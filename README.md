@@ -14,6 +14,15 @@ API-сервер музыкальной платформы DotSound — SoundClo
 | Хранилище | MinIO (S3-совместимое) |
 | Миграции | Alembic |
 | Зависимости | Poetry |
+| Mini App | React 18 + Vite + TypeScript |
+
+---
+
+## Требования
+
+- Python 3.11+, [Poetry](https://python-poetry.org/)
+- Node.js 18+, npm
+- Docker & Docker Compose
 
 ---
 
@@ -36,6 +45,25 @@ poetry run alembic upgrade head
 # 5. Запуск
 poetry run python main.py
 # → http://localhost:8000
+```
+
+### Frontend (Mini App)
+
+**Разработка** — hot reload, API проксируется на `localhost:8000`:
+
+```bash
+cd frontend
+npm install
+npm run dev
+# → http://localhost:5173/mini_app/
+```
+
+**Production-сборка** — выводит в `app/static/mini_app/`, раздаётся FastAPI:
+
+```bash
+cd frontend
+npm run build
+# → http://localhost:8000/mini_app/
 ```
 
 ---
