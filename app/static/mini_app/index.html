@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DotSound</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+    <div id="player">
+        <div id="track-info">
+            <span id="track-title">Выберите трек</span>
+            <span id="track-artist"></span>
+        </div>
+        <audio id="audio" preload="none"></audio>
+        <div id="controls">
+            <button id="btn-play" type="button">▶</button>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
