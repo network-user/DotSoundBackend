@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import { api } from '@/lib/api'
 import { userId } from '@/lib/telegram'
 import { tg } from '@/lib/telegram'
@@ -51,7 +51,7 @@ export function ComplaintModal() {
     }
   }
 
-  const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleBackdrop = (e: MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) closeComplaint()
   }
 

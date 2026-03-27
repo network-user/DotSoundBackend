@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { useLikes } from '@/store/LikesContext'
 import { usePlayer } from '@/store/PlayerContext'
@@ -14,7 +15,7 @@ export function TrackCard({ track }: Props) {
   const playing = currentTrack?.id === track.id
   const liked = isLiked(track.id)
 
-  const handleLike = async (e: React.MouseEvent) => {
+  const handleLike = async (e: MouseEvent) => {
     e.stopPropagation()
     await toggleLike(track.id)
   }

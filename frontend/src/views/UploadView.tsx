@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { api } from '@/lib/api'
 import { userId } from '@/lib/telegram'
 import { usePlayer } from '@/store/PlayerContext'
@@ -21,7 +21,7 @@ export function UploadView({ active, onNavigate }: Props) {
   const [progress, setProgress] = useState(0)
   const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCoverChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null
     setCoverFile(file)
     if (file) {
@@ -61,7 +61,7 @@ export function UploadView({ active, onNavigate }: Props) {
     setProgress(0)
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
 
