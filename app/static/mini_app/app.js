@@ -16,16 +16,18 @@ const state = {
 /* ─── DOM refs ───────────────────────────────────────────── */
 const $ = (sel) => document.querySelector(sel);
 
-const audioEl     = $('#audio');
-const playerBar   = $('#player-bar');
-const pbSeek      = $('#pb-seek');
-const pbPlay      = $('#pb-play');
-const pbLike      = $('#pb-like');
-const pbTitle     = $('#pb-title');
-const pbArtist    = $('#pb-artist');
-const pbCover     = $('#pb-cover');
-const pbCurrent   = $('#pb-current');
-const pbDuration  = $('#pb-duration');
+const audioEl        = $('#audio');
+const playerBar      = $('#player-bar');
+const pbSeek         = $('#pb-seek');
+const pbPlay         = $('#pb-play');
+const pbLike         = $('#pb-like');
+const pbReport       = $('#pb-report');
+const pbTitle        = $('#pb-title');
+const pbArtist       = $('#pb-artist');
+const pbCover        = $('#pb-cover');
+const pbCurrent      = $('#pb-current');
+const pbDuration     = $('#pb-duration');
+const complaintModal = $('#complaint-modal');
 
 /* ─── Helpers ────────────────────────────────────────────── */
 function fmt(sec) {
@@ -452,6 +454,80 @@ async function handleDeepLink() {
     playTrack(track);
   } catch { /* ignore */ }
 }
+
+/* ─── Complaint modal ────────────────────────────────────── */
+pbReport.addEventListener('click', () => {
+  if (!state.track) return;
+  openComplaintModal(state.track.id);
+});
+
+$('#complaint-close').addEventListener('click', closeComplaintModal);
+
+complaintModal.addEventListener('click', (e) => {
+  if (e.target === complaintModal) closeComplaintModal();
+});
+
+function openComplaintModal(trackId) {
+  $('#complaint-reason').value = '';
+  $('#complaint-email').value = '';
+  $('#complaint-error').classList.add('hidden');
+  $('#complaint-submit').disabled = false;
+  complaintModal.dataset.trackId = trackId;
+  complaintModal.classList.remove('hidden');
+}
+
+function closeComplaintModal() {
+  complaintModal.classList.add('hidden');
+}
+
+$('#complaint-submit').addEventListener('click', async () => {
+  const trackId = parseInt(complaintModal.dataset.trackId, 10);
+  const reason = $('#complaint-reason').value.trim();
+  const email = $('#complaint-email').value.trim() || null;
+  const errEl = $('#complaint-error');
+
+  if (reason.length < 10) {
+    errEl.textContent = 'Укажите причину (минимум 10 символов)';
+    errEl.classList.remove('hidden');
+    return;
+  }
+  if (!state.userId) {
+    errEl.textContent = 'Необходима авторизация через Telegram';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  $('#complaint-submit').disabled = true;
+  errEl.classList.add('hidden');
+
+  try {
+    const res = await api('/api/v1/complaints', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        track_id: trackId,
+        reported_by_user_id: state.userId,
+        reason,
+        contact_email: email,
+      }),
+    });
+    closeComplaintModal();
+    const msg = res.track_hidden
+      ? '✅ Жалоба принята. Трек скрыт.'
+      : '✅ Жалоба принята и будет рассмотрена.';
+    tg.showAlert(msg);
+    if (res.track_hidden && state.track?.id === trackId) {
+      audioEl.pause();
+      playerBar.classList.add('hidden');
+    }
+  } catch (e) {
+    errEl.textContent = e.message === '409'
+      ? 'Вы уже подавали жалобу на этот трек'
+      : 'Ошибка отправки. Попробуйте позже.';
+    errEl.classList.remove('hidden');
+    $('#complaint-submit').disabled = false;
+  }
+});
 
 /* ─── Init ───────────────────────────────────────────────── */
 async function init() {

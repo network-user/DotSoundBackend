@@ -14,6 +14,7 @@ class AppSettings(BaseSettings):
     minio_bucket: str
     minio_use_ssl: bool = False
     log_level: str = "INFO"
+    complaint_threshold: int = 3
 
 
 settings = AppSettings()
