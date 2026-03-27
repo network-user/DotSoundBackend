@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
 from app.dependencies import get_db
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserCreate, UserResponse, UserStatsResponse
+from app.services.stats_service import StatsService
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -61,3 +62,26 @@ async def get_user(
             detail="User not found",
         )
     return UserResponse.model_validate(user)
+
+
+@router.get(
+    "/{user_id}/stats",
+    response_model=UserStatsResponse,
+    summary="Get author analytics for a user",
+)
+@limiter.limit("60/minute")
+async def get_user_stats(
+    request: Request,
+    user_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> UserStatsResponse:
+    structlog.contextvars.bind_contextvars(user_id=user_id)
+    service = StatsService(session)
+    stats = await service.get_author_stats(user_id)
+    logger.info(
+        "stats_endpoint_response",
+        user_id=user_id,
+        total_tracks=stats.total_tracks,
+        total_plays=stats.total_plays,
+    )
+    return stats
