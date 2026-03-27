@@ -4,6 +4,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ReactNode,
 } from 'react'
 import { api } from '@/lib/api'
 import type { Track } from '@/types/api'
@@ -24,7 +25,7 @@ interface PlayerContextValue {
 
 const PlayerContext = createContext<PlayerContextValue | null>(null)
 
-export function PlayerProvider({ children }: { children: React.ReactNode }) {
+export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [track, setTrack] = useState<Track | null>(null)
   const [isPlaying, setIsPlaying] = useState(false)

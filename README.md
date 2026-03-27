@@ -1,7 +1,7 @@
 # DotSound Backend
 
 API-сервер музыкальной платформы DotSound — SoundCloud-style, UGC, без рекламы.
-Хранит треки в MinIO, метаданные в PostgreSQL, отдаёт Mini App.
+Хранит треки в MinIO, метаданные в PostgreSQL, раздаёт Telegram Mini App.
 
 ---
 
@@ -10,7 +10,7 @@ API-сервер музыкальной платформы DotSound — SoundClo
 | Компонент | Технология |
 |-----------|-----------|
 | API | FastAPI 0.111 + uvicorn |
-| БД | PostgreSQL 16 + SQLAlchemy 2 async |
+| БД | PostgreSQL 16 + SQLAlchemy 2 (async) |
 | Хранилище | MinIO (S3-совместимое) |
 | Миграции | Alembic |
 | Зависимости | Poetry |
@@ -20,51 +20,114 @@ API-сервер музыкальной платформы DotSound — SoundClo
 
 ## Требования
 
-- Python 3.11+, [Poetry](https://python-poetry.org/)
-- Node.js 18+, npm
-- Docker & Docker Compose
+| Инструмент | Версия | Зачем |
+|-----------|--------|-------|
+| Python | 3.11+ | Backend |
+| [Poetry](https://python-poetry.org/) | любая | Управление зависимостями Python |
+| Node.js | 18+ | Сборка React Mini App |
+| npm | 9+ | Менеджер пакетов Node.js |
+| Docker | любая | Запуск PostgreSQL и MinIO |
+| Docker Compose | v2+ | Оркестрация контейнеров |
 
 ---
 
 ## Быстрый старт
 
+### Шаг 1 — Клонируйте и установите зависимости
+
 ```bash
-# 1. Зависимости
+git clone <repo-url>
+cd DotSoundBackend
+
 poetry install
-
-# 2. Конфиг
-cp .env.example .env
-# DATABASE_URL, MINIO_* — заполнены для docker-compose по умолчанию
-
-# 3. Инфраструктура (PostgreSQL + MinIO)
-docker compose up -d
-
-# 4. Миграции
-poetry run alembic upgrade head
-
-# 5. Запуск
-poetry run python main.py
-# → http://localhost:8000
 ```
 
-### Frontend (Mini App)
+### Шаг 2 — Настройте переменные окружения
 
-**Разработка** — hot reload, API проксируется на `localhost:8000`:
+```bash
+cp .env.example .env
+```
+
+Файл `.env` уже содержит корректные значения для локального запуска через Docker.
+Если нужно изменить — откройте `.env` и отредактируйте нужные строки (см. раздел [Переменные окружения](#переменные-окружения)).
+
+### Шаг 3 — Запустите инфраструктуру
+
+```bash
+docker compose up -d
+```
+
+Это поднимет:
+- **PostgreSQL 16** на порту `5432` (user: `dotsound`, password: `dotsound`, db: `dotsound`)
+- **MinIO** на порту `9000` (API) и `9001` (веб-консоль)
+
+Проверить что контейнеры запущены:
+```bash
+docker compose ps
+```
+
+### Шаг 4 — Примените миграции базы данных
+
+```bash
+poetry run alembic upgrade head
+```
+
+### Шаг 5 — Запустите сервер
+
+```bash
+poetry run python main.py
+```
+
+Сервер запустится на `http://localhost:8000` с автоперезагрузкой (`reload=True`).
+
+> **Swagger UI:** `http://localhost:8000/docs`
+
+---
+
+## Mini App (Frontend)
+
+Mini App — это React-приложение, которое открывается как Telegram WebApp.
+Исходный код находится в `frontend/`, сборка выводится в `app/static/mini_app/`.
+
+### Разработка (hot reload)
 
 ```bash
 cd frontend
-npm install
+npm install      # только при первом запуске
 npm run dev
-# → http://localhost:5173/mini_app/
 ```
 
-**Production-сборка** — выводит в `app/static/mini_app/`, раздаётся FastAPI:
+Открыть: `http://localhost:5173/mini_app/`
+
+API-запросы автоматически проксируются на `http://localhost:8000` — backend должен быть запущен.
+
+### Production-сборка
 
 ```bash
 cd frontend
 npm run build
-# → http://localhost:8000/mini_app/
 ```
+
+После сборки файлы попадают в `app/static/mini_app/` и автоматически раздаются FastAPI по адресу `http://localhost:8000/mini_app/`.
+
+> Пересборка нужна после каждого изменения в `frontend/src/`.
+
+---
+
+## Переменные окружения
+
+Файл: `.env` (создаётся из `.env.example`)
+
+| Переменная | Описание | Значение по умолчанию |
+|-----------|---------|----------------------|
+| `DATABASE_URL` | asyncpg URL PostgreSQL | `postgresql+asyncpg://dotsound:dotsound@localhost:5432/dotsound` |
+| `MINIO_ENDPOINT` | Адрес MinIO (host:port) | `localhost:9000` |
+| `MINIO_ACCESS_KEY` | Логин MinIO | `minioadmin` |
+| `MINIO_SECRET_KEY` | Пароль MinIO | `minioadmin` |
+| `MINIO_BUCKET` | Имя бакета для аудио | `dotsound-audio` |
+| `MINIO_USE_SSL` | Использовать HTTPS для MinIO | `false` |
+| `LOG_LEVEL` | Уровень логов (`DEBUG`/`INFO`/`WARNING`) | `INFO` |
+| `COMPLAINT_THRESHOLD` | Количество жалоб до авто-скрытия трека | `3` |
 
 ---
 
@@ -73,63 +136,86 @@ npm run build
 | Метод | Путь | Описание |
 |-------|------|---------|
 | `GET` | `/api/v1/health` | Healthcheck |
-| `POST` | `/api/v1/users` | Регистрация пользователя |
-| `POST` | `/api/v1/tracks/upload` | Загрузить трек (multipart) |
-| `GET` | `/api/v1/tracks` | Список / поиск треков |
+| `POST` | `/api/v1/users` | Регистрация / обновление пользователя |
+| `POST` | `/api/v1/tracks/upload` | Загрузить трек (multipart/form-data) |
+| `GET` | `/api/v1/tracks` | Список треков / поиск (`?q=`, `?size=`, `?page=`) |
+| `GET` | `/api/v1/tracks/{id}` | Получить трек по ID |
 | `GET` | `/api/v1/tracks/{id}/stream` | Presigned URL для воспроизведения |
 | `POST` | `/api/v1/tracks/{id}/play` | Увеличить счётчик прослушиваний |
 | `POST` | `/api/v1/likes/{user_id}/{track_id}` | Поставить / снять лайк |
-| `GET` | `/api/v1/likes/{user_id}` | Лайкнутые треки |
-| `POST` | `/api/v1/complaints` | Подать жалобу (DMCA / ст. 1253.1 ГК РФ) |
-| `GET` | `/api/v1/complaints/{track_id}` | Список жалоб на трек |
+| `GET` | `/api/v1/likes/{user_id}` | Лайкнутые треки пользователя |
+| `POST` | `/api/v1/complaints` | Подать жалобу на нарушение АП |
 | `*` | `/api/v1/playlists/…` | CRUD плейлистов |
 
-Swagger UI: `http://localhost:8000/docs`
+Полная документация с примерами запросов: `http://localhost:8000/docs`
 
 ---
 
 ## Жалобы (DMCA / ст. 1253.1 ГК РФ)
 
-При `COMPLAINT_THRESHOLD` (по умолчанию **3**) жалобах трек автоматически скрывается (`is_active = false`).
-Каждый пользователь может подать жалобу на трек только один раз.
+При достижении `COMPLAINT_THRESHOLD` жалоб трек автоматически скрывается (`is_active = false`).
+Один пользователь может подать жалобу на конкретный трек только один раз.
 
 ---
 
-## Проверка
+## Структура проекта
+
+```
+DotSoundBackend/
+├── app/
+│   ├── api/v1/          # Маршруты (health, users, tracks, likes, complaints, playlists)
+│   ├── core/            # БД, логирование, rate limiting, S3
+│   ├── middlewares/     # Логирование запросов
+│   ├── models/          # SQLAlchemy ORM модели
+│   ├── repositories/    # Слой доступа к БД
+│   ├── schemas/         # Pydantic схемы (запрос / ответ)
+│   ├── services/        # Бизнес-логика
+│   ├── static/mini_app/ # Собранный React Mini App (git-ignored)
+│   └── main.py          # Фабрика FastAPI-приложения
+├── frontend/            # Исходный код React Mini App
+│   └── src/
+├── alembic/             # Миграции БД
+├── tests/
+├── docker-compose.yml   # PostgreSQL + MinIO
+├── .env.example
+└── pyproject.toml
+```
+
+---
+
+## Команды разработчика
 
 ```bash
 # Тесты
 poetry run pytest
 
-# Линтер / типы
+# Линтер
 poetry run ruff check .
+
+# Проверка типов
 poetry run mypy app/
+
+# Форматирование
+poetry run black app/
+
+# Создать новую миграцию
+poetry run alembic revision --autogenerate -m "описание изменений"
+
+# Откатить последнюю миграцию
+poetry run alembic downgrade -1
 ```
 
 ---
 
-## Переменные окружения
+## Полезные ссылки при локальной разработке
 
-| Переменная | Описание | По умолчанию |
-|-----------|---------|-------------|
-| `DATABASE_URL` | asyncpg URL PostgreSQL | — |
-| `MINIO_ENDPOINT` | Адрес MinIO | `localhost:9000` |
-| `MINIO_ACCESS_KEY` | Ключ доступа | `minioadmin` |
-| `MINIO_SECRET_KEY` | Секрет | `minioadmin` |
-| `MINIO_BUCKET` | Бакет | `dotsound-audio` |
-| `MINIO_USE_SSL` | HTTPS для MinIO | `false` |
-| `LOG_LEVEL` | Уровень логов | `INFO` |
-| `COMPLAINT_THRESHOLD` | Жалоб до скрытия трека | `3` |
+| Сервис | URL |
+|--------|-----|
+| API (Swagger UI) | http://localhost:8000/docs |
+| Mini App | http://localhost:8000/mini_app/ |
+| Mini App (dev сервер) | http://localhost:5173/mini_app/ |
+| MinIO веб-консоль | http://localhost:9001 (login: `minioadmin` / `minioadmin`) |
 
 ---
-
-## Архитектура
-
-```
-api/v1/ → services/ → repositories/ → models/
-schemas/ ←→ api/ и services/
-S3: app/core/s3.py
-БД: app/core/db.py
-```
 
 > Связанный репозиторий: [DotSoundBot](../DotSoundBot)

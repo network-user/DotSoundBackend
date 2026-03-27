@@ -12,5 +12,7 @@ export function useDeepLink() {
     api.getTrack(Number(trackId))
       .then((track) => playTrack(track))
       .catch(() => {})
+  // playTrack is stable (defined in context), runs once on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 }

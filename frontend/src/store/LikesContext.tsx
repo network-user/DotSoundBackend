@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api } from '@/lib/api'
 import { userId } from '@/lib/telegram'
 
@@ -9,7 +9,7 @@ interface LikesContextValue {
 
 const LikesContext = createContext<LikesContextValue | null>(null)
 
-export function LikesProvider({ children }: { children: React.ReactNode }) {
+export function LikesProvider({ children }: { children: ReactNode }) {
   const [likedIds, setLikedIds] = useState<Set<number>>(new Set())
 
   useEffect(() => {
