@@ -10,7 +10,7 @@ from app.repositories.track import TrackRepository
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-_ALLOWED_MIMES = frozenset(
+_ALLOWED_AUDIO_MIMES = frozenset(
     {
         "audio/mpeg",
         "audio/ogg",
@@ -22,7 +22,11 @@ _ALLOWED_MIMES = frozenset(
         "audio/aac",
     }
 )
-_MAX_SIZE_BYTES = 50 * 1024 * 1024
+_ALLOWED_COVER_MIMES = frozenset(
+    {"image/jpeg", "image/png", "image/webp"}
+)
+_MAX_AUDIO_BYTES = 50 * 1024 * 1024
+_MAX_COVER_BYTES = 5 * 1024 * 1024
 
 
 def _resolve_mime(file: UploadFile) -> str:
@@ -33,7 +37,7 @@ def _resolve_mime(file: UploadFile) -> str:
     return mime
 
 
-def _extension_from_mime(mime: str) -> str:
+def _audio_extension(mime: str) -> str:
     _map = {
         "audio/mpeg": "mp3",
         "audio/ogg": "ogg",
@@ -56,6 +60,7 @@ class UploadService:
         file: UploadFile,
         title: str,
         artist: str | None,
+        cover: UploadFile | None = None,
         uploader_id: int | None = None,
     ) -> Track:
         mime = _resolve_mime(file)
@@ -66,29 +71,24 @@ class UploadService:
             uploader_id=uploader_id,
         )
 
-        if mime not in _ALLOWED_MIMES:
-            logger.warning(
-                "upload_rejected_mime", mime=mime
-            )
+        if mime not in _ALLOWED_AUDIO_MIMES:
+            logger.warning("upload_rejected_mime", mime=mime)
             raise HTTPException(
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
                 detail=f"Unsupported audio format: {mime}",
             )
 
         data = await file.read()
-
-        if len(data) > _MAX_SIZE_BYTES:
+        if len(data) > _MAX_AUDIO_BYTES:
             logger.warning(
-                "upload_rejected_size",
-                size_bytes=len(data),
-                limit_bytes=_MAX_SIZE_BYTES,
+                "upload_rejected_size", size_bytes=len(data)
             )
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail="File exceeds 50 MB limit",
+                detail="Audio file exceeds 50 MB limit",
             )
 
-        ext = _extension_from_mime(mime)
+        ext = _audio_extension(mime)
         file_key = await s3.upload_audio(
             data=data,
             extension=ext,
@@ -96,15 +96,46 @@ class UploadService:
             user_id=uploader_id,
         )
 
+        cover_key: str | None = None
+        if cover and cover.filename:
+            cover_key = await self._upload_cover(
+                cover, uploader_id
+            )
+
         track = await self._repo.create(
             title=title,
             artist=artist,
             file_key=file_key,
+            cover_key=cover_key,
             uploaded_by_id=uploader_id,
         )
         logger.info(
             "upload_complete",
             track_id=track.id,
             file_key=file_key,
+            has_cover=cover_key is not None,
         )
         return track
+
+    async def _upload_cover(
+        self,
+        cover: UploadFile,
+        user_id: int | None,
+    ) -> str | None:
+        mime = _resolve_mime(cover)
+        if mime not in _ALLOWED_COVER_MIMES:
+            logger.warning(
+                "cover_rejected_mime", mime=mime
+            )
+            return None
+
+        data = await cover.read()
+        if len(data) > _MAX_COVER_BYTES:
+            logger.warning(
+                "cover_rejected_size", size_bytes=len(data)
+            )
+            return None
+
+        return await s3.upload_cover(
+            data=data, content_type=mime, user_id=user_id
+        )

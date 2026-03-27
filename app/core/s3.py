@@ -70,6 +70,42 @@ async def get_presigned_url(file_key: str) -> str:
     return url
 
 
+_ALLOWED_COVER_MIMES = frozenset(
+    {"image/jpeg", "image/png", "image/webp"}
+)
+_COVER_EXT_MAP = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+
+
+async def upload_cover(
+    data: bytes,
+    content_type: str,
+    user_id: int | None = None,
+) -> str:
+    """Upload cover image bytes to MinIO; return file_key."""
+    ext = _COVER_EXT_MAP.get(content_type, "jpg")
+    prefix = str(user_id) if user_id else "anon"
+    file_key = f"covers/{prefix}/{uuid.uuid4().hex}.{ext}"
+
+    logger.info(
+        "s3_cover_upload_started",
+        file_key=file_key,
+        size_bytes=len(data),
+    )
+    async with get_s3_client() as s3:
+        await s3.put_object(
+            Bucket=settings.minio_bucket,
+            Key=file_key,
+            Body=data,
+            ContentType=content_type,
+        )
+    logger.info("s3_cover_upload_completed", file_key=file_key)
+    return file_key
+
+
 async def ensure_bucket_exists() -> None:
     """Create the audio bucket if it doesn't exist yet."""
     async with get_s3_client() as s3:

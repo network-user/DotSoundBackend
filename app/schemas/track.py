@@ -10,6 +10,7 @@ class TrackResponse(BaseModel):
     title: str
     artist: str | None
     duration_seconds: int | None
+    cover_key: str | None = None
     play_count: int
     is_active: bool
     created_at: datetime
@@ -29,6 +30,7 @@ class TrackUploadResponse(BaseModel):
     title: str
     artist: str | None
     file_key: str
+    cover_key: str | None
     duration_seconds: int | None
     created_at: datetime
 

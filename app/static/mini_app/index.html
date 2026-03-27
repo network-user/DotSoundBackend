@@ -1,23 +1,154 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DotSound</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>DotSound</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <div id="player">
-        <div id="track-info">
-            <span id="track-title">Выберите трек</span>
-            <span id="track-artist"></span>
+<div id="app">
+
+  <!-- ═══ VIEWS ═══ -->
+  <main id="main">
+
+    <!-- Home: track feed -->
+    <section id="view-home" class="view active">
+      <div class="view-header">
+        <h2>DotSound</h2>
+        <span class="hint">Слушай. Делись. Открывай.</span>
+      </div>
+      <div id="home-list" class="track-list">
+        <div class="loader" id="home-loader"></div>
+      </div>
+    </section>
+
+    <!-- Search -->
+    <section id="view-search" class="view">
+      <div class="search-bar">
+        <span class="search-icon">🔍</span>
+        <input id="search-input" type="text"
+          placeholder="Трек или исполнитель…" autocomplete="off" />
+        <button id="search-clear" class="icon-btn hidden">✕</button>
+      </div>
+      <div id="search-list" class="track-list">
+        <p class="empty-hint" id="search-hint">Начните вводить название</p>
+      </div>
+    </section>
+
+    <!-- Upload -->
+    <section id="view-upload" class="view">
+      <div class="view-header"><h2>Загрузить трек</h2></div>
+      <form id="upload-form" novalidate>
+
+        <label class="cover-picker" id="cover-picker" for="cover-input">
+          <div class="cover-preview" id="cover-preview">
+            <span class="cover-placeholder">🎵</span>
+          </div>
+          <span class="cover-label">Добавить обложку</span>
+        </label>
+        <input id="cover-input" type="file"
+          accept="image/jpeg,image/png,image/webp" hidden />
+
+        <div class="form-group">
+          <label class="form-label" for="title-input">Название *</label>
+          <input id="title-input" class="form-input" type="text"
+            placeholder="Название трека" maxlength="256" required />
         </div>
-        <audio id="audio" preload="none"></audio>
-        <div id="controls">
-            <button id="btn-play" type="button">▶</button>
+
+        <div class="form-group">
+          <label class="form-label" for="artist-input">Исполнитель</label>
+          <input id="artist-input" class="form-input" type="text"
+            placeholder="Имя исполнителя" maxlength="256" />
         </div>
+
+        <div class="form-group">
+          <label class="form-label" for="audio-input">Аудиофайл *</label>
+          <label class="file-pick-btn" for="audio-input">
+            <span>📁</span> Выбрать файл
+          </label>
+          <p class="file-name" id="audio-file-name">Файл не выбран</p>
+          <input id="audio-input" type="file"
+            accept="audio/mpeg,audio/ogg,audio/wav,audio/flac,audio/mp4,audio/aac"
+            hidden required />
+        </div>
+
+        <div id="upload-error" class="form-error hidden"></div>
+
+        <button type="submit" class="btn-primary" id="upload-btn">
+          Загрузить
+        </button>
+
+        <div id="upload-progress" class="hidden">
+          <div class="progress-bar-wrap">
+            <div class="progress-bar-fill" id="progress-fill"></div>
+          </div>
+          <p class="progress-label">Загрузка…</p>
+        </div>
+
+      </form>
+    </section>
+
+    <!-- Liked tracks -->
+    <section id="view-liked" class="view">
+      <div class="view-header"><h2>Мне нравится</h2></div>
+      <div id="liked-list" class="track-list">
+        <div class="loader" id="liked-loader"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══ PLAYER BAR ═══ -->
+  <div id="player-bar" class="hidden">
+    <div id="pb-seek-wrap">
+      <input type="range" id="pb-seek"
+        min="0" max="100" step="0.1" value="0" />
     </div>
-    <script src="app.js"></script>
+    <div id="pb-row">
+      <div id="pb-cover-wrap">
+        <div id="pb-cover" class="pb-cover-img">🎵</div>
+      </div>
+      <div id="pb-info">
+        <p id="pb-title" class="pb-title">—</p>
+        <p id="pb-artist" class="pb-artist hint">—</p>
+      </div>
+      <div id="pb-controls">
+        <button id="pb-like" class="icon-btn" title="Лайк">🤍</button>
+        <button id="pb-play" class="play-btn" title="Воспроизвести">▶</button>
+      </div>
+    </div>
+    <div id="pb-time">
+      <span id="pb-current">0:00</span>
+      <span id="pb-duration">0:00</span>
+    </div>
+  </div>
+
+  <!-- ═══ BOTTOM NAV ═══ -->
+  <nav id="nav">
+    <button class="nav-btn active" data-view="home">
+      <span class="nav-icon">🏠</span>
+      <span class="nav-label">Главная</span>
+    </button>
+    <button class="nav-btn" data-view="search">
+      <span class="nav-icon">🔍</span>
+      <span class="nav-label">Поиск</span>
+    </button>
+    <button class="nav-btn" data-view="upload">
+      <span class="nav-icon">📤</span>
+      <span class="nav-label">Загрузить</span>
+    </button>
+    <button class="nav-btn" data-view="liked">
+      <span class="nav-icon">❤️</span>
+      <span class="nav-label">Лайки</span>
+    </button>
+  </nav>
+
+</div>
+
+<audio id="audio" preload="none"></audio>
+<script src="app.js"></script>
 </body>
 </html>
