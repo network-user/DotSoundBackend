@@ -4,6 +4,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
 
+import app.models  # noqa: F401 — registers all models with Base.metadata
 from app.config import settings
 from app.models.base import Base
 
@@ -16,12 +17,23 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _do_run_migrations(connection: object) -> None:
+    context.configure(
+        connection=connection,  # type: ignore[arg-type]
+        target_metadata=target_metadata,
+        compare_type=True,
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=settings.database_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        compare_type=True,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -30,16 +42,7 @@ def run_migrations_offline() -> None:
 async def run_async_migrations() -> None:
     engine = create_async_engine(settings.database_url)
     async with engine.begin() as conn:
-        await conn.run_sync(
-            lambda sync_conn: context.configure(
-                connection=sync_conn,
-                target_metadata=target_metadata,
-            )
-        )
-        async with engine.begin() as conn2:
-            await conn2.run_sync(
-                lambda sync_conn: context.run_migrations()
-            )
+        await conn.run_sync(_do_run_migrations)
     await engine.dispose()
 
 
