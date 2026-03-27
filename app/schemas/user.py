@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserCreate(BaseModel):
@@ -20,3 +20,22 @@ class UserResponse(BaseModel):
     last_name: str | None
     is_active: bool
     created_at: datetime
+
+
+class TrackStatsItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    artist: str | None
+    play_count: int
+    cover_key: str | None = None
+
+
+class UserStatsResponse(BaseModel):
+    user_id: int
+    total_tracks: int = Field(ge=0)
+    total_plays: int = Field(ge=0)
+    top_tracks: list[TrackStatsItem] = Field(
+        description="Top 5 most played tracks"
+    )
