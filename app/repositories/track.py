@@ -1,5 +1,5 @@
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
@@ -64,3 +64,23 @@ class TrackRepository(BaseRepository[Track]):
             .limit(limit)
         )
         return list(tracks_result.scalars().all()), total
+
+    async def increment_play_count(self, track_id: int) -> bool:
+        result = await self._session.execute(
+            update(Track)
+            .where(
+                Track.id == track_id,
+                Track.is_active.is_(True),
+            )
+            .values(play_count=Track.play_count + 1)
+        )
+        updated = result.rowcount > 0
+        if updated:
+            logger.debug(
+                "db_play_count_incremented", track_id=track_id
+            )
+        else:
+            logger.warning(
+                "db_play_count_track_missing", track_id=track_id
+            )
+        return updated

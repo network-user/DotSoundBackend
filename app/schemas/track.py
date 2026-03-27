@@ -20,3 +20,27 @@ class TrackListResponse(BaseModel):
     total: int
     page: int = Field(ge=1)
     size: int = Field(ge=1)
+
+
+class TrackUploadResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    artist: str | None
+    file_key: str
+    duration_seconds: int | None
+    created_at: datetime
+
+
+class StreamResponse(BaseModel):
+    track_id: int
+    url: str
+    expires_in: int = Field(
+        default=3600, description="URL TTL in seconds"
+    )
+
+
+class PlayResponse(BaseModel):
+    track_id: int
+    play_count: int
