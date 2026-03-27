@@ -1,11 +1,29 @@
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_db
-from app.schemas.track import TrackListResponse, TrackResponse
+from app.schemas.track import (
+    PlayResponse,
+    StreamResponse,
+    TrackListResponse,
+    TrackResponse,
+    TrackUploadResponse,
+)
 from app.services.track_service import TrackService
+from app.services.upload_service import UploadService
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -14,13 +32,13 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 @router.get(
     "",
     response_model=TrackListResponse,
-    summary="List active tracks with pagination",
+    summary="List active tracks with optional search",
 )
 @limiter.limit("200/minute")
 async def list_tracks(
     request: Request,
-    page: int = Query(1, ge=1, description="Page number"),
-    size: int = Query(20, ge=1, le=100, description="Page size"),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
     q: str | None = Query(None, description="Search query"),
     session: AsyncSession = Depends(get_db),
 ) -> TrackListResponse:
@@ -38,6 +56,92 @@ async def list_tracks(
     )
 
 
+@router.post(
+    "/upload",
+    response_model=TrackUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload a new audio track (multipart/form-data)",
+)
+@limiter.limit("10/minute")
+async def upload_track(
+    request: Request,
+    file: UploadFile = File(...),
+    title: str = Form(..., max_length=256),
+    artist: str | None = Form(None, max_length=256),
+    uploader_id: int | None = Form(None),
+    session: AsyncSession = Depends(get_db),
+) -> TrackUploadResponse:
+    structlog.contextvars.bind_contextvars(
+        title=title,
+        artist=artist,
+        uploader_id=uploader_id,
+    )
+    logger.info("track_upload_endpoint_called")
+    service = UploadService(session)
+    track = await service.upload_track(
+        file=file,
+        title=title,
+        artist=artist,
+        uploader_id=uploader_id,
+    )
+    return TrackUploadResponse.model_validate(track)
+
+
+@router.get(
+    "/{track_id}/stream",
+    response_model=StreamResponse,
+    summary="Get presigned URL to stream the audio",
+)
+@limiter.limit("300/minute")
+async def stream_track(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> StreamResponse:
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    service = TrackService(session)
+    track = await service.get_track(track_id)
+    if not track:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    url = await s3.get_presigned_url(track.file_key)
+    logger.info("stream_url_generated", track_id=track_id)
+    return StreamResponse(track_id=track_id, url=url)
+
+
+@router.post(
+    "/{track_id}/play",
+    response_model=PlayResponse,
+    summary="Increment play count for a track",
+)
+@limiter.limit("20/minute")
+async def play_track(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> PlayResponse:
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    from app.repositories.track import TrackRepository
+
+    repo = TrackRepository(session)
+    found = await repo.increment_play_count(track_id)
+    if not found:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    track = await repo.get_by_id(track_id)
+    play_count = track.play_count if track else 0
+    logger.info(
+        "play_count_updated",
+        track_id=track_id,
+        play_count=play_count,
+    )
+    return PlayResponse(track_id=track_id, play_count=play_count)
+
+
 @router.get(
     "/{track_id}",
     response_model=TrackResponse,
@@ -53,9 +157,6 @@ async def get_track(
     service = TrackService(session)
     track = await service.get_track(track_id)
     if not track:
-        logger.warning(
-            "track_not_found_endpoint", track_id=track_id
-        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
