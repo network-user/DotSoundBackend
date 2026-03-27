@@ -69,6 +69,7 @@ async def upload_track(
     title: str = Form(..., max_length=256),
     artist: str | None = Form(None, max_length=256),
     uploader_id: int | None = Form(None),
+    cover: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_db),
 ) -> TrackUploadResponse:
     structlog.contextvars.bind_contextvars(
@@ -82,6 +83,7 @@ async def upload_track(
         file=file,
         title=title,
         artist=artist,
+        cover=cover,
         uploader_id=uploader_id,
     )
     return TrackUploadResponse.model_validate(track)
@@ -140,6 +142,29 @@ async def play_track(
         play_count=play_count,
     )
     return PlayResponse(track_id=track_id, play_count=play_count)
+
+
+@router.get(
+    "/{track_id}/cover",
+    response_model=StreamResponse,
+    summary="Get presigned URL for the track cover image",
+)
+@limiter.limit("300/minute")
+async def get_cover(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> StreamResponse:
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    service = TrackService(session)
+    track = await service.get_track(track_id)
+    if not track or not track.cover_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cover not found",
+        )
+    url = await s3.get_presigned_url(track.cover_key)
+    return StreamResponse(track_id=track_id, url=url)
 
 
 @router.get(

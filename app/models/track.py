@@ -23,6 +23,9 @@ class Track(Base, TimestampMixin):
     play_count: Mapped[int] = mapped_column(
         Integer, server_default="0", nullable=False
     )
+    cover_key: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
     uploaded_by_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
