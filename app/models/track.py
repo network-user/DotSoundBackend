@@ -1,7 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.complaint import Complaint
 
 
 class Track(Base, TimestampMixin):
@@ -31,4 +38,9 @@ class Track(Base, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, server_default="true", nullable=False
+    )
+
+    complaints: Mapped[list[Complaint]] = relationship(
+        back_populates="track",
+        cascade="all, delete-orphan",
     )

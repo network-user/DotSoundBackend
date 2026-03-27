@@ -117,12 +117,46 @@
       </div>
       <div id="pb-controls">
         <button id="pb-like" class="icon-btn" title="Лайк">🤍</button>
+        <button id="pb-report" class="icon-btn" title="Пожаловаться">🚩</button>
         <button id="pb-play" class="play-btn" title="Воспроизвести">▶</button>
       </div>
     </div>
     <div id="pb-time">
       <span id="pb-current">0:00</span>
       <span id="pb-duration">0:00</span>
+    </div>
+  </div>
+
+  <!-- ═══ COMPLAINT MODAL ═══ -->
+  <div id="complaint-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>🚩 Жалоба на нарушение АП</h3>
+        <button id="complaint-close" class="icon-btn">✕</button>
+      </div>
+      <p class="modal-hint">
+        Форма уведомления правообладателя (ст.&nbsp;1253.1 ГК РФ).
+        Укажите причину и контакт для обратной связи.
+      </p>
+      <div class="form-group">
+        <label class="form-label" for="complaint-reason">
+          Причина *
+        </label>
+        <textarea id="complaint-reason" class="form-input"
+          rows="4" maxlength="1000"
+          placeholder="Опишите нарушение (мин. 10 символов)…"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="complaint-email">
+          Контактный e-mail
+        </label>
+        <input id="complaint-email" class="form-input" type="email"
+          placeholder="your@email.com" />
+      </div>
+      <div id="complaint-error" class="form-error hidden"></div>
+      <button id="complaint-submit" class="btn-primary">
+        Отправить жалобу
+      </button>
     </div>
   </div>
 

@@ -292,6 +292,40 @@ body {
 .nav-icon { font-size: 20px; line-height: 1; }
 .nav-label { font-size: 10px; font-weight: 500; }
 
+/* ── Complaint modal ── */
+.modal {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.65);
+  display: flex; align-items: flex-end;
+}
+.modal.hidden { display: none !important; }
+
+.modal-content {
+  width: 100%;
+  background: var(--bg);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 20px 16px 32px;
+  animation: slide-up 0.25s ease;
+}
+
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.modal-header {
+  display: flex; align-items: center;
+  justify-content: space-between; margin-bottom: 8px;
+}
+.modal-header h3 { font-size: 17px; font-weight: 700; }
+
+.modal-hint {
+  font-size: 12px; color: var(--hint);
+  margin-bottom: 16px; line-height: 1.5;
+}
+
+textarea.form-input { resize: none; }
+
 /* ── Utility ── */
 .hidden { display: none !important; }
 .hint { color: var(--hint); }
