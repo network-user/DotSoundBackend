@@ -96,6 +96,13 @@ body {
 }
 .view.active { display: block; }
 
+#view-search {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -196,6 +203,7 @@ body {
   text-overflow: ellipsis;
   transition: color 0.15s;
   flex: 1;
+  min-width: 0;
 }
 .track-card-artist {
   font-size: 12px;
@@ -290,6 +298,9 @@ body {
 
 .search-section {
   margin-top: 16px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 .search-section-label {
   padding: 0 16px 8px;
@@ -375,11 +386,13 @@ body {
   z-index: 10;
   width: 100%;
   box-sizing: border-box;
+  min-width: 0;
 }
 .search-icon { font-size: 16px; color: var(--text-muted); flex-shrink: 0; }
 
 #search-input {
   flex: 1;
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   outline: none;
