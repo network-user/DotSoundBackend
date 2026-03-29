@@ -1,4 +1,6 @@
-from sqlalchemy import BigInteger, ForeignKey, func
+from datetime import datetime, timezone
+
+from sqlalchemy import BigInteger, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -17,6 +19,8 @@ class Dislike(Base):
         primary_key=True,
     )
     created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
         server_default=func.now(),
+        default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )

@@ -79,13 +79,40 @@ class SoundCloudService:
             r.raise_for_status()
             return r.json()
 
-    def build_widget_url(self, sc_uri: str) -> str:
-        return (
-            f"https://w.soundcloud.com/player/"
-            f"?url={quote(sc_uri, safe='')}"
-            f"&auto_play=true&hide_related=true"
-            f"&show_comments=false&color=1a1919"
+    async def get_stream_url(self, sc_url: str) -> str:
+        sc_data = await self.resolve_url(sc_url)
+        transcodings: list[dict] = (
+            sc_data.get("media", {}).get("transcodings", [])
         )
+        track_auth: str = sc_data.get("track_authorization", "")
+
+        progressive = next(
+            (
+                t for t in transcodings
+                if t.get("format", {}).get("protocol") == "progressive"
+                and not t.get("snipped")
+            ),
+            None,
+        )
+        if not progressive:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="No streamable format found for this SC track",
+            )
+
+        params: dict = {"client_id": self._client_id}
+        if track_auth:
+            params["track_authorization"] = track_auth
+
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(progressive["url"], params=params)
+            if r.status_code in (401, 403):
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="SoundCloud client_id expired, update SC_CLIENT_ID",
+                )
+            r.raise_for_status()
+            return r.json()["url"]
 
     async def import_or_get_track(
         self,

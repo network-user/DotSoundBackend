@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { TrackList } from '@/components/TrackList/TrackList'
+import { TrackCard } from '@/components/TrackCard/TrackCard'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { api } from '@/lib/api'
 import { userId } from '@/lib/telegram'
 import { usePlayer } from '@/store/PlayerContext'
+import { useLikes } from '@/store/LikesContext'
 import { useDebounce } from '@/hooks/useDebounce'
 import type { SCSearchResult, Track } from '@/types/api'
 
@@ -13,9 +15,11 @@ interface Props {
 
 export function SearchView({ active }: Props) {
   const { playTrack } = usePlayer()
+  const { toggleLike } = useLikes()
   const [query, setQuery] = useState('')
   const [tracks, setTracks] = useState<Track[] | null | 'idle'>('idle')
   const [scResults, setSCResults] = useState<SCSearchResult[]>([])
+  const [importedSC, setImportedSC] = useState<Record<string, Track>>({})
   const [importing, setImporting] = useState<string | null>(null)
   const debouncedQuery = useDebounce(query, 350)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -33,7 +37,12 @@ export function SearchView({ active }: Props) {
     setTracks(null)
     setSCResults([])
     Promise.all([
-      api.getTracks({ q: debouncedQuery, size: 20 }).catch(() => ({ items: [] as Track[], total: 0, page: 1, size: 20 })),
+      api.getTracks({ q: debouncedQuery, size: 20 }).catch(() => ({
+        items: [] as Track[],
+        total: 0,
+        page: 1,
+        size: 20,
+      })),
       api.searchSoundCloud(debouncedQuery, 10).catch(() => [] as SCSearchResult[]),
     ]).then(([internal, sc]) => {
       setTracks(internal.items)
@@ -41,26 +50,37 @@ export function SearchView({ active }: Props) {
     })
   }, [debouncedQuery])
 
+  const ensureImported = async (result: SCSearchResult): Promise<Track | null> => {
+    if (importedSC[result.sc_url]) return importedSC[result.sc_url]
+    if (importing === result.sc_url) return null
+    setImporting(result.sc_url)
+    try {
+      const track = await api.importSCTrack(result.sc_url, userId ?? undefined, true)
+      setImportedSC((prev) => ({ ...prev, [result.sc_url]: track }))
+      return track
+    } catch {
+      return null
+    } finally {
+      setImporting(null)
+    }
+  }
+
+  const handlePlaySC = async (result: SCSearchResult) => {
+    const track = await ensureImported(result)
+    if (track) await playTrack(track)
+  }
+
+  const handleLikeSC = async (e: React.MouseEvent, result: SCSearchResult) => {
+    e.stopPropagation()
+    const track = await ensureImported(result)
+    if (track) await toggleLike(track.id)
+  }
+
   const clearSearch = () => {
     setQuery('')
     setTracks('idle')
     setSCResults([])
     inputRef.current?.focus()
-  }
-
-  const handlePlaySC = async (result: SCSearchResult) => {
-    if (importing === result.sc_url) return
-    setImporting(result.sc_url)
-    try {
-      const track = await api.importSCTrack(
-        result.sc_url,
-        userId ?? undefined,
-        true,
-      )
-      await playTrack(track)
-    } catch { } finally {
-      setImporting(null)
-    }
   }
 
   return (
@@ -95,30 +115,48 @@ export function SearchView({ active }: Props) {
           {scResults.length > 0 && (
             <div className="search-section">
               <p className="search-section-label">SoundCloud</p>
-              {scResults.map((r) => (
-                <div
-                  key={r.sc_id}
-                  className="track-card sc-result"
-                  onClick={() => handlePlaySC(r)}
-                >
-                  <CoverImage coverKey={null} externalUrl={r.artwork_url} />
-                  <div className="track-card-info">
-                    <p className="track-card-title">
-                      {r.title}
-                      <span className="track-badge track-badge-sc">SC</span>
-                    </p>
-                    <p className="track-card-artist">{r.artist ?? '—'}</p>
-                    {r.duration_seconds && (
-                      <p className="track-card-meta">
-                        {Math.floor(r.duration_seconds / 60)}:{String(r.duration_seconds % 60).padStart(2, '0')}
+              {scResults.map((r) => {
+                const imported = importedSC[r.sc_url]
+                if (imported) {
+                  return (
+                    <TrackCard key={r.sc_id} track={imported} />
+                  )
+                }
+                return (
+                  <div
+                    key={r.sc_id}
+                    className="track-card sc-result"
+                    onClick={() => handlePlaySC(r)}
+                  >
+                    <CoverImage coverKey={null} externalUrl={r.artwork_url} />
+                    <div className="track-card-info">
+                      <p className="track-card-title">
+                        {r.title}
+                        <span className="track-badge track-badge-sc">SC</span>
                       </p>
-                    )}
+                      <p className="track-card-artist">{r.artist ?? '—'}</p>
+                      {r.duration_seconds != null && (
+                        <p className="track-card-meta">
+                          {Math.floor(r.duration_seconds / 60)}:{String(r.duration_seconds % 60).padStart(2, '0')}
+                        </p>
+                      )}
+                    </div>
+                    <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        className="track-card-like"
+                        title="Лайк"
+                        onClick={(e) => handleLikeSC(e, r)}
+                        disabled={importing === r.sc_url}
+                      >
+                        🤍
+                      </button>
+                      <span className="sc-play-hint">
+                        {importing === r.sc_url ? '…' : '▶'}
+                      </span>
+                    </div>
                   </div>
-                  <span className="sc-play-hint">
-                    {importing === r.sc_url ? '…' : '▶'}
-                  </span>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 

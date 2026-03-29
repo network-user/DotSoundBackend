@@ -8,6 +8,7 @@ from app.core.rate_limit import limiter
 from app.dependencies import get_db
 from app.schemas.track import SCSearchResult, TrackResponse
 from app.services.soundcloud_service import SoundCloudService
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/soundcloud", tags=["soundcloud"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -78,9 +79,22 @@ async def import_soundcloud_track(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="URL is not a track",
         )
+    
+    # Resolve Telegram ID to internal ID
+    resolved_uploader_id = None
+    if data.uploader_id:
+        user_service = UserService(session)
+        user = await user_service.get_by_id(data.uploader_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+        resolved_uploader_id = user.id
+
     track = await service.import_or_get_track(
         sc_data=sc_data,
-        uploader_id=data.uploader_id,
+        uploader_id=resolved_uploader_id,
         is_public=data.is_public,
     )
     logger.info("sc_import_endpoint", track_id=track.id, sc_url=data.sc_url)
