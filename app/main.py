@@ -14,6 +14,7 @@ from app.api.router import api_router
 from app.config import settings
 from app.core.db import dispose_engine
 from app.core.logging import configure_logging
+from app.core.s3 import ensure_bucket_exists
 from app.core.rate_limit import limiter
 from app.middlewares.request_logging import RequestLoggingMiddleware
 
@@ -27,6 +28,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         "dotsound_backend_starting",
         log_level=settings.log_level,
     )
+    await ensure_bucket_exists()
     yield
     logger.info("dotsound_backend_shutting_down")
     await dispose_engine()

@@ -1,4 +1,4 @@
-export type ViewName = 'home' | 'search' | 'upload' | 'liked'
+export type ViewName = 'home' | 'search' | 'upload' | 'liked' | 'playlists' | 'profile'
 
 interface NavItem {
   view: ViewName
@@ -7,10 +7,11 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { view: 'home', icon: '🏠', label: 'Главная' },
-  { view: 'search', icon: '🔍', label: 'Поиск' },
-  { view: 'upload', icon: '📤', label: 'Загрузить' },
-  { view: 'liked', icon: '❤️', label: 'Лайки' },
+  { view: 'home',      icon: '◎', label: 'Главная' },
+  { view: 'search',    icon: '⌕', label: 'Поиск' },
+  { view: 'upload',    icon: '↑', label: 'Загрузить' },
+  { view: 'playlists', icon: '▤', label: 'Плейлисты' },
+  { view: 'profile',   icon: '◉', label: 'Профиль' },
 ]
 
 interface Props {
@@ -24,6 +25,7 @@ export function BottomNav({ activeView, onSwitch }: Props) {
       {NAV_ITEMS.map(({ view, icon, label }) => (
         <button
           key={view}
+          id={`nav-btn-${view}`}
           className={`nav-btn${activeView === view ? ' active' : ''}`}
           data-view={view}
           onClick={() => onSwitch(view)}

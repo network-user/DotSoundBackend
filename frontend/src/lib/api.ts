@@ -7,6 +7,10 @@ import type {
   UserLikesResponse,
   ComplaintCreate,
   ComplaintSubmitResponse,
+  Playlist,
+  PlaylistWithTracks,
+  UserResponse,
+  UserStatsResponse,
 } from '@/types/api'
 
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
@@ -56,5 +60,44 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
+  },
+
+  getPlaylists(ownerId: number): Promise<Playlist[]> {
+    return request(`/api/v1/playlists?owner_id=${ownerId}`)
+  },
+
+  getPlaylist(id: number): Promise<PlaylistWithTracks> {
+    return request(`/api/v1/playlists/${id}`)
+  },
+
+  createPlaylist(ownerId: number, name: string, isPublic = false): Promise<Playlist> {
+    return request(`/api/v1/playlists?owner_id=${ownerId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, is_public: isPublic }),
+    })
+  },
+
+  addTrackToPlaylist(
+    playlistId: number,
+    trackId: number,
+    requesterId: number,
+  ): Promise<void> {
+    return request(
+      `/api/v1/playlists/${playlistId}/tracks?requester_id=${requesterId}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ track_id: trackId }),
+      },
+    )
+  },
+
+  getUserProfile(userId: number): Promise<UserResponse> {
+    return request(`/api/v1/users/${userId}`)
+  },
+
+  getUserStats(userId: number): Promise<UserStatsResponse> {
+    return request(`/api/v1/users/${userId}/stats`)
   },
 }
