@@ -14,6 +14,8 @@ interface PlayerContextValue {
   isPlaying: boolean
   currentTime: number
   duration: number
+  volume: number
+  setVolume: (volume: number) => void
   isComplaintOpen: boolean
   playTrack: (track: Track) => Promise<void>
   togglePlay: () => void
@@ -31,6 +33,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [volume, setVolumeState] = useState(() => {
+    const saved = localStorage.getItem('player-volume')
+    return saved ? parseFloat(saved) : 0.8
+  })
   const [isComplaintOpen, setIsComplaintOpen] = useState(false)
   const playCountSentRef = useRef(false)
 
@@ -67,6 +73,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener('durationchange', onDurationChange)
     }
   }, [track])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (audio) {
+      audio.volume = volume
+    }
+    localStorage.setItem('player-volume', volume.toString())
+  }, [volume])
+
+  const setVolume = (v: number) => {
+    setVolumeState(Math.max(0, Math.min(1, v)))
+  }
 
   const playTrack = async (newTrack: Track) => {
     const audio = audioRef.current
@@ -111,6 +129,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         isPlaying,
         currentTime,
         duration,
+        volume,
+        setVolume,
         isComplaintOpen,
         playTrack,
         togglePlay,
