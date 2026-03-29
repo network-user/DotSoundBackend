@@ -44,3 +44,25 @@ class UserRepository(BaseRepository[User]):
         )
         logger.debug("db_user_created", telegram_id=telegram_id)
         return user, True
+
+    async def update_display_name(
+        self, user_id: int, display_name: str
+    ) -> User | None:
+        user = await self.get_by_id(user_id)
+        if not user:
+            return None
+        user.display_name = display_name
+        await self._session.commit()
+        await self._session.refresh(user)
+        return user
+
+    async def update_avatar_key(
+        self, user_id: int, avatar_key: str
+    ) -> User | None:
+        user = await self.get_by_id(user_id)
+        if not user:
+            return None
+        user.avatar_key = avatar_key
+        await self._session.commit()
+        await self._session.refresh(user)
+        return user

@@ -41,3 +41,13 @@ class UserService:
 
     async def get_by_telegram_id(self, telegram_id: int) -> User | None:
         return await self._repo.get_by_telegram_id(telegram_id)
+
+    async def update_display_name(
+        self, user_id: int, display_name: str
+    ) -> User | None:
+        return await self._repo.update_display_name(user_id, display_name)
+
+    async def update_avatar_key(
+        self, user_id: int, avatar_key: str
+    ) -> User | None:
+        return await self._repo.update_avatar_key(user_id, avatar_key)

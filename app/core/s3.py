@@ -106,6 +106,38 @@ async def upload_cover(
     return file_key
 
 
+async def delete_object(file_key: str) -> None:
+    logger.info("s3_delete_started", file_key=file_key)
+    async with get_s3_client() as s3:
+        await s3.delete_object(
+            Bucket=settings.minio_bucket, Key=file_key
+        )
+    logger.info("s3_delete_completed", file_key=file_key)
+
+
+async def upload_avatar(
+    data: bytes,
+    content_type: str,
+    user_id: int,
+) -> str:
+    ext = _COVER_EXT_MAP.get(content_type, "jpg")
+    file_key = f"avatars/{user_id}/{uuid.uuid4().hex}.{ext}"
+    logger.info(
+        "s3_avatar_upload_started",
+        file_key=file_key,
+        size_bytes=len(data),
+    )
+    async with get_s3_client() as s3:
+        await s3.put_object(
+            Bucket=settings.minio_bucket,
+            Key=file_key,
+            Body=data,
+            ContentType=content_type,
+        )
+    logger.info("s3_avatar_upload_completed", file_key=file_key)
+    return file_key
+
+
 async def ensure_bucket_exists() -> None:
     """Create the audio bucket if it doesn't exist yet."""
     async with get_s3_client() as s3:

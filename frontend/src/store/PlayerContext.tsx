@@ -29,7 +29,11 @@ const PlayerContext = createContext<PlayerContextValue | null>(null)
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement>(null)
+  const scIframeRef = useRef<HTMLIFrameElement>(null)
+  const scWidgetRef = useRef<SCWidgetInstance | null>(null)
+
   const [track, setTrack] = useState<Track | null>(null)
+  const [mode, setMode] = useState<'internal' | 'soundcloud'>('internal')
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -42,7 +46,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio) return
+    if (!audio || mode !== 'internal') return
 
     const onPlay = () => {
       setIsPlaying(true)
@@ -72,30 +76,88 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('durationchange', onDurationChange)
     }
-  }, [track])
+  }, [track, mode])
 
   useEffect(() => {
     const audio = audioRef.current
-    if (audio) {
-      audio.volume = volume
-    }
+    if (audio) audio.volume = volume
     localStorage.setItem('player-volume', volume.toString())
   }, [volume])
+
+  const bindScWidget = (newTrack: Track) => {
+    const iframe = scIframeRef.current
+    if (!iframe || typeof SC === 'undefined') return
+
+    scWidgetRef.current = SC.Widget(iframe)
+    const widget = scWidgetRef.current
+
+    widget.bind(SC.Widget.Events.PLAY, () => {
+      setIsPlaying(true)
+      if (!playCountSentRef.current) {
+        playCountSentRef.current = true
+        api.postPlay(newTrack.id).catch(() => {})
+      }
+    })
+
+    widget.bind(SC.Widget.Events.PAUSE, () => {
+      setIsPlaying(false)
+    })
+
+    widget.bind(SC.Widget.Events.FINISH, () => {
+      setIsPlaying(false)
+      setCurrentTime(0)
+    })
+
+    widget.bind(SC.Widget.Events.PLAY_PROGRESS, (e) => {
+      if (!e) return
+      setCurrentTime(e.currentPosition / 1000)
+      if (e.duration) setDuration(e.duration / 1000)
+    })
+  }
 
   const setVolume = (v: number) => {
     setVolumeState(Math.max(0, Math.min(1, v)))
   }
 
   const playTrack = async (newTrack: Track) => {
+    playCountSentRef.current = false
+    setTrack(newTrack)
+    setCurrentTime(0)
+    setDuration(newTrack.duration_seconds ?? 0)
+
+    if (newTrack.source === 'soundcloud') {
+      const audio = audioRef.current
+      if (audio) {
+        audio.pause()
+        audio.src = ''
+      }
+      setMode('soundcloud')
+      try {
+        const { url } = await api.getStream(newTrack.id)
+        const iframe = scIframeRef.current
+        if (!iframe) return
+        iframe.src = url
+        bindScWidget(newTrack)
+      } catch (e) {
+        console.error('sc playTrack error', e)
+      }
+      return
+    }
+
+    setMode('internal')
+    if (scWidgetRef.current) {
+      try { scWidgetRef.current.pause() } catch { }
+      scWidgetRef.current = null
+    }
+    const scIframe = scIframeRef.current
+    if (scIframe) scIframe.src = ''
+
     const audio = audioRef.current
     if (!audio) return
     try {
       const { url } = await api.getStream(newTrack.id)
       audio.src = url
-      playCountSentRef.current = false
-      setTrack(newTrack)
-      setCurrentTime(0)
-      setDuration(0)
+      audio.volume = volume
       await audio.play()
     } catch (e) {
       console.error('playTrack error', e)
@@ -103,6 +165,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }
 
   const togglePlay = () => {
+    if (mode === 'soundcloud') {
+      scWidgetRef.current?.toggle()
+      return
+    }
     const audio = audioRef.current
     if (!audio || !track) return
     if (audio.paused) audio.play()
@@ -110,16 +176,31 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }
 
   const seek = (pct: number) => {
+    if (mode === 'soundcloud') {
+      if (scWidgetRef.current && duration) {
+        scWidgetRef.current.seekTo(pct * duration * 10)
+      }
+      return
+    }
     const audio = audioRef.current
     if (!audio || !audio.duration) return
     audio.currentTime = (pct / 100) * audio.duration
   }
 
   const stop = () => {
-    const audio = audioRef.current
-    if (audio) audio.pause()
+    if (mode === 'soundcloud') {
+      try { scWidgetRef.current?.pause() } catch { }
+      scWidgetRef.current = null
+      const scIframe = scIframeRef.current
+      if (scIframe) scIframe.src = ''
+    } else {
+      const audio = audioRef.current
+      if (audio) audio.pause()
+    }
     setTrack(null)
     setIsPlaying(false)
+    setCurrentTime(0)
+    setDuration(0)
   }
 
   return (
@@ -141,6 +222,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }}
     >
       <audio ref={audioRef} preload="none" />
+      <iframe
+        ref={scIframeRef}
+        style={{ display: 'none', width: 0, height: 0, border: 'none' }}
+        allow="autoplay"
+        scrolling="no"
+        title="sc-player"
+      />
       {children}
     </PlayerContext.Provider>
   )

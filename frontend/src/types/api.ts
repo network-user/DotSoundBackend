@@ -6,6 +6,11 @@ export interface Track {
   cover_key: string | null
   play_count: number
   is_active: boolean
+  is_public: boolean
+  source: 'internal' | 'soundcloud'
+  sc_url: string | null
+  sc_uri: string | null
+  uploaded_by_id: number | null
   created_at: string
 }
 
@@ -20,9 +25,11 @@ export interface TrackUploadResponse {
   id: number
   title: string
   artist: string | null
-  file_key: string
+  file_key: string | null
   cover_key: string | null
   duration_seconds: number | null
+  source: string
+  is_public: boolean
   created_at: string
 }
 
@@ -78,6 +85,9 @@ export interface UserResponse {
   username: string | null
   first_name: string | null
   last_name: string | null
+  display_name: string | null
+  avatar_key: string | null
+  is_active: boolean
   created_at: string
 }
 
@@ -85,4 +95,18 @@ export interface UserStatsResponse {
   total_tracks: number
   total_plays: number
   total_likes: number
+}
+
+export interface SCSearchResult {
+  sc_id: number
+  title: string
+  artist: string | null
+  duration_seconds: number | null
+  artwork_url: string | null
+  sc_url: string
+  sc_uri: string
+}
+
+export interface AvatarResponse {
+  avatar_url: string
 }
