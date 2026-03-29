@@ -63,20 +63,34 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
     >
       <CoverImage coverKey={track.cover_key} />
       <div className="track-card-info">
-        <p className="track-card-title">
-          {track.title}
+        <div className="track-card-title-row">
+          <p className="track-card-title">{track.title}</p>
           {!track.is_public && (
             <span className="track-badge track-badge-private">🔒</span>
           )}
           {track.source === 'soundcloud' && (
             <span className="track-badge track-badge-sc">SC</span>
           )}
-        </p>
+        </div>
         <p className="track-card-artist">{track.artist ?? 'Неизвестный исполнитель'}</p>
         <p className="track-card-meta">
           ▶ {track.play_count}
           {track.duration_seconds ? ` · ${fmtDuration(track.duration_seconds)}` : ''}
         </p>
+        {track.source === 'soundcloud' && track.sc_url && (
+          <span className="track-source">
+            источник:{' '}
+            <a
+              href={track.sc_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="track-source-link"
+              onClick={(e) => e.stopPropagation()}
+            >
+              SoundCloud
+            </a>
+          </span>
+        )}
       </div>
       <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
         <button className="track-card-like" title="Лайк" onClick={handleLike}>
