@@ -545,6 +545,43 @@ body {
   text-overflow: ellipsis;
 }
 
+#pb-volume-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px;
+  flex-shrink: 0;
+}
+.volume-icon {
+  font-size: 14px;
+  color: var(--text-muted);
+  width: 18px;
+  text-align: center;
+}
+#pb-volume {
+  width: 60px;
+  height: 3px;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--surface-2);
+  border-radius: 2px;
+  outline: none;
+}
+#pb-volume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  cursor: pointer;
+}
+#pb-volume:hover::-webkit-slider-thumb {
+  background: var(--text);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.2);
+}
+
 #pb-controls { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
 .play-btn {

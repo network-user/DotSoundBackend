@@ -9,7 +9,7 @@ function fmt(sec: number) {
 }
 
 export function PlayerBar() {
-  const { track, isPlaying, currentTime, duration, togglePlay, seek, openComplaint } = usePlayer()
+  const { track, isPlaying, currentTime, duration, togglePlay, seek, openComplaint, volume, setVolume } = usePlayer()
   const { isLiked, toggleLike, isDisliked, toggleDislike } = useLikes()
 
   if (!track) return null
@@ -61,6 +61,18 @@ export function PlayerBar() {
         <div id="pb-info">
           <p className="pb-title">{track.title}</p>
           <p className="pb-artist hint">{track.artist ?? '—'}</p>
+        </div>
+        <div id="pb-volume-wrap">
+          <span className="volume-icon">{volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</span>
+          <input
+            type="range"
+            id="pb-volume"
+            min={0}
+            max={1}
+            step={0.01}
+            value={volume}
+            onChange={(e) => setVolume(parseFloat(e.target.value))}
+          />
         </div>
         <div id="pb-controls">
           <button className="icon-btn" title="Лайк" onClick={handleLike}>
