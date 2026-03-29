@@ -25,18 +25,18 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level)
     logger.info(
-        "dotsound_backend_starting",
+        "sound_api_starting",
         log_level=settings.log_level,
     )
     await ensure_bucket_exists()
     yield
-    logger.info("dotsound_backend_shutting_down")
+    logger.info("sound_api_shutting_down")
     await dispose_engine()
 
 
 def create_app() -> FastAPI:
     application = FastAPI(
-        title="DotSoundBackend",
+        title=".Sound API",
         version="0.1.0",
         lifespan=lifespan,
     )
