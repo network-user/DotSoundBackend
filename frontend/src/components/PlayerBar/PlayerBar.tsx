@@ -10,15 +10,20 @@ function fmt(sec: number) {
 
 export function PlayerBar() {
   const { track, isPlaying, currentTime, duration, togglePlay, seek, openComplaint } = usePlayer()
-  const { isLiked, toggleLike } = useLikes()
+  const { isLiked, toggleLike, isDisliked, toggleDislike } = useLikes()
 
   if (!track) return null
 
   const pct = duration ? (currentTime / duration) * 100 : 0
   const liked = isLiked(track.id)
+  const disliked = isDisliked(track.id)
 
   const handleLike = async () => {
     await toggleLike(track.id)
+  }
+
+  const handleDislike = async () => {
+    await toggleDislike(track.id)
   }
 
   const coverSrc = track.cover_key
@@ -60,6 +65,9 @@ export function PlayerBar() {
         <div id="pb-controls">
           <button className="icon-btn" title="Лайк" onClick={handleLike}>
             {liked ? '❤️' : '🤍'}
+          </button>
+          <button className="icon-btn" title="Дизлайк" onClick={handleDislike}>
+            {disliked ? '👎' : '▽'}
           </button>
           <button className="icon-btn" title="Пожаловаться" onClick={openComplaint}>
             🚩

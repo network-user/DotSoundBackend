@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -34,7 +34,9 @@ class Track(Base, TimestampMixin):
         Text, nullable=True
     )
     uploaded_by_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("users.id", ondelete="SET NULL"),
+        type_=BigInteger,
+        nullable=True,
     )
     is_active: Mapped[bool] = mapped_column(
         Boolean, server_default="true", nullable=False
