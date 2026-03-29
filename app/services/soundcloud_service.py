@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.models.track import Track
+from app.models.user import User
+from app.repositories.user import UserRepository
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -19,6 +21,20 @@ class SoundCloudService:
     def __init__(self, client_id: str, session: AsyncSession) -> None:
         self._client_id = client_id
         self._session = session
+        self._user_repo = UserRepository(session)
+
+    async def _resolve_user(self, user_id: int) -> User:
+        user = await self._user_repo.get_by_id(user_id)
+        if not user:
+            user = await self._user_repo.get_by_telegram_id(user_id)
+        
+        if not user:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+        return user
 
     async def search(
         self, query: str, limit: int = 20
@@ -120,6 +136,11 @@ class SoundCloudService:
         uploader_id: int | None = None,
         is_public: bool = True,
     ) -> Track:
+        resolved_uploader_id = None
+        if uploader_id is not None:
+            user = await self._resolve_user(uploader_id)
+            resolved_uploader_id = user.id
+
         sc_url: str = sc_data.get("permalink_url", "")
         existing_result = await self._session.execute(
             select(Track).where(Track.sc_url == sc_url)
@@ -133,7 +154,7 @@ class SoundCloudService:
         if artwork_url:
             try:
                 cover_key = await self._download_thumbnail(
-                    artwork_url, uploader_id
+                    artwork_url, resolved_uploader_id
                 )
             except Exception:
                 logger.warning(
@@ -156,7 +177,7 @@ class SoundCloudService:
             sc_uri=sc_data.get("uri"),
             file_key=None,
             cover_key=cover_key,
-            uploaded_by_id=uploader_id,
+            uploaded_by_id=resolved_uploader_id,
             is_public=is_public,
         )
         self._session.add(track)

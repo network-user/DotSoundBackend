@@ -2,7 +2,9 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
+from app.models.user import User
 from app.repositories.track import TrackRepository
+from app.repositories.user import UserRepository
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -10,6 +12,20 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 class TrackService:
     def __init__(self, session: AsyncSession) -> None:
         self._repo = TrackRepository(session)
+        self._user_repo = UserRepository(session)
+
+    async def _resolve_user(self, user_id: int) -> User:
+        user = await self._user_repo.get_by_id(user_id)
+        if not user:
+            user = await self._user_repo.get_by_telegram_id(user_id)
+        
+        if not user:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+        return user
 
     async def list_tracks(
         self,
@@ -61,21 +77,24 @@ class TrackService:
         page: int = 1,
         size: int = 50,
     ) -> tuple[list[Track], int]:
+        user = await self._resolve_user(user_id)
         offset = (page - 1) * size
         return await self._repo.list_by_user(
-            user_id=user_id, offset=offset, limit=size
+            user_id=user.id, offset=offset, limit=size
         )
 
     async def update_visibility(
         self, track_id: int, user_id: int, is_public: bool
     ) -> Track | None:
+        user = await self._resolve_user(user_id)
         return await self._repo.update_visibility(
-            track_id=track_id, user_id=user_id, is_public=is_public
+            track_id=track_id, user_id=user.id, is_public=is_public
         )
 
     async def delete_by_owner(
         self, track_id: int, user_id: int
     ) -> Track | None:
+        user = await self._resolve_user(user_id)
         return await self._repo.delete_by_owner(
-            track_id=track_id, user_id=user_id
+            track_id=track_id, user_id=user.id
         )
