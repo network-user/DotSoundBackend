@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Boolean, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -14,7 +14,8 @@ class Complaint(Base, TimestampMixin):
         index=True,
     )
     reported_by_user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        type_=BigInteger,
         nullable=False,
     )
     reason: Mapped[str] = mapped_column(Text, nullable=False)

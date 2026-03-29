@@ -4,6 +4,7 @@ import type {
   TrackUploadResponse,
   StreamResponse,
   LikeToggleResponse,
+  DislikeToggleResponse,
   UserLikesResponse,
   ComplaintCreate,
   ComplaintSubmitResponse,
@@ -48,6 +49,10 @@ export const api = {
 
   toggleLike(userId: number, trackId: number): Promise<LikeToggleResponse> {
     return request(`/api/v1/likes/${userId}/${trackId}`, { method: 'POST' })
+  },
+
+  toggleDislike(userId: number, track_id: number): Promise<DislikeToggleResponse> {
+    return request(`/api/v1/dislikes/${userId}/${track_id}`, { method: 'POST' })
   },
 
   getLikedTracks(userId: number, size = 200): Promise<UserLikesResponse> {

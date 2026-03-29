@@ -7,7 +7,7 @@ from app.models.base import Base, TimestampMixin
 class User(Base, TimestampMixin):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     telegram_id: Mapped[int] = mapped_column(
         BigInteger, unique=True, index=True, nullable=False
     )

@@ -3,20 +3,20 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
+from app.repositories.dislike import DislikeRepository
 from app.repositories.like import LikeRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
-from app.repositories.dislike import DislikeRepository
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
-class LikeService:
+class DislikeService:
     def __init__(self, session: AsyncSession) -> None:
-        self._repo = LikeRepository(session)
+        self._repo = DislikeRepository(session)
+        self._like_repo = LikeRepository(session)
         self._track_repo = TrackRepository(session)
         self._user_repo = UserRepository(session)
-        self._dislike_repo = DislikeRepository(session)
 
     async def toggle(
         self, user_id: int, track_id: int
@@ -44,48 +44,30 @@ class LikeService:
         existing = await self._repo.get(resolved_user_id, track_id)
         if existing:
             await self._repo.remove(resolved_user_id, track_id)
-            liked = False
+            disliked = False
         else:
-            # When liking, remove dislike if it exists
-            await self._dislike_repo.remove(resolved_user_id, track_id)
+            # When disliking, remove like if it exists
+            await self._like_repo.remove(resolved_user_id, track_id)
             await self._repo.add(resolved_user_id, track_id)
-            liked = True
+            disliked = True
 
         logger.info(
-            "like_toggled",
+            "dislike_toggled",
             user_id=resolved_user_id,
             track_id=track_id,
-            liked=liked,
+            disliked=disliked,
         )
-        return liked
+        return disliked
 
-    async def list_liked(
-        self,
-        user_id: int,
-        page: int = 1,
-        size: int = 20,
-    ) -> tuple[list[Track], int]:
-        # Resolve user_id
+    async def is_disliked(
+        self, user_id: int, track_id: int
+    ) -> bool:
         user = await self._user_repo.get_by_id(user_id)
         if not user:
             user = await self._user_repo.get_by_telegram_id(user_id)
         
         if not user:
-            return [], 0
-
-        offset = (page - 1) * size
-        tracks, total = await self._repo.list_liked_tracks(
-            user_id=user.id, offset=offset, limit=size
-        )
-        logger.info(
-            "liked_tracks_listed",
-            user_id=user.id,
-            total=total,
-        )
-        return tracks, total
-
-    async def is_liked(
-        self, user_id: int, track_id: int
-    ) -> bool:
-        like = await self._repo.get(user_id, track_id)
-        return like is not None
+            return False
+            
+        dislike = await self._repo.get(user.id, track_id)
+        return dislike is not None

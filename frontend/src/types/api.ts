@@ -37,6 +37,11 @@ export interface LikeToggleResponse {
   liked: boolean
 }
 
+export interface DislikeToggleResponse {
+  track_id: number
+  disliked: boolean
+}
+
 export interface UserLikesResponse {
   items: Track[]
   total: number

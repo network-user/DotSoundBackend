@@ -32,5 +32,12 @@ class UserService:
     async def get_by_id(self, user_id: int) -> User | None:
         user = await self._repo.get_by_id(user_id)
         if not user:
+            # Fallback to telegram_id if not found by primary key
+            user = await self._repo.get_by_telegram_id(user_id)
+        
+        if not user:
             logger.warning("user_not_found", user_id=user_id)
         return user
+
+    async def get_by_telegram_id(self, telegram_id: int) -> User | None:
+        return await self._repo.get_by_telegram_id(telegram_id)

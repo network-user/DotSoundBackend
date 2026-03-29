@@ -21,3 +21,16 @@ class LikeToggleResponse(BaseModel):
 class UserLikesResponse(BaseModel):
     items: list[TrackResponse]
     total: int
+
+
+class DislikeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    track_id: int
+    created_at: datetime
+
+
+class DislikeToggleResponse(BaseModel):
+    track_id: int
+    disliked: bool
