@@ -17,6 +17,7 @@ export function PlayerBar() {
   const pct = duration ? (currentTime / duration) * 100 : 0
   const liked = isLiked(track.id)
   const disliked = isDisliked(track.id)
+  const isSC = track.source === 'soundcloud'
 
   const handleLike = async () => {
     await toggleLike(track.id)
@@ -59,8 +60,24 @@ export function PlayerBar() {
           )}
         </div>
         <div id="pb-info">
-          <p className="pb-title">{track.title}</p>
-          <p className="pb-artist hint">{track.artist ?? '—'}</p>
+          <p className="pb-title">
+            {track.title}
+            {isSC && <span className="track-badge track-badge-sc">SC</span>}
+          </p>
+          <p className="pb-artist hint">
+            {track.artist ?? '—'}
+            {isSC && track.sc_url && (
+              <a
+                href={track.sc_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="pb-sc-link"
+                onClick={(e) => e.stopPropagation()}
+              >
+                ↗
+              </a>
+            )}
+          </p>
         </div>
         <div id="pb-volume-wrap">
           <span className="volume-icon">{volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</span>
@@ -81,9 +98,11 @@ export function PlayerBar() {
           <button className="icon-btn" title="Дизлайк" onClick={handleDislike}>
             {disliked ? '👎' : '▽'}
           </button>
-          <button className="icon-btn" title="Пожаловаться" onClick={openComplaint}>
-            🚩
-          </button>
+          {!isSC && (
+            <button className="icon-btn" title="Пожаловаться" onClick={openComplaint}>
+              🚩
+            </button>
+          )}
           <button className="play-btn" title="Воспроизвести" onClick={togglePlay}>
             {isPlaying ? '⏸' : '▶'}
           </button>

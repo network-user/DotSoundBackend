@@ -62,6 +62,7 @@ class UploadService:
         artist: str | None,
         cover: UploadFile | None = None,
         uploader_id: int | None = None,
+        is_public: bool = True,
     ) -> Track:
         mime = _resolve_mime(file)
         logger.info(
@@ -108,6 +109,7 @@ class UploadService:
             file_key=file_key,
             cover_key=cover_key,
             uploaded_by_id=uploader_id,
+            is_public=is_public,
         )
         logger.info(
             "upload_complete",

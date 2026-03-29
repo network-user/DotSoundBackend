@@ -15,6 +15,7 @@ class AppSettings(BaseSettings):
     minio_use_ssl: bool = False
     log_level: str = "INFO"
     complaint_threshold: int = 3
+    sc_client_id: str = ""
 
 
 settings = AppSettings()

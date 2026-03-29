@@ -1,15 +1,17 @@
 import type {
+  AvatarResponse,
+  ComplaintCreate,
+  ComplaintSubmitResponse,
+  DislikeToggleResponse,
+  LikeToggleResponse,
+  Playlist,
+  PlaylistWithTracks,
+  SCSearchResult,
+  StreamResponse,
   Track,
   TrackListResponse,
   TrackUploadResponse,
-  StreamResponse,
-  LikeToggleResponse,
-  DislikeToggleResponse,
   UserLikesResponse,
-  ComplaintCreate,
-  ComplaintSubmitResponse,
-  Playlist,
-  PlaylistWithTracks,
   UserResponse,
   UserStatsResponse,
 } from '@/types/api'
@@ -31,6 +33,10 @@ export const api = {
     return request(`/api/v1/tracks${query}`)
   },
 
+  getMyTracks(userId: number, page = 1, size = 50): Promise<TrackListResponse> {
+    return request(`/api/v1/tracks/my?user_id=${userId}&page=${page}&size=${size}`)
+  },
+
   getTrack(id: number): Promise<Track> {
     return request(`/api/v1/tracks/${id}`)
   },
@@ -45,6 +51,32 @@ export const api = {
 
   uploadTrack(formData: FormData): Promise<TrackUploadResponse> {
     return request('/api/v1/tracks/upload', { method: 'POST', body: formData })
+  },
+
+  updateTrack(trackId: number, data: { is_public?: boolean }, requesterId: number): Promise<Track> {
+    return request(`/api/v1/tracks/${trackId}?requester_id=${requesterId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+  },
+
+  deleteTrack(trackId: number, requesterId: number): Promise<void> {
+    return request(`/api/v1/tracks/${trackId}?requester_id=${requesterId}`, {
+      method: 'DELETE',
+    })
+  },
+
+  searchSoundCloud(q: string, limit = 20): Promise<SCSearchResult[]> {
+    return request(`/api/v1/soundcloud/search?q=${encodeURIComponent(q)}&limit=${limit}`)
+  },
+
+  importSCTrack(sc_url: string, uploader_id?: number, is_public = true): Promise<Track> {
+    return request('/api/v1/soundcloud/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sc_url, uploader_id, is_public }),
+    })
   },
 
   toggleLike(userId: number, trackId: number): Promise<LikeToggleResponse> {
@@ -104,5 +136,24 @@ export const api = {
 
   getUserStats(userId: number): Promise<UserStatsResponse> {
     return request(`/api/v1/users/${userId}/stats`)
+  },
+
+  updateProfile(userId: number, display_name: string): Promise<UserResponse> {
+    return request(`/api/v1/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ display_name }),
+    })
+  },
+
+  uploadAvatar(userId: number, formData: FormData): Promise<AvatarResponse> {
+    return request(`/api/v1/users/${userId}/avatar`, {
+      method: 'POST',
+      body: formData,
+    })
+  },
+
+  getAvatarUrl(userId: number): Promise<AvatarResponse> {
+    return request(`/api/v1/users/${userId}/avatar`)
   },
 }

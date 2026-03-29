@@ -24,8 +24,8 @@ class Track(Base, TimestampMixin):
     duration_seconds: Mapped[int | None] = mapped_column(
         Integer, nullable=True
     )
-    file_key: Mapped[str] = mapped_column(
-        Text, unique=True, nullable=False
+    file_key: Mapped[str | None] = mapped_column(
+        Text, nullable=True
     )
     play_count: Mapped[int] = mapped_column(
         Integer, server_default="0", nullable=False
@@ -39,6 +39,14 @@ class Track(Base, TimestampMixin):
         nullable=True,
     )
     is_active: Mapped[bool] = mapped_column(
+        Boolean, server_default="true", nullable=False
+    )
+    source: Mapped[str] = mapped_column(
+        String(20), server_default="internal", nullable=False
+    )
+    sc_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sc_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_public: Mapped[bool] = mapped_column(
         Boolean, server_default="true", nullable=False
     )
 

@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Boolean, String
+from sqlalchemy import BigInteger, Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -23,3 +23,7 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(
         Boolean, server_default="true", nullable=False
     )
+    display_name: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    avatar_key: Mapped[str | None] = mapped_column(Text, nullable=True)

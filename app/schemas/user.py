@@ -18,8 +18,18 @@ class UserResponse(BaseModel):
     username: str | None
     first_name: str
     last_name: str | None
+    display_name: str | None = None
+    avatar_key: str | None = None
     is_active: bool
     created_at: datetime
+
+
+class UserUpdateRequest(BaseModel):
+    display_name: str | None = Field(None, max_length=128)
+
+
+class AvatarResponse(BaseModel):
+    avatar_url: str
 
 
 class TrackStatsItem(BaseModel):
