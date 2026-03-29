@@ -130,16 +130,30 @@ export function SearchView({ active }: Props) {
                   >
                     <CoverImage coverKey={null} externalUrl={r.artwork_url} />
                     <div className="track-card-info">
-                      <p className="track-card-title">
-                        {r.title}
+                      <div className="track-card-title-row">
+                        <p className="track-card-title">{r.title}</p>
                         <span className="track-badge track-badge-sc">SC</span>
-                      </p>
+                      </div>
                       <p className="track-card-artist">{r.artist ?? '—'}</p>
-                      {r.duration_seconds != null && (
-                        <p className="track-card-meta">
-                          {Math.floor(r.duration_seconds / 60)}:{String(r.duration_seconds % 60).padStart(2, '0')}
-                        </p>
-                      )}
+                      <p className="track-card-meta">
+                        {r.duration_seconds != null && (
+                          <span className="sc-duration">
+                            {Math.floor(r.duration_seconds / 60)}:{String(r.duration_seconds % 60).padStart(2, '0')}
+                          </span>
+                        )}
+                      </p>
+                      <span className="track-source">
+                        источник:{' '}
+                        <a
+                          href={r.sc_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="track-source-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          SoundCloud
+                        </a>
+                      </span>
                     </div>
                     <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
                       <button
