@@ -26,6 +26,7 @@ from app.schemas.track import (
 )
 from app.services.track_service import TrackService
 from app.services.upload_service import UploadService
+from app.services.user_service import UserService
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -99,13 +100,26 @@ async def upload_track(
         uploader_id=uploader_id,
     )
     logger.info("track_upload_endpoint_called")
+    
+    # Resolve Telegram ID to internal ID
+    resolved_uploader_id = None
+    if uploader_id:
+        user_service = UserService(session)
+        user = await user_service.get_by_id(uploader_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+        resolved_uploader_id = user.id
+
     service = UploadService(session)
     track = await service.upload_track(
         file=file,
         title=title,
         artist=artist,
         cover=cover,
-        uploader_id=uploader_id,
+        uploader_id=resolved_uploader_id,
         is_public=is_public,
     )
     return TrackUploadResponse.model_validate(track)
@@ -125,7 +139,13 @@ async def list_my_tracks(
     session: AsyncSession = Depends(get_db),
 ) -> TrackListResponse:
     service = TrackService(session)
-    tracks, total = await service.list_by_user(user_id, page=page, size=size)
+    
+    # Resolve Telegram ID
+    user_service = UserService(session)
+    user = await user_service.get_by_id(user_id)
+    resolved_user_id = user.id if user else user_id
+
+    tracks, total = await service.list_by_user(resolved_user_id, page=page, size=size)
     return TrackListResponse(
         items=[TrackResponse.model_validate(t) for t in tracks],
         total=total,
@@ -154,9 +174,19 @@ async def update_track(
             detail="No fields to update",
         )
     service = TrackService(session)
+    
+    # Resolve requester
+    user_service = UserService(session)
+    user = await user_service.get_by_id(requester_id)
+    if not user:
+         raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    
     track = await service.update_visibility(
         track_id=track_id,
-        user_id=requester_id,
+        user_id=user.id,
         is_public=data.is_public,
     )
     if not track:
@@ -181,8 +211,18 @@ async def delete_track(
 ) -> None:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
+    
+    # Resolve requester
+    user_service = UserService(session)
+    user = await user_service.get_by_id(requester_id)
+    if not user:
+         raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
     track = await service.delete_by_owner(
-        track_id=track_id, user_id=requester_id
+        track_id=track_id, user_id=user.id
     )
     if not track:
         raise HTTPException(
@@ -219,17 +259,17 @@ async def stream_track(
             detail="Track not found",
         )
     if track.source == "soundcloud":
-        if not track.sc_uri:
+        if not track.sc_url:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="SC track missing URI",
+                detail="SC track missing URL",
             )
         from app.services.soundcloud_service import SoundCloudService
         from app.config import settings
         sc_service = SoundCloudService(settings.sc_client_id, session)
-        widget_url = sc_service.build_widget_url(track.sc_uri)
+        stream_url = await sc_service.get_stream_url(track.sc_url)
         return StreamResponse(
-            track_id=track_id, url=widget_url, expires_in=0
+            track_id=track_id, url=stream_url, expires_in=300
         )
     if not track.file_key:
         raise HTTPException(
