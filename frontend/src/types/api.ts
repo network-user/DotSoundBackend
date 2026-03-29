@@ -53,3 +53,31 @@ export interface ComplaintSubmitResponse {
   complaint: object
   track_hidden: boolean
 }
+
+export interface Playlist {
+  id: number
+  name: string
+  is_public: boolean
+  owner_id: number
+  created_at: string
+  track_count?: number
+}
+
+export interface PlaylistWithTracks extends Playlist {
+  tracks: Track[]
+}
+
+export interface UserResponse {
+  id: number
+  telegram_id: number
+  username: string | null
+  first_name: string | null
+  last_name: string | null
+  created_at: string
+}
+
+export interface UserStatsResponse {
+  total_tracks: number
+  total_plays: number
+  total_likes: number
+}
