@@ -23,10 +23,9 @@ async def submit_complaint(
     db: AsyncSession = Depends(get_db),
     cfg: AppSettings = Depends(get_settings),
 ) -> ComplaintSubmitResponse:
-    svc = ComplaintService()
+    svc = ComplaintService(db)
     try:
         complaint, track_hidden = await svc.submit(
-            db=db,
             track_id=body.track_id,
             user_id=body.reported_by_user_id,
             reason=body.reason,

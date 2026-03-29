@@ -1,11 +1,14 @@
 import structlog
+from typing import Any
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.playlist import Playlist
 from app.models.track import Track
+from app.models.user import User
 from app.repositories.playlist import PlaylistRepository
 from app.repositories.track import TrackRepository
+from app.repositories.user import UserRepository
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -14,6 +17,7 @@ class PlaylistService:
     def __init__(self, session: AsyncSession) -> None:
         self._repo = PlaylistRepository(session)
         self._track_repo = TrackRepository(session)
+        self._user_repo = UserRepository(session)
 
     async def create(
         self,
@@ -21,13 +25,14 @@ class PlaylistService:
         owner_id: int,
         is_public: bool = True,
     ) -> Playlist:
+        user = await self._resolve_user(owner_id)
         playlist = await self._repo.create(
-            name=name, owner_id=owner_id, is_public=is_public
+            name=name, owner_id=user.id, is_public=is_public
         )
         logger.info(
             "playlist_created",
             playlist_id=playlist.id,
-            owner_id=owner_id,
+            owner_id=user.id,
         )
         return playlist
 
@@ -42,9 +47,10 @@ class PlaylistService:
         page: int = 1,
         size: int = 20,
     ) -> tuple[list[Playlist], int]:
+        user = await self._resolve_user(owner_id)
         offset = (page - 1) * size
         return await self._repo.list_by_owner(
-            owner_id=owner_id, offset=offset, limit=size
+            owner_id=user.id, offset=offset, limit=size
         )
 
     async def update(
@@ -120,13 +126,14 @@ class PlaylistService:
     async def _get_owned(
         self, playlist_id: int, requester_id: int
     ) -> Playlist:
+        user = await self._resolve_user(requester_id)
         playlist = await self._repo.get_by_id(playlist_id)
         if not playlist:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Playlist not found",
             )
-        if playlist.owner_id != requester_id:
+        if playlist.owner_id != user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not your playlist",
@@ -142,3 +149,15 @@ class PlaylistService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Playlist not found",
             )
+
+    async def _resolve_user(self, user_id: int) -> User:
+        user = await self._user_repo.get_by_id(user_id)
+        if not user:
+            user = await self._user_repo.get_by_telegram_id(user_id)
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+        return user
