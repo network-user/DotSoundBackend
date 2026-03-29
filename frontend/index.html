@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>.Sound</title>
+  <title>.sound</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     /* Premium Monochrome Loader */
@@ -17,6 +17,10 @@
       display: flex; align-items: center; justify-content: center;
     }
     #ds-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #000;
       display: flex; align-items: center; justify-content: center;
       font-weight: 800; font-size: 32px; letter-spacing: -1.5px;
       user-select: none;
@@ -44,7 +48,7 @@
       to { opacity: 1; transform: scale(1); }
     }
     @keyframes textReveal {
-      to { width: 110px; } /* Adjusted to "sound" width */
+      to { width: 90px; } /* Adjusted to "sound" width */
     }
     @keyframes charSlideUp {
       to { opacity: 1; transform: translateY(0); }

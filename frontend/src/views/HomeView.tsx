@@ -24,7 +24,7 @@ export function HomeView({ active }: Props) {
   return (
     <section id="view-home" className={`view${active ? ' active' : ''}`}>
       <div className="view-header">
-        <h2>.Sound</h2>
+        <h2>.sound</h2>
         <span className="hint">Слушай. Делись. Открывай.</span>
       </div>
       <TrackList tracks={tracks} emptyMessage="Треков пока нет. Загрузи первый!" />
