@@ -67,6 +67,9 @@ body {
   flex-direction: column;
   height: 100vh;
   height: 100dvh;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* ── Main scrollable area ── */
@@ -77,11 +80,20 @@ body {
   padding-bottom: calc(var(--nav-h) + var(--player-h) + 12px);
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  width: 100%;
+  min-width: 0;
 }
 #main::-webkit-scrollbar { display: none; }
 
 /* ── Views ── */
-.view { display: none; animation: fadeIn 0.2s ease; }
+.view {
+  display: none;
+  animation: fadeIn 0.2s ease;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
 .view.active { display: block; }
 
 @keyframes fadeIn {
@@ -91,6 +103,8 @@ body {
 
 .view-header {
   padding: 24px 16px 16px;
+  width: 100%;
+  box-sizing: border-box;
 }
 .view-header h2 {
   font-size: 26px;
@@ -107,7 +121,12 @@ body {
 }
 
 /* ── Track list & cards ── */
-.track-list { padding: 0 0 8px; }
+.track-list {
+  padding: 0 0 8px;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+}
 
 .track-card {
   display: flex;
@@ -119,6 +138,9 @@ body {
   border-radius: var(--radius);
   margin: 0 8px 2px;
   border: 1px solid transparent;
+  min-width: 0;
+  max-width: calc(100% - 16px);
+  overflow: hidden;
 }
 .track-card:active,
 .track-card:hover {
@@ -153,12 +175,18 @@ body {
   object-fit: cover;
 }
 
-.track-card-info { flex: 1; min-width: 0; }
+.track-card-info {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
 .track-card-title-row {
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
+  width: 100%;
 }
 .track-card-title {
   font-size: 14px;
@@ -345,6 +373,8 @@ body {
   -webkit-backdrop-filter: var(--glass-blur);
   border-bottom: 1px solid var(--glass-border);
   z-index: 10;
+  width: 100%;
+  box-sizing: border-box;
 }
 .search-icon { font-size: 16px; color: var(--text-muted); flex-shrink: 0; }
 
