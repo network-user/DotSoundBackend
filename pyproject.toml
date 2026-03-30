@@ -17,6 +17,7 @@ pydantic-settings = "^2.3"
 uvicorn = { extras = ["standard"], version = "^0.30" }
 structlog = "^24.1"
 slowapi = "^0.1.9"
+python-jose = {extras = ["cryptography"], version = "^3.5.0"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2"

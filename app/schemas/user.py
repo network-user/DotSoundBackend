@@ -21,6 +21,7 @@ class UserResponse(BaseModel):
     display_name: str | None = None
     avatar_key: str | None = None
     is_active: bool
+    is_admin: bool = False
     created_at: datetime
 
 

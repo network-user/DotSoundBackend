@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class ComplaintCreate(BaseModel):
     track_id: int
-    reported_by_user_id: int
     reason: str = Field(min_length=10, max_length=1000)
     contact_email: str | None = None
 

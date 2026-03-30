@@ -3,10 +3,14 @@ const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
-/* ─── State ──────────────────────────────────────────────── */
+/* ─── Auth state ─────────────────────────────────────────── */
+let jwt = localStorage.getItem('dotsound_jwt') || null;
+let currentUser = null; // { id: int, is_admin: bool }
+
+/* ─── App state ──────────────────────────────────────────── */
 const state = {
-  userId: tg.initDataUnsafe?.user?.id ?? null,
-  track: null,       // currently loaded track object
+  get userId() { return currentUser?.id ?? null; },
+  track: null,
   isPlaying: false,
   isLiked: false,
   playCountSent: false,
@@ -37,13 +41,82 @@ function fmt(sec) {
   return `${m}:${s}`;
 }
 
+/* Parse JWT payload without validation (validation is server-side) */
+function parseJwtPayload(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1]));
+  } catch {
+    return null;
+  }
+}
+
+function isJwtExpired(token) {
+  const payload = parseJwtPayload(token);
+  if (!payload?.exp) return true;
+  return payload.exp < Math.floor(Date.now() / 1000);
+}
+
+/* ─── API wrapper ────────────────────────────────────────── */
 async function api(path, opts = {}) {
+  opts.headers = opts.headers || {};
+  if (jwt) {
+    opts.headers['Authorization'] = `Bearer ${jwt}`;
+  }
   const res = await fetch(path, opts);
+  if (res.status === 401) {
+    // Token rejected — clear it so next action triggers re-auth
+    jwt = null;
+    localStorage.removeItem('dotsound_jwt');
+    currentUser = null;
+  }
   if (!res.ok) throw new Error(`${res.status}`);
   if (res.status === 204) return null;
   return res.json();
 }
 
+/* ─── Authentication ─────────────────────────────────────── */
+async function authenticate() {
+  // Try existing JWT first
+  if (jwt && !isJwtExpired(jwt)) {
+    const payload = parseJwtPayload(jwt);
+    if (payload) {
+      currentUser = { id: parseInt(payload.sub, 10), is_admin: !!payload.admin };
+      return;
+    }
+  }
+
+  // Clear stale token
+  jwt = null;
+  localStorage.removeItem('dotsound_jwt');
+  currentUser = null;
+
+  const initData = tg.initData;
+  if (!initData) return; // running outside Telegram
+
+  try {
+    const res = await fetch('/api/v1/auth/telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ init_data: initData }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    jwt = data.access_token;
+    localStorage.setItem('dotsound_jwt', jwt);
+    currentUser = { id: data.user_id, is_admin: data.is_admin };
+  } catch (e) {
+    console.error('Auth failed', e);
+  }
+}
+
+/* Show admin nav button if user is admin */
+function applyAdminAccess() {
+  if (currentUser?.is_admin) {
+    $('#nav-admin').classList.remove('hidden');
+  }
+}
+
+/* ─── Cover element builder ──────────────────────────────── */
 function coverEl(coverKey, size = 50) {
   const wrap = document.createElement('div');
   wrap.className = 'track-card-cover';
@@ -158,7 +231,7 @@ pbLike.addEventListener('click', async () => {
   if (!state.track || !state.userId) return;
   try {
     const { liked } = await api(
-      `/api/v1/likes/${state.userId}/${state.track.id}`,
+      `/api/v1/likes/${state.track.id}`,
       { method: 'POST' }
     );
     state.isLiked = liked;
@@ -214,7 +287,7 @@ function buildTrackCard(track) {
     if (!state.userId) return;
     try {
       const { liked } = await api(
-        `/api/v1/likes/${state.userId}/${track.id}`,
+        `/api/v1/likes/${track.id}`,
         { method: 'POST' }
       );
       likeBtn.textContent = liked ? '❤️' : '🤍';
@@ -314,15 +387,15 @@ async function loadLiked() {
 }
 
 /* ─── Upload view ────────────────────────────────────────── */
-const coverInput = $('#cover-input');
-const coverPreview = $('#cover-preview');
-const audioInput = $('#audio-input');
+const coverInput    = $('#cover-input');
+const coverPreview  = $('#cover-preview');
+const audioInput    = $('#audio-input');
 const audioFileName = $('#audio-file-name');
-const uploadForm = $('#upload-form');
-const uploadBtn = $('#upload-btn');
-const uploadError = $('#upload-error');
+const uploadForm    = $('#upload-form');
+const uploadBtn     = $('#upload-btn');
+const uploadError   = $('#upload-error');
 const uploadProgress = $('#upload-progress');
-const progressFill = $('#progress-fill');
+const progressFill  = $('#progress-fill');
 
 coverInput.addEventListener('change', () => {
   const file = coverInput.files?.[0];
@@ -342,6 +415,11 @@ audioInput.addEventListener('change', () => {
 uploadForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   uploadError.classList.add('hidden');
+
+  if (!state.userId) {
+    showUploadError('Необходима авторизация через Telegram');
+    return;
+  }
 
   const title = $('#title-input').value.trim();
   const artist = $('#artist-input').value.trim();
@@ -367,7 +445,6 @@ uploadForm.addEventListener('submit', async (e) => {
     fd.append('title', title);
     if (artist) fd.append('artist', artist);
     if (coverFile) fd.append('cover', coverFile);
-    if (state.userId) fd.append('uploader_id', state.userId);
 
     const track = await api('/api/v1/tracks/upload', {
       method: 'POST',
@@ -393,6 +470,8 @@ uploadForm.addEventListener('submit', async (e) => {
         ? 'Формат файла не поддерживается'
         : err.message === '413'
         ? 'Файл слишком большой (макс. 50 МБ)'
+        : err.message === '401'
+        ? 'Сессия истекла, обновите страницу'
         : 'Ошибка загрузки. Попробуй ещё раз.'
     );
   }
@@ -429,13 +508,14 @@ function switchView(name) {
   if (name === 'home') loadHome();
   if (name === 'liked') loadLiked();
   if (name === 'search') $('#search-input').focus();
+  if (name === 'admin') loadAdminTab('tracks');
 }
 
 document.querySelectorAll('.nav-btn').forEach((btn) => {
   btn.addEventListener('click', () => switchView(btn.dataset.view));
 });
 
-/* ─── Load liked IDs for like button state ───────────────── */
+/* ─── Load liked IDs ─────────────────────────────────────── */
 async function preloadLikedIds() {
   if (!state.userId) return;
   try {
@@ -506,7 +586,6 @@ $('#complaint-submit').addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         track_id: trackId,
-        reported_by_user_id: state.userId,
         reason,
         contact_email: email,
       }),
@@ -529,8 +608,389 @@ $('#complaint-submit').addEventListener('click', async () => {
   }
 });
 
+/* ─── Confirm modal (generic) ────────────────────────────── */
+function showConfirm(title, text, onConfirm) {
+  $('#confirm-title').textContent = title;
+  $('#confirm-text').textContent = text;
+  $('#confirm-modal').classList.remove('hidden');
+
+  const ok = $('#confirm-ok');
+  const cancel = $('#confirm-cancel');
+  const close = $('#confirm-close');
+
+  function cleanup() {
+    $('#confirm-modal').classList.add('hidden');
+    ok.replaceWith(ok.cloneNode(true));
+    cancel.replaceWith(cancel.cloneNode(true));
+    close.replaceWith(close.cloneNode(true));
+  }
+
+  $('#confirm-ok').addEventListener('click', () => { cleanup(); onConfirm(); });
+  $('#confirm-cancel').addEventListener('click', cleanup);
+  $('#confirm-close').addEventListener('click', cleanup);
+  $('#confirm-modal').addEventListener('click', (e) => {
+    if (e.target === $('#confirm-modal')) cleanup();
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ADMIN PANEL
+   ═══════════════════════════════════════════════════════════ */
+
+const adminState = {
+  activeTab: 'tracks',
+  tracks: { page: 1, total: 0 },
+  users: { page: 1, total: 0 },
+  complaints: { page: 1, total: 0 },
+};
+
+/* ── Tab switching ── */
+document.querySelectorAll('.admin-tab').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.admin-tab').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.admin-tab-content').forEach((c) => c.classList.add('hidden'));
+    btn.classList.add('active');
+    const tab = btn.dataset.tab;
+    $(`#admin-tab-${tab}`).classList.remove('hidden');
+    adminState.activeTab = tab;
+    loadAdminTab(tab);
+  });
+});
+
+function loadAdminTab(tab) {
+  if (tab === 'tracks') loadAdminTracks();
+  else if (tab === 'users') loadAdminUsers();
+  else if (tab === 'complaints') loadAdminComplaints();
+}
+
+/* ── Admin tracks ── */
+async function loadAdminTracks() {
+  const list = $('#admin-tracks-list');
+  list.innerHTML = '<div class="loader"></div>';
+  try {
+    const { page } = adminState.tracks;
+    const data = await api(
+      `/api/v1/admin/tracks?page=${page}&size=20`
+    );
+    adminState.tracks.total = data.total;
+    renderAdminTracks(list, data.items);
+    updatePagination('tracks', page, data.total, 20);
+  } catch {
+    list.innerHTML = '<p class="empty-hint">Ошибка загрузки.</p>';
+  }
+}
+
+function renderAdminTracks(container, tracks) {
+  container.innerHTML = '';
+  if (!tracks.length) {
+    container.innerHTML = '<p class="empty-hint">Треков нет.</p>';
+    return;
+  }
+  tracks.forEach((track) => {
+    const row = document.createElement('div');
+    row.className = 'admin-row';
+
+    const cover = coverEl(track.cover_key, 40);
+
+    const info = document.createElement('div');
+    info.className = 'admin-row-info';
+    info.innerHTML = `
+      <p class="admin-row-title">${escHtml(track.title)}</p>
+      <p class="admin-row-sub">${escHtml(track.artist || '—')} · ID ${track.id}
+        ${track.is_active ? '' : ' · <span class="badge-hidden">скрыт</span>'}
+        ${track.source === 'soundcloud' ? ' · SC' : ''}
+      </p>
+    `;
+
+    const actions = document.createElement('div');
+    actions.className = 'admin-row-actions';
+
+    const visBtn = document.createElement('button');
+    visBtn.className = 'btn-sm';
+    visBtn.textContent = track.is_active ? 'Скрыть' : 'Показать';
+    visBtn.addEventListener('click', async () => {
+      try {
+        await api(
+          `/api/v1/admin/tracks/${track.id}/visibility?is_active=${!track.is_active}`,
+          { method: 'PATCH' }
+        );
+        loadAdminTracks();
+      } catch (e) {
+        tg.showAlert('Ошибка: ' + e.message);
+      }
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-sm btn-danger';
+    delBtn.textContent = '🗑';
+    delBtn.addEventListener('click', () => {
+      showConfirm(
+        'Удалить трек',
+        `Удалить «${track.title}»? Это действие необратимо.`,
+        async () => {
+          try {
+            await api(`/api/v1/admin/tracks/${track.id}`, { method: 'DELETE' });
+            loadAdminTracks();
+          } catch (e) {
+            tg.showAlert('Ошибка: ' + e.message);
+          }
+        }
+      );
+    });
+
+    actions.append(visBtn, delBtn);
+    row.append(cover, info, actions);
+    container.appendChild(row);
+  });
+}
+
+$('#admin-tracks-prev').addEventListener('click', () => {
+  if (adminState.tracks.page > 1) {
+    adminState.tracks.page--;
+    loadAdminTracks();
+  }
+});
+$('#admin-tracks-next').addEventListener('click', () => {
+  const { page, total } = adminState.tracks;
+  if (page * 20 < total) {
+    adminState.tracks.page++;
+    loadAdminTracks();
+  }
+});
+
+/* ── Admin users ── */
+async function loadAdminUsers() {
+  const list = $('#admin-users-list');
+  list.innerHTML = '<div class="loader"></div>';
+  try {
+    const { page } = adminState.users;
+    const data = await api(`/api/v1/admin/users?page=${page}&size=20`);
+    adminState.users.total = data.total;
+    renderAdminUsers(list, data.items);
+    updatePagination('users', page, data.total, 20);
+  } catch {
+    list.innerHTML = '<p class="empty-hint">Ошибка загрузки.</p>';
+  }
+}
+
+function renderAdminUsers(container, users) {
+  container.innerHTML = '';
+  if (!users.length) {
+    container.innerHTML = '<p class="empty-hint">Пользователей нет.</p>';
+    return;
+  }
+  users.forEach((user) => {
+    const row = document.createElement('div');
+    row.className = 'admin-row';
+
+    const info = document.createElement('div');
+    info.className = 'admin-row-info';
+    const name = user.display_name || user.first_name || `#${user.id}`;
+    info.innerHTML = `
+      <p class="admin-row-title">${escHtml(name)}
+        ${user.is_admin ? ' <span class="badge-admin">admin</span>' : ''}
+        ${!user.is_active ? ' <span class="badge-hidden">заблокирован</span>' : ''}
+      </p>
+      <p class="admin-row-sub">@${escHtml(user.username || '—')} · tg_id ${user.telegram_id}</p>
+    `;
+
+    const actions = document.createElement('div');
+    actions.className = 'admin-row-actions';
+
+    const blockBtn = document.createElement('button');
+    blockBtn.className = 'btn-sm';
+    blockBtn.textContent = user.is_active ? 'Блок' : 'Разблок';
+    blockBtn.addEventListener('click', () => {
+      const action = user.is_active ? 'заблокировать' : 'разблокировать';
+      showConfirm(
+        'Изменить статус',
+        `${action} пользователя ${name}?`,
+        async () => {
+          try {
+            await api(`/api/v1/admin/users/${user.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_active: !user.is_active }),
+            });
+            loadAdminUsers();
+          } catch (e) {
+            tg.showAlert('Ошибка: ' + e.message);
+          }
+        }
+      );
+    });
+
+    const adminBtn = document.createElement('button');
+    adminBtn.className = 'btn-sm';
+    adminBtn.textContent = user.is_admin ? '−Admin' : '+Admin';
+    // Prevent removing own admin rights
+    if (user.id === currentUser?.id) {
+      adminBtn.disabled = true;
+      adminBtn.title = 'Нельзя изменить себе';
+    }
+    adminBtn.addEventListener('click', () => {
+      const action = user.is_admin ? 'снять права администратора у' : 'назначить администратором';
+      showConfirm(
+        'Изменить права',
+        `${action} ${name}?`,
+        async () => {
+          try {
+            await api(`/api/v1/admin/users/${user.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ is_admin: !user.is_admin }),
+            });
+            loadAdminUsers();
+          } catch (e) {
+            tg.showAlert('Ошибка: ' + e.message);
+          }
+        }
+      );
+    });
+
+    actions.append(blockBtn, adminBtn);
+    row.append(info, actions);
+    container.appendChild(row);
+  });
+}
+
+$('#admin-users-prev').addEventListener('click', () => {
+  if (adminState.users.page > 1) {
+    adminState.users.page--;
+    loadAdminUsers();
+  }
+});
+$('#admin-users-next').addEventListener('click', () => {
+  const { page, total } = adminState.users;
+  if (page * 20 < total) {
+    adminState.users.page++;
+    loadAdminUsers();
+  }
+});
+
+/* ── Admin complaints ── */
+$('#admin-complaints-unresolved').addEventListener('change', () => {
+  adminState.complaints.page = 1;
+  loadAdminComplaints();
+});
+
+async function loadAdminComplaints() {
+  const list = $('#admin-complaints-list');
+  list.innerHTML = '<div class="loader"></div>';
+  try {
+    const { page } = adminState.complaints;
+    const unresolved = $('#admin-complaints-unresolved').checked;
+    const data = await api(
+      `/api/v1/admin/complaints?page=${page}&size=20&unresolved_only=${unresolved}`
+    );
+    adminState.complaints.total = data.total;
+    renderAdminComplaints(list, data.items);
+    updatePagination('complaints', page, data.total, 20);
+  } catch {
+    list.innerHTML = '<p class="empty-hint">Ошибка загрузки.</p>';
+  }
+}
+
+function renderAdminComplaints(container, complaints) {
+  container.innerHTML = '';
+  if (!complaints.length) {
+    container.innerHTML = '<p class="empty-hint">Жалоб нет.</p>';
+    return;
+  }
+  complaints.forEach((c) => {
+    const row = document.createElement('div');
+    row.className = 'admin-row admin-row--complaint';
+
+    const info = document.createElement('div');
+    info.className = 'admin-row-info';
+    const date = new Date(c.created_at).toLocaleDateString('ru');
+    info.innerHTML = `
+      <p class="admin-row-title">Трек #${c.track_id}
+        ${c.is_resolved ? '<span class="badge-ok">решено</span>' : ''}
+      </p>
+      <p class="admin-row-sub">${escHtml(c.reason.slice(0, 80))}… · ${date}</p>
+      ${c.contact_email ? `<p class="admin-row-sub">${escHtml(c.contact_email)}</p>` : ''}
+    `;
+
+    const actions = document.createElement('div');
+    actions.className = 'admin-row-actions';
+
+    if (!c.is_resolved) {
+      const resolveBtn = document.createElement('button');
+      resolveBtn.className = 'btn-sm';
+      resolveBtn.textContent = '✓ Решено';
+      resolveBtn.addEventListener('click', async () => {
+        try {
+          await api(
+            `/api/v1/admin/complaints/${c.id}/resolve`,
+            { method: 'PATCH' }
+          );
+          loadAdminComplaints();
+        } catch (e) {
+          tg.showAlert('Ошибка: ' + e.message);
+        }
+      });
+      actions.appendChild(resolveBtn);
+    }
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-sm btn-danger';
+    delBtn.textContent = '🗑';
+    delBtn.addEventListener('click', () => {
+      showConfirm(
+        'Удалить жалобу',
+        `Удалить жалобу #${c.id} на трек #${c.track_id}?`,
+        async () => {
+          try {
+            await api(`/api/v1/admin/complaints/${c.id}`, { method: 'DELETE' });
+            loadAdminComplaints();
+          } catch (e) {
+            tg.showAlert('Ошибка: ' + e.message);
+          }
+        }
+      );
+    });
+
+    actions.appendChild(delBtn);
+    row.append(info, actions);
+    container.appendChild(row);
+  });
+}
+
+$('#admin-complaints-prev').addEventListener('click', () => {
+  if (adminState.complaints.page > 1) {
+    adminState.complaints.page--;
+    loadAdminComplaints();
+  }
+});
+$('#admin-complaints-next').addEventListener('click', () => {
+  const { page, total } = adminState.complaints;
+  if (page * 20 < total) {
+    adminState.complaints.page++;
+    loadAdminComplaints();
+  }
+});
+
+/* ── Pagination helper ── */
+function updatePagination(tab, page, total, size) {
+  $(`#admin-${tab}-page`).textContent = page;
+  $(`#admin-${tab}-prev`).disabled = page <= 1;
+  $(`#admin-${tab}-next`).disabled = page * size >= total;
+}
+
+/* ── XSS escape ── */
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 /* ─── Init ───────────────────────────────────────────────── */
 async function init() {
+  await authenticate();
+  applyAdminAccess();
   await preloadLikedIds();
   await loadHome();
   await handleDeepLink();
