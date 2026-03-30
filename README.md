@@ -78,6 +78,17 @@ poetry run alembic upgrade head
 poetry run python main.py
 ```
 
+
+```bash
+# Разовый запуск (ручной триггер / тест)
+poetry run python scripts/sc_id_refresher.py --now
+
+# Запуск как демон (еженедельное обновление)
+poetry run python scripts/sc_id_refresher.py
+
+# Режим отладки
+poetry run python scripts/sc_id_refresher.py --now --log-level DEBUG
+```
 Сервер запустится на `http://localhost:8000` с автоперезагрузкой (`reload=True`).
 
 > **Swagger UI:** `http://localhost:8000/docs`

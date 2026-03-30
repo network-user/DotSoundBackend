@@ -99,6 +99,58 @@
       </div>
     </section>
 
+    <!-- Admin panel -->
+    <section id="view-admin" class="view">
+      <div class="view-header"><h2>⚙️ Панель администратора</h2></div>
+
+      <!-- Admin tabs -->
+      <div class="admin-tabs">
+        <button class="admin-tab active" data-tab="tracks">Треки</button>
+        <button class="admin-tab" data-tab="users">Пользователи</button>
+        <button class="admin-tab" data-tab="complaints">Жалобы</button>
+      </div>
+
+      <!-- Tracks tab -->
+      <div id="admin-tab-tracks" class="admin-tab-content active">
+        <div id="admin-tracks-list" class="track-list">
+          <div class="loader"></div>
+        </div>
+        <div class="admin-pagination">
+          <button id="admin-tracks-prev" class="btn-sm" disabled>‹ Пред</button>
+          <span id="admin-tracks-page">1</span>
+          <button id="admin-tracks-next" class="btn-sm">След ›</button>
+        </div>
+      </div>
+
+      <!-- Users tab -->
+      <div id="admin-tab-users" class="admin-tab-content hidden">
+        <div id="admin-users-list" class="admin-list">
+          <div class="loader"></div>
+        </div>
+        <div class="admin-pagination">
+          <button id="admin-users-prev" class="btn-sm" disabled>‹ Пред</button>
+          <span id="admin-users-page">1</span>
+          <button id="admin-users-next" class="btn-sm">След ›</button>
+        </div>
+      </div>
+
+      <!-- Complaints tab -->
+      <div id="admin-tab-complaints" class="admin-tab-content hidden">
+        <label class="admin-filter-label">
+          <input type="checkbox" id="admin-complaints-unresolved" />
+          Только нерешённые
+        </label>
+        <div id="admin-complaints-list" class="admin-list">
+          <div class="loader"></div>
+        </div>
+        <div class="admin-pagination">
+          <button id="admin-complaints-prev" class="btn-sm" disabled>‹ Пред</button>
+          <span id="admin-complaints-page">1</span>
+          <button id="admin-complaints-next" class="btn-sm">След ›</button>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- ═══ PLAYER BAR ═══ -->
@@ -160,6 +212,21 @@
     </div>
   </div>
 
+  <!-- ═══ CONFIRM DELETE MODAL ═══ -->
+  <div id="confirm-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 id="confirm-title">Подтверждение</h3>
+        <button id="confirm-close" class="icon-btn">✕</button>
+      </div>
+      <p id="confirm-text" class="modal-hint"></p>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button id="confirm-cancel" class="btn-sm" style="flex:1">Отмена</button>
+        <button id="confirm-ok" class="btn-primary btn-danger" style="flex:1">Удалить</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ═══ BOTTOM NAV ═══ -->
   <nav id="nav">
     <button class="nav-btn active" data-view="home">
@@ -177,6 +244,10 @@
     <button class="nav-btn" data-view="liked">
       <span class="nav-icon">❤️</span>
       <span class="nav-label">Лайки</span>
+    </button>
+    <button class="nav-btn hidden" data-view="admin" id="nav-admin">
+      <span class="nav-icon">⚙️</span>
+      <span class="nav-label">Админ</span>
     </button>
   </nav>
 

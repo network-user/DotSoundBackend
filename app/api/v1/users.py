@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.rate_limit import limiter
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db
+from app.models.user import User
 from app.schemas.user import (
     AvatarResponse,
     UserCreate,
@@ -87,25 +88,27 @@ async def get_user(
 
 
 @router.patch(
-    "/{user_id}",
+    "/me",
     response_model=UserResponse,
-    summary="Update user display name",
+    summary="Update own display name",
 )
 @limiter.limit("30/minute")
-async def update_user(
+async def update_me(
     request: Request,
-    user_id: int,
     data: UserUpdateRequest,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> UserResponse:
-    structlog.contextvars.bind_contextvars(user_id=user_id)
+    structlog.contextvars.bind_contextvars(user_id=current_user.id)
     if not data.display_name:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No fields to update",
         )
     service = UserService(session)
-    user = await service.update_display_name(user_id, data.display_name)
+    user = await service.update_display_name(
+        current_user.id, data.display_name
+    )
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -115,18 +118,18 @@ async def update_user(
 
 
 @router.post(
-    "/{user_id}/avatar",
+    "/me/avatar",
     response_model=AvatarResponse,
-    summary="Upload custom avatar",
+    summary="Upload own avatar",
 )
 @limiter.limit("10/minute")
-async def upload_avatar(
+async def upload_my_avatar(
     request: Request,
-    user_id: int,
     avatar: UploadFile = File(...),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> AvatarResponse:
-    structlog.contextvars.bind_contextvars(user_id=user_id)
+    structlog.contextvars.bind_contextvars(user_id=current_user.id)
     mime = avatar.content_type or ""
     if not mime or mime == "application/octet-stream":
         guessed, _ = mimetypes.guess_type(avatar.filename or "")
@@ -143,12 +146,16 @@ async def upload_avatar(
             detail="Avatar exceeds 2 MB limit",
         )
     avatar_key = await s3.upload_avatar(
-        data=data, content_type=mime, user_id=user_id
+        data=data, content_type=mime, user_id=current_user.id
     )
     service = UserService(session)
-    await service.update_avatar_key(user_id, avatar_key)
+    await service.update_avatar_key(current_user.id, avatar_key)
     avatar_url = await s3.get_presigned_url(avatar_key)
-    logger.info("avatar_uploaded", user_id=user_id, avatar_key=avatar_key)
+    logger.info(
+        "avatar_uploaded",
+        user_id=current_user.id,
+        avatar_key=avatar_key,
+    )
     return AvatarResponse(avatar_url=avatar_url)
 
 

@@ -1,9 +1,10 @@
 import structlog
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db
+from app.models.user import User
 from app.schemas.playlist import (
     PlaylistAddTrack,
     PlaylistCreate,
@@ -28,14 +29,14 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 async def create_playlist(
     request: Request,
     data: PlaylistCreate,
-    owner_id: int = Query(..., description="Telegram user ID"),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> PlaylistResponse:
-    structlog.contextvars.bind_contextvars(owner_id=owner_id)
+    structlog.contextvars.bind_contextvars(owner_id=current_user.id)
     service = PlaylistService(session)
     playlist = await service.create(
         name=data.name,
-        owner_id=owner_id,
+        owner_id=current_user.id,
         is_public=data.is_public,
     )
     logger.info(
@@ -47,20 +48,20 @@ async def create_playlist(
 @router.get(
     "",
     response_model=list[PlaylistResponse],
-    summary="List playlists owned by a user",
+    summary="List playlists owned by the authenticated user",
 )
 @limiter.limit("120/minute")
 async def list_playlists(
     request: Request,
-    owner_id: int = Query(...),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> list[PlaylistResponse]:
-    structlog.contextvars.bind_contextvars(owner_id=owner_id)
+    structlog.contextvars.bind_contextvars(owner_id=current_user.id)
     service = PlaylistService(session)
     playlists, _ = await service.list_by_owner(
-        owner_id=owner_id, page=page, size=size
+        owner_id=current_user.id, page=page, size=size
     )
     return [PlaylistResponse.model_validate(p) for p in playlists]
 
@@ -76,14 +77,10 @@ async def get_playlist(
     playlist_id: int,
     session: AsyncSession = Depends(get_db),
 ) -> PlaylistWithTracksResponse:
-    structlog.contextvars.bind_contextvars(
-        playlist_id=playlist_id
-    )
+    structlog.contextvars.bind_contextvars(playlist_id=playlist_id)
     service = PlaylistService(session)
     playlist = await service.get(playlist_id)
     if not playlist:
-        from fastapi import HTTPException
-
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Playlist not found",
@@ -104,16 +101,16 @@ async def update_playlist(
     request: Request,
     playlist_id: int,
     data: PlaylistUpdate,
-    requester_id: int = Query(...),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> PlaylistResponse:
     structlog.contextvars.bind_contextvars(
-        playlist_id=playlist_id, requester_id=requester_id
+        playlist_id=playlist_id, requester_id=current_user.id
     )
     service = PlaylistService(session)
     playlist = await service.update(
         playlist_id=playlist_id,
-        requester_id=requester_id,
+        requester_id=current_user.id,
         name=data.name,
         is_public=data.is_public,
     )
@@ -129,14 +126,14 @@ async def update_playlist(
 async def delete_playlist(
     request: Request,
     playlist_id: int,
-    requester_id: int = Query(...),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     structlog.contextvars.bind_contextvars(
-        playlist_id=playlist_id, requester_id=requester_id
+        playlist_id=playlist_id, requester_id=current_user.id
     )
     service = PlaylistService(session)
-    await service.delete(playlist_id, requester_id)
+    await service.delete(playlist_id, current_user.id)
     logger.info(
         "playlist_deleted_endpoint", playlist_id=playlist_id
     )
@@ -152,19 +149,19 @@ async def add_track(
     request: Request,
     playlist_id: int,
     data: PlaylistAddTrack,
-    requester_id: int = Query(...),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     structlog.contextvars.bind_contextvars(
         playlist_id=playlist_id,
         track_id=data.track_id,
-        requester_id=requester_id,
+        requester_id=current_user.id,
     )
     service = PlaylistService(session)
     await service.add_track(
         playlist_id=playlist_id,
         track_id=data.track_id,
-        requester_id=requester_id,
+        requester_id=current_user.id,
         position=data.position,
     )
 
@@ -179,13 +176,13 @@ async def remove_track(
     request: Request,
     playlist_id: int,
     track_id: int,
-    requester_id: int = Query(...),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     structlog.contextvars.bind_contextvars(
         playlist_id=playlist_id,
         track_id=track_id,
-        requester_id=requester_id,
+        requester_id=current_user.id,
     )
     service = PlaylistService(session)
-    await service.remove_track(playlist_id, track_id, requester_id)
+    await service.remove_track(playlist_id, track_id, current_user.id)

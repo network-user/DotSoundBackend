@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.rate_limit import limiter
-from app.dependencies import get_db
+from app.dependencies import get_current_user, get_db
+from app.models.user import User
 from app.schemas.track import (
     PlayResponse,
     StreamResponse,
@@ -26,7 +27,6 @@ from app.schemas.track import (
 )
 from app.services.track_service import TrackService
 from app.services.upload_service import UploadService
-from app.services.user_service import UserService
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -89,37 +89,24 @@ async def upload_track(
     file: UploadFile = File(...),
     title: str = Form(..., max_length=256),
     artist: str | None = Form(None, max_length=256),
-    uploader_id: int | None = Form(None),
     is_public: bool = Form(True),
     cover: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> TrackUploadResponse:
     structlog.contextvars.bind_contextvars(
         title=title,
         artist=artist,
-        uploader_id=uploader_id,
+        uploader_id=current_user.id,
     )
     logger.info("track_upload_endpoint_called")
-    
-    # Resolve Telegram ID to internal ID
-    resolved_uploader_id = None
-    if uploader_id:
-        user_service = UserService(session)
-        user = await user_service.get_by_id(uploader_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found",
-            )
-        resolved_uploader_id = user.id
-
     service = UploadService(session)
     track = await service.upload_track(
         file=file,
         title=title,
         artist=artist,
         cover=cover,
-        uploader_id=resolved_uploader_id,
+        uploader_id=current_user.id,
         is_public=is_public,
     )
     return TrackUploadResponse.model_validate(track)
@@ -128,24 +115,20 @@ async def upload_track(
 @router.get(
     "/my",
     response_model=TrackListResponse,
-    summary="List tracks uploaded by a specific user",
+    summary="List tracks uploaded by the authenticated user",
 )
 @limiter.limit("120/minute")
 async def list_my_tracks(
     request: Request,
-    user_id: int = Query(...),
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=100),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> TrackListResponse:
     service = TrackService(session)
-    
-    # Resolve Telegram ID
-    user_service = UserService(session)
-    user = await user_service.get_by_id(user_id)
-    resolved_user_id = user.id if user else user_id
-
-    tracks, total = await service.list_by_user(resolved_user_id, page=page, size=size)
+    tracks, total = await service.list_by_user(
+        current_user.id, page=page, size=size
+    )
     return TrackListResponse(
         items=[TrackResponse.model_validate(t) for t in tracks],
         total=total,
@@ -164,8 +147,8 @@ async def update_track(
     request: Request,
     track_id: int,
     data: TrackUpdateRequest,
-    requester_id: int = Query(...),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> TrackResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     if data.is_public is None:
@@ -174,19 +157,9 @@ async def update_track(
             detail="No fields to update",
         )
     service = TrackService(session)
-    
-    # Resolve requester
-    user_service = UserService(session)
-    user = await user_service.get_by_id(requester_id)
-    if not user:
-         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-    
     track = await service.update_visibility(
         track_id=track_id,
-        user_id=user.id,
+        user_id=current_user.id,
         is_public=data.is_public,
     )
     if not track:
@@ -206,23 +179,13 @@ async def update_track(
 async def delete_track(
     request: Request,
     track_id: int,
-    requester_id: int = Query(...),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> None:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
-    
-    # Resolve requester
-    user_service = UserService(session)
-    user = await user_service.get_by_id(requester_id)
-    if not user:
-         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
-        )
-
     track = await service.delete_by_owner(
-        track_id=track_id, user_id=user.id
+        track_id=track_id, user_id=current_user.id
     )
     if not track:
         raise HTTPException(
@@ -234,9 +197,11 @@ async def delete_track(
             await s3.delete_object(track.file_key)
         except Exception:
             logger.warning(
-                "s3_delete_failed", track_id=track_id, file_key=track.file_key
+                "s3_delete_failed",
+                track_id=track_id,
+                file_key=track.file_key,
             )
-    logger.info("track_deleted", track_id=track_id, requester_id=requester_id)
+    logger.info("track_deleted", track_id=track_id, user_id=current_user.id)
 
 
 @router.get(
@@ -264,8 +229,9 @@ async def stream_track(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="SC track missing URL",
             )
-        from app.services.soundcloud_service import SoundCloudService
         from app.config import settings
+        from app.services.soundcloud_service import SoundCloudService
+
         sc_service = SoundCloudService(settings.sc_client_id, session)
         stream_url = await sc_service.get_stream_url(track.sc_url)
         return StreamResponse(

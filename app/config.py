@@ -16,6 +16,9 @@ class AppSettings(BaseSettings):
     log_level: str = "INFO"
     complaint_threshold: int = 3
     sc_client_id: str = ""
+    telegram_bot_token: str = ""
+    jwt_secret: str = "changeme-set-a-strong-secret-in-production"
+    jwt_expire_days: int = 7
 
 
 settings = AppSettings()

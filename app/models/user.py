@@ -23,6 +23,9 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(
         Boolean, server_default="true", nullable=False
     )
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
     display_name: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
