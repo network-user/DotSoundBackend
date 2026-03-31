@@ -58,3 +58,39 @@ async def auth_telegram(
         user_id=user.id,
         is_admin=user.is_admin,
     )
+
+
+@router.post(
+    "/mock/{user_id}",
+    response_model=TokenResponse,
+    summary="[DEV ONLY] Mock authentication for local testing",
+)
+async def auth_mock(
+    request: Request,
+    user_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    """
+    Generate a JWT token for any user_id. 
+    In production, this should be disabled or protected.
+    """
+    service = UserService(session)
+    user = await service.get_by_id(user_id)
+    if not user:
+        # Create a mock user if not exists
+        from app.schemas.user import UserCreate
+        user_data = UserCreate(
+            telegram_id=user_id,
+            username=f"mockuser_{user_id}",
+            first_name="Mock",
+            last_name="Tester",
+        )
+        user, _ = await service.register_or_update(user_data)
+    
+    token = create_access_token(user.id, user.is_admin)
+    logger.warning("mock_auth_used", user_id=user.id)
+    return TokenResponse(
+        access_token=token,
+        user_id=user.id,
+        is_admin=user.is_admin,
+    )

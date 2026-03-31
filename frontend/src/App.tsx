@@ -17,14 +17,37 @@ import { UploadView } from '@/views/UploadView'
 export function App() {
   const [activeView, setActiveView] = useState<ViewName>('home')
   const [authorId, setAuthorId] = useState<number | null>(null)
+  const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
-    if (tg.initData) {
-      api.authTelegram(tg.initData).catch(console.error)
+    const init = async () => {
+      try {
+        await api.authTelegram(tg.initData)
+      } catch (err) {
+        console.error('[App] Auth failed:', err)
+      } finally {
+        // Even if auth fails, we initialize so the user can see public content if needed, 
+        // though most endpoints will 401 until they fix their Telegram session.
+        setIsInitialized(true)
+      }
     }
+    init()
   }, [])
 
   useDeepLink()
+
+  if (!isInitialized) {
+    return (
+      <div className="splash-screen">
+        <div className="dot-loader">
+          <div className="dot" />
+          <div className="dot" />
+          <div className="dot" />
+        </div>
+        <p>Loading session...</p>
+      </div>
+    )
+  }
 
   const handleOpenAuthor = (id: number) => setAuthorId(id)
   const handleCloseAuthor = () => setAuthorId(null)
