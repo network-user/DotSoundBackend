@@ -30,3 +30,6 @@ class User(Base, TimestampMixin):
         String(128), nullable=True
     )
     avatar_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    avatar_seed: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True
+    )
