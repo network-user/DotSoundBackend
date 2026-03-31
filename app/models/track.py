@@ -24,6 +24,15 @@ class Track(Base, TimestampMixin):
     duration_seconds: Mapped[int | None] = mapped_column(
         Integer, nullable=True
     )
+    file_size_bytes: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    genre: Mapped[str | None] = mapped_column(
+        String(100), index=True, nullable=True
+    )
+    processing_status: Mapped[str] = mapped_column(
+        String(20), server_default="active", nullable=False
+    )
     file_key: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )

@@ -1,6 +1,8 @@
 from datetime import datetime
+from enum import Enum
+from urllib.parse import quote
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
 class TrackResponse(BaseModel):
@@ -9,6 +11,9 @@ class TrackResponse(BaseModel):
     id: int
     title: str
     artist: str | None
+    genre: str | None = None
+    file_size_bytes: int | None = None
+    processing_status: str = "active"
     duration_seconds: int | None
     cover_key: str | None = None
     play_count: int
@@ -19,6 +24,13 @@ class TrackResponse(BaseModel):
     sc_uri: str | None = None
     uploaded_by_id: int | None = None
     created_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cover_url(self) -> str | None:
+        if not self.cover_key:
+            return None
+        return f"/api/v1/tracks/cover_proxy?key={quote(self.cover_key, safe='')}"
 
 
 class TrackListResponse(BaseModel):
@@ -34,6 +46,8 @@ class TrackUploadResponse(BaseModel):
     id: int
     title: str
     artist: str | None
+    genre: str | None = None
+    processing_status: str = "processing"
     file_key: str | None
     cover_key: str | None
     duration_seconds: int | None
@@ -67,3 +81,14 @@ class SCSearchResult(BaseModel):
     artwork_url: str | None
     sc_url: str
     sc_uri: str
+
+
+class PlaybackMode(str, Enum):
+    sequential = "sequential"
+    shuffle = "shuffle"
+    repeat_one = "repeat_one"
+
+
+class AdjacentTracksResponse(BaseModel):
+    prev_id: int | None = None
+    next_id: int | None = None

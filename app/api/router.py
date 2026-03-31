@@ -7,6 +7,7 @@ from app.api.v1 import (
     dislikes,
     health,
     likes,
+    metadata,
     playlists,
     soundcloud,
     tracks,
@@ -23,4 +24,5 @@ api_router.include_router(dislikes.router)
 api_router.include_router(playlists.router)
 api_router.include_router(soundcloud.router)
 api_router.include_router(complaints.router, tags=["complaints"])
+api_router.include_router(metadata.router)
 api_router.include_router(admin.router)

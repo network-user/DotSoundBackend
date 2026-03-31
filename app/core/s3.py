@@ -5,6 +5,7 @@ from typing import Any
 
 import aioboto3
 import structlog
+from botocore.exceptions import ClientError
 
 from app.config import settings
 
@@ -136,6 +137,43 @@ async def upload_avatar(
         )
     logger.info("s3_avatar_upload_completed", file_key=file_key)
     return file_key
+
+
+async def stream_object_range(
+    file_key: str,
+    range_header: str | None = None,
+) -> tuple[Any, int, str | None, str]:
+    """Fetch (a range of) an S3 object for streaming.
+
+    Returns (body, content_length, content_range, content_type).
+    Raises ClientError if the key does not exist.
+    """
+    kwargs: dict[str, Any] = {
+        "Bucket": settings.minio_bucket,
+        "Key": file_key,
+    }
+    if range_header:
+        kwargs["Range"] = range_header
+    logger.debug(
+        "s3_stream_range_requested",
+        file_key=file_key,
+        range=range_header,
+    )
+    async with get_s3_client() as s3:
+        try:
+            response = await s3.get_object(**kwargs)
+        except ClientError as exc:
+            code = exc.response["Error"]["Code"]
+            logger.warning(
+                "s3_stream_range_error", file_key=file_key, code=code
+            )
+            raise
+        return (
+            response["Body"],
+            int(response["ContentLength"]),
+            response.get("ContentRange"),
+            response.get("ContentType", "audio/mpeg"),
+        )
 
 
 async def ensure_bucket_exists() -> None:

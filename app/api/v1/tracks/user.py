@@ -3,6 +3,7 @@
 import structlog
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -40,9 +41,11 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 @limiter.limit("10/minute")
 async def upload_track(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: str = Form(..., max_length=256),
     artist: str | None = Form(None, max_length=256),
+    genre: str | None = Form(None, max_length=100),
     is_public: bool = Form(True),
     cover: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_db),
@@ -59,9 +62,11 @@ async def upload_track(
         file=file,
         title=title,
         artist=artist,
+        genre=genre,
         cover=cover,
         uploader_id=current_user.id,
         is_public=is_public,
+        background_tasks=background_tasks,
     )
     return TrackUploadResponse.model_validate(track)
 

@@ -1,13 +1,22 @@
 """Track playback endpoints — stream URL, play count, cover, single track."""
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from botocore.exceptions import ClientError
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import RedirectResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_db
-from app.schemas.track import PlayResponse, StreamResponse, TrackResponse
+from app.repositories.track import TrackRepository
+from app.schemas.track import (
+    AdjacentTracksResponse,
+    PlaybackMode,
+    PlayResponse,
+    StreamResponse,
+    TrackResponse,
+)
 from app.services.track_service import TrackService
 
 router = APIRouter()
@@ -69,8 +78,6 @@ async def play_track(
     session: AsyncSession = Depends(get_db),
 ) -> PlayResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
-    from app.repositories.track import TrackRepository
-
     repo = TrackRepository(session)
     found = await repo.increment_play_count(track_id)
     if not found:
@@ -109,6 +116,127 @@ async def get_cover(
         )
     url = await s3.get_presigned_url(track.cover_key)
     return StreamResponse(track_id=track_id, url=url)
+
+
+@router.get(
+    "/{track_id}/audio",
+    summary="Proxy-stream audio with HTTP Range support",
+)
+@limiter.limit("120/minute")
+async def audio_stream(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> StreamingResponse | RedirectResponse:
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    service = TrackService(session)
+    track = await service.get_track(track_id)
+    if not track:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+
+    if track.source == "soundcloud":
+        if not track.sc_url:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="SC track missing URL",
+            )
+        from app.config import settings
+        from app.services.soundcloud_service import SoundCloudService
+
+        sc_service = SoundCloudService(settings.sc_client_id, session)
+        hls_url = await sc_service.get_hls_url(track.sc_url)
+        return RedirectResponse(url=hls_url, status_code=302)
+
+    if not track.file_key:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Track has no audio file",
+        )
+
+    range_header = request.headers.get("range")
+    try:
+        body, content_length, content_range, content_type = (
+            await s3.stream_object_range(track.file_key, range_header)
+        )
+    except ClientError as exc:
+        code = exc.response["Error"]["Code"]
+        if code == "NoSuchKey":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Audio file not found in storage",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Storage error",
+        ) from exc
+
+    async def _iter_body() -> StreamingResponse:  # type: ignore[return]
+        async with body as stream:
+            while True:
+                chunk: bytes = await stream.read(65536)
+                if not chunk:
+                    break
+                yield chunk
+
+    http_status = 206 if content_range else 200
+    headers: dict[str, str] = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(content_length),
+    }
+    if content_range:
+        headers["Content-Range"] = content_range
+    logger.info(
+        "audio_stream_started",
+        track_id=track_id,
+        range=range_header,
+        status=http_status,
+    )
+    return StreamingResponse(
+        _iter_body(),
+        status_code=http_status,
+        media_type=content_type,
+        headers=headers,
+    )
+
+
+@router.get(
+    "/{track_id}/adjacent",
+    response_model=AdjacentTracksResponse,
+    summary="Get prev/next track IDs for navigation",
+)
+@limiter.limit("300/minute")
+async def get_adjacent_tracks(
+    request: Request,
+    track_id: int,
+    mode: PlaybackMode = Query(PlaybackMode.sequential),
+    session: AsyncSession = Depends(get_db),
+) -> AdjacentTracksResponse:
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    repo = TrackRepository(session)
+    track = await repo.get_by_id(track_id)
+    if not track or not track.is_active or not track.is_public:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+
+    if mode == PlaybackMode.repeat_one:
+        return AdjacentTracksResponse(
+            prev_id=track_id, next_id=track_id
+        )
+
+    if mode == PlaybackMode.shuffle:
+        rand_prev = await repo.get_random_id(track_id)
+        rand_next = await repo.get_random_id(track_id)
+        return AdjacentTracksResponse(
+            prev_id=rand_prev, next_id=rand_next
+        )
+
+    prev_id, next_id = await repo.get_adjacent(track_id)
+    return AdjacentTracksResponse(prev_id=prev_id, next_id=next_id)
 
 
 @router.get(
