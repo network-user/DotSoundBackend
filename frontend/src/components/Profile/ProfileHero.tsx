@@ -1,5 +1,3 @@
-import type { ChangeEvent, RefObject } from 'react'
-
 interface Props {
   currentAvatar: string | null
   shownName: string
@@ -7,12 +5,10 @@ interface Props {
   editMode: boolean
   displayName: string
   saving: boolean
-  avatarInputRef: RefObject<HTMLInputElement>
   onEditStart: () => void
   onSave: () => void
   onCancel: () => void
   onDisplayNameChange: (name: string) => void
-  onAvatarChange: (e: ChangeEvent<HTMLInputElement>) => void
 }
 
 export function ProfileHero({
@@ -22,39 +18,26 @@ export function ProfileHero({
   editMode,
   displayName,
   saving,
-  avatarInputRef,
   onEditStart,
   onSave,
   onCancel,
   onDisplayNameChange,
-  onAvatarChange,
 }: Props) {
   return (
     <div className="profile-hero">
-      <div
-        className={`profile-avatar${editMode ? ' editable' : ''}`}
-        onClick={() => editMode && avatarInputRef.current?.click()}
-      >
+      <div className="profile-avatar">
         {currentAvatar
           ? <img src={currentAvatar} alt={shownName} />
           : shownName.charAt(0).toUpperCase()
         }
-        {editMode && <span className="avatar-edit-hint">✎</span>}
       </div>
-      <input
-        ref={avatarInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        hidden
-        onChange={onAvatarChange}
-      />
 
       {editMode ? (
         <input
           className="form-input profile-name-input"
           value={displayName}
           onChange={(e) => onDisplayNameChange(e.target.value)}
-          maxLength={128}
+          maxLength={64}
           placeholder="Отображаемое имя"
         />
       ) : (

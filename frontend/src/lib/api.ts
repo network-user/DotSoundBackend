@@ -138,8 +138,8 @@ export const api = {
     return request(`/api/v1/users/${userId}/stats`)
   },
 
-  updateProfile(userId: number, display_name: string): Promise<UserResponse> {
-    return request(`/api/v1/users/${userId}`, {
+  updateProfile(display_name: string): Promise<UserResponse> {
+    return request('/api/v1/users/me', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ display_name }),
