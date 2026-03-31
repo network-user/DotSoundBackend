@@ -48,6 +48,8 @@ async def get_current_user(
     user_id = int(str(payload["sub"]))
     repo = UserRepository(session)
     user = await repo.get_by_id(user_id)
+    if not user:
+        user = await repo.get_by_telegram_id(user_id)
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
