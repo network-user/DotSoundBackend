@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { AuthorView } from '@/components/AuthorView/AuthorView'
 import { BottomNav, type ViewName } from '@/components/BottomNav/BottomNav'
 import { ComplaintModal } from '@/components/ComplaintModal/ComplaintModal'
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
+import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
 import { useDeepLink } from '@/hooks/useDeepLink'
 import { HomeView } from '@/views/HomeView'
 import { LikedView } from '@/views/LikedView'
@@ -12,8 +14,12 @@ import { UploadView } from '@/views/UploadView'
 
 export function App() {
   const [activeView, setActiveView] = useState<ViewName>('home')
+  const [authorId, setAuthorId] = useState<number | null>(null)
 
   useDeepLink()
+
+  const handleOpenAuthor = (id: number) => setAuthorId(id)
+  const handleCloseAuthor = () => setAuthorId(null)
 
   return (
     <div id="app">
@@ -30,6 +36,10 @@ export function App() {
       </main>
       <PlayerBar />
       <ComplaintModal />
+      <TrackCardSheet onOpenAuthor={handleOpenAuthor} />
+      {authorId !== null && (
+        <AuthorView authorId={authorId} onClose={handleCloseAuthor} />
+      )}
       <BottomNav activeView={activeView} onSwitch={setActiveView} />
     </div>
   )

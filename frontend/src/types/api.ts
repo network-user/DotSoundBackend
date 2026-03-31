@@ -92,9 +92,13 @@ export interface UserResponse {
 }
 
 export interface UserStatsResponse {
+  user_id: number
   total_tracks: number
   total_plays: number
   total_likes: number
+  followers_count: number
+  following_count: number
+  top_tracks: Track[]
 }
 
 export interface SCSearchResult {
@@ -109,4 +113,73 @@ export interface SCSearchResult {
 
 export interface AvatarResponse {
   avatar_url: string
+}
+
+// ── Track Card ──────────────────────────────────────────────────────────────
+
+export interface TrackAuthorInfo {
+  id: number
+  display_name: string | null
+  username: string | null
+  avatar_key: string | null
+}
+
+export interface TrackAlbumInfo {
+  id: number
+  title: string
+  cover_key: string | null
+}
+
+export interface TrackCardResponse {
+  id: number
+  title: string
+  artist: string | null
+  genre: string | null
+  duration_seconds: number | null
+  play_count: number
+  cover_url: string | null
+  created_at: string
+  author: TrackAuthorInfo | null
+  album: TrackAlbumInfo | null
+  has_lyrics: boolean
+}
+
+// ── Lyrics ──────────────────────────────────────────────────────────────────
+
+export interface SyncedLine {
+  time_ms: number
+  text: string
+}
+
+export interface LyricsResponse {
+  track_id: number
+  plain_text: string
+  synced_lines: SyncedLine[] | null
+  created_at: string
+  updated_at: string
+}
+
+// ── Share ───────────────────────────────────────────────────────────────────
+
+export interface ShareResponse {
+  track_id: number
+  url: string
+  telegram_share_url: string
+}
+
+// ── Follow ──────────────────────────────────────────────────────────────────
+
+export interface FollowToggleResponse {
+  user_id: number
+  following: boolean
+}
+
+export interface AuthorProfile {
+  id: number
+  telegram_id: number
+  username: string | null
+  display_name: string | null
+  avatar_key: string | null
+  is_active: boolean
+  created_at: string
 }

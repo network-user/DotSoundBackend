@@ -1,5 +1,6 @@
 import { useLikes } from '@/store/LikesContext'
 import { usePlayer } from '@/store/PlayerContext'
+import type { MouseEvent } from 'react'
 
 function fmt(sec: number) {
   if (!sec || isNaN(sec)) return '0:00'
@@ -9,7 +10,7 @@ function fmt(sec: number) {
 }
 
 export function PlayerBar() {
-  const { track, isPlaying, currentTime, duration, togglePlay, seek, openComplaint, volume, setVolume } = usePlayer()
+  const { track, isPlaying, currentTime, duration, togglePlay, seek, openComplaint, openCard, volume, setVolume } = usePlayer()
   const { isLiked, toggleLike, isDisliked, toggleDislike } = useLikes()
 
   if (!track) return null
@@ -31,6 +32,11 @@ export function PlayerBar() {
     ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`
     : null
 
+  const handleOpenCard = (e: MouseEvent) => {
+    e.stopPropagation()
+    openCard()
+  }
+
   return (
     <div id="player-bar">
       <div id="pb-seek-wrap">
@@ -45,7 +51,7 @@ export function PlayerBar() {
         />
       </div>
       <div id="pb-row">
-        <div className="pb-cover-img">
+        <div className="pb-cover-img pb-clickable" onClick={handleOpenCard} title="Открыть карточку">
           {coverSrc ? (
             <img
               src={coverSrc}
@@ -59,7 +65,7 @@ export function PlayerBar() {
             '🎵'
           )}
         </div>
-        <div id="pb-info">
+        <div id="pb-info" className="pb-clickable" onClick={handleOpenCard} title="Открыть карточку">
           <p className="pb-title">
             {track.title}
             {isSC && <span className="track-badge track-badge-sc">SC</span>}
