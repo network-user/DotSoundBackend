@@ -162,6 +162,7 @@ function updatePlayerBar() {
   pbArtist.textContent = t.artist || '—';
   pbPlay.textContent = state.isPlaying ? '⏸' : '▶';
   pbLike.textContent = state.isLiked ? '❤️' : '🤍';
+  pbLike.classList.toggle('liked', state.isLiked);
 
   if (t.cover_key) {
     const img = document.createElement('img');
@@ -241,6 +242,7 @@ pbLike.addEventListener('click', async () => {
       state.likedIds.delete(state.track.id);
     }
     pbLike.textContent = liked ? '❤️' : '🤍';
+    pbLike.classList.toggle('liked', liked);
     updateLikeButtonsInList(state.track.id, liked);
   } catch (e) {
     console.error('like error', e);
@@ -250,7 +252,10 @@ pbLike.addEventListener('click', async () => {
 function updateLikeButtonsInList(trackId, liked) {
   document
     .querySelectorAll(`.track-card[data-id="${trackId}"] .track-card-like`)
-    .forEach((btn) => { btn.textContent = liked ? '❤️' : '🤍'; });
+    .forEach((btn) => { 
+      btn.textContent = liked ? '❤️' : '🤍'; 
+      btn.classList.toggle('liked', liked);
+    });
 }
 
 /* ─── Track card builder ─────────────────────────────────── */
@@ -280,7 +285,9 @@ function buildTrackCard(track) {
   const likeBtn = document.createElement('button');
   likeBtn.className = 'track-card-like';
   likeBtn.title = 'Лайк';
-  likeBtn.textContent = state.likedIds.has(track.id) ? '❤️' : '🤍';
+  const isLiked = state.likedIds.has(track.id);
+  likeBtn.textContent = isLiked ? '❤️' : '🤍';
+  likeBtn.classList.toggle('liked', isLiked);
 
   likeBtn.addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -291,6 +298,7 @@ function buildTrackCard(track) {
         { method: 'POST' }
       );
       likeBtn.textContent = liked ? '❤️' : '🤍';
+      likeBtn.classList.toggle('liked', liked);
       if (liked) {
         state.likedIds.add(track.id);
       } else {
@@ -299,6 +307,7 @@ function buildTrackCard(track) {
       if (state.track?.id === track.id) {
         state.isLiked = liked;
         pbLike.textContent = liked ? '❤️' : '🤍';
+        pbLike.classList.toggle('liked', liked);
       }
     } catch (e) {
       console.error('like error', e);

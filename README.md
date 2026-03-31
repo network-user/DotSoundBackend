@@ -106,6 +106,7 @@ Mini App — это React-приложение, которое открывае�
 cd frontend
 npm install      # только при первом запуске
 npm run dev
+npm run dev -- --host # локальный запуск
 ```
 
 Открыть: `http://localhost:5173/mini_app/`
