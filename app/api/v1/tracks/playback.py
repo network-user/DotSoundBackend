@@ -121,6 +121,7 @@ async def get_cover(
 @router.get(
     "/{track_id}/audio",
     summary="Proxy-stream audio with HTTP Range support",
+    response_model=None,
 )
 @limiter.limit("120/minute")
 async def audio_stream(

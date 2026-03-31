@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import get_db
+from app.dependencies import get_db
 from app.models.track import Track
 
 router = APIRouter(prefix="/metadata", tags=["metadata"])
