@@ -57,6 +57,21 @@ services:
     networks:
       - dotsound
 
+  backend:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - minio
+    volumes:
+      - .:/app
+    networks:
+      - dotsound
+
 volumes:
   postgres_data:
   minio_data:

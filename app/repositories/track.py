@@ -1,5 +1,5 @@
 import structlog
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
@@ -11,6 +11,16 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 class TrackRepository(BaseRepository[Track]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, Track)
+
+    async def get_total_uploaded_bytes(self, user_id: int) -> int:
+        result = await self._session.execute(
+            select(func.coalesce(func.sum(Track.file_size_bytes), 0))
+            .where(
+                Track.uploaded_by_id == user_id,
+                Track.is_active.is_(True),
+            )
+        )
+        return result.scalar_one()
 
     async def list_active(
         self,
@@ -129,3 +139,71 @@ class TrackRepository(BaseRepository[Track]):
         track.is_active = False
         await self._session.commit()
         return track
+
+    async def get_adjacent(
+        self, track_id: int
+    ) -> tuple[int | None, int | None]:
+        """Return (prev_id, next_id) based on created_at DESC ordering.
+
+        prev_id = newer track (higher created_at / id).
+        next_id = older track (lower created_at / id).
+        Uses id as tiebreaker for identical created_at values.
+        """
+        track = await self.get_by_id(track_id)
+        if not track:
+            return None, None
+
+        ct = track.created_at
+        tid = track.id
+        base = (
+            Track.is_active.is_(True)
+            & Track.is_public.is_(True)
+            & (Track.id != track_id)
+        )
+
+        next_q = (
+            select(Track.id)
+            .where(
+                base
+                & or_(
+                    Track.created_at < ct,
+                    (Track.created_at == ct) & (Track.id < tid),
+                )
+            )
+            .order_by(Track.created_at.desc(), Track.id.desc())
+            .limit(1)
+        )
+        prev_q = (
+            select(Track.id)
+            .where(
+                base
+                & or_(
+                    Track.created_at > ct,
+                    (Track.created_at == ct) & (Track.id > tid),
+                )
+            )
+            .order_by(Track.created_at.asc(), Track.id.asc())
+            .limit(1)
+        )
+
+        next_row = (
+            await self._session.execute(next_q)
+        ).scalar_one_or_none()
+        prev_row = (
+            await self._session.execute(prev_q)
+        ).scalar_one_or_none()
+        return prev_row, next_row
+
+    async def get_random_id(self, exclude_id: int) -> int | None:
+        """Return a random active public track id, excluding exclude_id."""
+        result = await self._session.execute(
+            select(Track.id)
+            .where(
+                Track.is_active.is_(True)
+                & Track.is_public.is_(True)
+                & (Track.id != exclude_id)
+            )
+            .order_by(func.random())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()

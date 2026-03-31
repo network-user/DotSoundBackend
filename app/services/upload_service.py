@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import s3
 from app.models.track import Track
 from app.repositories.track import TrackRepository
+from app.services.transcoding import transcode_and_upload
+from fastapi import BackgroundTasks
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -25,8 +27,10 @@ _ALLOWED_AUDIO_MIMES = frozenset(
 _ALLOWED_COVER_MIMES = frozenset(
     {"image/jpeg", "image/png", "image/webp"}
 )
-_MAX_AUDIO_BYTES = 50 * 1024 * 1024
+_MAX_AUDIO_BYTES = 100 * 1024 * 1024  # Increased to 100MB for raw WAV files
 _MAX_COVER_BYTES = 5 * 1024 * 1024
+_MAX_STORAGE_QUOTA = 3 * 1024 * 1024 * 1024  # 3 GB
+
 
 
 def _resolve_mime(file: UploadFile) -> str:
@@ -60,9 +64,11 @@ class UploadService:
         file: UploadFile,
         title: str,
         artist: str | None,
+        genre: str | None = None,
         cover: UploadFile | None = None,
         uploader_id: int | None = None,
         is_public: bool = True,
+        background_tasks: BackgroundTasks = None,
     ) -> Track:
         mime = _resolve_mime(file)
         logger.info(
@@ -86,16 +92,19 @@ class UploadService:
             )
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail="Audio file exceeds 50 MB limit",
+                detail="Audio file exceeds 100 MB limit",
             )
 
-        ext = _audio_extension(mime)
-        file_key = await s3.upload_audio(
-            data=data,
-            extension=ext,
-            content_type=mime,
-            user_id=uploader_id,
-        )
+        if uploader_id is not None:
+            used_bytes = await self._repo.get_total_uploaded_bytes(uploader_id)
+            if used_bytes + len(data) > _MAX_STORAGE_QUOTA:
+                logger.warning(
+                    "upload_rejected_quota", used=used_bytes, new=len(data)
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Quota Exceeded: 3GB maximum storage reached.",
+                )
 
         cover_key: str | None = None
         if cover and cover.filename:
@@ -106,17 +115,27 @@ class UploadService:
         track = await self._repo.create(
             title=title,
             artist=artist,
-            file_key=file_key,
+            genre=genre,
+            file_key=None,
             cover_key=cover_key,
             uploaded_by_id=uploader_id,
             is_public=is_public,
+            processing_status="processing",
+            file_size_bytes=len(data),
         )
         logger.info(
-            "upload_complete",
+            "upload_track_record_created",
             track_id=track.id,
-            file_key=file_key,
             has_cover=cover_key is not None,
         )
+
+        if background_tasks:
+            background_tasks.add_task(
+                transcode_and_upload,
+                track_id=track.id,
+                raw_audio_data=data,
+                original_filename=file.filename or "track.mp3",
+            )
         return track
 
     async def _upload_cover(
