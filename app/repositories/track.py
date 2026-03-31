@@ -9,6 +9,9 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 class TrackRepository(BaseRepository[Track]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, Track)
+
     async def get_unique_genres(self) -> list[str]:
         result = await self._session.execute(
             select(Track.genre)
@@ -16,7 +19,7 @@ class TrackRepository(BaseRepository[Track]):
             .distinct()
             .order_by(Track.genre.asc())
         )
-        return [row[0] for row in result.all() if row[0]]
+        return [str(g) for g in result.scalars().all() if g]
 
     async def get_total_uploaded_bytes(self, user_id: int) -> int:
         result = await self._session.execute(

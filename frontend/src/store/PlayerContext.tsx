@@ -51,7 +51,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     const onPlay = () => {
       setIsPlaying(true)
-      if (!playCountSentRef.current && track) {
+      if (!playCountSentRef.current && track && track.id > 0) {
         playCountSentRef.current = true
         api.postPlay(track.id).catch(() => {})
       }

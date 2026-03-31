@@ -31,10 +31,18 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     headers.set('Authorization', `Bearer ${accessToken}`)
   }
 
-  const res = await fetch(path, { ...opts, headers })
-  if (!res.ok) throw new Error(`${res.status}`)
-  if (res.status === 204) return null as T
-  return res.json() as Promise<T>
+  try {
+    const res = await fetch(path, { ...opts, headers })
+    if (res.status === 401) {
+      console.error(`[API] 401 Unauthorized: ${path}. Token present: ${!!accessToken}`)
+    }
+    if (!res.ok) throw new Error(`${res.status}`)
+    if (res.status === 204) return null as T
+    return res.json() as Promise<T>
+  } catch (err) {
+    console.error(`[API] Fetch error for ${path}:`, err)
+    throw err
+  }
 }
 
 export const api = {
@@ -230,10 +238,23 @@ export const api = {
   // ── Auth ────────────────────────────────────────────────────────────────────
 
   async authTelegram(init_data: string): Promise<TokenResponse> {
+    if (!init_data) {
+      console.warn('[API] Missing initData, attempting mock auth...')
+      // Use a default mock ID if in dev mode
+      return this.authMock(1000000000) 
+    }
     const res = await request<TokenResponse>('/api/v1/auth/telegram', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ init_data }),
+    })
+    accessToken = res.access_token
+    return res
+  },
+
+  async authMock(user_id: number): Promise<TokenResponse> {
+    const res = await request<TokenResponse>(`/api/v1/auth/mock/${user_id}`, {
+      method: 'POST',
     })
     accessToken = res.access_token
     return res

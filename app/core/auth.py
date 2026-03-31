@@ -15,6 +15,9 @@ from app.config import settings
 _ALGORITHM = "HS256"
 
 
+import structlog
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
 class AuthError(Exception):
     """Raised when authentication or signature verification fails."""
 
@@ -50,6 +53,12 @@ def verify_telegram_init_data(init_data: str) -> dict[str, object]:
     ).hexdigest()
 
     if not hmac.compare_digest(computed_hash, received_hash):
+        logger.debug(
+            "telegram_hmac_mismatch",
+            computed=computed_hash,
+            received=received_hash,
+            data_check_string=data_check_string,
+        )
         raise AuthError("Invalid initData signature")
 
     user_json = parsed.get("user", [None])[0]
