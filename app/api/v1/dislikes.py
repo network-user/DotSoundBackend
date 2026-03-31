@@ -32,3 +32,25 @@ async def toggle_dislike(
     disliked = await service.toggle(current_user.id, track_id)
     logger.info("dislike_toggle_endpoint", disliked=disliked)
     return DislikeToggleResponse(track_id=track_id, disliked=disliked)
+
+
+@router.post(
+    "/{user_id}/{track_id}",
+    response_model=DislikeToggleResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Toggle dislike on a track (public / bot)",
+)
+@limiter.limit("60/minute")
+async def toggle_dislike_public(
+    request: Request,
+    user_id: int,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> DislikeToggleResponse:
+    structlog.contextvars.bind_contextvars(
+        user_id=user_id, track_id=track_id
+    )
+    service = DislikeService(session)
+    disliked = await service.toggle(user_id, track_id)
+    logger.info("dislike_toggle_endpoint_public", disliked=disliked)
+    return DislikeToggleResponse(track_id=track_id, disliked=disliked)
