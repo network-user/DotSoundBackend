@@ -1,9 +1,16 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import asyncio
+import sys
 import structlog
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+
+# --- WINDOWS ASYNCIO FIX ---
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+# ---------------------------
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
