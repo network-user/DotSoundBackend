@@ -88,3 +88,14 @@ class LikeRepository:
             total=total,
         )
         return list(tracks_result.scalars().all()), total
+
+    async def count_likes_for_user_tracks(self, user_id: int) -> int:
+        from sqlalchemy import func
+
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(Like)
+            .join(Track, Track.id == Like.track_id)
+            .where(Track.uploaded_by_id == user_id, Track.is_active.is_(True))
+        )
+        return result.scalar_one()

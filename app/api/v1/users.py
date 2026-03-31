@@ -6,6 +6,7 @@ from fastapi import (
     Depends,
     File,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     status,
@@ -16,6 +17,8 @@ from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
+from app.schemas.album import AlbumResponse
+from app.schemas.track import TrackListResponse, TrackResponse
 from app.schemas.user import (
     AvatarResponse,
     UserCreate,
@@ -23,7 +26,10 @@ from app.schemas.user import (
     UserStatsResponse,
     UserUpdateRequest,
 )
+from app.services.album_service import AlbumService
+from app.services.follow_service import FollowService
 from app.services.stats_service import StatsService
+from app.services.track_service import TrackService
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -190,6 +196,65 @@ async def get_avatar(
         avatar_url = f"https://api.dicebear.com/9.x/identicon/svg?seed={seed}"
         
     return AvatarResponse(avatar_url=avatar_url)
+
+
+@router.get(
+    "/me/feed",
+    response_model=TrackListResponse,
+    summary="Get feed of tracks from followed users (auth required)",
+)
+@limiter.limit("60/minute")
+async def get_feed(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TrackListResponse:
+    structlog.contextvars.bind_contextvars(user_id=current_user.id)
+    service = FollowService(session)
+    tracks, total = await service.get_feed(current_user.id, page, size)
+    items = [TrackResponse.model_validate(t) for t in tracks]
+    return TrackListResponse(items=items, total=total, page=page, size=size)
+
+
+@router.get(
+    "/{user_id}/tracks",
+    response_model=TrackListResponse,
+    summary="Get public tracks uploaded by a user",
+)
+@limiter.limit("120/minute")
+async def get_user_tracks(
+    request: Request,
+    user_id: int,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    session: AsyncSession = Depends(get_db),
+) -> TrackListResponse:
+    structlog.contextvars.bind_contextvars(user_id=user_id)
+    service = TrackService(session)
+    tracks, total = await service.list_public_by_user(user_id, page, size)
+    items = [TrackResponse.model_validate(t) for t in tracks]
+    return TrackListResponse(items=items, total=total, page=page, size=size)
+
+
+@router.get(
+    "/{user_id}/albums",
+    response_model=list[AlbumResponse],
+    summary="Get albums created by a user",
+)
+@limiter.limit("120/minute")
+async def get_user_albums(
+    request: Request,
+    user_id: int,
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=100),
+    session: AsyncSession = Depends(get_db),
+) -> list[AlbumResponse]:
+    structlog.contextvars.bind_contextvars(user_id=user_id)
+    service = AlbumService(session)
+    albums, _ = await service.list_by_user(user_id, page, size)
+    return [AlbumResponse.model_validate(a) for a in albums]
 
 
 @router.get(

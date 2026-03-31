@@ -1,0 +1,55 @@
+import structlog
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.lyrics import TrackLyrics
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+class LyricsRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_track_id(self, track_id: int) -> TrackLyrics | None:
+        result = await self._session.execute(
+            select(TrackLyrics).where(TrackLyrics.track_id == track_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def create_or_update(
+        self, track_id: int, plain_text: str
+    ) -> TrackLyrics:
+        existing = await self.get_by_track_id(track_id)
+        if existing:
+            existing.plain_text = plain_text
+            await self._session.flush()
+            await self._session.refresh(existing)
+            logger.debug("db_lyrics_updated", track_id=track_id)
+            return existing
+        lyrics = TrackLyrics(track_id=track_id, plain_text=plain_text)
+        self._session.add(lyrics)
+        await self._session.flush()
+        await self._session.refresh(lyrics)
+        logger.debug("db_lyrics_created", track_id=track_id)
+        return lyrics
+
+    async def update_sync(
+        self, track_id: int, synced_lines: list[dict]
+    ) -> TrackLyrics | None:
+        existing = await self.get_by_track_id(track_id)
+        if not existing:
+            return None
+        existing.synced_lines = synced_lines
+        await self._session.flush()
+        await self._session.refresh(existing)
+        logger.debug("db_lyrics_sync_updated", track_id=track_id)
+        return existing
+
+    async def delete_by_track_id(self, track_id: int) -> bool:
+        result = await self._session.execute(
+            delete(TrackLyrics).where(TrackLyrics.track_id == track_id)
+        )
+        removed = result.rowcount > 0
+        logger.debug("db_lyrics_deleted", track_id=track_id, found=removed)
+        return removed

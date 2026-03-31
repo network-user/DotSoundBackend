@@ -52,6 +52,9 @@ class UserStatsResponse(BaseModel):
     user_id: int
     total_tracks: int = Field(ge=0)
     total_plays: int = Field(ge=0)
+    total_likes: int = 0
+    followers_count: int = 0
+    following_count: int = 0
     top_tracks: list[TrackStatsItem] = Field(
         description="Top 5 most played tracks"
     )

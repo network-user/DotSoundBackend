@@ -23,6 +23,7 @@ class TrackResponse(BaseModel):
     sc_url: str | None = None
     sc_uri: str | None = None
     uploaded_by_id: int | None = None
+    album_id: int | None = None
     created_at: datetime
 
     @computed_field  # type: ignore[prop-decorator]

@@ -2,11 +2,14 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     admin,
+    albums,
     auth,
     complaints,
     dislikes,
+    follows,
     health,
     likes,
+    lyrics,
     metadata,
     playlists,
     soundcloud,
@@ -26,3 +29,6 @@ api_router.include_router(soundcloud.router)
 api_router.include_router(complaints.router, tags=["complaints"])
 api_router.include_router(metadata.router)
 api_router.include_router(admin.router)
+api_router.include_router(lyrics.router)
+api_router.include_router(follows.router)
+api_router.include_router(albums.router)

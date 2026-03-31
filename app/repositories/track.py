@@ -207,3 +207,55 @@ class TrackRepository(BaseRepository[Track]):
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def list_public_by_user(
+        self,
+        user_id: int,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[Track], int]:
+        condition = (
+            Track.is_active.is_(True)
+            & Track.is_public.is_(True)
+            & (Track.uploaded_by_id == user_id)
+        )
+        total_result = await self._session.execute(
+            select(func.count()).where(condition)
+        )
+        total = total_result.scalar_one()
+
+        tracks_result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(tracks_result.scalars().all()), total
+
+    async def list_by_users_public(
+        self,
+        user_ids: list[int],
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[Track], int]:
+        if not user_ids:
+            return [], 0
+        condition = (
+            Track.is_active.is_(True)
+            & Track.is_public.is_(True)
+            & Track.uploaded_by_id.in_(user_ids)
+        )
+        total_result = await self._session.execute(
+            select(func.count()).where(condition)
+        )
+        total = total_result.scalar_one()
+
+        tracks_result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(tracks_result.scalars().all()), total

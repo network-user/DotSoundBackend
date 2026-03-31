@@ -10,6 +10,8 @@ from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_db
 from app.repositories.track import TrackRepository
+from app.schemas.card import TrackCardResponse
+from app.schemas.share import ShareResponse
 from app.schemas.track import (
     AdjacentTracksResponse,
     PlaybackMode,
@@ -17,6 +19,7 @@ from app.schemas.track import (
     StreamResponse,
     TrackResponse,
 )
+from app.services.card_service import CardService
 from app.services.track_service import TrackService
 
 router = APIRouter()
@@ -245,6 +248,64 @@ async def get_adjacent_tracks(
 
     prev_id, next_id = await repo.get_adjacent(track_id)
     return AdjacentTracksResponse(prev_id=prev_id, next_id=next_id)
+
+
+@router.get(
+    "/{track_id}/card",
+    response_model=TrackCardResponse,
+    summary="Get full track card (track info + author + album + has_lyrics)",
+)
+@limiter.limit("300/minute")
+async def get_track_card(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> TrackCardResponse:
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    service = CardService(session)
+    card = await service.get_card(track_id)
+    if not card:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    return card
+
+
+@router.get(
+    "/{track_id}/share",
+    response_model=ShareResponse,
+    summary="Get shareable links for a track",
+)
+@limiter.limit("120/minute")
+async def get_share_links(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> ShareResponse:
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    service = TrackService(session)
+    track = await service.get_track(track_id)
+    if not track:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    from app.config import settings
+
+    mini_app_url = settings.mini_app_url or ""
+    bot_username = settings.telegram_bot_username or ""
+    web_url = f"{mini_app_url}/track/{track_id}" if mini_app_url else f"/api/v1/tracks/{track_id}"
+    tg_url = (
+        f"https://t.me/{bot_username}/app?startapp=track_{track_id}"
+        if bot_username
+        else f"https://t.me/share/url?url={web_url}"
+    )
+    return ShareResponse(
+        track_id=track_id,
+        url=web_url,
+        telegram_share_url=tg_url,
+    )
 
 
 @router.get(
