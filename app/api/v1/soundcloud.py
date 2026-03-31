@@ -17,6 +17,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 class SCImportRequest(BaseModel):
     sc_url: str
     is_public: bool = True
+    uploader_id: int | None = None
 
 
 def _format_result(item: dict) -> SCSearchResult:  # type: ignore[type-arg]
@@ -64,7 +65,6 @@ async def import_soundcloud_track(
     request: Request,
     data: SCImportRequest,
     session: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ) -> TrackResponse:
     structlog.contextvars.bind_contextvars(sc_url=data.sc_url)
     if not data.sc_url.startswith("https://soundcloud.com/"):
@@ -81,7 +81,7 @@ async def import_soundcloud_track(
         )
     track = await service.import_or_get_track(
         sc_data=sc_data,
-        uploader_id=current_user.id,
+        uploader_id=data.uploader_id,
         is_public=data.is_public,
     )
     logger.info(

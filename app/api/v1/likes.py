@@ -35,6 +35,28 @@ async def toggle_like(
     return LikeToggleResponse(track_id=track_id, liked=liked)
 
 
+@router.post(
+    "/{user_id}/{track_id}",
+    response_model=LikeToggleResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Toggle like on a track (public / bot)",
+)
+@limiter.limit("60/minute")
+async def toggle_like_public(
+    request: Request,
+    user_id: int,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> LikeToggleResponse:
+    structlog.contextvars.bind_contextvars(
+        user_id=user_id, track_id=track_id
+    )
+    service = LikeService(session)
+    liked = await service.toggle(user_id, track_id)
+    logger.info("like_toggle_endpoint_public", liked=liked)
+    return LikeToggleResponse(track_id=track_id, liked=liked)
+
+
 @router.get(
     "/{user_id}",
     response_model=UserLikesResponse,
