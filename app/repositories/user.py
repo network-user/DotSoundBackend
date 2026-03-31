@@ -1,4 +1,5 @@
 import structlog
+import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +34,8 @@ class UserRepository(BaseRepository[User]):
             user.username = username
             user.first_name = first_name
             user.last_name = last_name
+            if not user.avatar_seed:
+                user.avatar_seed = uuid.uuid4().hex
             await self._session.flush()
             logger.debug("db_user_updated", telegram_id=telegram_id)
             return user, False
@@ -41,6 +44,7 @@ class UserRepository(BaseRepository[User]):
             username=username,
             first_name=first_name,
             last_name=last_name,
+            avatar_seed=uuid.uuid4().hex,
         )
         logger.debug("db_user_created", telegram_id=telegram_id)
         return user, True
