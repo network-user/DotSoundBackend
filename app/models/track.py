@@ -55,6 +55,9 @@ class Track(Base, TimestampMixin):
     )
     sc_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     sc_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hls_manifest_key: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
     is_public: Mapped[bool] = mapped_column(
         Boolean, server_default="true", nullable=False
     )

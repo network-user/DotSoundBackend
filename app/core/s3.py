@@ -176,6 +176,38 @@ async def stream_object_range(
         )
 
 
+async def download_object(file_key: str) -> bytes:
+    """Download an S3 object and return its raw bytes."""
+    logger.debug("s3_download_requested", file_key=file_key)
+    async with get_s3_client() as s3:
+        response = await s3.get_object(
+            Bucket=settings.minio_bucket, Key=file_key
+        )
+        async with response["Body"] as stream:
+            data: bytes = await stream.read()
+    logger.debug("s3_download_complete", file_key=file_key)
+    return data
+
+
+async def upload_object(
+    key: str, data: bytes, content_type: str
+) -> None:
+    """Upload arbitrary bytes to MinIO at the given key path."""
+    logger.debug(
+        "s3_upload_object_started",
+        key=key,
+        size_bytes=len(data),
+    )
+    async with get_s3_client() as s3:
+        await s3.put_object(
+            Bucket=settings.minio_bucket,
+            Key=key,
+            Body=data,
+            ContentType=content_type,
+        )
+    logger.debug("s3_upload_object_complete", key=key)
+
+
 async def ensure_bucket_exists() -> None:
     """Create the audio bucket if it doesn't exist yet."""
     async with get_s3_client() as s3:

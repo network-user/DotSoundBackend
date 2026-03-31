@@ -138,6 +138,13 @@ async def audio_stream(
             detail="Track not found",
         )
 
+    # Prefer HLS adaptive streaming when available
+    if track.hls_manifest_key:
+        return RedirectResponse(
+            url=f"/api/v1/tracks/{track_id}/hls/master.m3u8",
+            status_code=302,
+        )
+
     if track.source == "soundcloud":
         if not track.sc_url:
             raise HTTPException(
