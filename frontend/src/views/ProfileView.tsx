@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { tg, userId } from '@/lib/telegram'
 import type { Track, UserStatsResponse } from '@/types/api'
@@ -20,10 +20,7 @@ export function ProfileView({ active, onNavigate }: Props) {
   const [editMode, setEditMode] = useState(false)
   const [displayName, setDisplayName] = useState('')
   const [avatarSrc, setAvatarSrc] = useState<string | null>(null)
-  const [avatarFile, setAvatarFile] = useState<File | null>(null)
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const tgUser = tg.initDataUnsafe?.user
 
@@ -41,11 +38,9 @@ export function ProfileView({ active, onNavigate }: Props) {
     api.getUserProfile(id)
       .then((profile) => {
         setDisplayName(profile.display_name || defaultName)
-        if (profile.avatar_key) {
-          api.getAvatarUrl(id)
-            .then(({ avatar_url }) => setAvatarSrc(avatar_url))
-            .catch(() => {})
-        }
+        api.getAvatarUrl(id)
+          .then(({ avatar_url }) => setAvatarSrc(avatar_url))
+          .catch(() => {})
       })
       .catch(() => setDisplayName(defaultName))
 
@@ -54,30 +49,13 @@ export function ProfileView({ active, onNavigate }: Props) {
       .catch(() => {})
   }, [active])
 
-  const handleAvatarChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null
-    setAvatarFile(file)
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (ev) => setAvatarPreview(ev.target?.result as string)
-      reader.readAsDataURL(file)
-    }
-  }
 
   const handleSave = async () => {
     if (!userId) return
     setSaving(true)
     try {
       if (displayName.trim()) {
-        await api.updateProfile(userId, displayName.trim())
-      }
-      if (avatarFile) {
-        const fd = new FormData()
-        fd.append('avatar', avatarFile)
-        const { avatar_url } = await api.uploadAvatar(userId, fd)
-        setAvatarSrc(avatar_url)
-        setAvatarFile(null)
-        setAvatarPreview(null)
+        await api.updateProfile(displayName.trim())
       }
       setEditMode(false)
     } catch { } finally {
@@ -106,7 +84,7 @@ export function ProfileView({ active, onNavigate }: Props) {
     } catch { }
   }
 
-  const currentAvatar = avatarPreview || avatarSrc || tgUser?.photo_url || null
+  const currentAvatar = avatarSrc || tgUser?.photo_url || null
   const shownName = displayName || defaultName
 
   if (!tgUser) {
@@ -130,16 +108,12 @@ export function ProfileView({ active, onNavigate }: Props) {
         editMode={editMode}
         displayName={displayName}
         saving={saving}
-        avatarInputRef={avatarInputRef}
         onEditStart={() => setEditMode(true)}
         onSave={handleSave}
         onCancel={() => {
           setEditMode(false)
-          setAvatarFile(null)
-          setAvatarPreview(null)
         }}
         onDisplayNameChange={setDisplayName}
-        onAvatarChange={handleAvatarChange}
       />
       <ProfileStats stats={stats} />
       <ProfileActions onNavigate={onNavigate} />

@@ -26,7 +26,12 @@ class UserResponse(BaseModel):
 
 
 class UserUpdateRequest(BaseModel):
-    display_name: str | None = Field(None, max_length=128)
+    display_name: str | None = Field(
+        None,
+        min_length=1,
+        max_length=64,
+        pattern=r"^[^\s].*[^\s]$|^[^\s]$"
+    )
 
 
 class AvatarResponse(BaseModel):

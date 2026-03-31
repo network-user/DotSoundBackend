@@ -129,6 +129,10 @@ async def upload_my_avatar(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AvatarResponse:
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Avatar uploads are temporarily frozen. Enjoy your auto-generated identicon!",
+    )
     structlog.contextvars.bind_contextvars(user_id=current_user.id)
     mime = avatar.content_type or ""
     if not mime or mime == "application/octet-stream":
@@ -173,12 +177,18 @@ async def get_avatar(
     structlog.contextvars.bind_contextvars(user_id=user_id)
     service = UserService(session)
     user = await service.get_by_id(user_id)
-    if not user or not user.avatar_key:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Custom avatar not found",
+            detail="User not found",
         )
-    avatar_url = await s3.get_presigned_url(user.avatar_key)
+    
+    if user.avatar_key:
+        avatar_url = await s3.get_presigned_url(user.avatar_key)
+    else:
+        seed = user.avatar_seed or str(user.telegram_id)
+        avatar_url = f"https://api.dicebear.com/9.x/identicon/svg?seed={seed}"
+        
     return AvatarResponse(avatar_url=avatar_url)
 
 
