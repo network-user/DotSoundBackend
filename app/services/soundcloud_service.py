@@ -102,7 +102,7 @@ class SoundCloudService:
         )
         track_auth: str = sc_data.get("track_authorization", "")
 
-        progressive = next(
+        selected = next(
             (
                 t for t in transcodings
                 if t.get("format", {}).get("protocol") == "progressive"
@@ -110,7 +110,17 @@ class SoundCloudService:
             ),
             None,
         )
-        if not progressive:
+        if not selected:
+            selected = next(
+                (
+                    t for t in transcodings
+                    if t.get("format", {}).get("protocol") == "hls"
+                    and not t.get("snipped")
+                ),
+                None,
+            )
+
+        if not selected:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="No streamable format found for this SC track",
@@ -121,7 +131,7 @@ class SoundCloudService:
             params["track_authorization"] = track_auth
 
         async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(progressive["url"], params=params)
+            r = await client.get(selected["url"], params=params)
             if r.status_code in (401, 403):
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
