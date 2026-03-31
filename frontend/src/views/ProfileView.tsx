@@ -3,6 +3,10 @@ import { api } from '@/lib/api'
 import { tg, userId } from '@/lib/telegram'
 import type { Track, UserStatsResponse } from '@/types/api'
 import { usePlayer } from '@/store/PlayerContext'
+import { ProfileHero } from '@/components/Profile/ProfileHero'
+import { ProfileStats } from '@/components/Profile/ProfileStats'
+import { ProfileActions } from '@/components/Profile/ProfileActions'
+import { ProfileTrackList } from '@/components/Profile/ProfileTrackList'
 
 interface Props {
   active: boolean
@@ -28,23 +32,24 @@ export function ProfileView({ active, onNavigate }: Props) {
 
   useEffect(() => {
     if (!active || !userId) return
+    const id = userId
 
-    api.getUserStats(userId)
+    api.getUserStats(id)
       .then(setStats)
       .catch(() => setStats({ total_tracks: 0, total_plays: 0, total_likes: 0 }))
 
-    api.getUserProfile(userId)
+    api.getUserProfile(id)
       .then((profile) => {
         setDisplayName(profile.display_name || defaultName)
         if (profile.avatar_key) {
-          api.getAvatarUrl(userId)
+          api.getAvatarUrl(id)
             .then(({ avatar_url }) => setAvatarSrc(avatar_url))
             .catch(() => {})
         }
       })
       .catch(() => setDisplayName(defaultName))
 
-    api.getMyTracks(userId)
+    api.getMyTracks(id)
       .then((data) => setMyTracks(data.items))
       .catch(() => {})
   }, [active])
@@ -118,152 +123,32 @@ export function ProfileView({ active, onNavigate }: Props) {
 
   return (
     <section id="view-profile" className={`view${active ? ' active' : ''}`}>
-      <div className="profile-hero">
-        <div
-          className={`profile-avatar${editMode ? ' editable' : ''}`}
-          onClick={() => editMode && avatarInputRef.current?.click()}
-        >
-          {currentAvatar
-            ? <img src={currentAvatar} alt={shownName} />
-            : shownName.charAt(0).toUpperCase()
-          }
-          {editMode && <span className="avatar-edit-hint">✎</span>}
-        </div>
-        <input
-          ref={avatarInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          hidden
-          onChange={handleAvatarChange}
-        />
-
-        {editMode ? (
-          <input
-            className="form-input profile-name-input"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            maxLength={128}
-            placeholder="Отображаемое имя"
-          />
-        ) : (
-          <div className="profile-name">{shownName}</div>
-        )}
-
-        {tgUser.username && !editMode && (
-          <div className="profile-username">@{tgUser.username}</div>
-        )}
-
-        <div className="profile-edit-controls">
-          {!editMode ? (
-            <button className="profile-edit-btn" onClick={() => setEditMode(true)}>
-              ✎ Изменить
-            </button>
-          ) : (
-            <>
-              <button className="btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? 'Сохранение…' : 'Сохранить'}
-              </button>
-              <button className="profile-edit-cancel" onClick={() => {
-                setEditMode(false)
-                setAvatarFile(null)
-                setAvatarPreview(null)
-              }}>
-                Отмена
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div className="profile-stats">
-        <div className="stat-item">
-          <div className="stat-value">{stats?.total_tracks ?? '—'}</div>
-          <div className="stat-label">Треков</div>
-        </div>
-        <div className="stat-item">
-          <div className="stat-value">
-            {stats ? formatPlays(stats.total_plays) : '—'}
-          </div>
-          <div className="stat-label">Прослушиваний</div>
-        </div>
-        <div className="stat-item">
-          <div className="stat-value">{stats?.total_likes ?? '—'}</div>
-          <div className="stat-label">Лайков</div>
-        </div>
-      </div>
-
-      <div className="profile-actions">
-        <button
-          id="profile-action-upload"
-          className="profile-action-btn"
-          onClick={() => onNavigate('upload')}
-        >
-          <span className="profile-action-icon">↑</span>
-          <span className="profile-action-label">Загрузить трек</span>
-          <span className="profile-action-chevron">›</span>
-        </button>
-
-        <button
-          id="profile-action-playlists"
-          className="profile-action-btn"
-          onClick={() => onNavigate('playlists')}
-        >
-          <span className="profile-action-icon">▤</span>
-          <span className="profile-action-label">Мои плейлисты</span>
-          <span className="profile-action-chevron">›</span>
-        </button>
-
-        <button
-          id="profile-action-liked"
-          className="profile-action-btn"
-          onClick={() => onNavigate('liked')}
-        >
-          <span className="profile-action-icon">♥</span>
-          <span className="profile-action-label">Понравившееся</span>
-          <span className="profile-action-chevron">›</span>
-        </button>
-      </div>
-
-      {myTracks.length > 0 && (
-        <div className="my-tracks-section">
-          <p className="my-tracks-label">Мои треки</p>
-          {myTracks.map((track) => (
-            <div key={track.id} className="my-track-row" onClick={() => playTrack(track)}>
-              <div className="my-track-info">
-                <span className="my-track-title">{track.title}</span>
-                {track.source === 'soundcloud' && (
-                  <span className="track-badge track-badge-sc">SC</span>
-                )}
-                {!track.is_public && (
-                  <span className="track-badge track-badge-private">🔒</span>
-                )}
-              </div>
-              <div className="my-track-actions" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className="icon-btn"
-                  title={track.is_public ? 'Сделать приватным' : 'Сделать публичным'}
-                  onClick={() => handleToggleVisibility(track)}
-                >
-                  {track.is_public ? '👁' : '🔒'}
-                </button>
-                <button
-                  className="icon-btn"
-                  title="Удалить"
-                  onClick={() => handleDelete(track)}
-                >
-                  🗑
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <ProfileHero
+        currentAvatar={currentAvatar}
+        shownName={shownName}
+        username={tgUser.username}
+        editMode={editMode}
+        displayName={displayName}
+        saving={saving}
+        avatarInputRef={avatarInputRef}
+        onEditStart={() => setEditMode(true)}
+        onSave={handleSave}
+        onCancel={() => {
+          setEditMode(false)
+          setAvatarFile(null)
+          setAvatarPreview(null)
+        }}
+        onDisplayNameChange={setDisplayName}
+        onAvatarChange={handleAvatarChange}
+      />
+      <ProfileStats stats={stats} />
+      <ProfileActions onNavigate={onNavigate} />
+      <ProfileTrackList
+        tracks={myTracks}
+        onPlay={playTrack}
+        onToggleVisibility={handleToggleVisibility}
+        onDelete={handleDelete}
+      />
     </section>
   )
-}
-
-function formatPlays(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
 }

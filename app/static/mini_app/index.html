@@ -2,258 +2,95 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <title>DotSound</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>.sound</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* Premium Monochrome Loader */
+    body, html {
+      margin: 0; padding: 0;
+      background: #000;
+      color: #fff;
+      font-family: 'Inter', -apple-system, sans-serif;
+      height: 100%; width: 100%;
+      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #root {
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      overflow: hidden;
+    }
+    #ds-loader {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: #000;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 32px; letter-spacing: -1.5px;
+      user-select: none;
+    }
+    .loader-dot {
+      opacity: 0;
+      transform: scale(0.5);
+      animation: dotFadeIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+      margin-right: 2px;
+      color: #fff;
+    }
+    .loader-text {
+      display: flex; overflow: hidden; width: 0;
+      animation: textReveal 1.2s 0.6s cubic-bezier(0.77, 0, 0.175, 1) forwards;
+      white-space: nowrap;
+    }
+    .loader-char {
+      opacity: 0;
+      display: inline-block;
+      transform: translateY(10px);
+      animation: charSlideUp 0.4s forwards;
+    }
+    
+    @keyframes dotFadeIn {
+      to { opacity: 1; transform: scale(1); }
+    }
+    @keyframes textReveal {
+      to { width: 90px; } /* Adjusted to "sound" width */
+    }
+    @keyframes charSlideUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    #ds-loader.fade-out {
+      opacity: 0;
+      transition: opacity 0.5s ease;
+      pointer-events: none;
+    }
+  </style>
+  <script type="module" crossorigin src="/mini_app/assets/index-CUxKSKbq.js"></script>
+  <link rel="modulepreload" crossorigin href="/mini_app/assets/vendor-BGT-5E2Y.js">
+  <link rel="stylesheet" crossorigin href="/mini_app/assets/index-eCtBG7hm.css">
 </head>
 <body>
-<div id="app">
-
-  <!-- ═══ VIEWS ═══ -->
-  <main id="main">
-
-    <!-- Home: track feed -->
-    <section id="view-home" class="view active">
-      <div class="view-header">
-        <h2>DotSound</h2>
-        <span class="hint">Слушай. Делись. Открывай.</span>
-      </div>
-      <div id="home-list" class="track-list">
-        <div class="loader" id="home-loader"></div>
-      </div>
-    </section>
-
-    <!-- Search -->
-    <section id="view-search" class="view">
-      <div class="search-bar">
-        <span class="search-icon">🔍</span>
-        <input id="search-input" type="text"
-          placeholder="Трек или исполнитель…" autocomplete="off" />
-        <button id="search-clear" class="icon-btn hidden">✕</button>
-      </div>
-      <div id="search-list" class="track-list">
-        <p class="empty-hint" id="search-hint">Начните вводить название</p>
-      </div>
-    </section>
-
-    <!-- Upload -->
-    <section id="view-upload" class="view">
-      <div class="view-header"><h2>Загрузить трек</h2></div>
-      <form id="upload-form" novalidate>
-
-        <label class="cover-picker" id="cover-picker" for="cover-input">
-          <div class="cover-preview" id="cover-preview">
-            <span class="cover-placeholder">🎵</span>
-          </div>
-          <span class="cover-label">Добавить обложку</span>
-        </label>
-        <input id="cover-input" type="file"
-          accept="image/jpeg,image/png,image/webp" hidden />
-
-        <div class="form-group">
-          <label class="form-label" for="title-input">Название *</label>
-          <input id="title-input" class="form-input" type="text"
-            placeholder="Название трека" maxlength="256" required />
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="artist-input">Исполнитель</label>
-          <input id="artist-input" class="form-input" type="text"
-            placeholder="Имя исполнителя" maxlength="256" />
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="audio-input">Аудиофайл *</label>
-          <label class="file-pick-btn" for="audio-input">
-            <span>📁</span> Выбрать файл
-          </label>
-          <p class="file-name" id="audio-file-name">Файл не выбран</p>
-          <input id="audio-input" type="file"
-            accept="audio/mpeg,audio/ogg,audio/wav,audio/flac,audio/mp4,audio/aac"
-            hidden required />
-        </div>
-
-        <div id="upload-error" class="form-error hidden"></div>
-
-        <button type="submit" class="btn-primary" id="upload-btn">
-          Загрузить
-        </button>
-
-        <div id="upload-progress" class="hidden">
-          <div class="progress-bar-wrap">
-            <div class="progress-bar-fill" id="progress-fill"></div>
-          </div>
-          <p class="progress-label">Загрузка…</p>
-        </div>
-
-      </form>
-    </section>
-
-    <!-- Liked tracks -->
-    <section id="view-liked" class="view">
-      <div class="view-header"><h2>Мне нравится</h2></div>
-      <div id="liked-list" class="track-list">
-        <div class="loader" id="liked-loader"></div>
-      </div>
-    </section>
-
-    <!-- Admin panel -->
-    <section id="view-admin" class="view">
-      <div class="view-header"><h2>⚙️ Панель администратора</h2></div>
-
-      <!-- Admin tabs -->
-      <div class="admin-tabs">
-        <button class="admin-tab active" data-tab="tracks">Треки</button>
-        <button class="admin-tab" data-tab="users">Пользователи</button>
-        <button class="admin-tab" data-tab="complaints">Жалобы</button>
-      </div>
-
-      <!-- Tracks tab -->
-      <div id="admin-tab-tracks" class="admin-tab-content active">
-        <div id="admin-tracks-list" class="track-list">
-          <div class="loader"></div>
-        </div>
-        <div class="admin-pagination">
-          <button id="admin-tracks-prev" class="btn-sm" disabled>‹ Пред</button>
-          <span id="admin-tracks-page">1</span>
-          <button id="admin-tracks-next" class="btn-sm">След ›</button>
-        </div>
-      </div>
-
-      <!-- Users tab -->
-      <div id="admin-tab-users" class="admin-tab-content hidden">
-        <div id="admin-users-list" class="admin-list">
-          <div class="loader"></div>
-        </div>
-        <div class="admin-pagination">
-          <button id="admin-users-prev" class="btn-sm" disabled>‹ Пред</button>
-          <span id="admin-users-page">1</span>
-          <button id="admin-users-next" class="btn-sm">След ›</button>
-        </div>
-      </div>
-
-      <!-- Complaints tab -->
-      <div id="admin-tab-complaints" class="admin-tab-content hidden">
-        <label class="admin-filter-label">
-          <input type="checkbox" id="admin-complaints-unresolved" />
-          Только нерешённые
-        </label>
-        <div id="admin-complaints-list" class="admin-list">
-          <div class="loader"></div>
-        </div>
-        <div class="admin-pagination">
-          <button id="admin-complaints-prev" class="btn-sm" disabled>‹ Пред</button>
-          <span id="admin-complaints-page">1</span>
-          <button id="admin-complaints-next" class="btn-sm">След ›</button>
-        </div>
-      </div>
-    </section>
-
-  </main>
-
-  <!-- ═══ PLAYER BAR ═══ -->
-  <div id="player-bar" class="hidden">
-    <div id="pb-seek-wrap">
-      <input type="range" id="pb-seek"
-        min="0" max="100" step="0.1" value="0" />
-    </div>
-    <div id="pb-row">
-      <div id="pb-cover-wrap">
-        <div id="pb-cover" class="pb-cover-img">🎵</div>
-      </div>
-      <div id="pb-info">
-        <p id="pb-title" class="pb-title">—</p>
-        <p id="pb-artist" class="pb-artist hint">—</p>
-      </div>
-      <div id="pb-controls">
-        <button id="pb-like" class="icon-btn" title="Лайк">🤍</button>
-        <button id="pb-report" class="icon-btn" title="Пожаловаться">🚩</button>
-        <button id="pb-play" class="play-btn" title="Воспроизвести">▶</button>
-      </div>
-    </div>
-    <div id="pb-time">
-      <span id="pb-current">0:00</span>
-      <span id="pb-duration">0:00</span>
+  <div id="ds-loader">
+    <span class="loader-dot">.</span>
+    <div class="loader-text">
+      <span class="loader-char" style="animation-delay: 0.7s">s</span>
+      <span class="loader-char" style="animation-delay: 0.8s">o</span>
+      <span class="loader-char" style="animation-delay: 0.9s">u</span>
+      <span class="loader-char" style="animation-delay: 1.0s">n</span>
+      <span class="loader-char" style="animation-delay: 1.1s">d</span>
     </div>
   </div>
-
-  <!-- ═══ COMPLAINT MODAL ═══ -->
-  <div id="complaint-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>🚩 Жалоба на нарушение АП</h3>
-        <button id="complaint-close" class="icon-btn">✕</button>
-      </div>
-      <p class="modal-hint">
-        Форма уведомления правообладателя (ст.&nbsp;1253.1 ГК РФ).
-        Укажите причину и контакт для обратной связи.
-      </p>
-      <div class="form-group">
-        <label class="form-label" for="complaint-reason">
-          Причина *
-        </label>
-        <textarea id="complaint-reason" class="form-input"
-          rows="4" maxlength="1000"
-          placeholder="Опишите нарушение (мин. 10 символов)…"></textarea>
-      </div>
-      <div class="form-group">
-        <label class="form-label" for="complaint-email">
-          Контактный e-mail
-        </label>
-        <input id="complaint-email" class="form-input" type="email"
-          placeholder="your@email.com" />
-      </div>
-      <div id="complaint-error" class="form-error hidden"></div>
-      <button id="complaint-submit" class="btn-primary">
-        Отправить жалобу
-      </button>
-    </div>
-  </div>
-
-  <!-- ═══ CONFIRM DELETE MODAL ═══ -->
-  <div id="confirm-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3 id="confirm-title">Подтверждение</h3>
-        <button id="confirm-close" class="icon-btn">✕</button>
-      </div>
-      <p id="confirm-text" class="modal-hint"></p>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button id="confirm-cancel" class="btn-sm" style="flex:1">Отмена</button>
-        <button id="confirm-ok" class="btn-primary btn-danger" style="flex:1">Удалить</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ═══ BOTTOM NAV ═══ -->
-  <nav id="nav">
-    <button class="nav-btn active" data-view="home">
-      <span class="nav-icon">🏠</span>
-      <span class="nav-label">Главная</span>
-    </button>
-    <button class="nav-btn" data-view="search">
-      <span class="nav-icon">🔍</span>
-      <span class="nav-label">Поиск</span>
-    </button>
-    <button class="nav-btn" data-view="upload">
-      <span class="nav-icon">📤</span>
-      <span class="nav-label">Загрузить</span>
-    </button>
-    <button class="nav-btn" data-view="liked">
-      <span class="nav-icon">❤️</span>
-      <span class="nav-label">Лайки</span>
-    </button>
-    <button class="nav-btn hidden" data-view="admin" id="nav-admin">
-      <span class="nav-icon">⚙️</span>
-      <span class="nav-label">Админ</span>
-    </button>
-  </nav>
-
-</div>
-
-<audio id="audio" preload="none"></audio>
-<script src="app.js"></script>
+  <div id="root"></div>
+  <script>
+    // Hide loader when the app is initialized
+    window.addEventListener('load', () => {
+      const loader = document.getElementById('ds-loader');
+      setTimeout(() => {
+        loader.classList.add('fade-out');
+        setTimeout(() => loader.remove(), 550);
+      }, 1800); // Minimum time for the animation to look good
+    });
+  </script>
 </body>
 </html>
