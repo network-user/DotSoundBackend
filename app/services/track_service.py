@@ -110,3 +110,6 @@ class TrackService:
         return await self._repo.list_public_by_user(
             user_id=user.id, offset=offset, limit=size
         )
+
+    async def get_genres(self) -> list[str]:
+        return await self._repo.get_unique_genres()

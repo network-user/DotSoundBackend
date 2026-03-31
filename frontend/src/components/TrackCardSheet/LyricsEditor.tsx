@@ -4,7 +4,8 @@ import { usePlayer } from '@/store/PlayerContext'
 import type { LyricsResponse, SyncedLine } from '@/types/api'
 
 interface Props {
-  trackId: number
+  trackId?: number
+  localAudioUrl?: string
   existingLyrics: LyricsResponse | null
   onSaved: (lyrics: LyricsResponse) => void
   onCancel: () => void
@@ -28,7 +29,13 @@ function parseMsFromInput(val: string): number | null {
   return Math.round((m * 60 + s) * 1000)
 }
 
-export function LyricsEditor({ trackId, existingLyrics, onSaved, onCancel }: Props) {
+export function LyricsEditor({
+  trackId,
+  localAudioUrl,
+  existingLyrics,
+  onSaved,
+  onCancel,
+}: Props) {
   const { currentTime, track, playTrack } = usePlayer()
 
   const [step, setStep] = useState<EditorStep>('text')
@@ -73,10 +80,21 @@ export function LyricsEditor({ trackId, existingLyrics, onSaved, onCancel }: Pro
       setError('Введите текст')
       return
     }
+    if (localAudioUrl) {
+      // If we are in upload mode, just "save" locally by calling onSaved with dummy record
+      onSaved({
+        track_id: 0,
+        plain_text: plainText.trim(),
+        synced_lines: null,
+        created_at: '',
+        updated_at: '',
+      })
+      return
+    }
     setSaving(true)
     setError(null)
     try {
-      const saved = await api.saveLyrics(trackId, plainText.trim())
+      const saved = await api.saveLyrics(trackId!, plainText.trim())
       onSaved(saved)
     } catch {
       setError('Ошибка сохранения')
@@ -86,13 +104,25 @@ export function LyricsEditor({ trackId, existingLyrics, onSaved, onCancel }: Pro
   }
 
   const handleSaveSync = async () => {
+    const syncedLines: SyncedLine[] = lines
+      .map((text, i) => ({ time_ms: timecodes[i] ?? 0, text }))
+      .sort((a, b) => a.time_ms - b.time_ms)
+
+    if (localAudioUrl) {
+      onSaved({
+        track_id: 0,
+        plain_text: plainText.trim(),
+        synced_lines: syncedLines,
+        created_at: '',
+        updated_at: '',
+      })
+      return
+    }
+
     setSaving(true)
     setError(null)
     try {
-      const syncedLines: SyncedLine[] = lines
-        .map((text, i) => ({ time_ms: timecodes[i] ?? 0, text }))
-        .sort((a, b) => a.time_ms - b.time_ms)
-      const saved = await api.saveLyricsSync(trackId, syncedLines)
+      const saved = await api.saveLyricsSync(trackId!, syncedLines)
       onSaved(saved)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : ''
@@ -104,10 +134,29 @@ export function LyricsEditor({ trackId, existingLyrics, onSaved, onCancel }: Pro
 
   // Auto-start playing when entering timecode step
   useEffect(() => {
-    if (step === 'timecodes' && track) {
-      playTrack(track).catch(() => {})
+    if (step === 'timecodes') {
+      if (localAudioUrl) {
+        // Special case for local file: we use the player but need to set stream source
+        playTrack({
+          id: -1,
+          title: 'Preview',
+          artist: 'Local File',
+          duration_seconds: 0,
+          cover_key: null,
+          play_count: 0,
+          is_active: true,
+          is_public: true,
+          source: 'internal',
+          sc_url: null,
+          sc_uri: null,
+          uploaded_by_id: null,
+          created_at: '',
+        }, localAudioUrl).catch(() => {})
+      } else if (track) {
+        playTrack(track).catch(() => {})
+      }
     }
-  }, [step]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step, localAudioUrl]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (step === 'text') {
     return (
@@ -136,9 +185,9 @@ export function LyricsEditor({ trackId, existingLyrics, onSaved, onCancel }: Pro
           <button
             className="btn-secondary"
             onClick={handleSaveText}
-            disabled={saving || !plainText.trim()}
+            disabled={saving || !plainText.trim() || (!!localAudioUrl && saving)}
           >
-            💾 Сохранить текст
+            💾 {localAudioUrl ? 'Применить текст' : 'Сохранить текст'}
           </button>
           {plainText.trim() && (
             <button
@@ -204,7 +253,7 @@ export function LyricsEditor({ trackId, existingLyrics, onSaved, onCancel }: Pro
           onClick={handleSaveSync}
           disabled={saving || timecodes.every((t) => t === null)}
         >
-          💾 Сохранить с таймкодами
+          💾 {localAudioUrl ? 'Применить с таймкодами' : 'Сохранить с таймкодами'}
         </button>
       </div>
     </div>

@@ -18,7 +18,7 @@ interface PlayerContextValue {
   setVolume: (volume: number) => void
   isComplaintOpen: boolean
   isCardOpen: boolean
-  playTrack: (track: Track) => Promise<void>
+  playTrack: (track: Track, overrideUrl?: string) => Promise<void>
   togglePlay: () => void
   seek: (pct: number) => void
   openComplaint: () => void
@@ -89,7 +89,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setVolumeState(Math.max(0, Math.min(1, v)))
   }
 
-  const playTrack = async (newTrack: Track) => {
+  const playTrack = async (newTrack: Track, overrideUrl?: string) => {
     const audio = audioRef.current
     if (!audio) return
     playCountSentRef.current = false
@@ -97,7 +97,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTime(0)
     setDuration(0)
     try {
-      const { url } = await api.getStream(newTrack.id)
+      const url = overrideUrl || (await api.getStream(newTrack.id)).url
       audio.src = url
       audio.volume = volume
       await audio.play()

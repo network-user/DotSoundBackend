@@ -58,3 +58,17 @@ async def cover_proxy(
         )
     url = await s3.get_presigned_url(key)
     return RedirectResponse(url=url, status_code=302)
+
+
+@router.get(
+    "/genres",
+    response_model=list[str],
+    summary="Get a list of unique track genres currently in the database",
+)
+@limiter.limit("60/minute")
+async def get_genres(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+) -> list[str]:
+    service = TrackService(session)
+    return await service.get_genres()
