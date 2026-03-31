@@ -31,6 +31,18 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
     session: AsyncSession = Depends(get_db),
 ) -> User:
+    # --- DEV STUB START ---
+    # Если токена нет, но мы в режиме разработки (стандартный секрет), возвращаем мок-пользователя
+    if not credentials and settings.jwt_secret == "changeme-set-a-strong-secret-in-production":
+        repo = UserRepository(session)
+        # Пробуем найти или создать тестового пользователя
+        user = await repo.get_by_id(1000000000)
+        if not user:
+            user = await repo.get_by_telegram_id(1000000000)
+        if user:
+            return user
+    # --- DEV STUB END ---
+
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -40,6 +52,12 @@ async def get_current_user(
     try:
         payload = decode_access_token(credentials.credentials)
     except AuthError:
+        # --- MORE DEV STUB ---
+        if settings.jwt_secret == "changeme-set-a-strong-secret-in-production":
+             repo = UserRepository(session)
+             user = await repo.get_by_id(1000000000)
+             if user: return user
+        # --------------------
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
