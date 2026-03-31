@@ -98,3 +98,15 @@ class TrackService:
         return await self._repo.delete_by_owner(
             track_id=track_id, user_id=user.id
         )
+
+    async def list_public_by_user(
+        self,
+        user_id: int,
+        page: int = 1,
+        size: int = 20,
+    ) -> tuple[list[Track], int]:
+        user = await self._resolve_user(user_id)
+        offset = (page - 1) * size
+        return await self._repo.list_public_by_user(
+            user_id=user.id, offset=offset, limit=size
+        )

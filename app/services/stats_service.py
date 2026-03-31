@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
 from app.models.user import User
+from app.repositories.follow import FollowRepository
+from app.repositories.like import LikeRepository
 from app.schemas.user import TrackStatsItem, UserStatsResponse
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -14,6 +16,8 @@ _TOP_TRACKS_LIMIT = 5
 class StatsService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+        self._like_repo = LikeRepository(session)
+        self._follow_repo = FollowRepository(session)
 
     async def get_author_stats(
         self, user_id: int
@@ -62,6 +66,12 @@ class StatsService:
             for t in top_result.scalars().all()
         ]
 
+        total_likes = await self._like_repo.count_likes_for_user_tracks(
+            resolved_id
+        )
+        followers_count = await self._follow_repo.count_followers(resolved_id)
+        following_count = await self._follow_repo.count_following(resolved_id)
+
         logger.info(
             "stats_computed",
             user_id=user_id,
@@ -72,5 +82,8 @@ class StatsService:
             user_id=resolved_id,
             total_tracks=total_tracks,
             total_plays=int(total_plays),
+            total_likes=total_likes,
+            followers_count=followers_count,
+            following_count=following_count,
             top_tracks=top_tracks,
         )

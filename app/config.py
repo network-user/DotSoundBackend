@@ -19,6 +19,8 @@ class AppSettings(BaseSettings):
     telegram_bot_token: str = ""
     jwt_secret: str = "changeme-set-a-strong-secret-in-production"
     jwt_expire_days: int = 7
+    mini_app_url: str = ""
+    telegram_bot_username: str = ""
 
 
 settings = AppSettings()

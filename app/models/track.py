@@ -8,7 +8,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.album import Album
     from app.models.complaint import Complaint
+    from app.models.lyrics import TrackLyrics
 
 
 class Track(Base, TimestampMixin):
@@ -61,8 +63,20 @@ class Track(Base, TimestampMixin):
     is_public: Mapped[bool] = mapped_column(
         Boolean, server_default="true", nullable=False
     )
+    album_id: Mapped[int | None] = mapped_column(
+        ForeignKey("albums.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     complaints: Mapped[list[Complaint]] = relationship(
         back_populates="track",
         cascade="all, delete-orphan",
+    )
+    lyrics: Mapped[TrackLyrics | None] = relationship(
+        back_populates="track",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    album: Mapped[Album | None] = relationship(
+        back_populates="tracks",
     )
