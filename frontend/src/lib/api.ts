@@ -1,14 +1,20 @@
 import type {
+  AuthorProfile,
   AvatarResponse,
   ComplaintCreate,
   ComplaintSubmitResponse,
   DislikeToggleResponse,
+  FollowToggleResponse,
   LikeToggleResponse,
+  LyricsResponse,
   Playlist,
   PlaylistWithTracks,
   SCSearchResult,
+  ShareResponse,
   StreamResponse,
+  SyncedLine,
   Track,
+  TrackCardResponse,
   TrackListResponse,
   TrackUploadResponse,
   UserLikesResponse,
@@ -155,5 +161,57 @@ export const api = {
 
   getAvatarUrl(userId: number): Promise<AvatarResponse> {
     return request(`/api/v1/users/${userId}/avatar`)
+  },
+
+  // ── Track card ────────────────────────────────────────────────────────────
+
+  getTrackCard(trackId: number): Promise<TrackCardResponse> {
+    return request(`/api/v1/tracks/${trackId}/card`)
+  },
+
+  getShareLinks(trackId: number): Promise<ShareResponse> {
+    return request(`/api/v1/tracks/${trackId}/share`)
+  },
+
+  // ── Lyrics ────────────────────────────────────────────────────────────────
+
+  getLyrics(trackId: number): Promise<LyricsResponse> {
+    return request(`/api/v1/tracks/${trackId}/lyrics`)
+  },
+
+  saveLyrics(trackId: number, plainText: string): Promise<LyricsResponse> {
+    return request(`/api/v1/tracks/${trackId}/lyrics`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plain_text: plainText }),
+    })
+  },
+
+  saveLyricsSync(trackId: number, syncedLines: SyncedLine[]): Promise<LyricsResponse> {
+    return request(`/api/v1/tracks/${trackId}/lyrics/sync`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ synced_lines: syncedLines }),
+    })
+  },
+
+  deleteLyrics(trackId: number): Promise<void> {
+    return request(`/api/v1/tracks/${trackId}/lyrics`, { method: 'DELETE' })
+  },
+
+  // ── Follow ────────────────────────────────────────────────────────────────
+
+  toggleFollow(targetUserId: number): Promise<FollowToggleResponse> {
+    return request(`/api/v1/users/${targetUserId}/follow`, { method: 'POST' })
+  },
+
+  // ── Author page ───────────────────────────────────────────────────────────
+
+  getAuthorProfile(userId: number): Promise<AuthorProfile> {
+    return request(`/api/v1/users/${userId}`)
+  },
+
+  getAuthorTracks(userId: number, page = 1, size = 20): Promise<TrackListResponse> {
+    return request(`/api/v1/users/${userId}/tracks?page=${page}&size=${size}`)
   },
 }

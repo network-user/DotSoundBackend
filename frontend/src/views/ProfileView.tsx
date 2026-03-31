@@ -33,7 +33,7 @@ export function ProfileView({ active, onNavigate }: Props) {
 
     api.getUserStats(id)
       .then(setStats)
-      .catch(() => setStats({ total_tracks: 0, total_plays: 0, total_likes: 0 }))
+      .catch(() => setStats({ user_id: userId ?? 0, total_tracks: 0, total_plays: 0, total_likes: 0, followers_count: 0, following_count: 0, top_tracks: [] }))
 
     api.getUserProfile(id)
       .then((profile) => {

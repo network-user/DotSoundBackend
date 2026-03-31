@@ -17,11 +17,14 @@ interface PlayerContextValue {
   volume: number
   setVolume: (volume: number) => void
   isComplaintOpen: boolean
+  isCardOpen: boolean
   playTrack: (track: Track) => Promise<void>
   togglePlay: () => void
   seek: (pct: number) => void
   openComplaint: () => void
   closeComplaint: () => void
+  openCard: () => void
+  closeCard: () => void
   stop: () => void
 }
 
@@ -39,6 +42,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     return saved ? parseFloat(saved) : 0.8
   })
   const [isComplaintOpen, setIsComplaintOpen] = useState(false)
+  const [isCardOpen, setIsCardOpen] = useState(false)
   const playCountSentRef = useRef(false)
 
   useEffect(() => {
@@ -134,11 +138,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         volume,
         setVolume,
         isComplaintOpen,
+        isCardOpen,
         playTrack,
         togglePlay,
         seek,
         openComplaint: () => setIsComplaintOpen(true),
         closeComplaint: () => setIsComplaintOpen(false),
+        openCard: () => setIsCardOpen(true),
+        closeCard: () => setIsCardOpen(false),
         stop,
       }}
     >
