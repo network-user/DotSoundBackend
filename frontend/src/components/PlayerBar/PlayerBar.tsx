@@ -67,7 +67,7 @@ export function PlayerBar() {
         </div>
         <div id="pb-info" className="pb-clickable" onClick={handleOpenCard} title="Открыть карточку">
           <p className="pb-title">
-            {track.title}
+            {track.title} <span className="pb-info-icon">ⓘ</span>
             {isSC && <span className="track-badge track-badge-sc">SC</span>}
           </p>
           <p className="pb-artist hint">

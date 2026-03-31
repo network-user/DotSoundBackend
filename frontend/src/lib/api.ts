@@ -13,6 +13,7 @@ import type {
   ShareResponse,
   StreamResponse,
   SyncedLine,
+  TokenResponse,
   Track,
   TrackCardResponse,
   TrackListResponse,
@@ -22,8 +23,15 @@ import type {
   UserStatsResponse,
 } from '@/types/api'
 
+let accessToken: string | null = null
+
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const res = await fetch(path, opts)
+  const headers = new Headers(opts.headers)
+  if (accessToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${accessToken}`)
+  }
+
+  const res = await fetch(path, { ...opts, headers })
   if (!res.ok) throw new Error(`${res.status}`)
   if (res.status === 204) return null as T
   return res.json() as Promise<T>
@@ -49,6 +57,10 @@ export const api = {
 
   getStream(id: number): Promise<StreamResponse> {
     return request(`/api/v1/tracks/${id}/stream`)
+  },
+
+  getGenres(): Promise<string[]> {
+    return request('/api/v1/tracks/genres')
   },
 
   postPlay(id: number): Promise<void> {
@@ -213,5 +225,21 @@ export const api = {
 
   getAuthorTracks(userId: number, page = 1, size = 20): Promise<TrackListResponse> {
     return request(`/api/v1/users/${userId}/tracks?page=${page}&size=${size}`)
+  },
+
+  // ── Auth ────────────────────────────────────────────────────────────────────
+
+  async authTelegram(init_data: string): Promise<TokenResponse> {
+    const res = await request<TokenResponse>('/api/v1/auth/telegram', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ init_data }),
+    })
+    accessToken = res.access_token
+    return res
+  },
+
+  setToken(token: string | null) {
+    accessToken = token
   },
 }

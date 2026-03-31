@@ -183,3 +183,15 @@ export interface AuthorProfile {
   is_active: boolean
   created_at: string
 }
+
+// ── Auth ────────────────────────────────────────────────────────────────────
+
+export interface TokenResponse {
+  access_token: string
+  user_id: number
+  is_admin: boolean
+}
+
+export interface TelegramAuthRequest {
+  init_data: string
+}

@@ -1522,3 +1522,63 @@ textarea.form-input { resize: none; }
   color: #ffffff;
 }
 .author-follow-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Fullscreen Overlay (for Editor in Upload) ── */
+.fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease-out;
+}
+.overlay-content {
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 32px;
+}
+
+.lyrics-editor-trigger {
+  width: 100%;
+  padding: 14px;
+  background: var(--bg-card);
+  border: 1px dashed var(--border-hover);
+  border-radius: var(--radius-lg);
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+}
+.lyrics-editor-trigger:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.lyrics-editor-trigger.active {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.pb-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border-radius: 50%;
+  font-size: 11px;
+  margin-left: 6px;
+  vertical-align: middle;
+  transition: color 0.15s, background 0.15s;
+}
+.pb-clickable:hover .pb-info-icon {
+  background: var(--accent);
+  color: #fff;
+}

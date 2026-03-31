@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { api } from '@/lib/api'
+import { tg } from '@/lib/telegram'
 import { AuthorView } from '@/components/AuthorView/AuthorView'
 import { BottomNav, type ViewName } from '@/components/BottomNav/BottomNav'
 import { ComplaintModal } from '@/components/ComplaintModal/ComplaintModal'
@@ -15,6 +17,12 @@ import { UploadView } from '@/views/UploadView'
 export function App() {
   const [activeView, setActiveView] = useState<ViewName>('home')
   const [authorId, setAuthorId] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (tg.initData) {
+      api.authTelegram(tg.initData).catch(console.error)
+    }
+  }, [])
 
   useDeepLink()
 
