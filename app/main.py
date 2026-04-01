@@ -1,12 +1,11 @@
-import asyncio
-import sys
-
 # --- WINDOWS ASYNCIO FIX ---
 # Должно быть выполнено до создания любого цикла событий
 if sys.platform == "win32":
-    if not isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsProactorEventLoopPolicy):
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    import asyncio
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 # ---------------------------
+
+import sys
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
