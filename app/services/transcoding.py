@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.db import AsyncSessionLocal
+from app.core.tkq import broker  # Добавлено
 from app.models.track import Track
 
 logger = structlog.stdlib.get_logger(__name__)
@@ -26,9 +27,10 @@ _MASTER_PLAYLIST = (
 )
 
 
+@broker.task  # Превращаем в фоновую задачу воркера
 async def transcode_and_upload(
     track_id: int,
-    raw_audio_data: bytes,
+    raw_key: str,  # Теперь принимаем ключ в S3 вместо байтов
     original_filename: str,
 ) -> None:
     """Background task: transcode to MP3 192k + HLS 128k/64k, upload all."""
@@ -45,6 +47,9 @@ async def transcode_and_upload(
     os.makedirs(lo_dir)
 
     try:
+        # Скачиваем оригинальный файл из временного хранилища S3
+        raw_audio_data = await s3.download_object(raw_key)
+
         with open(temp_in_path, "wb") as f:
             f.write(raw_audio_data)
 
@@ -120,6 +125,11 @@ async def transcode_and_upload(
 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
+        # Удаляем временный исходный файл из S3 после обработки
+        try:
+            await s3.delete_object(raw_key)
+        except Exception:
+            logger.warning("failed_to_delete_raw_temp_file", raw_key=raw_key)
 
 
 async def transcode_hls_only(
