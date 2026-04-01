@@ -129,13 +129,23 @@ class UploadService:
             has_cover=cover_key is not None,
         )
 
-        if background_tasks:
-            background_tasks.add_task(
-                transcode_and_upload,
-                track_id=track.id,
-                raw_audio_data=data,
-                original_filename=file.filename or "track.mp3",
-            )
+        # Сохраняем оригинальный файл во временное хранилище S3 для обработки воркером
+        # Это позволяет передать задачу в другой контейнер без передачи огромных байтов в памяти
+        raw_key = f"temp/raw/{track.id}_{file.filename or 'track'}"
+        await s3.upload_object(
+            key=raw_key,
+            data=data,
+            content_type=mime,
+        )
+
+        # Отправляем задачу в очередь Taskiq
+        # Метод .kiwi() ставит задачу в очередь Redis, не дожидаясь выполнения
+        await transcode_and_upload.kiwi(
+            track_id=track.id,
+            raw_key=raw_key,
+            original_filename=file.filename or "track.mp3",
+        )
+        
         return track
 
     async def _upload_cover(

@@ -45,15 +45,11 @@ services:
     networks:
       - dotsound
 
-  portainer:
-    image: portainer/portainer-ce:latest
+  redis:
+    image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "9443:9443"
-      - "8900:8000"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
+      - redis_data:/data
     networks:
       - dotsound
 
@@ -67,8 +63,48 @@ services:
     depends_on:
       - postgres
       - minio
+      - redis
     volumes:
       - .:/app
+    networks:
+      - dotsound
+
+  worker:
+    build: .
+    restart: unless-stopped
+    # Очередь задач для ffmpeg
+    command: taskiq worker app.core.tkq:broker app.services.transcoding
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - postgres
+      - minio
+    volumes:
+      - .:/app
+    networks:
+      - dotsound
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - dotsound
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    restart: unless-stopped
+    ports:
+      - "9443:9443"
+      - "8900:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
     networks:
       - dotsound
 
@@ -77,6 +113,7 @@ volumes:
   minio_data:
   pgadmin_data:
   portainer_data:
+  redis_data:
 
 networks:
   dotsound:
