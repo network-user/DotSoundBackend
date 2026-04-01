@@ -1,16 +1,19 @@
+import asyncio
+import sys
+
+# --- WINDOWS ASYNCIO FIX ---
+# Должно быть выполнено до создания любого цикла событий
+if sys.platform == "win32":
+    if not isinstance(asyncio.get_event_loop_policy(), asyncio.WindowsProactorEventLoopPolicy):
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+# ---------------------------
+
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-import asyncio
-import sys
 import structlog
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-
-# --- WINDOWS ASYNCIO FIX ---
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-# ---------------------------
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -31,10 +34,19 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     configure_logging(settings.log_level)
+    loop_type = type(asyncio.get_running_loop()).__name__
     logger.info(
         "sound_api_starting",
         log_level=settings.log_level,
+        event_loop=loop_type,
     )
+    if sys.platform == "win32" and loop_type != "ProactorEventLoop":
+        logger.warning(
+            "incorrect_event_loop_type",
+            expected="ProactorEventLoop",
+            actual=loop_type,
+            hint="Subprocesses (ffmpeg) will fail with NotImplementedError",
+        )
     await ensure_bucket_exists()
     yield
     logger.info("sound_api_shutting_down")
