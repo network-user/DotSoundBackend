@@ -68,6 +68,17 @@ export const api = {
     return request(`/api/v1/tracks/${id}/stream`)
   },
 
+  getAdjacentTracks(
+    trackId: number,
+  ): Promise<{
+    prev_id: number | null
+    next_id: number | null
+  }> {
+    return request(
+      `/api/v1/tracks/${trackId}/adjacent`,
+    )
+  },
+
   getGenres(): Promise<string[]> {
     return request('/api/v1/tracks/genres')
   },
@@ -270,22 +281,13 @@ export const api = {
     setInternalUserId(null)
   },
 
-  async requestTelegramCode(
-    telegramId: number,
-  ): Promise<{ sent: boolean }> {
-    return request('/api/v1/auth/telegram-code', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        telegram_id: telegramId,
-      }),
-    })
+  getAuthConfig(): Promise<{
+    bot_username: string
+  }> {
+    return request('/api/v1/auth/config')
   },
 
   async verifyTelegramCode(
-    telegramId: number,
     code: string,
   ): Promise<TokenResponse> {
     const res = await request<TokenResponse>(
@@ -295,10 +297,7 @@ export const api = {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          telegram_id: telegramId,
-          code,
-        }),
+        body: JSON.stringify({ code }),
       },
     )
     accessToken = res.access_token

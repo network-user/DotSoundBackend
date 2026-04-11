@@ -1,12 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { setInternalUserId } from '@/lib/telegram'
 
-type Step =
-  | 'welcome'
-  | 'input'
-  | 'code'
-  | 'success'
+type Step = 'welcome' | 'code' | 'success'
 
 interface Props {
   onAuth: () => void
@@ -15,45 +11,41 @@ interface Props {
 export function TelegramAuth({ onAuth }: Props) {
   const [step, setStep] =
     useState<Step>('welcome')
-  const [telegramId, setTelegramId] = useState('')
+  const [botUsername, setBotUsername] = useState('')
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const handleRequestCode = async () => {
-    const id = parseInt(telegramId.trim(), 10)
-    if (!id || isNaN(id)) {
-      setError(
-        'Введите ваш Telegram ID (число)',
+  useEffect(() => {
+    api
+      .getAuthConfig()
+      .then((cfg) =>
+        setBotUsername(cfg.bot_username),
       )
+      .catch(() => {})
+  }, [])
+
+  const handleOpenBot = () => {
+    if (!botUsername) {
+      setError('Бот не настроен')
       return
     }
-    setLoading(true)
-    setError('')
-    try {
-      await api.requestTelegramCode(id)
-      setStep('code')
-    } catch {
-      setError(
-        'Не удалось отправить код. ' +
-          'Убедитесь что вы начали диалог с ботом.',
-      )
-    } finally {
-      setLoading(false)
-    }
+    window.open(
+      `https://t.me/${botUsername}?start=web_login`,
+      '_blank',
+    )
+    setStep('code')
   }
 
   const handleVerifyCode = async () => {
-    const id = parseInt(telegramId.trim(), 10)
-    if (!code.trim()) {
-      setError('Введите код')
+    if (!code.trim() || code.length !== 6) {
+      setError('Введите 6-значный код')
       return
     }
     setLoading(true)
     setError('')
     try {
       const res = await api.verifyTelegramCode(
-        id,
         code.trim(),
       )
       setInternalUserId(res.user_id)
@@ -81,70 +73,16 @@ export function TelegramAuth({ onAuth }: Props) {
               <br />
               Слушай. Делись. Открывай.
             </p>
-            <button
-              className="btn-primary auth-tg-btn"
-              onClick={() => setStep('input')}
-            >
-              ✈ Войти через Telegram
-            </button>
-          </>
-        )}
-
-        {step === 'input' && (
-          <>
-            <h2 className="auth-title">
-              Вход через Telegram
-            </h2>
-            <p className="auth-hint">
-              Введите ваш Telegram ID.
-              <br />
-              Узнать его можно у{' '}
-              <a
-                href="https://t.me/userinfobot"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="auth-link"
-              >
-                @userinfobot
-              </a>
-            </p>
-            <input
-              className="form-input"
-              type="text"
-              inputMode="numeric"
-              placeholder="Telegram ID"
-              value={telegramId}
-              onChange={(e) =>
-                setTelegramId(e.target.value)
-              }
-              onKeyDown={(e) =>
-                e.key === 'Enter' &&
-                handleRequestCode()
-              }
-              autoFocus
-            />
             {error && (
               <div className="form-error">
                 {error}
               </div>
             )}
             <button
-              className="btn-primary"
-              onClick={handleRequestCode}
-              disabled={loading}
+              className="btn-primary auth-tg-btn"
+              onClick={handleOpenBot}
             >
-              {loading
-                ? 'Отправка...'
-                : 'Получить код'}
-            </button>
-            <button
-              className="btn-secondary auth-back"
-              onClick={() => {
-                setStep('welcome')
-                setError('')
-              }}
-            >
-              Назад
+              Войти через Telegram
             </button>
           </>
         )}
@@ -155,9 +93,8 @@ export function TelegramAuth({ onAuth }: Props) {
               Введите код
             </h2>
             <p className="auth-hint">
-              Код отправлен в Telegram.
-              <br />
-              Проверьте сообщения от бота .sound
+              Откройте бота .sound в Telegram
+              <br />и введите полученный код
             </p>
             <input
               className="form-input auth-code-input"
@@ -195,7 +132,7 @@ export function TelegramAuth({ onAuth }: Props) {
             <button
               className="btn-secondary auth-back"
               onClick={() => {
-                setStep('input')
+                setStep('welcome')
                 setCode('')
                 setError('')
               }}
