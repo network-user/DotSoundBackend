@@ -63,12 +63,12 @@ export function App() {
   if (!isInitialized) {
     return (
       <div className="splash-screen">
-        <div className="dot-loader">
-          <div className="dot" />
-          <div className="dot" />
-          <div className="dot" />
+        <div className="splash-logo">.sound</div>
+        <div className="splash-dots">
+          <span />
+          <span />
+          <span />
         </div>
-        <p>Loading session...</p>
       </div>
     )
   }
@@ -84,6 +84,10 @@ export function App() {
   const handleOpenAuthor = (id: number) =>
     setAuthorId(id)
   const handleCloseAuthor = () => setAuthorId(null)
+  const handleLogout = () => {
+    api.logout()
+    setNeedsAuth(true)
+  }
 
   return (
     <div id="app">
@@ -107,6 +111,7 @@ export function App() {
         <ProfileView
           active={activeView === 'profile'}
           onNavigate={setActiveView}
+          onLogout={handleLogout}
         />
       </main>
       <PlayerBar />

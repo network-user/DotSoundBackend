@@ -240,9 +240,7 @@ export const api = {
 
   async authTelegram(init_data: string): Promise<TokenResponse> {
     if (!init_data) {
-      console.warn('[API] Missing initData, attempting mock auth...')
-      // Use a default mock ID if in dev mode
-      return this.authMock(1000000000) 
+      throw new Error('No Telegram initData')
     }
     const res = await request<TokenResponse>('/api/v1/auth/telegram', {
       method: 'POST',
@@ -265,6 +263,11 @@ export const api = {
 
   setToken(token: string | null) {
     accessToken = token
+  },
+
+  logout() {
+    accessToken = null
+    setInternalUserId(null)
   },
 
   async requestTelegramCode(

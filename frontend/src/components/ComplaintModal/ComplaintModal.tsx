@@ -1,6 +1,6 @@
 import { useState, type MouseEvent } from 'react'
 import { api } from '@/lib/api'
-import { userId } from '@/lib/telegram'
+import { getUserId } from '@/lib/telegram'
 import { tg } from '@/lib/telegram'
 import { usePlayer } from '@/store/PlayerContext'
 
@@ -19,7 +19,8 @@ export function ComplaintModal() {
       setError('Укажите причину (минимум 10 символов)')
       return
     }
-    if (!userId) {
+    const uid = getUserId()
+    if (!uid) {
       setError('Необходима авторизация через Telegram')
       return
     }
@@ -27,7 +28,7 @@ export function ComplaintModal() {
     try {
       const res = await api.submitComplaint({
         track_id: track.id,
-        reported_by_user_id: userId,
+        reported_by_user_id: uid!,
         reason: reason.trim(),
         contact_email: email.trim() || null,
       })

@@ -2,14 +2,19 @@ import { useState } from 'react'
 import { api } from '@/lib/api'
 import { setInternalUserId } from '@/lib/telegram'
 
-type Step = 'input' | 'code' | 'success' | 'error'
+type Step =
+  | 'welcome'
+  | 'input'
+  | 'code'
+  | 'success'
 
 interface Props {
   onAuth: () => void
 }
 
 export function TelegramAuth({ onAuth }: Props) {
-  const [step, setStep] = useState<Step>('input')
+  const [step, setStep] =
+    useState<Step>('welcome')
   const [telegramId, setTelegramId] = useState('')
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
@@ -18,7 +23,9 @@ export function TelegramAuth({ onAuth }: Props) {
   const handleRequestCode = async () => {
     const id = parseInt(telegramId.trim(), 10)
     if (!id || isNaN(id)) {
-      setError('Введите ваш Telegram ID (число)')
+      setError(
+        'Введите ваш Telegram ID (число)',
+      )
       return
     }
     setLoading(true)
@@ -28,8 +35,8 @@ export function TelegramAuth({ onAuth }: Props) {
       setStep('code')
     } catch {
       setError(
-        'Не удалось отправить код. '
-        + 'Убедитесь что вы начали диалог с ботом.',
+        'Не удалось отправить код. ' +
+          'Убедитесь что вы начали диалог с ботом.',
       )
     } finally {
       setLoading(false)
@@ -64,14 +71,42 @@ export function TelegramAuth({ onAuth }: Props) {
       <div className="auth-card">
         <div className="auth-logo">.sound</div>
 
+        {step === 'welcome' && (
+          <>
+            <h2 className="auth-title">
+              Добро пожаловать
+            </h2>
+            <p className="auth-hint">
+              Музыка без рекламы.
+              <br />
+              Слушай. Делись. Открывай.
+            </p>
+            <button
+              className="btn-primary auth-tg-btn"
+              onClick={() => setStep('input')}
+            >
+              ✈ Войти через Telegram
+            </button>
+          </>
+        )}
+
         {step === 'input' && (
           <>
             <h2 className="auth-title">
               Вход через Telegram
             </h2>
             <p className="auth-hint">
-              Введите ваш Telegram ID. Его можно
-              узнать у @userinfobot
+              Введите ваш Telegram ID.
+              <br />
+              Узнать его можно у{' '}
+              <a
+                href="https://t.me/userinfobot"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="auth-link"
+              >
+                @userinfobot
+              </a>
             </p>
             <input
               className="form-input"
@@ -86,6 +121,7 @@ export function TelegramAuth({ onAuth }: Props) {
                 e.key === 'Enter' &&
                 handleRequestCode()
               }
+              autoFocus
             />
             {error && (
               <div className="form-error">
@@ -101,6 +137,15 @@ export function TelegramAuth({ onAuth }: Props) {
                 ? 'Отправка...'
                 : 'Получить код'}
             </button>
+            <button
+              className="btn-secondary auth-back"
+              onClick={() => {
+                setStep('welcome')
+                setError('')
+              }}
+            >
+              Назад
+            </button>
           </>
         )}
 
@@ -110,8 +155,9 @@ export function TelegramAuth({ onAuth }: Props) {
               Введите код
             </h2>
             <p className="auth-hint">
-              Код отправлен в Telegram. Проверьте
-              сообщения от бота .sound
+              Код отправлен в Telegram.
+              <br />
+              Проверьте сообщения от бота .sound
             </p>
             <input
               className="form-input auth-code-input"
@@ -122,7 +168,10 @@ export function TelegramAuth({ onAuth }: Props) {
               value={code}
               onChange={(e) =>
                 setCode(
-                  e.target.value.replace(/\D/g, ''),
+                  e.target.value.replace(
+                    /\D/g,
+                    '',
+                  ),
                 )
               }
               onKeyDown={(e) =>

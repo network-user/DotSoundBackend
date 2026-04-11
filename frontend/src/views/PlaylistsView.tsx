@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import { userId } from '@/lib/telegram'
+import { getUserId } from '@/lib/telegram'
 import type { Playlist, PlaylistWithTracks } from '@/types/api'
 import { TrackList } from '@/components/TrackList/TrackList'
 
@@ -19,9 +19,10 @@ export function PlaylistsView({ active }: Props) {
   const [loading, setLoading] = useState(false)
 
   const loadPlaylists = () => {
-    if (!userId) { setPlaylists([]); return }
+    const uid = getUserId()
+    if (!uid) { setPlaylists([]); return }
     setPlaylists(null)
-    api.getPlaylists(userId)
+    api.getPlaylists(uid)
       .then(setPlaylists)
       .catch(() => setPlaylists([]))
   }
@@ -39,10 +40,11 @@ export function PlaylistsView({ active }: Props) {
   }
 
   const handleCreate = async () => {
-    if (!newName.trim() || !userId) return
+    const uid = getUserId()
+    if (!newName.trim() || !uid) return
     setLoading(true)
     try {
-      await api.createPlaylist(userId, newName.trim())
+      await api.createPlaylist(uid, newName.trim())
       setNewName('')
       setCreating(false)
       loadPlaylists()
@@ -128,13 +130,9 @@ export function PlaylistsView({ active }: Props) {
         </div>
       )}
 
-      {!userId && (
-        <p className="empty-hint">Войди через Telegram, чтобы видеть плейлисты.</p>
-      )}
+      {playlists === null && <div className="loader" />}
 
-      {userId && playlists === null && <div className="loader" />}
-
-      {userId && playlists !== null && playlists.length === 0 && !creating && (
+      {playlists !== null && playlists.length === 0 && !creating && (
         <div className="empty-hint">
           <strong>Плейлистов пока нет</strong>
           Создай свою первую подборку

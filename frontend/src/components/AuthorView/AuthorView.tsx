@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import { userId } from '@/lib/telegram'
+import { getInternalUserId } from '@/lib/telegram'
 import { TrackList } from '@/components/TrackList/TrackList'
 import type { AuthorProfile, Track, UserStatsResponse } from '@/types/api'
 
@@ -19,7 +19,8 @@ export function AuthorView({ authorId, onClose }: Props) {
   const [loading, setLoading] = useState(false)
   const [followLoading, setFollowLoading] = useState(false)
 
-  const isOwnProfile = userId !== null && author?.telegram_id === userId
+  const internalId = getInternalUserId()
+  const isOwnProfile = internalId !== null && author?.id === internalId
 
   useEffect(() => {
     if (!authorId) return
@@ -94,7 +95,7 @@ export function AuthorView({ authorId, onClose }: Props) {
             )}
 
             {/* Follow button (hide for own profile) */}
-            {!isOwnProfile && userId && (
+            {!isOwnProfile && internalId && (
               <button
                 className={`author-follow-btn${following ? ' following' : ''}`}
                 onClick={handleFollow}

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { api } from '@/lib/api'
-import { userId } from '@/lib/telegram'
+import { getUserId } from '@/lib/telegram'
 import type { LyricsResponse, Track } from '@/types/api'
 import { LyricsEditor } from '../TrackCardSheet/LyricsEditor'
 
@@ -105,7 +105,8 @@ export function UploadFileTab({ onSuccess }: Props) {
       if (artist.trim()) fd.append('artist', artist.trim())
       if (genre.trim()) fd.append('genre', genre.trim())
       if (coverFile) fd.append('cover', coverFile)
-      if (userId) fd.append('uploader_id', String(userId))
+      const uid = getUserId()
+      if (uid) fd.append('uploader_id', String(uid))
       fd.append('is_public', String(isPublic))
 
       const uploaded = await api.uploadTrack(fd)

@@ -1597,7 +1597,7 @@ textarea.form-input { resize: none; }
   color: #fff;
 }
 
-/* ── Splash Screen & Loader ────────────────────────────────────────────────── */
+/* ── Splash Screen ── */
 .splash-screen {
   position: fixed;
   inset: 0;
@@ -1605,43 +1605,43 @@ textarea.form-input { resize: none; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--bg-primary);
+  background: var(--bg);
   z-index: 10000;
-  color: var(--text-primary);
+  animation: splashFadeIn 0.4s ease;
 }
-
-.splash-screen p {
-  margin-top: 20px;
-  font-size: 14px;
-  opacity: 0.6;
-  letter-spacing: 0.5px;
-  animation: pulse-text 2s infinite ease-in-out;
+.splash-logo {
+  font-size: 42px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: var(--text);
+  animation: splashPulse 2s ease-in-out infinite;
 }
-
-.dot-loader {
+.splash-dots {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  margin-top: 24px;
 }
-
-.dot-loader .dot {
-  width: 10px;
-  height: 10px;
-  background: var(--accent-primary);
+.splash-dots span {
+  width: 6px;
+  height: 6px;
+  background: var(--text-muted);
   border-radius: 50%;
-  animation: dot-pulse 1.4s infinite ease-in-out both;
+  animation: splashDot 1.2s ease-in-out infinite;
 }
+.splash-dots span:nth-child(2) { animation-delay: 0.15s; }
+.splash-dots span:nth-child(3) { animation-delay: 0.3s; }
 
-.dot-loader .dot:nth-child(1) { animation-delay: -0.32s; }
-.dot-loader .dot:nth-child(2) { animation-delay: -0.16s; }
-
-@keyframes dot-pulse {
-  0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
-  40% { transform: scale(1); opacity: 1; }
+@keyframes splashFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
-
-@keyframes pulse-text {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
+@keyframes splashPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+@keyframes splashDot {
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
 }
 
 .profile-tabs {
@@ -1848,6 +1848,20 @@ textarea.form-input { resize: none; }
   width: 100%;
   text-align: center;
   margin-top: 4px;
+}
+.auth-tg-btn {
+  margin-top: 12px;
+  font-size: 16px;
+  padding: 16px;
+  letter-spacing: 0;
+}
+.auth-link {
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.auth-link:hover {
+  opacity: 0.7;
 }
 .auth-success-icon {
   width: 64px;

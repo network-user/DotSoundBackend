@@ -9,12 +9,18 @@ export const telegramId: number | null =
 
 let _internalUserId: number | null = null
 
-export function setInternalUserId(id: number): void {
+export function setInternalUserId(
+  id: number | null,
+): void {
   _internalUserId = id
 }
 
-export function getInternalUserId(): number | null {
+export function getInternalUserId():
+  | number
+  | null {
   return _internalUserId
 }
 
-export const userId: number | null = telegramId
+export function getUserId(): number | null {
+  return _internalUserId ?? telegramId
+}
