@@ -66,7 +66,14 @@ async def cover_proxy(
     request: Request,
     key: str = Query(...),
 ) -> Response:
-    if ".." in key or key.startswith("/"):
+    _ALLOWED_PREFIXES = (
+        "covers/", "avatars/",
+    )
+    if (
+        ".." in key
+        or key.startswith("/")
+        or not key.startswith(_ALLOWED_PREFIXES)
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid key",

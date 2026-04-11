@@ -92,10 +92,24 @@ async def process_import_job(job_id: int) -> None:
                         )
                     audio_bytes = resp.content
 
+                mime = audio_info.get(
+                    "mime_type", "audio/mpeg"
+                )
+                ext_map = {
+                    "audio/mpeg": "mp3",
+                    "audio/ogg": "ogg",
+                    "audio/mp4": "m4a",
+                    "audio/x-m4a": "m4a",
+                    "audio/flac": "flac",
+                }
+                ext = ext_map.get(
+                    mime or "", "mp3"
+                )
+
                 file_key = await upload_audio(
                     data=audio_bytes,
-                    extension="mp3",
-                    content_type="audio/mpeg",
+                    extension=ext,
+                    content_type=mime or "audio/mpeg",
                     user_id=job.user_id,
                 )
 
