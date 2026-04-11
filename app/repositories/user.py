@@ -60,6 +60,12 @@ class UserRepository(BaseRepository[User]):
         await self._session.refresh(user)
         return user
 
+    async def get_first_user(self) -> User | None:
+        result = await self._session.execute(
+            select(User).order_by(User.id).limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def update_avatar_key(
         self, user_id: int, avatar_key: str
     ) -> User | None:

@@ -80,7 +80,8 @@ async def _get_debug_user(
 ) -> User:
     """Fallback user for local development only."""
     repo = UserRepository(session)
-    user = await repo.get_by_telegram_id(1000000000)
+    first_user = await repo.get_first_user()
+    user = first_user
     if user:
         logger.warning("debug_auth_fallback_used")
         return user
