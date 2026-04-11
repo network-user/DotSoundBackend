@@ -11,9 +11,11 @@ async_engine = create_async_engine(
     echo=False,
 )
 
-AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
-    async_engine,
-    expire_on_commit=False,
+AsyncSessionLocal: async_sessionmaker[AsyncSession] = (
+    async_sessionmaker(
+        async_engine,
+        expire_on_commit=False,
+    )
 )
 
 

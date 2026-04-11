@@ -1,12 +1,5 @@
-# --- WINDOWS ASYNCIO FIX ---
-# Должно быть выполнено до создания любого цикла событий
-if sys.platform == "win32":
-    import asyncio
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-# ---------------------------
-
+import asyncio
 import sys
-
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -23,8 +16,8 @@ from app.api.router import api_router
 from app.config import settings
 from app.core.db import dispose_engine
 from app.core.logging import configure_logging
-from app.core.s3 import ensure_bucket_exists
 from app.core.rate_limit import limiter
+from app.core.s3 import ensure_bucket_exists
 from app.middlewares.request_logging import RequestLoggingMiddleware
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -44,7 +37,6 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             "incorrect_event_loop_type",
             expected="ProactorEventLoop",
             actual=loop_type,
-            hint="Subprocesses (ffmpeg) will fail with NotImplementedError",
         )
     await ensure_bucket_exists()
     yield
@@ -53,6 +45,14 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    if not settings.debug and settings.jwt_secret == (
+        "changeme-set-a-strong-secret-in-production"
+    ):
+        raise RuntimeError(
+            "JWT_SECRET must be changed in production "
+            "(set DEBUG=true for development)"
+        )
+
     application = FastAPI(
         title=".Sound API",
         version="0.1.0",
@@ -69,7 +69,7 @@ def create_app() -> FastAPI:
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.allowed_origins_list,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["*"],
     )
