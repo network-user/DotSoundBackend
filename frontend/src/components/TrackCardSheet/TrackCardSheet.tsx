@@ -5,8 +5,7 @@ import {
   useState,
 } from 'react'
 import { api } from '@/lib/api'
-import { userId } from '@/lib/telegram'
-import { tg } from '@/lib/telegram'
+import { getInternalUserId, tg } from '@/lib/telegram'
 import { usePlayer } from '@/store/PlayerContext'
 import type { TrackCardResponse } from '@/types/api'
 import { LyricsPanel } from './LyricsPanel'
@@ -17,19 +16,28 @@ interface Props {
 
 const GENERATE_COOLDOWN_MS = 20_000
 
-export function TrackCardSheet({ onOpenAuthor }: Props) {
-  const { track, isCardOpen, closeCard, playTrack } =
-    usePlayer()
+function coverUrl(key: string, v: number): string {
+  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}&v=${v}`
+}
+
+export function TrackCardSheet({
+  onOpenAuthor,
+}: Props) {
+  const { track, isCardOpen, closeCard } = usePlayer()
   const [card, setCard] =
     useState<TrackCardResponse | null>(null)
   const [showLyrics, setShowLyrics] = useState(false)
   const [authorAvatarUrl, setAuthorAvatarUrl] =
     useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [coverVersion, setCoverVersion] = useState(0)
+
+  const [coverKey, setCoverKey] = useState<
+    string | null
+  >(null)
+  const [coverVer, setCoverVer] = useState(0)
+  const [coverBusy, setCoverBusy] = useState(false)
   const [genCooldown, setGenCooldown] = useState(0)
-  const [coverUploading, setCoverUploading] =
-    useState(false)
+
   const sheetRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -38,8 +46,12 @@ export function TrackCardSheet({ onOpenAuthor }: Props) {
       setCard(null)
       setShowLyrics(false)
       setAuthorAvatarUrl(null)
+      setCoverKey(null)
+      setCoverBusy(false)
       return
     }
+    setCoverKey(track.cover_key)
+    setCoverVer((v) => v + 1)
     setLoading(true)
     api
       .getTrackCard(track.id)
@@ -56,14 +68,15 @@ export function TrackCardSheet({ onOpenAuthor }: Props) {
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [isCardOpen, track])
+  }, [isCardOpen, track?.id])
 
   useEffect(() => {
     if (genCooldown <= 0) return
-    const timer = setInterval(() => {
-      setGenCooldown((v) => Math.max(0, v - 1))
-    }, 1000)
-    return () => clearInterval(timer)
+    const t = setInterval(
+      () => setGenCooldown((v) => Math.max(0, v - 1)),
+      1000,
+    )
+    return () => clearInterval(t)
   }, [genCooldown])
 
   const handleBackdrop = (e: React.MouseEvent) => {
@@ -88,28 +101,34 @@ export function TrackCardSheet({ onOpenAuthor }: Props) {
     }
   }
 
-  const handleUploadCover = useCallback(async () => {
+  const handleUploadCover = useCallback(() => {
     fileInputRef.current?.click()
   }, [])
 
   const handleFileSelected = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
+    async (
+      e: React.ChangeEvent<HTMLInputElement>,
+    ) => {
       const file = e.target.files?.[0]
       if (!file || !track) return
-      setCoverUploading(true)
+      setCoverBusy(true)
       try {
         const fd = new FormData()
         fd.append('cover', file)
-        const updated =
-          await api.uploadTrackCover(track.id, fd)
+        const updated = await api.uploadTrackCover(
+          track.id,
+          fd,
+        )
         if (updated.cover_key) {
-          track.cover_key = updated.cover_key
-          setCoverVersion((v) => v + 1)
+          setCoverKey(updated.cover_key)
+          setCoverVer((v) => v + 1)
         }
       } catch {
-        tg.showAlert('Не удалось загрузить обложку')
+        tg.showAlert(
+          'Не удалось загрузить обложку',
+        )
       } finally {
-        setCoverUploading(false)
+        setCoverBusy(false)
         e.target.value = ''
       }
     },
@@ -118,37 +137,49 @@ export function TrackCardSheet({ onOpenAuthor }: Props) {
 
   const handleGenerateCover = useCallback(async () => {
     if (!track || genCooldown > 0) return
-    setCoverUploading(true)
+    setCoverBusy(true)
+    setGenCooldown(
+      Math.ceil(GENERATE_COOLDOWN_MS / 1000),
+    )
     try {
       await api.regenerateTrackCover(track.id)
-      setGenCooldown(
-        Math.ceil(GENERATE_COOLDOWN_MS / 1000),
-      )
-      setTimeout(async () => {
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) =>
+          setTimeout(r, 1500),
+        )
         try {
-          const updated = await api.getTrack(track.id)
-          if (updated.cover_key) {
-            track.cover_key = updated.cover_key
-            setCoverVersion((v) => v + 1)
+          const updated = await api.getTrack(
+            track.id,
+          )
+          if (
+            updated.cover_key &&
+            updated.cover_key !== coverKey
+          ) {
+            setCoverKey(updated.cover_key)
+            setCoverVer((v) => v + 1)
+            break
           }
         } catch {}
-      }, 3000)
+      }
     } catch {
-      tg.showAlert('Не удалось сгенерировать обложку')
+      tg.showAlert(
+        'Не удалось сгенерировать обложку',
+      )
     } finally {
-      setCoverUploading(false)
+      setCoverBusy(false)
     }
-  }, [track, genCooldown])
+  }, [track, genCooldown, coverKey])
 
   if (!isCardOpen || !track) return null
 
-  const coverSrc = track.cover_key
-    ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}&v=${coverVersion}`
+  const coverSrc = coverKey
+    ? coverUrl(coverKey, coverVer)
     : null
 
+  const internalId = getInternalUserId()
   const isOwner =
-    userId !== null &&
-    track.uploaded_by_id === userId
+    internalId !== null &&
+    track.uploaded_by_id === internalId
 
   return (
     <div
@@ -164,8 +195,11 @@ export function TrackCardSheet({ onOpenAuthor }: Props) {
           ✕
         </button>
 
-        <div className="tcs-cover-wrap">
-          {coverUploading && (
+        <div
+          className="tcs-cover-wrap"
+          style={{ position: 'relative' }}
+        >
+          {coverBusy && (
             <div className="tcs-cover-loading">
               <div className="loader" />
             </div>
@@ -175,31 +209,18 @@ export function TrackCardSheet({ onOpenAuthor }: Props) {
               className="tcs-cover"
               src={coverSrc}
               alt=""
-              onError={(e) => {
-                const el = e.currentTarget
-                el.style.display = 'none'
-                el.parentElement!
-                  .querySelector(
-                    '.tcs-cover-placeholder',
-                  )
-                  ?.removeAttribute('style')
-              }}
             />
-          ) : null}
-          <div
-            className="tcs-cover-placeholder"
-            style={
-              coverSrc
-                ? { display: 'none' }
-                : undefined
-            }
-          >
-            🎵
-          </div>
+          ) : (
+            <div className="tcs-cover-placeholder">
+              🎵
+            </div>
+          )}
         </div>
 
         <div className="tcs-info">
-          <h2 className="tcs-title">{track.title}</h2>
+          <h2 className="tcs-title">
+            {track.title}
+          </h2>
           <p className="tcs-artist">
             {track.artist ?? '—'}
           </p>
@@ -238,7 +259,9 @@ export function TrackCardSheet({ onOpenAuthor }: Props) {
         <div className="tcs-actions">
           <button
             className={`tcs-action-btn${showLyrics ? ' active' : ''}`}
-            onClick={() => setShowLyrics((v) => !v)}
+            onClick={() =>
+              setShowLyrics((v) => !v)
+            }
             disabled={
               !card?.has_lyrics && !isOwner
             }
@@ -294,7 +317,7 @@ export function TrackCardSheet({ onOpenAuthor }: Props) {
               <button
                 className="tcs-action-btn"
                 onClick={handleUploadCover}
-                disabled={coverUploading}
+                disabled={coverBusy}
               >
                 <span className="tcs-action-icon">
                   🖼
@@ -308,7 +331,7 @@ export function TrackCardSheet({ onOpenAuthor }: Props) {
                 className="tcs-action-btn"
                 onClick={handleGenerateCover}
                 disabled={
-                  coverUploading || genCooldown > 0
+                  coverBusy || genCooldown > 0
                 }
               >
                 <span className="tcs-action-icon">
