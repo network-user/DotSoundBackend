@@ -5,28 +5,32 @@ import type { MouseEvent } from 'react'
 function fmt(sec: number) {
   if (!sec || isNaN(sec)) return '0:00'
   const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60).toString().padStart(2, '0')
+  const s = Math.floor(sec % 60)
+    .toString()
+    .padStart(2, '0')
   return `${m}:${s}`
 }
 
 export function PlayerBar() {
-  const { track, isPlaying, currentTime, duration, togglePlay, seek, playNext, playPrev, openComplaint, openCard, openLyrics, openEq, volume, setVolume } = usePlayer()
-  const { isLiked, toggleLike, isDisliked, toggleDislike } = useLikes()
+  const {
+    track,
+    isPlaying,
+    currentTime,
+    duration,
+    togglePlay,
+    seek,
+    playNext,
+    playPrev,
+    openCard,
+  } = usePlayer()
+  const { isLiked, toggleLike } = useLikes()
 
   if (!track) return null
 
-  const pct = duration ? (currentTime / duration) * 100 : 0
+  const pct = duration
+    ? (currentTime / duration) * 100
+    : 0
   const liked = isLiked(track.id)
-  const disliked = isDisliked(track.id)
-  const isSC = track.source === 'soundcloud'
-
-  const handleLike = async () => {
-    await toggleLike(track.id)
-  }
-
-  const handleDislike = async () => {
-    await toggleDislike(track.id)
-  }
 
   const coverSrc = track.cover_key
     ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`
@@ -35,6 +39,11 @@ export function PlayerBar() {
   const handleOpenCard = (e: MouseEvent) => {
     e.stopPropagation()
     openCard()
+  }
+
+  const handleLike = async (e: MouseEvent) => {
+    e.stopPropagation()
+    await toggleLike(track.id)
   }
 
   return (
@@ -47,75 +56,59 @@ export function PlayerBar() {
           max={100}
           step={0.1}
           value={pct}
-          onChange={(e) => seek(Number(e.target.value))}
+          onChange={(e) =>
+            seek(Number(e.target.value))
+          }
         />
       </div>
       <div id="pb-row">
-        <div className="pb-cover-img pb-clickable" onClick={handleOpenCard} title="Открыть карточку">
+        <div
+          className="pb-cover-img pb-clickable"
+          onClick={handleOpenCard}
+        >
           {coverSrc ? (
-            <img
-              src={coverSrc}
-              alt=""
-              onError={(e) => {
-                const el = e.target as HTMLImageElement
-                if (el.parentElement) el.parentElement.textContent = '🎵'
-              }}
-            />
+            <img src={coverSrc} alt="" />
           ) : (
             '🎵'
           )}
         </div>
-        <div id="pb-info" className="pb-clickable" onClick={handleOpenCard} title="Открыть карточку">
+        <div
+          id="pb-info"
+          className="pb-clickable"
+          onClick={handleOpenCard}
+        >
           <p className="pb-title">
-            {track.title} <span className="pb-info-icon">ⓘ</span>
-            {isSC && <span className="track-badge track-badge-sc">SC</span>}
+            {track.title}
           </p>
           <p className="pb-artist hint">
             {track.artist ?? '—'}
-            {isSC && track.sc_url && (
-              <a
-                href={track.sc_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="pb-sc-link"
-                onClick={(e) => e.stopPropagation()}
-              >
-                ↗
-              </a>
-            )}
           </p>
         </div>
-        <div id="pb-volume-wrap">
-          <span className="volume-icon">{volume === 0 ? '🔇' : volume < 0.5 ? '🔉' : '🔊'}</span>
-          <input
-            type="range"
-            id="pb-volume"
-            min={0}
-            max={1}
-            step={0.01}
-            value={volume}
-            onChange={(e) => setVolume(parseFloat(e.target.value))}
-          />
-        </div>
         <div id="pb-controls">
-          <button className="icon-btn" title="Лайк" onClick={handleLike}>
+          <button
+            className="icon-btn"
+            onClick={handleLike}
+          >
             {liked ? '❤️' : '🤍'}
           </button>
-          <button className="icon-btn" title="Дизлайк" onClick={handleDislike}>
-            {disliked ? '👎' : '▽'}
+          <button
+            className="ctrl-btn"
+            onClick={playPrev}
+          >
+            ⏮
           </button>
-          {!isSC && (
-            <button className="icon-btn" title="Пожаловаться" onClick={openComplaint}>
-              🚩
-            </button>
-          )}
-          <button className="ctrl-btn" title="Текст" onClick={openLyrics}>¶</button>
-          <button className="ctrl-btn" title="Эквалайзер" onClick={openEq}>⫛</button>
-          <button className="ctrl-btn" title="Предыдущий" onClick={playPrev}>⏮</button>
-          <button className="play-btn" title="Воспроизвести" onClick={togglePlay}>
+          <button
+            className="play-btn"
+            onClick={togglePlay}
+          >
             {isPlaying ? '⏸' : '▶'}
           </button>
-          <button className="ctrl-btn" title="Следующий" onClick={playNext}>⏭</button>
+          <button
+            className="ctrl-btn"
+            onClick={playNext}
+          >
+            ⏭
+          </button>
         </div>
       </div>
       <div id="pb-time">

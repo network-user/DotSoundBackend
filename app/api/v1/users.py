@@ -1,6 +1,7 @@
 import mimetypes
 
 import structlog
+from pydantic import BaseModel, field_validator
 from fastapi import (
     APIRouter,
     Depends,
@@ -288,6 +289,7 @@ async def get_login_history(
     request: Request,
     user_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     from sqlalchemy import select
     from app.models.login_history import LoginHistory
@@ -342,10 +344,30 @@ async def get_eq_settings(
     }
 
 
+class EqSettingsRequest(BaseModel):
+    preset: str | None = None
+    bands: list[float]
+
+    @field_validator("bands")
+    @classmethod
+    def validate_bands(
+        cls, v: list[float],
+    ) -> list[float]:
+        if len(v) != 8:
+            raise ValueError("bands must have 8 values")
+        for b in v:
+            if not (-12 <= b <= 12):
+                raise ValueError(
+                    "each band must be between -12 and 12"
+                )
+        return v
+
+
 @router.put("/me/eq")
 @limiter.limit("30/minute")
 async def save_eq_settings(
     request: Request,
+    body: EqSettingsRequest,
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
@@ -354,17 +376,8 @@ async def save_eq_settings(
         UserEqSettings,
     )
 
-    body = await request.json()
-    preset = body.get("preset")
-    bands = body.get("bands", [0] * 8)
-
-    if len(bands) != 8:
-        from fastapi import HTTPException, status
-
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="bands must have 8 values",
-        )
+    preset = body.preset
+    bands = body.bands
 
     result = await session.execute(
         select(UserEqSettings).where(

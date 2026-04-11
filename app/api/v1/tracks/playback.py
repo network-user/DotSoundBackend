@@ -3,7 +3,7 @@
 import structlog
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
@@ -26,6 +26,14 @@ router = APIRouter()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
+def _check_public(track: object) -> None:
+    if not getattr(track, "is_public", True):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+
+
 @router.get(
     "/{track_id}/stream",
     response_model=StreamResponse,
@@ -45,6 +53,7 @@ async def stream_track(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
+    _check_public(track)
     if track.source == "soundcloud":
         if not track.sc_url:
             raise HTTPException(
@@ -117,6 +126,7 @@ async def get_cover(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Cover not found",
         )
+    _check_public(track)
     url = await s3.get_presigned_url(track.cover_key)
     return StreamResponse(track_id=track_id, url=url)
 
@@ -140,6 +150,7 @@ async def audio_stream(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
+    _check_public(track)
 
     # Prefer HLS adaptive streaming when available
     if track.hls_manifest_key:
@@ -289,6 +300,7 @@ async def get_share_links(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
+    _check_public(track)
     from app.config import settings
 
     mini_app_url = settings.mini_app_url or ""
@@ -316,8 +328,6 @@ async def video_proxy(
     track_id: int,
     session: AsyncSession = Depends(get_db),
 ) -> Response:
-    from fastapi.responses import Response
-
     service = TrackService(session)
     track = await service.get_track(track_id)
     if not track or not track.video_key:
@@ -325,6 +335,7 @@ async def video_proxy(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Video not found",
         )
+    _check_public(track)
     try:
         data = await s3.download_object(
             track.video_key
@@ -365,4 +376,5 @@ async def get_track(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
+    _check_public(track)
     return TrackResponse.model_validate(track)

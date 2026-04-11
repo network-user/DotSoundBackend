@@ -205,13 +205,15 @@ async def generate_auth_code(
     request: Request,
     body: GenerateCodeRequest,
 ) -> GenerateCodeResponse:
+    if not settings.bot_internal_secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Internal secret not configured",
+        )
     secret = request.headers.get(
         "X-Internal-Secret", ""
     )
-    if (
-        settings.bot_internal_secret
-        and secret != settings.bot_internal_secret
-    ):
+    if secret != settings.bot_internal_secret:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden",
