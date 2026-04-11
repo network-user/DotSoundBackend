@@ -18,10 +18,22 @@ class AppSettings(BaseSettings):
     complaint_threshold: int = 3
     sc_client_id: str = ""
     telegram_bot_token: str = ""
-    jwt_secret: str = "changeme-set-a-strong-secret-in-production"
+    jwt_secret: str = (
+        "changeme-set-a-strong-secret-in-production"
+    )
     jwt_expire_days: int = 7
     mini_app_url: str = ""
     telegram_bot_username: str = ""
+    debug: bool = False
+    allowed_origins: str = "*"
+
+    @property
+    def allowed_origins_list(self) -> list[str]:
+        return [
+            o.strip()
+            for o in self.allowed_origins.split(",")
+            if o.strip()
+        ]
 
 
 settings = AppSettings()

@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -13,6 +14,15 @@ _session = aioboto3.Session()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _PRESIGNED_TTL_SECONDS = 3600
+
+_ALLOWED_COVER_MIMES = frozenset(
+    {"image/jpeg", "image/png", "image/webp"}
+)
+_COVER_EXT_MAP = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
 
 
 @asynccontextmanager
@@ -34,7 +44,6 @@ async def upload_audio(
     content_type: str,
     user_id: int | None = None,
 ) -> str:
-    """Upload audio bytes to MinIO; return the object file_key."""
     prefix = str(user_id) if user_id else "anon"
     file_key = f"{prefix}/{uuid.uuid4().hex}.{extension}"
 
@@ -56,7 +65,6 @@ async def upload_audio(
 
 
 async def get_presigned_url(file_key: str) -> str:
-    """Generate a presigned GET URL valid for 1 hour."""
     logger.debug("s3_presign_requested", file_key=file_key)
     async with get_s3_client() as s3:
         url: str = await s3.generate_presigned_url(
@@ -71,22 +79,11 @@ async def get_presigned_url(file_key: str) -> str:
     return url
 
 
-_ALLOWED_COVER_MIMES = frozenset(
-    {"image/jpeg", "image/png", "image/webp"}
-)
-_COVER_EXT_MAP = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-}
-
-
 async def upload_cover(
     data: bytes,
     content_type: str,
     user_id: int | None = None,
 ) -> str:
-    """Upload cover image bytes to MinIO; return file_key."""
     ext = _COVER_EXT_MAP.get(content_type, "jpg")
     prefix = str(user_id) if user_id else "anon"
     file_key = f"covers/{prefix}/{uuid.uuid4().hex}.{ext}"
@@ -143,11 +140,7 @@ async def stream_object_range(
     file_key: str,
     range_header: str | None = None,
 ) -> tuple[Any, int, str | None, str]:
-    """Fetch (a range of) an S3 object for streaming.
-
-    Returns (body, content_length, content_range, content_type).
-    Raises ClientError if the key does not exist.
-    """
+    """Returns (body, content_length, content_range, content_type)."""
     kwargs: dict[str, Any] = {
         "Bucket": settings.minio_bucket,
         "Key": file_key,
@@ -165,7 +158,9 @@ async def stream_object_range(
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
             logger.warning(
-                "s3_stream_range_error", file_key=file_key, code=code
+                "s3_stream_range_error",
+                file_key=file_key,
+                code=code,
             )
             raise
         return (
@@ -177,7 +172,6 @@ async def stream_object_range(
 
 
 async def download_object(file_key: str) -> bytes:
-    """Download an S3 object and return its raw bytes."""
     logger.debug("s3_download_requested", file_key=file_key)
     async with get_s3_client() as s3:
         response = await s3.get_object(
@@ -192,7 +186,6 @@ async def download_object(file_key: str) -> bytes:
 async def upload_object(
     key: str, data: bytes, content_type: str
 ) -> None:
-    """Upload arbitrary bytes to MinIO at the given key path."""
     logger.debug(
         "s3_upload_object_started",
         key=key,
@@ -208,16 +201,51 @@ async def upload_object(
     logger.debug("s3_upload_object_complete", key=key)
 
 
+_BUCKET_RETRY_ATTEMPTS = 5
+_BUCKET_RETRY_DELAY = 2.0
+
+
 async def ensure_bucket_exists() -> None:
-    """Create the audio bucket if it doesn't exist yet."""
-    async with get_s3_client() as s3:
+    """Create the audio bucket if it doesn't exist yet.
+
+    Retries on connection errors because MinIO may still be starting.
+    """
+    for attempt in range(1, _BUCKET_RETRY_ATTEMPTS + 1):
         try:
-            await s3.head_bucket(Bucket=settings.minio_bucket)
-            logger.debug(
-                "s3_bucket_exists", bucket=settings.minio_bucket
+            async with get_s3_client() as s3:
+                try:
+                    await s3.head_bucket(
+                        Bucket=settings.minio_bucket
+                    )
+                    logger.debug(
+                        "s3_bucket_exists",
+                        bucket=settings.minio_bucket,
+                    )
+                    return
+                except ClientError as exc:
+                    code = exc.response["Error"]["Code"]
+                    if code in ("404", "NoSuchBucket"):
+                        await s3.create_bucket(
+                            Bucket=settings.minio_bucket
+                        )
+                        logger.info(
+                            "s3_bucket_created",
+                            bucket=settings.minio_bucket,
+                        )
+                        return
+                    raise
+        except Exception as exc:
+            if attempt == _BUCKET_RETRY_ATTEMPTS:
+                logger.error(
+                    "s3_bucket_check_failed",
+                    attempt=attempt,
+                    error=str(exc),
+                )
+                raise
+            logger.warning(
+                "s3_bucket_check_retry",
+                attempt=attempt,
+                error=str(exc),
+                next_retry_in=_BUCKET_RETRY_DELAY * attempt,
             )
-        except Exception:
-            await s3.create_bucket(Bucket=settings.minio_bucket)
-            logger.info(
-                "s3_bucket_created", bucket=settings.minio_bucket
-            )
+            await asyncio.sleep(_BUCKET_RETRY_DELAY * attempt)

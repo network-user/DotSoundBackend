@@ -7,20 +7,28 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(
+    __name__
+)
 
-_SKIP_PATHS = frozenset({"/api/v1/health", "/docs", "/openapi.json"})
+_SKIP_PATHS = frozenset(
+    {"/api/v1/health", "/docs", "/openapi.json"}
+)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self,
         request: Request,
-        call_next: Callable[[Request], Awaitable[Response]],
+        call_next: Callable[
+            [Request], Awaitable[Response]
+        ],
     ) -> Response:
         request_id = str(uuid.uuid4())[:12]
         client_ip = (
-            request.client.host if request.client else "unknown"
+            request.client.host
+            if request.client
+            else "unknown"
         )
 
         structlog.contextvars.clear_contextvars()
@@ -39,7 +47,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
 
-        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        duration_ms = round(
+            (time.perf_counter() - start) * 1000, 2
+        )
 
         if not skip:
             logger.info(

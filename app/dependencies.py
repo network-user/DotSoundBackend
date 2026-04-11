@@ -1,7 +1,11 @@
 from collections.abc import AsyncGenerator
 
+import structlog
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import (
+    HTTPAuthorizationCredentials,
+    HTTPBearer,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import AppSettings, settings
@@ -11,6 +15,9 @@ from app.models.user import User
 from app.repositories.user import UserRepository
 
 _bearer = HTTPBearer(auto_error=False)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(
+    __name__
+)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -28,41 +35,33 @@ def get_settings() -> AppSettings:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    credentials: (
+        HTTPAuthorizationCredentials | None
+    ) = Depends(_bearer),
     session: AsyncSession = Depends(get_db),
 ) -> User:
-    # --- DEV STUB START ---
-    # Если токена нет, но мы в режиме разработки (стандартный секрет), возвращаем мок-пользователя
-    if not credentials and settings.jwt_secret == "changeme-set-a-strong-secret-in-production":
-        repo = UserRepository(session)
-        # Пробуем найти или создать тестового пользователя
-        user = await repo.get_by_id(1000000000)
-        if not user:
-            user = await repo.get_by_telegram_id(1000000000)
-        if user:
-            return user
-    # --- DEV STUB END ---
-
     if not credentials:
+        if settings.debug:
+            return await _get_debug_user(session)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
     try:
-        payload = decode_access_token(credentials.credentials)
+        payload = decode_access_token(
+            credentials.credentials
+        )
     except AuthError:
-        # --- MORE DEV STUB ---
-        if settings.jwt_secret == "changeme-set-a-strong-secret-in-production":
-             repo = UserRepository(session)
-             user = await repo.get_by_id(1000000000)
-             if user: return user
-        # --------------------
+        if settings.debug:
+            return await _get_debug_user(session)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
     user_id = int(str(payload["sub"]))
     repo = UserRepository(session)
     user = await repo.get_by_id(user_id)
@@ -74,6 +73,22 @@ async def get_current_user(
             detail="User not found or inactive",
         )
     return user
+
+
+async def _get_debug_user(
+    session: AsyncSession,
+) -> User:
+    """Fallback user for local development only."""
+    repo = UserRepository(session)
+    user = await repo.get_by_telegram_id(1000000000)
+    if user:
+        logger.warning("debug_auth_fallback_used")
+        return user
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No debug user found; register first",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 async def require_admin(

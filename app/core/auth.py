@@ -1,5 +1,3 @@
-"""JWT creation/verification and Telegram WebApp initData HMAC validation."""
-
 from __future__ import annotations
 
 import hashlib
@@ -8,28 +6,28 @@ import json
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, unquote
 
+import structlog
 from jose import JWTError, jwt
 
 from app.config import settings
 
 _ALGORITHM = "HS256"
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(
+    __name__
+)
 
-
-import structlog
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 class AuthError(Exception):
-    """Raised when authentication or signature verification fails."""
+    pass
 
 
-def verify_telegram_init_data(init_data: str) -> dict[str, object]:
-    """
-    Validate Telegram WebApp initData HMAC-SHA256 signature.
-
-    Returns parsed Telegram user dict on success.
-    Raises AuthError on invalid/missing signature or missing user data.
-    """
-    parsed = parse_qs(unquote(init_data), keep_blank_values=True)
+def verify_telegram_init_data(
+    init_data: str,
+) -> dict[str, object]:
+    """Validate Telegram WebApp initData via HMAC-SHA256."""
+    parsed = parse_qs(
+        unquote(init_data), keep_blank_values=True
+    )
 
     hash_values = parsed.pop("hash", [])
     if not hash_values:
@@ -52,12 +50,13 @@ def verify_telegram_init_data(init_data: str) -> dict[str, object]:
         hashlib.sha256,
     ).hexdigest()
 
-    if not hmac.compare_digest(computed_hash, received_hash):
+    if not hmac.compare_digest(
+        computed_hash, received_hash
+    ):
         logger.debug(
             "telegram_hmac_mismatch",
             computed=computed_hash,
             received=received_hash,
-            data_check_string=data_check_string,
         )
         raise AuthError("Invalid initData signature")
 
@@ -68,8 +67,9 @@ def verify_telegram_init_data(init_data: str) -> dict[str, object]:
     return dict(json.loads(user_json))  # type: ignore[arg-type]
 
 
-def create_access_token(user_id: int, is_admin: bool) -> str:
-    """Create a signed JWT for the given user."""
+def create_access_token(
+    user_id: int, is_admin: bool
+) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.jwt_expire_days
     )
@@ -78,17 +78,25 @@ def create_access_token(user_id: int, is_admin: bool) -> str:
         "admin": is_admin,
         "exp": expire,
     }
-    return str(jwt.encode(payload, settings.jwt_secret, algorithm=_ALGORITHM))
+    return str(
+        jwt.encode(
+            payload,
+            settings.jwt_secret,
+            algorithm=_ALGORITHM,
+        )
+    )
 
 
-def decode_access_token(token: str) -> dict[str, object]:
-    """
-    Decode and verify a JWT.
-    Raises AuthError on invalid or expired token.
-    """
+def decode_access_token(
+    token: str,
+) -> dict[str, object]:
     try:
         return dict(  # type: ignore[arg-type]
-            jwt.decode(token, settings.jwt_secret, algorithms=[_ALGORITHM])
+            jwt.decode(
+                token,
+                settings.jwt_secret,
+                algorithms=[_ALGORITHM],
+            )
         )
     except JWTError as exc:
         raise AuthError(str(exc)) from exc

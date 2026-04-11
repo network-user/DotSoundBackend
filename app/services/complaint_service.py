@@ -1,4 +1,5 @@
 import structlog
+from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.complaint import Complaint
@@ -25,7 +26,7 @@ class ComplaintService:
         threshold: int,
     ) -> tuple[Complaint, bool]:
         user = await self._resolve_user(user_id)
-        
+
         if await self._repo.exists(user.id, track_id):
             raise ValueError("already_reported")
 
@@ -36,7 +37,7 @@ class ComplaintService:
             contact_email=contact_email,
         )
 
-        count = await repo.count_by_track(track_id)
+        count = await self._repo.count_by_track(track_id)
         track_hidden = False
 
         if count >= threshold:
@@ -63,10 +64,11 @@ class ComplaintService:
     async def _resolve_user(self, user_id: int) -> User:
         user = await self._user_repo.get_by_id(user_id)
         if not user:
-            user = await self._user_repo.get_by_telegram_id(user_id)
-        
+            user = await self._user_repo.get_by_telegram_id(
+                user_id
+            )
+
         if not user:
-            from fastapi import HTTPException, status
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found",
