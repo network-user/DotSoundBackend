@@ -70,22 +70,34 @@ def _parse_user_agent(ua: str) -> str:
     browser = "Unknown"
     os_name = "Unknown"
 
-    if "chrome" in ua_lower and "edg" not in ua_lower:
+    if (
+        "chrome" in ua_lower
+        and "edg" not in ua_lower
+    ):
         browser = "Chrome"
     elif "firefox" in ua_lower:
         browser = "Firefox"
-    elif "safari" in ua_lower and "chrome" not in ua_lower:
+    elif (
+        "safari" in ua_lower
+        and "chrome" not in ua_lower
+    ):
         browser = "Safari"
     elif "edg" in ua_lower:
         browser = "Edge"
 
     if "windows" in ua_lower:
         os_name = "Windows"
-    elif "macintosh" in ua_lower or "mac os" in ua_lower:
+    elif (
+        "macintosh" in ua_lower
+        or "mac os" in ua_lower
+    ):
         os_name = "macOS"
     elif "android" in ua_lower:
         os_name = "Android"
-    elif "iphone" in ua_lower or "ipad" in ua_lower:
+    elif (
+        "iphone" in ua_lower
+        or "ipad" in ua_lower
+    ):
         os_name = "iOS"
     elif "linux" in ua_lower:
         os_name = "Linux"
@@ -100,6 +112,17 @@ def _bot_headers() -> dict[str, str]:
             settings.bot_internal_secret
         )
     return headers
+
+
+class AuthConfigResponse(BaseModel):
+    bot_username: str
+
+
+@router.get("/config", response_model=AuthConfigResponse)
+async def get_auth_config() -> AuthConfigResponse:
+    return AuthConfigResponse(
+        bot_username=settings.telegram_bot_username,
+    )
 
 
 @router.post(
@@ -165,76 +188,51 @@ async def auth_telegram(
     )
 
 
-class CodeRequest(BaseModel):
+class GenerateCodeRequest(BaseModel):
     telegram_id: int
 
 
-class CodeVerifyRequest(BaseModel):
-    telegram_id: int
+class GenerateCodeResponse(BaseModel):
     code: str
-
-
-class CodeResponse(BaseModel):
-    sent: bool
     expires_in: int = _CODE_TTL
 
 
 @router.post(
-    "/telegram-code",
-    response_model=CodeResponse,
+    "/generate-code",
+    response_model=GenerateCodeResponse,
 )
-@limiter.limit("3/minute")
-async def request_telegram_code(
+async def generate_auth_code(
     request: Request,
-    body: CodeRequest,
-    session: AsyncSession = Depends(get_db),
-) -> CodeResponse:
-    service = UserService(session)
-    user = await service.get_by_telegram_id(
-        body.telegram_id
+    body: GenerateCodeRequest,
+) -> GenerateCodeResponse:
+    secret = request.headers.get(
+        "X-Internal-Secret", ""
     )
-    if not user:
+    if (
+        settings.bot_internal_secret
+        and secret != settings.bot_internal_secret
+    ):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found. Start the bot first.",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
         )
 
     code = _generate_code()
     redis = await _get_redis()
     await redis.setex(
-        f"{_CODE_PREFIX}{body.telegram_id}",
+        f"{_CODE_PREFIX}{code}",
         _CODE_TTL,
-        code,
+        str(body.telegram_id),
     )
-
-    try:
-        async with httpx.AsyncClient(
-            timeout=10
-        ) as client:
-            await client.post(
-                f"{settings.bot_internal_url}"
-                "/internal/send-auth-code",
-                headers=_bot_headers(),
-                json={
-                    "telegram_id": body.telegram_id,
-                    "code": code,
-                },
-            )
-    except Exception as exc:
-        logger.error(
-            "auth_code_send_failed",
-            error=str(exc),
-        )
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to send code via bot",
-        )
-
     logger.info(
-        "auth_code_sent",
+        "auth_code_generated",
         telegram_id=body.telegram_id,
     )
-    return CodeResponse(sent=True)
+    return GenerateCodeResponse(code=code)
+
+
+class CodeVerifyRequest(BaseModel):
+    code: str
 
 
 @router.post(
@@ -248,26 +246,21 @@ async def verify_telegram_code(
     session: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
     redis = await _get_redis()
-    key = f"{_CODE_PREFIX}{body.telegram_id}"
-    stored_code = await redis.get(key)
+    key = f"{_CODE_PREFIX}{body.code}"
+    stored_tg_id = await redis.get(key)
 
-    if not stored_code:
+    if not stored_tg_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Code expired or not found",
         )
 
-    if stored_code.decode() != body.code:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid code",
-        )
-
+    telegram_id = int(stored_tg_id.decode())
     await redis.delete(key)
 
     service = UserService(session)
     user = await service.get_by_telegram_id(
-        body.telegram_id
+        telegram_id
     )
     if not user:
         raise HTTPException(
@@ -298,7 +291,7 @@ async def verify_telegram_code(
                 "/internal/send-login-notification",
                 headers=_bot_headers(),
                 json={
-                    "telegram_id": body.telegram_id,
+                    "telegram_id": telegram_id,
                     "ip": _mask_ip(client_ip),
                     "device": _parse_user_agent(
                         user_agent
@@ -314,7 +307,6 @@ async def verify_telegram_code(
     logger.info(
         "web_auth_success",
         user_id=user.id,
-        telegram_id=body.telegram_id,
     )
     return TokenResponse(
         access_token=token,

@@ -10,7 +10,7 @@ function fmt(sec: number) {
 }
 
 export function PlayerBar() {
-  const { track, isPlaying, currentTime, duration, togglePlay, seek, openComplaint, openCard, volume, setVolume } = usePlayer()
+  const { track, isPlaying, currentTime, duration, togglePlay, seek, playNext, playPrev, openComplaint, openCard, volume, setVolume } = usePlayer()
   const { isLiked, toggleLike, isDisliked, toggleDislike } = useLikes()
 
   if (!track) return null
@@ -109,9 +109,11 @@ export function PlayerBar() {
               🚩
             </button>
           )}
+          <button className="ctrl-btn" title="Предыдущий" onClick={playPrev}>⏮</button>
           <button className="play-btn" title="Воспроизвести" onClick={togglePlay}>
             {isPlaying ? '⏸' : '▶'}
           </button>
+          <button className="ctrl-btn" title="Следующий" onClick={playNext}>⏭</button>
         </div>
       </div>
       <div id="pb-time">
