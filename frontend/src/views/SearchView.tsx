@@ -3,7 +3,7 @@ import { TrackList } from '@/components/TrackList/TrackList'
 import { TrackCard } from '@/components/TrackCard/TrackCard'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { api } from '@/lib/api'
-import { userId } from '@/lib/telegram'
+import { getUserId } from '@/lib/telegram'
 import { usePlayer } from '@/store/PlayerContext'
 import { useLikes } from '@/store/LikesContext'
 import { useDebounce } from '@/hooks/useDebounce'
@@ -55,7 +55,7 @@ export function SearchView({ active }: Props) {
     if (importing === result.sc_url) return null
     setImporting(result.sc_url)
     try {
-      const track = await api.importSCTrack(result.sc_url, userId ?? undefined, true)
+      const track = await api.importSCTrack(result.sc_url, getUserId() ?? undefined, true)
       setImportedSC((prev) => ({ ...prev, [result.sc_url]: track }))
       return track
     } catch {

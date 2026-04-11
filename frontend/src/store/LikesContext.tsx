@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { api } from '@/lib/api'
-import { userId } from '@/lib/telegram'
+import { getUserId } from '@/lib/telegram'
 
 interface LikesContextValue {
   isLiked: (trackId: number) => boolean
@@ -16,8 +16,9 @@ export function LikesProvider({ children }: { children: ReactNode }) {
   const [dislikedIds, setDislikedIds] = useState<Set<number>>(new Set())
 
   useEffect(() => {
-    if (!userId) return
-    api.getLikedTracks(userId).then((data) => {
+    const uid = getUserId()
+    if (!uid) return
+    api.getLikedTracks(uid).then((data) => {
       setLikedIds(new Set(data.items.map((t) => t.id)))
     }).catch(() => {})
   }, [])
@@ -26,8 +27,9 @@ export function LikesProvider({ children }: { children: ReactNode }) {
   const isDisliked = (trackId: number) => dislikedIds.has(trackId)
 
   const toggleLike = async (trackId: number) => {
-    if (!userId) return
-    const { liked } = await api.toggleLike(userId, trackId)
+    const uid = getUserId()
+    if (!uid) return
+    const { liked } = await api.toggleLike(uid, trackId)
     setLikedIds((prev) => {
       const next = new Set(prev)
       if (liked) next.add(trackId)
@@ -45,8 +47,9 @@ export function LikesProvider({ children }: { children: ReactNode }) {
   }
 
   const toggleDislike = async (trackId: number) => {
-    if (!userId) return
-    const { disliked } = await api.toggleDislike(userId, trackId)
+    const uid = getUserId()
+    if (!uid) return
+    const { disliked } = await api.toggleDislike(uid, trackId)
     setDislikedIds((prev) => {
       const next = new Set(prev)
       if (disliked) next.add(trackId)
