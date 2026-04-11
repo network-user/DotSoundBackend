@@ -278,3 +278,36 @@ async def get_user_stats(
         total_plays=stats.total_plays,
     )
     return stats
+
+
+@router.get(
+    "/{user_id}/login-history",
+)
+@limiter.limit("30/minute")
+async def get_login_history(
+    request: Request,
+    user_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    from sqlalchemy import select
+    from app.models.login_history import LoginHistory
+
+    result = await session.execute(
+        select(LoginHistory)
+        .where(LoginHistory.user_id == user_id)
+        .order_by(LoginHistory.created_at.desc())
+        .limit(10)
+    )
+    rows = result.scalars().all()
+    return [
+        {
+            "id": r.id,
+            "ip": r.ip,
+            "device": r.device,
+            "login_type": r.login_type,
+            "created_at": r.created_at.isoformat()
+            if r.created_at
+            else None,
+        }
+        for r in rows
+    ]

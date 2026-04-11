@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import {
   getInternalUserId,
-  telegramId,
   tg,
 } from '@/lib/telegram'
 import type {
@@ -203,7 +202,7 @@ export function ProfileView({
             }
             onDelete={handleDelete}
           />
-          {!telegramId && onLogout && (
+          {onLogout && (
             <div style={{ padding: '16px' }}>
               <button
                 className="btn-secondary"

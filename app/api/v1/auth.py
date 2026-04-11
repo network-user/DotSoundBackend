@@ -304,6 +304,19 @@ async def verify_telegram_code(
     except Exception:
         pass
 
+    from app.models.login_history import (
+        LoginHistory,
+    )
+
+    session.add(
+        LoginHistory(
+            user_id=user.id,
+            ip=_mask_ip(client_ip),
+            device=_parse_user_agent(user_agent),
+            login_type="web_code",
+        )
+    )
+
     logger.info(
         "web_auth_success",
         user_id=user.id,
