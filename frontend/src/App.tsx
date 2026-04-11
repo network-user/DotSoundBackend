@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import { tg } from '@/lib/telegram'
+import {
+  getInternalUserId,
+  setInternalUserId,
+  telegramId,
+  tg,
+} from '@/lib/telegram'
 import { AuthorView } from '@/components/AuthorView/AuthorView'
 import { BottomNav, type ViewName } from '@/components/BottomNav/BottomNav'
 import { ComplaintModal } from '@/components/ComplaintModal/ComplaintModal'
@@ -25,11 +30,16 @@ export function App() {
         await api.authTelegram(tg.initData)
       } catch (err) {
         console.error('[App] Auth failed:', err)
-      } finally {
-        // Even if auth fails, we initialize so the user can see public content if needed, 
-        // though most endpoints will 401 until they fix their Telegram session.
-        setIsInitialized(true)
       }
+      if (!getInternalUserId() && telegramId) {
+        try {
+          const profile = await api.getUserProfile(
+            telegramId
+          )
+          setInternalUserId(profile.id)
+        } catch {}
+      }
+      setIsInitialized(true)
     }
     init()
   }, [])

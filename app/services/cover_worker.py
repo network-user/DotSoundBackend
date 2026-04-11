@@ -1,3 +1,5 @@
+import time
+
 import structlog
 
 from app.core import s3
@@ -24,20 +26,13 @@ async def generate_and_upload_cover(
             )
             return
 
+        old_cover_key = track.cover_key
+
         seed = (
             f"{track.title}:{track.id}"
-            f":{track.created_at}"
+            f":{time.time()}"
         )
         png_bytes = generate_cover(seed)
-
-        if track.cover_key:
-            try:
-                await s3.delete_object(track.cover_key)
-            except Exception:
-                logger.warning(
-                    "cover_gen_old_delete_failed",
-                    track_id=track_id,
-                )
 
         cover_key = await s3.upload_cover(
             data=png_bytes,
@@ -53,3 +48,9 @@ async def generate_and_upload_cover(
             track_id=track_id,
             cover_key=cover_key,
         )
+
+        if old_cover_key and old_cover_key != cover_key:
+            try:
+                await s3.delete_object(old_cover_key)
+            except Exception:
+                pass

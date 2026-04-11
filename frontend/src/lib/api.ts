@@ -1,3 +1,4 @@
+import { setInternalUserId } from '@/lib/telegram'
 import type {
   AuthorProfile,
   AvatarResponse,
@@ -249,6 +250,7 @@ export const api = {
       body: JSON.stringify({ init_data }),
     })
     accessToken = res.access_token
+    setInternalUserId(res.user_id)
     return res
   },
 
@@ -257,6 +259,7 @@ export const api = {
       method: 'POST',
     })
     accessToken = res.access_token
+    setInternalUserId(res.user_id)
     return res
   },
 

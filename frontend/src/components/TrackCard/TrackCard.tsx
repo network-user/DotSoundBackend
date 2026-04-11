@@ -2,7 +2,7 @@ import type { MouseEvent } from 'react'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { useLikes } from '@/store/LikesContext'
 import { usePlayer } from '@/store/PlayerContext'
-import { userId } from '@/lib/telegram'
+import { getInternalUserId } from '@/lib/telegram'
 import { api } from '@/lib/api'
 import type { Track } from '@/types/api'
 
@@ -25,7 +25,8 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
 
   const playing = currentTrack?.id === track.id
   const liked = isLiked(track.id)
-  const isOwner = userId !== null && track.uploaded_by_id === userId
+  const internalId = getInternalUserId()
+  const isOwner = internalId !== null && track.uploaded_by_id === internalId
 
   const handleLike = async (e: MouseEvent) => {
     e.stopPropagation()
@@ -34,22 +35,22 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
 
   const handleDelete = async (e: MouseEvent) => {
     e.stopPropagation()
-    if (!userId) return
+    if (!internalId) return
     if (!confirm('Удалить трек?')) return
     try {
-      await api.deleteTrack(track.id, userId)
+      await api.deleteTrack(track.id, internalId)
       onDeleted?.(track.id)
     } catch { }
   }
 
   const handleToggleVisibility = async (e: MouseEvent) => {
     e.stopPropagation()
-    if (!userId) return
+    if (!internalId) return
     try {
       const updated = await api.updateTrack(
         track.id,
         { is_public: !track.is_public },
-        userId,
+        internalId,
       )
       onVisibilityChanged?.(updated)
     } catch { }
