@@ -1,6 +1,7 @@
 from app.models.album import Album
 from app.models.complaint import Complaint
 from app.models.dislike import Dislike
+from app.models.eq_settings import UserEqSettings
 from app.models.follow import UserFollow
 from app.models.import_job import ImportJob
 from app.models.like import Like
@@ -15,6 +16,7 @@ __all__ = [
     "Complaint",
     "Dislike",
     "ImportJob",
+    "UserEqSettings",
     "Like",
     "LoginHistory",
     "Playlist",

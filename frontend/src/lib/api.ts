@@ -356,4 +356,43 @@ export const api = {
       { method: 'POST' },
     )
   },
+
+  uploadTrackVideo(
+    trackId: number,
+    formData: FormData,
+  ): Promise<Track> {
+    return request(
+      `/api/v1/tracks/${trackId}/video`,
+      { method: 'POST', body: formData },
+    )
+  },
+
+  deleteTrackVideo(
+    trackId: number,
+  ): Promise<void> {
+    return request(
+      `/api/v1/tracks/${trackId}/video`,
+      { method: 'DELETE' },
+    )
+  },
+
+  getEqSettings(): Promise<{
+    preset: string | null
+    bands: number[]
+  }> {
+    return request('/api/v1/users/me/eq')
+  },
+
+  saveEqSettings(data: {
+    preset: string | null
+    bands: number[]
+  }): Promise<void> {
+    return request('/api/v1/users/me/eq', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    })
+  },
 }

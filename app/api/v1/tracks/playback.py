@@ -307,6 +307,46 @@ async def get_share_links(
 
 
 @router.get(
+    "/{track_id}/video",
+    response_model=None,
+)
+@limiter.limit("120/minute")
+async def video_proxy(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> Response:
+    from fastapi.responses import Response
+
+    service = TrackService(session)
+    track = await service.get_track(track_id)
+    if not track or not track.video_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video not found",
+        )
+    try:
+        data = await s3.download_object(
+            track.video_key
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video file not found",
+        )
+    ct = "video/mp4"
+    if track.video_key.endswith(".webm"):
+        ct = "video/webm"
+    return Response(
+        content=data,
+        media_type=ct,
+        headers={
+            "Cache-Control": "public, max-age=3600"
+        },
+    )
+
+
+@router.get(
     "/{track_id}",
     response_model=TrackResponse,
     summary="Get a single track by ID",

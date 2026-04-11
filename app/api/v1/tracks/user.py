@@ -280,3 +280,85 @@ async def regenerate_track_cover(
         track_id=track_id,
     )
     return TrackResponse.model_validate(track)
+
+
+_ALLOWED_VIDEO_MIMES = frozenset(
+    {"video/mp4", "video/webm"}
+)
+_MAX_VIDEO_BYTES = 15 * 1024 * 1024
+
+
+@router.post(
+    "/{track_id}/video",
+    response_model=TrackResponse,
+)
+@limiter.limit("5/minute")
+async def upload_track_video(
+    request: Request,
+    track_id: int,
+    video: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TrackResponse:
+    track = await _get_owned_track(
+        track_id, current_user, session
+    )
+
+    mime = video.content_type or ""
+    if mime not in _ALLOWED_VIDEO_MIMES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Video must be MP4 or WebM",
+        )
+
+    data = await video.read()
+    if len(data) > _MAX_VIDEO_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Video exceeds 15 MB limit",
+        )
+
+    if track.video_key:
+        try:
+            await s3.delete_object(track.video_key)
+        except Exception:
+            pass
+
+    import uuid
+
+    ext = "mp4" if "mp4" in mime else "webm"
+    key = (
+        f"videos/{current_user.id}/"
+        f"{uuid.uuid4().hex}.{ext}"
+    )
+    await s3.upload_object(
+        key=key, data=data, content_type=mime
+    )
+    track.video_key = key
+    await session.flush()
+    await session.refresh(track)
+
+    return TrackResponse.model_validate(track)
+
+
+@router.delete(
+    "/{track_id}/video",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+@limiter.limit("10/minute")
+async def delete_track_video(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    track = await _get_owned_track(
+        track_id, current_user, session
+    )
+    if track.video_key:
+        try:
+            await s3.delete_object(track.video_key)
+        except Exception:
+            pass
+        track.video_key = None
+        await session.flush()
