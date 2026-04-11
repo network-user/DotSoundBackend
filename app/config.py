@@ -25,7 +25,10 @@ class AppSettings(BaseSettings):
     mini_app_url: str = ""
     telegram_bot_username: str = ""
     debug: bool = False
+    redact_logs: bool = True
     allowed_origins: str = "*"
+    bot_internal_url: str = "http://localhost:8081"
+    bot_internal_secret: str = ""
 
     @property
     def allowed_origins_list(self) -> list[str]:

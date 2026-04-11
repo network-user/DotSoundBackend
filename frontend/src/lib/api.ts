@@ -263,4 +263,56 @@ export const api = {
   setToken(token: string | null) {
     accessToken = token
   },
+
+  startTelegramImport(): Promise<any> {
+    return request('/api/v1/import/telegram', {
+      method: 'POST',
+    })
+  },
+
+  startImportJob(
+    jobId: number,
+    trackIndices: number[],
+  ): Promise<any> {
+    return request(`/api/v1/import/${jobId}/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        track_indices: trackIndices,
+      }),
+    })
+  },
+
+  getImportStatus(jobId: number): Promise<any> {
+    return request(`/api/v1/import/${jobId}/status`)
+  },
+
+  getActiveImport(): Promise<any> {
+    return request('/api/v1/import/active')
+  },
+
+  cancelImport(jobId: number): Promise<any> {
+    return request(`/api/v1/import/${jobId}/cancel`, {
+      method: 'POST',
+    })
+  },
+
+  uploadTrackCover(
+    trackId: number,
+    formData: FormData,
+  ): Promise<Track> {
+    return request(
+      `/api/v1/tracks/${trackId}/cover`,
+      { method: 'POST', body: formData },
+    )
+  },
+
+  regenerateTrackCover(
+    trackId: number,
+  ): Promise<Track> {
+    return request(
+      `/api/v1/tracks/${trackId}/cover/generate`,
+      { method: 'POST' },
+    )
+  },
 }

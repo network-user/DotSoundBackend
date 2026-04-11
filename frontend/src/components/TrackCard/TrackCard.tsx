@@ -71,6 +71,9 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
           {track.source === 'soundcloud' && (
             <span className="track-badge track-badge-sc">SC</span>
           )}
+          {track.source === 'telegram' && (
+            <span className="track-badge track-badge-tg">TG</span>
+          )}
         </div>
         <p className="track-card-artist">{track.artist ?? 'Неизвестный исполнитель'}</p>
         <p className="track-card-meta">
@@ -90,6 +93,9 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
               SoundCloud
             </a>
           </span>
+        )}
+        {track.source === 'telegram' && (
+          <span className="track-source">источник: Telegram</span>
         )}
       </div>
       <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>

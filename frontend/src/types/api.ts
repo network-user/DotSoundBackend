@@ -7,7 +7,7 @@ export interface Track {
   play_count: number
   is_active: boolean
   is_public: boolean
-  source: 'internal' | 'soundcloud'
+  source: 'internal' | 'soundcloud' | 'telegram'
   sc_url: string | null
   sc_uri: string | null
   uploaded_by_id: number | null

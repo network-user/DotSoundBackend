@@ -25,7 +25,10 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
-    configure_logging(settings.log_level)
+    configure_logging(
+        settings.log_level,
+        redact=settings.redact_logs,
+    )
     loop_type = type(asyncio.get_running_loop()).__name__
     logger.info(
         "sound_api_starting",
