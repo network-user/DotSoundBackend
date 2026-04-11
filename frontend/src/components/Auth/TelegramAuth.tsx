@@ -9,8 +9,14 @@ interface Props {
 }
 
 export function TelegramAuth({ onAuth }: Props) {
-  const [step, setStep] =
-    useState<Step>('welcome')
+  const params = new URLSearchParams(
+    window.location.search,
+  )
+  const startOnCode = params.get('auth') === 'code'
+
+  const [step, setStep] = useState<Step>(
+    startOnCode ? 'code' : 'welcome',
+  )
   const [botUsername, setBotUsername] = useState('')
   const [code, setCode] = useState('')
   const [error, setError] = useState('')

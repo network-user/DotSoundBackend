@@ -186,11 +186,9 @@ async def audio_stream(
 
     async def _iter_body() -> StreamingResponse:  # type: ignore[return]
         async with body as stream:
-            while True:
-                chunk: bytes = await stream.read(65536)
-                if not chunk:
-                    break
-                yield chunk
+            data: bytes = await stream.read()
+            for i in range(0, len(data), 65536):
+                yield data[i : i + 65536]
 
     http_status = 206 if content_range else 200
     headers: dict[str, str] = {
