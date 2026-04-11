@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import s3
 from app.models.track import Track
 from app.repositories.track import TrackRepository
+from app.services.cover_worker import generate_and_upload_cover
 from app.services.transcoding import transcode_and_upload
 from fastapi import BackgroundTasks
 
@@ -138,14 +139,15 @@ class UploadService:
             content_type=mime,
         )
 
-        # Отправляем задачу в очередь Taskiq
-        # Метод .kiwi() ставит задачу в очередь Redis, не дожидаясь выполнения
         await transcode_and_upload.kiwi(
             track_id=track.id,
             raw_key=raw_key,
             original_filename=file.filename or "track.mp3",
         )
-        
+
+        if not cover_key:
+            await generate_and_upload_cover.kiq(track.id)
+
         return track
 
     async def _upload_cover(

@@ -8,6 +8,7 @@ from app.api.v1 import (
     dislikes,
     follows,
     health,
+    imports,
     likes,
     lyrics,
     metadata,
@@ -32,3 +33,4 @@ api_router.include_router(admin.router)
 api_router.include_router(lyrics.router)
 api_router.include_router(follows.router)
 api_router.include_router(albums.router)
+api_router.include_router(imports.router)

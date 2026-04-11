@@ -7,6 +7,9 @@ import { ProfileHero } from '@/components/Profile/ProfileHero'
 import { ProfileStats } from '@/components/Profile/ProfileStats'
 import { ProfileActions } from '@/components/Profile/ProfileActions'
 import { ProfileTrackList } from '@/components/Profile/ProfileTrackList'
+import { ImportView } from '@/components/Import/ImportView'
+
+type ProfileTab = 'profile' | 'import'
 
 interface Props {
   active: boolean
@@ -15,6 +18,7 @@ interface Props {
 
 export function ProfileView({ active, onNavigate }: Props) {
   const { playTrack } = usePlayer()
+  const [tab, setTab] = useState<ProfileTab>('profile')
   const [stats, setStats] = useState<UserStatsResponse | null>(null)
   const [myTracks, setMyTracks] = useState<Track[]>([])
   const [editMode, setEditMode] = useState(false)
@@ -33,7 +37,15 @@ export function ProfileView({ active, onNavigate }: Props) {
 
     api.getUserStats(id)
       .then(setStats)
-      .catch(() => setStats({ user_id: userId ?? 0, total_tracks: 0, total_plays: 0, total_likes: 0, followers_count: 0, following_count: 0, top_tracks: [] }))
+      .catch(() => setStats({
+        user_id: userId ?? 0,
+        total_tracks: 0,
+        total_plays: 0,
+        total_likes: 0,
+        followers_count: 0,
+        following_count: 0,
+        top_tracks: [],
+      }))
 
     api.getUserProfile(id)
       .then((profile) => {
@@ -48,7 +60,6 @@ export function ProfileView({ active, onNavigate }: Props) {
       .then((data) => setMyTracks(data.items))
       .catch(() => {})
   }, [active])
-
 
   const handleSave = async () => {
     if (!userId) return
@@ -101,28 +112,49 @@ export function ProfileView({ active, onNavigate }: Props) {
 
   return (
     <section id="view-profile" className={`view${active ? ' active' : ''}`}>
-      <ProfileHero
-        currentAvatar={currentAvatar}
-        shownName={shownName}
-        username={tgUser.username}
-        editMode={editMode}
-        displayName={displayName}
-        saving={saving}
-        onEditStart={() => setEditMode(true)}
-        onSave={handleSave}
-        onCancel={() => {
-          setEditMode(false)
-        }}
-        onDisplayNameChange={setDisplayName}
-      />
-      <ProfileStats stats={stats} />
-      <ProfileActions onNavigate={onNavigate} />
-      <ProfileTrackList
-        tracks={myTracks}
-        onPlay={playTrack}
-        onToggleVisibility={handleToggleVisibility}
-        onDelete={handleDelete}
-      />
+      <div className="profile-tabs">
+        <button
+          className={`profile-tab${tab === 'profile' ? ' active' : ''}`}
+          onClick={() => setTab('profile')}
+        >
+          Профиль
+        </button>
+        <button
+          className={`profile-tab${tab === 'import' ? ' active' : ''}`}
+          onClick={() => setTab('import')}
+        >
+          Импорт
+        </button>
+      </div>
+
+      {tab === 'profile' && (
+        <>
+          <ProfileHero
+            currentAvatar={currentAvatar}
+            shownName={shownName}
+            username={tgUser.username}
+            editMode={editMode}
+            displayName={displayName}
+            saving={saving}
+            onEditStart={() => setEditMode(true)}
+            onSave={handleSave}
+            onCancel={() => setEditMode(false)}
+            onDisplayNameChange={setDisplayName}
+          />
+          <ProfileStats stats={stats} />
+          <ProfileActions onNavigate={onNavigate} />
+          <ProfileTrackList
+            tracks={myTracks}
+            onPlay={playTrack}
+            onToggleVisibility={handleToggleVisibility}
+            onDelete={handleDelete}
+          />
+        </>
+      )}
+
+      {tab === 'import' && (
+        <ImportView active={tab === 'import'} />
+      )}
     </section>
   )
 }
