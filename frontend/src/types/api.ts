@@ -11,6 +11,7 @@ export interface Track {
   sc_url: string | null
   sc_uri: string | null
   uploaded_by_id: number | null
+  video_key: string | null
   created_at: string
 }
 

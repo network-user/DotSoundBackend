@@ -13,6 +13,8 @@ import {
   type ViewName,
 } from '@/components/BottomNav/BottomNav'
 import { ComplaintModal } from '@/components/ComplaintModal/ComplaintModal'
+import { Equalizer } from '@/components/Equalizer/Equalizer'
+import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics'
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
 import { useDeepLink } from '@/hooks/useDeepLink'
@@ -115,6 +117,8 @@ export function App() {
         />
       </main>
       <PlayerBar />
+      <FullscreenLyrics />
+      <Equalizer />
       <ComplaintModal />
       <TrackCardSheet
         onOpenAuthor={handleOpenAuthor}

@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -10,27 +11,40 @@ import Hls from 'hls.js'
 import { api } from '@/lib/api'
 import type { Track } from '@/types/api'
 
+const EQ_FREQUENCIES = [
+  32, 64, 125, 250, 500, 1000, 4000, 16000,
+]
+const EQ_DEFAULT = [0, 0, 0, 0, 0, 0, 0, 0]
+
 interface PlayerContextValue {
   track: Track | null
   isPlaying: boolean
   currentTime: number
   duration: number
   volume: number
-  setVolume: (volume: number) => void
+  setVolume: (v: number) => void
   isComplaintOpen: boolean
   isCardOpen: boolean
+  isLyricsOpen: boolean
+  isEqOpen: boolean
+  eqBands: number[]
   playTrack: (
-    track: Track,
-    overrideUrl?: string,
+    t: Track,
+    url?: string,
   ) => Promise<void>
   togglePlay: () => void
   seek: (pct: number) => void
   playNext: () => Promise<void>
   playPrev: () => Promise<void>
+  setEqBand: (idx: number, gain: number) => void
   openComplaint: () => void
   closeComplaint: () => void
   openCard: () => void
   closeCard: () => void
+  openLyrics: () => void
+  closeLyrics: () => void
+  openEq: () => void
+  closeEq: () => void
   stop: () => void
 }
 
@@ -39,36 +53,26 @@ const PlayerContext =
 
 const _SAVE_INTERVAL = 5000
 
-function _saveState(
-  track: Track | null,
-  time: number,
-) {
-  if (track) {
-    localStorage.setItem(
-      'player-track',
-      JSON.stringify(track),
-    )
-    localStorage.setItem(
-      'player-time',
-      String(time),
-    )
-  }
+function _saveState(t: Track | null, s: number) {
+  if (!t) return
+  localStorage.setItem(
+    'player-track',
+    JSON.stringify(t),
+  )
+  localStorage.setItem('player-time', String(s))
 }
 
-function _loadState(): {
-  track: Track | null
-  time: number
-} {
+function _loadState() {
   try {
-    const raw = localStorage.getItem(
-      'player-track',
-    )
-    if (!raw) return { track: null, time: 0 }
-    const track = JSON.parse(raw) as Track
-    const time = parseFloat(
-      localStorage.getItem('player-time') || '0',
-    )
-    return { track, time }
+    const r = localStorage.getItem('player-track')
+    if (!r) return { track: null, time: 0 }
+    return {
+      track: JSON.parse(r) as Track,
+      time: parseFloat(
+        localStorage.getItem('player-time') ||
+          '0',
+      ),
+    }
   } catch {
     return { track: null, time: 0 }
   }
@@ -119,31 +123,30 @@ function _updateMediaSession(
     )
     navigator.mediaSession.setActionHandler(
       'seekto',
-      (details) => {
+      (d) => {
         if (
-          details.seekTime !== undefined &&
+          d.seekTime !== undefined &&
           audio.duration
-        ) {
-          audio.currentTime = details.seekTime
-        }
+        )
+          audio.currentTime = d.seekTime
       },
     )
   } catch {}
 }
 
 function _updatePositionState(
-  audio: HTMLAudioElement,
+  a: HTMLAudioElement,
 ) {
   if (
     !('mediaSession' in navigator) ||
-    !audio.duration
+    !a.duration
   )
     return
   try {
     navigator.mediaSession.setPositionState({
-      duration: audio.duration,
-      playbackRate: audio.playbackRate,
-      position: audio.currentTime,
+      duration: a.duration,
+      playbackRate: a.playbackRate,
+      position: a.currentTime,
     })
   } catch {}
 }
@@ -155,6 +158,13 @@ export function PlayerProvider({
 }) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const hlsRef = useRef<Hls | null>(null)
+  const audioCtxRef =
+    useRef<AudioContext | null>(null)
+  const filtersRef = useRef<BiquadFilterNode[]>([])
+  const sourceRef =
+    useRef<MediaElementAudioSourceNode | null>(
+      null,
+    )
 
   const [track, setTrack] = useState<Track | null>(
     () => _loadState().track,
@@ -163,27 +173,67 @@ export function PlayerProvider({
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolumeState] = useState(() => {
-    const saved = localStorage.getItem(
-      'player-volume',
-    )
-    return saved ? parseFloat(saved) : 0.8
+    const s = localStorage.getItem('player-volume')
+    return s ? parseFloat(s) : 0.8
   })
   const [isComplaintOpen, setIsComplaintOpen] =
     useState(false)
   const [isCardOpen, setIsCardOpen] = useState(false)
+  const [isLyricsOpen, setIsLyricsOpen] =
+    useState(false)
+  const [isEqOpen, setIsEqOpen] = useState(false)
+  const [eqBands, setEqBands] =
+    useState<number[]>(EQ_DEFAULT)
+
   const playCountSentRef = useRef(false)
   const restoredRef = useRef(false)
 
+  const _initAudioCtx = useCallback(() => {
+    const audio = audioRef.current
+    if (!audio || audioCtxRef.current) return
+    const ctx = new AudioContext()
+    audioCtxRef.current = ctx
+    const src = ctx.createMediaElementSource(audio)
+    sourceRef.current = src
+
+    const filters = EQ_FREQUENCIES.map((freq) => {
+      const f = ctx.createBiquadFilter()
+      f.type = 'peaking'
+      f.frequency.value = freq
+      f.Q.value = 1.4
+      f.gain.value = 0
+      return f
+    })
+    filtersRef.current = filters
+
+    let prev: AudioNode = src
+    for (const f of filters) {
+      prev.connect(f)
+      prev = f
+    }
+    prev.connect(ctx.destination)
+  }, [])
+
+  const setEqBand = useCallback(
+    (idx: number, gain: number) => {
+      setEqBands((prev) => {
+        const next = [...prev]
+        next[idx] = gain
+        return next
+      })
+      const f = filtersRef.current[idx]
+      if (f) f.gain.value = gain
+    },
+    [],
+  )
+
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio) return
-    if (restoredRef.current) return
+    if (!audio || restoredRef.current) return
     restoredRef.current = true
-
     const saved = _loadState()
     if (saved.track) {
-      const url = `/api/v1/tracks/${saved.track.id}/audio`
-      audio.src = url
+      audio.src = `/api/v1/tracks/${saved.track.id}/audio`
       audio.currentTime = saved.time
       audio.volume = volume
     }
@@ -192,9 +242,10 @@ export function PlayerProvider({
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
-
     const onPlay = () => {
       setIsPlaying(true)
+      if (audioCtxRef.current?.state === 'suspended')
+        audioCtxRef.current.resume()
       if (
         !playCountSentRef.current &&
         track &&
@@ -210,36 +261,32 @@ export function PlayerProvider({
       setCurrentTime(0)
       playNext()
     }
-    const onTimeUpdate = () => {
+    const onTime = () => {
       setCurrentTime(audio.currentTime)
       _updatePositionState(audio)
     }
-    const onDurationChange = () =>
+    const onDur = () =>
       setDuration(audio.duration || 0)
 
     audio.addEventListener('play', onPlay)
     audio.addEventListener('pause', onPause)
     audio.addEventListener('ended', onEnded)
-    audio.addEventListener(
-      'timeupdate',
-      onTimeUpdate,
-    )
+    audio.addEventListener('timeupdate', onTime)
     audio.addEventListener(
       'durationchange',
-      onDurationChange,
+      onDur,
     )
-
     return () => {
       audio.removeEventListener('play', onPlay)
       audio.removeEventListener('pause', onPause)
       audio.removeEventListener('ended', onEnded)
       audio.removeEventListener(
         'timeupdate',
-        onTimeUpdate,
+        onTime,
       )
       audio.removeEventListener(
         'durationchange',
-        onDurationChange,
+        onDur,
       )
     }
   }, [track])
@@ -255,18 +302,15 @@ export function PlayerProvider({
 
   useEffect(() => {
     if (!track) return
-    const interval = setInterval(() => {
-      const audio = audioRef.current
-      if (audio) {
-        _saveState(track, audio.currentTime)
-      }
+    const i = setInterval(() => {
+      const a = audioRef.current
+      if (a) _saveState(track, a.currentTime)
     }, _SAVE_INTERVAL)
-    return () => clearInterval(interval)
+    return () => clearInterval(i)
   }, [track])
 
-  const setVolume = (v: number) => {
+  const setVolume = (v: number) =>
     setVolumeState(Math.max(0, Math.min(1, v)))
-  }
 
   const playTrack = async (
     newTrack: Track,
@@ -274,12 +318,11 @@ export function PlayerProvider({
   ) => {
     const audio = audioRef.current
     if (!audio) return
-
+    _initAudioCtx()
     if (hlsRef.current) {
       hlsRef.current.destroy()
       hlsRef.current = null
     }
-
     playCountSentRef.current = false
     setTrack(newTrack)
     setCurrentTime(0)
@@ -288,7 +331,7 @@ export function PlayerProvider({
 
     try {
       const hlsUrl = `/api/v1/tracks/${newTrack.id}/hls/master.m3u8`
-      const fallbackUrl =
+      const fallback =
         overrideUrl ||
         `/api/v1/tracks/${newTrack.id}/audio`
 
@@ -300,24 +343,24 @@ export function PlayerProvider({
         hlsRef.current = hls
         hls.loadSource(hlsUrl)
         hls.attachMedia(audio)
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          audio.volume = volume
-          audio.play().catch(() => {})
-        })
         hls.on(
-          Hls.Events.ERROR,
-          (_event, data) => {
-            if (data.fatal) {
-              hls.destroy()
-              hlsRef.current = null
-              audio.src = fallbackUrl
-              audio.volume = volume
-              audio.play().catch(() => {})
-            }
+          Hls.Events.MANIFEST_PARSED,
+          () => {
+            audio.volume = volume
+            audio.play().catch(() => {})
           },
         )
+        hls.on(Hls.Events.ERROR, (_e, d) => {
+          if (d.fatal) {
+            hls.destroy()
+            hlsRef.current = null
+            audio.src = fallback
+            audio.volume = volume
+            audio.play().catch(() => {})
+          }
+        })
       } else {
-        audio.src = fallbackUrl
+        audio.src = fallback
         audio.volume = volume
         await audio.play()
       }
@@ -340,19 +383,17 @@ export function PlayerProvider({
         track.id,
       )
       if (adj.next_id) {
-        const nextTrack = await api.getTrack(
-          adj.next_id,
-        )
-        await playTrack(nextTrack)
+        const t = await api.getTrack(adj.next_id)
+        await playTrack(t)
       }
     } catch {}
   }
 
   const playPrev = async () => {
     if (!track) return
-    const audio = audioRef.current
-    if (audio && audio.currentTime > 3) {
-      audio.currentTime = 0
+    const a = audioRef.current
+    if (a && a.currentTime > 3) {
+      a.currentTime = 0
       return
     }
     try {
@@ -360,31 +401,29 @@ export function PlayerProvider({
         track.id,
       )
       if (adj.prev_id) {
-        const prevTrack = await api.getTrack(
-          adj.prev_id,
-        )
-        await playTrack(prevTrack)
+        const t = await api.getTrack(adj.prev_id)
+        await playTrack(t)
       }
     } catch {}
   }
 
   const togglePlay = () => {
-    const audio = audioRef.current
-    if (!audio || !track) return
-    if (audio.paused) audio.play()
-    else audio.pause()
+    const a = audioRef.current
+    if (!a || !track) return
+    _initAudioCtx()
+    if (a.paused) a.play()
+    else a.pause()
   }
 
   const seek = (pct: number) => {
-    const audio = audioRef.current
-    if (!audio || !audio.duration) return
-    audio.currentTime =
-      (pct / 100) * audio.duration
+    const a = audioRef.current
+    if (!a || !a.duration) return
+    a.currentTime = (pct / 100) * a.duration
   }
 
   const stop = () => {
-    const audio = audioRef.current
-    if (audio) audio.pause()
+    const a = audioRef.current
+    if (a) a.pause()
     if (hlsRef.current) {
       hlsRef.current.destroy()
       hlsRef.current = null
@@ -407,17 +446,25 @@ export function PlayerProvider({
         setVolume,
         isComplaintOpen,
         isCardOpen,
+        isLyricsOpen,
+        isEqOpen,
+        eqBands,
         playTrack,
         togglePlay,
         seek,
         playNext,
         playPrev,
+        setEqBand,
         openComplaint: () =>
           setIsComplaintOpen(true),
         closeComplaint: () =>
           setIsComplaintOpen(false),
         openCard: () => setIsCardOpen(true),
         closeCard: () => setIsCardOpen(false),
+        openLyrics: () => setIsLyricsOpen(true),
+        closeLyrics: () => setIsLyricsOpen(false),
+        openEq: () => setIsEqOpen(true),
+        closeEq: () => setIsEqOpen(false),
         stop,
       }}
     >

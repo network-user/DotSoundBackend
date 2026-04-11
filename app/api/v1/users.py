@@ -311,3 +311,76 @@ async def get_login_history(
         }
         for r in rows
     ]
+
+
+@router.get("/me/eq")
+@limiter.limit("60/minute")
+async def get_eq_settings(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    from sqlalchemy import select
+    from app.models.eq_settings import (
+        UserEqSettings,
+    )
+
+    result = await session.execute(
+        select(UserEqSettings).where(
+            UserEqSettings.user_id == current_user.id
+        )
+    )
+    eq = result.scalar_one_or_none()
+    if not eq:
+        return {
+            "preset": "Flat",
+            "bands": [0, 0, 0, 0, 0, 0, 0, 0],
+        }
+    return {
+        "preset": eq.preset,
+        "bands": eq.bands,
+    }
+
+
+@router.put("/me/eq")
+@limiter.limit("30/minute")
+async def save_eq_settings(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    from sqlalchemy import select
+    from app.models.eq_settings import (
+        UserEqSettings,
+    )
+
+    body = await request.json()
+    preset = body.get("preset")
+    bands = body.get("bands", [0] * 8)
+
+    if len(bands) != 8:
+        from fastapi import HTTPException, status
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="bands must have 8 values",
+        )
+
+    result = await session.execute(
+        select(UserEqSettings).where(
+            UserEqSettings.user_id == current_user.id
+        )
+    )
+    eq = result.scalar_one_or_none()
+    if eq:
+        eq.preset = preset
+        eq.bands = bands
+    else:
+        eq = UserEqSettings(
+            user_id=current_user.id,
+            preset=preset,
+            bands=bands,
+        )
+        session.add(eq)
+
+    return {"preset": preset, "bands": bands}
