@@ -18,7 +18,10 @@ interface PlayerContextValue {
   setVolume: (volume: number) => void
   isComplaintOpen: boolean
   isCardOpen: boolean
-  playTrack: (track: Track, overrideUrl?: string) => Promise<void>
+  playTrack: (
+    track: Track,
+    overrideUrl?: string,
+  ) => Promise<void>
   togglePlay: () => void
   seek: (pct: number) => void
   openComplaint: () => void
@@ -28,20 +31,72 @@ interface PlayerContextValue {
   stop: () => void
 }
 
-const PlayerContext = createContext<PlayerContextValue | null>(null)
+const PlayerContext =
+  createContext<PlayerContextValue | null>(null)
 
-export function PlayerProvider({ children }: { children: ReactNode }) {
+function updateMediaSession(
+  track: Track,
+  audio: HTMLAudioElement,
+): void {
+  if (!('mediaSession' in navigator)) return
+  try {
+    navigator.mediaSession.metadata =
+      new MediaMetadata({
+        title: track.title,
+        artist: track.artist || '',
+        artwork: track.cover_key
+          ? [
+              {
+                src: `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`,
+                sizes: '512x512',
+                type: 'image/png',
+              },
+            ]
+          : [],
+      })
+    navigator.mediaSession.setActionHandler(
+      'play',
+      () => audio.play(),
+    )
+    navigator.mediaSession.setActionHandler(
+      'pause',
+      () => audio.pause(),
+    )
+    navigator.mediaSession.setActionHandler(
+      'seekto',
+      (details) => {
+        if (
+          details.seekTime !== undefined &&
+          audio.duration
+        ) {
+          audio.currentTime = details.seekTime
+        }
+      },
+    )
+  } catch {}
+}
+
+export function PlayerProvider({
+  children,
+}: {
+  children: ReactNode
+}) {
   const audioRef = useRef<HTMLAudioElement>(null)
 
-  const [track, setTrack] = useState<Track | null>(null)
+  const [track, setTrack] = useState<Track | null>(
+    null,
+  )
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
   const [volume, setVolumeState] = useState(() => {
-    const saved = localStorage.getItem('player-volume')
+    const saved = localStorage.getItem(
+      'player-volume',
+    )
     return saved ? parseFloat(saved) : 0.8
   })
-  const [isComplaintOpen, setIsComplaintOpen] = useState(false)
+  const [isComplaintOpen, setIsComplaintOpen] =
+    useState(false)
   const [isCardOpen, setIsCardOpen] = useState(false)
   const playCountSentRef = useRef(false)
 
@@ -51,7 +106,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     const onPlay = () => {
       setIsPlaying(true)
-      if (!playCountSentRef.current && track && track.id > 0) {
+      if (
+        !playCountSentRef.current &&
+        track &&
+        track.id > 0
+      ) {
         playCountSentRef.current = true
         api.postPlay(track.id).catch(() => {})
       }
@@ -61,35 +120,55 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setIsPlaying(false)
       setCurrentTime(0)
     }
-    const onTimeUpdate = () => setCurrentTime(audio.currentTime)
-    const onDurationChange = () => setDuration(audio.duration || 0)
+    const onTimeUpdate = () =>
+      setCurrentTime(audio.currentTime)
+    const onDurationChange = () =>
+      setDuration(audio.duration || 0)
 
     audio.addEventListener('play', onPlay)
     audio.addEventListener('pause', onPause)
     audio.addEventListener('ended', onEnded)
-    audio.addEventListener('timeupdate', onTimeUpdate)
-    audio.addEventListener('durationchange', onDurationChange)
+    audio.addEventListener(
+      'timeupdate',
+      onTimeUpdate,
+    )
+    audio.addEventListener(
+      'durationchange',
+      onDurationChange,
+    )
 
     return () => {
       audio.removeEventListener('play', onPlay)
       audio.removeEventListener('pause', onPause)
       audio.removeEventListener('ended', onEnded)
-      audio.removeEventListener('timeupdate', onTimeUpdate)
-      audio.removeEventListener('durationchange', onDurationChange)
+      audio.removeEventListener(
+        'timeupdate',
+        onTimeUpdate,
+      )
+      audio.removeEventListener(
+        'durationchange',
+        onDurationChange,
+      )
     }
   }, [track])
 
   useEffect(() => {
     const audio = audioRef.current
     if (audio) audio.volume = volume
-    localStorage.setItem('player-volume', volume.toString())
+    localStorage.setItem(
+      'player-volume',
+      volume.toString(),
+    )
   }, [volume])
 
   const setVolume = (v: number) => {
     setVolumeState(Math.max(0, Math.min(1, v)))
   }
 
-  const playTrack = async (newTrack: Track, overrideUrl?: string) => {
+  const playTrack = async (
+    newTrack: Track,
+    overrideUrl?: string,
+  ) => {
     const audio = audioRef.current
     if (!audio) return
     playCountSentRef.current = false
@@ -97,10 +176,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTime(0)
     setDuration(0)
     try {
-      const url = overrideUrl || (await api.getStream(newTrack.id)).url
+      const url =
+        overrideUrl ||
+        `/api/v1/tracks/${newTrack.id}/audio`
       audio.src = url
       audio.volume = volume
       await audio.play()
+      updateMediaSession(newTrack, audio)
     } catch (e) {
       console.error('playTrack error', e)
     }
@@ -116,7 +198,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const seek = (pct: number) => {
     const audio = audioRef.current
     if (!audio || !audio.duration) return
-    audio.currentTime = (pct / 100) * audio.duration
+    audio.currentTime =
+      (pct / 100) * audio.duration
   }
 
   const stop = () => {
@@ -142,8 +225,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         playTrack,
         togglePlay,
         seek,
-        openComplaint: () => setIsComplaintOpen(true),
-        closeComplaint: () => setIsComplaintOpen(false),
+        openComplaint: () =>
+          setIsComplaintOpen(true),
+        closeComplaint: () =>
+          setIsComplaintOpen(false),
         openCard: () => setIsCardOpen(true),
         closeCard: () => setIsCardOpen(false),
         stop,
@@ -157,6 +242,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
 export function usePlayer() {
   const ctx = useContext(PlayerContext)
-  if (!ctx) throw new Error('usePlayer must be used within PlayerProvider')
+  if (!ctx)
+    throw new Error(
+      'usePlayer must be used within PlayerProvider',
+    )
   return ctx
 }

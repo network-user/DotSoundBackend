@@ -267,6 +267,42 @@ export const api = {
     accessToken = token
   },
 
+  async requestTelegramCode(
+    telegramId: number,
+  ): Promise<{ sent: boolean }> {
+    return request('/api/v1/auth/telegram-code', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        telegram_id: telegramId,
+      }),
+    })
+  },
+
+  async verifyTelegramCode(
+    telegramId: number,
+    code: string,
+  ): Promise<TokenResponse> {
+    const res = await request<TokenResponse>(
+      '/api/v1/auth/verify-code',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          telegram_id: telegramId,
+          code,
+        }),
+      },
+    )
+    accessToken = res.access_token
+    setInternalUserId(res.user_id)
+    return res
+  },
+
   startTelegramImport(): Promise<any> {
     return request('/api/v1/import/telegram', {
       method: 'POST',

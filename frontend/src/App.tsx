@@ -6,8 +6,12 @@ import {
   telegramId,
   tg,
 } from '@/lib/telegram'
+import { TelegramAuth } from '@/components/Auth/TelegramAuth'
 import { AuthorView } from '@/components/AuthorView/AuthorView'
-import { BottomNav, type ViewName } from '@/components/BottomNav/BottomNav'
+import {
+  BottomNav,
+  type ViewName,
+} from '@/components/BottomNav/BottomNav'
 import { ComplaintModal } from '@/components/ComplaintModal/ComplaintModal'
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
@@ -20,9 +24,14 @@ import { SearchView } from '@/views/SearchView'
 import { UploadView } from '@/views/UploadView'
 
 export function App() {
-  const [activeView, setActiveView] = useState<ViewName>('home')
-  const [authorId, setAuthorId] = useState<number | null>(null)
-  const [isInitialized, setIsInitialized] = useState(false)
+  const [activeView, setActiveView] =
+    useState<ViewName>('home')
+  const [authorId, setAuthorId] = useState<
+    number | null
+  >(null)
+  const [isInitialized, setIsInitialized] =
+    useState(false)
+  const [needsAuth, setNeedsAuth] = useState(false)
 
   useEffect(() => {
     const init = async () => {
@@ -31,14 +40,19 @@ export function App() {
       } catch (err) {
         console.error('[App] Auth failed:', err)
       }
+
       if (!getInternalUserId() && telegramId) {
         try {
-          const profile = await api.getUserProfile(
-            telegramId
-          )
+          const profile =
+            await api.getUserProfile(telegramId)
           setInternalUserId(profile.id)
         } catch {}
       }
+
+      if (!getInternalUserId()) {
+        setNeedsAuth(true)
+      }
+
       setIsInitialized(true)
     }
     init()
@@ -59,17 +73,37 @@ export function App() {
     )
   }
 
-  const handleOpenAuthor = (id: number) => setAuthorId(id)
+  if (needsAuth) {
+    return (
+      <TelegramAuth
+        onAuth={() => setNeedsAuth(false)}
+      />
+    )
+  }
+
+  const handleOpenAuthor = (id: number) =>
+    setAuthorId(id)
   const handleCloseAuthor = () => setAuthorId(null)
 
   return (
     <div id="app">
       <main id="main">
-        <HomeView active={activeView === 'home'} />
-        <SearchView active={activeView === 'search'} />
-        <UploadView active={activeView === 'upload'} onNavigate={setActiveView} />
-        <LikedView active={activeView === 'liked'} />
-        <PlaylistsView active={activeView === 'playlists'} />
+        <HomeView
+          active={activeView === 'home'}
+        />
+        <SearchView
+          active={activeView === 'search'}
+        />
+        <UploadView
+          active={activeView === 'upload'}
+          onNavigate={setActiveView}
+        />
+        <LikedView
+          active={activeView === 'liked'}
+        />
+        <PlaylistsView
+          active={activeView === 'playlists'}
+        />
         <ProfileView
           active={activeView === 'profile'}
           onNavigate={setActiveView}
@@ -77,11 +111,19 @@ export function App() {
       </main>
       <PlayerBar />
       <ComplaintModal />
-      <TrackCardSheet onOpenAuthor={handleOpenAuthor} />
+      <TrackCardSheet
+        onOpenAuthor={handleOpenAuthor}
+      />
       {authorId !== null && (
-        <AuthorView authorId={authorId} onClose={handleCloseAuthor} />
+        <AuthorView
+          authorId={authorId}
+          onClose={handleCloseAuthor}
+        />
       )}
-      <BottomNav activeView={activeView} onSwitch={setActiveView} />
+      <BottomNav
+        activeView={activeView}
+        onSwitch={setActiveView}
+      />
     </div>
   )
 }
