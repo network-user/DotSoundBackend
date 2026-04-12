@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
 import { getInternalUserId } from '@/lib/telegram'
+import { Icon } from '@/components/Icon/Icon'
+import type { Track } from '@/types/api'
 
 const BANDS = [
   '32', '64', '125', '250',
@@ -26,53 +28,31 @@ export function Equalizer() {
     isEqOpen,
     closeEq,
     eqBands,
+    eqPreset,
+    eqBypassed,
     setEqBand,
+    setEqPreset,
+    toggleEqBypass,
+    resetEq,
+    track,
+    isPlaying,
+    playTrack,
   } = usePlayer()
 
-  const [activePreset, setActivePreset] =
-    useState<string | null>('Flat')
-  const [saveTimer, setSaveTimer] =
-    useState<ReturnType<typeof setTimeout> | null>(
-      null,
-    )
-
-  useEffect(() => {
-    if (!isEqOpen) return
-    const uid = getInternalUserId()
-    if (!uid) return
-    api
-      .getEqSettings()
-      .then((data) => {
-        if (data?.bands?.length === 8) {
-          data.bands.forEach(
-            (g: number, i: number) =>
-              setEqBand(i, g),
-          )
-          setActivePreset(data.preset || null)
-        }
-      })
-      .catch(() => {})
-  }, [isEqOpen])
-
-  const debouncedSave = useCallback(
-    (preset: string | null, bands: number[]) => {
-      if (saveTimer) clearTimeout(saveTimer)
-      const t = setTimeout(() => {
-        api
-          .saveEqSettings({ preset, bands })
-          .catch(() => {})
-      }, 1000)
-      setSaveTimer(t)
-    },
-    [saveTimer],
-  )
+  const [previewTracks, setPreviewTracks] =
+    useState<Track[]>([])
+  const [previewLoading, setPreviewLoading] =
+    useState(false)
+  const [previewError, setPreviewError] =
+    useState<string | null>(null)
+  const [previewSource, setPreviewSource] =
+    useState<string | null>(null)
 
   const handlePreset = (name: string) => {
     const values = PRESETS[name]
     if (!values) return
     values.forEach((g, i) => setEqBand(i, g))
-    setActivePreset(name)
-    debouncedSave(name, values)
+    setEqPreset(name)
   }
 
   const handleBandChange = (
@@ -80,13 +60,56 @@ export function Equalizer() {
     gain: number,
   ) => {
     setEqBand(idx, gain)
-    setActivePreset(null)
-    const bands = [...eqBands]
-    bands[idx] = gain
-    debouncedSave(null, bands)
+    setEqPreset(null)
   }
 
-  const handleReset = () => handlePreset('Flat')
+  const loadPreviewTracks = async () => {
+    const uid = getInternalUserId()
+    if (!uid) {
+      setPreviewError(
+        'Нужно войти, чтобы выбрать трек для проверки',
+      )
+      return
+    }
+
+    setPreviewLoading(true)
+    setPreviewError(null)
+    try {
+      const mine = await api.getMyTracks(uid, 1, 8)
+      const ownTracks = mine.items.filter(
+        (item) => item.is_active,
+      )
+      if (ownTracks.length > 0) {
+        setPreviewTracks(ownTracks)
+        setPreviewSource('Мои треки')
+        return
+      }
+
+      const popular = await api.getTracks({
+        size: 8,
+      })
+      setPreviewTracks(
+        popular.items.filter(
+          (item) => item.is_active,
+        ),
+      )
+      setPreviewSource('Рекомендованные')
+    } catch {
+      setPreviewError(
+        'Не удалось загрузить треки для проверки',
+      )
+    } finally {
+      setPreviewLoading(false)
+    }
+  }
+
+  const handlePreviewTrack = async (
+    item: Track,
+  ) => {
+    await playTrack(item)
+    setPreviewTracks([])
+    setPreviewSource(null)
+  }
 
   if (!isEqOpen) return null
 
@@ -102,28 +125,142 @@ export function Equalizer() {
         <div className="eq-handle" />
 
         <div className="eq-header">
-          <span className="eq-title">
-            Эквалайзер
-          </span>
-          <button
-            className="icon-btn"
-            onClick={handleReset}
-          >
-            ↺
-          </button>
+          <div className="eq-header-main">
+            <span className="eq-title">
+              Эквалайзер
+            </span>
+            <span className="eq-subtitle">
+              {eqPreset || 'Custom'}
+            </span>
+          </div>
+          <div className="eq-header-actions">
+            <button
+              className={`chip${eqBypassed ? ' active' : ''}`}
+              onClick={toggleEqBypass}
+            >
+              {eqBypassed ? 'Без EQ' : 'С EQ'}
+            </button>
+            <button
+              className="icon-btn"
+              onClick={resetEq}
+            >
+              <Icon name="undo" size={18} />
+            </button>
+          </div>
         </div>
+
+        <div className="eq-preview-card">
+          {track ? (
+            <>
+              <div className="eq-preview-info">
+                <span className="eq-preview-label">
+                  {isPlaying
+                    ? 'Проверка на текущем треке'
+                    : 'Текущий трек готов для проверки'}
+                </span>
+                <strong className="eq-preview-title">
+                  {track.title}
+                </strong>
+                <span className="eq-preview-artist">
+                  {track.artist || '—'}
+                </span>
+              </div>
+              <button
+                className="eq-preview-toggle"
+                onClick={toggleEqBypass}
+              >
+                {eqBypassed
+                  ? 'Включить EQ'
+                  : 'Сравнить с оригиналом'}
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="eq-preview-info">
+                <span className="eq-preview-label">
+                  Ничего не играет
+                </span>
+                <strong className="eq-preview-title">
+                  Запустите трек для проверки
+                </strong>
+                <span className="eq-preview-artist">
+                  Сначала покажем ваши треки,
+                  потом популярные
+                </span>
+              </div>
+              <button
+                className="eq-preview-toggle"
+                onClick={loadPreviewTracks}
+                disabled={previewLoading}
+              >
+                {previewLoading
+                  ? 'Загружаем...'
+                  : 'Запустить для проверки'}
+              </button>
+            </>
+          )}
+        </div>
+
+        {previewTracks.length > 0 && (
+          <div className="eq-track-picker">
+            <div className="eq-track-picker-header">
+              <span className="eq-track-picker-title">
+                {previewSource}
+              </span>
+              <button
+                className="icon-btn"
+                onClick={() => {
+                  setPreviewTracks([])
+                  setPreviewSource(null)
+                }}
+              >
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+            <div className="eq-track-picker-list">
+              {previewTracks.map((item) => (
+                <button
+                  key={item.id}
+                  className="eq-track-option"
+                  onClick={() =>
+                    handlePreviewTrack(item)
+                  }
+                >
+                  <div className="eq-track-option-info">
+                    <span className="eq-track-option-title">
+                      {item.title}
+                    </span>
+                    <span className="eq-track-option-artist">
+                      {item.artist || '—'}
+                    </span>
+                  </div>
+                  <Icon
+                    name="play"
+                    size={14}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {previewError && (
+          <div className="eq-preview-error">
+            {previewError}
+          </div>
+        )}
 
         <div className="eq-presets">
           {PRESET_NAMES.map((name) => (
             <button
               key={name}
-              className={`chip${activePreset === name ? ' active' : ''}`}
+              className={`chip${eqPreset === name ? ' active' : ''}`}
               onClick={() => handlePreset(name)}
             >
               {name}
             </button>
           ))}
-          {activePreset === null && (
+          {eqPreset === null && (
             <span className="chip active">
               Custom
             </span>

@@ -23,6 +23,7 @@ export function PlayerBar() {
     playNext,
     playPrev,
     openCard,
+    openEq,
   } = usePlayer()
   const { isLiked, toggleLike } = useLikes()
 
@@ -96,6 +97,12 @@ export function PlayerBar() {
               }
               size={18}
             />
+          </button>
+          <button
+            className="ctrl-btn"
+            onClick={openEq}
+          >
+            <Icon name="eq" size={18} />
           </button>
           <button
             className="ctrl-btn"

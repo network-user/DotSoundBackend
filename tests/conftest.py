@@ -111,3 +111,15 @@ async def create_test_track(
         )
     assert r.status_code == 201
     return r.json()
+
+
+async def auth_headers(
+    client: AsyncClient,
+    user_id: int,
+) -> dict[str, str]:
+    response = await client.post(
+        f"/api/v1/auth/mock/{user_id}"
+    )
+    assert response.status_code == 200
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}

@@ -37,6 +37,7 @@ export interface TrackUploadResponse {
 export interface StreamResponse {
   track_id: number
   url: string
+  stream_type: 'direct' | 'hls'
   expires_in: number
 }
 
