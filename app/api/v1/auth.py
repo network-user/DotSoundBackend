@@ -279,6 +279,60 @@ async def verify_telegram_code(
     )
 
 
+class InternalTokenRequest(BaseModel):
+    telegram_id: int
+
+
+@router.post(
+    "/internal-token",
+    response_model=TokenResponse,
+)
+async def internal_token(
+    request: Request,
+    body: InternalTokenRequest,
+    session: AsyncSession = Depends(get_db),
+) -> TokenResponse:
+    if not settings.bot_internal_secret:
+        raise HTTPException(
+            status_code=(
+                status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
+            detail="Internal secret not configured",
+        )
+    secret = request.headers.get(
+        INTERNAL_SECRET_HEADER, ""
+    )
+    if secret != settings.bot_internal_secret:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
+
+    service = UserService(session)
+    user = await service.get_by_telegram_id(
+        body.telegram_id
+    )
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    token = create_access_token(
+        user.id, user.is_admin
+    )
+    logger.info(
+        "internal_token_issued",
+        user_id=user.id,
+        telegram_id=body.telegram_id,
+    )
+    return TokenResponse(
+        access_token=token,
+        user_id=user.id,
+        is_admin=user.is_admin,
+    )
+
+
 if settings.debug:
 
     @router.post(
