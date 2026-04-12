@@ -165,6 +165,17 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    const mono =
+      localStorage.getItem(
+        'setting-monochrome',
+      ) === 'true'
+    document.body.classList.toggle(
+      'monochrome',
+      mono,
+    )
+  }, [])
+
+  useEffect(() => {
     if (needsAuth) return
     const token = api.getToken()
     if (token) {

@@ -61,6 +61,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── Monochrome filter ── */
+body.monochrome #app {
+  filter: grayscale(1);
+}
+
 /* ── App shell ── */
 #app {
   display: flex;

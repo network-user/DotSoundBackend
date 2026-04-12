@@ -499,8 +499,21 @@ export function PlayerProvider({
     if (saved.track) {
       audio.crossOrigin = 'anonymous'
       audio.src = `/api/v1/tracks/${saved.track.id}/audio`
-      audio.currentTime = saved.time
       audio.volume = volume
+      if (saved.time > 0) {
+        setCurrentTime(saved.time)
+        const onMeta = () => {
+          audio.currentTime = saved.time
+          audio.removeEventListener(
+            'loadedmetadata',
+            onMeta,
+          )
+        }
+        audio.addEventListener(
+          'loadedmetadata',
+          onMeta,
+        )
+      }
     }
   }, [])
 

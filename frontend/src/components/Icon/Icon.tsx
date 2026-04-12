@@ -77,6 +77,7 @@ const PATHS: Record<string, string> = {
   reply: 'M9 17H5l4-4m0 0L5 9m4 4h6a4 4 0 004-4V3',
   'thumbs-up': 'M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14zM4 22h1a2 2 0 002-2v-7a2 2 0 00-2-2H4',
   block: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M4.93 4.93l14.14 14.14',
+  moon: 'M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z',
 }
 
 const FILLED_ICONS = new Set([
