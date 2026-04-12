@@ -38,7 +38,7 @@ async def toggle_dislike(
     "/{user_id}/{track_id}",
     response_model=DislikeToggleResponse,
     status_code=status.HTTP_200_OK,
-    summary="Toggle dislike on a track (public / bot)",
+    summary="Toggle dislike on a track (internal / bot)",
 )
 @limiter.limit("60/minute")
 async def toggle_dislike_public(
@@ -46,6 +46,7 @@ async def toggle_dislike_public(
     user_id: int,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> DislikeToggleResponse:
     structlog.contextvars.bind_contextvars(
         user_id=user_id, track_id=track_id

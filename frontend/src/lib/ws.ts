@@ -3,13 +3,19 @@ type EventHandler = (data: Record<string, unknown>) => void
 let socket: WebSocket | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectDelay = 1000
+let intentionalClose = false
 const MAX_RECONNECT_DELAY = 30000
 
 const handlers: Map<string, Set<EventHandler>> = new Map()
 
 export function connectWS(token: string) {
-  if (socket?.readyState === WebSocket.OPEN) return
+  if (
+    socket?.readyState === WebSocket.OPEN ||
+    socket?.readyState === WebSocket.CONNECTING
+  )
+    return
 
+  intentionalClose = false
   const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
   const url = `${protocol}//${location.host}/api/v1/ws?token=${token}`
 
@@ -33,7 +39,7 @@ export function connectWS(token: string) {
   }
 
   socket.onclose = () => {
-    scheduleReconnect(token)
+    if (!intentionalClose) scheduleReconnect(token)
   }
 
   socket.onerror = () => {
@@ -51,6 +57,7 @@ function scheduleReconnect(token: string) {
 }
 
 export function disconnectWS() {
+  intentionalClose = true
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
     reconnectTimer = null

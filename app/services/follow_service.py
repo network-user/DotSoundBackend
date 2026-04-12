@@ -38,10 +38,13 @@ class FollowService:
                 detail="Cannot follow yourself",
             )
 
-        existing = await self._repo.get(resolved_follower, resolved_following)
+        existing = await self._repo.get(
+            resolved_follower, resolved_following
+        )
         if existing:
-            await self._repo.remove(resolved_follower, resolved_following)
-            await self._session.commit()
+            await self._repo.remove(
+                resolved_follower, resolved_following
+            )
             logger.info(
                 "unfollowed",
                 follower_id=resolved_follower,
@@ -49,14 +52,29 @@ class FollowService:
             )
             return False
         else:
-            await self._repo.add(resolved_follower, resolved_following)
-            await self._session.commit()
+            await self._repo.add(
+                resolved_follower, resolved_following
+            )
             logger.info(
                 "followed",
                 follower_id=resolved_follower,
                 following_id=resolved_following,
             )
             return True
+
+    async def is_following(
+        self, follower_id: int, following_id: int
+    ) -> bool:
+        resolved_follower = await self._resolve_user_id(
+            follower_id
+        )
+        resolved_following = await self._resolve_user_id(
+            following_id
+        )
+        existing = await self._repo.get(
+            resolved_follower, resolved_following
+        )
+        return existing is not None
 
     async def list_followers(
         self, user_id: int, page: int = 1, size: int = 20

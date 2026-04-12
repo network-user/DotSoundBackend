@@ -56,7 +56,7 @@ class UserRepository(BaseRepository[User]):
         if not user:
             return None
         user.display_name = display_name
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(user)
         return user
 
@@ -73,7 +73,7 @@ class UserRepository(BaseRepository[User]):
         if not user:
             return None
         user.avatar_key = avatar_key
-        await self._session.commit()
+        await self._session.flush()
         await self._session.refresh(user)
         return user
 

@@ -2,7 +2,7 @@
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
@@ -35,8 +35,10 @@ async def admin_list_users(
     )
     users = list(result.scalars().all())
 
-    count_result = await session.execute(select(User).order_by(None))
-    total = len(count_result.scalars().all())
+    count_result = await session.execute(
+        select(func.count(User.id))
+    )
+    total = count_result.scalar_one()
 
     return AdminUserListResponse(
         items=[UserResponse.model_validate(u) for u in users],

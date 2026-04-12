@@ -12,18 +12,26 @@ export function ChatList({ items, onOpenChat }: Props) {
   const [onlineMap, setOnlineMap] = useState<Record<number, boolean>>({})
 
   useEffect(() => {
-    const loadPresence = async () => {
+    if (items.length === 0) return
+    let cancelled = false
+    Promise.all(
+      items.map((item) =>
+        api
+          .getChatPresence(item.conversation.id)
+          .then((res) => {
+            const members = Object.values(res.members)
+            const online = members.some((m) => m.status === 'online')
+            return [item.conversation.id, online] as const
+          })
+          .catch(() => [item.conversation.id, false] as const),
+      ),
+    ).then((results) => {
+      if (cancelled) return
       const map: Record<number, boolean> = {}
-      for (const item of items) {
-        try {
-          const res = await api.getChatPresence(item.conversation.id)
-          const members = Object.values(res.members)
-          map[item.conversation.id] = members.some((m) => m.status === 'online')
-        } catch {}
-      }
+      for (const [id, online] of results) map[id] = online
       setOnlineMap(map)
-    }
-    if (items.length > 0) loadPresence()
+    })
+    return () => { cancelled = true }
   }, [items])
 
   return (

@@ -41,11 +41,25 @@ class LyricsService:
             )
         return track
 
-    async def get_lyrics(self, track_id: int) -> TrackLyrics | None:
+    async def get_lyrics(
+        self,
+        track_id: int,
+        requester_id: int | None = None,
+    ) -> TrackLyrics | None:
         track = await self._track_repo.get_by_id(track_id)
         if not track or not track.is_active:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Track not found"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Track not found",
+            )
+        is_owner = (
+            requester_id
+            and track.uploaded_by_id == requester_id
+        )
+        if not track.is_public and not is_owner:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Track not found",
             )
         return await self._repo.get_by_track_id(track_id)
 

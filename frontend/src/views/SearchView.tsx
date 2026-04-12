@@ -6,6 +6,7 @@ import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
 import { useLikes } from '@/store/LikesContext'
 import { useDebounce } from '@/hooks/useDebounce'
+import { Icon } from '@/components/Icon/Icon'
 import type { SCSearchResult, Track } from '@/types/api'
 
 interface Props {
@@ -35,6 +36,7 @@ export function SearchView({ active }: Props) {
     }
     setTracks(null)
     setSCResults([])
+    let cancelled = false
     Promise.all([
       api.getTracks({ q: debouncedQuery, size: 20 }).catch(() => ({
         items: [] as Track[],
@@ -44,9 +46,11 @@ export function SearchView({ active }: Props) {
       })),
       api.searchSoundCloud(debouncedQuery, 10).catch(() => [] as SCSearchResult[]),
     ]).then(([internal, sc]) => {
+      if (cancelled) return
       setTracks(internal.items)
       setSCResults(sc)
     })
+    return () => { cancelled = true }
   }, [debouncedQuery])
 
   const ensureImported = async (result: SCSearchResult): Promise<Track | null> => {
@@ -88,7 +92,7 @@ export function SearchView({ active }: Props) {
   return (
     <section id="view-search" className={`view${active ? ' active' : ''}`}>
       <div className="search-bar">
-        <span className="search-icon">🔍</span>
+        <span className="search-icon"><Icon name="search" size={16} /></span>
         <input
           ref={inputRef}
           id="search-input"
@@ -99,7 +103,7 @@ export function SearchView({ active }: Props) {
           onChange={(e) => setQuery(e.target.value)}
         />
         {query && (
-          <button className="icon-btn" onClick={clearSearch}>✕</button>
+          <button className="icon-btn" onClick={clearSearch}><Icon name="x" size={16} /></button>
         )}
       </div>
 

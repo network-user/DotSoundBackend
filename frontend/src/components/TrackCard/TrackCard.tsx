@@ -1,5 +1,6 @@
 import type { MouseEvent } from 'react'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
+import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
 import { usePlayer } from '@/store/PlayerContext'
 import { getInternalUserId } from '@/lib/telegram'
@@ -66,7 +67,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
         <div className="track-card-title-row">
           <p className="track-card-title">{track.title}</p>
           {!track.is_public && (
-            <span className="track-badge track-badge-private">🔒</span>
+            <span className="track-badge track-badge-private"><Icon name="lock" size={12} /></span>
           )}
           {track.source === 'soundcloud' && (
             <span className="track-badge track-badge-sc">SC</span>
@@ -100,7 +101,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
       </div>
       <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
         <button className="track-card-like" title="Лайк" onClick={handleLike}>
-          {liked ? '❤️' : '🤍'}
+          <Icon name={liked ? 'heart' : 'heart-outline'} size={18} />
         </button>
         {isOwner && (
           <>
@@ -109,14 +110,14 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
               title={track.is_public ? 'Сделать приватным' : 'Сделать публичным'}
               onClick={handleToggleVisibility}
             >
-              {track.is_public ? '👁' : '🔒'}
+              <Icon name={track.is_public ? 'eye' : 'lock'} size={16} />
             </button>
             <button
               className="track-card-delete"
               title="Удалить трек"
               onClick={handleDelete}
             >
-              🗑
+              <Icon name="trash" size={16} />
             </button>
           </>
         )}

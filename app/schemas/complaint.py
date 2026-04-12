@@ -1,12 +1,12 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class ComplaintCreate(BaseModel):
     track_id: int
     reason: str = Field(min_length=10, max_length=1000)
-    contact_email: str | None = None
+    contact_email: EmailStr | None = None
 
 
 class ComplaintResponse(BaseModel):

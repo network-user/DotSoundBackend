@@ -497,22 +497,37 @@ export function PlayerProvider({
     restoredRef.current = true
     const saved = _loadState()
     if (saved.track) {
+      setTrack(saved.track)
       audio.crossOrigin = 'anonymous'
-      audio.src = `/api/v1/tracks/${saved.track.id}/audio`
       audio.volume = volume
-      if (saved.time > 0) {
-        setCurrentTime(saved.time)
-        const onMeta = () => {
-          audio.currentTime = saved.time
-          audio.removeEventListener(
+
+      const seekAfterLoad = () => {
+        if (saved.time > 0) {
+          setCurrentTime(saved.time)
+          const onMeta = () => {
+            audio.currentTime = saved.time
+            audio.removeEventListener(
+              'loadedmetadata',
+              onMeta,
+            )
+          }
+          audio.addEventListener(
             'loadedmetadata',
             onMeta,
           )
         }
-        audio.addEventListener(
-          'loadedmetadata',
-          onMeta,
-        )
+      }
+
+      const hlsUrl = `/api/v1/tracks/${saved.track.id}/hls/master.m3u8`
+      const fallback = `/api/v1/tracks/${saved.track.id}/audio`
+
+      if (Hls.isSupported()) {
+        startHlsPlayback(audio, hlsUrl, fallback)
+          .then(seekAfterLoad)
+          .catch(() => {})
+      } else {
+        audio.src = fallback
+        seekAfterLoad()
       }
     }
   }, [])

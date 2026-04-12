@@ -32,6 +32,7 @@ import type {
 } from '@/types/api'
 
 let accessToken: string | null = null
+let onUnauthorized: (() => void) | null = null
 const AUTH_TOKEN_KEY = 'auth-token'
 
 function decodeJwtPayload(
@@ -121,6 +122,9 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     const res = await fetch(path, { ...opts, headers })
     if (res.status === 401) {
       console.error(`[API] 401 Unauthorized: ${path}. Token present: ${!!accessToken}`)
+      accessToken = null
+      persistToken(null)
+      onUnauthorized?.()
     }
     if (!res.ok) throw new Error(`${res.status}`)
     if (res.status === 204) return null as T
@@ -322,6 +326,10 @@ export const api = {
     return request(`/api/v1/users/${targetUserId}/follow`, { method: 'POST' })
   },
 
+  getFollowStatus(targetUserId: number): Promise<{ following: boolean }> {
+    return request(`/api/v1/users/${targetUserId}/follow/status`)
+  },
+
   // ── Author page ───────────────────────────────────────────────────────────
 
   getAuthorProfile(userId: number): Promise<AuthorProfile> {
@@ -398,6 +406,10 @@ export const api = {
     accessToken = null
     persistToken(null)
     setInternalUserId(null)
+  },
+
+  setOnUnauthorized(cb: (() => void) | null) {
+    onUnauthorized = cb
   },
 
   getAuthConfig(): Promise<{
@@ -565,7 +577,7 @@ export const api = {
 
   getMessages(convId: number, cursor?: number, limit = 20): Promise<ChatMessage[]> {
     const sp = new URLSearchParams()
-    if (cursor) sp.set('cursor', String(cursor))
+    if (cursor != null) sp.set('cursor', String(cursor))
     sp.set('limit', String(limit))
     return request(`/api/v1/chats/${convId}/messages?${sp}`)
   },
@@ -606,10 +618,11 @@ export const api = {
     })
   },
 
-  sendPhoto(convId: number, formData: FormData): Promise<ChatMessage> {
+  sendPhoto(convId: number, formData: FormData, signal?: AbortSignal): Promise<ChatMessage> {
     return request(`/api/v1/chats/${convId}/messages/photo`, {
       method: 'POST',
       body: formData,
+      signal,
     })
   },
 
@@ -632,7 +645,7 @@ export const api = {
 
   getComments(trackId: number, cursor?: number, limit = 20): Promise<TrackComment[]> {
     const sp = new URLSearchParams()
-    if (cursor) sp.set('cursor', String(cursor))
+    if (cursor != null) sp.set('cursor', String(cursor))
     sp.set('limit', String(limit))
     return request(`/api/v1/tracks/${trackId}/comments?${sp}`)
   },

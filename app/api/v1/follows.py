@@ -37,6 +37,25 @@ async def toggle_follow(
 
 
 @router.get(
+    "/{user_id}/follow/status",
+    summary="Check if current user follows target",
+)
+@limiter.limit("120/minute")
+async def follow_status(
+    request: Request,
+    user_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    service = FollowService(session)
+    is_following = await service.is_following(
+        follower_id=current_user.id,
+        following_id=user_id,
+    )
+    return {"following": is_following}
+
+
+@router.get(
     "/{user_id}/followers",
     response_model=FollowListResponse,
     summary="List followers of a user",

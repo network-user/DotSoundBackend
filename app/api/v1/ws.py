@@ -8,10 +8,12 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthError, decode_access_token
+from app.core.db import AsyncSessionLocal
 from app.core.ws_manager import ACTIVITY_TYPES, ws_manager
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.repositories.chat import ChatRepository
+from app.repositories.user import UserRepository
 
 router = APIRouter(tags=["websocket"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
@@ -35,6 +37,14 @@ async def websocket_endpoint(
         return
 
     user_id = int(str(payload["sub"]))
+
+    async with AsyncSessionLocal() as s:
+        user_repo = UserRepository(s)
+        user = await user_repo.get_by_id(user_id)
+        if not user or not user.is_active:
+            await websocket.close(code=4001)
+            return
+
     await ws_manager.connect(user_id, websocket)
 
     try:
@@ -57,12 +67,16 @@ async def websocket_endpoint(
                 )
                 if activity not in ACTIVITY_TYPES:
                     continue
-                online = (
-                    ws_manager.get_online_user_ids()
-                )
+                async with AsyncSessionLocal() as s:
+                    repo = ChatRepository(s)
+                    member_ids = (
+                        await repo.get_member_ids(
+                            conv_id
+                        )
+                    )
                 members = [
                     uid
-                    for uid in online
+                    for uid in member_ids
                     if uid != user_id
                 ]
                 await ws_manager.broadcast_activity(

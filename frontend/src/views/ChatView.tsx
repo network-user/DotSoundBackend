@@ -217,6 +217,8 @@ export function ChatView({ active, conversationId, title, onBack }: Props) {
       offDel()
       offActivity()
       offReaction()
+      if (activityTimer.current)
+        clearTimeout(activityTimer.current)
     }
   }, [conversationId, myId])
 
@@ -270,7 +272,7 @@ export function ChatView({ active, conversationId, title, onBack }: Props) {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      const msg = await api.sendPhoto(conversationId, fd)
+      const msg = await api.sendPhoto(conversationId, fd, controller.signal)
       if (caption) {
         await api.sendMessage(conversationId, caption)
       }

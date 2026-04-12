@@ -132,7 +132,12 @@ class UploadService:
 
         # Сохраняем оригинальный файл во временное хранилище S3 для обработки воркером
         # Это позволяет передать задачу в другой контейнер без передачи огромных байтов в памяти
-        raw_key = f"temp/raw/{track.id}_{file.filename or 'track'}"
+        import re
+
+        safe_name = re.sub(
+            r"[^\w.\-]", "_", file.filename or "track"
+        )[:100]
+        raw_key = f"temp/raw/{track.id}_{safe_name}"
         await s3.upload_object(
             key=raw_key,
             data=data,
