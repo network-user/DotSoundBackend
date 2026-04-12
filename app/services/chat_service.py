@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.block import BlockRepository
 from app.repositories.chat import ChatRepository
+from app.repositories.user import UserRepository
 
 logger: structlog.stdlib.BoundLogger = (
     structlog.get_logger(__name__)
@@ -20,6 +21,7 @@ class ChatService:
     ) -> None:
         self._repo = ChatRepository(session)
         self._block_repo = BlockRepository(session)
+        self._user_repo = UserRepository(session)
 
     async def create_dm(
         self, user_id: int, target_id: int
@@ -178,6 +180,50 @@ class ChatService:
         return await self._repo.get_member_ids(
             conv_id
         )
+
+    async def get_or_create_saved(
+        self, user_id: int
+    ) -> dict[str, Any]:
+        existing = await self._repo.find_dm(
+            user_id, user_id
+        )
+        if existing:
+            return {"conversation": existing}
+
+        conv = await self._repo.create_conversation(
+            type="saved",
+            title="Избранное",
+            created_by_id=user_id,
+        )
+        await self._repo.add_member(
+            conversation_id=conv.id,
+            user_id=user_id,
+            role="owner",
+        )
+        logger.info(
+            "saved_created",
+            conv_id=conv.id,
+            user_id=user_id,
+        )
+        return {"conversation": conv}
+
+    async def search_users(
+        self, query: str, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        users = await self._user_repo.search(
+            query, limit
+        )
+        return [
+            {
+                "id": u.id,
+                "username": u.username,
+                "first_name": u.first_name,
+                "last_name": u.last_name,
+                "display_name": u.display_name,
+                "avatar_key": u.avatar_key,
+            }
+            for u in users
+        ]
 
     async def _ensure_member(
         self, conv_id: int, user_id: int

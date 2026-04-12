@@ -109,7 +109,7 @@ body {
 }
 
 .view-header {
-  padding: 24px 16px 16px;
+  padding: 24px 20px 16px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -125,6 +125,14 @@ body {
   color: var(--text-muted);
   margin-top: 3px;
   font-weight: 400;
+}
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  font-size: 14px;
+  opacity: 0.4;
+  color: var(--text);
+  line-height: 1.5;
 }
 
 /* ── Track list & cards ── */

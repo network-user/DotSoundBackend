@@ -76,3 +76,24 @@ class UserRepository(BaseRepository[User]):
         await self._session.commit()
         await self._session.refresh(user)
         return user
+
+    async def search(
+        self, query: str, limit: int = 20
+    ) -> list[User]:
+        pattern = f"%{query}%"
+        result = await self._session.execute(
+            select(User)
+            .where(
+                User.is_active.is_(True),
+                (
+                    User.username.ilike(pattern)
+                    | User.first_name.ilike(pattern)
+                    | User.last_name.ilike(pattern)
+                    | User.display_name.ilike(
+                        pattern
+                    )
+                ),
+            )
+            .limit(limit)
+        )
+        return list(result.scalars().all())

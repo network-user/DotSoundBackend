@@ -71,6 +71,16 @@ class ChatRepository:
     async def find_dm(
         self, user_a: int, user_b: int
     ) -> Conversation | None:
+        if user_a == user_b:
+            row = await self._s.execute(
+                select(Conversation).where(
+                    Conversation.created_by_id
+                    == user_a,
+                    Conversation.type == "saved",
+                )
+            )
+            return row.scalar_one_or_none()
+
         sub = (
             select(
                 ConversationMember.conversation_id
