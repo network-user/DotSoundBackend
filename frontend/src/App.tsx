@@ -13,6 +13,7 @@ import {
   type ViewName,
 } from '@/components/BottomNav/BottomNav'
 import { ComplaintModal } from '@/components/ComplaintModal/ComplaintModal'
+import { SettingsSheet } from '@/components/Settings/SettingsSheet'
 import { Equalizer } from '@/components/Equalizer/Equalizer'
 import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics'
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
@@ -83,11 +84,14 @@ export function App() {
     )
   }
 
+  const [settingsOpen, setSettingsOpen] =
+    useState(false)
   const handleOpenAuthor = (id: number) =>
     setAuthorId(id)
   const handleCloseAuthor = () => setAuthorId(null)
   const handleLogout = () => {
     api.logout()
+    setSettingsOpen(false)
     setNeedsAuth(true)
   }
 
@@ -113,12 +117,19 @@ export function App() {
         <ProfileView
           active={activeView === 'profile'}
           onNavigate={setActiveView}
-          onLogout={handleLogout}
+          onOpenSettings={() =>
+            setSettingsOpen(true)
+          }
         />
       </main>
       <PlayerBar />
       <FullscreenLyrics />
       <Equalizer />
+      <SettingsSheet
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onLogout={handleLogout}
+      />
       <ComplaintModal />
       <TrackCardSheet
         onOpenAuthor={handleOpenAuthor}

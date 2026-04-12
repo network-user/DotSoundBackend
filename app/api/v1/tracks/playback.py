@@ -180,8 +180,10 @@ async def audio_stream(
 
     range_header = request.headers.get("range")
     try:
-        body, content_length, content_range, content_type = (
-            await s3.stream_object_range(track.file_key, range_header)
+        data, content_length, content_range, content_type = (
+            await s3.download_object_range(
+                track.file_key, range_header
+            )
         )
     except ClientError as exc:
         code = exc.response["Error"]["Code"]
@@ -194,12 +196,6 @@ async def audio_stream(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Storage error",
         ) from exc
-
-    async def _iter_body() -> StreamingResponse:  # type: ignore[return]
-        async with body as stream:
-            data: bytes = await stream.read()
-            for i in range(0, len(data), 65536):
-                yield data[i : i + 65536]
 
     http_status = 206 if content_range else 200
     headers: dict[str, str] = {
@@ -214,8 +210,8 @@ async def audio_stream(
         range=range_header,
         status=http_status,
     )
-    return StreamingResponse(
-        _iter_body(),
+    return Response(
+        content=data,
         status_code=http_status,
         media_type=content_type,
         headers=headers,

@@ -1,5 +1,6 @@
 import { useLikes } from '@/store/LikesContext'
 import { usePlayer } from '@/store/PlayerContext'
+import { Icon } from '@/components/Icon/Icon'
 import type { MouseEvent } from 'react'
 
 function fmt(sec: number) {
@@ -69,7 +70,7 @@ export function PlayerBar() {
           {coverSrc ? (
             <img src={coverSrc} alt="" />
           ) : (
-            '🎵'
+            <Icon name="music" size={18} />
           )}
         </div>
         <div
@@ -86,28 +87,39 @@ export function PlayerBar() {
         </div>
         <div id="pb-controls">
           <button
-            className="icon-btn"
+            className={`icon-btn${liked ? ' liked' : ''}`}
             onClick={handleLike}
           >
-            {liked ? '❤️' : '🤍'}
+            <Icon
+              name={
+                liked ? 'heart' : 'heart-outline'
+              }
+              size={18}
+            />
           </button>
           <button
             className="ctrl-btn"
             onClick={playPrev}
           >
-            ⏮
+            <Icon name="skip-back" size={18} />
           </button>
           <button
             className="play-btn"
             onClick={togglePlay}
           >
-            {isPlaying ? '⏸' : '▶'}
+            <Icon
+              name={isPlaying ? 'pause' : 'play'}
+              size={16}
+            />
           </button>
           <button
             className="ctrl-btn"
             onClick={playNext}
           >
-            ⏭
+            <Icon
+              name="skip-forward"
+              size={18}
+            />
           </button>
         </div>
       </div>
