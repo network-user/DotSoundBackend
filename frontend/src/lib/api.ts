@@ -1,7 +1,10 @@
 import { setInternalUserId } from '@/lib/telegram'
 import type {
+  AppNotification,
   AuthorProfile,
   AvatarResponse,
+  ChatListItem,
+  ChatMessage,
   ComplaintCreate,
   ComplaintSubmitResponse,
   DislikeToggleResponse,
@@ -17,6 +20,7 @@ import type {
   TokenResponse,
   Track,
   TrackCardResponse,
+  TrackComment,
   TrackListResponse,
   TrackUploadResponse,
   UserLikesResponse,
@@ -394,5 +398,199 @@ export const api = {
       },
       body: JSON.stringify(data),
     })
+  },
+
+  // ── Chats ──────────────────────────────────────────
+
+  createDM(targetUserId: number): Promise<{ conversation: { id: number } }> {
+    return request('/api/v1/chats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_user_id: targetUserId }),
+    })
+  },
+
+  createGroup(title: string, memberIds: number[]): Promise<{ conversation: { id: number } }> {
+    return request('/api/v1/chats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, member_ids: memberIds }),
+    })
+  },
+
+  listChats(): Promise<ChatListItem[]> {
+    return request('/api/v1/chats')
+  },
+
+  pinChat(convId: number): Promise<void> {
+    return request(`/api/v1/chats/${convId}/pin`, { method: 'POST' })
+  },
+
+  unpinChat(convId: number): Promise<void> {
+    return request(`/api/v1/chats/${convId}/pin`, { method: 'DELETE' })
+  },
+
+  // ── Messages ───────────────────────────────────────
+
+  getMessages(convId: number, cursor?: number, limit = 20): Promise<ChatMessage[]> {
+    const sp = new URLSearchParams()
+    if (cursor) sp.set('cursor', String(cursor))
+    sp.set('limit', String(limit))
+    return request(`/api/v1/chats/${convId}/messages?${sp}`)
+  },
+
+  sendMessage(convId: number, content: string, opts?: {
+    type?: string
+    reply_to_id?: number
+    shared_track_id?: number
+  }): Promise<ChatMessage> {
+    return request(`/api/v1/chats/${convId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, ...opts }),
+    })
+  },
+
+  deleteMessage(messageId: number): Promise<void> {
+    return request(`/api/v1/messages/${messageId}`, { method: 'DELETE' })
+  },
+
+  addReaction(messageId: number, reactionType: string): Promise<void> {
+    return request(`/api/v1/messages/${messageId}/reactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reaction_type: reactionType }),
+    })
+  },
+
+  removeReaction(messageId: number, reactionType: string): Promise<void> {
+    return request(`/api/v1/messages/${messageId}/reactions/${reactionType}`, { method: 'DELETE' })
+  },
+
+  markRead(convId: number, messageId: number): Promise<void> {
+    return request(`/api/v1/chats/${convId}/messages/read`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message_id: messageId }),
+    })
+  },
+
+  sendPhoto(convId: number, formData: FormData): Promise<ChatMessage> {
+    return request(`/api/v1/chats/${convId}/messages/photo`, {
+      method: 'POST',
+      body: formData,
+    })
+  },
+
+  sendVoice(convId: number, formData: FormData): Promise<ChatMessage> {
+    return request(`/api/v1/chats/${convId}/messages/voice`, {
+      method: 'POST',
+      body: formData,
+    })
+  },
+
+  // ── Comments ───────────────────────────────────────
+
+  addComment(trackId: number, text: string): Promise<TrackComment> {
+    return request(`/api/v1/tracks/${trackId}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    })
+  },
+
+  getComments(trackId: number, cursor?: number, limit = 20): Promise<TrackComment[]> {
+    const sp = new URLSearchParams()
+    if (cursor) sp.set('cursor', String(cursor))
+    sp.set('limit', String(limit))
+    return request(`/api/v1/tracks/${trackId}/comments?${sp}`)
+  },
+
+  deleteComment(commentId: number): Promise<void> {
+    return request(`/api/v1/comments/${commentId}`, { method: 'DELETE' })
+  },
+
+  pinComment(commentId: number): Promise<void> {
+    return request(`/api/v1/comments/${commentId}/pin`, { method: 'POST' })
+  },
+
+  unpinComment(commentId: number): Promise<void> {
+    return request(`/api/v1/comments/${commentId}/pin`, { method: 'DELETE' })
+  },
+
+  hideComment(commentId: number): Promise<void> {
+    return request(`/api/v1/comments/${commentId}/hide`, { method: 'POST' })
+  },
+
+  hideCommentForMe(commentId: number): Promise<void> {
+    return request(`/api/v1/comments/${commentId}/hide-for-me`, { method: 'POST' })
+  },
+
+  voteComment(commentId: number, isLike: boolean): Promise<void> {
+    return request(`/api/v1/comments/${commentId}/vote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_like: isLike }),
+    })
+  },
+
+  removeCommentVote(commentId: number): Promise<void> {
+    return request(`/api/v1/comments/${commentId}/vote`, { method: 'DELETE' })
+  },
+
+  // ── Blocks ─────────────────────────────────────────
+
+  blockUser(userId: number): Promise<void> {
+    return request(`/api/v1/users/${userId}/block`, { method: 'POST' })
+  },
+
+  unblockUser(userId: number): Promise<void> {
+    return request(`/api/v1/users/${userId}/block`, { method: 'DELETE' })
+  },
+
+  listBlocks(): Promise<{ blocked_user_ids: number[] }> {
+    return request('/api/v1/blocks')
+  },
+
+  // ── Notifications ──────────────────────────────────
+
+  getNotifications(cursor?: number, limit = 20): Promise<AppNotification[]> {
+    const sp = new URLSearchParams()
+    if (cursor) sp.set('cursor', String(cursor))
+    sp.set('limit', String(limit))
+    return request(`/api/v1/notifications?${sp}`)
+  },
+
+  getUnreadCount(): Promise<{ count: number }> {
+    return request('/api/v1/notifications/unread-count')
+  },
+
+  markNotificationRead(notificationId: number): Promise<void> {
+    return request('/api/v1/notifications/read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notification_id: notificationId }),
+    })
+  },
+
+  markAllNotificationsRead(): Promise<void> {
+    return request('/api/v1/notifications/read-all', { method: 'POST' })
+  },
+
+  // ── Presence ───────────────────────────────────────
+
+  getUserPresence(userId: number): Promise<{
+    user_id: number
+    status: string
+    last_seen: number
+  }> {
+    return request(`/api/v1/users/${userId}/presence`)
+  },
+
+  getChatPresence(convId: number): Promise<{
+    conversation_id: number
+    members: Record<string, { status: string; last_seen: number }>
+  }> {
+    return request(`/api/v1/chats/${convId}/presence`)
   },
 }

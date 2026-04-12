@@ -18,6 +18,7 @@ from app.core.db import dispose_engine
 from app.core.logging import configure_logging
 from app.core.rate_limit import limiter
 from app.core.s3 import ensure_bucket_exists
+from app.core.ws_manager import ws_manager
 from app.middlewares.request_logging import RequestLoggingMiddleware
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -42,8 +43,10 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             actual=loop_type,
         )
     await ensure_bucket_exists()
+    await ws_manager.startup()
     yield
     logger.info("sound_api_shutting_down")
+    await ws_manager.shutdown()
     await dispose_engine()
 
 

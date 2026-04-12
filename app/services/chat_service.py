@@ -1,0 +1,192 @@
+from __future__ import annotations
+
+from typing import Any
+
+import structlog
+from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.repositories.block import BlockRepository
+from app.repositories.chat import ChatRepository
+
+logger: structlog.stdlib.BoundLogger = (
+    structlog.get_logger(__name__)
+)
+
+
+class ChatService:
+    def __init__(
+        self, session: AsyncSession
+    ) -> None:
+        self._repo = ChatRepository(session)
+        self._block_repo = BlockRepository(session)
+
+    async def create_dm(
+        self, user_id: int, target_id: int
+    ) -> dict[str, Any]:
+        if user_id == target_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot message yourself",
+            )
+        if await self._block_repo.is_blocked(
+            user_id, target_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User is blocked",
+            )
+
+        existing = await self._repo.find_dm(
+            user_id, target_id
+        )
+        if existing:
+            return {"conversation": existing}
+
+        conv = await self._repo.create_conversation(
+            type="dm", created_by_id=user_id
+        )
+        await self._repo.add_member(
+            conversation_id=conv.id,
+            user_id=user_id,
+            role="owner",
+        )
+        await self._repo.add_member(
+            conversation_id=conv.id,
+            user_id=target_id,
+            role="member",
+        )
+        logger.info(
+            "dm_created",
+            conv_id=conv.id,
+            user_a=user_id,
+            user_b=target_id,
+        )
+        return {"conversation": conv}
+
+    async def create_group(
+        self,
+        user_id: int,
+        title: str,
+        member_ids: list[int],
+    ) -> dict[str, Any]:
+        conv = await self._repo.create_conversation(
+            type="group",
+            title=title,
+            created_by_id=user_id,
+        )
+        await self._repo.add_member(
+            conversation_id=conv.id,
+            user_id=user_id,
+            role="owner",
+        )
+        for mid in member_ids:
+            if mid == user_id:
+                continue
+            if await self._block_repo.is_blocked(
+                user_id, mid
+            ):
+                continue
+            await self._repo.add_member(
+                conversation_id=conv.id,
+                user_id=mid,
+                role="member",
+            )
+        logger.info(
+            "group_created",
+            conv_id=conv.id,
+            owner=user_id,
+        )
+        return {"conversation": conv}
+
+    async def list_chats(
+        self, user_id: int
+    ) -> list[dict[str, Any]]:
+        return (
+            await self._repo.list_user_conversations(
+                user_id
+            )
+        )
+
+    async def pin_chat(
+        self, user_id: int, conv_id: int
+    ) -> None:
+        await self._ensure_member(
+            conv_id, user_id
+        )
+        await self._repo.set_pinned(
+            conv_id, user_id, True
+        )
+
+    async def unpin_chat(
+        self, user_id: int, conv_id: int
+    ) -> None:
+        await self._ensure_member(
+            conv_id, user_id
+        )
+        await self._repo.set_pinned(
+            conv_id, user_id, False
+        )
+
+    async def add_member(
+        self,
+        user_id: int,
+        conv_id: int,
+        new_member_id: int,
+    ) -> None:
+        member = await self._repo.get_member(
+            conv_id, user_id
+        )
+        if not member or member.role not in (
+            "owner",
+            "admin",
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not allowed",
+            )
+        await self._repo.add_member(
+            conversation_id=conv_id,
+            user_id=new_member_id,
+            role="member",
+        )
+
+    async def remove_member(
+        self,
+        user_id: int,
+        conv_id: int,
+        target_id: int,
+    ) -> None:
+        member = await self._repo.get_member(
+            conv_id, user_id
+        )
+        if not member or member.role not in (
+            "owner",
+            "admin",
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not allowed",
+            )
+        await self._repo.remove_member(
+            conv_id, target_id
+        )
+
+    async def get_member_ids(
+        self, conv_id: int
+    ) -> list[int]:
+        return await self._repo.get_member_ids(
+            conv_id
+        )
+
+    async def _ensure_member(
+        self, conv_id: int, user_id: int
+    ) -> None:
+        m = await self._repo.get_member(
+            conv_id, user_id
+        )
+        if not m:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member",
+            )

@@ -4,6 +4,7 @@ import { LikesProvider } from '@/store/LikesContext'
 import { PlayerProvider } from '@/store/PlayerContext'
 import { App } from './App'
 import './styles/global.css'
+import './styles/animations.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

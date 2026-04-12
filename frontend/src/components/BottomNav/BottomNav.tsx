@@ -7,6 +7,8 @@ export type ViewName =
   | 'liked'
   | 'playlists'
   | 'profile'
+  | 'chats'
+  | 'chat'
 
 interface NavItem {
   view: ViewName
@@ -22,14 +24,14 @@ const NAV_ITEMS: NavItem[] = [
     label: 'Поиск',
   },
   {
+    view: 'chats',
+    icon: 'message-circle',
+    label: 'Чаты',
+  },
+  {
     view: 'upload',
     icon: 'upload',
     label: 'Загрузить',
-  },
-  {
-    view: 'playlists',
-    icon: 'list',
-    label: 'Плейлисты',
   },
   {
     view: 'profile',

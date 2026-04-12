@@ -79,29 +79,98 @@ async def get_presigned_url(file_key: str) -> str:
     return url
 
 
+async def upload_image(
+    data: bytes,
+    prefix: str,
+    max_size: int | None = None,
+    user_id: int | None = None,
+) -> tuple[str, str, int, int]:
+    from app.services.media_service import (
+        process_image,
+    )
+
+    processed, thumb, w, h = process_image(
+        data, max_size
+    )
+
+    owner = str(user_id) if user_id else "anon"
+    base = f"{prefix}/{owner}/{uuid.uuid4().hex}"
+    img_key = f"{base}.webp"
+    thumb_key = f"{base}_thumb.webp"
+
+    logger.info(
+        "s3_image_upload_started",
+        img_key=img_key,
+        original_bytes=len(data),
+        processed_bytes=len(processed),
+    )
+    async with get_s3_client() as s3:
+        await s3.put_object(
+            Bucket=settings.minio_bucket,
+            Key=img_key,
+            Body=processed,
+            ContentType="image/webp",
+        )
+        await s3.put_object(
+            Bucket=settings.minio_bucket,
+            Key=thumb_key,
+            Body=thumb,
+            ContentType="image/webp",
+        )
+    logger.info(
+        "s3_image_upload_completed",
+        img_key=img_key,
+    )
+    return img_key, thumb_key, w, h
+
+
 async def upload_cover(
     data: bytes,
     content_type: str,
     user_id: int | None = None,
 ) -> str:
-    ext = _COVER_EXT_MAP.get(content_type, "jpg")
-    prefix = str(user_id) if user_id else "anon"
-    file_key = f"covers/{prefix}/{uuid.uuid4().hex}.{ext}"
+    img_key, _, _, _ = await upload_image(
+        data,
+        prefix="covers",
+        max_size=settings.image_cover_max_size,
+        user_id=user_id,
+    )
+    return img_key
 
+
+async def upload_voice(
+    data: bytes,
+    user_id: int | None = None,
+) -> tuple[str, int, list[float]]:
+    from app.services.media_service import (
+        process_voice,
+    )
+
+    ogg_data, duration, waveform = (
+        await process_voice(data)
+    )
+
+    owner = str(user_id) if user_id else "anon"
+    file_key = (
+        f"voice/{owner}/{uuid.uuid4().hex}.ogg"
+    )
     logger.info(
-        "s3_cover_upload_started",
+        "s3_voice_upload_started",
         file_key=file_key,
-        size_bytes=len(data),
+        duration=duration,
     )
     async with get_s3_client() as s3:
         await s3.put_object(
             Bucket=settings.minio_bucket,
             Key=file_key,
-            Body=data,
-            ContentType=content_type,
+            Body=ogg_data,
+            ContentType="audio/ogg",
         )
-    logger.info("s3_cover_upload_completed", file_key=file_key)
-    return file_key
+    logger.info(
+        "s3_voice_upload_completed",
+        file_key=file_key,
+    )
+    return file_key, duration, waveform
 
 
 async def delete_object(file_key: str) -> None:
@@ -118,22 +187,13 @@ async def upload_avatar(
     content_type: str,
     user_id: int,
 ) -> str:
-    ext = _COVER_EXT_MAP.get(content_type, "jpg")
-    file_key = f"avatars/{user_id}/{uuid.uuid4().hex}.{ext}"
-    logger.info(
-        "s3_avatar_upload_started",
-        file_key=file_key,
-        size_bytes=len(data),
+    img_key, _, _, _ = await upload_image(
+        data,
+        prefix="avatars",
+        max_size=settings.image_avatar_max_size,
+        user_id=user_id,
     )
-    async with get_s3_client() as s3:
-        await s3.put_object(
-            Bucket=settings.minio_bucket,
-            Key=file_key,
-            Body=data,
-            ContentType=content_type,
-        )
-    logger.info("s3_avatar_upload_completed", file_key=file_key)
-    return file_key
+    return img_key
 
 
 async def download_object_range(

@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.dependencies import get_current_user, get_db
+from app.models.user import User
+from app.schemas.chat import (
+    ReadNotificationsRequest,
+)
+from app.services.notification_service import (
+    NotificationService,
+)
+
+router = APIRouter(
+    prefix="/notifications", tags=["notifications"]
+)
+
+
+@router.get("")
+async def list_notifications(
+    cursor: int | None = None,
+    limit: int = 20,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    svc = NotificationService(session)
+    return await svc.list_notifications(
+        user.id, cursor, min(limit, 50)
+    )
+
+
+@router.get("/unread-count")
+async def unread_count(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    svc = NotificationService(session)
+    count = await svc.unread_count(user.id)
+    return {"count": count}
+
+
+@router.post("/read")
+async def mark_read(
+    body: ReadNotificationsRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    svc = NotificationService(session)
+    await svc.mark_read(
+        body.notification_id, user.id
+    )
+    return {"status": "read"}
+
+
+@router.post("/read-all")
+async def mark_all_read(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    svc = NotificationService(session)
+    await svc.mark_all_read(user.id)
+    return {"status": "all_read"}

@@ -4,6 +4,9 @@ from app.api.v1 import (
     admin,
     albums,
     auth,
+    blocks,
+    chats,
+    comments,
     complaints,
     dislikes,
     follows,
@@ -11,11 +14,14 @@ from app.api.v1 import (
     imports,
     likes,
     lyrics,
+    messages,
     metadata,
+    notifications,
     playlists,
     soundcloud,
     tracks,
     users,
+    ws,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -34,3 +40,9 @@ api_router.include_router(lyrics.router)
 api_router.include_router(follows.router)
 api_router.include_router(albums.router)
 api_router.include_router(imports.router)
+api_router.include_router(chats.router)
+api_router.include_router(messages.router)
+api_router.include_router(comments.router)
+api_router.include_router(blocks.router)
+api_router.include_router(notifications.router)
+api_router.include_router(ws.router)
