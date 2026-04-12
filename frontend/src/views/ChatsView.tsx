@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { ChatList } from '@/components/Chat/ChatList'
 import { Icon } from '@/components/Icon/Icon'
+import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import type { ChatListItem } from '@/types/api'
 
 interface UserResult {
@@ -15,7 +16,7 @@ interface UserResult {
 
 interface Props {
   active: boolean
-  onOpenChat: (convId: number) => void
+  onOpenChat: (convId: number, title?: string) => void
 }
 
 export function ChatsView({ active, onOpenChat }: Props) {
@@ -62,20 +63,25 @@ export function ChatsView({ active, onOpenChat }: Props) {
 
   const handleOpenSaved = async () => {
     const res = await api.getSavedChat()
-    onOpenChat(res.conversation.id)
+    onOpenChat(res.conversation.id, 'Избранное')
   }
 
   const handleSelectUser = async (userId: number) => {
     const res = await api.createDM(userId)
+    const user = searchResults.find((u) => u.id === userId)
+    const name = user
+      ? (user.display_name || user.first_name + (user.last_name ? ` ${user.last_name}` : ''))
+      : undefined
     setQuery('')
     setSearchResults([])
-    onOpenChat(res.conversation.id)
+    onOpenChat(res.conversation.id, name)
   }
 
   return (
     <div className={`view${active ? ' active' : ''}`}>
       <div className="chats-header">
         <h2 className="chats-title">Чаты</h2>
+        <NotificationBell />
       </div>
 
       <div className="chats-search-bar">

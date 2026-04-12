@@ -15,6 +15,7 @@ import { ProfileStats } from '@/components/Profile/ProfileStats'
 import { ProfileActions } from '@/components/Profile/ProfileActions'
 import { ProfileTrackList } from '@/components/Profile/ProfileTrackList'
 import { ImportView } from '@/components/Import/ImportView'
+import { NotificationBell } from '@/components/Notifications/NotificationBell'
 
 type ProfileTab = 'profile' | 'import'
 
@@ -177,14 +178,17 @@ export function ProfileView({
             Импорт
           </button>
         </div>
-        {onOpenSettings && (
-          <button
-            className="icon-btn profile-settings-btn"
-            onClick={onOpenSettings}
-          >
-            <Icon name="settings" size={20} />
-          </button>
-        )}
+        <div className="profile-header-actions">
+          <NotificationBell />
+          {onOpenSettings && (
+            <button
+              className="icon-btn profile-settings-btn"
+              onClick={onOpenSettings}
+            >
+              <Icon name="settings" size={20} />
+            </button>
+          )}
+        </div>
       </div>
 
       {tab === 'profile' && (

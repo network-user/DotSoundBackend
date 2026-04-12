@@ -4,6 +4,7 @@ import { onWS } from '@/lib/ws'
 import { getInternalUserId } from '@/lib/telegram'
 import { ChatBubble } from '@/components/Chat/ChatBubble'
 import { ChatInput } from '@/components/Chat/ChatInput'
+import { PhotoViewer } from '@/components/Chat/PhotoViewer'
 import { Icon } from '@/components/Icon/Icon'
 import type { ChatMessage } from '@/types/api'
 
@@ -16,17 +17,21 @@ const ACTIVITY_LABELS: Record<string, string> = {
 interface Props {
   active: boolean
   conversationId: number | null
+  title: string | null
   onBack: () => void
 }
 
-export function ChatView({ active, conversationId, onBack }: Props) {
+export function ChatView({ active, conversationId, title, onBack }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [peerStatus, setPeerStatus] = useState<string>('offline')
   const [peerActivity, setPeerActivity] = useState<string | null>(null)
   const [peerLastSeen, setPeerLastSeen] = useState<number>(0)
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const activityTimer = useRef<ReturnType<typeof setTimeout>>()
+  const uploadAbort = useRef<AbortController | null>(null)
+  const uploadTempId = useRef<number | null>(null)
   const myId = getInternalUserId()
 
   const loadMessages = useCallback(async () => {
@@ -50,7 +55,11 @@ export function ChatView({ active, conversationId, onBack }: Props) {
         const peer = members[0]
         setPeerStatus(peer.status)
         setPeerLastSeen(peer.last_seen)
+      } else {
+        setPeerStatus('self')
       }
+    }).catch(() => {
+      setPeerStatus('self')
     })
   }, [active, conversationId, loadMessages])
 
@@ -59,9 +68,14 @@ export function ChatView({ active, conversationId, onBack }: Props) {
 
     const offNew = onWS('message.new', (data) => {
       if (data.conversation_id === conversationId) {
-        setMessages((prev) => [...prev, data as unknown as ChatMessage])
+        const msg = data as unknown as ChatMessage
+        const msgId = msg.id ?? (data.message_id as number)
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msgId)) return prev
+          return [...prev, { ...msg, id: msgId }]
+        })
         if (data.sender_id !== myId) {
-          api.markRead(conversationId, data.message_id as number)
+          api.markRead(conversationId, msgId)
         }
         setPeerActivity(null)
       }
@@ -95,27 +109,88 @@ export function ChatView({ active, conversationId, onBack }: Props) {
     }
   }, [messages])
 
-  const handleSend = async (content: string) => {
-    if (!conversationId || !content.trim()) return
-    await api.sendMessage(conversationId, content)
+  const addMessage = (msg: ChatMessage) => {
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === msg.id)) return prev
+      return [...prev, msg]
+    })
   }
 
-  const handleSendPhoto = async (file: File) => {
+  const handleSend = async (content: string) => {
+    if (!conversationId || !content.trim()) return
+    const msg = await api.sendMessage(conversationId, content)
+    addMessage(msg)
+  }
+
+  const handleSendPhoto = async (file: File, caption: string) => {
     if (!conversationId) return
-    const fd = new FormData()
-    fd.append('file', file)
-    await api.sendPhoto(conversationId, fd)
+
+    const localUrl = URL.createObjectURL(file)
+    const tempId = -Date.now()
+    uploadTempId.current = tempId
+    const controller = new AbortController()
+    uploadAbort.current = controller
+
+    const placeholder: ChatMessage = {
+      id: tempId,
+      conversation_id: conversationId,
+      sender_id: myId ?? 0,
+      type: 'photo',
+      content: caption,
+      reply_to_id: null,
+      shared_track_id: null,
+      created_at: new Date().toISOString(),
+      attachments: [{
+        id: 0,
+        file_key: localUrl,
+        file_type: 'photo',
+      }],
+      reactions: [],
+      _uploading: true,
+    } as ChatMessage & { _uploading?: boolean }
+    setMessages((prev) => [...prev, placeholder])
+
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const msg = await api.sendPhoto(conversationId, fd)
+      if (caption) {
+        await api.sendMessage(conversationId, caption)
+      }
+      setMessages((prev) =>
+        prev.map((m) => (m.id === tempId ? { ...msg, _uploading: false } : m))
+      )
+    } catch {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId))
+    } finally {
+      URL.revokeObjectURL(localUrl)
+      uploadAbort.current = null
+      uploadTempId.current = null
+    }
+  }
+
+  const handleCancelUpload = () => {
+    uploadAbort.current?.abort()
+    if (uploadTempId.current !== null) {
+      setMessages((prev) =>
+        prev.filter((m) => m.id !== uploadTempId.current)
+      )
+    }
+    uploadAbort.current = null
+    uploadTempId.current = null
   }
 
   const handleSendVoice = async (blob: Blob) => {
     if (!conversationId) return
     const fd = new FormData()
     fd.append('file', blob, 'voice.ogg')
-    await api.sendVoice(conversationId, fd)
+    const msg = await api.sendVoice(conversationId, fd)
+    addMessage(msg)
   }
 
   const handleDelete = async (msgId: number) => {
     await api.deleteMessage(msgId)
+    setMessages((prev) => prev.filter((m) => m.id !== msgId))
   }
 
   const handleReaction = async (msgId: number, type: string) => {
@@ -134,6 +209,7 @@ export function ChatView({ active, conversationId, onBack }: Props) {
   }
 
   const renderStatusLine = () => {
+    if (peerStatus === 'self') return null
     if (peerActivity && ACTIVITY_LABELS[peerActivity]) {
       return (
         <span className="chat-status-text activity">
@@ -143,6 +219,13 @@ export function ChatView({ active, conversationId, onBack }: Props) {
     }
     if (peerStatus === 'online') {
       return <span className="chat-status-text online">в сети</span>
+    }
+    if (!peerLastSeen) {
+      return (
+        <span className="chat-status-text offline">
+          не в сети
+        </span>
+      )
     }
     return (
       <span className="chat-status-text offline">
@@ -159,13 +242,22 @@ export function ChatView({ active, conversationId, onBack }: Props) {
         <button className="chat-back-btn" onClick={onBack}>
           <Icon name="chevron" size={20} className="chat-back-icon" />
         </button>
+        {peerStatus === 'self' && (
+          <div className="chat-header-avatar saved">
+            <Icon name="heart" size={20} />
+          </div>
+        )}
         <div className="chat-header-info">
           <div className="chat-header-top">
-            <span className="chat-view-title">Чат</span>
+            <span className="chat-view-title">
+              {title || 'Чат'}
+            </span>
             {peerStatus === 'online' && <span className="presence-dot online" />}
           </div>
           <div className="chat-header-status">
-            {renderStatusLine()}
+            {peerStatus === 'self'
+              ? <span className="chat-status-text offline">личное пространство</span>
+              : renderStatusLine()}
           </div>
         </div>
       </div>
@@ -177,7 +269,21 @@ export function ChatView({ active, conversationId, onBack }: Props) {
             ))}
           </div>
         ) : messages.length === 0 ? (
-          <div className="empty-state">Нет сообщений</div>
+          <div className="chat-empty-state">
+            {peerStatus === 'self' ? (
+              <>
+                <div className="chat-empty-icon">
+                  <Icon name="heart" size={32} />
+                </div>
+                <div className="chat-empty-title">Избранное</div>
+                <div className="chat-empty-desc">
+                  Сохраняйте сюда важные сообщения, ссылки на треки и заметки
+                </div>
+              </>
+            ) : (
+              <div className="chat-empty-desc">Напишите первое сообщение</div>
+            )}
+          </div>
         ) : (
           messages.map((msg) => (
             <ChatBubble
@@ -186,6 +292,12 @@ export function ChatView({ active, conversationId, onBack }: Props) {
               isMine={msg.sender_id === myId}
               onDelete={handleDelete}
               onReaction={handleReaction}
+              onCancelUpload={
+                (msg as any)._uploading
+                  ? handleCancelUpload
+                  : undefined
+              }
+              onViewPhoto={setViewingPhoto}
             />
           ))
         )}
@@ -201,6 +313,12 @@ export function ChatView({ active, conversationId, onBack }: Props) {
         onSendPhoto={handleSendPhoto}
         onSendVoice={handleSendVoice}
       />
+      {viewingPhoto && (
+        <PhotoViewer
+          src={viewingPhoto}
+          onClose={() => setViewingPhoto(null)}
+        />
+      )}
     </div>
   )
 }

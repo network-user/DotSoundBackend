@@ -20,7 +20,6 @@ import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
 import { useDeepLink } from '@/hooks/useDeepLink'
-import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { HomeView } from '@/views/HomeView'
 import { LikedView } from '@/views/LikedView'
 import { ChatView } from '@/views/ChatView'
@@ -49,6 +48,8 @@ export function App() {
   const [openChatId, setOpenChatId] = useState<
     number | null
   >(null)
+  const [openChatTitle, setOpenChatTitle] =
+    useState<string | null>(null)
 
   useEffect(() => {
     const init = async () => {
@@ -132,8 +133,9 @@ export function App() {
         />
         <ChatsView
           active={activeView === 'chats'}
-          onOpenChat={(id) => {
+          onOpenChat={(id, title) => {
             setOpenChatId(id)
+            setOpenChatTitle(title ?? null)
             setActiveView('chat')
           }}
         />
@@ -148,9 +150,9 @@ export function App() {
       <ChatView
         active={activeView === 'chat'}
         conversationId={openChatId}
+        title={openChatTitle}
         onBack={() => setActiveView('chats')}
       />
-      <NotificationBell />
       <PlayerBar />
       <FullscreenLyrics />
       <Equalizer />
