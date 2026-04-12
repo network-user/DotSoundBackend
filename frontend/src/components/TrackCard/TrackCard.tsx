@@ -38,7 +38,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
     if (!internalId) return
     if (!confirm('Удалить трек?')) return
     try {
-      await api.deleteTrack(track.id, internalId)
+      await api.deleteTrack(track.id)
       onDeleted?.(track.id)
     } catch { }
   }
@@ -50,7 +50,6 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
       const updated = await api.updateTrack(
         track.id,
         { is_public: !track.is_public },
-        internalId,
       )
       onVisibilityChanged?.(updated)
     } catch { }

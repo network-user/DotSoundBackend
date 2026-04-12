@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Text,
+    false,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -42,13 +43,13 @@ class TrackComment(Base, TimestampMixin):
         Text, nullable=False
     )
     is_pinned: Mapped[bool] = mapped_column(
-        Boolean, server_default="false", nullable=False
+        Boolean, server_default=false(), nullable=False
     )
     is_hidden_by_author: Mapped[bool] = mapped_column(
-        Boolean, server_default="false", nullable=False
+        Boolean, server_default=false(), nullable=False
     )
     is_deleted: Mapped[bool] = mapped_column(
-        Boolean, server_default="false", nullable=False
+        Boolean, server_default=false(), nullable=False
     )
 
 

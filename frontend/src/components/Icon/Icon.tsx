@@ -44,6 +44,12 @@ const PATHS: Record<string, string> = {
     'M3 6h18m-2 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2',
   chevron:
     'M9 18l6-6-6-6',
+  plus: 'M12 5v14M5 12h14',
+  minus: 'M5 12h14',
+  download:
+    'M12 3v12m0 0l-5-5m5 5l5-5M5 21h14',
+  copy:
+    'M9 9h11v12H9zM4 15H3V4h11v1',
   maximize:
     'M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3',
   'volume-off': 'M11 5L6 9H2v6h4l5 4V5z M23 9l-6 6m0-6l6 6',

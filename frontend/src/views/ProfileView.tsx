@@ -105,7 +105,7 @@ export function ProfileView({
       )
 
     api
-      .getMyTracks(internalId)
+      .getMyTracks()
       .then((data) => setMyTracks(data.items))
       .catch(() => {})
   }, [active])
@@ -125,13 +125,10 @@ export function ProfileView({
   const handleToggleVisibility = async (
     track: Track,
   ) => {
-    const internalId = getInternalUserId()
-    if (!internalId) return
     try {
       const updated = await api.updateTrack(
         track.id,
         { is_public: !track.is_public },
-        internalId,
       )
       setMyTracks((prev) =>
         prev.map((t) =>
@@ -142,12 +139,10 @@ export function ProfileView({
   }
 
   const handleDelete = async (track: Track) => {
-    const internalId = getInternalUserId()
-    if (!internalId) return
     if (!confirm(`Удалить "${track.title}"?`))
       return
     try {
-      await api.deleteTrack(track.id, internalId)
+      await api.deleteTrack(track.id)
       setMyTracks((prev) =>
         prev.filter((t) => t.id !== track.id),
       )

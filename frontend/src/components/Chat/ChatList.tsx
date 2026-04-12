@@ -39,7 +39,14 @@ export function ChatList({ items, onOpenChat }: Props) {
           )}
         >
           <div className="chat-list-avatar">
-            <Icon name="user" size={24} />
+            <Icon
+              name={
+                item.conversation.type === 'saved'
+                  ? 'heart'
+                  : 'user'
+              }
+              size={24}
+            />
             {onlineMap[item.conversation.id] && (
               <span className="presence-dot online list-dot" />
             )}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import {
+  getInternalUserId,
   tg,
 } from '@/lib/telegram'
 import { TelegramAuth } from '@/components/Auth/TelegramAuth'
@@ -25,7 +26,81 @@ import { PlaylistsView } from '@/views/PlaylistsView'
 import { ProfileView } from '@/views/ProfileView'
 import { SearchView } from '@/views/SearchView'
 import { UploadView } from '@/views/UploadView'
-import { connectWS } from '@/lib/ws'
+import {
+  connectWS,
+  disconnectWS,
+} from '@/lib/ws'
+
+const CHAT_STATE_KEY_PREFIX = 'chat-state:'
+const RESTORABLE_VIEWS: ViewName[] = [
+  'home',
+  'search',
+  'upload',
+  'liked',
+  'playlists',
+  'profile',
+  'chats',
+  'chat',
+]
+
+function getChatStateKey(userId: number) {
+  return `${CHAT_STATE_KEY_PREFIX}${userId}`
+}
+
+function loadChatState(userId: number): {
+  activeView: ViewName
+  openChatId: number | null
+  openChatTitle: string | null
+} | null {
+  try {
+    const raw = localStorage.getItem(
+      getChatStateKey(userId),
+    )
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as {
+      activeView?: ViewName
+      openChatId?: number | null
+      openChatTitle?: string | null
+    }
+    if (
+      !parsed.activeView ||
+      !RESTORABLE_VIEWS.includes(
+        parsed.activeView,
+      )
+    ) {
+      return null
+    }
+    return {
+      activeView: parsed.activeView,
+      openChatId:
+        typeof parsed.openChatId === 'number'
+          ? parsed.openChatId
+          : null,
+      openChatTitle:
+        typeof parsed.openChatTitle === 'string'
+          ? parsed.openChatTitle
+          : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+function saveChatState(
+  userId: number,
+  state: {
+    activeView: ViewName
+    openChatId: number | null
+    openChatTitle: string | null
+  },
+) {
+  try {
+    localStorage.setItem(
+      getChatStateKey(userId),
+      JSON.stringify(state),
+    )
+  } catch {}
+}
 
 export function App() {
   const [activeView, setActiveView] =
@@ -47,14 +122,16 @@ export function App() {
   >(null)
   const [openChatTitle, setOpenChatTitle] =
     useState<string | null>(null)
+  const [navStateReady, setNavStateReady] =
+    useState(false)
 
   useEffect(() => {
     const init = async () => {
       let authenticated = false
-      const restored = api.restoreSession()
+      const hasTelegramContext = Boolean(tg.initData)
 
       try {
-        if (tg.initData) {
+        if (hasTelegramContext) {
           const authRes = await api.authTelegram(
             tg.initData,
           )
@@ -67,9 +144,15 @@ export function App() {
         console.error('[App] Auth failed:', err)
       }
 
-      if (!authenticated && restored?.token) {
+      if (
+        !authenticated &&
+        !hasTelegramContext
+      ) {
+        const restored = api.restoreSession()
+        if (restored?.token) {
         connectWS(restored.token)
         authenticated = true
+        }
       }
 
       if (!authenticated) {
@@ -89,6 +172,100 @@ export function App() {
     }
   }, [needsAuth])
 
+  useEffect(() => {
+    if (!isInitialized || needsAuth) {
+      setNavStateReady(false)
+      return
+    }
+    const userId = getInternalUserId()
+    if (!userId) {
+      setNavStateReady(true)
+      return
+    }
+
+    let cancelled = false
+
+    const restoreChatState = async () => {
+      setNavStateReady(false)
+      const saved = loadChatState(userId)
+      if (!saved) {
+        if (!cancelled) setNavStateReady(true)
+        return
+      }
+
+      if (
+        saved.activeView === 'chat' &&
+        saved.openChatId !== null
+      ) {
+        try {
+          const chats = await api.listChats()
+          if (cancelled) return
+          const exists = chats.some(
+            (item) =>
+              item.conversation.id ===
+              saved.openChatId,
+          )
+          if (exists) {
+            setOpenChatId(saved.openChatId)
+            setOpenChatTitle(
+              saved.openChatTitle,
+            )
+            setActiveView('chat')
+          } else {
+            setOpenChatId(null)
+            setOpenChatTitle(null)
+            setActiveView('chats')
+          }
+        } catch {
+          if (cancelled) return
+          setOpenChatId(null)
+          setOpenChatTitle(null)
+          setActiveView('chats')
+        } finally {
+          if (!cancelled) {
+            setNavStateReady(true)
+          }
+        }
+        return
+      }
+
+      setOpenChatId(null)
+      setOpenChatTitle(null)
+      setActiveView(saved.activeView)
+      setNavStateReady(true)
+    }
+
+    void restoreChatState()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isInitialized, needsAuth])
+
+  useEffect(() => {
+    if (
+      !isInitialized ||
+      needsAuth ||
+      !navStateReady
+    ) {
+      return
+    }
+    const userId = getInternalUserId()
+    if (!userId) return
+    saveChatState(userId, {
+      activeView,
+      openChatId,
+      openChatTitle,
+    })
+  }, [
+    activeView,
+    isInitialized,
+    navStateReady,
+    needsAuth,
+    openChatId,
+    openChatTitle,
+  ])
+
   useDeepLink()
 
   const handleOpenAuthor = (id: number) =>
@@ -96,6 +273,7 @@ export function App() {
   const handleCloseAuthor = () =>
     setAuthorId(null)
   const handleLogout = () => {
+    disconnectWS()
     api.logout()
     setSettingsOpen(false)
     setNeedsAuth(true)
@@ -143,6 +321,7 @@ export function App() {
         />
         <ChatsView
           active={activeView === 'chats'}
+          onOpenAuthor={handleOpenAuthor}
           onOpenChat={(id, title) => {
             setOpenChatId(id)
             setOpenChatTitle(title ?? null)

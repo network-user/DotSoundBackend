@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
-import { getInternalUserId } from '@/lib/telegram'
 import { Icon } from '@/components/Icon/Icon'
 import type { Track } from '@/types/api'
 
@@ -64,18 +63,10 @@ export function Equalizer() {
   }
 
   const loadPreviewTracks = async () => {
-    const uid = getInternalUserId()
-    if (!uid) {
-      setPreviewError(
-        'Нужно войти, чтобы выбрать трек для проверки',
-      )
-      return
-    }
-
     setPreviewLoading(true)
     setPreviewError(null)
     try {
-      const mine = await api.getMyTracks(uid, 1, 8)
+      const mine = await api.getMyTracks(1, 8)
       const ownTracks = mine.items.filter(
         (item) => item.is_active,
       )

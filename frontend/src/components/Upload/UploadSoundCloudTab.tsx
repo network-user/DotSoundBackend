@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { api } from '@/lib/api'
-import { getUserId } from '@/lib/telegram'
 import type { Track } from '@/types/api'
 
 interface Props {
@@ -22,7 +21,6 @@ export function UploadSoundCloudTab({ onSuccess }: Props) {
     try {
       const track = await api.importSCTrack(
         scUrl.trim(),
-        getUserId() ?? undefined,
         scPublic,
       )
       setSCPreview(track)

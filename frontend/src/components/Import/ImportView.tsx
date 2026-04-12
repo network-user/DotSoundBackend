@@ -56,7 +56,7 @@ export function ImportView({ active }: { active: boolean }) {
       } else if (j && j.status === 'ready') {
         setJob(j)
         setAudios(j.tracks_data?.audios || [])
-        const all = new Set(
+        const all = new Set<number>(
           (j.tracks_data?.audios || [])
             .map((_: AudioInfo, i: number) => i)
             .filter((i: number) => {
@@ -99,7 +99,7 @@ export function ImportView({ active }: { active: boolean }) {
       }
       const list = j.tracks_data?.audios || []
       setAudios(list)
-      const all = new Set(
+      const all = new Set<number>(
         list.map((_: AudioInfo, i: number) => i)
           .filter((i: number) => !list[i].file_size || list[i].file_size! <= MAX_FILE_SIZE)
       )
@@ -121,7 +121,7 @@ export function ImportView({ active }: { active: boolean }) {
   }
 
   const selectAll = () => {
-    const all = new Set(
+    const all = new Set<number>(
       audios.map((_, i) => i)
         .filter((i) => !audios[i].file_size || audios[i].file_size! <= MAX_FILE_SIZE)
     )

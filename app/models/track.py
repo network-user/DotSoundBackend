@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    true,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -50,7 +58,7 @@ class Track(Base, TimestampMixin):
         nullable=True,
     )
     is_active: Mapped[bool] = mapped_column(
-        Boolean, server_default="true", nullable=False
+        Boolean, server_default=true(), nullable=False
     )
     source: Mapped[str] = mapped_column(
         String(20), server_default="internal", nullable=False
@@ -64,14 +72,14 @@ class Track(Base, TimestampMixin):
         Text, nullable=True
     )
     is_public: Mapped[bool] = mapped_column(
-        Boolean, server_default="true", nullable=False
+        Boolean, server_default=true(), nullable=False
     )
     album_id: Mapped[int | None] = mapped_column(
         ForeignKey("albums.id", ondelete="SET NULL"),
         nullable=True,
     )
     comments_enabled: Mapped[bool] = mapped_column(
-        Boolean, server_default="true", nullable=False
+        Boolean, server_default=true(), nullable=False
     )
 
     complaints: Mapped[list[Complaint]] = relationship(

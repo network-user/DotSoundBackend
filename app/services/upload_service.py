@@ -139,7 +139,7 @@ class UploadService:
             content_type=mime,
         )
 
-        await transcode_and_upload.kiwi(
+        await transcode_and_upload.kiq(
             track_id=track.id,
             raw_key=raw_key,
             original_filename=file.filename or "track.mp3",

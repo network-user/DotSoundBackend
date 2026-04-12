@@ -55,5 +55,5 @@ export function getInternalUserId():
 }
 
 export function getUserId(): number | null {
-  return _internalUserId ?? telegramId
+  return _internalUserId
 }
