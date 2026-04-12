@@ -1,0 +1,8 @@
+# Replace with your real GitHub username before enabling strict rules.
+* @your-github-username
+
+docs/ai-boundary-policy.md @your-github-username
+docs/private-boundary-inventory.md @your-github-username
+scripts/check_boundary_policy.py @your-github-username
+.github/workflows/policy-guardrails.yml @your-github-username
+

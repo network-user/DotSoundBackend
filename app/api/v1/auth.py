@@ -1,10 +1,18 @@
-import random
-import string
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 import structlog
+from dotsound_private_core.contracts import (
+    INTERNAL_SECRET_HEADER,
+)
+from dotsound_private_core.services import (
+    build_internal_headers,
+    generate_code,
+    mask_ip,
+    parse_user_agent,
+    send_login_notification_url,
+)
 from fastapi import (
     APIRouter,
     Depends,
@@ -50,68 +58,6 @@ async def _get_redis() -> Any:
             settings.redis_url
         )
     return _redis_client
-
-
-def _generate_code() -> str:
-    return "".join(
-        random.choices(string.digits, k=6)
-    )
-
-
-def _mask_ip(ip: str) -> str:
-    parts = ip.split(".")
-    if len(parts) == 4:
-        return f"{parts[0]}.***.***.{parts[3]}"
-    return ip[:4] + "***"
-
-
-def _parse_user_agent(ua: str) -> str:
-    ua_lower = ua.lower()
-    browser = "Unknown"
-    os_name = "Unknown"
-
-    if (
-        "chrome" in ua_lower
-        and "edg" not in ua_lower
-    ):
-        browser = "Chrome"
-    elif "firefox" in ua_lower:
-        browser = "Firefox"
-    elif (
-        "safari" in ua_lower
-        and "chrome" not in ua_lower
-    ):
-        browser = "Safari"
-    elif "edg" in ua_lower:
-        browser = "Edge"
-
-    if "windows" in ua_lower:
-        os_name = "Windows"
-    elif (
-        "macintosh" in ua_lower
-        or "mac os" in ua_lower
-    ):
-        os_name = "macOS"
-    elif "android" in ua_lower:
-        os_name = "Android"
-    elif (
-        "iphone" in ua_lower
-        or "ipad" in ua_lower
-    ):
-        os_name = "iOS"
-    elif "linux" in ua_lower:
-        os_name = "Linux"
-
-    return f"{browser}, {os_name}"
-
-
-def _bot_headers() -> dict[str, str]:
-    headers: dict[str, str] = {}
-    if settings.bot_internal_secret:
-        headers["X-Internal-Secret"] = (
-            settings.bot_internal_secret
-        )
-    return headers
 
 
 class AuthConfigResponse(BaseModel):
@@ -211,7 +157,7 @@ async def generate_auth_code(
             detail="Internal secret not configured",
         )
     secret = request.headers.get(
-        "X-Internal-Secret", ""
+        INTERNAL_SECRET_HEADER, ""
     )
     if secret != settings.bot_internal_secret:
         raise HTTPException(
@@ -219,7 +165,7 @@ async def generate_auth_code(
             detail="Forbidden",
         )
 
-    code = _generate_code()
+    code = generate_code()
     redis = await _get_redis()
     await redis.setex(
         f"{_CODE_PREFIX}{code}",
@@ -289,13 +235,16 @@ async def verify_telegram_code(
             timeout=10
         ) as client:
             await client.post(
-                f"{settings.bot_internal_url}"
-                "/internal/send-login-notification",
-                headers=_bot_headers(),
+                send_login_notification_url(
+                    settings.bot_internal_url
+                ),
+                headers=build_internal_headers(
+                    settings.bot_internal_secret
+                ),
                 json={
                     "telegram_id": telegram_id,
-                    "ip": _mask_ip(client_ip),
-                    "device": _parse_user_agent(
+                    "ip": mask_ip(client_ip),
+                    "device": parse_user_agent(
                         user_agent
                     ),
                     "time": now.strftime(
@@ -313,8 +262,8 @@ async def verify_telegram_code(
     session.add(
         LoginHistory(
             user_id=user.id,
-            ip=_mask_ip(client_ip),
-            device=_parse_user_agent(user_agent),
+            ip=mask_ip(client_ip),
+            device=parse_user_agent(user_agent),
             login_type="web_code",
         )
     )

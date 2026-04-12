@@ -1,0 +1,12 @@
+---
+description: Enforce public/private boundary policy
+alwaysApply: true
+---
+
+# Public/Private Boundary
+
+- Follow `docs/ai-boundary-policy.md`.
+- Treat this repository as public showcase code.
+- Keep sensitive business rules in `DotSoundPrivateCore`.
+- If a request can cross boundaries and intent is unclear, stop and ask.
+

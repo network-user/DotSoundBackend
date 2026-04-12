@@ -5,6 +5,15 @@ DotSound — музыкальная платформа в Telegram (SoundCloud-s
 Этот репозиторий: FastAPI-бэкенд, PostgreSQL, MinIO, Redis, Taskiq.
 Связанный репозиторий: `DotSoundBot` (Telegram-бот, aiogram 3).
 
+## Жёсткие границы public/private
+- Этот репозиторий — публичная витрина. Private логика живёт в
+  `DotSoundPrivateCore`.
+- Любой агент обязан соблюдать `docs/ai-boundary-policy.md`.
+- Запрещено переносить private-код в public-ветку без явного
+  подтверждения владельца.
+- Если неясно, к какой зоне относится изменение, агент должен
+  остановиться и запросить подтверждение.
+
 ## Стек
 - Python 3.12
 - FastAPI (async, OpenAPI)
