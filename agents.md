@@ -3,7 +3,9 @@
 ## Проект
 DotSound — музыкальная платформа в Telegram (SoundCloud-style, UGC, без рекламы).
 Этот репозиторий: FastAPI-бэкенд, PostgreSQL, MinIO, Redis, Taskiq.
-Связанный репозиторий: `DotSoundBot` (Telegram-бот, aiogram 3).
+Связанные репозитории:
+- `DotSoundBot` (Telegram-бот, aiogram 3)
+- `DotSoundPrivateCore` (приватная бизнес-логика: алгоритмы, рекомендации, ML, scoring, anti-abuse)
 
 ## Жёсткие границы public/private
 - Этот репозиторий — публичная витрина. Private логика живёт в

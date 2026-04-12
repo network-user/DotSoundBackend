@@ -12,11 +12,15 @@ implemented in `DotSoundPrivateCore`.
 - App bootstrap and infra wiring.
 - Frontend Mini App UI and user-visible behavior.
 
-## Private Zone
+## Private Zone (lives in `DotSoundPrivateCore`)
 
-- Internal auth flow rules.
+- Internal auth flow rules and OTP generation.
 - Internal bridge contracts and secret-header policy.
-- Anti-abuse, scoring, risk, and monetization rules.
+- Anti-abuse, scoring, risk, and content moderation rules.
+- Recommendation algorithms (collaborative, content-based, feed).
+- ML pipelines (embeddings, genre classification, similarity).
+- Monetization and subscription logic.
+- Private analytics algorithms.
 - Production-only privileged automation.
 
 ## Mandatory Rules For Any AI Agent
@@ -26,6 +30,10 @@ implemented in `DotSoundPrivateCore`.
 3. If zone classification is ambiguous, stop and ask for approval.
 4. Keep external API behavior backward-compatible during migrations.
 5. Implement private rules via `dotsound_private_core` only.
+6. Backend may create thin adapter services that call PrivateCore,
+   but algorithms and business rules must stay in PrivateCore.
+7. Do not implement recommendation, scoring, ML, or anti-abuse
+   logic directly in this repository.
 
 ## Frontend Exposure Policy
 
