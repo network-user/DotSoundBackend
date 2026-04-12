@@ -14,12 +14,35 @@ export function SettingsSheet({
   onLogout,
 }: Props) {
   const { openEq } = usePlayer()
+  const [videoEnabled, setVideoEnabled] =
+    useState(
+      () =>
+        localStorage.getItem(
+          'setting-video-enabled',
+        ) !== 'false',
+    )
 
   if (!open) return null
 
   const handleEq = () => {
     onClose()
     openEq()
+  }
+
+  const handleVideoToggle = () => {
+    const next = !videoEnabled
+    setVideoEnabled(next)
+    localStorage.setItem(
+      'setting-video-enabled',
+      String(next),
+    )
+  }
+
+  const handleOpenBrowser = () => {
+    window.open(
+      window.location.href,
+      '_blank',
+    )
   }
 
   return (
@@ -58,6 +81,38 @@ export function SettingsSheet({
             />
           </button>
 
+          <div
+            className="settings-item"
+            onClick={handleVideoToggle}
+          >
+            <Icon name="video" size={20} />
+            <span>Видеоклипы</span>
+            <div
+              className={`settings-toggle${videoEnabled ? ' on' : ''}`}
+            >
+              <div className="settings-toggle-dot" />
+            </div>
+          </div>
+
+          <button
+            className="settings-item"
+            onClick={handleOpenBrowser}
+          >
+            <Icon name="maximize" size={20} />
+            <span>Открыть в браузере</span>
+            <Icon
+              name="chevron"
+              size={16}
+              className="settings-chevron"
+            />
+          </button>
+
+          <div className="settings-hint">
+            Для управления музыкой с экрана
+            блокировки откройте .sound в
+            браузере
+          </div>
+
           <button
             className="settings-item disabled"
             disabled
@@ -67,17 +122,6 @@ export function SettingsSheet({
               size={20}
             />
             <span>Качество звука</span>
-            <span className="settings-badge">
-              скоро
-            </span>
-          </button>
-
-          <button
-            className="settings-item disabled"
-            disabled
-          >
-            <Icon name="text" size={20} />
-            <span>Язык</span>
             <span className="settings-badge">
               скоро
             </span>
