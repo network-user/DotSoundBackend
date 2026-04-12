@@ -25,6 +25,7 @@ DotSound — музыкальная платформа в Telegram (SoundCloud-s
 - **Полная асинхронность**: async/await везде
 - Настройки только через `app/config.py` (pydantic-settings)
 - `os.environ` напрямую — запрещено
+- **Без эмодзи в UI** — вместо дефолтных эмодзи используем монохромные SVG иконки из `components/Icon/Icon.tsx`. Все иконки stroke-based, currentColor. Стиль проекта: **минимализм, монохром**
 
 ## Архитектурные слои
 ```

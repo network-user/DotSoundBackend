@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
+import { Icon } from '@/components/Icon/Icon'
 import type { LyricsResponse } from '@/types/api'
 import { LyricsEditor } from './LyricsEditor'
 
@@ -10,49 +15,86 @@ interface Props {
   hasLyrics: boolean
 }
 
-export function LyricsPanel({ trackId, isOwner, hasLyrics }: Props) {
-  const { currentTime } = usePlayer()
-  const [lyrics, setLyrics] = useState<LyricsResponse | null>(null)
+export function LyricsPanel({
+  trackId,
+  isOwner,
+  hasLyrics,
+}: Props) {
+  const { currentTime, duration, seek } =
+    usePlayer()
+  const [lyrics, setLyrics] =
+    useState<LyricsResponse | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [editing, setEditing] = useState(!hasLyrics && isOwner)
-  const activeLyricsRef = useRef<HTMLDivElement>(null)
+  const [error, setError] = useState<
+    string | null
+  >(null)
+  const [editing, setEditing] = useState(
+    !hasLyrics && isOwner,
+  )
+  const activeRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!hasLyrics) return
     setLoading(true)
-    api.getLyrics(trackId)
+    api
+      .getLyrics(trackId)
       .then(setLyrics)
-      .catch(() => setError('Не удалось загрузить текст'))
+      .catch(() =>
+        setError('Не удалось загрузить текст'),
+      )
       .finally(() => setLoading(false))
   }, [trackId, hasLyrics])
 
-  // Find active line index by currentTime
   const activeIdx = (() => {
     if (!lyrics?.synced_lines?.length) return -1
     const ms = currentTime * 1000
     let idx = 0
-    for (let i = 0; i < lyrics.synced_lines.length; i++) {
-      if (lyrics.synced_lines[i].time_ms <= ms) idx = i
+    for (
+      let i = 0;
+      i < lyrics.synced_lines.length;
+      i++
+    ) {
+      if (lyrics.synced_lines[i].time_ms <= ms)
+        idx = i
       else break
     }
     return idx
   })()
 
-  // Auto-scroll to active line
   useEffect(() => {
-    if (activeLyricsRef.current) {
-      activeLyricsRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    if (activeRef.current) {
+      activeRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
     }
   }, [activeIdx])
 
-  const handleSaved = (updated: LyricsResponse) => {
+  const handleLineClick = (timeMs: number) => {
+    if (!duration) return
+    const pct = (timeMs / 1000 / duration) * 100
+    seek(pct)
+  }
+
+  const handleSaved = (
+    updated: LyricsResponse,
+  ) => {
     setLyrics(updated)
     setEditing(false)
   }
 
-  if (loading) return <div className="lyrics-panel"><div className="loader" /></div>
-  if (error) return <div className="lyrics-panel lyrics-error">{error}</div>
+  if (loading)
+    return (
+      <div className="lyrics-panel">
+        <div className="loader" />
+      </div>
+    )
+  if (error)
+    return (
+      <div className="lyrics-panel lyrics-error">
+        {error}
+      </div>
+    )
 
   if (editing || (!hasLyrics && isOwner)) {
     return (
@@ -60,7 +102,9 @@ export function LyricsPanel({ trackId, isOwner, hasLyrics }: Props) {
         trackId={trackId}
         existingLyrics={lyrics}
         onSaved={handleSaved}
-        onCancel={() => hasLyrics && setEditing(false)}
+        onCancel={() =>
+          hasLyrics && setEditing(false)
+        }
       />
     )
   }
@@ -70,30 +114,43 @@ export function LyricsPanel({ trackId, isOwner, hasLyrics }: Props) {
   return (
     <div className="lyrics-panel">
       <div className="lyrics-panel-header">
-        <span className="lyrics-panel-title">Текст</span>
+        <span className="lyrics-panel-title">
+          Текст
+        </span>
         {isOwner && (
-          <button className="lyrics-edit-btn" onClick={() => setEditing(true)}>
-            ✏️ Редактировать
+          <button
+            className="lyrics-edit-btn"
+            onClick={() => setEditing(true)}
+          >
+            <Icon name="edit" size={14} />
+            Редактировать
           </button>
         )}
       </div>
 
       <div className="lyrics-content">
-        {lyrics.synced_lines?.length ? (
-          // Synced lyrics — highlight current line
-          lyrics.synced_lines.map((line, i) => (
-            <div
-              key={i}
-              ref={i === activeIdx ? activeLyricsRef : null}
-              className={`lyrics-line${i === activeIdx ? ' lyrics-line-active' : ''}`}
-            >
-              {line.text}
-            </div>
-          ))
-        ) : (
-          // Plain text lyrics
-          <pre className="lyrics-plain">{lyrics.plain_text}</pre>
-        )}
+        {lyrics.synced_lines?.length
+          ? lyrics.synced_lines.map((line, i) => (
+              <div
+                key={i}
+                ref={
+                  i === activeIdx
+                    ? activeRef
+                    : null
+                }
+                className={`lyrics-line${i === activeIdx ? ' lyrics-line-active' : ''}`}
+                onClick={() =>
+                  handleLineClick(line.time_ms)
+                }
+              >
+                {line.text}
+              </div>
+            ))
+          : (
+            <pre className="lyrics-plain">
+              {lyrics.plain_text}
+            </pre>
+          )}
       </div>
     </div>
   )
