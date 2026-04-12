@@ -64,7 +64,11 @@ const PATHS: Record<string, string> = {
     'M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4m7 14l5-5-5-5m5 5H9',
 }
 
-const FILLED_ICONS = new Set(['heart', 'play'])
+const FILLED_ICONS = new Set([
+  'heart',
+  'play',
+  'pause',
+])
 
 export function Icon({
   name,

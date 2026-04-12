@@ -1170,8 +1170,29 @@ textarea.form-input { resize: none; }
   align-items: center;
   justify-content: center;
   background: rgba(10, 10, 10, 0.7);
+  z-index: 2;
+  border-radius: var(--radius-lg);
+}
+.tcs-lyrics-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 10, 10, 0.8);
   z-index: 1;
   border-radius: var(--radius-lg);
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.tcs-lyrics-overlay::-webkit-scrollbar { display: none; }
+.tcs-lyrics-overlay .lyrics-panel { margin: 0; border: none; padding: 0; }
+.tcs-lyrics-overlay .lyrics-content { max-height: none; padding: 0; }
+.tcs-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 /* Track info */
@@ -1431,16 +1452,22 @@ textarea.form-input { resize: none; }
   max-height: 40dvh;
   overflow-y: auto;
   scrollbar-width: none;
+  padding: 0 16px;
 }
 .lyrics-content::-webkit-scrollbar { display: none; }
 
 /* Synced lyrics */
 .lyrics-line {
-  padding: 4px 0;
+  padding: 6px 0;
   font-size: 15px;
   color: var(--text-muted);
   line-height: 1.6;
   transition: color 0.2s, transform 0.2s;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.lyrics-line:hover {
+  color: var(--text-secondary);
 }
 .lyrics-line-active {
   color: var(--text);

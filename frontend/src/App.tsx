@@ -7,6 +7,7 @@ import {
   tg,
 } from '@/lib/telegram'
 import { TelegramAuth } from '@/components/Auth/TelegramAuth'
+import { ArtistView } from '@/components/ArtistView/ArtistView'
 import { AuthorView } from '@/components/AuthorView/AuthorView'
 import {
   BottomNav,
@@ -34,7 +35,13 @@ export function App() {
   >(null)
   const [isInitialized, setIsInitialized] =
     useState(false)
-  const [needsAuth, setNeedsAuth] = useState(false)
+  const [needsAuth, setNeedsAuth] =
+    useState(false)
+  const [settingsOpen, setSettingsOpen] =
+    useState(false)
+  const [artistName, setArtistName] = useState<
+    string | null
+  >(null)
 
   useEffect(() => {
     const init = async () => {
@@ -63,6 +70,16 @@ export function App() {
 
   useDeepLink()
 
+  const handleOpenAuthor = (id: number) =>
+    setAuthorId(id)
+  const handleCloseAuthor = () =>
+    setAuthorId(null)
+  const handleLogout = () => {
+    api.logout()
+    setSettingsOpen(false)
+    setNeedsAuth(true)
+  }
+
   if (!isInitialized) {
     return (
       <div className="splash-screen">
@@ -82,17 +99,6 @@ export function App() {
         onAuth={() => setNeedsAuth(false)}
       />
     )
-  }
-
-  const [settingsOpen, setSettingsOpen] =
-    useState(false)
-  const handleOpenAuthor = (id: number) =>
-    setAuthorId(id)
-  const handleCloseAuthor = () => setAuthorId(null)
-  const handleLogout = () => {
-    api.logout()
-    setSettingsOpen(false)
-    setNeedsAuth(true)
   }
 
   return (
@@ -133,11 +139,20 @@ export function App() {
       <ComplaintModal />
       <TrackCardSheet
         onOpenAuthor={handleOpenAuthor}
+        onOpenArtist={(name) =>
+          setArtistName(name)
+        }
       />
       {authorId !== null && (
         <AuthorView
           authorId={authorId}
           onClose={handleCloseAuthor}
+        />
+      )}
+      {artistName !== null && (
+        <ArtistView
+          artistName={artistName}
+          onClose={() => setArtistName(null)}
         />
       )}
       <BottomNav

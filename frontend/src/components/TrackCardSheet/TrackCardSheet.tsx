@@ -17,6 +17,7 @@ import { LyricsPanel } from './LyricsPanel'
 
 interface Props {
   onOpenAuthor: (authorId: number) => void
+  onOpenArtist?: (name: string) => void
 }
 
 const GENERATE_COOLDOWN_MS = 20_000
@@ -36,6 +37,7 @@ function coverUrl(k: string, v: number) {
 
 export function TrackCardSheet({
   onOpenAuthor,
+  onOpenArtist,
 }: Props) {
   const {
     track,
@@ -294,13 +296,45 @@ export function TrackCardSheet({
               <Icon name="music" size={72} />
             </div>
           )}
+          {showLyrics && (
+            <div className="tcs-lyrics-overlay">
+              <LyricsPanel
+                trackId={track.id}
+                isOwner={isOwner}
+                hasLyrics={
+                  card?.has_lyrics ?? false
+                }
+              />
+            </div>
+          )}
         </div>
 
         <div className="tcs-info">
-          <h2 className="tcs-title">
-            {track.title}
-          </h2>
-          <p className="tcs-artist">
+          <div className="tcs-title-row">
+            <h2 className="tcs-title">
+              {track.title}
+            </h2>
+            <button
+              className="icon-btn"
+              onClick={handleShare}
+            >
+              <Icon name="link" size={18} />
+            </button>
+          </div>
+          <p
+            className="tcs-artist"
+            onClick={() => {
+              if (track.artist && onOpenArtist) {
+                closeCard()
+                onOpenArtist(track.artist)
+              }
+            }}
+            style={
+              track.artist
+                ? { cursor: 'pointer' }
+                : undefined
+            }
+          >
             {track.artist ?? '—'}
           </p>
           {card?.author && (
@@ -426,16 +460,6 @@ export function TrackCardSheet({
             <Icon name="text" size={20} />
             <span className="tcs-action-label">
               Текст
-            </span>
-          </button>
-
-          <button
-            className="tcs-action-btn"
-            onClick={handleShare}
-          >
-            <Icon name="link" size={20} />
-            <span className="tcs-action-label">
-              Поделиться
             </span>
           </button>
 
@@ -574,14 +598,6 @@ export function TrackCardSheet({
           style={{ display: 'none' }}
           onChange={handleVideoSelected}
         />
-
-        {showLyrics && track && (
-          <LyricsPanel
-            trackId={track.id}
-            isOwner={isOwner}
-            hasLyrics={card?.has_lyrics ?? false}
-          />
-        )}
 
         {loading && !card && (
           <div className="tcs-loader">
