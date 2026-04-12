@@ -1,5 +1,11 @@
 import httpx
 import structlog
+from dotsound_private_core.services import (
+    MAX_IMPORT_FILE_SIZE_BYTES,
+    build_internal_headers,
+    download_audio_url,
+    resolve_audio_extension,
+)
 
 from app.config import settings
 from app.core.db import AsyncSessionLocal
@@ -38,11 +44,9 @@ async def process_import_job(job_id: int) -> None:
             await session.commit()
             return
 
-        headers: dict[str, str] = {}
-        if settings.bot_internal_secret:
-            headers["X-Internal-Secret"] = (
-                settings.bot_internal_secret
-            )
+        headers = build_internal_headers(
+            settings.bot_internal_secret
+        )
 
         imported_tracks: list[dict] = []
 
@@ -63,7 +67,10 @@ async def process_import_job(job_id: int) -> None:
                 title=title,
             )
 
-            if file_size and file_size > 20 * 1024 * 1024:
+            if (
+                file_size
+                and file_size > MAX_IMPORT_FILE_SIZE_BYTES
+            ):
                 job.failed_tracks += 1
                 imported_tracks.append(
                     {
@@ -80,8 +87,9 @@ async def process_import_job(job_id: int) -> None:
                     timeout=_BOT_DOWNLOAD_TIMEOUT
                 ) as client:
                     resp = await client.post(
-                        f"{settings.bot_internal_url}"
-                        "/internal/download-audio",
+                        download_audio_url(
+                            settings.bot_internal_url
+                        ),
                         headers=headers,
                         json={"file_id": file_id},
                     )
@@ -95,16 +103,7 @@ async def process_import_job(job_id: int) -> None:
                 mime = audio_info.get(
                     "mime_type", "audio/mpeg"
                 )
-                ext_map = {
-                    "audio/mpeg": "mp3",
-                    "audio/ogg": "ogg",
-                    "audio/mp4": "m4a",
-                    "audio/x-m4a": "m4a",
-                    "audio/flac": "flac",
-                }
-                ext = ext_map.get(
-                    mime or "", "mp3"
-                )
+                ext = resolve_audio_extension(mime)
 
                 file_key = await upload_audio(
                     data=audio_bytes,

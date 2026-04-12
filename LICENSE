@@ -1,0 +1,63 @@
+DotSound Source-Available License 1.0
+
+Copyright (c) 2026 DotSound
+All rights reserved.
+
+1. Definitions
+
+"Software" means the source code and all related files in this
+repository.
+
+"Licensor" means the copyright holder of this Software.
+
+2. Limited Permission
+
+Subject to this license, Licensor grants a personal, revocable,
+non-exclusive, non-transferable, non-sublicensable right to:
+
+- view and read the Software source code;
+- evaluate the Software for interview, portfolio review, security
+  review, or due diligence;
+- run local, non-production experiments strictly for evaluation.
+
+3. Restrictions
+
+Without prior written permission from Licensor, you may not:
+
+- use the Software in production;
+- use the Software for any commercial purpose;
+- host, offer, or expose the Software as a service;
+- redistribute the Software, in source or binary form;
+- sublicense, sell, rent, lease, or otherwise monetize the Software;
+- create or distribute derivative products based on the Software;
+- integrate the Software into another project or organization workflow;
+- use the Software or derivatives to train machine learning models;
+- remove or alter copyright, licensing, or attribution notices.
+
+4. Ownership
+
+All intellectual property rights in the Software remain with Licensor.
+No rights are granted except those expressly stated in this license.
+
+5. Termination
+
+Any breach of this license immediately terminates your rights under it.
+Upon termination, you must stop all use and delete all copies.
+
+6. Warranty Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+7. Liability Limitation
+
+IN NO EVENT SHALL LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY, WHETHER IN CONTRACT, TORT, OR OTHERWISE, ARISING FROM OR IN
+CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+8. Commercial Licensing
+
+For any use beyond this license, a separate written commercial license
+agreement is required from Licensor.
+

@@ -3,6 +3,10 @@
 API-сервер музыкальной платформы DotSound — SoundCloud-style, UGC, без рекламы.
 Хранит треки в MinIO, метаданные в PostgreSQL, раздаёт Telegram Mini App.
 
+> Этот репозиторий опубликован как engineering showcase.
+> Критичная закрытая логика выносится в приватный репозиторий
+> `DotSoundPrivateCore`.
+
 ---
 
 ## Стек
@@ -193,6 +197,11 @@ DotSoundBackend/
 └── pyproject.toml
 ```
 
+Приватное ядро, которое не публикуется в этом репозитории:
+
+- `DotSoundPrivateCore` — internal auth policies, protected
+  integration contracts, anti-abuse и другие production-only правила.
+
 ---
 
 ## Команды разработчика
@@ -216,6 +225,19 @@ poetry run alembic revision --autogenerate -m "описание изменени
 # Откатить последнюю миграцию
 poetry run alembic downgrade -1
 ```
+
+---
+
+## License / Usage Restrictions
+
+Репозиторий **не является open source**.
+
+- Лицензия: [`LICENSE`](./LICENSE)
+- Ограничения использования: [`NOTICE`](./NOTICE)
+
+Разрешён просмотр и не-production оценка кода. Продакшн-использование,
+коммерческая эксплуатация, SaaS-хостинг, встраивание в другие продукты
+и перераспространение запрещены без письменного разрешения.
 
 ---
 

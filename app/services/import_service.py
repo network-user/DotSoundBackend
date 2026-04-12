@@ -1,7 +1,9 @@
-from typing import Any
-
 import httpx
 import structlog
+from dotsound_private_core.services import (
+    build_internal_headers,
+    profile_audios_url,
+)
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,14 +42,6 @@ class ImportService:
             )
         return user
 
-    def _bot_headers(self) -> dict[str, str]:
-        headers: dict[str, str] = {}
-        if settings.bot_internal_secret:
-            headers["X-Internal-Secret"] = (
-                settings.bot_internal_secret
-            )
-        return headers
-
     async def scan_telegram_profile(
         self, user_id: int
     ) -> ImportJob:
@@ -71,10 +65,13 @@ class ImportService:
                 timeout=_BOT_TIMEOUT
             ) as client:
                 resp = await client.get(
-                    f"{settings.bot_internal_url}"
-                    f"/internal/profile-audios"
-                    f"/{user.telegram_id}",
-                    headers=self._bot_headers(),
+                    profile_audios_url(
+                        settings.bot_internal_url,
+                        user.telegram_id,
+                    ),
+                    headers=build_internal_headers(
+                        settings.bot_internal_secret
+                    ),
                 )
                 if resp.status_code != 200:
                     job.status = "failed"
