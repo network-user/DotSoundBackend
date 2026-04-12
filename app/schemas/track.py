@@ -64,6 +64,10 @@ class TrackUpdateRequest(BaseModel):
 class StreamResponse(BaseModel):
     track_id: int
     url: str
+    stream_type: str = Field(
+        default="direct",
+        description="direct or hls",
+    )
     expires_in: int = Field(
         default=3600, description="URL TTL in seconds"
     )

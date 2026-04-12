@@ -95,30 +95,36 @@ class SoundCloudService:
             r.raise_for_status()
             return r.json()
 
-    async def get_stream_url(self, sc_url: str) -> str:
+    async def get_stream_info(
+        self,
+        sc_url: str,
+        prefer_hls: bool = False,
+    ) -> tuple[str, str]:
         sc_data = await self.resolve_url(sc_url)
         transcodings: list[dict] = (
             sc_data.get("media", {}).get("transcodings", [])
         )
         track_auth: str = sc_data.get("track_authorization", "")
 
-        selected = next(
-            (
-                t for t in transcodings
-                if t.get("format", {}).get("protocol") == "progressive"
-                and not t.get("snipped")
-            ),
-            None,
+        protocols = (
+            ["hls", "progressive"]
+            if prefer_hls
+            else ["progressive", "hls"]
         )
-        if not selected:
+        selected: dict | None = None
+        for protocol in protocols:
             selected = next(
                 (
-                    t for t in transcodings
-                    if t.get("format", {}).get("protocol") == "hls"
+                    t
+                    for t in transcodings
+                    if t.get("format", {}).get("protocol")
+                    == protocol
                     and not t.get("snipped")
                 ),
                 None,
             )
+            if selected:
+                break
 
         if not selected:
             raise HTTPException(
@@ -138,57 +144,22 @@ class SoundCloudService:
                     detail="SoundCloud client_id expired, update SC_CLIENT_ID",
                 )
             r.raise_for_status()
-            return r.json()["url"]
+            return (
+                r.json()["url"],
+                selected.get("format", {}).get(
+                    "protocol", "progressive"
+                ),
+            )
+
+    async def get_stream_url(self, sc_url: str) -> str:
+        url, _ = await self.get_stream_info(sc_url)
+        return url
 
     async def get_hls_url(self, sc_url: str) -> str:
-        """Like get_stream_url but prefers HLS over progressive.
-
-        HLS is better for poor network conditions due to small chunks
-        and native buffering support.
-        """
-        sc_data = await self.resolve_url(sc_url)
-        transcodings: list[dict] = (
-            sc_data.get("media", {}).get("transcodings", [])
+        url, _ = await self.get_stream_info(
+            sc_url, prefer_hls=True
         )
-        track_auth: str = sc_data.get("track_authorization", "")
-
-        selected = next(
-            (
-                t for t in transcodings
-                if t.get("format", {}).get("protocol") == "hls"
-                and not t.get("snipped")
-            ),
-            None,
-        )
-        if not selected:
-            selected = next(
-                (
-                    t for t in transcodings
-                    if t.get("format", {}).get("protocol") == "progressive"
-                    and not t.get("snipped")
-                ),
-                None,
-            )
-
-        if not selected:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="No streamable format found for this SC track",
-            )
-
-        params: dict = {"client_id": self._client_id}
-        if track_auth:
-            params["track_authorization"] = track_auth
-
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(selected["url"], params=params)
-            if r.status_code in (401, 403):
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="SoundCloud client_id expired, update SC_CLIENT_ID",
-                )
-            r.raise_for_status()
-            return r.json()["url"]
+        return url
 
     async def import_or_get_track(
         self,

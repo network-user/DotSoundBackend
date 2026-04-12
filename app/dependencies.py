@@ -1,6 +1,5 @@
 from collections.abc import AsyncGenerator
 
-import structlog
 from fastapi import Depends, HTTPException, status
 from fastapi.security import (
     HTTPAuthorizationCredentials,
@@ -15,9 +14,6 @@ from app.models.user import User
 from app.repositories.user import UserRepository
 
 _bearer = HTTPBearer(auto_error=False)
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -41,8 +37,6 @@ async def get_current_user(
     session: AsyncSession = Depends(get_db),
 ) -> User:
     if not credentials:
-        if settings.debug:
-            return await _get_debug_user(session)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -54,8 +48,6 @@ async def get_current_user(
             credentials.credentials
         )
     except AuthError:
-        if settings.debug:
-            return await _get_debug_user(session)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -73,23 +65,6 @@ async def get_current_user(
             detail="User not found or inactive",
         )
     return user
-
-
-async def _get_debug_user(
-    session: AsyncSession,
-) -> User:
-    """Fallback user for local development only."""
-    repo = UserRepository(session)
-    first_user = await repo.get_first_user()
-    user = first_user
-    if user:
-        logger.warning("debug_auth_fallback_used")
-        return user
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="No debug user found; register first",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
 
 
 async def require_admin(

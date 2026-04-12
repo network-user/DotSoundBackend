@@ -64,9 +64,18 @@ async def stream_track(
         from app.services.soundcloud_service import SoundCloudService
 
         sc_service = SoundCloudService(settings.sc_client_id, session)
-        stream_url = await sc_service.get_stream_url(track.sc_url)
+        stream_url, protocol = (
+            await sc_service.get_stream_info(track.sc_url)
+        )
         return StreamResponse(
-            track_id=track_id, url=stream_url, expires_in=300
+            track_id=track_id,
+            url=stream_url,
+            stream_type=(
+                "hls"
+                if protocol == "hls"
+                else "direct"
+            ),
+            expires_in=300,
         )
     if not track.file_key:
         raise HTTPException(
@@ -75,7 +84,11 @@ async def stream_track(
         )
     url = await s3.get_presigned_url(track.file_key)
     logger.info("stream_url_generated", track_id=track_id)
-    return StreamResponse(track_id=track_id, url=url)
+    return StreamResponse(
+        track_id=track_id,
+        url=url,
+        stream_type="direct",
+    )
 
 
 @router.post(
@@ -169,8 +182,12 @@ async def audio_stream(
         from app.services.soundcloud_service import SoundCloudService
 
         sc_service = SoundCloudService(settings.sc_client_id, session)
-        hls_url = await sc_service.get_hls_url(track.sc_url)
-        return RedirectResponse(url=hls_url, status_code=302)
+        stream_url = await sc_service.get_stream_url(
+            track.sc_url
+        )
+        return RedirectResponse(
+            url=stream_url, status_code=302
+        )
 
     if not track.file_key:
         raise HTTPException(

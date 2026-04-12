@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import {
-  getInternalUserId,
-  setInternalUserId,
-  telegramId,
   tg,
 } from '@/lib/telegram'
 import { TelegramAuth } from '@/components/Auth/TelegramAuth'
@@ -53,24 +50,18 @@ export function App() {
 
   useEffect(() => {
     const init = async () => {
+      let authenticated = false
       try {
         const authRes = await api.authTelegram(tg.initData)
         if (authRes?.access_token) {
           connectWS(authRes.access_token)
+          authenticated = true
         }
       } catch (err) {
         console.error('[App] Auth failed:', err)
       }
 
-      if (!getInternalUserId() && telegramId) {
-        try {
-          const profile =
-            await api.getUserProfile(telegramId)
-          setInternalUserId(profile.id)
-        } catch {}
-      }
-
-      if (!getInternalUserId()) {
+      if (!authenticated) {
         setNeedsAuth(true)
       }
 
@@ -78,6 +69,14 @@ export function App() {
     }
     init()
   }, [])
+
+  useEffect(() => {
+    if (needsAuth) return
+    const token = api.getToken()
+    if (token) {
+      connectWS(token)
+    }
+  }, [needsAuth])
 
   useDeepLink()
 

@@ -1,7 +1,6 @@
 import mimetypes
 
 import structlog
-from pydantic import BaseModel, field_validator
 from fastapi import (
     APIRouter,
     Depends,
@@ -19,6 +18,10 @@ from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.album import AlbumResponse
+from app.schemas.eq import (
+    EqSettingsRequest,
+    EqSettingsResponse,
+)
 from app.schemas.track import TrackListResponse, TrackResponse
 from app.schemas.user import (
     AvatarResponse,
@@ -28,6 +31,7 @@ from app.schemas.user import (
     UserUpdateRequest,
 )
 from app.services.album_service import AlbumService
+from app.services.eq_service import EqService
 from app.services.follow_service import FollowService
 from app.services.stats_service import StatsService
 from app.services.track_service import TrackService
@@ -315,85 +319,36 @@ async def get_login_history(
     ]
 
 
-@router.get("/me/eq")
+@router.get(
+    "/me/eq",
+    response_model=EqSettingsResponse,
+)
 @limiter.limit("60/minute")
 async def get_eq_settings(
     request: Request,
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict:
-    from sqlalchemy import select
-    from app.models.eq_settings import (
-        UserEqSettings,
+) -> EqSettingsResponse:
+    service = EqService(session)
+    return await service.get_settings(
+        current_user.id
     )
 
-    result = await session.execute(
-        select(UserEqSettings).where(
-            UserEqSettings.user_id == current_user.id
-        )
-    )
-    eq = result.scalar_one_or_none()
-    if not eq:
-        return {
-            "preset": "Flat",
-            "bands": [0, 0, 0, 0, 0, 0, 0, 0],
-        }
-    return {
-        "preset": eq.preset,
-        "bands": eq.bands,
-    }
 
-
-class EqSettingsRequest(BaseModel):
-    preset: str | None = None
-    bands: list[float]
-
-    @field_validator("bands")
-    @classmethod
-    def validate_bands(
-        cls, v: list[float],
-    ) -> list[float]:
-        if len(v) != 8:
-            raise ValueError("bands must have 8 values")
-        for b in v:
-            if not (-12 <= b <= 12):
-                raise ValueError(
-                    "each band must be between -12 and 12"
-                )
-        return v
-
-
-@router.put("/me/eq")
+@router.put(
+    "/me/eq",
+    response_model=EqSettingsResponse,
+)
 @limiter.limit("30/minute")
 async def save_eq_settings(
     request: Request,
     body: EqSettingsRequest,
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict:
-    from sqlalchemy import select
-    from app.models.eq_settings import (
-        UserEqSettings,
+) -> EqSettingsResponse:
+    service = EqService(session)
+    return await service.save_settings(
+        current_user.id,
+        body.preset,
+        body.bands,
     )
-
-    preset = body.preset
-    bands = body.bands
-
-    result = await session.execute(
-        select(UserEqSettings).where(
-            UserEqSettings.user_id == current_user.id
-        )
-    )
-    eq = result.scalar_one_or_none()
-    if eq:
-        eq.preset = preset
-        eq.bands = bands
-    else:
-        eq = UserEqSettings(
-            user_id=current_user.id,
-            preset=preset,
-            bands=bands,
-        )
-        session.add(eq)
-
-    return {"preset": preset, "bands": bands}

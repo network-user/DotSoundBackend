@@ -280,6 +280,10 @@ export const api = {
     accessToken = token
   },
 
+  getToken(): string | null {
+    return accessToken
+  },
+
   logout() {
     accessToken = null
     setInternalUserId(null)

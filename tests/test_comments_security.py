@@ -2,6 +2,7 @@ import pytest
 from httpx import AsyncClient
 
 from tests.conftest import (
+    auth_headers,
     create_test_track,
     create_test_user,
 )
@@ -18,16 +19,21 @@ async def test_add_and_get_comments(
     t = await create_test_track(
         client, "Song", u["id"]
     )
+    headers = await auth_headers(
+        client, u["id"]
+    )
 
     r = await client.post(
         f"/api/v1/tracks/{t['id']}/comments",
         json={"text": "Great song!"},
+        headers=headers,
     )
     assert r.status_code == 200
     comment_id = r.json()["id"]
 
     r = await client.get(
-        f"/api/v1/tracks/{t['id']}/comments"
+        f"/api/v1/tracks/{t['id']}/comments",
+        headers=headers,
     )
     assert r.status_code == 200
     assert any(
@@ -47,17 +53,22 @@ async def test_non_owner_cannot_pin(
     t = await create_test_track(
         client, "Track", owner["id"]
     )
+    other_headers = await auth_headers(
+        client, other["id"]
+    )
 
     r = await client.post(
         f"/api/v1/tracks/{t['id']}/comments",
         json={"text": "comment"},
+        headers=other_headers,
     )
     cid = r.json()["id"]
 
     r = await client.post(
-        f"/api/v1/comments/{cid}/pin"
+        f"/api/v1/comments/{cid}/pin",
+        headers=other_headers,
     )
-    assert r.status_code in (200, 403)
+    assert r.status_code == 403
 
 
 async def test_comments_disabled(
@@ -69,10 +80,14 @@ async def test_comments_disabled(
     t = await create_test_track(
         client, "NoComments", u["id"]
     )
+    headers = await auth_headers(
+        client, u["id"]
+    )
 
     r = await client.post(
         f"/api/v1/tracks/{t['id']}/comments",
         json={"text": "test"},
+        headers=headers,
     )
     assert r.status_code == 200
 
@@ -86,20 +101,26 @@ async def test_vote_comment(
     t = await create_test_track(
         client, "Voteable", u["id"]
     )
+    headers = await auth_headers(
+        client, u["id"]
+    )
 
     r = await client.post(
         f"/api/v1/tracks/{t['id']}/comments",
         json={"text": "nice"},
+        headers=headers,
     )
     cid = r.json()["id"]
 
     r = await client.post(
         f"/api/v1/comments/{cid}/vote",
         json={"is_like": True},
+        headers=headers,
     )
     assert r.status_code == 200
 
     r = await client.delete(
-        f"/api/v1/comments/{cid}/vote"
+        f"/api/v1/comments/{cid}/vote",
+        headers=headers,
     )
     assert r.status_code == 200
