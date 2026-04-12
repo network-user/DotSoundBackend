@@ -21,6 +21,13 @@ export function SettingsSheet({
           'setting-video-enabled',
         ) !== 'false',
     )
+  const [monoEnabled, setMonoEnabled] =
+    useState(
+      () =>
+        localStorage.getItem(
+          'setting-monochrome',
+        ) === 'true',
+    )
 
   if (!open) return null
 
@@ -35,6 +42,19 @@ export function SettingsSheet({
     localStorage.setItem(
       'setting-video-enabled',
       String(next),
+    )
+  }
+
+  const handleMonoToggle = () => {
+    const next = !monoEnabled
+    setMonoEnabled(next)
+    localStorage.setItem(
+      'setting-monochrome',
+      String(next),
+    )
+    document.body.classList.toggle(
+      'monochrome',
+      next,
     )
   }
 
@@ -89,6 +109,19 @@ export function SettingsSheet({
             <span>Видеоклипы</span>
             <div
               className={`settings-toggle${videoEnabled ? ' on' : ''}`}
+            >
+              <div className="settings-toggle-dot" />
+            </div>
+          </div>
+
+          <div
+            className="settings-item"
+            onClick={handleMonoToggle}
+          >
+            <Icon name="moon" size={20} />
+            <span>Монохром</span>
+            <div
+              className={`settings-toggle${monoEnabled ? ' on' : ''}`}
             >
               <div className="settings-toggle-dot" />
             </div>
