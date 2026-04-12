@@ -1,3 +1,5 @@
+import hmac
+import ipaddress
 from datetime import datetime, timezone
 from typing import Any
 
@@ -27,6 +29,7 @@ from app.config import settings
 from app.core.auth import (
     AuthError,
     create_access_token,
+    create_scoped_token,
     verify_telegram_init_data,
 )
 from app.core.rate_limit import limiter
@@ -279,6 +282,28 @@ async def verify_telegram_code(
     )
 
 
+_INTERNAL_ALLOWED_NETS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+]
+
+_INTERNAL_TOKEN_SCOPE = "bot_player"
+_INTERNAL_TOKEN_TTL_MIN = 15
+
+
+def _is_internal_ip(ip_str: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return False
+    return any(
+        addr in net for net in _INTERNAL_ALLOWED_NETS
+    )
+
+
 class InternalTokenRequest(BaseModel):
     telegram_id: int
 
@@ -286,12 +311,31 @@ class InternalTokenRequest(BaseModel):
 @router.post(
     "/internal-token",
     response_model=TokenResponse,
+    include_in_schema=False,
 )
+@limiter.limit("5/minute")
 async def internal_token(
     request: Request,
     body: InternalTokenRequest,
     session: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
+    client_ip = (
+        request.client.host
+        if request.client
+        else "unknown"
+    )
+
+    if not _is_internal_ip(client_ip):
+        logger.warning(
+            "internal_token_blocked_ip",
+            ip=client_ip,
+            telegram_id=body.telegram_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
+
     if not settings.bot_internal_secret:
         raise HTTPException(
             status_code=(
@@ -299,10 +343,22 @@ async def internal_token(
             ),
             detail="Internal secret not configured",
         )
-    secret = request.headers.get(
-        INTERNAL_SECRET_HEADER, ""
+
+    provided = (
+        request.headers.get(
+            INTERNAL_SECRET_HEADER, ""
+        )
+        .encode()
     )
-    if secret != settings.bot_internal_secret:
+    expected = (
+        settings.bot_internal_secret.encode()
+    )
+    if not hmac.compare_digest(provided, expected):
+        logger.warning(
+            "internal_token_bad_secret",
+            ip=client_ip,
+            telegram_id=body.telegram_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Forbidden",
@@ -318,18 +374,28 @@ async def internal_token(
             detail="User not found",
         )
 
-    token = create_access_token(
-        user.id, user.is_admin
+    token = create_scoped_token(
+        user.id,
+        scope=_INTERNAL_TOKEN_SCOPE,
+        ttl_minutes=_INTERNAL_TOKEN_TTL_MIN,
+    )
+
+    user_agent = request.headers.get(
+        "user-agent", ""
     )
     logger.info(
         "internal_token_issued",
         user_id=user.id,
         telegram_id=body.telegram_id,
+        scope=_INTERNAL_TOKEN_SCOPE,
+        ttl_min=_INTERNAL_TOKEN_TTL_MIN,
+        ip=client_ip,
+        ua=user_agent[:80],
     )
     return TokenResponse(
         access_token=token,
         user_id=user.id,
-        is_admin=user.is_admin,
+        is_admin=False,
     )
 
 

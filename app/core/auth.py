@@ -87,6 +87,29 @@ def create_access_token(
     )
 
 
+def create_scoped_token(
+    user_id: int,
+    scope: str,
+    ttl_minutes: int = 15,
+) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=ttl_minutes
+    )
+    payload: dict[str, object] = {
+        "sub": str(user_id),
+        "scope": scope,
+        "admin": False,
+        "exp": expire,
+    }
+    return str(
+        jwt.encode(
+            payload,
+            settings.jwt_secret,
+            algorithm=_ALGORITHM,
+        )
+    )
+
+
 def decode_access_token(
     token: str,
 ) -> dict[str, object]:
