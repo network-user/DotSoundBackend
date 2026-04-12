@@ -4,6 +4,7 @@ from typing import Any
 
 import structlog
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.conversation import (
@@ -47,6 +48,7 @@ class ChatService:
     def __init__(
         self, session: AsyncSession
     ) -> None:
+        self._session = session
         self._repo = ChatRepository(session)
         self._block_repo = BlockRepository(session)
         self._user_repo = UserRepository(session)
@@ -188,6 +190,7 @@ class ChatService:
         conv_id: int,
         new_member_id: int,
     ) -> None:
+        await self._ensure_not_saved(conv_id)
         member = await self._repo.get_member(
             conv_id, user_id
         )
@@ -211,6 +214,7 @@ class ChatService:
         conv_id: int,
         target_id: int,
     ) -> None:
+        await self._ensure_not_saved(conv_id)
         member = await self._repo.get_member(
             conv_id, user_id
         )
@@ -236,9 +240,7 @@ class ChatService:
     async def get_or_create_saved(
         self, user_id: int
     ) -> dict[str, Any]:
-        existing = await self._repo.find_dm(
-            user_id, user_id
-        )
+        existing = await self._repo.find_saved(user_id)
         if existing:
             return {
                 "conversation": _conv_to_dict(
@@ -246,16 +248,29 @@ class ChatService:
                 )
             }
 
-        conv = await self._repo.create_conversation(
-            type="saved",
-            title="Избранное",
-            created_by_id=user_id,
-        )
-        await self._repo.add_member(
-            conversation_id=conv.id,
-            user_id=user_id,
-            role="owner",
-        )
+        try:
+            conv = await self._repo.create_conversation(
+                type="saved",
+                title="Избранное",
+                created_by_id=user_id,
+            )
+            await self._repo.add_member(
+                conversation_id=conv.id,
+                user_id=user_id,
+                role="owner",
+            )
+        except IntegrityError:
+            await self._session.rollback()
+            existing = await self._repo.find_saved(
+                user_id
+            )
+            if existing:
+                return {
+                    "conversation": _conv_to_dict(
+                        existing
+                    )
+                }
+            raise
         logger.info(
             "saved_created",
             conv_id=conv.id,
@@ -293,4 +308,21 @@ class ChatService:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not a member",
+            )
+
+    async def _ensure_not_saved(
+        self, conv_id: int
+    ) -> None:
+        conv = await self._repo.get_conversation(
+            conv_id
+        )
+        if not conv:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+        if conv.type == "saved":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Saved chat membership is immutable",
             )

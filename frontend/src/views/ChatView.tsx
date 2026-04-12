@@ -34,6 +34,106 @@ export function ChatView({ active, conversationId, title, onBack }: Props) {
   const uploadTempId = useRef<number | null>(null)
   const myId = getInternalUserId()
 
+  const mergeIncomingMessage = (
+    data: Record<string, unknown>,
+  ) => {
+    const msgId = Number(
+      data.id ?? data.message_id,
+    )
+    if (!Number.isFinite(msgId)) return
+    const nextMessage = {
+      id: msgId,
+      conversation_id: Number(
+        data.conversation_id,
+      ),
+      sender_id: Number(data.sender_id),
+      type: String(data.type || 'text'),
+      content: String(data.content || ''),
+      reply_to_id:
+        typeof data.reply_to_id === 'number'
+          ? data.reply_to_id
+          : null,
+      shared_track_id:
+        typeof data.shared_track_id === 'number'
+          ? data.shared_track_id
+          : null,
+      created_at: String(data.created_at),
+      attachments: Array.isArray(data.attachments)
+        ? data.attachments
+        : [],
+      reactions: Array.isArray(data.reactions)
+        ? data.reactions
+        : [],
+    } as ChatMessage
+
+    setMessages((prev) => {
+      const index = prev.findIndex(
+        (msg) => msg.id === msgId,
+      )
+      if (index === -1) {
+        return [...prev, nextMessage]
+      }
+      return prev.map((msg) =>
+        msg.id === msgId
+          ? { ...msg, ...nextMessage }
+          : msg,
+      )
+    })
+  }
+
+  const applyReactionEvent = (
+    data: Record<string, unknown>,
+  ) => {
+    const msgId = Number(data.message_id)
+    const userId = Number(data.user_id)
+    const reactionType = String(
+      data.reaction_type || '',
+    )
+    const action = String(data.action || 'add')
+    if (
+      !Number.isFinite(msgId) ||
+      !Number.isFinite(userId) ||
+      !reactionType
+    ) {
+      return
+    }
+
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== msgId) return msg
+        const existing = msg.reactions.some(
+          (reaction) =>
+            reaction.user_id === userId &&
+            reaction.reaction_type === reactionType,
+        )
+        if (action === 'remove') {
+          return {
+            ...msg,
+            reactions: msg.reactions.filter(
+              (reaction) =>
+                !(
+                  reaction.user_id === userId &&
+                  reaction.reaction_type ===
+                    reactionType
+                ),
+            ),
+          }
+        }
+        if (existing) return msg
+        return {
+          ...msg,
+          reactions: [
+            ...msg.reactions,
+            {
+              user_id: userId,
+              reaction_type: reactionType,
+            },
+          ],
+        }
+      }),
+    )
+  }
+
   const loadMessages = useCallback(async () => {
     if (!conversationId) return
     setLoading(true)
@@ -68,13 +168,14 @@ export function ChatView({ active, conversationId, title, onBack }: Props) {
 
     const offNew = onWS('message.new', (data) => {
       if (data.conversation_id === conversationId) {
-        const msg = data as unknown as ChatMessage
-        const msgId = msg.id ?? (data.message_id as number)
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === msgId)) return prev
-          return [...prev, { ...msg, id: msgId }]
-        })
-        if (data.sender_id !== myId) {
+        mergeIncomingMessage(data)
+        const msgId = Number(
+          data.id ?? data.message_id,
+        )
+        if (
+          Number.isFinite(msgId) &&
+          data.sender_id !== myId
+        ) {
           api.markRead(conversationId, msgId)
         }
         setPeerActivity(null)
@@ -100,7 +201,23 @@ export function ChatView({ active, conversationId, title, onBack }: Props) {
       }
     })
 
-    return () => { offNew(); offDel(); offActivity() }
+    const offReaction = onWS(
+      'message.reaction',
+      (data) => {
+        if (
+          data.conversation_id === conversationId
+        ) {
+          applyReactionEvent(data)
+        }
+      },
+    )
+
+    return () => {
+      offNew()
+      offDel()
+      offActivity()
+      offReaction()
+    }
   }, [conversationId, myId])
 
   useEffect(() => {
@@ -194,6 +311,17 @@ export function ChatView({ active, conversationId, title, onBack }: Props) {
   }
 
   const handleReaction = async (msgId: number, type: string) => {
+    const hasOwnReaction = messages
+      .find((msg) => msg.id === msgId)
+      ?.reactions.some(
+        (reaction) =>
+          reaction.user_id === myId &&
+          reaction.reaction_type === type,
+      )
+    if (hasOwnReaction) {
+      await api.removeReaction(msgId, type)
+      return
+    }
     await api.addReaction(msgId, type)
   }
 

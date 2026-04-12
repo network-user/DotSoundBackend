@@ -1,4 +1,7 @@
-import { setInternalUserId } from '@/lib/telegram'
+import {
+  getInternalUserId,
+  setInternalUserId,
+} from '@/lib/telegram'
 import type {
   AppNotification,
   AuthorProfile,
@@ -61,6 +64,14 @@ function isTokenExpired(token: string): boolean {
   if (!Number.isFinite(exp)) return false
   const now = Math.floor(Date.now() / 1000)
   return exp <= now
+}
+
+function getTokenUserId(
+  token: string,
+): number | null {
+  const payload = decodeJwtPayload(token)
+  const sub = Number(payload?.sub)
+  return Number.isFinite(sub) ? sub : null
 }
 
 function persistToken(
@@ -130,8 +141,8 @@ export const api = {
     return request(`/api/v1/tracks${query}`)
   },
 
-  getMyTracks(userId: number, page = 1, size = 50): Promise<TrackListResponse> {
-    return request(`/api/v1/tracks/my?user_id=${userId}&page=${page}&size=${size}`)
+  getMyTracks(page = 1, size = 50): Promise<TrackListResponse> {
+    return request(`/api/v1/tracks/my?page=${page}&size=${size}`)
   },
 
   getTrack(id: number): Promise<Track> {
@@ -165,16 +176,16 @@ export const api = {
     return request('/api/v1/tracks/upload', { method: 'POST', body: formData })
   },
 
-  updateTrack(trackId: number, data: { is_public?: boolean }, requesterId: number): Promise<Track> {
-    return request(`/api/v1/tracks/${trackId}?requester_id=${requesterId}`, {
+  updateTrack(trackId: number, data: { is_public?: boolean }): Promise<Track> {
+    return request(`/api/v1/tracks/${trackId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
   },
 
-  deleteTrack(trackId: number, requesterId: number): Promise<void> {
-    return request(`/api/v1/tracks/${trackId}?requester_id=${requesterId}`, {
+  deleteTrack(trackId: number): Promise<void> {
+    return request(`/api/v1/tracks/${trackId}`, {
       method: 'DELETE',
     })
   },
@@ -183,11 +194,11 @@ export const api = {
     return request(`/api/v1/soundcloud/search?q=${encodeURIComponent(q)}&limit=${limit}`)
   },
 
-  importSCTrack(sc_url: string, uploader_id?: number, is_public = true): Promise<Track> {
+  importSCTrack(sc_url: string, is_public = true): Promise<Track> {
     return request('/api/v1/soundcloud/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sc_url, uploader_id, is_public }),
+      body: JSON.stringify({ sc_url, is_public }),
     })
   },
 
@@ -360,12 +371,27 @@ export const api = {
   restoreSession():
     | {
         token: string
+        userId: number
       }
     | null {
     const token = loadStoredToken()
-    if (!token) return null
+    if (!token) {
+      setInternalUserId(null)
+      return null
+    }
+    const userId = getTokenUserId(token)
+    const storedUserId = getInternalUserId()
+    if (
+      userId === null ||
+      (storedUserId !== null && storedUserId !== userId)
+    ) {
+      persistToken(null)
+      setInternalUserId(null)
+      return null
+    }
     accessToken = token
-    return { token }
+    setInternalUserId(userId)
+    return { token, userId }
   },
 
   logout() {

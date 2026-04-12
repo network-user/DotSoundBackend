@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ws_manager import ws_manager
+from app.models.message import Message
 from app.repositories.block import BlockRepository
 from app.repositories.chat import ChatRepository
 from app.repositories.message import (
@@ -39,6 +40,7 @@ class MessageService:
         msg_type: str = "text",
         reply_to_id: int | None = None,
         shared_track_id: int | None = None,
+        broadcast: bool = True,
     ) -> dict[str, Any]:
         member = await self._chat_repo.get_member(
             conversation_id, sender_id
@@ -81,27 +83,7 @@ class MessageService:
             shared_track_id=shared_track_id,
         )
 
-        event = {
-            "event": "message.new",
-            "message_id": msg.id,
-            "conversation_id": conversation_id,
-            "sender_id": sender_id,
-            "type": msg_type,
-            "content": content,
-            "reply_to_id": reply_to_id,
-            "shared_track_id": shared_track_id,
-            "created_at": msg.created_at.isoformat(),
-        }
-        await ws_manager.send_to_conversation(
-            members, event
-        )
-
-        logger.info(
-            "message_sent",
-            msg_id=msg.id,
-            conv_id=conversation_id,
-        )
-        return {
+        result = {
             "id": msg.id,
             "conversation_id": conversation_id,
             "sender_id": sender_id,
@@ -110,7 +92,25 @@ class MessageService:
             "reply_to_id": reply_to_id,
             "shared_track_id": shared_track_id,
             "created_at": msg.created_at.isoformat(),
+            "attachments": [],
+            "reactions": [],
         }
+        if broadcast:
+            await ws_manager.send_to_conversation(
+                members,
+                {
+                    "event": "message.new",
+                    "message_id": msg.id,
+                    **result,
+                },
+            )
+
+        logger.info(
+            "message_sent",
+            msg_id=msg.id,
+            conv_id=conversation_id,
+        )
+        return result
 
     async def delete_message(
         self, message_id: int, user_id: int
@@ -168,64 +168,12 @@ class MessageService:
             conversation_id, cursor, limit
         )
 
-        result: list[dict[str, Any]] = []
-        for msg in msgs:
-            text = ""
-            if (
-                msg.encrypted_content
-                and msg.content_nonce
-            ):
-                text = await decrypt_message(
-                    self._session,
-                    conversation_id,
-                    msg.encrypted_content,
-                    msg.content_nonce,
-                )
-
-            attachments = (
-                await self._msg_repo.get_attachments(
-                    msg.id
-                )
+        return [
+            await self._serialize_message(
+                msg, conversation_id
             )
-            reactions = (
-                await self._msg_repo.get_reactions(
-                    msg.id
-                )
-            )
-
-            result.append(
-                {
-                    "id": msg.id,
-                    "conversation_id": conversation_id,
-                    "sender_id": msg.sender_id,
-                    "type": msg.type,
-                    "content": text,
-                    "reply_to_id": msg.reply_to_id,
-                    "shared_track_id": msg.shared_track_id,
-                    "created_at": msg.created_at.isoformat(),
-                    "attachments": [
-                        {
-                            "id": a.id,
-                            "file_key": a.file_key,
-                            "file_type": a.file_type,
-                            "file_size_bytes": a.file_size_bytes,
-                            "duration_seconds": a.duration_seconds,
-                            "waveform": a.waveform,
-                            "width": a.width,
-                            "height": a.height,
-                        }
-                        for a in attachments
-                    ],
-                    "reactions": [
-                        {
-                            "user_id": r.user_id,
-                            "reaction_type": r.reaction_type,
-                        }
-                        for r in reactions
-                    ],
-                }
-            )
-        return result
+            for msg in msgs
+        ]
 
     async def add_reaction(
         self,
@@ -241,6 +189,14 @@ class MessageService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Message not found",
             )
+        member = await self._chat_repo.get_member(
+            msg.conversation_id, user_id
+        )
+        if not member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member",
+            )
         await self._msg_repo.add_reaction(
             message_id, user_id, reaction_type
         )
@@ -254,6 +210,7 @@ class MessageService:
             {
                 "event": "message.reaction",
                 "message_id": message_id,
+                "conversation_id": msg.conversation_id,
                 "user_id": user_id,
                 "reaction_type": reaction_type,
                 "action": "add",
@@ -266,8 +223,40 @@ class MessageService:
         user_id: int,
         reaction_type: str,
     ) -> None:
+        msg = await self._msg_repo.get_by_id(
+            message_id
+        )
+        if not msg:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Message not found",
+            )
+        member = await self._chat_repo.get_member(
+            msg.conversation_id, user_id
+        )
+        if not member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member",
+            )
         await self._msg_repo.remove_reaction(
             message_id, user_id, reaction_type
+        )
+        members = (
+            await self._chat_repo.get_member_ids(
+                msg.conversation_id
+            )
+        )
+        await ws_manager.send_to_conversation(
+            members,
+            {
+                "event": "message.reaction",
+                "message_id": message_id,
+                "conversation_id": msg.conversation_id,
+                "user_id": user_id,
+                "reaction_type": reaction_type,
+                "action": "remove",
+            },
         )
 
     async def mark_as_read(
@@ -298,3 +287,82 @@ class MessageService:
                 "message_id": message_id,
             },
         )
+
+    async def broadcast_message(
+        self, message_id: int
+    ) -> None:
+        msg = await self._msg_repo.get_by_id(
+            message_id
+        )
+        if not msg or msg.is_deleted:
+            return
+        members = (
+            await self._chat_repo.get_member_ids(
+                msg.conversation_id
+            )
+        )
+        payload = await self._serialize_message(
+            msg, msg.conversation_id
+        )
+        await ws_manager.send_to_conversation(
+            members,
+            {
+                "event": "message.new",
+                "message_id": msg.id,
+                **payload,
+            },
+        )
+
+    async def _serialize_message(
+        self,
+        msg: Message,
+        conversation_id: int,
+    ) -> dict[str, Any]:
+        text = ""
+        if (
+            msg.encrypted_content
+            and msg.content_nonce
+        ):
+            text = await decrypt_message(
+                self._session,
+                conversation_id,
+                msg.encrypted_content,
+                msg.content_nonce,
+            )
+
+        attachments = await self._msg_repo.get_attachments(
+            msg.id
+        )
+        reactions = await self._msg_repo.get_reactions(
+            msg.id
+        )
+        return {
+            "id": msg.id,
+            "conversation_id": conversation_id,
+            "sender_id": msg.sender_id,
+            "type": msg.type,
+            "content": text,
+            "reply_to_id": msg.reply_to_id,
+            "shared_track_id": msg.shared_track_id,
+            "created_at": msg.created_at.isoformat(),
+            "attachments": [
+                {
+                    "id": a.id,
+                    "file_key": a.file_key,
+                    "file_type": a.file_type,
+                    "file_size_bytes": a.file_size_bytes,
+                    "duration_seconds": a.duration_seconds,
+                    "waveform": a.waveform,
+                    "width": a.width,
+                    "height": a.height,
+                }
+                for a in attachments
+            ],
+            "reactions": [
+                {
+                    "user_id": r.user_id,
+                    "reaction_type": r.reaction_type,
+                }
+                for r in reactions
+            ],
+        }

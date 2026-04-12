@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
+import { onWS } from '@/lib/ws'
 import { ChatList } from '@/components/Chat/ChatList'
 import { Icon } from '@/components/Icon/Icon'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
@@ -16,10 +17,15 @@ interface UserResult {
 
 interface Props {
   active: boolean
+  onOpenAuthor: (userId: number) => void
   onOpenChat: (convId: number, title?: string) => void
 }
 
-export function ChatsView({ active, onOpenChat }: Props) {
+export function ChatsView({
+  active,
+  onOpenAuthor,
+  onOpenChat,
+}: Props) {
   const [chats, setChats] = useState<ChatListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -31,7 +37,12 @@ export function ChatsView({ active, onOpenChat }: Props) {
     setLoading(true)
     try {
       const data = await api.listChats()
-      setChats(data)
+      setChats(
+        data.filter(
+          (item) =>
+            item.conversation.type !== 'saved',
+        ),
+      )
     } finally {
       setLoading(false)
     }
@@ -40,6 +51,23 @@ export function ChatsView({ active, onOpenChat }: Props) {
   useEffect(() => {
     if (!active) return
     loadChats()
+  }, [active, loadChats])
+
+  useEffect(() => {
+    if (!active) return
+    const offNew = onWS('message.new', () => {
+      loadChats()
+    })
+    const offDeleted = onWS(
+      'message.deleted',
+      () => {
+        loadChats()
+      },
+    )
+    return () => {
+      offNew()
+      offDeleted()
+    }
   }, [active, loadChats])
 
   const handleSearch = (value: string) => {
@@ -114,11 +142,19 @@ export function ChatsView({ active, onOpenChat }: Props) {
             <div className="chats-empty">Никого не найдено</div>
           ) : (
             searchResults.map((u, i) => (
-              <button
+              <div
                 key={u.id}
-                className="chat-list-item fade-in-stagger"
+                className="chat-list-item chat-search-item fade-in-stagger"
                 style={{ animationDelay: `${i * 50}ms` }}
-                onClick={() => handleSelectUser(u.id)}
+                onClick={() => onOpenAuthor(u.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onOpenAuthor(u.id)
+                  }
+                }}
+                role="button"
+                tabIndex={0}
               >
                 <div className="chat-list-avatar">
                   <Icon name="user" size={24} />
@@ -132,8 +168,16 @@ export function ChatsView({ active, onOpenChat }: Props) {
                     <span className="chat-list-preview">@{u.username}</span>
                   )}
                 </div>
-                <Icon name="message-circle" size={16} className="chat-list-chevron" />
-              </button>
+                <button
+                  className="chat-search-message-btn"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void handleSelectUser(u.id)
+                  }}
+                >
+                  Написать
+                </button>
+              </div>
             ))
           )}
         </div>

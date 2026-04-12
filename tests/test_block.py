@@ -73,7 +73,7 @@ async def test_blocked_user_cannot_create_dm(
 
     r = await client.post(
         "/api/v1/chats",
-        json={"target_user_id": u2["id"]},
+        json={"target_user_id": u1["id"]},
         headers=headers_u2,
     )
     assert r.status_code == 403

@@ -159,7 +159,11 @@ async def upload_photo(
 
     msg_svc = MessageService(session)
     result = await msg_svc.send_message(
-        conv_id, user.id, "", "photo"
+        conv_id,
+        user.id,
+        "",
+        "photo",
+        broadcast=False,
     )
 
     msg_repo = MessageRepository(session)
@@ -180,6 +184,7 @@ async def upload_photo(
             "height": h,
         }
     ]
+    await msg_svc.broadcast_message(result["id"])
     return result
 
 
@@ -202,7 +207,11 @@ async def upload_voice_msg(
 
     msg_svc = MessageService(session)
     result = await msg_svc.send_message(
-        conv_id, user.id, "", "voice"
+        conv_id,
+        user.id,
+        "",
+        "voice",
+        broadcast=False,
     )
 
     msg_repo = MessageRepository(session)
@@ -223,4 +232,5 @@ async def upload_voice_msg(
             "waveform": waveform,
         }
     ]
+    await msg_svc.broadcast_message(result["id"])
     return result

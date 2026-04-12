@@ -77,26 +77,25 @@ class TrackService:
         page: int = 1,
         size: int = 50,
     ) -> tuple[list[Track], int]:
-        user = await self._resolve_user(user_id)
         offset = (page - 1) * size
         return await self._repo.list_by_user(
-            user_id=user.id, offset=offset, limit=size
+            user_id=user_id, offset=offset, limit=size
         )
 
     async def update_visibility(
         self, track_id: int, user_id: int, is_public: bool
     ) -> Track | None:
-        user = await self._resolve_user(user_id)
         return await self._repo.update_visibility(
-            track_id=track_id, user_id=user.id, is_public=is_public
+            track_id=track_id,
+            user_id=user_id,
+            is_public=is_public,
         )
 
     async def delete_by_owner(
         self, track_id: int, user_id: int
     ) -> Track | None:
-        user = await self._resolve_user(user_id)
         return await self._repo.delete_by_owner(
-            track_id=track_id, user_id=user.id
+            track_id=track_id, user_id=user_id
         )
 
     async def list_public_by_user(

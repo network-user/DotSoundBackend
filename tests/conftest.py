@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import BigInteger
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -16,6 +18,15 @@ from app.main import create_app
 from app.models.base import Base
 
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@compiles(BigInteger, "sqlite")
+def _compile_bigint_sqlite(
+    _type: BigInteger,
+    _compiler: Any,
+    **_kwargs: Any,
+) -> str:
+    return "INTEGER"
 
 
 @pytest.fixture
@@ -90,17 +101,27 @@ async def create_test_track(
     uploader_id: int | None = None,
 ) -> dict[str, Any]:
     data: dict[str, str] = {"title": title}
+    headers: dict[str, str] = {}
     if uploader_id is not None:
-        data["uploader_id"] = str(uploader_id)
+        headers = await auth_headers(client, uploader_id)
 
     with patch(
         "app.core.s3.upload_audio",
         new_callable=AsyncMock,
         return_value=f"anon/{title}.mp3",
+    ), patch(
+        "app.services.upload_service.transcode_and_upload.kiq",
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        "app.services.upload_service.generate_and_upload_cover.kiq",
+        new_callable=AsyncMock,
+        return_value=None,
     ):
         r = await client.post(
             "/api/v1/tracks/upload",
             data=data,
+            headers=headers,
             files={
                 "file": (
                     "t.mp3",

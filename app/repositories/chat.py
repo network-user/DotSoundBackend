@@ -72,14 +72,7 @@ class ChatRepository:
         self, user_a: int, user_b: int
     ) -> Conversation | None:
         if user_a == user_b:
-            row = await self._s.execute(
-                select(Conversation).where(
-                    Conversation.created_by_id
-                    == user_a,
-                    Conversation.type == "saved",
-                )
-            )
-            return row.scalar_one_or_none()
+            return await self.find_saved(user_a)
 
         sub = (
             select(
@@ -105,6 +98,20 @@ class ChatRepository:
             )
         )
         return row.scalar_one_or_none()
+
+    async def find_saved(
+        self, user_id: int
+    ) -> Conversation | None:
+        row = await self._s.execute(
+            select(Conversation)
+            .where(
+                Conversation.created_by_id == user_id,
+                Conversation.type == "saved",
+            )
+            .order_by(Conversation.id.asc())
+            .limit(1)
+        )
+        return row.scalars().first()
 
     async def list_user_conversations(
         self, user_id: int

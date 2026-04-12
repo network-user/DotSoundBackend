@@ -95,3 +95,78 @@ async def test_delete_message_for_all(
     assert r.status_code == 200
     ids = [m["id"] for m in r.json()]
     assert msg_id not in ids
+
+
+async def test_saved_chat_is_private_per_user(
+    client: AsyncClient,
+) -> None:
+    u1 = await create_test_user(
+        client, 200101, first_name="SavedA"
+    )
+    u2 = await create_test_user(
+        client, 200102, first_name="SavedB"
+    )
+    headers_u1 = await auth_headers(
+        client, u1["id"]
+    )
+    headers_u2 = await auth_headers(
+        client, u2["id"]
+    )
+
+    saved_u1 = await client.get(
+        "/api/v1/chats/saved",
+        headers=headers_u1,
+    )
+    saved_u2 = await client.get(
+        "/api/v1/chats/saved",
+        headers=headers_u2,
+    )
+
+    assert saved_u1.status_code == 200
+    assert saved_u2.status_code == 200
+    assert (
+        saved_u1.json()["conversation"]["id"]
+        != saved_u2.json()["conversation"]["id"]
+    )
+
+    conv_id = saved_u1.json()["conversation"]["id"]
+    send_u1 = await client.post(
+        f"/api/v1/chats/{conv_id}/messages",
+        json={"content": "private note"},
+        headers=headers_u1,
+    )
+    assert send_u1.status_code == 200
+
+    list_u2 = await client.get(
+        f"/api/v1/chats/{conv_id}/messages",
+        headers=headers_u2,
+    )
+    assert list_u2.status_code == 403
+
+
+async def test_saved_chat_cannot_add_members(
+    client: AsyncClient,
+) -> None:
+    owner = await create_test_user(
+        client, 200103, first_name="Owner"
+    )
+    other = await create_test_user(
+        client, 200104, first_name="Other"
+    )
+    headers = await auth_headers(
+        client, owner["id"]
+    )
+
+    saved = await client.get(
+        "/api/v1/chats/saved",
+        headers=headers,
+    )
+    conv_id = saved.json()["conversation"]["id"]
+
+    response = await client.post(
+        f"/api/v1/chats/{conv_id}/members",
+        json={"user_id": other["id"]},
+        headers=headers,
+    )
+
+    assert response.status_code == 400

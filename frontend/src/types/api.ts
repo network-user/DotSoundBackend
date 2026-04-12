@@ -202,7 +202,7 @@ export interface TelegramAuthRequest {
 
 export interface ChatConversation {
   id: number
-  type: 'dm' | 'group'
+  type: 'dm' | 'group' | 'saved'
   title: string | null
   created_by_id: number
   created_at: string
