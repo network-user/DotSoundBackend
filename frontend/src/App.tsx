@@ -30,6 +30,7 @@ import {
   connectWS,
   disconnectWS,
 } from '@/lib/ws'
+import { useLikes } from '@/store/LikesContext'
 
 const CHAT_STATE_KEY_PREFIX = 'chat-state:'
 const RESTORABLE_VIEWS: ViewName[] = [
@@ -103,6 +104,7 @@ function saveChatState(
 }
 
 export function App() {
+  const { reloadLikes } = useLikes()
   const [activeView, setActiveView] =
     useState<ViewName>('home')
   const [authorId, setAuthorId] = useState<
@@ -126,6 +128,10 @@ export function App() {
     useState(false)
 
   useEffect(() => {
+    api.setOnUnauthorized(() => {
+      disconnectWS()
+      setNeedsAuth(true)
+    })
     const init = async () => {
       let authenticated = false
       const hasTelegramContext = Boolean(tg.initData)
@@ -306,7 +312,10 @@ export function App() {
   if (needsAuth) {
     return (
       <TelegramAuth
-        onAuth={() => setNeedsAuth(false)}
+        onAuth={() => {
+          setNeedsAuth(false)
+          reloadLikes()
+        }}
       />
     )
   }

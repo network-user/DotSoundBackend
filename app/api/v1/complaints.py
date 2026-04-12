@@ -55,9 +55,11 @@ async def list_complaints(
     request: Request,
     track_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> list[ComplaintResponse]:
     repo = ComplaintRepository(db)
     complaints = await repo.list_by_track(track_id)
     return [
-        ComplaintResponse.model_validate(c) for c in complaints
+        ComplaintResponse.model_validate(c)
+        for c in complaints
     ]

@@ -89,19 +89,20 @@ class PlaylistRepository:
         track_id: int,
         position: int = 0,
     ) -> PlaylistTrack:
-        existing = await self._session.execute(
+        result = await self._session.execute(
             select(PlaylistTrack).where(
                 PlaylistTrack.playlist_id == playlist_id,
                 PlaylistTrack.track_id == track_id,
             )
         )
-        if existing.scalar_one_or_none():
+        found = result.scalar_one_or_none()
+        if found:
             logger.debug(
                 "db_playlist_track_already_exists",
                 playlist_id=playlist_id,
                 track_id=track_id,
             )
-            return existing.scalar_one()  # type: ignore[return-value]
+            return found
 
         pt = PlaylistTrack(
             playlist_id=playlist_id,

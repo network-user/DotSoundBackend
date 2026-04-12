@@ -39,7 +39,7 @@ async def toggle_like(
     "/{user_id}/{track_id}",
     response_model=LikeToggleResponse,
     status_code=status.HTTP_200_OK,
-    summary="Toggle like on a track (public / bot)",
+    summary="Toggle like on a track (internal / bot)",
 )
 @limiter.limit("60/minute")
 async def toggle_like_public(
@@ -47,6 +47,7 @@ async def toggle_like_public(
     user_id: int,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> LikeToggleResponse:
     structlog.contextvars.bind_contextvars(
         user_id=user_id, track_id=track_id

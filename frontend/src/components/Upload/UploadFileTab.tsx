@@ -120,6 +120,7 @@ export function UploadFileTab({ onSuccess }: Props) {
       setProgress(100)
 
       setTimeout(async () => {
+        setUploading(false)
         reset()
         const fullTrack = await api.getTrack(uploaded.id)
         onSuccess(fullTrack)

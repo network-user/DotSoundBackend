@@ -104,13 +104,18 @@ async def play_track(
 ) -> PlayResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     repo = TrackRepository(session)
+    track = await repo.get_by_id(track_id)
+    if not track or not track.is_active or not track.is_public:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
     found = await repo.increment_play_count(track_id)
     if not found:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
-    track = await repo.get_by_id(track_id)
     play_count = track.play_count if track else 0
     logger.info(
         "play_count_updated",

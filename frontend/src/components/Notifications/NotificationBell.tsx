@@ -9,7 +9,7 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    api.getUnreadCount().then((r) => setCount(r.count))
+    api.getUnreadCount().then((r) => setCount(r.count)).catch(() => {})
     const off = onWS('notification', () => {
       setCount((p) => p + 1)
     })

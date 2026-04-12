@@ -36,6 +36,11 @@ async def hls_master(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="HLS not ready for this track",
         )
+    if not track.is_active or not track.is_public:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not available",
+        )
     data = await s3.download_object(track.hls_manifest_key)
     return Response(
         content=data,
@@ -62,6 +67,17 @@ async def hls_variant_playlist(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid variant — use 'hi' or 'lo'",
+        )
+    repo = TrackRepository(session)
+    track = await repo.get_by_id(track_id)
+    if (
+        not track
+        or not track.is_active
+        or not track.is_public
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not available",
         )
     key = f"hls/{track_id}/{variant}/playlist.m3u8"
     try:
@@ -97,6 +113,17 @@ async def hls_segment(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid variant",
+        )
+    repo = TrackRepository(session)
+    track = await repo.get_by_id(track_id)
+    if (
+        not track
+        or not track.is_active
+        or not track.is_public
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not available",
         )
     if not segment.endswith(".ts") or not segment[:-3].isdigit():
         raise HTTPException(

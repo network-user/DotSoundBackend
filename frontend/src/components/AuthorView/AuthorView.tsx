@@ -35,13 +35,15 @@ export function AuthorView({ authorId, onClose }: Props) {
       api.getUserStats(authorId),
       api.getAuthorTracks(authorId, 1, 20),
       api.getAvatarUrl(authorId),
+      internalId ? api.getFollowStatus(authorId).catch(() => null) : Promise.resolve(null),
     ])
-      .then(([profile, authorStats, tracksRes, avatarRes]) => {
+      .then(([profile, authorStats, tracksRes, avatarRes, followRes]) => {
         setAuthor(profile as AuthorProfile)
         setStats(authorStats)
         setTracks(tracksRes.items)
         setTracksTotal(tracksRes.total)
         setAvatarUrl(avatarRes.avatar_url)
+        if (followRes) setFollowing(followRes.following)
       })
       .catch(() => {})
       .finally(() => setLoading(false))

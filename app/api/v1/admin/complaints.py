@@ -2,7 +2,7 @@
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
@@ -37,11 +37,13 @@ async def admin_list_complaints(
     result = await session.execute(q.offset(offset).limit(size))
     complaints = list(result.scalars().all())
 
-    count_q = select(Complaint)
+    count_q = select(func.count(Complaint.id))
     if unresolved_only:
-        count_q = count_q.where(Complaint.is_resolved.is_(False))
+        count_q = count_q.where(
+            Complaint.is_resolved.is_(False)
+        )
     count_result = await session.execute(count_q)
-    total = len(count_result.scalars().all())
+    total = count_result.scalar_one()
 
     return AdminComplaintListResponse(
         items=[AdminComplaintResponse.model_validate(c) for c in complaints],

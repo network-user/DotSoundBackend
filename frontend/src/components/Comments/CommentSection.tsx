@@ -29,8 +29,12 @@ export function CommentSection({ trackId, trackOwnerId }: Props) {
   useEffect(() => { load() }, [load])
 
   const handleAdd = async (text: string) => {
-    const c = await api.addComment(trackId, text)
-    setComments((prev) => [c, ...prev])
+    try {
+      const c = await api.addComment(trackId, text)
+      setComments((prev) => [c, ...prev])
+    } catch (e) {
+      console.error('addComment failed', e)
+    }
   }
 
   const handleDelete = async (id: number) => {

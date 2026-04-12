@@ -223,29 +223,39 @@ class ConnectionManager:
         if not self._redis:
             return
         pubsub = self._redis.pubsub()
+        subscribed: set[str] = set()
         try:
             while True:
-                for uid in list(
-                    self._connections.keys()
-                ):
-                    channel = f"user:{uid}"
+                desired = {
+                    f"user:{uid}"
+                    for uid in self._connections
+                }
+                to_add = desired - subscribed
+                to_remove = subscribed - desired
+                for ch in to_add:
                     try:
-                        await pubsub.subscribe(
-                            channel
-                        )
+                        await pubsub.subscribe(ch)
                     except Exception:
                         pass
+                for ch in to_remove:
+                    try:
+                        await pubsub.unsubscribe(ch)
+                    except Exception:
+                        pass
+                subscribed = (
+                    subscribed | to_add
+                ) - to_remove
 
                 msg = await pubsub.get_message(
                     ignore_subscribe_messages=True,
                     timeout=1.0,
                 )
                 if msg and msg["type"] == "message":
-                    channel: str = msg["channel"]  # type: ignore[no-redef]
-                    if isinstance(channel, bytes):
-                        channel = channel.decode()
-                    if channel.startswith("user:"):
-                        uid_str = channel.split(
+                    ch_name: str = msg["channel"]  # type: ignore[assignment]
+                    if isinstance(ch_name, bytes):
+                        ch_name = ch_name.decode()
+                    if ch_name.startswith("user:"):
+                        uid_str = ch_name.split(
                             ":", 1
                         )[1]
                         try:

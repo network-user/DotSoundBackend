@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
-from app.dependencies import get_current_user, get_db
+from app.dependencies import get_current_user, get_db, get_optional_user
 from app.models.user import User
 from app.schemas.album import (
     AlbumCreateRequest,
@@ -53,12 +53,23 @@ async def get_album(
     request: Request,
     album_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> AlbumWithTracksResponse:
     service = AlbumService(session)
     album = await service.get_with_tracks(album_id)
     if not album:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Album not found"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Album not found",
+        )
+    is_owner = (
+        current_user
+        and current_user.id == album.owner_id
+    )
+    if not album.is_public and not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Album not found",
         )
     tracks = [TrackResponse.model_validate(t) for t in album.tracks]
     return AlbumWithTracksResponse(

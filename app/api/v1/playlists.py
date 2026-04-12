@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
-from app.dependencies import get_current_user, get_db
+from app.dependencies import get_current_user, get_db, get_optional_user
 from app.models.user import User
 from app.schemas.playlist import (
     PlaylistAddTrack,
@@ -76,11 +76,21 @@ async def get_playlist(
     request: Request,
     playlist_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> PlaylistWithTracksResponse:
     structlog.contextvars.bind_contextvars(playlist_id=playlist_id)
     service = PlaylistService(session)
     playlist = await service.get(playlist_id)
     if not playlist:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Playlist not found",
+        )
+    is_owner = (
+        current_user
+        and current_user.id == playlist.owner_id
+    )
+    if not playlist.is_public and not is_owner:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Playlist not found",

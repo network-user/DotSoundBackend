@@ -67,6 +67,30 @@ async def get_current_user(
     return user
 
 
+async def get_optional_user(
+    credentials: (
+        HTTPAuthorizationCredentials | None
+    ) = Depends(_bearer),
+    session: AsyncSession = Depends(get_db),
+) -> User | None:
+    if not credentials:
+        return None
+    try:
+        payload = decode_access_token(
+            credentials.credentials
+        )
+    except AuthError:
+        return None
+    user_id = int(str(payload["sub"]))
+    repo = UserRepository(session)
+    user = await repo.get_by_id(user_id)
+    if not user:
+        user = await repo.get_by_telegram_id(user_id)
+    if not user or not user.is_active:
+        return None
+    return user
+
+
 async def require_admin(
     user: User = Depends(get_current_user),
 ) -> User:

@@ -2,7 +2,7 @@
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
@@ -38,9 +38,9 @@ async def admin_list_tracks(
     tracks = list(result.scalars().all())
 
     count_result = await session.execute(
-        select(Track).order_by(None)
+        select(func.count(Track.id))
     )
-    total = len(count_result.scalars().all())
+    total = count_result.scalar_one()
 
     return AdminTrackListResponse(
         items=[AdminTrackResponse.model_validate(t) for t in tracks],

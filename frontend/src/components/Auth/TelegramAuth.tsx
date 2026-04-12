@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { setInternalUserId } from '@/lib/telegram'
 
@@ -9,6 +9,7 @@ interface Props {
 }
 
 export function TelegramAuth({ onAuth }: Props) {
+  const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const params = new URLSearchParams(
     window.location.search,
   )
@@ -29,6 +30,10 @@ export function TelegramAuth({ onAuth }: Props) {
         setBotUsername(cfg.bot_username),
       )
       .catch(() => {})
+    return () => {
+      if (successTimer.current)
+        clearTimeout(successTimer.current)
+    }
   }, [])
 
   const handleOpenBot = () => {
@@ -56,7 +61,7 @@ export function TelegramAuth({ onAuth }: Props) {
       )
       setInternalUserId(res.user_id)
       setStep('success')
-      setTimeout(onAuth, 1500)
+      successTimer.current = setTimeout(onAuth, 1500)
     } catch {
       setError('Неверный или просроченный код')
     } finally {

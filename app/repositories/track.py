@@ -136,7 +136,7 @@ class TrackRepository(BaseRepository[Track]):
             .values(is_public=is_public)
             .returning(Track)
         )
-        await self._session.commit()
+        await self._session.flush()
         return result.scalar_one_or_none()
 
     async def delete_by_owner(
@@ -146,7 +146,7 @@ class TrackRepository(BaseRepository[Track]):
         if not track or track.uploaded_by_id != user_id:
             return None
         track.is_active = False
-        await self._session.commit()
+        await self._session.flush()
         return track
 
     async def get_adjacent(

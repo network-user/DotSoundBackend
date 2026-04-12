@@ -1,5 +1,5 @@
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +17,7 @@ logger = structlog.stdlib.get_logger(__name__)
 )
 async def get_popular_genres(
     session: AsyncSession = Depends(get_db),
-    limit: int = 50,
+    limit: int = Query(50, ge=1, le=200),
 ) -> list[str]:
     from sqlalchemy import func
     result = await session.execute(

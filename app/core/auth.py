@@ -60,6 +60,21 @@ def verify_telegram_init_data(
         )
         raise AuthError("Invalid initData signature")
 
+    auth_date_str = parsed.get("auth_date", [None])[0]
+    if auth_date_str:
+        try:
+            auth_ts = int(auth_date_str)
+            now_ts = int(
+                datetime.now(timezone.utc).timestamp()
+            )
+            max_age = 86400
+            if now_ts - auth_ts > max_age:
+                raise AuthError(
+                    "initData expired (auth_date too old)"
+                )
+        except ValueError:
+            raise AuthError("Invalid auth_date")
+
     user_json = parsed.get("user", [None])[0]
     if not user_json:
         raise AuthError("No user data in initData")

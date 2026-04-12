@@ -1,3 +1,6 @@
+import { useState } from 'react'
+import { Icon } from '@/components/Icon/Icon'
+
 interface Props {
   coverKey: string | null
   externalUrl?: string | null
@@ -6,6 +9,7 @@ interface Props {
 }
 
 export function CoverImage({ coverKey, externalUrl, size = 50, className }: Props) {
+  const [failed, setFailed] = useState(false)
   const style = size ? { width: size, height: size } : undefined
 
   const src = coverKey
@@ -14,17 +18,14 @@ export function CoverImage({ coverKey, externalUrl, size = 50, className }: Prop
 
   return (
     <div className={`track-card-cover${className ? ` ${className}` : ''}`} style={style}>
-      {src ? (
+      {src && !failed ? (
         <img
           src={src}
           alt=""
-          onError={(e) => {
-            const parent = (e.target as HTMLImageElement).parentElement
-            if (parent) parent.textContent = '🎵'
-          }}
+          onError={() => setFailed(true)}
         />
       ) : (
-        '🎵'
+        <Icon name="music" size={size ? Math.round(size * 0.5) : 24} />
       )}
     </div>
   )

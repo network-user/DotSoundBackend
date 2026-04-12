@@ -67,6 +67,8 @@ export function ChatsView({
     return () => {
       offNew()
       offDeleted()
+      if (debounceRef.current)
+        clearTimeout(debounceRef.current)
     }
   }, [active, loadChats])
 
