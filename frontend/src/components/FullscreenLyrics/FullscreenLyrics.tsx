@@ -5,6 +5,7 @@ import {
 } from 'react'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
+import { Icon } from '@/components/Icon/Icon'
 import type { LyricsResponse } from '@/types/api'
 
 function fmt(sec: number) {
@@ -79,9 +80,19 @@ export function FullscreenLyrics() {
     ? (currentTime / duration) * 100
     : 0
 
-  const videoSrc = track.video_key
-    ? `/api/v1/tracks/${track.id}/video`
-    : null
+  const videoEnabled =
+    localStorage.getItem(
+      'setting-video-enabled',
+    ) !== 'false'
+  const videoSrc =
+    track.video_key && videoEnabled
+      ? `/api/v1/tracks/${track.id}/video`
+      : null
+
+  const handleLineClick = (timeMs: number) => {
+    if (!duration) return
+    seek((timeMs / 1000 / duration) * 100)
+  }
 
   return (
     <div className="fl-overlay">
@@ -101,7 +112,7 @@ export function FullscreenLyrics() {
         className="fl-close icon-btn"
         onClick={closeLyrics}
       >
-        ✕
+        <Icon name="x" size={18} />
       </button>
 
       <div className="fl-content">
@@ -119,6 +130,9 @@ export function FullscreenLyrics() {
                     : null
                 }
                 className={`fl-line${i === activeIdx ? ' fl-line-active' : ''}`}
+                onClick={() =>
+                  handleLineClick(line.time_ms)
+                }
               >
                 {line.text}
               </div>

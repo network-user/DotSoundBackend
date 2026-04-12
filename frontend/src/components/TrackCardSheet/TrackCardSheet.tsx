@@ -77,6 +77,10 @@ export function TrackCardSheet({
   const [coverVer, setCoverVer] = useState(0)
   const [coverBusy, setCoverBusy] = useState(false)
   const [genCooldown, setGenCooldown] = useState(0)
+  const [videoReady, setVideoReady] =
+    useState(false)
+  const videoEnabled =
+    localStorage.getItem('setting-video-enabled') !== 'false'
 
   const sheetRef = useRef<HTMLDivElement>(null)
   const coverInputRef =
@@ -92,6 +96,7 @@ export function TrackCardSheet({
       setAuthorAvatarUrl(null)
       setCoverKey(null)
       setCoverBusy(false)
+      setVideoReady(false)
       return
     }
     setCoverKey(track.cover_key)
@@ -267,6 +272,26 @@ export function TrackCardSheet({
           <Icon name="x" size={18} />
         </button>
 
+        {videoSrc && videoEnabled && (
+          <>
+            <video
+              className="tcs-video-bg"
+              src={videoSrc}
+              autoPlay
+              loop
+              muted
+              playsInline
+              onCanPlay={() =>
+                setVideoReady(true)
+              }
+              onError={() =>
+                setVideoReady(false)
+              }
+            />
+            <div className="tcs-video-overlay" />
+          </>
+        )}
+
         <div
           className="tcs-cover-wrap"
           style={{ position: 'relative' }}
@@ -276,16 +301,18 @@ export function TrackCardSheet({
               <div className="loader" />
             </div>
           )}
-          {videoSrc ? (
-            <video
-              className="tcs-cover"
-              src={videoSrc}
-              autoPlay
-              loop
-              muted
-              playsInline
-            />
-          ) : coverSrc ? (
+          {videoSrc &&
+            videoEnabled &&
+            !videoReady && (
+              <div className="tcs-video-loading">
+                <Icon
+                  name="video"
+                  size={32}
+                  className="tcs-video-pulse"
+                />
+              </div>
+            )}
+          {coverSrc ? (
             <img
               className="tcs-cover"
               src={coverSrc}
@@ -298,6 +325,18 @@ export function TrackCardSheet({
           )}
           {showLyrics && (
             <div className="tcs-lyrics-overlay">
+              <button
+                className="tcs-lyrics-expand icon-btn"
+                onClick={() => {
+                  setShowLyrics(false)
+                  openLyrics()
+                }}
+              >
+                <Icon
+                  name="maximize"
+                  size={16}
+                />
+              </button>
               <LyricsPanel
                 trackId={track.id}
                 isOwner={isOwner}
@@ -488,15 +527,6 @@ export function TrackCardSheet({
             </button>
           )}
 
-          <button
-            className="tcs-action-btn"
-            onClick={openLyrics}
-          >
-            <Icon name="maximize" size={20} />
-            <span className="tcs-action-label">
-              Полный экран
-            </span>
-          </button>
 
           {!isSC && (
             <button
