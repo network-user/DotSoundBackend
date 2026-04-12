@@ -5,7 +5,9 @@ from typing import Any
 from fastapi import (
     APIRouter,
     Depends,
+    HTTPException,
     UploadFile,
+    status,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -120,6 +122,16 @@ async def mark_read(
     return {"status": "read"}
 
 
+_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+_ALLOWED_IMAGE_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+}
+_MAX_VOICE_BYTES = 20 * 1024 * 1024
+
+
 @router.post("/chats/{conv_id}/messages/photo")
 async def upload_photo(
     conv_id: int,
@@ -127,7 +139,20 @@ async def upload_photo(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    if (
+        file.content_type
+        and file.content_type not in _ALLOWED_IMAGE_TYPES
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported image type",
+        )
     data = await file.read()
+    if len(data) > _MAX_IMAGE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Image too large (max 10 MB)",
+        )
     img_key, thumb_key, w, h = await upload_image(
         data, prefix="chat_photos", user_id=user.id
     )
@@ -166,6 +191,11 @@ async def upload_voice_msg(
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     data = await file.read()
+    if len(data) > _MAX_VOICE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Voice too large (max 20 MB)",
+        )
     file_key, duration, waveform = (
         await upload_voice(data, user_id=user.id)
     )

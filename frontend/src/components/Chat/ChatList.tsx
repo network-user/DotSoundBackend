@@ -5,7 +5,7 @@ import { Icon } from '@/components/Icon/Icon'
 
 interface Props {
   items: ChatListItem[]
-  onOpenChat: (convId: number) => void
+  onOpenChat: (convId: number, title?: string) => void
 }
 
 export function ChatList({ items, onOpenChat }: Props) {
@@ -33,7 +33,10 @@ export function ChatList({ items, onOpenChat }: Props) {
           key={item.conversation.id}
           className="chat-list-item fade-in-stagger"
           style={{ animationDelay: `${i * 50}ms` }}
-          onClick={() => onOpenChat(item.conversation.id)}
+          onClick={() => onOpenChat(
+            item.conversation.id,
+            item.conversation.title || undefined,
+          )}
         >
           <div className="chat-list-avatar">
             <Icon name="user" size={24} />

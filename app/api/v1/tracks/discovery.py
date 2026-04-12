@@ -67,7 +67,10 @@ async def cover_proxy(
     key: str = Query(...),
 ) -> Response:
     _ALLOWED_PREFIXES = (
-        "covers/", "avatars/",
+        "covers/",
+        "avatars/",
+        "chat_photos/",
+        "voice/",
     )
     if (
         ".." in key
@@ -90,6 +93,8 @@ async def cover_proxy(
         content_type = "image/jpeg"
     elif key.endswith(".webp"):
         content_type = "image/webp"
+    elif key.endswith(".ogg"):
+        content_type = "audio/ogg"
     return Response(
         content=data,
         media_type=content_type,

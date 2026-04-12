@@ -6,6 +6,10 @@ import structlog
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.conversation import (
+    Conversation,
+    ConversationMember,
+)
 from app.repositories.block import BlockRepository
 from app.repositories.chat import ChatRepository
 from app.repositories.user import UserRepository
@@ -13,6 +17,30 @@ from app.repositories.user import UserRepository
 logger: structlog.stdlib.BoundLogger = (
     structlog.get_logger(__name__)
 )
+
+
+def _conv_to_dict(
+    conv: Conversation,
+) -> dict[str, Any]:
+    return {
+        "id": conv.id,
+        "type": conv.type,
+        "title": conv.title,
+        "created_by_id": conv.created_by_id,
+        "created_at": conv.created_at.isoformat()
+        if conv.created_at
+        else None,
+    }
+
+
+def _member_to_dict(
+    m: ConversationMember,
+) -> dict[str, Any]:
+    return {
+        "is_pinned": m.is_pinned,
+        "is_muted": m.is_muted,
+        "last_read_message_id": m.last_read_message_id,
+    }
 
 
 class ChatService:
@@ -43,7 +71,11 @@ class ChatService:
             user_id, target_id
         )
         if existing:
-            return {"conversation": existing}
+            return {
+                "conversation": _conv_to_dict(
+                    existing
+                )
+            }
 
         conv = await self._repo.create_conversation(
             type="dm", created_by_id=user_id
@@ -64,7 +96,9 @@ class ChatService:
             user_a=user_id,
             user_b=target_id,
         )
-        return {"conversation": conv}
+        return {
+            "conversation": _conv_to_dict(conv)
+        }
 
     async def create_group(
         self,
@@ -99,16 +133,34 @@ class ChatService:
             conv_id=conv.id,
             owner=user_id,
         )
-        return {"conversation": conv}
+        return {
+            "conversation": _conv_to_dict(conv)
+        }
 
     async def list_chats(
         self, user_id: int
     ) -> list[dict[str, Any]]:
-        return (
+        rows = (
             await self._repo.list_user_conversations(
                 user_id
             )
         )
+        return [
+            {
+                "conversation": _conv_to_dict(
+                    r["conversation"]
+                ),
+                "member": _member_to_dict(
+                    r["member"]
+                ),
+                "last_message_at": (
+                    r["last_message_at"].isoformat()
+                    if r["last_message_at"]
+                    else None
+                ),
+            }
+            for r in rows
+        ]
 
     async def pin_chat(
         self, user_id: int, conv_id: int
@@ -188,7 +240,11 @@ class ChatService:
             user_id, user_id
         )
         if existing:
-            return {"conversation": existing}
+            return {
+                "conversation": _conv_to_dict(
+                    existing
+                )
+            }
 
         conv = await self._repo.create_conversation(
             type="saved",
@@ -205,7 +261,9 @@ class ChatService:
             conv_id=conv.id,
             user_id=user_id,
         )
-        return {"conversation": conv}
+        return {
+            "conversation": _conv_to_dict(conv)
+        }
 
     async def search_users(
         self, query: str, limit: int = 20

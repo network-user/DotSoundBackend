@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CreateDMRequest(BaseModel):
@@ -8,7 +8,7 @@ class CreateDMRequest(BaseModel):
 
 
 class CreateGroupRequest(BaseModel):
-    title: str
+    title: str = Field(max_length=256)
     member_ids: list[int]
 
 
@@ -17,14 +17,14 @@ class AddMemberRequest(BaseModel):
 
 
 class SendMessageRequest(BaseModel):
-    content: str
+    content: str = Field(max_length=4096)
     type: str = "text"
     reply_to_id: int | None = None
     shared_track_id: int | None = None
 
 
 class ReactionRequest(BaseModel):
-    reaction_type: str
+    reaction_type: str = Field(max_length=30)
 
 
 class MarkReadRequest(BaseModel):
@@ -36,7 +36,9 @@ class VoteRequest(BaseModel):
 
 
 class CommentRequest(BaseModel):
-    text: str
+    text: str = Field(
+        min_length=1, max_length=1000
+    )
 
 
 class ReadNotificationsRequest(BaseModel):
