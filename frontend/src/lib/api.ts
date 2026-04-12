@@ -422,6 +422,21 @@ export const api = {
     return request('/api/v1/chats')
   },
 
+  searchUsers(q: string, limit = 20): Promise<{
+    id: number
+    username: string | null
+    first_name: string
+    last_name: string | null
+    display_name: string | null
+    avatar_key: string | null
+  }[]> {
+    return request(`/api/v1/chats/search-users?q=${encodeURIComponent(q)}&limit=${limit}`)
+  },
+
+  getSavedChat(): Promise<{ conversation: { id: number } }> {
+    return request('/api/v1/chats/saved')
+  },
+
   pinChat(convId: number): Promise<void> {
     return request(`/api/v1/chats/${convId}/pin`, { method: 'POST' })
   },

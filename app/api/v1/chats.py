@@ -17,6 +17,28 @@ from app.services.chat_service import ChatService
 router = APIRouter(prefix="/chats", tags=["chats"])
 
 
+@router.get("/search-users")
+async def search_users(
+    q: str,
+    limit: int = 20,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    svc = ChatService(session)
+    return await svc.search_users(
+        q, min(limit, 50)
+    )
+
+
+@router.get("/saved")
+async def get_saved(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    svc = ChatService(session)
+    return await svc.get_or_create_saved(user.id)
+
+
 @router.post("")
 async def create_chat(
     body: CreateDMRequest | CreateGroupRequest,
