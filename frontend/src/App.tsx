@@ -51,14 +51,25 @@ export function App() {
   useEffect(() => {
     const init = async () => {
       let authenticated = false
+      const restored = api.restoreSession()
+
       try {
-        const authRes = await api.authTelegram(tg.initData)
-        if (authRes?.access_token) {
-          connectWS(authRes.access_token)
-          authenticated = true
+        if (tg.initData) {
+          const authRes = await api.authTelegram(
+            tg.initData,
+          )
+          if (authRes?.access_token) {
+            connectWS(authRes.access_token)
+            authenticated = true
+          }
         }
       } catch (err) {
         console.error('[App] Auth failed:', err)
+      }
+
+      if (!authenticated && restored?.token) {
+        connectWS(restored.token)
+        authenticated = true
       }
 
       if (!authenticated) {

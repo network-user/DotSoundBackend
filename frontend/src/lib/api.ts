@@ -29,6 +29,76 @@ import type {
 } from '@/types/api'
 
 let accessToken: string | null = null
+const AUTH_TOKEN_KEY = 'auth-token'
+
+function decodeJwtPayload(
+  token: string,
+): Record<string, unknown> | null {
+  try {
+    const [, payload] = token.split('.')
+    if (!payload) return null
+    const base64 = payload
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+    const padded = base64.padEnd(
+      base64.length +
+        ((4 - (base64.length % 4)) % 4),
+      '=',
+    )
+    const decoded = atob(padded)
+    return JSON.parse(decoded) as Record<
+      string,
+      unknown
+    >
+  } catch {
+    return null
+  }
+}
+
+function isTokenExpired(token: string): boolean {
+  const payload = decodeJwtPayload(token)
+  const exp = Number(payload?.exp)
+  if (!Number.isFinite(exp)) return false
+  const now = Math.floor(Date.now() / 1000)
+  return exp <= now
+}
+
+function persistToken(
+  token: string | null,
+) {
+  try {
+    if (token) {
+      localStorage.setItem(
+        AUTH_TOKEN_KEY,
+        token,
+      )
+    } else {
+      localStorage.removeItem(
+        AUTH_TOKEN_KEY,
+      )
+    }
+  } catch {}
+}
+
+function loadStoredToken():
+  | string
+  | null {
+  try {
+    const token = localStorage.getItem(
+      AUTH_TOKEN_KEY,
+    )
+    if (!token) return null
+    if (isTokenExpired(token)) {
+      localStorage.removeItem(
+        AUTH_TOKEN_KEY,
+      )
+      return null
+    }
+    return token
+  } catch {
+    return null
+  }
+}
 
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers = new Headers(opts.headers)
@@ -263,6 +333,7 @@ export const api = {
       body: JSON.stringify({ init_data }),
     })
     accessToken = res.access_token
+    persistToken(accessToken)
     setInternalUserId(res.user_id)
     return res
   },
@@ -272,20 +343,34 @@ export const api = {
       method: 'POST',
     })
     accessToken = res.access_token
+    persistToken(accessToken)
     setInternalUserId(res.user_id)
     return res
   },
 
   setToken(token: string | null) {
     accessToken = token
+    persistToken(token)
   },
 
   getToken(): string | null {
     return accessToken
   },
 
+  restoreSession():
+    | {
+        token: string
+      }
+    | null {
+    const token = loadStoredToken()
+    if (!token) return null
+    accessToken = token
+    return { token }
+  },
+
   logout() {
     accessToken = null
+    persistToken(null)
     setInternalUserId(null)
   },
 
@@ -309,6 +394,7 @@ export const api = {
       },
     )
     accessToken = res.access_token
+    persistToken(accessToken)
     setInternalUserId(res.user_id)
     return res
   },
