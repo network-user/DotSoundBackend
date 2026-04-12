@@ -1135,7 +1135,6 @@ textarea.form-input { resize: none; }
   position: relative;
   z-index: 2;
 }
-}
 .tcs-sheet::-webkit-scrollbar { display: none; }
 
 .tcs-handle {

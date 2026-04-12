@@ -196,3 +196,73 @@ export interface TokenResponse {
 export interface TelegramAuthRequest {
   init_data: string
 }
+
+// ── Chat ───────────────────────────────────────────────────────────────────
+
+export interface ChatConversation {
+  id: number
+  type: 'dm' | 'group'
+  title: string | null
+  created_by_id: number
+  created_at: string
+}
+
+export interface ChatListItem {
+  conversation: ChatConversation
+  member: { is_pinned: boolean; is_muted: boolean; last_read_message_id: number | null }
+  last_message_at: string | null
+}
+
+export interface MessageAttachment {
+  id: number
+  file_key: string
+  file_type: 'photo' | 'voice'
+  file_size_bytes?: number
+  duration_seconds?: number
+  waveform?: number[]
+  width?: number
+  height?: number
+}
+
+export interface MessageReaction {
+  user_id: number
+  reaction_type: string
+}
+
+export interface ChatMessage {
+  id: number
+  conversation_id: number
+  sender_id: number
+  type: 'text' | 'photo' | 'voice' | 'track_share'
+  content: string
+  reply_to_id: number | null
+  shared_track_id: number | null
+  created_at: string
+  attachments: MessageAttachment[]
+  reactions: MessageReaction[]
+}
+
+// ── Comments ───────────────────────────────────────────────────────────────
+
+export interface TrackComment {
+  id: number
+  track_id: number
+  user_id: number
+  text: string
+  is_pinned: boolean
+  created_at: string
+  likes: number
+  dislikes: number
+}
+
+// ── Notifications ──────────────────────────────────────────────────────────
+
+export interface AppNotification {
+  id: number
+  type: string
+  title: string
+  body: string
+  data: Record<string, unknown> | null
+  is_read: boolean
+  created_at: string
+}

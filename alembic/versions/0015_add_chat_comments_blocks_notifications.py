@@ -1,0 +1,545 @@
+"""add chat comments blocks notifications
+
+Revision ID: 0015
+Revises: 0014
+Create Date: 2026-04-12
+"""
+
+from alembic import op
+import sqlalchemy as sa
+
+revision = "0015"
+down_revision = "0014"
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "conversations",
+        sa.Column(
+            "id",
+            sa.BigInteger(),
+            autoincrement=True,
+            primary_key=True,
+        ),
+        sa.Column(
+            "type",
+            sa.String(10),
+            nullable=False,
+        ),
+        sa.Column(
+            "title",
+            sa.String(256),
+            nullable=True,
+        ),
+        sa.Column(
+            "created_by_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "users.id", ondelete="CASCADE"
+            ),
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
+    )
+
+    op.create_table(
+        "conversation_members",
+        sa.Column(
+            "conversation_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "conversations.id",
+                ondelete="CASCADE",
+            ),
+            primary_key=True,
+        ),
+        sa.Column(
+            "user_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "users.id", ondelete="CASCADE"
+            ),
+            primary_key=True,
+        ),
+        sa.Column(
+            "role",
+            sa.String(10),
+            server_default="member",
+            nullable=False,
+        ),
+        sa.Column(
+            "is_pinned",
+            sa.Boolean(),
+            server_default="false",
+            nullable=False,
+        ),
+        sa.Column(
+            "is_muted",
+            sa.Boolean(),
+            server_default="false",
+            nullable=False,
+        ),
+        sa.Column(
+            "last_read_message_id",
+            sa.BigInteger(),
+            nullable=True,
+        ),
+        sa.Column(
+            "joined_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
+    )
+    op.create_index(
+        "ix_conversation_members_user_id",
+        "conversation_members",
+        ["user_id"],
+    )
+
+    op.create_table(
+        "messages",
+        sa.Column(
+            "id",
+            sa.BigInteger(),
+            autoincrement=True,
+            primary_key=True,
+        ),
+        sa.Column(
+            "conversation_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "conversations.id",
+                ondelete="CASCADE",
+            ),
+            nullable=False,
+        ),
+        sa.Column(
+            "sender_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "users.id", ondelete="CASCADE"
+            ),
+            nullable=False,
+        ),
+        sa.Column(
+            "type",
+            sa.String(20),
+            server_default="text",
+            nullable=False,
+        ),
+        sa.Column(
+            "encrypted_content",
+            sa.LargeBinary(),
+            nullable=True,
+        ),
+        sa.Column(
+            "content_nonce",
+            sa.LargeBinary(),
+            nullable=True,
+        ),
+        sa.Column(
+            "reply_to_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "messages.id",
+                ondelete="SET NULL",
+            ),
+            nullable=True,
+        ),
+        sa.Column(
+            "shared_track_id",
+            sa.Integer(),
+            sa.ForeignKey(
+                "tracks.id",
+                ondelete="SET NULL",
+            ),
+            nullable=True,
+        ),
+        sa.Column(
+            "is_deleted",
+            sa.Boolean(),
+            server_default="false",
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
+    )
+    op.create_index(
+        "ix_messages_conversation_created",
+        "messages",
+        ["conversation_id", "created_at"],
+    )
+
+    op.create_table(
+        "message_reactions",
+        sa.Column(
+            "message_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "messages.id", ondelete="CASCADE"
+            ),
+            primary_key=True,
+        ),
+        sa.Column(
+            "user_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "users.id", ondelete="CASCADE"
+            ),
+            primary_key=True,
+        ),
+        sa.Column(
+            "reaction_type",
+            sa.String(30),
+            primary_key=True,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
+    )
+
+    op.create_table(
+        "message_attachments",
+        sa.Column(
+            "id",
+            sa.BigInteger(),
+            autoincrement=True,
+            primary_key=True,
+        ),
+        sa.Column(
+            "message_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "messages.id", ondelete="CASCADE"
+            ),
+            nullable=False,
+        ),
+        sa.Column(
+            "file_key",
+            sa.Text(),
+            nullable=False,
+        ),
+        sa.Column(
+            "file_type",
+            sa.String(20),
+            nullable=False,
+        ),
+        sa.Column(
+            "file_size_bytes",
+            sa.BigInteger(),
+            nullable=True,
+        ),
+        sa.Column(
+            "duration_seconds",
+            sa.Integer(),
+            nullable=True,
+        ),
+        sa.Column(
+            "waveform",
+            sa.JSON(),
+            nullable=True,
+        ),
+        sa.Column(
+            "width",
+            sa.Integer(),
+            nullable=True,
+        ),
+        sa.Column(
+            "height",
+            sa.Integer(),
+            nullable=True,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
+    )
+    op.create_index(
+        "ix_message_attachments_message_id",
+        "message_attachments",
+        ["message_id"],
+    )
+
+    op.create_table(
+        "track_comments",
+        sa.Column(
+            "id",
+            sa.BigInteger(),
+            autoincrement=True,
+            primary_key=True,
+        ),
+        sa.Column(
+            "track_id",
+            sa.Integer(),
+            sa.ForeignKey(
+                "tracks.id", ondelete="CASCADE"
+            ),
+            nullable=False,
+        ),
+        sa.Column(
+            "user_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "users.id", ondelete="CASCADE"
+            ),
+            nullable=False,
+        ),
+        sa.Column(
+            "text", sa.Text(), nullable=False
+        ),
+        sa.Column(
+            "is_pinned",
+            sa.Boolean(),
+            server_default="false",
+            nullable=False,
+        ),
+        sa.Column(
+            "is_hidden_by_author",
+            sa.Boolean(),
+            server_default="false",
+            nullable=False,
+        ),
+        sa.Column(
+            "is_deleted",
+            sa.Boolean(),
+            server_default="false",
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
+    )
+    op.create_index(
+        "ix_track_comments_track_created",
+        "track_comments",
+        ["track_id", "created_at"],
+    )
+
+    op.create_table(
+        "comment_hides",
+        sa.Column(
+            "comment_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "track_comments.id",
+                ondelete="CASCADE",
+            ),
+            primary_key=True,
+        ),
+        sa.Column(
+            "user_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "users.id", ondelete="CASCADE"
+            ),
+            primary_key=True,
+        ),
+    )
+
+    op.create_table(
+        "comment_votes",
+        sa.Column(
+            "comment_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "track_comments.id",
+                ondelete="CASCADE",
+            ),
+            primary_key=True,
+        ),
+        sa.Column(
+            "user_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "users.id", ondelete="CASCADE"
+            ),
+            primary_key=True,
+        ),
+        sa.Column(
+            "is_like",
+            sa.Boolean(),
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
+    )
+
+    op.create_table(
+        "user_blocks",
+        sa.Column(
+            "blocker_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "users.id", ondelete="CASCADE"
+            ),
+            primary_key=True,
+        ),
+        sa.Column(
+            "blocked_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "users.id", ondelete="CASCADE"
+            ),
+            primary_key=True,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
+        sa.CheckConstraint(
+            "blocker_id != blocked_id",
+            name="ck_no_self_block",
+        ),
+    )
+    op.create_index(
+        "ix_user_blocks_blocked_id",
+        "user_blocks",
+        ["blocked_id"],
+    )
+
+    op.create_table(
+        "notifications",
+        sa.Column(
+            "id",
+            sa.BigInteger(),
+            autoincrement=True,
+            primary_key=True,
+        ),
+        sa.Column(
+            "user_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "users.id", ondelete="CASCADE"
+            ),
+            nullable=False,
+        ),
+        sa.Column(
+            "type",
+            sa.String(30),
+            nullable=False,
+        ),
+        sa.Column(
+            "title",
+            sa.String(256),
+            nullable=False,
+        ),
+        sa.Column(
+            "body", sa.Text(), nullable=False
+        ),
+        sa.Column(
+            "data", sa.JSON(), nullable=True
+        ),
+        sa.Column(
+            "is_read",
+            sa.Boolean(),
+            server_default="false",
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
+    )
+    op.create_index(
+        "ix_notifications_user_unread",
+        "notifications",
+        ["user_id", "is_read", "created_at"],
+    )
+
+    op.create_table(
+        "encryption_keys",
+        sa.Column(
+            "id",
+            sa.BigInteger(),
+            autoincrement=True,
+            primary_key=True,
+        ),
+        sa.Column(
+            "conversation_id",
+            sa.BigInteger(),
+            sa.ForeignKey(
+                "conversations.id",
+                ondelete="CASCADE",
+            ),
+            nullable=False,
+            unique=True,
+        ),
+        sa.Column(
+            "encrypted_key",
+            sa.LargeBinary(),
+            nullable=False,
+        ),
+        sa.Column(
+            "key_version",
+            sa.Integer(),
+            server_default="1",
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+        ),
+    )
+
+    op.add_column(
+        "tracks",
+        sa.Column(
+            "comments_enabled",
+            sa.Boolean(),
+            server_default="true",
+            nullable=False,
+        ),
+    )
+
+
+def downgrade() -> None:
+    op.drop_column("tracks", "comments_enabled")
+    op.drop_table("encryption_keys")
+    op.drop_table("notifications")
+    op.drop_table("user_blocks")
+    op.drop_table("comment_votes")
+    op.drop_table("comment_hides")
+    op.drop_table("track_comments")
+    op.drop_table("message_attachments")
+    op.drop_table("message_reactions")
+    op.drop_table("messages")
+    op.drop_table("conversation_members")
+    op.drop_table("conversations")

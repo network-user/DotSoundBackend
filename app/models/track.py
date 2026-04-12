@@ -70,6 +70,9 @@ class Track(Base, TimestampMixin):
         ForeignKey("albums.id", ondelete="SET NULL"),
         nullable=True,
     )
+    comments_enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default="true", nullable=False
+    )
 
     complaints: Mapped[list[Complaint]] = relationship(
         back_populates="track",

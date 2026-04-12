@@ -20,12 +20,16 @@ import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
 import { useDeepLink } from '@/hooks/useDeepLink'
+import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { HomeView } from '@/views/HomeView'
 import { LikedView } from '@/views/LikedView'
+import { ChatView } from '@/views/ChatView'
+import { ChatsView } from '@/views/ChatsView'
 import { PlaylistsView } from '@/views/PlaylistsView'
 import { ProfileView } from '@/views/ProfileView'
 import { SearchView } from '@/views/SearchView'
 import { UploadView } from '@/views/UploadView'
+import { connectWS } from '@/lib/ws'
 
 export function App() {
   const [activeView, setActiveView] =
@@ -42,11 +46,17 @@ export function App() {
   const [artistName, setArtistName] = useState<
     string | null
   >(null)
+  const [openChatId, setOpenChatId] = useState<
+    number | null
+  >(null)
 
   useEffect(() => {
     const init = async () => {
       try {
-        await api.authTelegram(tg.initData)
+        const authRes = await api.authTelegram(tg.initData)
+        if (authRes?.access_token) {
+          connectWS(authRes.access_token)
+        }
       } catch (err) {
         console.error('[App] Auth failed:', err)
       }
@@ -120,6 +130,13 @@ export function App() {
         <PlaylistsView
           active={activeView === 'playlists'}
         />
+        <ChatsView
+          active={activeView === 'chats'}
+          onOpenChat={(id) => {
+            setOpenChatId(id)
+            setActiveView('chat')
+          }}
+        />
         <ProfileView
           active={activeView === 'profile'}
           onNavigate={setActiveView}
@@ -128,6 +145,12 @@ export function App() {
           }
         />
       </main>
+      <ChatView
+        active={activeView === 'chat'}
+        conversationId={openChatId}
+        onBack={() => setActiveView('chats')}
+      />
+      <NotificationBell />
       <PlayerBar />
       <FullscreenLyrics />
       <Equalizer />

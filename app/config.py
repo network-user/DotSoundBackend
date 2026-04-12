@@ -30,6 +30,17 @@ class AppSettings(BaseSettings):
     bot_internal_url: str = "http://localhost:8081"
     bot_internal_secret: str = ""
 
+    chat_encryption_key: str = ""
+    ws_heartbeat_interval: int = 30
+    image_chat_max_size: int = 1280
+    image_avatar_max_size: int = 400
+    image_cover_max_size: int = 800
+    image_quality: int = 80
+    image_thumbnail_size: int = 320
+    image_strip_metadata: bool = True
+    voice_bitrate: str = "64k"
+    voice_max_duration: int = 300
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [
