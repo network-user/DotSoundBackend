@@ -7,12 +7,45 @@ export const tg = WebApp
 export const telegramId: number | null =
   WebApp.initDataUnsafe?.user?.id ?? null
 
-let _internalUserId: number | null = null
+const INTERNAL_USER_ID_KEY =
+  'auth-user-id'
+
+function loadStoredInternalUserId():
+  | number
+  | null {
+  try {
+    const raw = localStorage.getItem(
+      INTERNAL_USER_ID_KEY,
+    )
+    if (!raw) return null
+    const parsed = Number(raw)
+    return Number.isFinite(parsed)
+      ? parsed
+      : null
+  } catch {
+    return null
+  }
+}
+
+let _internalUserId: number | null =
+  loadStoredInternalUserId()
 
 export function setInternalUserId(
   id: number | null,
 ): void {
   _internalUserId = id
+  try {
+    if (id === null) {
+      localStorage.removeItem(
+        INTERNAL_USER_ID_KEY,
+      )
+    } else {
+      localStorage.setItem(
+        INTERNAL_USER_ID_KEY,
+        String(id),
+      )
+    }
+  } catch {}
 }
 
 export function getInternalUserId():
