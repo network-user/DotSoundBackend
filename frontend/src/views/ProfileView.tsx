@@ -9,6 +9,7 @@ import type {
   UserStatsResponse,
 } from '@/types/api'
 import { usePlayer } from '@/store/PlayerContext'
+import { Icon } from '@/components/Icon/Icon'
 import { ProfileHero } from '@/components/Profile/ProfileHero'
 import { ProfileStats } from '@/components/Profile/ProfileStats'
 import { ProfileActions } from '@/components/Profile/ProfileActions'
@@ -22,13 +23,13 @@ interface Props {
   onNavigate: (
     view: 'liked' | 'playlists' | 'upload'
   ) => void
-  onLogout?: () => void
+  onOpenSettings?: () => void
 }
 
 export function ProfileView({
   active,
   onNavigate,
-  onLogout,
+  onOpenSettings,
 }: Props) {
   const { playTrack } = usePlayer()
   const [tab, setTab] =
@@ -161,19 +162,29 @@ export function ProfileView({
       id="view-profile"
       className={`view${active ? ' active' : ''}`}
     >
-      <div className="profile-tabs">
-        <button
-          className={`profile-tab${tab === 'profile' ? ' active' : ''}`}
-          onClick={() => setTab('profile')}
-        >
-          Профиль
-        </button>
-        <button
-          className={`profile-tab${tab === 'import' ? ' active' : ''}`}
-          onClick={() => setTab('import')}
-        >
-          Импорт
-        </button>
+      <div className="profile-tabs-row">
+        <div className="profile-tabs">
+          <button
+            className={`profile-tab${tab === 'profile' ? ' active' : ''}`}
+            onClick={() => setTab('profile')}
+          >
+            Профиль
+          </button>
+          <button
+            className={`profile-tab${tab === 'import' ? ' active' : ''}`}
+            onClick={() => setTab('import')}
+          >
+            Импорт
+          </button>
+        </div>
+        {onOpenSettings && (
+          <button
+            className="icon-btn profile-settings-btn"
+            onClick={onOpenSettings}
+          >
+            <Icon name="settings" size={20} />
+          </button>
+        )}
       </div>
 
       {tab === 'profile' && (
@@ -202,17 +213,6 @@ export function ProfileView({
             }
             onDelete={handleDelete}
           />
-          {onLogout && (
-            <div style={{ padding: '16px' }}>
-              <button
-                className="btn-secondary"
-                style={{ width: '100%' }}
-                onClick={onLogout}
-              >
-                Выйти
-              </button>
-            </div>
-          )}
         </>
       )}
 

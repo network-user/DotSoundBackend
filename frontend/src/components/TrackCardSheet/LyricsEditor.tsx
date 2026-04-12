@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
-import type { LyricsResponse, SyncedLine } from '@/types/api'
+import { Icon } from '@/components/Icon/Icon'
+import type {
+  LyricsResponse,
+  SyncedLine,
+} from '@/types/api'
 
 interface Props {
   trackId?: number
@@ -11,22 +15,13 @@ interface Props {
   onCancel: () => void
 }
 
-type EditorStep = 'text' | 'timecodes'
+type Step = 'text' | 'sync'
 
 function msToDisplay(ms: number): string {
-  const totalSec = ms / 1000
-  const m = Math.floor(totalSec / 60)
-  const s = (totalSec % 60).toFixed(1).padStart(4, '0')
+  const sec = ms / 1000
+  const m = Math.floor(sec / 60)
+  const s = (sec % 60).toFixed(1).padStart(4, '0')
   return `${m}:${s}`
-}
-
-function parseMsFromInput(val: string): number | null {
-  const parts = val.trim().split(':')
-  if (parts.length !== 2) return null
-  const m = parseFloat(parts[0])
-  const s = parseFloat(parts[1])
-  if (isNaN(m) || isNaN(s)) return null
-  return Math.round((m * 60 + s) * 1000)
 }
 
 export function LyricsEditor({
@@ -36,44 +31,140 @@ export function LyricsEditor({
   onSaved,
   onCancel,
 }: Props) {
-  const { currentTime, track, playTrack } = usePlayer()
+  const {
+    currentTime,
+    duration,
+    isPlaying,
+    track,
+    playTrack,
+    togglePlay,
+    seek,
+  } = usePlayer()
 
-  const [step, setStep] = useState<EditorStep>('text')
-  const [plainText, setPlainText] = useState(existingLyrics?.plain_text ?? '')
+  const [step, setStep] = useState<Step>('text')
+  const [plainText, setPlainText] = useState(
+    existingLyrics?.plain_text ?? '',
+  )
   const [lines, setLines] = useState<string[]>([])
-  const [timecodes, setTimecodes] = useState<(number | null)[]>([])
+  const [timecodes, setTimecodes] = useState<
+    (number | null)[]
+  >([])
+  const [currentLine, setCurrentLine] = useState(0)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    null,
+  )
+  const [history, setHistory] = useState<
+    { idx: number; prev: number | null }[]
+  >([])
+  const listRef = useRef<HTMLDivElement>(null)
+  const activeRef = useRef<HTMLDivElement>(null)
 
-  // When entering timecode step, split text into lines
-  const enterTimecodeStep = () => {
-    const splitLines = plainText.split('\n').filter((l) => l.trim() !== '')
-    setLines(splitLines)
-    // Preserve existing timecodes if available
-    const existing = existingLyrics?.synced_lines ?? []
-    setTimecodes(splitLines.map((_, i) => existing[i]?.time_ms ?? null))
-    setStep('timecodes')
+  const enterSync = () => {
+    const split = plainText
+      .split('\n')
+      .filter((l) => l.trim())
+    setLines(split)
+    const existing =
+      existingLyrics?.synced_lines ?? []
+    setTimecodes(
+      split.map(
+        (_, i) => existing[i]?.time_ms ?? null,
+      ),
+    )
+    setCurrentLine(0)
+    setHistory([])
+    setStep('sync')
   }
 
-  // Tap to mark: set current playback time for line
-  const markLine = (idx: number) => {
+  const markCurrent = () => {
     const ms = Math.round(currentTime * 1000)
+    const idx = currentLine
+    setHistory((h) => [
+      ...h,
+      { idx, prev: timecodes[idx] },
+    ])
     setTimecodes((prev) => {
       const next = [...prev]
       next[idx] = ms
       return next
     })
+    if (currentLine < lines.length - 1) {
+      setCurrentLine((c) => c + 1)
+    }
   }
 
-  // Manual input for timecode
-  const handleTimeInput = (idx: number, val: string) => {
-    const ms = parseMsFromInput(val)
+  const undoLast = () => {
+    if (!history.length) return
+    const last = history[history.length - 1]
     setTimecodes((prev) => {
       const next = [...prev]
-      next[idx] = ms
+      next[last.idx] = last.prev
       return next
     })
+    setCurrentLine(last.idx)
+    setHistory((h) => h.slice(0, -1))
   }
+
+  const jumpTo = (idx: number) => {
+    setCurrentLine(idx)
+    if (timecodes[idx] !== null) {
+      const pct = duration
+        ? (timecodes[idx]! / 1000 / duration) *
+          100
+        : 0
+      seek(pct)
+    }
+  }
+
+  const seekRelative = (sec: number) => {
+    if (!duration) return
+    const target = Math.max(
+      0,
+      Math.min(
+        duration,
+        currentTime + sec,
+      ),
+    )
+    seek((target / duration) * 100)
+  }
+
+  useEffect(() => {
+    if (activeRef.current) {
+      activeRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      })
+    }
+  }, [currentLine])
+
+  useEffect(() => {
+    if (step === 'sync') {
+      if (localAudioUrl) {
+        playTrack(
+          {
+            id: -1,
+            title: 'Preview',
+            artist: '',
+            duration_seconds: 0,
+            cover_key: null,
+            play_count: 0,
+            is_active: true,
+            is_public: true,
+            source: 'internal',
+            sc_url: null,
+            sc_uri: null,
+            uploaded_by_id: null,
+            video_key: null,
+            created_at: '',
+          },
+          localAudioUrl,
+        ).catch(() => {})
+      } else if (track) {
+        playTrack(track).catch(() => {})
+      }
+    }
+  }, [step])
 
   const handleSaveText = async () => {
     if (!plainText.trim()) {
@@ -81,7 +172,6 @@ export function LyricsEditor({
       return
     }
     if (localAudioUrl) {
-      // If we are in upload mode, just "save" locally by calling onSaved with dummy record
       onSaved({
         track_id: 0,
         plain_text: plainText.trim(),
@@ -94,7 +184,10 @@ export function LyricsEditor({
     setSaving(true)
     setError(null)
     try {
-      const saved = await api.saveLyrics(trackId!, plainText.trim())
+      const saved = await api.saveLyrics(
+        trackId!,
+        plainText.trim(),
+      )
       onSaved(saved)
     } catch {
       setError('Ошибка сохранения')
@@ -104,98 +197,85 @@ export function LyricsEditor({
   }
 
   const handleSaveSync = async () => {
-    const syncedLines: SyncedLine[] = lines
-      .map((text, i) => ({ time_ms: timecodes[i] ?? 0, text }))
+    const synced: SyncedLine[] = lines
+      .map((text, i) => ({
+        time_ms: timecodes[i] ?? 0,
+        text,
+      }))
       .sort((a, b) => a.time_ms - b.time_ms)
 
     if (localAudioUrl) {
       onSaved({
         track_id: 0,
         plain_text: plainText.trim(),
-        synced_lines: syncedLines,
+        synced_lines: synced,
         created_at: '',
         updated_at: '',
       })
       return
     }
-
     setSaving(true)
     setError(null)
     try {
-      const saved = await api.saveLyricsSync(trackId!, syncedLines)
+      const saved = await api.saveLyricsSync(
+        trackId!,
+        synced,
+      )
       onSaved(saved)
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : ''
-      setError(msg === '422' ? 'Таймкоды должны быть в порядке возрастания' : 'Ошибка сохранения')
+    } catch {
+      setError('Ошибка сохранения')
     } finally {
       setSaving(false)
     }
   }
 
-  // Auto-start playing when entering timecode step
-  useEffect(() => {
-    if (step === 'timecodes') {
-      if (localAudioUrl) {
-        // Special case for local file: we use the player but need to set stream source
-        playTrack({
-          id: -1,
-          title: 'Preview',
-          artist: 'Local File',
-          duration_seconds: 0,
-          cover_key: null,
-          play_count: 0,
-          is_active: true,
-          is_public: true,
-          source: 'internal',
-          sc_url: null,
-          sc_uri: null,
-          uploaded_by_id: null,
-          created_at: '',
-        }, localAudioUrl).catch(() => {})
-      } else if (track) {
-        playTrack(track).catch(() => {})
-      }
-    }
-  }, [step, localAudioUrl]) // eslint-disable-line react-hooks/exhaustive-deps
-
   if (step === 'text') {
     return (
-      <div className="lyrics-editor">
-        <div className="lyrics-panel-header">
-          <span className="lyrics-panel-title">
-            {existingLyrics ? 'Редактировать текст' : 'Добавить текст'}
+      <div className="le-panel">
+        <div className="le-header">
+          <span className="le-title">
+            {existingLyrics
+              ? 'Редактировать текст'
+              : 'Добавить текст'}
           </span>
-          <button className="lyrics-edit-btn" onClick={onCancel}>Отмена</button>
+          <button
+            className="icon-btn"
+            onClick={onCancel}
+          >
+            <Icon name="x" size={16} />
+          </button>
         </div>
-
-        <div className="form-group">
-          <textarea
-            className="form-input lyrics-textarea"
-            rows={10}
-            maxLength={10000}
-            placeholder="Вставьте текст песни&#10;Каждая строка — отдельная строфа"
-            value={plainText}
-            onChange={(e) => setPlainText(e.target.value)}
-          />
-        </div>
-
-        {error && <div className="form-error">{error}</div>}
-
-        <div className="lyrics-editor-actions">
+        <textarea
+          className="form-input le-textarea"
+          rows={10}
+          maxLength={10000}
+          placeholder={
+            'Вставьте текст песни\n' +
+            'Каждая строка — отдельная строфа'
+          }
+          value={plainText}
+          onChange={(e) =>
+            setPlainText(e.target.value)
+          }
+        />
+        {error && (
+          <div className="form-error">{error}</div>
+        )}
+        <div className="le-actions">
           <button
             className="btn-secondary"
             onClick={handleSaveText}
-            disabled={saving || !plainText.trim() || (!!localAudioUrl && saving)}
+            disabled={saving || !plainText.trim()}
           >
-            💾 {localAudioUrl ? 'Применить текст' : 'Сохранить текст'}
+            Сохранить текст
           </button>
           {plainText.trim() && (
             <button
               className="btn-primary"
-              onClick={enterTimecodeStep}
+              onClick={enterSync}
               disabled={saving}
             >
-              🕐 Добавить таймкоды →
+              Добавить таймкоды
             </button>
           )}
         </div>
@@ -203,57 +283,132 @@ export function LyricsEditor({
     )
   }
 
-  // Timecode step
+  const pct = duration
+    ? (currentTime / duration) * 100
+    : 0
+
   return (
-    <div className="lyrics-editor">
-      <div className="lyrics-panel-header">
-        <button className="lyrics-edit-btn" onClick={() => setStep('text')}>← Текст</button>
-        <span className="lyrics-panel-title">Таймкоды</span>
-        <span className="lyrics-editor-time">{msToDisplay(Math.round(currentTime * 1000))}</span>
+    <div className="le-fullscreen">
+      <div className="le-fs-header">
+        <button
+          className="icon-btn"
+          onClick={() => setStep('text')}
+        >
+          <Icon name="undo" size={18} />
+        </button>
+        <span className="le-fs-time">
+          {msToDisplay(
+            Math.round(currentTime * 1000),
+          )}
+        </span>
+        <button
+          className="icon-btn"
+          onClick={undoLast}
+          disabled={!history.length}
+        >
+          <Icon name="undo" size={18} />
+        </button>
       </div>
 
-      <p className="lyrics-editor-hint">
-        Нажми ▶ на строке во время воспроизведения, чтобы отметить момент. Или введи время вручную (м:сс.д).
-      </p>
+      <div className="le-fs-seek">
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={0.1}
+          value={pct}
+          onChange={(e) =>
+            seek(Number(e.target.value))
+          }
+        />
+      </div>
 
-      <div className="lyrics-timecode-list">
+      <div className="le-fs-controls">
+        <button
+          className="ctrl-btn"
+          onClick={() => seekRelative(-5)}
+        >
+          <Icon name="rewind-5" size={20} />
+        </button>
+        <button
+          className="play-btn"
+          onClick={togglePlay}
+        >
+          <Icon
+            name={isPlaying ? 'pause' : 'play'}
+            size={18}
+          />
+        </button>
+        <button
+          className="ctrl-btn"
+          onClick={() => seekRelative(5)}
+        >
+          <Icon name="forward-5" size={20} />
+        </button>
+      </div>
+
+      <div
+        className="le-fs-current"
+        onClick={markCurrent}
+      >
+        <p className="le-fs-current-text">
+          {lines[currentLine] || '—'}
+        </p>
+        <p className="le-fs-hint">
+          Тапни чтобы отметить
+        </p>
+      </div>
+
+      <div
+        className="le-fs-list"
+        ref={listRef}
+      >
         {lines.map((line, i) => (
-          <div key={i} className="lyrics-timecode-row">
-            <button
-              className="lyrics-timecode-mark"
-              title="Отметить текущий момент"
-              onClick={() => markLine(i)}
-            >
-              ▶
-            </button>
-            <div className="lyrics-timecode-text">{line}</div>
-            <input
-              className="lyrics-timecode-input"
-              type="text"
-              placeholder="0:00.0"
-              value={timecodes[i] !== null ? msToDisplay(timecodes[i]!) : ''}
-              onChange={(e) => handleTimeInput(i, e.target.value)}
-            />
+          <div
+            key={i}
+            ref={
+              i === currentLine
+                ? activeRef
+                : null
+            }
+            className={`le-fs-line${i === currentLine ? ' active' : ''}`}
+            onClick={() => jumpTo(i)}
+          >
+            <span className="le-fs-line-time">
+              {timecodes[i] !== null
+                ? msToDisplay(timecodes[i]!)
+                : '—'}
+            </span>
+            <span className="le-fs-line-text">
+              {line}
+            </span>
           </div>
         ))}
       </div>
 
-      {error && <div className="form-error">{error}</div>}
+      {error && (
+        <div className="form-error">{error}</div>
+      )}
 
-      <div className="lyrics-editor-actions">
+      <div className="le-fs-save">
         <button
           className="btn-secondary"
           onClick={handleSaveText}
           disabled={saving}
+          style={{ flex: 1 }}
         >
-          💾 Сохранить без таймкодов
+          Без таймкодов
         </button>
         <button
           className="btn-primary"
           onClick={handleSaveSync}
-          disabled={saving || timecodes.every((t) => t === null)}
+          disabled={
+            saving ||
+            timecodes.every((t) => t === null)
+          }
+          style={{ flex: 1 }}
         >
-          💾 {localAudioUrl ? 'Применить с таймкодами' : 'Сохранить с таймкодами'}
+          Сохранить
         </button>
       </div>
     </div>

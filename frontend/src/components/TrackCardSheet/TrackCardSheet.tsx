@@ -11,6 +11,7 @@ import {
 } from '@/lib/telegram'
 import { useLikes } from '@/store/LikesContext'
 import { usePlayer } from '@/store/PlayerContext'
+import { Icon } from '@/components/Icon/Icon'
 import type { TrackCardResponse } from '@/types/api'
 import { LyricsPanel } from './LyricsPanel'
 
@@ -29,11 +30,8 @@ function fmt(sec: number) {
   return `${m}:${s}`
 }
 
-function coverUrl(
-  key: string,
-  v: number,
-): string {
-  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}&v=${v}`
+function coverUrl(k: string, v: number) {
+  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(k)}&v=${v}`
 }
 
 export function TrackCardSheet({
@@ -53,7 +51,6 @@ export function TrackCardSheet({
     playNext,
     playPrev,
     openLyrics,
-    openEq,
     openComplaint,
   } = usePlayer()
   const {
@@ -67,6 +64,7 @@ export function TrackCardSheet({
     useState<TrackCardResponse | null>(null)
   const [showLyrics, setShowLyrics] =
     useState(false)
+  const [showEdit, setShowEdit] = useState(false)
   const [authorAvatarUrl, setAuthorAvatarUrl] =
     useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -88,6 +86,7 @@ export function TrackCardSheet({
     if (!isCardOpen || !track) {
       setCard(null)
       setShowLyrics(false)
+      setShowEdit(false)
       setAuthorAvatarUrl(null)
       setCoverKey(null)
       setCoverBusy(false)
@@ -147,9 +146,10 @@ export function TrackCardSheet({
     }
   }
 
-  const handleCoverUpload = useCallback(() => {
-    coverInputRef.current?.click()
-  }, [])
+  const handleCoverUpload = useCallback(
+    () => coverInputRef.current?.click(),
+    [],
+  )
 
   const handleCoverSelected = useCallback(
     async (
@@ -161,20 +161,16 @@ export function TrackCardSheet({
       try {
         const fd = new FormData()
         fd.append('cover', file)
-        const updated =
-          await api.uploadTrackCover(
-            track.id,
-            fd,
-          )
-        if (updated.cover_key) {
-          setCoverKey(updated.cover_key)
+        const up = await api.uploadTrackCover(
+          track.id,
+          fd,
+        )
+        if (up.cover_key) {
+          setCoverKey(up.cover_key)
           setCoverVer((v) => v + 1)
         }
-      } catch {
-        tg.showAlert(
-          'Не удалось загрузить обложку',
-        )
-      } finally {
+      } catch {}
+      finally {
         setCoverBusy(false)
         e.target.value = ''
       }
@@ -182,7 +178,7 @@ export function TrackCardSheet({
     [track],
   )
 
-  const handleGenerateCover =
+  const handleGenerate =
     useCallback(async () => {
       if (!track || genCooldown > 0) return
       setCoverBusy(true)
@@ -196,31 +192,27 @@ export function TrackCardSheet({
             setTimeout(r, 1500),
           )
           try {
-            const updated = await api.getTrack(
-              track.id,
-            )
+            const u = await api.getTrack(track.id)
             if (
-              updated.cover_key &&
-              updated.cover_key !== coverKey
+              u.cover_key &&
+              u.cover_key !== coverKey
             ) {
-              setCoverKey(updated.cover_key)
+              setCoverKey(u.cover_key)
               setCoverVer((v) => v + 1)
               break
             }
           } catch {}
         }
-      } catch {
-        tg.showAlert(
-          'Не удалось сгенерировать обложку',
-        )
-      } finally {
+      } catch {}
+      finally {
         setCoverBusy(false)
       }
     }, [track, genCooldown, coverKey])
 
-  const handleVideoUpload = useCallback(() => {
-    videoInputRef.current?.click()
-  }, [])
+  const handleVideoUpload = useCallback(
+    () => videoInputRef.current?.click(),
+    [],
+  )
 
   const handleVideoSelected = useCallback(
     async (
@@ -232,12 +224,8 @@ export function TrackCardSheet({
         const fd = new FormData()
         fd.append('video', file)
         await api.uploadTrackVideo(track.id, fd)
-        tg.showAlert('Видео загружено')
-      } catch {
-        tg.showAlert(
-          'Не удалось загрузить видео',
-        )
-      } finally {
+      } catch {}
+      finally {
         e.target.value = ''
       }
     },
@@ -249,16 +237,13 @@ export function TrackCardSheet({
   const coverSrc = coverKey
     ? coverUrl(coverKey, coverVer)
     : null
-
   const videoSrc = track.video_key
     ? `/api/v1/tracks/${track.id}/video`
     : null
-
   const internalId = getInternalUserId()
   const isOwner =
     internalId !== null &&
     track.uploaded_by_id === internalId
-
   const liked = isLiked(track.id)
   const disliked = isDisliked(track.id)
   const pct = duration
@@ -277,7 +262,7 @@ export function TrackCardSheet({
           className="tcs-close icon-btn"
           onClick={closeCard}
         >
-          ✕
+          <Icon name="x" size={18} />
         </button>
 
         <div
@@ -306,7 +291,7 @@ export function TrackCardSheet({
             />
           ) : (
             <div className="tcs-cover-placeholder">
-              🎵
+              <Icon name="music" size={72} />
             </div>
           )}
         </div>
@@ -318,7 +303,6 @@ export function TrackCardSheet({
           <p className="tcs-artist">
             {track.artist ?? '—'}
           </p>
-
           {card?.author && (
             <div
               className="tcs-author-row"
@@ -329,13 +313,12 @@ export function TrackCardSheet({
                   <img
                     src={authorAvatarUrl}
                     alt=""
-                    onError={(e) => {
-                      e.currentTarget.style.display =
-                        'none'
-                    }}
                   />
                 ) : (
-                  '👤'
+                  <Icon
+                    name="user"
+                    size={18}
+                  />
                 )}
               </div>
               <span className="tcs-author-name">
@@ -343,9 +326,11 @@ export function TrackCardSheet({
                   card.author.username ||
                   'Автор'}
               </span>
-              <span className="tcs-author-chevron">
-                ›
-              </span>
+              <Icon
+                name="chevron"
+                size={16}
+                className="tcs-author-chevron"
+              />
             </div>
           )}
         </div>
@@ -373,19 +358,30 @@ export function TrackCardSheet({
               className="ctrl-btn"
               onClick={playPrev}
             >
-              ⏮
+              <Icon
+                name="skip-back"
+                size={22}
+              />
             </button>
             <button
               className="play-btn"
               onClick={togglePlay}
             >
-              {isPlaying ? '⏸' : '▶'}
+              <Icon
+                name={
+                  isPlaying ? 'pause' : 'play'
+                }
+                size={20}
+              />
             </button>
             <button
               className="ctrl-btn"
               onClick={playNext}
             >
-              ⏭
+              <Icon
+                name="skip-forward"
+                size={22}
+              />
             </button>
           </div>
         </div>
@@ -395,9 +391,12 @@ export function TrackCardSheet({
             className={`tcs-action-btn${liked ? ' active' : ''}`}
             onClick={() => toggleLike(track.id)}
           >
-            <span className="tcs-action-icon">
-              {liked ? '❤️' : '🤍'}
-            </span>
+            <Icon
+              name={
+                liked ? 'heart' : 'heart-outline'
+              }
+              size={20}
+            />
             <span className="tcs-action-label">
               Лайк
             </span>
@@ -409,9 +408,10 @@ export function TrackCardSheet({
               toggleDislike(track.id)
             }
           >
-            <span className="tcs-action-icon">
-              {disliked ? '👎' : '▽'}
-            </span>
+            <Icon
+              name="thumbs-down"
+              size={20}
+            />
             <span className="tcs-action-label">
               Дизлайк
             </span>
@@ -423,9 +423,7 @@ export function TrackCardSheet({
               setShowLyrics((v) => !v)
             }
           >
-            <span className="tcs-action-icon">
-              ¶
-            </span>
+            <Icon name="text" size={20} />
             <span className="tcs-action-label">
               Текст
             </span>
@@ -435,23 +433,9 @@ export function TrackCardSheet({
             className="tcs-action-btn"
             onClick={handleShare}
           >
-            <span className="tcs-action-icon">
-              🔗
-            </span>
+            <Icon name="link" size={20} />
             <span className="tcs-action-label">
               Поделиться
-            </span>
-          </button>
-
-          <button
-            className="tcs-action-btn"
-            onClick={openEq}
-          >
-            <span className="tcs-action-icon">
-              ⫛
-            </span>
-            <span className="tcs-action-label">
-              Эквалайзер
             </span>
           </button>
 
@@ -460,70 +444,22 @@ export function TrackCardSheet({
             onClick={handleAuthor}
             disabled={!card?.author}
           >
-            <span className="tcs-action-icon">
-              👤
-            </span>
+            <Icon name="user" size={20} />
             <span className="tcs-action-label">
               К автору
             </span>
           </button>
 
           {isOwner && (
-            <>
-              <button
-                className="tcs-action-btn"
-                onClick={handleCoverUpload}
-                disabled={coverBusy}
-              >
-                <span className="tcs-action-icon">
-                  🖼
-                </span>
-                <span className="tcs-action-label">
-                  Обложка
-                </span>
-              </button>
-
-              <button
-                className="tcs-action-btn"
-                onClick={handleGenerateCover}
-                disabled={
-                  coverBusy || genCooldown > 0
-                }
-              >
-                <span className="tcs-action-icon">
-                  ✨
-                </span>
-                <span className="tcs-action-label">
-                  {genCooldown > 0
-                    ? `${genCooldown}с`
-                    : 'Генерация'}
-                </span>
-              </button>
-
-              <button
-                className="tcs-action-btn"
-                onClick={handleVideoUpload}
-              >
-                <span className="tcs-action-icon">
-                  🎬
-                </span>
-                <span className="tcs-action-label">
-                  Видео
-                </span>
-              </button>
-            </>
-          )}
-
-          {!isSC && (
             <button
-              className="tcs-action-btn"
-              onClick={openComplaint}
+              className={`tcs-action-btn${showEdit ? ' active' : ''}`}
+              onClick={() =>
+                setShowEdit((v) => !v)
+              }
             >
-              <span className="tcs-action-icon">
-                🚩
-              </span>
+              <Icon name="edit" size={20} />
               <span className="tcs-action-label">
-                Жалоба
+                Редактировать
               </span>
             </button>
           )}
@@ -532,23 +468,83 @@ export function TrackCardSheet({
             className="tcs-action-btn"
             onClick={openLyrics}
           >
-            <span className="tcs-action-icon">
-              📜
-            </span>
+            <Icon name="maximize" size={20} />
             <span className="tcs-action-label">
               Полный экран
             </span>
           </button>
+
+          {!isSC && (
+            <button
+              className="tcs-action-btn"
+              onClick={openComplaint}
+            >
+              <Icon name="flag" size={20} />
+              <span className="tcs-action-label">
+                Жалоба
+              </span>
+            </button>
+          )}
         </div>
 
+        {showEdit && isOwner && (
+          <div className="tcs-edit-panel">
+            <div className="tcs-edit-title">
+              Редактирование
+            </div>
+            <div className="tcs-edit-actions">
+              <button
+                className="tcs-edit-btn"
+                onClick={handleCoverUpload}
+                disabled={coverBusy}
+              >
+                <Icon
+                  name="image"
+                  size={18}
+                />
+                Обложка
+              </button>
+              <button
+                className="tcs-edit-btn"
+                onClick={handleGenerate}
+                disabled={
+                  coverBusy || genCooldown > 0
+                }
+              >
+                <Icon
+                  name="sparkle"
+                  size={18}
+                />
+                {genCooldown > 0
+                  ? `${genCooldown}с`
+                  : 'Генерация'}
+              </button>
+              <button
+                className="tcs-edit-btn"
+                onClick={handleVideoUpload}
+              >
+                <Icon
+                  name="video"
+                  size={18}
+                />
+                Видео
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="tcs-volume-section">
-          <span className="tcs-volume-icon">
-            {volume === 0
-              ? '🔇'
-              : volume < 0.5
-                ? '🔉'
-                : '🔊'}
-          </span>
+          <Icon
+            name={
+              volume === 0
+                ? 'volume-off'
+                : volume < 0.5
+                  ? 'volume-low'
+                  : 'volume-high'
+            }
+            size={16}
+            className="tcs-volume-icon"
+          />
           <input
             type="range"
             className="tcs-volume"

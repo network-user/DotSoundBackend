@@ -136,11 +136,16 @@ async def upload_avatar(
     return file_key
 
 
-async def stream_object_range(
+async def download_object_range(
     file_key: str,
     range_header: str | None = None,
-) -> tuple[Any, int, str | None, str]:
-    """Returns (body, content_length, content_range, content_type)."""
+) -> tuple[bytes, int, str | None, str]:
+    """Download (a range of) an S3 object.
+
+    Returns (data, content_length, content_range, content_type).
+    All data is read inside the S3 client context to avoid
+    connection-closed errors.
+    """
     kwargs: dict[str, Any] = {
         "Bucket": settings.minio_bucket,
         "Key": file_key,
@@ -148,26 +153,32 @@ async def stream_object_range(
     if range_header:
         kwargs["Range"] = range_header
     logger.debug(
-        "s3_stream_range_requested",
+        "s3_range_requested",
         file_key=file_key,
         range=range_header,
     )
     async with get_s3_client() as s3:
         try:
-            response = await s3.get_object(**kwargs)
+            response = await s3.get_object(
+                **kwargs
+            )
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
             logger.warning(
-                "s3_stream_range_error",
+                "s3_range_error",
                 file_key=file_key,
                 code=code,
             )
             raise
+        async with response["Body"] as stream:
+            data: bytes = await stream.read()
         return (
-            response["Body"],
+            data,
             int(response["ContentLength"]),
             response.get("ContentRange"),
-            response.get("ContentType", "audio/mpeg"),
+            response.get(
+                "ContentType", "audio/mpeg"
+            ),
         )
 
 
