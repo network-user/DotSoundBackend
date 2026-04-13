@@ -6,6 +6,7 @@ import structlog
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.ws_manager import ws_manager
 from app.models.track import Track
 from app.repositories.block import BlockRepository
 from app.repositories.comment import (
@@ -63,7 +64,7 @@ class CommentService:
             comment_id=c.id,
             track_id=track_id,
         )
-        return {
+        result = {
             "id": c.id,
             "track_id": track_id,
             "user_id": user_id,
@@ -73,6 +74,10 @@ class CommentService:
             "likes": 0,
             "dislikes": 0,
         }
+        await ws_manager.broadcast_to_online(
+            {"event": "comment.new", **result}
+        )
+        return result
 
     async def get_comments(
         self,
@@ -127,6 +132,13 @@ class CommentService:
                 detail="Not allowed",
             )
         await self._repo.soft_delete(comment_id)
+        await ws_manager.broadcast_to_online(
+            {
+                "event": "comment.deleted",
+                "comment_id": comment_id,
+                "track_id": c.track_id,
+            }
+        )
 
     async def pin_comment(
         self, comment_id: int, user_id: int

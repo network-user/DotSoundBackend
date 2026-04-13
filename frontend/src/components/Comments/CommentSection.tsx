@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
+import { onWS } from '@/lib/ws'
 import { CommentCard } from '@/components/Comments/CommentCard'
 import { CommentInput } from '@/components/Comments/CommentInput'
 import type { TrackComment } from '@/types/api'
@@ -27,6 +28,26 @@ export function CommentSection({ trackId, trackOwnerId }: Props) {
   }, [trackId])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    const offNew = onWS('comment.new', (data) => {
+      if (data.track_id !== trackId) return
+      if (data.user_id === myId) return
+      const c = data as unknown as TrackComment
+      setComments((prev) => {
+        if (prev.some((x) => x.id === c.id)) return prev
+        return [c, ...prev]
+      })
+    })
+    const offDel = onWS('comment.deleted', (data) => {
+      if (data.track_id !== trackId) return
+      const id = data.comment_id as number
+      setComments((prev) =>
+        prev.filter((c) => c.id !== id),
+      )
+    })
+    return () => { offNew(); offDel() }
+  }, [trackId, myId])
 
   const handleAdd = async (text: string) => {
     try {
