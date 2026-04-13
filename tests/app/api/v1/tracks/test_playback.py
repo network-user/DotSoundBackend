@@ -222,6 +222,54 @@ async def test_get_share_links_not_found(
     assert r.status_code == 404
 
 
+async def test_video_proxy_success(
+    client: AsyncClient,
+) -> None:
+    from io import BytesIO
+
+    user = await create_test_user(client, 50020)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    t = await create_test_track(
+        client, "VidProxy", user["id"]
+    )
+
+    video_bytes = b"\x00\x00\x00\x1cftypisom" + (
+        b"\x00" * 100
+    )
+    with patch(
+        "app.core.s3.upload_object",
+        new_callable=AsyncMock,
+    ):
+        await client.post(
+            f"/api/v1/tracks/{t['id']}/video",
+            headers=headers,
+            files={
+                "video": (
+                    "clip.mp4",
+                    BytesIO(video_bytes),
+                    "video/mp4",
+                )
+            },
+        )
+
+    with patch(
+        "app.core.s3.download_object",
+        new_callable=AsyncMock,
+        return_value=video_bytes,
+    ):
+        r = await client.get(
+            f"/api/v1/tracks/{t['id']}/video"
+        )
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "video/mp4"
+    assert (
+        r.headers["cache-control"]
+        == "public, max-age=3600"
+    )
+
+
 async def test_video_proxy_not_found(
     client: AsyncClient,
 ) -> None:
