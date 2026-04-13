@@ -453,6 +453,7 @@ export const api = {
 
   async verifyMagicLink(
     token: string,
+    signal?: AbortSignal,
   ): Promise<EmailVerifyResponse> {
     const res =
       await request<EmailVerifyResponse>(
@@ -463,6 +464,7 @@ export const api = {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ token }),
+          signal,
         },
       )
     if (

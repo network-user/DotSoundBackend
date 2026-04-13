@@ -108,11 +108,10 @@ async def request_link_email(
     )
     await redis.aclose()
 
-    base_url = settings.mini_app_url.rstrip("/")
-    link = (
-        f"{base_url}"
-        f"?link_email_token={token}"
-    )
+    base_url = settings.mini_app_url
+    if not base_url.endswith("/"):
+        base_url += "/"
+    link = f"{base_url}?link_email_token={token}"
     await send_magic_link(normalized, link)
 
 

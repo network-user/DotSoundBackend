@@ -6,9 +6,13 @@ type Step = 'welcome' | 'code' | 'success'
 
 interface Props {
   onAuth: () => void
+  onEmail?: () => void
 }
 
-export function TelegramAuth({ onAuth }: Props) {
+export function TelegramAuth({
+  onAuth,
+  onEmail,
+}: Props) {
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const params = new URLSearchParams(
     window.location.search,
@@ -96,6 +100,14 @@ export function TelegramAuth({ onAuth }: Props) {
             >
               Войти через Telegram
             </button>
+            {onEmail && (
+              <button
+                className="btn-secondary auth-back"
+                onClick={onEmail}
+              >
+                Войти по email
+              </button>
+            )}
           </>
         )}
 
