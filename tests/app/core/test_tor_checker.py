@@ -8,8 +8,11 @@ from unittest.mock import (
 
 import pytest
 
+from dotsound_private_core.services.abuse import (
+    TOR_REDIS_KEY,
+)
+
 from app.core.tor_checker import (
-    _REDIS_KEY,
     is_tor_exit_node,
     refresh_tor_exit_nodes,
 )
@@ -71,10 +74,10 @@ class TestRefreshTorExitNodes:
 
         assert count == 2
         pipe.sadd.assert_any_call(
-            _REDIS_KEY, "1.2.3.4"
+            TOR_REDIS_KEY, "1.2.3.4"
         )
         pipe.sadd.assert_any_call(
-            _REDIS_KEY, "5.6.7.8"
+            TOR_REDIS_KEY, "5.6.7.8"
         )
 
     async def test_http_failure_returns_zero(
@@ -163,7 +166,7 @@ class TestIsTorExitNode:
 
         assert result is True
         redis.sismember.assert_awaited_once_with(
-            _REDIS_KEY, "1.2.3.4"
+            TOR_REDIS_KEY, "1.2.3.4"
         )
 
     async def test_normal_ip_returns_false(

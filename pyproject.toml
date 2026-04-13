@@ -39,6 +39,8 @@ aiosqlite = "^0.20"
 mypy = "^1.10"
 ruff = "^0.5"
 black = "^24.4"
+dirty-equals = "^0.8"
+factory-boy = "^3.3"
 
 [tool.black]
 line-length = 79

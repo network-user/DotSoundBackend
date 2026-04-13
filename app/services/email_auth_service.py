@@ -15,8 +15,16 @@ from app.core.auth import (
     _ALGORITHM,
     create_access_token,
 )
-from app.core.disposable_email import (
+from dotsound_private_core.services.abuse import (
     is_disposable_email,
+)
+from dotsound_private_core.services.auth_policy import (
+    FALLBACK_CODE_TTL,
+    FALLBACK_COOLDOWN_TTL,
+    FALLBACK_PREFIX,
+    FALLBACK_RATE_TTL,
+    should_burn_code,
+    should_cooldown_account,
 )
 from app.core.totp import (
     decrypt_secret,
@@ -43,7 +51,6 @@ _MAGIC_LINK_TYPE = "magic_link"
 _2FA_SESSION_TYPE = "2fa_session"
 _ML_PREFIX = "magic_link:"
 _2FA_PREFIX = "2fa_session:"
-_2FA_FALLBACK_PREFIX = "2fa_fallback:"
 _2FA_SESSION_TTL = 300
 
 
@@ -369,8 +376,20 @@ async def send_2fa_fallback(
         )
 
     redis = await _get_redis()
+
+    cooldown_key = (
+        f"{FALLBACK_PREFIX}"
+        f"cooldown:{user.id}"
+    )
+    if await redis.exists(cooldown_key):
+        await redis.aclose()
+        raise EmailAuthError(
+            "Too many failed attempts. "
+            "Try again later"
+        )
+
     rate_key = (
-        f"{_2FA_FALLBACK_PREFIX}{user.id}"
+        f"{FALLBACK_PREFIX}{user.id}"
     )
     if await redis.exists(rate_key):
         await redis.aclose()
@@ -381,11 +400,17 @@ async def send_2fa_fallback(
 
     code = f"{secrets.randbelow(10**6):06d}"
     await redis.setex(
-        f"{_2FA_FALLBACK_PREFIX}code:{user.id}",
-        300,
+        f"{FALLBACK_PREFIX}code:{user.id}",
+        FALLBACK_CODE_TTL,
         code,
     )
-    await redis.setex(rate_key, 120, "1")
+    await redis.setex(
+        rate_key, FALLBACK_RATE_TTL, "1"
+    )
+    await redis.delete(
+        f"{FALLBACK_PREFIX}"
+        f"attempts:{user.id}"
+    )
     await redis.aclose()
 
     await send_totp_fallback_code(user.email, code)
@@ -402,14 +427,76 @@ async def verify_2fa_email_code(
     user_id = int(str(payload["sub"]))
 
     redis = await _get_redis()
-    stored = await redis.get(
-        f"{_2FA_FALLBACK_PREFIX}code:{user_id}"
+
+    cooldown_key = (
+        f"{FALLBACK_PREFIX}"
+        f"cooldown:{user_id}"
     )
-    if not stored or stored.decode() != code:
+    if await redis.exists(cooldown_key):
+        await redis.aclose()
+        raise EmailAuthError(
+            "Too many failed attempts. "
+            "Try again later"
+        )
+
+    code_key = (
+        f"{FALLBACK_PREFIX}code:{user_id}"
+    )
+    stored = await redis.get(code_key)
+    if not stored:
+        await redis.aclose()
+        raise EmailAuthError(
+            "Code expired or not found"
+        )
+
+    if stored.decode() != code:
+        attempts_key = (
+            f"{FALLBACK_PREFIX}"
+            f"attempts:{user_id}"
+        )
+        attempts = await redis.incr(attempts_key)
+        await redis.expire(
+            attempts_key, FALLBACK_CODE_TTL
+        )
+
+        if should_burn_code(attempts):
+            await redis.delete(code_key)
+            await redis.delete(attempts_key)
+            burned_key = (
+                f"{FALLBACK_PREFIX}"
+                f"burned:{user_id}"
+            )
+            burned = await redis.incr(burned_key)
+            await redis.expire(
+                burned_key, FALLBACK_COOLDOWN_TTL
+            )
+            if should_cooldown_account(burned):
+                await redis.setex(
+                    cooldown_key,
+                    FALLBACK_COOLDOWN_TTL,
+                    "1",
+                )
+                logger.warning(
+                    "2fa_fallback_account_cooldown",
+                    user_id=user_id,
+                )
+            logger.warning(
+                "2fa_fallback_code_burned",
+                user_id=user_id,
+            )
+            await redis.aclose()
+            raise EmailAuthError(
+                "Code invalidated due to "
+                "too many attempts"
+            )
+
         await redis.aclose()
         raise EmailAuthError("Invalid code")
+
+    await redis.delete(code_key)
     await redis.delete(
-        f"{_2FA_FALLBACK_PREFIX}code:{user_id}"
+        f"{FALLBACK_PREFIX}"
+        f"attempts:{user_id}"
     )
     await redis.aclose()
 

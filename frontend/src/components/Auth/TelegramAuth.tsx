@@ -49,7 +49,8 @@ export function TelegramAuth({ onAuth }: Props) {
   }
 
   const handleVerifyCode = async () => {
-    if (!code.trim() || code.length !== 6) {
+    const digits = code.replace(/\s/g, '')
+    if (!digits || digits.length !== 6) {
       setError('Введите 6-значный код')
       return
     }
@@ -57,7 +58,7 @@ export function TelegramAuth({ onAuth }: Props) {
     setError('')
     try {
       const res = await api.verifyTelegramCode(
-        code.trim(),
+        digits,
       )
       setInternalUserId(res.user_id)
       setStep('success')
@@ -111,13 +112,13 @@ export function TelegramAuth({ onAuth }: Props) {
               className="form-input auth-code-input"
               type="text"
               inputMode="numeric"
-              maxLength={6}
-              placeholder="000000"
+              maxLength={7}
+              placeholder="000 000"
               value={code}
               onChange={(e) =>
                 setCode(
                   e.target.value.replace(
-                    /\D/g,
+                    /[^\d ]/g,
                     '',
                   ),
                 )

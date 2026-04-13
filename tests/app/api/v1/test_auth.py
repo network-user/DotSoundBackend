@@ -106,6 +106,9 @@ async def test_generate_code_success(
 ) -> None:
     redis_mock = AsyncMock()
     redis_mock.setex = AsyncMock()
+    redis_mock.exists = AsyncMock(
+        return_value=False
+    )
     mock_redis.return_value = redis_mock
 
     with patch(
@@ -121,6 +124,39 @@ async def test_generate_code_success(
         )
     assert r.status_code == 200
     assert r.json()["code"] == "ABC123"
+
+
+@patch(
+    "app.api.v1.auth._get_redis",
+    new_callable=AsyncMock,
+)
+@patch(
+    "app.api.v1.auth.generate_code",
+    return_value="999999",
+)
+async def test_generate_code_blocked_by_cooldown(
+    mock_gen: AsyncMock,
+    mock_redis: AsyncMock,
+    client: AsyncClient,
+) -> None:
+    redis_mock = AsyncMock()
+    redis_mock.exists = AsyncMock(
+        return_value=True
+    )
+    mock_redis.return_value = redis_mock
+
+    with patch(
+        "app.api.v1.auth.settings"
+    ) as s:
+        s.bot_internal_secret = "sec"
+        r = await client.post(
+            "/api/v1/auth/generate-code",
+            json={"telegram_id": 100},
+            headers={
+                "X-Internal-Secret": "sec"
+            },
+        )
+    assert r.status_code == 429
 
 
 @patch(
@@ -203,6 +239,49 @@ async def test_verify_code_success(
 
     assert r.status_code == 200
     assert "access_token" in r.json()
+
+
+@patch(
+    "app.api.v1.auth._get_redis",
+    new_callable=AsyncMock,
+)
+async def test_verify_code_strips_whitespace(
+    mock_redis: AsyncMock,
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 70002)
+
+    redis_mock = AsyncMock()
+    redis_mock.get = AsyncMock(
+        return_value=str(
+            user["telegram_id"]
+        ).encode()
+    )
+    redis_mock.delete = AsyncMock()
+    mock_redis.return_value = redis_mock
+
+    with patch(
+        "app.api.v1.auth.httpx.AsyncClient"
+    ) as mock_httpx:
+        hc = AsyncMock()
+        hc.post = AsyncMock()
+        hc.__aenter__ = AsyncMock(
+            return_value=hc
+        )
+        hc.__aexit__ = AsyncMock(
+            return_value=False
+        )
+        mock_httpx.return_value = hc
+
+        r = await client.post(
+            "/api/v1/auth/verify-code",
+            json={"code": "123 456"},
+        )
+
+    assert r.status_code == 200
+    redis_mock.get.assert_awaited_once_with(
+        "auth_code:123456"
+    )
 
 
 async def test_internal_token_forbidden_ip(

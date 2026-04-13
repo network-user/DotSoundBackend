@@ -545,8 +545,11 @@ async def test_send_2fa_fallback_success(
     mock_svc_cls.return_value = svc
 
     redis_mock = AsyncMock()
-    redis_mock.exists = AsyncMock(return_value=0)
+    redis_mock.exists = AsyncMock(
+        side_effect=[False, False]
+    )
     redis_mock.setex = AsyncMock()
+    redis_mock.delete = AsyncMock()
     redis_mock.aclose = AsyncMock()
     mock_redis.return_value = redis_mock
 
@@ -579,7 +582,9 @@ async def test_send_2fa_fallback_rate_limited(
     mock_svc_cls.return_value = svc
 
     redis_mock = AsyncMock()
-    redis_mock.exists = AsyncMock(return_value=1)
+    redis_mock.exists = AsyncMock(
+        side_effect=[False, True]
+    )
     redis_mock.aclose = AsyncMock()
     mock_redis.return_value = redis_mock
 
@@ -632,6 +637,9 @@ async def test_verify_2fa_email_code_success(
     session_token = _create_2fa_session_token(1)
 
     redis_mock = AsyncMock()
+    redis_mock.exists = AsyncMock(
+        return_value=False
+    )
     redis_mock.get = AsyncMock(
         return_value=b"123456"
     )
@@ -658,7 +666,7 @@ async def test_verify_2fa_email_code_success(
 
 
 @patch(f"{_MOD}._get_redis", new_callable=AsyncMock)
-async def test_verify_2fa_email_code_invalid(
+async def test_verify_2fa_email_code_expired(
     mock_redis: AsyncMock,
     session: AsyncSession,
 ) -> None:
@@ -669,7 +677,42 @@ async def test_verify_2fa_email_code_invalid(
     session_token = _create_2fa_session_token(1)
 
     redis_mock = AsyncMock()
+    redis_mock.exists = AsyncMock(
+        return_value=False
+    )
     redis_mock.get = AsyncMock(return_value=None)
+    redis_mock.aclose = AsyncMock()
+    mock_redis.return_value = redis_mock
+
+    with pytest.raises(
+        EmailAuthError,
+        match="Code expired or not found",
+    ):
+        await verify_2fa_email_code(
+            session_token, "000000", session
+        )
+
+
+@patch(f"{_MOD}._get_redis", new_callable=AsyncMock)
+async def test_verify_2fa_email_code_wrong(
+    mock_redis: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    from app.services.email_auth_service import (
+        verify_2fa_email_code,
+    )
+
+    session_token = _create_2fa_session_token(1)
+
+    redis_mock = AsyncMock()
+    redis_mock.exists = AsyncMock(
+        return_value=False
+    )
+    redis_mock.get = AsyncMock(
+        return_value=b"123456"
+    )
+    redis_mock.incr = AsyncMock(return_value=1)
+    redis_mock.expire = AsyncMock()
     redis_mock.aclose = AsyncMock()
     mock_redis.return_value = redis_mock
 
@@ -677,5 +720,146 @@ async def test_verify_2fa_email_code_invalid(
         EmailAuthError, match="Invalid code"
     ):
         await verify_2fa_email_code(
+            session_token, "999999", session
+        )
+
+    redis_mock.incr.assert_awaited_once()
+
+
+@patch(f"{_MOD}._get_redis", new_callable=AsyncMock)
+async def test_verify_2fa_email_code_burned(
+    mock_redis: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    from app.services.email_auth_service import (
+        verify_2fa_email_code,
+    )
+
+    session_token = _create_2fa_session_token(1)
+
+    redis_mock = AsyncMock()
+    redis_mock.exists = AsyncMock(
+        return_value=False
+    )
+    redis_mock.get = AsyncMock(
+        return_value=b"123456"
+    )
+    redis_mock.incr = AsyncMock(
+        side_effect=[5, 1]
+    )
+    redis_mock.expire = AsyncMock()
+    redis_mock.delete = AsyncMock()
+    redis_mock.aclose = AsyncMock()
+    mock_redis.return_value = redis_mock
+
+    with pytest.raises(
+        EmailAuthError,
+        match="too many attempts",
+    ):
+        await verify_2fa_email_code(
+            session_token, "999999", session
+        )
+
+
+@patch(f"{_MOD}._get_redis", new_callable=AsyncMock)
+async def test_verify_2fa_email_code_cooldown(
+    mock_redis: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    from app.services.email_auth_service import (
+        verify_2fa_email_code,
+    )
+
+    session_token = _create_2fa_session_token(1)
+
+    redis_mock = AsyncMock()
+    redis_mock.exists = AsyncMock(
+        return_value=True
+    )
+    redis_mock.aclose = AsyncMock()
+    mock_redis.return_value = redis_mock
+
+    with pytest.raises(
+        EmailAuthError,
+        match="Too many failed attempts",
+    ):
+        await verify_2fa_email_code(
             session_token, "000000", session
+        )
+
+
+@patch(f"{_MOD}._get_redis", new_callable=AsyncMock)
+async def test_verify_2fa_email_burned_triggers_cooldown(
+    mock_redis: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    from app.services.email_auth_service import (
+        verify_2fa_email_code,
+    )
+
+    session_token = _create_2fa_session_token(1)
+
+    redis_mock = AsyncMock()
+    redis_mock.exists = AsyncMock(
+        return_value=False
+    )
+    redis_mock.get = AsyncMock(
+        return_value=b"123456"
+    )
+    redis_mock.incr = AsyncMock(
+        side_effect=[5, 3]
+    )
+    redis_mock.expire = AsyncMock()
+    redis_mock.delete = AsyncMock()
+    redis_mock.setex = AsyncMock()
+    redis_mock.aclose = AsyncMock()
+    mock_redis.return_value = redis_mock
+
+    with pytest.raises(
+        EmailAuthError,
+        match="too many attempts",
+    ):
+        await verify_2fa_email_code(
+            session_token, "999999", session
+        )
+
+    redis_mock.setex.assert_awaited_once()
+
+
+@patch(f"{_MOD}._get_redis", new_callable=AsyncMock)
+@patch(f"{_MOD}.UserService")
+async def test_send_2fa_fallback_blocked_by_cooldown(
+    mock_svc_cls: MagicMock,
+    mock_redis: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    from app.services.email_auth_service import (
+        send_2fa_fallback,
+    )
+
+    session_token = _create_2fa_session_token(1)
+
+    user_mock = MagicMock()
+    user_mock.id = 1
+    user_mock.email = "a@b.com"
+
+    svc = AsyncMock()
+    svc.get_by_id = AsyncMock(
+        return_value=user_mock
+    )
+    mock_svc_cls.return_value = svc
+
+    redis_mock = AsyncMock()
+    redis_mock.exists = AsyncMock(
+        return_value=True
+    )
+    redis_mock.aclose = AsyncMock()
+    mock_redis.return_value = redis_mock
+
+    with pytest.raises(
+        EmailAuthError,
+        match="Too many failed attempts",
+    ):
+        await send_2fa_fallback(
+            session_token, session
         )

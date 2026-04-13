@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import structlog
+from dotsound_private_core.services.abuse import (
+    TOR_LIST_URL,
+    TOR_REDIS_KEY,
+    TOR_REFRESH_TTL,
+)
 
 from app.config import settings
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
+logger: structlog.stdlib.BoundLogger = (
+    structlog.get_logger(__name__)
 )
-
-_TOR_LIST_URL = (
-    "https://check.torproject.org/torbulkexitlist"
-)
-_REDIS_KEY = "tor_exit_nodes"
-_REFRESH_TTL = 7200
 
 
 async def refresh_tor_exit_nodes() -> int:
@@ -23,7 +22,7 @@ async def refresh_tor_exit_nodes() -> int:
         async with httpx.AsyncClient(
             timeout=30
         ) as client:
-            resp = await client.get(_TOR_LIST_URL)
+            resp = await client.get(TOR_LIST_URL)
             resp.raise_for_status()
     except Exception:
         logger.exception("tor_list_fetch_failed")
@@ -41,10 +40,10 @@ async def refresh_tor_exit_nodes() -> int:
 
     r = aioredis.from_url(settings.redis_url)
     pipe = r.pipeline()
-    pipe.delete(_REDIS_KEY)
+    pipe.delete(TOR_REDIS_KEY)
     for ip in ips:
-        pipe.sadd(_REDIS_KEY, ip)
-    pipe.expire(_REDIS_KEY, _REFRESH_TTL)
+        pipe.sadd(TOR_REDIS_KEY, ip)
+    pipe.expire(TOR_REDIS_KEY, TOR_REFRESH_TTL)
     await pipe.execute()
     await r.aclose()
 
@@ -58,6 +57,6 @@ async def is_tor_exit_node(ip: str) -> bool:
     import redis.asyncio as aioredis
 
     r = aioredis.from_url(settings.redis_url)
-    result = await r.sismember(_REDIS_KEY, ip)
+    result = await r.sismember(TOR_REDIS_KEY, ip)
     await r.aclose()
     return bool(result)

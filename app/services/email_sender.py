@@ -92,6 +92,8 @@ async def send_magic_link(
 async def send_totp_fallback_code(
     to_email: str, code: str
 ) -> None:
+    mid = len(code) // 2
+    display_code = f"{code[:mid]} {code[mid:]}"
     html = (
         "<div style='font-family:sans-serif;"
         "max-width:480px;margin:0 auto;'>"
@@ -100,9 +102,9 @@ async def send_totp_fallback_code(
         "sign-in:</p>"
         "<div style='font-size:32px;"
         "font-weight:700;"
-        "letter-spacing:8px;"
+        "letter-spacing:6px;"
         "padding:16px 0;'>"
-        + code
+        + display_code
         + "</div>"
         "<p>This code expires in "
         "5 minutes.</p>"

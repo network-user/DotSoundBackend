@@ -21,6 +21,29 @@ DotSound — музыкальная платформа в Telegram (SoundCloud-s
 - Если неясно, к какой зоне относится изменение, агент должен
   остановиться и запросить подтверждение.
 
+### Как классифицировать код
+
+Перед написанием любого нового кода агент определяет зону:
+- **Константа безопасности** (TTL, лимит попыток, cooldown,
+  scope токена) -> `DotSoundPrivateCore`
+- **Функция-решение** (burn? cooldown? disposable? internal IP?)
+  -> `DotSoundPrivateCore`
+- **Anti-abuse / модерация** (правила фильтрации, детекции,
+  auto-hide) -> `DotSoundPrivateCore`
+- **Redis/DB/HTTP вызов** -> `DotSoundBackend` (adapter)
+- **Schema / Model / SQL** -> `DotSoundBackend`
+
+Паттерн: PrivateCore = правила, Backend = транспорт.
+
+### Текущие модули PrivateCore
+- `services/auth_policy.py` -- auth constants + decision functions
+- `services/abuse.py` -- disposable email, Tor policy
+- `services/moderation.py` -- content moderation rules
+- `services/web_auth.py` -- OTP generation, IP masking, UA parsing
+- `services/internal_bridge.py` -- URL/header builders
+- `services/import_rules.py` -- import limits
+- `contracts/` -- protocol constants
+
 ## Стек
 - Python 3.12
 - FastAPI (async, OpenAPI)
@@ -43,15 +66,46 @@ DotSound — музыкальная платформа в Telegram (SoundCloud-s
 - `os.environ` напрямую — запрещено
 - **Без эмодзи в UI** — вместо дефолтных эмодзи используем монохромные SVG иконки из `components/Icon/Icon.tsx`. Все иконки stroke-based, currentColor. Стиль проекта: **минимализм, монохром**
 
-## Архитектурные слои
+## Архитектурная модель (Telegram-style)
+
+Проект следует модели Telegram: открытый клиент + приватное ядро.
+
+```
+Frontend (React)  →  Backend API (FastAPI)  →  PrivateCore (pure Python)
+   открытый UI        открытый транспорт         приватные правила
+```
+
+- **Frontend** (`frontend/`) — полностью открытый, собирается
+  независимо (`npm run build`). Общается с Backend только через
+  `/api/v1/` REST и WebSocket.
+- **Backend** (`app/`) — открытый транспортный слой. Маршрутизация,
+  Redis/DB/S3 операции, Pydantic-схемы. Не содержит бизнес-правил.
+- **PrivateCore** (`DotSoundPrivateCore`) — приватное ядро.
+  Константы, decision functions, anti-abuse, модерация. Чистый
+  Python без фреймворков.
+
+## Архитектурные слои Backend
 ```
 api/v1/ → services/ → repositories/ → models/
 ```
 - `api/v1/` — HTTP граница: парсинг запроса, вызов сервиса, возврат схемы
-- `services/` — бизнес-логика. Вызывает репозитории
+- `services/` — оркестрация. Вызывает репозитории и PrivateCore
 - `repositories/` — только запросы к БД. Возвращает ORM-модели
 - `models/` — определения таблиц SQLAlchemy
 - `schemas/` — Pydantic модели запросов/ответов
+
+### Правило слоёв
+- `api/v1/` НЕ должен содержать `select()`, `session.execute()`,
+  или прямые ORM-запросы. Вся работа с БД — через services/repos.
+- `services/` импортирует decision functions из PrivateCore.
+- `repositories/` — чистые SQL-запросы без бизнес-решений.
+
+### Известные нарушения (tech debt)
+- `admin/tracks.py`, `admin/users.py`, `admin/complaints.py` —
+  inline SQL в роутах (нужны AdminService + AdminRepository)
+- `metadata.py:get_popular_genres` — inline grouped query
+- `users.py:get_login_history` — inline select + hardcoded limit
+- `account_linking_service.py:_LINK_TTL` — hardcoded, не в PrivateCore
 
 ## Правила DI
 - Сессии БД только через `dependencies.get_db()`

@@ -5,6 +5,27 @@
 This repository is a public showcase. Sensitive business logic is
 implemented in `DotSoundPrivateCore`.
 
+## Architecture Model (Telegram-style)
+
+The project follows the Telegram open-source model:
+
+1. **Open client** -- frontend (React Mini App) and public Backend
+   are maximally readable. Modules, services, UI, and network
+   requests are organized in clear separate layers.
+2. **Private core-server** -- all business logic, auth policy,
+   anti-abuse, scoring, and moderation rules live in
+   `DotSoundPrivateCore`, which does not reveal implementation
+   details. Backend imports decisions from PrivateCore and applies
+   them via Redis/DB/HTTP.
+3. **Config separation** -- configuration, routing, and auth wiring
+   are separated from business logic. All settings come from
+   `.env` via `app/config.py` (pydantic-settings). Never use
+   `os.environ` directly.
+4. **Client-server boundary** -- the frontend can be built and
+   verified independently (`cd frontend && npm run build`). It
+   communicates with the backend exclusively through `/api/v1/`
+   REST endpoints and WebSocket. No shared runtime state.
+
 ## Public Zone
 
 - FastAPI route wiring and public API contracts.
@@ -41,6 +62,52 @@ implemented in `DotSoundPrivateCore`.
 - Do not place secrets, internal tokens, or privileged contracts into
   frontend code.
 - Security-sensitive decisions must run on backend/private core.
+
+## Classification Guide
+
+### Decision tree: where does this code belong?
+
+1. Is it a **security/auth constant** (TTL, max attempts, cooldown,
+   internal IP ranges, token scope, TOTP window)? -> PrivateCore
+2. Is it a **decision function** that uses those constants
+   (should burn code? should cooldown? is internal IP?)? -> PrivateCore
+3. Is it **anti-abuse logic** (disposable email check, Tor detection,
+   spam rules, content filter rules)? -> PrivateCore
+4. Is it **content moderation policy** (auto-hide threshold, report
+   escalation rules)? -> PrivateCore
+5. Is it **scoring/ranking/recommendation** algorithm? -> PrivateCore
+6. Does it **call Redis, DB, S3, HTTP, or import a framework**?
+   -> Backend (thin adapter importing PrivateCore decisions)
+7. Is it **Pydantic schema, ORM model, or SQL query**? -> Backend
+8. Is it **rate limit decorator value** (visible in 429 headers)?
+   -> Backend (not secret)
+9. Is it **upload/file size limit** (product config, not algorithm)?
+   -> Backend
+
+### Integration pattern
+
+PrivateCore exposes:
+  - Constants (thresholds, TTLs, prefixes)
+  - Pure decision functions (inputs -> bool/value)
+  - No framework imports, no I/O
+
+Backend creates thin adapters:
+  - Imports constants and decisions from PrivateCore
+  - Applies them via Redis/DB/HTTP calls
+  - Never hardcodes security constants locally
+
+### Examples
+
+PRIVATE (PrivateCore):
+  - `FALLBACK_MAX_ATTEMPTS = 5`
+  - `def should_burn_code(attempts: int) -> bool`
+  - `def is_disposable_email(email: str) -> bool`
+  - `TOR_REDIS_KEY = "tor_exit_nodes"`
+
+PUBLIC (Backend adapter):
+  - `attempts = await redis.incr(attempts_key)`
+  - `if should_burn_code(attempts): await redis.delete(code_key)`
+  - Redis/DB orchestration calling PrivateCore decisions
 
 ## Enforcement
 

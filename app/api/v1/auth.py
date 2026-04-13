@@ -1,5 +1,4 @@
 import hmac
-import ipaddress
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +13,16 @@ from dotsound_private_core.services import (
     mask_ip,
     parse_user_agent,
     send_login_notification_url,
+)
+from dotsound_private_core.services.auth_policy import (
+    CODE_PREFIX,
+    CODE_TTL,
+    COOLDOWN_PREFIX,
+    COOLDOWN_TTL,
+    INTERNAL_TOKEN_SCOPE,
+    INTERNAL_TOKEN_TTL_MIN,
+    is_internal_ip,
+    normalize_code,
 )
 from fastapi import (
     APIRouter,
@@ -45,9 +54,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 logger: structlog.stdlib.BoundLogger = (
     structlog.get_logger(__name__)
 )
-
-_CODE_TTL = 300
-_CODE_PREFIX = "auth_code:"
 
 _redis_client: Any = None
 
@@ -143,7 +149,7 @@ class GenerateCodeRequest(BaseModel):
 
 class GenerateCodeResponse(BaseModel):
     code: str
-    expires_in: int = _CODE_TTL
+    expires_in: int = CODE_TTL
 
 
 @router.post(
@@ -168,11 +174,24 @@ async def generate_auth_code(
             detail="Forbidden",
         )
 
-    code = generate_code()
     redis = await _get_redis()
+
+    cooldown_key = (
+        f"{COOLDOWN_PREFIX}{body.telegram_id}"
+    )
+    if await redis.exists(cooldown_key):
+        raise HTTPException(
+            status_code=(
+                status.HTTP_429_TOO_MANY_REQUESTS
+            ),
+            detail="Too many failed attempts. "
+            "Try again later",
+        )
+
+    code = generate_code()
     await redis.setex(
-        f"{_CODE_PREFIX}{code}",
-        _CODE_TTL,
+        f"{CODE_PREFIX}{code}",
+        CODE_TTL,
         str(body.telegram_id),
     )
     logger.info(
@@ -190,14 +209,15 @@ class CodeVerifyRequest(BaseModel):
     "/verify-code",
     response_model=TokenResponse,
 )
-@limiter.limit("10/minute")
+@limiter.limit("5/minute")
 async def verify_telegram_code(
     request: Request,
     body: CodeVerifyRequest,
     session: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
+    clean_code = normalize_code(body.code)
     redis = await _get_redis()
-    key = f"{_CODE_PREFIX}{body.code}"
+    key = f"{CODE_PREFIX}{clean_code}"
     stored_tg_id = await redis.get(key)
 
     if not stored_tg_id:
@@ -282,28 +302,6 @@ async def verify_telegram_code(
     )
 
 
-_INTERNAL_ALLOWED_NETS = [
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-]
-
-_INTERNAL_TOKEN_SCOPE = "bot_player"
-_INTERNAL_TOKEN_TTL_MIN = 15
-
-
-def _is_internal_ip(ip_str: str) -> bool:
-    try:
-        addr = ipaddress.ip_address(ip_str)
-    except ValueError:
-        return False
-    return any(
-        addr in net for net in _INTERNAL_ALLOWED_NETS
-    )
-
-
 class InternalTokenRequest(BaseModel):
     telegram_id: int
 
@@ -325,7 +323,7 @@ async def internal_token(
         else "unknown"
     )
 
-    if not _is_internal_ip(client_ip):
+    if not is_internal_ip(client_ip):
         logger.warning(
             "internal_token_blocked_ip",
             ip=client_ip,
@@ -376,8 +374,8 @@ async def internal_token(
 
     token = create_scoped_token(
         user.id,
-        scope=_INTERNAL_TOKEN_SCOPE,
-        ttl_minutes=_INTERNAL_TOKEN_TTL_MIN,
+        scope=INTERNAL_TOKEN_SCOPE,
+        ttl_minutes=INTERNAL_TOKEN_TTL_MIN,
     )
 
     user_agent = request.headers.get(
@@ -387,8 +385,8 @@ async def internal_token(
         "internal_token_issued",
         user_id=user.id,
         telegram_id=body.telegram_id,
-        scope=_INTERNAL_TOKEN_SCOPE,
-        ttl_min=_INTERNAL_TOKEN_TTL_MIN,
+        scope=INTERNAL_TOKEN_SCOPE,
+        ttl_min=INTERNAL_TOKEN_TTL_MIN,
         ip=client_ip,
         ua=user_agent[:80],
     )

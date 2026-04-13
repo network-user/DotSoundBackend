@@ -8,6 +8,10 @@ import secrets
 import pyotp
 import qrcode  # type: ignore[import-untyped]
 from cryptography.fernet import Fernet
+from dotsound_private_core.services.auth_policy import (
+    BACKUP_CODE_COUNT,
+    TOTP_VALID_WINDOW,
+)
 
 from app.config import settings
 
@@ -59,10 +63,14 @@ def generate_qr_base64(uri: str) -> str:
 
 def verify_totp(secret: str, code: str) -> bool:
     totp = pyotp.TOTP(secret)
-    return totp.verify(code, valid_window=1)
+    return totp.verify(
+        code, valid_window=TOTP_VALID_WINDOW
+    )
 
 
-def generate_backup_codes(count: int = 8) -> list[str]:
+def generate_backup_codes(
+    count: int = BACKUP_CODE_COUNT,
+) -> list[str]:
     return [
         f"{secrets.token_hex(2).upper()}"
         f"-{secrets.token_hex(2).upper()}"
