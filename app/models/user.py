@@ -1,4 +1,10 @@
-from sqlalchemy import BigInteger, Boolean, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -6,10 +12,18 @@ from app.models.base import Base, TimestampMixin
 
 class User(Base, TimestampMixin):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "telegram_id IS NOT NULL OR email IS NOT NULL",
+            name="ck_users_has_identity",
+        ),
+    )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    telegram_id: Mapped[int] = mapped_column(
-        BigInteger, unique=True, index=True, nullable=False
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True
+    )
+    telegram_id: Mapped[int | None] = mapped_column(
+        BigInteger, unique=True, index=True, nullable=True
     )
     username: Mapped[str | None] = mapped_column(
         String(64), nullable=True
@@ -29,7 +43,28 @@ class User(Base, TimestampMixin):
     display_name: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
-    avatar_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    avatar_key: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
     avatar_seed: Mapped[str | None] = mapped_column(
         String(64), nullable=True, unique=True
+    )
+
+    email: Mapped[str | None] = mapped_column(
+        String(255), unique=True, index=True, nullable=True
+    )
+    email_verified: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
+    auth_provider: Mapped[str] = mapped_column(
+        String(20), server_default="telegram", nullable=False
+    )
+    totp_secret_encrypted: Mapped[str | None] = (
+        mapped_column(Text, nullable=True)
+    )
+    totp_enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
+    backup_codes_hash: Mapped[str | None] = (
+        mapped_column(Text, nullable=True)
     )

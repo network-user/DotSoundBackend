@@ -31,13 +31,23 @@ class TrackRepository(BaseRepository[Track]):
         )
         return result.scalar_one()
 
+    @staticmethod
+    def _playable_filter():  # type: ignore[no-untyped-def]
+        return (
+            Track.file_key.isnot(None)
+            | (Track.source == "soundcloud")
+        )
+
     async def list_active(
         self,
         offset: int = 0,
         limit: int = 20,
+        playable_only: bool = False,
     ) -> tuple[list[Track], int]:
         logger.debug("db_list_tracks", offset=offset, limit=limit)
         condition = Track.is_active.is_(True) & Track.is_public.is_(True)
+        if playable_only:
+            condition = condition & self._playable_filter()
         total_result = await self._session.execute(
             select(func.count()).where(condition)
         )
@@ -57,10 +67,13 @@ class TrackRepository(BaseRepository[Track]):
         user_id: int,
         offset: int = 0,
         limit: int = 50,
+        playable_only: bool = False,
     ) -> tuple[list[Track], int]:
         condition = (
             Track.is_active.is_(True) & (Track.uploaded_by_id == user_id)
         )
+        if playable_only:
+            condition = condition & self._playable_filter()
         total_result = await self._session.execute(
             select(func.count()).where(condition)
         )

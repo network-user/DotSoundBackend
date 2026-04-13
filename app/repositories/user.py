@@ -1,12 +1,15 @@
-import structlog
 import uuid
+
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from app.repositories.base import BaseRepository
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(
+    __name__
+)
 
 
 class UserRepository(BaseRepository[User]):
@@ -16,9 +19,25 @@ class UserRepository(BaseRepository[User]):
     async def get_by_telegram_id(
         self, telegram_id: int
     ) -> User | None:
-        logger.debug("db_get_by_telegram_id", telegram_id=telegram_id)
+        logger.debug(
+            "db_get_by_telegram_id",
+            telegram_id=telegram_id,
+        )
         result = await self._session.execute(
-            select(User).where(User.telegram_id == telegram_id)
+            select(User).where(
+                User.telegram_id == telegram_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_email(
+        self, email: str
+    ) -> User | None:
+        logger.debug("db_get_by_email", email=email)
+        result = await self._session.execute(
+            select(User).where(
+                User.email == email.lower()
+            )
         )
         return result.scalar_one_or_none()
 
@@ -29,7 +48,9 @@ class UserRepository(BaseRepository[User]):
         first_name: str,
         last_name: str | None,
     ) -> tuple[User, bool]:
-        user = await self.get_by_telegram_id(telegram_id)
+        user = await self.get_by_telegram_id(
+            telegram_id
+        )
         if user:
             user.username = username
             user.first_name = first_name
@@ -37,7 +58,10 @@ class UserRepository(BaseRepository[User]):
             if not user.avatar_seed:
                 user.avatar_seed = uuid.uuid4().hex
             await self._session.flush()
-            logger.debug("db_user_updated", telegram_id=telegram_id)
+            logger.debug(
+                "db_user_updated",
+                telegram_id=telegram_id,
+            )
             return user, False
         user = await self.create(
             telegram_id=telegram_id,
@@ -45,8 +69,33 @@ class UserRepository(BaseRepository[User]):
             first_name=first_name,
             last_name=last_name,
             avatar_seed=uuid.uuid4().hex,
+            auth_provider="telegram",
         )
-        logger.debug("db_user_created", telegram_id=telegram_id)
+        logger.debug(
+            "db_user_created",
+            telegram_id=telegram_id,
+        )
+        return user, True
+
+    async def upsert_by_email(
+        self, email: str
+    ) -> tuple[User, bool]:
+        normalized = email.lower().strip()
+        user = await self.get_by_email(normalized)
+        if user:
+            return user, False
+        local_part = normalized.split("@")[0][:64]
+        user = await self.create(
+            email=normalized,
+            email_verified=True,
+            first_name=local_part,
+            avatar_seed=uuid.uuid4().hex,
+            auth_provider="email",
+        )
+        logger.debug(
+            "db_user_created_by_email",
+            email=normalized,
+        )
         return user, True
 
     async def update_display_name(

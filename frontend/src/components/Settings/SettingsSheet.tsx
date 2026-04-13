@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePlayer } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { TwoFASettings } from './TwoFASettings'
 
 interface Props {
   open: boolean
@@ -28,6 +29,8 @@ export function SettingsSheet({
           'setting-monochrome',
         ) === 'true',
     )
+  const [twoFAEnabled, setTwoFAEnabled] =
+    useState(false)
 
   if (!open) return null
 
@@ -145,6 +148,11 @@ export function SettingsSheet({
             блокировки откройте .sound в
             браузере
           </div>
+
+          <TwoFASettings
+            enabled={twoFAEnabled}
+            onToggle={setTwoFAEnabled}
+          />
 
           <button
             className="settings-item disabled"

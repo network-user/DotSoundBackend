@@ -1,0 +1,3 @@
+0 */6 * * * /scripts/backup.sh pg     >> /var/log/backup.log 2>&1
+0 3   * * * /scripts/backup.sh full   >> /var/log/backup.log 2>&1
+0 4   * * * /scripts/backup-healthcheck.sh >> /var/log/backup.log 2>&1

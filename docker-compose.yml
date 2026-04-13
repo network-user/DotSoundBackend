@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -15,6 +21,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    logging: *default-logging
     networks:
       - dotsound
 
@@ -35,6 +42,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    logging: *default-logging
     networks:
       - dotsound
 
@@ -50,6 +58,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+    logging: *default-logging
     networks:
       - dotsound
 
@@ -73,6 +82,7 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
+    logging: *default-logging
     networks:
       - dotsound
 
@@ -95,6 +105,7 @@ services:
         condition: service_healthy
     volumes:
       - .:/app
+    logging: *default-logging
     networks:
       - dotsound
 
@@ -106,6 +117,33 @@ services:
       - "80:80"
     depends_on:
       - backend
+    logging: *default-logging
+    networks:
+      - dotsound
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    profiles:
+      - backup
+    env_file:
+      - .env
+    environment:
+      PGHOST: postgres
+      PGUSER: dotsound
+      PGPASSWORD: dotsound
+      PGDATABASE: dotsound
+    volumes:
+      - ./scripts:/scripts:ro
+      - backup_data:/backups
+      - redis_data:/redis-data:ro
+      - ./.env:/app/.env:ro
+      - ./docker-compose.yml:/app/docker-compose.yml:ro
+    entrypoint: ["/bin/sh", "-c", "chmod +x /scripts/*.sh && crontab /scripts/backup-crontab && crond -f -d 8"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *default-logging
     networks:
       - dotsound
 
@@ -123,6 +161,7 @@ services:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
       - postgres
+    logging: *default-logging
     networks:
       - dotsound
 
@@ -137,6 +176,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data
+    logging: *default-logging
     networks:
       - dotsound
 
@@ -146,6 +186,7 @@ volumes:
   pgadmin_data:
   portainer_data:
   redis_data:
+  backup_data:
 
 networks:
   dotsound:

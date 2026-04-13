@@ -1,4 +1,4 @@
-.PHONY: dev infra migrate test lint format stop clean init
+.PHONY: dev infra migrate test lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop
 
 dev: ## Start infra, run migrations, start backend
 	docker compose up -d postgres minio redis
@@ -41,3 +41,26 @@ init: ## First-time project setup
 	poetry install
 	poetry run alembic upgrade head
 	@echo Setup complete! Run 'make dev' to start.
+
+backup: ## Run full backup (PostgreSQL + Redis + configs)
+	docker compose --profile backup run --rm backup /scripts/backup.sh full
+
+backup-pg: ## Run PostgreSQL-only backup
+	docker compose --profile backup run --rm backup /scripts/backup.sh pg
+
+backup-list: ## List available backups
+	docker compose --profile backup run --rm backup sh -c "ls -lhR /backups/daily/ /backups/weekly/ /backups/monthly/ 2>/dev/null || echo 'No backups yet'"
+
+backup-restore: ## Restore from backup (interactive)
+	@echo Available backups:
+	docker compose --profile backup run --rm backup sh -c "ls -1d /backups/daily/* 2>/dev/null || echo 'No backups'"
+	@echo Run: docker compose --profile backup run --rm backup /scripts/restore.sh /backups/daily/YYYYMMDD_HHMMSS
+
+backup-health: ## Check health of latest backup
+	docker compose --profile backup run --rm backup /scripts/backup-healthcheck.sh
+
+backup-start: ## Start automatic backup cron service
+	docker compose --profile backup up -d backup
+
+backup-stop: ## Stop backup cron service
+	docker compose --profile backup stop backup
