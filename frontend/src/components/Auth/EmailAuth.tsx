@@ -103,7 +103,8 @@ export function EmailAuth({
   }
 
   const handleVerifyTotp = async () => {
-    if (totpCode.length !== 6) {
+    const digits = totpCode.replace(/\s/g, '')
+    if (digits.length !== 6) {
       setError('Введите 6-значный код')
       return
     }
@@ -115,12 +116,12 @@ export function EmailAuth({
         res =
           await api.verify2FAEmailFallback(
             sessionToken,
-            totpCode,
+            digits,
           )
       } else {
         res = await api.verify2FA(
           sessionToken,
-          totpCode,
+          digits,
         )
       }
       if (res.user_id) {
@@ -246,15 +247,24 @@ export function EmailAuth({
               className="form-input auth-code-input"
               type="text"
               inputMode="numeric"
-              maxLength={6}
-              placeholder="000000"
+              maxLength={fallbackMode ? 7 : 6}
+              placeholder={
+                fallbackMode
+                  ? '000 000'
+                  : '000000'
+              }
               value={totpCode}
               onChange={(e) =>
                 setTotpCode(
-                  e.target.value.replace(
-                    /\D/g,
-                    '',
-                  ),
+                  fallbackMode
+                    ? e.target.value.replace(
+                        /[^\d ]/g,
+                        '',
+                      )
+                    : e.target.value.replace(
+                        /\D/g,
+                        '',
+                      ),
                 )
               }
               onKeyDown={(e) =>

@@ -1,4 +1,7 @@
 import structlog
+from dotsound_private_core.services.moderation import (
+    should_auto_hide_track,
+)
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,7 +43,7 @@ class ComplaintService:
         count = await self._repo.count_by_track(track_id)
         track_hidden = False
 
-        if count >= threshold:
+        if should_auto_hide_track(count, threshold):
             track = await self._session.get(Track, track_id)
             if track and track.is_active:
                 track.is_active = False

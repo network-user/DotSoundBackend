@@ -1,12 +1,24 @@
 ---
-description: Enforce public/private boundary policy
+description: Enforce public/private boundary policy (Telegram-style architecture)
 alwaysApply: true
 ---
 
-# Public/Private Boundary
+# Public/Private Boundary (Telegram Model)
 
-- Follow `docs/ai-boundary-policy.md`.
-- Treat this repository as public showcase code.
-- Keep sensitive business rules in `DotSoundPrivateCore`.
+Architecture: open client + open transport + private core.
+Follow `docs/ai-boundary-policy.md`.
+
+## Layer rules
+- `api/v1/` routes must NOT contain `select()`, `session.execute()`,
+  or direct ORM queries. All DB access goes through services/repos.
+- `services/` import decision functions from `dotsound_private_core`.
+- Security constants (TTLs, attempt limits, cooldowns) -> PrivateCore.
+- Decision functions (should_burn, is_internal_ip) -> PrivateCore.
+- Anti-abuse logic (disposable email, Tor, moderation) -> PrivateCore.
+- Redis/DB/HTTP orchestration -> Backend adapter.
+- When adding new auth/abuse logic: add rules to PrivateCore first,
+  then import in Backend. Never hardcode thresholds locally.
+- Frontend builds independently (`npm run build`). It talks to
+  Backend only through `/api/v1/` REST and WebSocket.
 - If a request can cross boundaries and intent is unclear, stop and ask.
 

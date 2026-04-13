@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-import app.core.disposable_email as mod
+import dotsound_private_core.services.abuse as abuse_mod
 from app.core.disposable_email import (
     is_disposable_email,
 )
 
 
 def _reset_cache() -> None:
-    mod._DISPOSABLE_DOMAINS = None
+    abuse_mod._DISPOSABLE_DOMAINS = None
 
 
 def test_known_disposable_returns_true() -> None:

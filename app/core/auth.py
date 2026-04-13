@@ -7,6 +7,9 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, unquote
 
 import structlog
+from dotsound_private_core.services.auth_policy import (
+    AUTH_DATE_MAX_AGE,
+)
 from jose import JWTError, jwt
 
 from app.config import settings
@@ -67,7 +70,7 @@ def verify_telegram_init_data(
             now_ts = int(
                 datetime.now(timezone.utc).timestamp()
             )
-            max_age = 86400
+            max_age = AUTH_DATE_MAX_AGE
             if now_ts - auth_ts > max_age:
                 raise AuthError(
                     "initData expired (auth_date too old)"
