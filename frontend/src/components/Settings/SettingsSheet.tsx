@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePlayer } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { LinkedAccounts } from './LinkedAccounts'
 import { TwoFASettings } from './TwoFASettings'
 
 interface Props {
@@ -148,6 +149,8 @@ export function SettingsSheet({
             блокировки откройте .sound в
             браузере
           </div>
+
+          <LinkedAccounts />
 
           <TwoFASettings
             enabled={twoFAEnabled}

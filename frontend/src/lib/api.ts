@@ -602,6 +602,73 @@ export const api = {
     })
   },
 
+  getLinkStatus(): Promise<{
+    telegram_linked: boolean
+    email_linked: boolean
+    email: string | null
+    telegram_username: string | null
+  }> {
+    return request(
+      '/api/v1/account/link-status',
+    )
+  },
+
+  requestLinkEmail(
+    email: string,
+  ): Promise<{ status: string }> {
+    return request(
+      '/api/v1/account/link/email',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      },
+    )
+  },
+
+  verifyLinkEmail(
+    token: string,
+  ): Promise<{ status: string }> {
+    return request(
+      '/api/v1/account/link/email/verify',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token }),
+      },
+    )
+  },
+
+  generateLinkTelegramCode(): Promise<{
+    code: string
+    bot_username: string
+    deep_link: string
+  }> {
+    return request(
+      '/api/v1/account/link/telegram/generate-code',
+      { method: 'POST' },
+    )
+  },
+
+  mergeAccounts(
+    sourceAccountToken: string,
+  ): Promise<{ status: string }> {
+    return request('/api/v1/account/merge', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        source_account_token:
+          sourceAccountToken,
+      }),
+    })
+  },
+
   startTelegramImport(): Promise<any> {
     return request('/api/v1/import/telegram', {
       method: 'POST',
