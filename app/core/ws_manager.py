@@ -7,6 +7,7 @@ from typing import Any
 import structlog
 from fastapi import WebSocket
 from redis.asyncio import Redis
+from redis.asyncio.client import PubSub
 
 from app.config import settings
 
@@ -34,6 +35,7 @@ class ConnectionManager:
             int, list[WebSocket]
         ] = {}
         self._redis: Redis | None = None  # type: ignore[type-arg]
+        self._pubsub: PubSub | None = None
         self._pubsub_task: asyncio.Task[None] | None = (
             None
         )
@@ -46,6 +48,7 @@ class ConnectionManager:
             settings.redis_url,
             decode_responses=True,
         )
+        self._pubsub = self._redis.pubsub()
         self._pubsub_task = asyncio.create_task(
             self._listen_redis()
         )
@@ -65,6 +68,8 @@ class ConnectionManager:
                     await task
                 except asyncio.CancelledError:
                     pass
+        if self._pubsub:
+            await self._pubsub.aclose()
         if self._redis:
             for uid in list(self._connections):
                 await self._redis.delete(
@@ -77,13 +82,15 @@ class ConnectionManager:
         self, user_id: int, ws: WebSocket
     ) -> None:
         await ws.accept()
+        is_first = user_id not in self._connections
         self._connections.setdefault(
             user_id, []
         ).append(ws)
-        if self._redis:
-            await self._redis.subscribe(
+        if is_first and self._pubsub:
+            await self._pubsub.subscribe(
                 f"user:{user_id}"
             )
+        if self._redis:
             await self._set_presence(
                 user_id, "online"
             )
@@ -99,10 +106,11 @@ class ConnectionManager:
             conns.remove(ws)
         if not conns:
             self._connections.pop(user_id, None)
-            if self._redis:
-                await self._redis.unsubscribe(
+            if self._pubsub:
+                await self._pubsub.unsubscribe(
                     f"user:{user_id}"
                 )
+            if self._redis:
                 await self._set_presence(
                     user_id, "offline"
                 )
@@ -127,6 +135,12 @@ class ConnectionManager:
         data: dict[str, Any],
     ) -> None:
         for uid in member_ids:
+            await self.send_to_user(uid, data)
+
+    async def broadcast_to_online(
+        self, data: dict[str, Any]
+    ) -> None:
+        for uid in list(self._connections.keys()):
             await self.send_to_user(uid, data)
 
     async def _set_presence(
@@ -219,59 +233,66 @@ class ConnectionManager:
         for ws in dead:
             await self.disconnect(user_id, ws)
 
+    def _parse_and_deliver(
+        self, msg: dict[str, Any]
+    ) -> int | None:
+        ch_name: str = msg["channel"]  # type: ignore[assignment]
+        if isinstance(ch_name, bytes):
+            ch_name = ch_name.decode()
+        if not ch_name.startswith("user:"):
+            return None
+        uid_str = ch_name.split(":", 1)[1]
+        try:
+            return int(uid_str)
+        except ValueError:
+            return None
+
     async def _listen_redis(self) -> None:
         if not self._redis:
             return
-        pubsub = self._redis.pubsub()
-        subscribed: set[str] = set()
+        pubsub = self._pubsub
+        if not pubsub:
+            return
         try:
             while True:
-                desired = {
-                    f"user:{uid}"
-                    for uid in self._connections
-                }
-                to_add = desired - subscribed
-                to_remove = subscribed - desired
-                for ch in to_add:
-                    try:
-                        await pubsub.subscribe(ch)
-                    except Exception:
-                        pass
-                for ch in to_remove:
-                    try:
-                        await pubsub.unsubscribe(ch)
-                    except Exception:
-                        pass
-                subscribed = (
-                    subscribed | to_add
-                ) - to_remove
-
                 msg = await pubsub.get_message(
                     ignore_subscribe_messages=True,
-                    timeout=1.0,
+                    timeout=0.5,
                 )
-                if msg and msg["type"] == "message":
-                    ch_name: str = msg["channel"]  # type: ignore[assignment]
-                    if isinstance(ch_name, bytes):
-                        ch_name = ch_name.decode()
-                    if ch_name.startswith("user:"):
-                        uid_str = ch_name.split(
-                            ":", 1
-                        )[1]
-                        try:
-                            uid = int(uid_str)
-                        except ValueError:
-                            continue
+                if not msg:
+                    await asyncio.sleep(0.01)
+                    continue
+
+                if msg["type"] != "message":
+                    continue
+
+                uid = self._parse_and_deliver(msg)
+                if uid is not None:
+                    data = json.loads(msg["data"])
+                    await self._deliver_local(
+                        uid, data
+                    )
+
+                for _ in range(64):
+                    extra = await pubsub.get_message(
+                        ignore_subscribe_messages=True,
+                        timeout=0.0,
+                    )
+                    if not extra:
+                        break
+                    if extra["type"] != "message":
+                        continue
+                    uid = self._parse_and_deliver(
+                        extra
+                    )
+                    if uid is not None:
                         data = json.loads(
-                            msg["data"]
+                            extra["data"]
                         )
                         await self._deliver_local(
                             uid, data
                         )
-                else:
-                    await asyncio.sleep(0.05)
         except asyncio.CancelledError:
-            await pubsub.aclose()
             raise
 
 
