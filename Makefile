@@ -18,6 +18,9 @@ migrate: ## Run Alembic migrations
 test: ## Run pytest
 	poetry run pytest -v
 
+test-cov: ## Run pytest with coverage
+	poetry run pytest --cov=app --cov-report=term-missing --cov-report=html -v
+
 lint: ## Run Ruff + Black check + mypy
 	poetry run ruff check .
 	poetry run black --check .

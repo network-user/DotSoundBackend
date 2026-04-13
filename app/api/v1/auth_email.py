@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import structlog
 from dotsound_private_core.services import (
     mask_ip,
@@ -80,7 +78,7 @@ def _record_login(
     "/request",
     response_model=EmailAuthResponse,
 )
-@limiter.limit("10/15minutes")
+@limiter.limit("10/minute")
 async def email_auth_request(
     request: Request,
     body: EmailAuthRequest,
@@ -262,7 +260,7 @@ async def twofa_disable(
 
 
 @router_2fa.post("/email-fallback")
-@limiter.limit("3/5minutes")
+@limiter.limit("3/minute")
 async def twofa_email_fallback(
     request: Request,
     body: TwoFAEmailFallbackRequest,

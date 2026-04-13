@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import structlog
 from fastapi import (
     APIRouter,
@@ -59,7 +57,7 @@ async def link_status(
 
 
 @router.post("/link/email")
-@limiter.limit("5/15minutes")
+@limiter.limit("5/minute")
 async def link_email(
     request: Request,
     body: LinkEmailRequest,
