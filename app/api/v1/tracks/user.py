@@ -90,12 +90,16 @@ async def list_my_tracks(
     request: Request,
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=100),
+    playable: bool = Query(False),
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> TrackListResponse:
     service = TrackService(session)
     tracks, total = await service.list_by_user(
-        current_user.id, page=page, size=size
+        current_user.id,
+        page=page,
+        size=size,
+        playable_only=playable,
     )
     return TrackListResponse(
         items=[

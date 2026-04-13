@@ -51,13 +51,18 @@ def _redact_processor(
 def configure_logging(
     log_level: str = "INFO",
     redact: bool = True,
+    json_output: bool = False,
 ) -> None:
     global _REDACT_ENABLED
     _REDACT_ENABLED = redact
 
-    level = getattr(logging, log_level.upper(), logging.INFO)
+    level = getattr(
+        logging, log_level.upper(), logging.INFO
+    )
 
-    shared_processors: list[structlog.types.Processor] = [
+    shared_processors: list[
+        structlog.types.Processor
+    ] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
@@ -69,11 +74,20 @@ def configure_logging(
         _redact_processor,
     ]
 
+    if json_output:
+        renderer: structlog.types.Processor = (
+            structlog.processors.JSONRenderer()
+        )
+    else:
+        renderer = structlog.dev.ConsoleRenderer(
+            colors=True
+        )
+
     structlog.configure(
         processors=shared_processors
         + [
             structlog.processors.format_exc_info,
-            structlog.dev.ConsoleRenderer(colors=True),
+            renderer,
         ],
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,
@@ -87,5 +101,10 @@ def configure_logging(
         format="%(message)s",
     )
 
-    for noisy in ("uvicorn.access", "sqlalchemy.engine"):
-        logging.getLogger(noisy).setLevel(logging.WARNING)
+    for noisy in (
+        "uvicorn.access",
+        "sqlalchemy.engine",
+    ):
+        logging.getLogger(noisy).setLevel(
+            logging.WARNING
+        )

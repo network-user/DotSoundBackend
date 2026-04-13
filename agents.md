@@ -7,6 +7,11 @@ DotSound — музыкальная платформа в Telegram (SoundCloud-s
 - `DotSoundBot` (Telegram-бот, aiogram 3)
 - `DotSoundPrivateCore` (приватная бизнес-логика: алгоритмы, рекомендации, ML, scoring, anti-abuse)
 
+## TODO-трекер
+- Файл `TODO.md` в корне — единый источник задач проекта.
+- Агент обязан прочитать его в начале сессии и обновить после
+  выполнения задач. Подробнее: `.cursor/rules/todo-tracking.mdc`.
+
 ## Жёсткие границы public/private
 - Этот репозиторий — публичная витрина. Private логика живёт в
   `DotSoundPrivateCore`.

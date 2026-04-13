@@ -31,10 +31,13 @@ class TrackService:
         self,
         page: int = 1,
         size: int = 20,
+        playable_only: bool = False,
     ) -> tuple[list[Track], int]:
         offset = (page - 1) * size
         tracks, total = await self._repo.list_active(
-            offset=offset, limit=size
+            offset=offset,
+            limit=size,
+            playable_only=playable_only,
         )
         logger.info(
             "tracks_listed",
@@ -76,10 +79,14 @@ class TrackService:
         user_id: int,
         page: int = 1,
         size: int = 50,
+        playable_only: bool = False,
     ) -> tuple[list[Track], int]:
         offset = (page - 1) * size
         return await self._repo.list_by_user(
-            user_id=user_id, offset=offset, limit=size
+            user_id=user_id,
+            offset=offset,
+            limit=size,
+            playable_only=playable_only,
         )
 
     async def update_visibility(

@@ -198,6 +198,21 @@ export interface TelegramAuthRequest {
   init_data: string
 }
 
+export interface EmailVerifyResponse {
+  access_token: string | null
+  token_type: string
+  user_id: number | null
+  is_admin: boolean
+  requires_2fa: boolean
+  session_token: string | null
+}
+
+export interface TwoFASetupResponse {
+  otpauth_uri: string
+  qr_code_base64: string
+  backup_codes: string[]
+}
+
 // ── Chat ───────────────────────────────────────────────────────────────────
 
 export interface ChatConversation {

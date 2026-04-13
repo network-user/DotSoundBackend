@@ -11,6 +11,7 @@ import type {
   ComplaintCreate,
   ComplaintSubmitResponse,
   DislikeToggleResponse,
+  EmailVerifyResponse,
   FollowToggleResponse,
   LikeToggleResponse,
   LyricsResponse,
@@ -26,6 +27,7 @@ import type {
   TrackComment,
   TrackListResponse,
   TrackUploadResponse,
+  TwoFASetupResponse,
   UserLikesResponse,
   UserResponse,
   UserStatsResponse,
@@ -435,6 +437,169 @@ export const api = {
     persistToken(accessToken)
     setInternalUserId(res.user_id)
     return res
+  },
+
+  requestMagicLink(
+    email: string,
+  ): Promise<{ message: string }> {
+    return request('/api/v1/auth/email/request', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    })
+  },
+
+  async verifyMagicLink(
+    token: string,
+  ): Promise<EmailVerifyResponse> {
+    const res =
+      await request<EmailVerifyResponse>(
+        '/api/v1/auth/email/verify',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ token }),
+        },
+      )
+    if (
+      res.access_token &&
+      res.user_id &&
+      !res.requires_2fa
+    ) {
+      accessToken = res.access_token
+      persistToken(accessToken)
+      setInternalUserId(res.user_id)
+    }
+    return res
+  },
+
+  async verify2FA(
+    sessionToken: string,
+    code: string,
+  ): Promise<EmailVerifyResponse> {
+    const res =
+      await request<EmailVerifyResponse>(
+        '/api/v1/auth/2fa/verify',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            session_token: sessionToken,
+            code,
+          }),
+        },
+      )
+    if (res.access_token && res.user_id) {
+      accessToken = res.access_token
+      persistToken(accessToken)
+      setInternalUserId(res.user_id)
+    }
+    return res
+  },
+
+  async verify2FABackup(
+    sessionToken: string,
+    backupCode: string,
+  ): Promise<EmailVerifyResponse> {
+    const res =
+      await request<EmailVerifyResponse>(
+        '/api/v1/auth/2fa/verify',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            session_token: sessionToken,
+            backup_code: backupCode,
+          }),
+        },
+      )
+    if (res.access_token && res.user_id) {
+      accessToken = res.access_token
+      persistToken(accessToken)
+      setInternalUserId(res.user_id)
+    }
+    return res
+  },
+
+  request2FAEmailFallback(
+    sessionToken: string,
+  ): Promise<{ status: string }> {
+    return request(
+      '/api/v1/auth/2fa/email-fallback',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_token: sessionToken,
+        }),
+      },
+    )
+  },
+
+  async verify2FAEmailFallback(
+    sessionToken: string,
+    code: string,
+  ): Promise<EmailVerifyResponse> {
+    const res =
+      await request<EmailVerifyResponse>(
+        '/api/v1/auth/2fa/email-fallback/verify',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            session_token: sessionToken,
+            code,
+          }),
+        },
+      )
+    if (res.access_token && res.user_id) {
+      accessToken = res.access_token
+      persistToken(accessToken)
+      setInternalUserId(res.user_id)
+    }
+    return res
+  },
+
+  setup2FA(): Promise<TwoFASetupResponse> {
+    return request('/api/v1/auth/2fa/setup', {
+      method: 'POST',
+    })
+  },
+
+  confirm2FA(
+    code: string,
+  ): Promise<{ status: string }> {
+    return request('/api/v1/auth/2fa/confirm', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code }),
+    })
+  },
+
+  disable2FA(
+    code: string,
+  ): Promise<{ status: string }> {
+    return request('/api/v1/auth/2fa', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ code }),
+    })
   },
 
   startTelegramImport(): Promise<any> {

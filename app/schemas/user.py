@@ -4,22 +4,28 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserCreate(BaseModel):
-    telegram_id: int
+    telegram_id: int | None = None
+    email: str | None = None
     username: str | None = None
     first_name: str
     last_name: str | None = None
+    auth_provider: str = "telegram"
 
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    telegram_id: int
-    username: str | None
+    telegram_id: int | None = None
+    username: str | None = None
     first_name: str
-    last_name: str | None
+    last_name: str | None = None
     display_name: str | None = None
     avatar_key: str | None = None
+    email: str | None = None
+    email_verified: bool = False
+    auth_provider: str = "telegram"
+    totp_enabled: bool = False
     is_active: bool
     is_admin: bool = False
     created_at: datetime

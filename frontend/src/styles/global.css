@@ -2206,6 +2206,47 @@ textarea.form-input { resize: none; }
   margin-bottom: 8px;
 }
 
+/* ── 2FA Settings ── */
+.twofa-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+.twofa-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+.twofa-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin: 0;
+}
+.twofa-qr {
+  width: 200px;
+  height: 200px;
+  align-self: center;
+  border-radius: var(--radius);
+  background: #fff;
+  padding: 8px;
+}
+.twofa-backup-codes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 12px;
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+.twofa-backup-codes code {
+  font-size: 13px;
+  font-family: monospace;
+  color: var(--text);
+}
+
 /* ── Fullscreen Lyrics ── */
 .fl-overlay {
   position: fixed;

@@ -30,6 +30,11 @@ class AppSettings(BaseSettings):
     bot_internal_url: str = "http://localhost:8081"
     bot_internal_secret: str = ""
 
+    resend_api_key: str = ""
+    resend_from_email: str = "noreply@example.com"
+    magic_link_ttl_minutes: int = 15
+    totp_encryption_key: str = ""
+
     chat_encryption_key: str = ""
     ws_heartbeat_interval: int = 30
     image_chat_max_size: int = 1280

@@ -4,7 +4,7 @@ import {
   getInternalUserId,
   tg,
 } from '@/lib/telegram'
-import { TelegramAuth } from '@/components/Auth/TelegramAuth'
+import { AuthScreen } from '@/components/Auth/AuthScreen'
 import { ArtistView } from '@/components/ArtistView/ArtistView'
 import { AuthorView } from '@/components/AuthorView/AuthorView'
 import {
@@ -311,7 +311,7 @@ export function App() {
 
   if (needsAuth) {
     return (
-      <TelegramAuth
+      <AuthScreen
         onAuth={() => {
           setNeedsAuth(false)
           reloadLikes()

@@ -1,0 +1,12 @@
+# TODO Tracking
+
+At the **start** of every session, read `TODO.md` in the project root.
+At the **end** of every session where tasks were completed, update
+`TODO.md`:
+- Mark completed items with `[x]`.
+- Mark in-progress items with `[~]`.
+- Add new items discovered during the session.
+- Update the "Последнее обновление" timestamp.
+
+Do NOT remove completed items — they serve as a changelog.
+Do NOT create a separate TODO file — `TODO.md` is the single source.
