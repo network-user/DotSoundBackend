@@ -1,4 +1,5 @@
 import pytest
+from dirty_equals import IsPartialDict
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.anyio
@@ -17,11 +18,12 @@ async def test_register_new_user(
         "/api/v1/users", json=payload
     )
     assert response.status_code == 200
-    data = response.json()
-    assert data["telegram_id"] == 123456789
-    assert data["username"] == "testuser"
-    assert data["first_name"] == "Test"
-    assert data["is_active"] is True
+    assert response.json() == IsPartialDict(
+        telegram_id=123456789,
+        username="testuser",
+        first_name="Test",
+        is_active=True,
+    )
 
 
 async def test_register_same_user_twice(

@@ -1,4 +1,5 @@
 import pytest
+from dirty_equals import IsInstance, IsInt, IsPartialDict
 from httpx import AsyncClient
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,9 +38,10 @@ async def test_admin_list_complaints(
         headers=headers,
     )
     assert r.status_code == 200
-    data = r.json()
-    assert "items" in data
-    assert "total" in data
+    assert r.json() == IsPartialDict(
+        items=IsInstance(list),
+        total=IsInstance(int),
+    )
 
 
 async def test_admin_resolve_complaint(

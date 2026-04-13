@@ -1,4 +1,9 @@
 import pytest
+from dirty_equals import (
+    IsInstance,
+    IsPartialDict,
+    IsStr,
+)
 from httpx import AsyncClient
 
 from tests.conftest import (
@@ -34,19 +39,14 @@ async def test_submit_complaint(
         headers=headers,
     )
     assert r.status_code == 200
-    data = r.json()
-    assert (
-        data["complaint"]["track_id"]
-        == track["id"]
+    assert r.json() == IsPartialDict(
+        complaint=IsPartialDict(
+            track_id=track["id"],
+            reason=IsStr(regex=r"^Нарушение.*"),
+            contact_email="rights@example.com",
+        ),
+        track_hidden=IsInstance(bool),
     )
-    assert data["complaint"]["reason"].startswith(
-        "Нарушение"
-    )
-    assert (
-        data["complaint"]["contact_email"]
-        == "rights@example.com"
-    )
-    assert isinstance(data["track_hidden"], bool)
 
 
 async def test_duplicate_complaint_rejected(
@@ -109,11 +109,10 @@ async def test_list_complaints(
         headers=headers,
     )
     assert r.status_code == 200
-    items = r.json()
-    assert isinstance(items, list)
+    assert IsInstance(list) == r.json()
     assert any(
         c["track_id"] == track["id"]
-        for c in items
+        for c in r.json()
     )
 
 

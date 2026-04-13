@@ -19,14 +19,21 @@ def test_create_dm_valid() -> None:
     assert req.target_user_id == 42
 
 
-def test_create_dm_missing() -> None:
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        pytest.param({}, id="missing"),
+        pytest.param(
+            {"target_user_id": "abc"},
+            id="wrong_type",
+        ),
+    ],
+)
+def test_create_dm_invalid(
+    kwargs: dict[str, object],
+) -> None:
     with pytest.raises(ValidationError):
-        CreateDMRequest()
-
-
-def test_create_dm_wrong_type() -> None:
-    with pytest.raises(ValidationError):
-        CreateDMRequest(target_user_id="abc")
+        CreateDMRequest(**kwargs)
 
 
 def test_create_group_valid() -> None:
@@ -93,9 +100,17 @@ def test_send_message_full() -> None:
     assert req.shared_track_id == 10
 
 
-def test_send_message_content_too_long() -> None:
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param("x" * 4097, id="too_long"),
+    ],
+)
+def test_send_message_invalid_content(
+    content: str,
+) -> None:
     with pytest.raises(ValidationError):
-        SendMessageRequest(content="x" * 4097)
+        SendMessageRequest(content=content)
 
 
 def test_send_message_content_max_length() -> None:
@@ -133,14 +148,12 @@ def test_mark_read_missing() -> None:
         MarkReadRequest()
 
 
-def test_vote_request_like() -> None:
-    req = VoteRequest(is_like=True)
-    assert req.is_like is True
-
-
-def test_vote_request_dislike() -> None:
-    req = VoteRequest(is_like=False)
-    assert req.is_like is False
+@pytest.mark.parametrize(
+    "is_like", [True, False],
+)
+def test_vote_request(is_like: bool) -> None:
+    req = VoteRequest(is_like=is_like)
+    assert req.is_like is is_like
 
 
 def test_vote_request_missing() -> None:
@@ -153,14 +166,18 @@ def test_comment_request_valid() -> None:
     assert req.text == "Great track!"
 
 
-def test_comment_request_empty() -> None:
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("x" * 1001, id="too_long"),
+    ],
+)
+def test_comment_request_invalid(
+    text: str,
+) -> None:
     with pytest.raises(ValidationError):
-        CommentRequest(text="")
-
-
-def test_comment_request_too_long() -> None:
-    with pytest.raises(ValidationError):
-        CommentRequest(text="x" * 1001)
+        CommentRequest(text=text)
 
 
 def test_comment_request_min_length() -> None:
