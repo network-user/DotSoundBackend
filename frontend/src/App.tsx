@@ -128,13 +128,11 @@ export function App() {
     useState(false)
 
   useEffect(() => {
-    api.setOnUnauthorized(() => {
-      disconnectWS()
-      setNeedsAuth(true)
-    })
     const init = async () => {
       let authenticated = false
-      const hasTelegramContext = Boolean(tg.initData)
+      const hasTelegramContext = Boolean(
+        tg.initData,
+      )
 
       const params = new URLSearchParams(
         window.location.search,
@@ -148,50 +146,49 @@ export function App() {
         )
         try {
           const res =
-            await api.verifyMagicLink(magicToken)
+            await api.verifyMagicLink(
+              magicToken,
+            )
           if (
             res.access_token &&
             res.user_id &&
             !res.requires_2fa
           ) {
             connectWS(res.access_token)
-            authenticated = true
-          } else if (res.requires_2fa) {
-            setNeedsAuth(true)
+            api.setOnUnauthorized(() => {
+              disconnectWS()
+              setNeedsAuth(true)
+            })
             setIsInitialized(true)
             return
           }
         } catch {
-          setNeedsAuth(true)
-          setIsInitialized(true)
-          return
+          // fall through to other auth methods
         }
+      }
+
+      try {
+        if (
+          !authenticated &&
+          hasTelegramContext
+        ) {
+          const authRes =
+            await api.authTelegram(
+              tg.initData,
+            )
+          if (authRes?.access_token) {
+            connectWS(authRes.access_token)
+            authenticated = true
+          }
+        }
+      } catch (err) {
+        console.error(
+          '[App] Auth failed:',
+          err,
+        )
       }
 
       if (!authenticated) {
-        try {
-          if (hasTelegramContext) {
-            const authRes =
-              await api.authTelegram(
-                tg.initData,
-              )
-            if (authRes?.access_token) {
-              connectWS(authRes.access_token)
-              authenticated = true
-            }
-          }
-        } catch (err) {
-          console.error(
-            '[App] Auth failed:',
-            err,
-          )
-        }
-      }
-
-      if (
-        !authenticated &&
-        !hasTelegramContext
-      ) {
         const restored = api.restoreSession()
         if (restored?.token) {
           connectWS(restored.token)
@@ -203,6 +200,10 @@ export function App() {
         setNeedsAuth(true)
       }
 
+      api.setOnUnauthorized(() => {
+        disconnectWS()
+        setNeedsAuth(true)
+      })
       setIsInitialized(true)
     }
     init()

@@ -19,6 +19,15 @@ _SENSITIVE_KEYS = frozenset({
     "access_token",
     "jwt_secret",
     "client_ip",
+    "to",
+    "email",
+    "code",
+    "init_data",
+    "magic_link_url",
+    "session_token",
+    "backup_code",
+    "secret",
+    "totp_secret",
 })
 
 _REDACT_ENABLED = False

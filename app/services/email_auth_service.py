@@ -171,7 +171,9 @@ async def request_magic_link(
     )
     await redis.aclose()
 
-    base_url = settings.mini_app_url.rstrip("/")
+    base_url = settings.mini_app_url
+    if not base_url.endswith("/"):
+        base_url += "/"
     link = f"{base_url}?token={token}"
 
     await send_magic_link(normalized, link)

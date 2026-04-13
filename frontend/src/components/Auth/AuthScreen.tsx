@@ -15,7 +15,6 @@ export function AuthScreen({ onAuth }: Props) {
   const hasToken = params.has('token')
   const hasAuthCode =
     params.get('auth') === 'code'
-
   const initial: Method = hasToken
     ? 'email'
     : hasAuthCode
@@ -26,7 +25,12 @@ export function AuthScreen({ onAuth }: Props) {
     useState<Method>(initial)
 
   if (method === 'telegram') {
-    return <TelegramAuth onAuth={onAuth} />
+    return (
+      <TelegramAuth
+        onAuth={onAuth}
+        onEmail={() => setMethod('email')}
+      />
+    )
   }
 
   if (method === 'email') {
