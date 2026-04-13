@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import structlog
+from dotsound_private_core.services import (
+    mask_ip,
+    parse_user_agent,
+)
 from fastapi import (
     APIRouter,
     Depends,
@@ -13,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
+from app.models.login_history import LoginHistory
 from app.models.user import User
 from app.schemas.auth_email import (
     EmailAuthRequest,
@@ -48,6 +53,29 @@ logger: structlog.stdlib.BoundLogger = (
 )
 
 
+def _record_login(
+    request: Request,
+    session: AsyncSession,
+    user_id: int,
+) -> None:
+    client_ip = (
+        request.client.host
+        if request.client
+        else "unknown"
+    )
+    user_agent = request.headers.get(
+        "user-agent", ""
+    )
+    session.add(
+        LoginHistory(
+            user_id=user_id,
+            ip=mask_ip(client_ip),
+            device=parse_user_agent(user_agent),
+            login_type="email_magic_link",
+        )
+    )
+
+
 @router.post(
     "/request",
     response_model=EmailAuthResponse,
@@ -63,6 +91,23 @@ async def email_auth_request(
                 status.HTTP_503_SERVICE_UNAVAILABLE
             ),
             detail="Email auth is not configured",
+        )
+
+    client_ip = (
+        request.client.host
+        if request.client
+        else "unknown"
+    )
+
+    from app.core.tor_checker import (
+        is_tor_exit_node,
+    )
+
+    if await is_tor_exit_node(client_ip):
+        logger.warning(
+            "tor_exit_node_email_request",
+            ip=client_ip,
+            email=body.email,
         )
 
     try:
@@ -106,6 +151,10 @@ async def email_auth_verify(
             ),
         )
 
+    _record_login(
+        request, session, int(str(result["user_id"]))
+    )
+
     return EmailVerifyResponse(
         access_token=str(result["access_token"]),
         user_id=int(str(result["user_id"])),
@@ -137,6 +186,10 @@ async def twofa_verify(
             ),
             detail=str(exc),
         )
+
+    _record_login(
+        request, session, int(str(result["user_id"]))
+    )
 
     return EmailVerifyResponse(
         access_token=str(result["access_token"]),

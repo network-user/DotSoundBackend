@@ -1,3 +1,4 @@
+from app.models.account_merge import AccountMerge
 from app.models.album import Album
 from app.models.block import UserBlock
 from app.models.comment import (
@@ -29,6 +30,7 @@ from app.models.track import Track
 from app.models.user import User
 
 __all__ = [
+    "AccountMerge",
     "Album",
     "CommentHide",
     "CommentVote",
