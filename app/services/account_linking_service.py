@@ -110,8 +110,8 @@ async def request_link_email(
 
     base_url = settings.mini_app_url.rstrip("/")
     link = (
-        f"{base_url}/account/link-email"
-        f"?token={token}"
+        f"{base_url}"
+        f"?link_email_token={token}"
     )
     await send_magic_link(normalized, link)
 

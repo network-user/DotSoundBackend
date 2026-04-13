@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
+import { getInternalUserId } from '@/lib/telegram'
 import { Icon } from '@/components/Icon/Icon'
 import { LinkedAccounts } from './LinkedAccounts'
 import { TwoFASettings } from './TwoFASettings'
@@ -32,6 +34,20 @@ export function SettingsSheet({
     )
   const [twoFAEnabled, setTwoFAEnabled] =
     useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    const userId = getInternalUserId()
+    if (!userId) return
+    api
+      .getUserProfile(userId)
+      .then((u) => {
+        setTwoFAEnabled(
+          u.totp_enabled ?? false,
+        )
+      })
+      .catch(() => {})
+  }, [open])
 
   if (!open) return null
 

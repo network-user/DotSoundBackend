@@ -83,12 +83,16 @@ export interface PlaylistWithTracks extends Playlist {
 
 export interface UserResponse {
   id: number
-  telegram_id: number
+  telegram_id: number | null
   username: string | null
   first_name: string | null
   last_name: string | null
   display_name: string | null
   avatar_key: string | null
+  email: string | null
+  email_verified: boolean
+  auth_provider: string
+  totp_enabled: boolean
   is_active: boolean
   created_at: string
 }
@@ -178,7 +182,7 @@ export interface FollowToggleResponse {
 
 export interface AuthorProfile {
   id: number
-  telegram_id: number
+  telegram_id: number | null
   username: string | null
   display_name: string | null
   avatar_key: string | null
