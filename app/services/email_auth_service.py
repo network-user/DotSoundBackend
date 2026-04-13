@@ -165,7 +165,7 @@ async def request_magic_link(
     await redis.aclose()
 
     base_url = settings.mini_app_url.rstrip("/")
-    link = f"{base_url}/auth/verify?token={token}"
+    link = f"{base_url}?token={token}"
 
     await send_magic_link(normalized, link)
 

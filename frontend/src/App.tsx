@@ -136,18 +136,56 @@ export function App() {
       let authenticated = false
       const hasTelegramContext = Boolean(tg.initData)
 
-      try {
-        if (hasTelegramContext) {
-          const authRes = await api.authTelegram(
-            tg.initData,
-          )
-          if (authRes?.access_token) {
-            connectWS(authRes.access_token)
+      const params = new URLSearchParams(
+        window.location.search,
+      )
+      const magicToken = params.get('token')
+      if (magicToken) {
+        window.history.replaceState(
+          {},
+          '',
+          window.location.pathname,
+        )
+        try {
+          const res =
+            await api.verifyMagicLink(magicToken)
+          if (
+            res.access_token &&
+            res.user_id &&
+            !res.requires_2fa
+          ) {
+            connectWS(res.access_token)
             authenticated = true
+          } else if (res.requires_2fa) {
+            setNeedsAuth(true)
+            setIsInitialized(true)
+            return
           }
+        } catch {
+          setNeedsAuth(true)
+          setIsInitialized(true)
+          return
         }
-      } catch (err) {
-        console.error('[App] Auth failed:', err)
+      }
+
+      if (!authenticated) {
+        try {
+          if (hasTelegramContext) {
+            const authRes =
+              await api.authTelegram(
+                tg.initData,
+              )
+            if (authRes?.access_token) {
+              connectWS(authRes.access_token)
+              authenticated = true
+            }
+          }
+        } catch (err) {
+          console.error(
+            '[App] Auth failed:',
+            err,
+          )
+        }
       }
 
       if (
@@ -156,8 +194,8 @@ export function App() {
       ) {
         const restored = api.restoreSession()
         if (restored?.token) {
-        connectWS(restored.token)
-        authenticated = true
+          connectWS(restored.token)
+          authenticated = true
         }
       }
 

@@ -36,6 +36,33 @@ export function LinkedAccounts() {
         setTgUsername(s.telegram_username)
       })
       .catch(() => {})
+
+    const params = new URLSearchParams(
+      window.location.search,
+    )
+    const linkToken = params.get(
+      'link_email_token',
+    )
+    if (linkToken) {
+      window.history.replaceState(
+        {},
+        '',
+        window.location.pathname,
+      )
+      api
+        .verifyLinkEmail(linkToken)
+        .then(() => {
+          api.getLinkStatus().then((s) => {
+            setEmailLinked(s.email_linked)
+            setEmail(s.email)
+          })
+        })
+        .catch(() => {
+          setError(
+            'Ссылка привязки недействительна',
+          )
+        })
+    }
   }, [])
 
   const handleLinkEmail = async () => {
