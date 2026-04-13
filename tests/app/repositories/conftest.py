@@ -11,6 +11,7 @@ from sqlalchemy.ext.compiler import compiles
 
 import app.models  # noqa: F401
 from app.models.base import Base
+from tests.factories import TrackFactory, UserFactory
 
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -64,3 +65,33 @@ async def session():
     async with factory() as s:
         yield s
     await engine.dispose()
+
+
+@pytest.fixture
+def create_user(session: AsyncSession):
+    async def _create(**kwargs: Any):
+        user = UserFactory(**kwargs)
+        session.add(user)
+        await session.flush()
+        await session.refresh(user)
+        return user
+
+    return _create
+
+
+@pytest.fixture
+def create_track(
+    session: AsyncSession,
+    create_user,
+):
+    async def _create(**kwargs: Any):
+        if "uploaded_by_id" not in kwargs:
+            user = await create_user()
+            kwargs["uploaded_by_id"] = user.id
+        track = TrackFactory(**kwargs)
+        session.add(track)
+        await session.flush()
+        await session.refresh(track)
+        return track
+
+    return _create

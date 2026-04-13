@@ -128,39 +128,51 @@ class TestDecodeAccessToken:
         assert payload["sub"] == "99"
         assert payload["admin"] is True
 
-    async def test_expired_token_raises(self) -> None:
-        expired_payload = {
-            "sub": "1",
-            "admin": False,
-            "exp": datetime.now(timezone.utc)
-            - timedelta(hours=1),
-        }
-        token = jwt.encode(
-            expired_payload,
-            _JWT_SECRET,
-            algorithm=_ALGORITHM,
-        )
-
-        with _patch_settings(), pytest.raises(AuthError):
-            decode_access_token(token)
-
-    async def test_malformed_token_raises(self) -> None:
-        with _patch_settings(), pytest.raises(AuthError):
-            decode_access_token("not.a.jwt")
-
-    async def test_wrong_secret_raises(self) -> None:
-        token = jwt.encode(
-            {
-                "sub": "1",
-                "admin": False,
-                "exp": datetime.now(timezone.utc)
-                + timedelta(days=1),
-            },
-            "wrong-secret",
-            algorithm=_ALGORITHM,
-        )
-
-        with _patch_settings(), pytest.raises(AuthError):
+    @pytest.mark.parametrize(
+        "token_factory",
+        [
+            pytest.param(
+                lambda: jwt.encode(
+                    {
+                        "sub": "1",
+                        "admin": False,
+                        "exp": datetime.now(timezone.utc)
+                        - timedelta(hours=1),
+                    },
+                    _JWT_SECRET,
+                    algorithm=_ALGORITHM,
+                ),
+                id="expired",
+            ),
+            pytest.param(
+                lambda: "not.a.jwt",
+                id="malformed",
+            ),
+            pytest.param(
+                lambda: jwt.encode(
+                    {
+                        "sub": "1",
+                        "admin": False,
+                        "exp": datetime.now(
+                            timezone.utc
+                        )
+                        + timedelta(days=1),
+                    },
+                    "wrong-secret",
+                    algorithm=_ALGORITHM,
+                ),
+                id="wrong_secret",
+            ),
+        ],
+    )
+    async def test_invalid_token_raises(
+        self,
+        token_factory: object,
+    ) -> None:
+        token = token_factory()
+        with _patch_settings(), pytest.raises(
+            AuthError
+        ):
             decode_access_token(token)
 
 

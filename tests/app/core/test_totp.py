@@ -17,7 +17,9 @@ from app.core.totp import (
     verify_totp,
 )
 
-_FERNET_KEY = base64.urlsafe_b64encode(b"0" * 32).decode()
+_FERNET_KEY = base64.urlsafe_b64encode(
+    b"0" * 32
+).decode()
 
 
 def _patch_settings():
@@ -43,7 +45,8 @@ def test_encrypt_decrypt_roundtrip() -> None:
         assert decrypt_secret(encrypted) == plain
 
 
-def test_encrypt_produces_different_ciphertexts() -> None:
+def test_encrypt_produces_different_ciphertexts(
+) -> None:
     with _patch_settings():
         plain = "JBSWY3DPEHPK3PXP"
         a = encrypt_secret(plain)
@@ -65,7 +68,9 @@ def test_get_otpauth_uri_format() -> None:
 
 
 def test_generate_qr_base64_returns_png() -> None:
-    uri = "otpauth://totp/DotSound:u@e.com?secret=A"
+    uri = (
+        "otpauth://totp/DotSound:u@e.com?secret=A"
+    )
 
     result = generate_qr_base64(uri)
 
@@ -87,20 +92,28 @@ def test_verify_totp_invalid_code() -> None:
     assert verify_totp(secret, "000000") is False
 
 
-def test_generate_backup_codes_count() -> None:
-    codes = generate_backup_codes(5)
-
-    assert len(codes) == 5
+@pytest.mark.parametrize(
+    "count,expected_len",
+    [
+        pytest.param(5, 5, id="custom_count"),
+        pytest.param(None, 8, id="default_count"),
+    ],
+)
+def test_generate_backup_codes_count(
+    count: int | None,
+    expected_len: int,
+) -> None:
+    codes = (
+        generate_backup_codes(count)
+        if count is not None
+        else generate_backup_codes()
+    )
+    assert len(codes) == expected_len
     assert all("-" in c for c in codes)
 
 
-def test_generate_backup_codes_default_count() -> None:
-    codes = generate_backup_codes()
-
-    assert len(codes) == 8
-
-
-def test_generate_backup_codes_uniqueness() -> None:
+def test_generate_backup_codes_uniqueness(
+) -> None:
     codes = generate_backup_codes(20)
 
     assert len(set(codes)) == 20
@@ -109,12 +122,13 @@ def test_generate_backup_codes_uniqueness() -> None:
 def test_hash_backup_code_deterministic() -> None:
     code = "ABCD-EF12"
 
-    assert hash_backup_code(code) == hash_backup_code(
+    assert hash_backup_code(
         code
-    )
+    ) == hash_backup_code(code)
 
 
-def test_hash_backup_code_case_insensitive() -> None:
+def test_hash_backup_code_case_insensitive(
+) -> None:
     assert hash_backup_code(
         "abcd-ef12"
     ) == hash_backup_code("ABCD-EF12")

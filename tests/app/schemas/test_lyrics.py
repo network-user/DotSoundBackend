@@ -22,14 +22,24 @@ def test_synced_line_zero_time() -> None:
     assert line.time_ms == 0
 
 
-def test_synced_line_negative_time() -> None:
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        pytest.param(
+            {"time_ms": -1, "text": "Bad"},
+            id="negative_time",
+        ),
+        pytest.param(
+            {"time_ms": 0},
+            id="missing_text",
+        ),
+    ],
+)
+def test_synced_line_invalid(
+    kwargs: dict[str, object],
+) -> None:
     with pytest.raises(ValidationError):
-        SyncedLine(time_ms=-1, text="Bad")
-
-
-def test_synced_line_missing_text() -> None:
-    with pytest.raises(ValidationError):
-        SyncedLine(time_ms=0)
+        SyncedLine(**kwargs)
 
 
 def test_lyrics_create_valid() -> None:
@@ -39,11 +49,24 @@ def test_lyrics_create_valid() -> None:
     assert "Line one" in req.plain_text
 
 
-def test_lyrics_create_too_long() -> None:
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        pytest.param(
+            {"plain_text": "x" * 10001},
+            id="too_long",
+        ),
+        pytest.param(
+            {},
+            id="missing",
+        ),
+    ],
+)
+def test_lyrics_create_invalid(
+    kwargs: dict[str, object],
+) -> None:
     with pytest.raises(ValidationError):
-        LyricsCreateRequest(
-            plain_text="x" * 10001
-        )
+        LyricsCreateRequest(**kwargs)
 
 
 def test_lyrics_create_max_length() -> None:
@@ -58,11 +81,6 @@ def test_lyrics_create_empty() -> None:
     assert req.plain_text == ""
 
 
-def test_lyrics_create_missing() -> None:
-    with pytest.raises(ValidationError):
-        LyricsCreateRequest()
-
-
 def test_lyrics_sync_sorted() -> None:
     req = LyricsSyncRequest(
         synced_lines=[
@@ -75,11 +93,17 @@ def test_lyrics_sync_sorted() -> None:
 
 
 def test_lyrics_sync_unsorted() -> None:
-    with pytest.raises(ValidationError) as exc_info:
+    with pytest.raises(
+        ValidationError
+    ) as exc_info:
         LyricsSyncRequest(
             synced_lines=[
-                SyncedLine(time_ms=200, text="C"),
-                SyncedLine(time_ms=100, text="B"),
+                SyncedLine(
+                    time_ms=200, text="C"
+                ),
+                SyncedLine(
+                    time_ms=100, text="B"
+                ),
             ]
         )
     assert "sorted" in str(exc_info.value)

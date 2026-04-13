@@ -1,4 +1,5 @@
 import pytest
+from dirty_equals import IsPartialDict
 from httpx import AsyncClient
 
 from tests.conftest import (
@@ -73,9 +74,10 @@ async def test_get_user_likes(
         f"/api/v1/likes/{user['id']}"
     )
     assert r.status_code == 200
-    data = r.json()
-    assert data["total"] == 1
-    assert data["items"][0]["id"] == track["id"]
+    assert r.json() == IsPartialDict(
+        total=1,
+        items=[IsPartialDict(id=track["id"])],
+    )
 
 
 async def test_get_user_likes_empty(

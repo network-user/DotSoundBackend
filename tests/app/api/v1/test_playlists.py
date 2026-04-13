@@ -1,4 +1,5 @@
 import pytest
+from dirty_equals import IsPartialDict
 from httpx import AsyncClient
 
 from tests.conftest import (
@@ -36,8 +37,9 @@ async def test_create_and_get_playlist(
         headers=headers,
     )
     assert r2.status_code == 200
-    assert r2.json()["name"] == "My Mix"
-    assert r2.json()["tracks"] == []
+    assert r2.json() == IsPartialDict(
+        name="My Mix", tracks=[],
+    )
 
 
 async def test_add_and_remove_track(

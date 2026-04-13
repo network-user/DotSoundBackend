@@ -1,4 +1,5 @@
 import pytest
+from dirty_equals import IsPartialDict
 from httpx import AsyncClient
 
 from tests.conftest import (
@@ -17,11 +18,12 @@ async def test_stats_empty(
         f"/api/v1/users/{user['id']}/stats"
     )
     assert resp.status_code == 200
-    data = resp.json()
-    assert data["user_id"] == user["id"]
-    assert data["total_tracks"] == 0
-    assert data["total_plays"] == 0
-    assert data["top_tracks"] == []
+    assert resp.json() == IsPartialDict(
+        user_id=user["id"],
+        total_tracks=0,
+        total_plays=0,
+        top_tracks=[],
+    )
 
 
 async def test_stats_with_tracks(

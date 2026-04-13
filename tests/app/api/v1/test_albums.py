@@ -1,4 +1,5 @@
 import pytest
+from dirty_equals import IsPartialDict
 from httpx import AsyncClient
 
 from tests.conftest import (
@@ -21,10 +22,11 @@ async def test_create_album_success(
         headers=headers,
     )
     assert r.status_code == 201
-    data = r.json()
-    assert data["title"] == "My Album"
-    assert data["owner_id"] == user["id"]
-    assert data["is_public"] is True
+    assert r.json() == IsPartialDict(
+        title="My Album",
+        owner_id=user["id"],
+        is_public=True,
+    )
 
 
 async def test_create_album_missing_title(
@@ -74,8 +76,10 @@ async def test_get_album_success(
         headers=headers,
     )
     assert r.status_code == 200
-    assert r.json()["title"] == "Fetchable Album"
-    assert r.json()["tracks"] == []
+    assert r.json() == IsPartialDict(
+        title="Fetchable Album",
+        tracks=[],
+    )
 
 
 async def test_add_track_to_album(

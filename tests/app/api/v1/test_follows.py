@@ -1,4 +1,5 @@
 import pytest
+from dirty_equals import IsPartialDict
 from httpx import AsyncClient
 
 from tests.conftest import auth_headers, create_test_user
@@ -48,9 +49,9 @@ async def test_list_followers_empty(
         f"/api/v1/users/{user['id']}/followers",
     )
     assert r.status_code == 200
-    data = r.json()
-    assert data["items"] == []
-    assert data["total"] == 0
+    assert r.json() == IsPartialDict(
+        items=[], total=0
+    )
 
 
 async def test_list_following_returns_followed_user(
@@ -69,9 +70,10 @@ async def test_list_following_returns_followed_user(
         f"/api/v1/users/{u1['id']}/following",
     )
     assert r.status_code == 200
-    data = r.json()
-    assert data["total"] == 1
-    assert data["items"][0]["id"] == u2["id"]
+    assert r.json() == IsPartialDict(
+        total=1,
+        items=[IsPartialDict(id=u2["id"])],
+    )
 
 
 async def test_follow_status(

@@ -1,4 +1,4 @@
-.PHONY: dev infra migrate test lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop
+.PHONY: dev infra migrate test test-cov test-fast lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop
 
 dev: ## Start infra, run migrations, start backend
 	docker compose up -d postgres minio redis
@@ -20,6 +20,9 @@ test: ## Run pytest
 
 test-cov: ## Run pytest with coverage
 	poetry run pytest --cov=app --cov-report=term-missing --cov-report=html -v
+
+test-fast: ## Run fast tests only (skip slow/s3/redis)
+	poetry run pytest -v -m "not slow and not s3 and not redis"
 
 lint: ## Run Ruff + Black check + mypy
 	poetry run ruff check .
