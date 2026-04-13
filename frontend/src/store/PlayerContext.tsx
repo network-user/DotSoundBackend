@@ -125,6 +125,7 @@ interface PlayerContextValue {
   openEq: () => void
   closeEq: () => void
   stop: () => void
+  updateTrack: (updated: Partial<Track> & { id: number }) => void
 }
 
 const PlayerContext =
@@ -794,6 +795,19 @@ export function PlayerProvider({
     _clearState()
   }
 
+  const updateTrack = useCallback(
+    (updated: Partial<Track> & { id: number }) => {
+      setTrack((prev) => {
+        if (!prev || prev.id !== updated.id)
+          return prev
+        const merged = { ...prev, ...updated }
+        _saveState(merged, audioRef.current?.currentTime ?? 0)
+        return merged
+      })
+    },
+    [],
+  )
+
   return (
     <PlayerContext.Provider
       value={{
@@ -830,6 +844,7 @@ export function PlayerProvider({
         openEq: () => setIsEqOpen(true),
         closeEq: () => setIsEqOpen(false),
         stop,
+        updateTrack,
       }}
     >
       <audio ref={audioRef} preload="none" />

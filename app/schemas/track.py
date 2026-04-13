@@ -16,6 +16,7 @@ class TrackResponse(BaseModel):
     processing_status: str = "active"
     duration_seconds: int | None
     cover_key: str | None = None
+    video_key: str | None = None
     play_count: int
     is_active: bool
     is_public: bool = True

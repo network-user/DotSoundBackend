@@ -54,6 +54,7 @@ export function TrackCardSheet({
     playPrev,
     openLyrics,
     openComplaint,
+    updateTrack,
   } = usePlayer()
   const {
     isLiked,
@@ -230,14 +231,31 @@ export function TrackCardSheet({
       try {
         const fd = new FormData()
         fd.append('video', file)
-        await api.uploadTrackVideo(track.id, fd)
+        const updated = await api.uploadTrackVideo(
+          track.id,
+          fd,
+        )
+        updateTrack(updated)
+        setVideoReady(false)
       } catch {}
       finally {
         e.target.value = ''
       }
     },
-    [track],
+    [track, updateTrack],
   )
+
+  const handleVideoDelete = useCallback(async () => {
+    if (!track?.video_key) return
+    try {
+      await api.deleteTrackVideo(track.id)
+      updateTrack({
+        id: track.id,
+        video_key: null,
+      })
+      setVideoReady(false)
+    } catch {}
+  }, [track, updateTrack])
 
   if (!isCardOpen || !track) return null
 
@@ -583,6 +601,18 @@ export function TrackCardSheet({
                 />
                 Видео
               </button>
+              {track.video_key && (
+                <button
+                  className="tcs-edit-btn"
+                  onClick={handleVideoDelete}
+                >
+                  <Icon
+                    name="x"
+                    size={18}
+                  />
+                  Удалить видео
+                </button>
+              )}
             </div>
           </div>
         )}

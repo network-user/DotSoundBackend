@@ -1,4 +1,5 @@
 import mimetypes
+import uuid
 
 import structlog
 from fastapi import (
@@ -169,14 +170,22 @@ async def delete_track(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found or access denied",
         )
-    if track.source == "internal" and track.file_key:
+    for key in (
+        track.file_key
+        if track.source == "internal"
+        else None,
+        track.cover_key,
+        track.video_key,
+    ):
+        if not key:
+            continue
         try:
-            await s3.delete_object(track.file_key)
+            await s3.delete_object(key)
         except Exception:
             logger.warning(
                 "s3_delete_failed",
                 track_id=track_id,
-                file_key=track.file_key,
+                file_key=key,
             )
     logger.info(
         "track_deleted",
@@ -327,8 +336,6 @@ async def upload_track_video(
             await s3.delete_object(track.video_key)
         except Exception:
             pass
-
-    import uuid
 
     ext = "mp4" if "mp4" in mime else "webm"
     key = (

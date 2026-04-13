@@ -281,3 +281,128 @@ async def test_regenerate_cover_not_found(
         headers=headers,
     )
     assert r.status_code == 404
+
+
+async def test_upload_video_success(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 60020)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    track = await create_test_track(
+        client, "VidOK", user["id"]
+    )
+
+    video_data = b"\x00\x00\x00\x1cftypisom" + (
+        b"\x00" * 100
+    )
+    with patch(
+        "app.core.s3.upload_object",
+        new_callable=AsyncMock,
+    ):
+        r = await client.post(
+            f"/api/v1/tracks/{track['id']}/video",
+            headers=headers,
+            files={
+                "video": (
+                    "clip.mp4",
+                    BytesIO(video_data),
+                    "video/mp4",
+                )
+            },
+        )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["video_key"] is not None
+    assert data["video_key"].startswith("videos/")
+
+
+async def test_delete_video_success(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 60021)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    track = await create_test_track(
+        client, "VidDel", user["id"]
+    )
+
+    video_data = b"\x00\x00\x00\x1cftypisom" + (
+        b"\x00" * 100
+    )
+    with patch(
+        "app.core.s3.upload_object",
+        new_callable=AsyncMock,
+    ):
+        r = await client.post(
+            f"/api/v1/tracks/{track['id']}/video",
+            headers=headers,
+            files={
+                "video": (
+                    "clip.mp4",
+                    BytesIO(video_data),
+                    "video/mp4",
+                )
+            },
+        )
+    assert r.json()["video_key"] is not None
+
+    with patch(
+        "app.core.s3.delete_object",
+        new_callable=AsyncMock,
+    ) as mock_del:
+        r = await client.delete(
+            f"/api/v1/tracks/{track['id']}/video",
+            headers=headers,
+        )
+    assert r.status_code == 204
+    mock_del.assert_called_once()
+
+
+async def test_delete_track_cleans_video_s3(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 60022)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    track = await create_test_track(
+        client, "CleanVid", user["id"]
+    )
+
+    video_data = b"\x00\x00\x00\x1cftypisom" + (
+        b"\x00" * 100
+    )
+    with patch(
+        "app.core.s3.upload_object",
+        new_callable=AsyncMock,
+    ):
+        await client.post(
+            f"/api/v1/tracks/{track['id']}/video",
+            headers=headers,
+            files={
+                "video": (
+                    "clip.mp4",
+                    BytesIO(video_data),
+                    "video/mp4",
+                )
+            },
+        )
+
+    with patch(
+        "app.core.s3.delete_object",
+        new_callable=AsyncMock,
+    ) as mock_del:
+        r = await client.delete(
+            f"/api/v1/tracks/{track['id']}",
+            headers=headers,
+        )
+    assert r.status_code == 204
+    deleted_keys = [
+        c.args[0] for c in mock_del.call_args_list
+    ]
+    assert any(
+        k.startswith("videos/") for k in deleted_keys
+    )
