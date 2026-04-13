@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import BigInteger
+from sqlalchemy import BigInteger, Boolean, event
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -29,25 +29,76 @@ def _compile_bigint_sqlite(
     return "INTEGER"
 
 
+@event.listens_for(
+    Base, "init", propagate=True
+)
+def _set_boolean_defaults(
+    target: Any,
+    _args: Any,
+    kwargs: dict[str, Any],
+) -> None:
+    for attr in type(
+        target
+    ).__mapper__.column_attrs:
+        col = attr.columns[0]
+        if (
+            isinstance(col.type, Boolean)
+            and attr.key not in kwargs
+            and col.server_default is not None
+        ):
+            sd = col.server_default.arg
+            if isinstance(sd, str):
+                setattr(
+                    target,
+                    attr.key,
+                    sd.lower() in ("true", "1"),
+                )
+
+
+@pytest.fixture(autouse=True)
+def _disable_rate_limit():
+    with patch(
+        "app.core.rate_limit.limiter.enabled",
+        False,
+    ):
+        yield
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
 
 
 @pytest.fixture
-async def client() -> AsyncClient:
+async def db_engine():
     engine = create_async_engine(_TEST_DB_URL)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    yield engine
+    await engine.dispose()
 
-    session_factory: async_sessionmaker[AsyncSession] = (
+
+@pytest.fixture
+async def db_session(db_engine):
+    factory: async_sessionmaker[AsyncSession] = (
         async_sessionmaker(
-            engine, expire_on_commit=False
+            db_engine, expire_on_commit=False
+        )
+    )
+    async with factory() as session:
+        yield session
+
+
+@pytest.fixture
+async def client(db_engine) -> AsyncClient:
+    factory: async_sessionmaker[AsyncSession] = (
+        async_sessionmaker(
+            db_engine, expire_on_commit=False
         )
     )
 
     async def _override_get_db() -> AsyncSession:
-        async with session_factory() as session:
+        async with factory() as session:
             try:
                 yield session  # type: ignore[misc]
                 await session.commit()
@@ -66,8 +117,6 @@ async def client() -> AsyncClient:
     ) as ac:
         yield ac  # type: ignore[misc]
 
-    await engine.dispose()
-
 
 @pytest.fixture
 def mock_s3():
@@ -79,6 +128,22 @@ def mock_s3():
         yield m
 
 
+@pytest.fixture
+def mock_taskiq():
+    with patch(
+        "app.services.upload_service"
+        ".transcode_and_upload.kiq",
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        "app.services.upload_service"
+        ".generate_and_upload_cover.kiq",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        yield
+
+
 async def create_test_user(
     client: AsyncClient,
     telegram_id: int,
@@ -86,11 +151,15 @@ async def create_test_user(
 ) -> dict[str, Any]:
     payload = {
         "telegram_id": telegram_id,
-        "first_name": kwargs.get("first_name", "Test"),
+        "first_name": kwargs.get(
+            "first_name", "Test"
+        ),
         "username": kwargs.get("username"),
         "last_name": kwargs.get("last_name"),
     }
-    r = await client.post("/api/v1/users", json=payload)
+    r = await client.post(
+        "/api/v1/users", json=payload
+    )
     assert r.status_code == 200
     return r.json()
 
@@ -103,18 +172,22 @@ async def create_test_track(
     data: dict[str, str] = {"title": title}
     headers: dict[str, str] = {}
     if uploader_id is not None:
-        headers = await auth_headers(client, uploader_id)
+        headers = await auth_headers(
+            client, uploader_id
+        )
 
     with patch(
         "app.core.s3.upload_audio",
         new_callable=AsyncMock,
         return_value=f"anon/{title}.mp3",
     ), patch(
-        "app.services.upload_service.transcode_and_upload.kiq",
+        "app.services.upload_service"
+        ".transcode_and_upload.kiq",
         new_callable=AsyncMock,
         return_value=None,
     ), patch(
-        "app.services.upload_service.generate_and_upload_cover.kiq",
+        "app.services.upload_service"
+        ".generate_and_upload_cover.kiq",
         new_callable=AsyncMock,
         return_value=None,
     ):
@@ -125,7 +198,9 @@ async def create_test_track(
             files={
                 "file": (
                     "t.mp3",
-                    BytesIO(b"\xff\xfb" + b"\x00" * 64),
+                    BytesIO(
+                        b"\xff\xfb" + b"\x00" * 64
+                    ),
                     "audio/mpeg",
                 )
             },
