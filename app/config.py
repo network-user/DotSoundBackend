@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -45,6 +47,10 @@ class AppSettings(BaseSettings):
     image_strip_metadata: bool = True
     voice_bitrate: str = "64k"
     voice_max_duration: int = 300
+
+    upload_malware_scan_mode: Literal[
+        "none", "lightweight", "clamav"
+    ] = "none"
 
     @property
     def allowed_origins_list(self) -> list[str]:

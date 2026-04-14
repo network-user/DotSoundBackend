@@ -332,6 +332,9 @@ async def upload_track_video(
             detail="Video exceeds 15 MB limit",
         )
 
+    from app.services.file_validator import validate_video
+    validate_video(data, video.filename)
+
     if track.video_key:
         try:
             await s3.delete_object(track.video_key)

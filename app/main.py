@@ -20,6 +20,7 @@ from app.core.rate_limit import limiter
 from app.core.s3 import ensure_bucket_exists
 from app.core.ws_manager import ws_manager
 from app.middlewares.request_logging import RequestLoggingMiddleware
+from app.middlewares.security_headers import SecurityHeadersMiddleware
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -73,6 +74,7 @@ def create_app() -> FastAPI:
     )
 
     application.add_middleware(SlowAPIMiddleware)
+    application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(
         CORSMiddleware,

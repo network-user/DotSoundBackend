@@ -39,49 +39,21 @@
 - [x] Аудио sanitization через FFmpeg перекодирование (payload уничтожается)
 - [ ] Аудит-лог входов через бота (расширить login_history)
 - [ ] Rate limit тюнинг под production нагрузку
-- [ ] **Глубокая валидация загрузок (Layer 1)**
-  - `python-magic` для проверки magic bytes
-  - Двойная проверка MIME vs magic bytes
-  - Запрет двойных расширений (`track.mp3.exe`)
-- [ ] **Sanitization изображений (Layer 2)**
-  - Pillow `Image.open().save()` для пересохранения обложек/аватаров
-- [ ] **Сканирование загрузок: режим `lightweight` ИЛИ `clamav` (взаимоисключающие)**
-  - **Конфиг** (`app/config.py`, `.env`): одно поле, например
-    `upload_malware_scan_mode: none | lightweight | clamav`.
-    При старте приложения: если значение не `none`, ровно один активный
-    режим; при неверной комбинации или одновременном включении двух
-    путей — падение с понятной ошибкой (Pydantic validator / lifespan).
-  - **Интеграционные точки (сейчас без AV):**
-    - аудио: `UploadService.upload_track` → временный объект в MinIO
-      (`temp/raw/...`), затем воркер `transcode_and_upload`
-      (`app/services/transcoding.py`) скачивает байты через
-      `s3.download_object` — скан **после** скачивания и **до** FFmpeg
-      (или отдельная задача в очереди: quarantine-префикс → OK → транскод).
-    - обложки: `UploadService._upload_cover` (байты в памяти до
-      `s3.upload_cover`).
-    - видео к треку: `upload_track_video` в `app/api/v1/tracks/user.py`
-      (байты в памяти; вынести общий helper сканирования).
-    - при необходимости те же хуки для вложений чата (отдельно
-      перечислить эндпоинты после аудита).
-  - **Режим `lightweight` (малый RAM, слабый VPS):** без `clamd`.
-    Наслоить на уже запланированные Layer 1–2 (magic bytes, сверка MIME,
-    запрет двойных расширений, Pillow-ресейв для изображений). Дополнительно
-    по согласованию с `DotSoundPrivateCore`: эвристики (энтропия, размер
-    заголовков контейнера), опционально узкий набор **YARA**-правил под
-    известные сигнатуры — константы и пороги только в PrivateCore, вызов из `app/services/`.
-  - **Режим `clamav` (серьёзный сервер или отдельный хост под AV):**
-    Docker `clamav/clamav:stable`, скан через `clamd` (TCP или socket).
-    Тот же контракт «quarantine-префикс в MinIO → при CLEAN перенос /
-    триггер транскода»; при INFECTED — удалить объект, пометить трек/
-    загрузку ошибкой, залогировать без утечки содержимого.
-  - **Взаимоисключение:** при `lightweight` не поднимать и не вызывать
-    ClamAV; при `clamav` не гонять тяжёлый пакет эвристик/YARA (достаточно
-    минимальной валидации формата, если нужна до скана). Документировать в
-    `.env.example` рекомендуемые тарифы VPS на режим.
-- [ ] **CSP и изоляция (Layer 4)**
-  - `Content-Security-Policy` при отдаче файлов
-  - `Content-Disposition: attachment` для raw-загрузок
-  - `X-Content-Type-Options: nosniff`
+- [x] **Глубокая валидация загрузок (Layer 1)**
+  - `python-magic-bin` для проверки magic bytes (`file_validator.py`)
+  - Интеграция в audio upload, cover upload, video upload
+  - Запрет двойных расширений (`.exe`, `.bat`, `.cmd` и др.)
+- [x] **Sanitization изображений (Layer 2)**
+  - Pillow re-encode для обложек и аватаров (через `media_service.process_image`)
+- [~] **Сканирование загрузок: режим `lightweight` ИЛИ `clamav`**
+  - [x] Конфиг `upload_malware_scan_mode: none | lightweight | clamav` в `config.py`
+  - [x] `scan_service.py` stub (ScanResult, scan_bytes)
+  - [x] Документировано в `.env.example` с рекомендациями по VPS
+  - [ ] Реализация `lightweight` режима (YARA + эвристики, PrivateCore)
+  - [ ] Реализация `clamav` режима (clamd TCP/socket, quarantine flow)
+- [x] **CSP и изоляция (Layer 4)**
+  - `SecurityHeadersMiddleware`: `X-Content-Type-Options: nosniff` на все ответы
+  - `Content-Security-Policy: default-src 'none'` на медиа-ответы
 
 ## Плеер в боте
 
@@ -263,4 +235,4 @@
 
 ---
 
-*Последнее обновление: 2026-04-14 агентом (Sprint 1 Quick Wins)*
+*Последнее обновление: 2026-04-14 агентом (Sprint 2 Security Layers)*
