@@ -79,4 +79,6 @@ async def get_user_likes(
     return UserLikesResponse(
         items=[TrackResponse.model_validate(t) for t in tracks],
         total=total,
+        page=page,
+        has_more=(page * size) < total,
     )

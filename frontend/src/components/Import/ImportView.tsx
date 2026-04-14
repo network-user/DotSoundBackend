@@ -1,27 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
+import type { ImportAudioInfo, ImportJobResponse } from '@/types/api'
 import { ImportSourcePicker } from './ImportSourcePicker'
 
-interface AudioInfo {
-  file_id: string
-  title: string
-  performer: string | null
-  duration: number | null
-  file_size: number | null
-}
-
-interface ImportJobData {
-  id: number
-  source: string
-  status: string
-  total_tracks: number
-  completed_tracks: number
-  failed_tracks: number
-  tracks_data: {
-    audios?: AudioInfo[]
-    imported?: { title: string; status: string; track_id?: number; reason?: string }[]
-  } | null
-}
+type AudioInfo = ImportAudioInfo
+type ImportJobData = ImportJobResponse
 
 type Phase = 'pick' | 'scanning' | 'select' | 'importing' | 'done'
 

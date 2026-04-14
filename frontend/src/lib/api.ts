@@ -13,6 +13,7 @@ import type {
   DislikeToggleResponse,
   EmailVerifyResponse,
   FollowToggleResponse,
+  ImportJobResponse,
   LikeToggleResponse,
   LyricsResponse,
   Playlist,
@@ -216,8 +217,8 @@ export const api = {
     return request(`/api/v1/dislikes/${userId}/${track_id}`, { method: 'POST' })
   },
 
-  getLikedTracks(userId: number, size = 200): Promise<UserLikesResponse> {
-    return request(`/api/v1/likes/${userId}?size=${size}`)
+  getLikedTracks(userId: number, page = 1, size = 20): Promise<UserLikesResponse> {
+    return request(`/api/v1/likes/${userId}?page=${page}&size=${size}`)
   },
 
   submitComplaint(body: ComplaintCreate): Promise<ComplaintSubmitResponse> {
@@ -671,7 +672,7 @@ export const api = {
     })
   },
 
-  startTelegramImport(): Promise<any> {
+  startTelegramImport(): Promise<ImportJobResponse> {
     return request('/api/v1/import/telegram', {
       method: 'POST',
     })
@@ -680,7 +681,7 @@ export const api = {
   startImportJob(
     jobId: number,
     trackIndices: number[],
-  ): Promise<any> {
+  ): Promise<ImportJobResponse> {
     return request(`/api/v1/import/${jobId}/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -690,15 +691,15 @@ export const api = {
     })
   },
 
-  getImportStatus(jobId: number): Promise<any> {
+  getImportStatus(jobId: number): Promise<ImportJobResponse> {
     return request(`/api/v1/import/${jobId}/status`)
   },
 
-  getActiveImport(): Promise<any> {
+  getActiveImport(): Promise<ImportJobResponse | null> {
     return request('/api/v1/import/active')
   },
 
-  cancelImport(jobId: number): Promise<any> {
+  cancelImport(jobId: number): Promise<ImportJobResponse> {
     return request(`/api/v1/import/${jobId}/cancel`, {
       method: 'POST',
     })

@@ -2,6 +2,8 @@ export interface Track {
   id: number
   title: string
   artist: string | null
+  genre: string | null
+  description: string | null
   duration_seconds: number | null
   cover_key: string | null
   play_count: number
@@ -54,6 +56,8 @@ export interface DislikeToggleResponse {
 export interface UserLikesResponse {
   items: Track[]
   total: number
+  page: number
+  has_more: boolean
 }
 
 export interface ComplaintCreate {
@@ -285,4 +289,32 @@ export interface AppNotification {
   data: Record<string, unknown> | null
   is_read: boolean
   created_at: string
+}
+
+// ── Import ────────────────────────────────────────────────────────────────
+
+export interface ImportAudioInfo {
+  file_id: string
+  title: string
+  performer: string | null
+  duration: number | null
+  file_size: number | null
+}
+
+export interface ImportJobResponse {
+  id: number
+  source: string
+  status: string
+  total_tracks: number
+  completed_tracks: number
+  failed_tracks: number
+  tracks_data: {
+    audios?: ImportAudioInfo[]
+    imported?: {
+      title: string
+      status: string
+      track_id?: number
+      reason?: string
+    }[]
+  } | null
 }

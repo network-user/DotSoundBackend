@@ -21,6 +21,8 @@ class LikeToggleResponse(BaseModel):
 class UserLikesResponse(BaseModel):
     items: list[TrackResponse]
     total: int
+    page: int = 1
+    has_more: bool = False
 
 
 class DislikeResponse(BaseModel):

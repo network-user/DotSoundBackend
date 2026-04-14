@@ -16,6 +16,7 @@ class TrackResponse(BaseModel):
     processing_status: str = "active"
     duration_seconds: int | None
     cover_key: str | None = None
+    description: str | None = None
     video_key: str | None = None
     play_count: int
     is_active: bool
@@ -59,6 +60,14 @@ class TrackUploadResponse(BaseModel):
 
 
 class TrackUpdateRequest(BaseModel):
+    title: str | None = Field(
+        None, max_length=256, min_length=1
+    )
+    artist: str | None = Field(None, max_length=256)
+    genre: str | None = Field(None, max_length=100)
+    description: str | None = Field(
+        None, max_length=2000
+    )
     is_public: bool | None = None
 
 

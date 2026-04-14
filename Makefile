@@ -1,4 +1,7 @@
-.PHONY: dev infra migrate test test-cov test-fast lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop
+.PHONY: dev infra migrate test test-cov test-fast lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop hooks
+
+hooks: ## Install repo git hooks (boundary check before push)
+	git config core.hooksPath .githooks
 
 dev: ## Start infra, run migrations, start backend
 	docker compose up -d postgres minio redis

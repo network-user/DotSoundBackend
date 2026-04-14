@@ -105,6 +105,65 @@ async def test_increment_play_count(
     assert missing is False
 
 
+async def test_update_track(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session)
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="Old",
+        artist="Old Artist",
+        uploaded_by_id=user.id,
+    )
+
+    updated = await repo.update_track(
+        track.id,
+        user.id,
+        title="New",
+        artist="New Artist",
+        genre="Rock",
+        description="A description",
+    )
+    assert updated is not None
+    assert updated.title == "New"
+    assert updated.artist == "New Artist"
+    assert updated.genre == "Rock"
+    assert updated.description == "A description"
+
+
+async def test_update_track_wrong_owner(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session)
+    other = await _make_user(session, telegram_id=99)
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="Mine",
+        artist="A",
+        uploaded_by_id=user.id,
+    )
+
+    result = await repo.update_track(
+        track.id, other.id, title="Stolen"
+    )
+    assert result is None
+
+
+async def test_update_track_no_fields(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session)
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="NoChange",
+        artist="A",
+        uploaded_by_id=user.id,
+    )
+
+    result = await repo.update_track(track.id, user.id)
+    assert result is None
+
+
 async def test_delete_by_owner(
     session: AsyncSession,
 ) -> None:

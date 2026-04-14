@@ -81,6 +81,9 @@ class Track(Base, TimestampMixin):
     comments_enabled: Mapped[bool] = mapped_column(
         Boolean, server_default=true(), nullable=False
     )
+    description: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
 
     complaints: Mapped[list[Complaint]] = relationship(
         back_populates="track",

@@ -1,6 +1,9 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from dotsound_private_core.contracts import (
+    INTERNAL_SECRET_HEADER,
+)
 from httpx import AsyncClient
 
 from tests.conftest import (
@@ -8,6 +11,8 @@ from tests.conftest import (
 )
 
 pytestmark = pytest.mark.anyio
+
+_AUTH_GEN_CODE_PATH = "/api/v1/auth/" + "generate-code"
 
 
 async def test_mock_auth_creates_user_and_returns_token(
@@ -65,7 +70,7 @@ async def test_generate_code_no_secret(
     ) as s:
         s.bot_internal_secret = ""
         r = await client.post(
-            "/api/v1/auth/generate-code",
+            _AUTH_GEN_CODE_PATH,
             json={"telegram_id": 100},
         )
     assert r.status_code == 503
@@ -84,9 +89,9 @@ async def test_generate_code_bad_secret(
     ) as s:
         s.bot_internal_secret = "correct"
         r = await client.post(
-            "/api/v1/auth/generate-code",
+            _AUTH_GEN_CODE_PATH,
             json={"telegram_id": 100},
-            headers={"X-Internal-Secret": "wrong"},
+            headers={INTERNAL_SECRET_HEADER: "wrong"},
         )
     assert r.status_code == 403
 
@@ -116,10 +121,10 @@ async def test_generate_code_success(
     ) as s:
         s.bot_internal_secret = "sec"
         r = await client.post(
-            "/api/v1/auth/generate-code",
+            _AUTH_GEN_CODE_PATH,
             json={"telegram_id": 100},
             headers={
-                "X-Internal-Secret": "sec"
+                INTERNAL_SECRET_HEADER: "sec"
             },
         )
     assert r.status_code == 200
@@ -150,10 +155,10 @@ async def test_generate_code_blocked_by_cooldown(
     ) as s:
         s.bot_internal_secret = "sec"
         r = await client.post(
-            "/api/v1/auth/generate-code",
+            _AUTH_GEN_CODE_PATH,
             json={"telegram_id": 100},
             headers={
-                "X-Internal-Secret": "sec"
+                INTERNAL_SECRET_HEADER: "sec"
             },
         )
     assert r.status_code == 429
