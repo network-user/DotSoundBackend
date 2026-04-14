@@ -115,7 +115,14 @@
   - Meta-теги: theme-color, apple-touch-icon, apple-mobile-web-app-capable
 - [ ] Picture-in-Picture для видео-треков
   - `video.requestPictureInPicture()` в `TrackCardSheet.tsx`
-- [ ] Offline-кэш треков (Service Worker)
+- [ ] **Offline-кэш треков (сохранение для оффлайн-прослушивания)**
+  - **Сохранение**: кнопка "Скачать" на TrackCardSheet; аудио кешируется в Cache API (`caches.open('offline-tracks')`)
+  - **Хранилище**: IndexedDB для метаданных (track JSON, обложка blob, статус); Cache API для аудиофайлов
+  - **Управление**: экран "Скачанные" (список, занято места, кнопка удаления); лимит по объёму (настраиваемый, ~500MB)
+  - **Оффлайн-режим**: Service Worker перехватывает `/api/v1/tracks/{id}/audio` и `/hls/` — если есть в кеше, отдаёт локально
+  - **Плеер**: `playTrack()` проверяет Cache API перед сетевым запросом; оффлайн-треки играют без интернета
+  - **Синхронизация**: при появлении сети — sync play counts (Background Sync API); обновление метаданных
+  - **Ограничения**: HLS-треки кешировать как один файл через fallback endpoint `/audio`; DRM/лицензирование не применяется (UGC-платформа)
 
 ## Видео к трекам
 
@@ -164,11 +171,19 @@
 - [x] Предзагрузка следующей пачки в боте (DotSoundBot)
 - [x] `GET /tracks/{id}/adjacent` (sequential/shuffle/repeat_one)
 - [x] hls.js с ABR (`startLevel: -1`, `enableWorker: true`)
-- [x] **Prefetch в Mini App / браузере**
+- [x] **Prefetch в Mini App / браузере (метаданные)**
   - `GET /tracks/{id}/queue?count=3` -- новый endpoint
   - `TrackRepository.get_next_tracks()` возвращает N следующих треков
   - Кеш в `PlayerContext` через `useRef` (`prefetchCacheRef`)
   - `playNext` использует кеш, fallback на `getAdjacentTracks`
+- [ ] **Предзагрузка аудио следующего трека (gapless)**
+  - При проигрывании текущего трека — начинать буферизацию аудио следующего трека в фоне
+  - Скрытый `<audio>` элемент (`preloadAudioRef`) с `preload="auto"` загружает URL следующего трека
+  - Для HLS: создать второй `Hls` instance, привязать к preload-элементу, дождаться `MANIFEST_PARSED`
+  - При `playNext` — swap: preload-элемент становится основным, мгновенный старт без буферизации
+  - Запуск предзагрузки по порогу (например, текущий трек проигран на 75% или осталось < 30 сек)
+  - Отмена предзагрузки при ручном переключении на другой трек
+  - Ограничение: предзагружать только 1 следующий трек (экономия трафика)
 
 ## Идентификация загрузчика
 

@@ -7,9 +7,10 @@ type Method = 'choose' | 'telegram' | 'email'
 
 interface Props {
   onAuth: () => void
+  error?: string | null
 }
 
-export function AuthScreen({ onAuth }: Props) {
+export function AuthScreen({ onAuth, error }: Props) {
   const { t } = useTranslation()
   const params = new URLSearchParams(
     window.location.search,
@@ -68,6 +69,19 @@ export function AuthScreen({ onAuth }: Props) {
         >
           {t('auth.loginEmail')}
         </button>
+        {error && (
+          <p
+            className="auth-hint"
+            style={{
+              marginTop: 16,
+              fontSize: 11,
+              opacity: 0.45,
+              wordBreak: 'break-all',
+            }}
+          >
+            {error}
+          </p>
+        )}
       </div>
     </div>
   )

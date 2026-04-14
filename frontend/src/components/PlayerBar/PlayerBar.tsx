@@ -24,6 +24,7 @@ export function PlayerBar() {
     playPrev,
     openCard,
     openEq,
+    stop,
   } = usePlayer()
   const { isLiked, toggleLike } = useLikes()
 
@@ -127,6 +128,15 @@ export function PlayerBar() {
               name="skip-forward"
               size={18}
             />
+          </button>
+          <button
+            className="ctrl-btn pb-close"
+            onClick={(e) => {
+              e.stopPropagation()
+              stop()
+            }}
+          >
+            <Icon name="x" size={16} />
           </button>
         </div>
       </div>

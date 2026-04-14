@@ -1,11 +1,37 @@
 import WebApp from '@twa-dev/sdk'
 
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: {
+        initData?: string
+        initDataUnsafe?: { user?: { id?: number } }
+      }
+    }
+  }
+}
+
 WebApp.ready()
 WebApp.expand()
 
 export const tg = WebApp
+
+function nativeInitData(): string {
+  try {
+    return window.Telegram?.WebApp?.initData ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function getInitData(): string {
+  return tg.initData || nativeInitData()
+}
+
 export const telegramId: number | null =
-  WebApp.initDataUnsafe?.user?.id ?? null
+  WebApp.initDataUnsafe?.user?.id
+  ?? window.Telegram?.WebApp?.initDataUnsafe?.user?.id
+  ?? null
 
 const INTERNAL_USER_ID_KEY =
   'auth-user-id'
