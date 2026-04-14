@@ -361,6 +361,135 @@ async def test_delete_video_success(
     mock_del.assert_called_once()
 
 
+async def test_update_track_title(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 60030)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    track = await create_test_track(
+        client, "OldTitle", user["id"]
+    )
+
+    r = await client.patch(
+        f"/api/v1/tracks/{track['id']}",
+        headers=headers,
+        json={"title": "NewTitle"},
+    )
+    assert r.status_code == 200
+    assert r.json()["title"] == "NewTitle"
+
+
+async def test_update_track_artist(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 60031)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    track = await create_test_track(
+        client, "ArtistTrack", user["id"]
+    )
+
+    r = await client.patch(
+        f"/api/v1/tracks/{track['id']}",
+        headers=headers,
+        json={"artist": "New Artist"},
+    )
+    assert r.status_code == 200
+    assert r.json()["artist"] == "New Artist"
+
+
+async def test_update_track_genre(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 60032)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    track = await create_test_track(
+        client, "GenreTrack", user["id"]
+    )
+
+    r = await client.patch(
+        f"/api/v1/tracks/{track['id']}",
+        headers=headers,
+        json={"genre": "Electronic"},
+    )
+    assert r.status_code == 200
+    assert r.json()["genre"] == "Electronic"
+
+
+async def test_update_track_description(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 60033)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    track = await create_test_track(
+        client, "DescTrack", user["id"]
+    )
+
+    r = await client.patch(
+        f"/api/v1/tracks/{track['id']}",
+        headers=headers,
+        json={"description": "A great track"},
+    )
+    assert r.status_code == 200
+    assert r.json()["description"] == "A great track"
+
+
+async def test_update_track_multiple_fields(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 60034)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    track = await create_test_track(
+        client, "MultiField", user["id"]
+    )
+
+    r = await client.patch(
+        f"/api/v1/tracks/{track['id']}",
+        headers=headers,
+        json={
+            "title": "Updated",
+            "artist": "New Art",
+            "genre": "Rock",
+            "is_public": False,
+        },
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["title"] == "Updated"
+    assert data["artist"] == "New Art"
+    assert data["genre"] == "Rock"
+    assert data["is_public"] is False
+
+
+async def test_update_track_non_owner(
+    client: AsyncClient,
+) -> None:
+    owner = await create_test_user(client, 60035)
+    other = await create_test_user(client, 60036)
+    other_headers = await auth_headers(
+        client, other["id"]
+    )
+    track = await create_test_track(
+        client, "Owned", owner["id"]
+    )
+
+    r = await client.patch(
+        f"/api/v1/tracks/{track['id']}",
+        headers=other_headers,
+        json={"title": "Hacked"},
+    )
+    assert r.status_code == 404
+
+
 async def test_delete_track_cleans_video_s3(
     client: AsyncClient,
 ) -> None:

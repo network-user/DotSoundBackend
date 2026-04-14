@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import { api } from '@/lib/api'
 import { getUserId } from '@/lib/telegram'
 
@@ -17,20 +25,30 @@ export function LikesProvider({ children }: { children: ReactNode }) {
   const [dislikedIds, setDislikedIds] = useState<Set<number>>(new Set())
   const [authTick, setAuthTick] = useState(0)
 
-  const reloadLikes = () => setAuthTick((n) => n + 1)
+  const reloadLikes = useCallback(
+    () => setAuthTick((n) => n + 1),
+    [],
+  )
 
   useEffect(() => {
     const uid = getUserId()
     if (!uid) return
-    api.getLikedTracks(uid).then((data) => {
+    api.getLikedTracks(uid, 1, 200).then((data) => {
       setLikedIds(new Set(data.items.map((t) => t.id)))
     }).catch(() => {})
   }, [authTick])
 
-  const isLiked = (trackId: number) => likedIds.has(trackId)
-  const isDisliked = (trackId: number) => dislikedIds.has(trackId)
+  const isLiked = useCallback(
+    (trackId: number) => likedIds.has(trackId),
+    [likedIds],
+  )
 
-  const toggleLike = async (trackId: number) => {
+  const isDisliked = useCallback(
+    (trackId: number) => dislikedIds.has(trackId),
+    [dislikedIds],
+  )
+
+  const toggleLike = useCallback(async (trackId: number) => {
     const uid = getUserId()
     if (!uid) return
     try {
@@ -51,9 +69,9 @@ export function LikesProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('toggleLike failed', e)
     }
-  }
+  }, [])
 
-  const toggleDislike = async (trackId: number) => {
+  const toggleDislike = useCallback(async (trackId: number) => {
     const uid = getUserId()
     if (!uid) return
     try {
@@ -74,10 +92,15 @@ export function LikesProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('toggleDislike failed', e)
     }
-  }
+  }, [])
+
+  const value = useMemo(
+    () => ({ isLiked, isDisliked, toggleLike, toggleDislike, reloadLikes }),
+    [isLiked, isDisliked, toggleLike, toggleDislike, reloadLikes],
+  )
 
   return (
-    <LikesContext.Provider value={{ isLiked, isDisliked, toggleLike, toggleDislike, reloadLikes }}>
+    <LikesContext.Provider value={value}>
       {children}
     </LikesContext.Provider>
   )

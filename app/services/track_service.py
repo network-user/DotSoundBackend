@@ -98,6 +98,18 @@ class TrackService:
             is_public=is_public,
         )
 
+    async def update_track(
+        self,
+        track_id: int,
+        user_id: int,
+        **fields: object,
+    ) -> Track | None:
+        return await self._repo.update_track(
+            track_id=track_id,
+            user_id=user_id,
+            **fields,
+        )
+
     async def delete_by_owner(
         self, track_id: int, user_id: int
     ) -> Track | None:

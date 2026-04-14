@@ -146,6 +146,8 @@ export function LyricsEditor({
             id: -1,
             title: 'Preview',
             artist: '',
+            genre: null,
+            description: null,
             duration_seconds: 0,
             cover_key: null,
             play_count: 0,

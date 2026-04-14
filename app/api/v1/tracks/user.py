@@ -128,16 +128,17 @@ async def update_track(
     structlog.contextvars.bind_contextvars(
         track_id=track_id
     )
-    if data.is_public is None:
+    fields = data.model_dump(exclude_none=True)
+    if not fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No fields to update",
         )
     service = TrackService(session)
-    track = await service.update_visibility(
+    track = await service.update_track(
         track_id=track_id,
         user_id=current_user.id,
-        is_public=data.is_public,
+        **fields,
     )
     if not track:
         raise HTTPException(
