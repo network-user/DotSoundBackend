@@ -51,9 +51,22 @@
   - [x] Документировано в `.env.example` с рекомендациями по VPS
   - [ ] Реализация `lightweight` режима (YARA + эвристики, PrivateCore)
   - [ ] Реализация `clamav` режима (clamd TCP/socket, quarantine flow)
+  - [ ] Разделить слои: сигнатуры/эвристики/пороги в PrivateCore, clamd/quarantine orchestration в Backend
 - [x] **CSP и изоляция (Layer 4)**
   - `SecurityHeadersMiddleware`: `X-Content-Type-Options: nosniff` на все ответы
   - `Content-Security-Policy: default-src 'none'` на медиа-ответы
+
+## Граница Backend / PrivateCore
+
+- [x] **Immediate: перенести auth/email policy в PrivateCore**
+  - [x] `account_linking_service`: `_LINK_TTL`, `_LINK_EMAIL_TYPE`, `_LINK_PREFIX`, `_LINK_TG_PREFIX`
+  - [x] `account_linking_service`: импортировать `is_disposable_email` из `dotsound_private_core.services.abuse`
+  - [x] `email_auth_service`: `_2FA_SESSION_TTL`, `_MAGIC_LINK_TYPE`, `_2FA_SESSION_TYPE`, `_ML_PREFIX`
+  - [x] `email_auth_service`: policy генерации fallback OTP (6-значный код) перенести в helper PrivateCore
+  - [x] `email_sender`: текст TTL fallback-кода строить от `FALLBACK_CODE_TTL`, без hardcoded `5 minutes`
+- [ ] **Route-layer SQL debt (Backend refactor, не PrivateCore)**
+  - Перенести inline SQL из `api/v1/admin/tracks.py`, `api/v1/admin/users.py`, `api/v1/admin/complaints.py` в `AdminService`/`AdminRepository`
+  - Перенести inline SQL из `api/v1/metadata.py:get_popular_genres` и `api/v1/users.py:get_login_history` в `services/repositories`
 
 ## Плеер в боте
 
@@ -63,6 +76,7 @@
 - [x] Предзагрузка следующей пачки
 - [x] Фильтрация треков без файлов (playable_only)
 - [ ] Расширить источники: плейлисты, подписки, рекомендации
+  - Для источника "рекомендации": алгоритм ранжирования и скоринг в PrivateCore, Backend/бот — адаптеры выдачи
 - [ ] Shuffle / Random режим
 
 ## Интернационализация (i18n)
@@ -132,6 +146,7 @@
   - Alembic миграция `651109411149`
 - [ ] Теги (`tags`, JSONB или отдельная таблица)
 - [ ] BPM auto-detection (background task, `librosa` / `essentia`)
+  - Извлечение фич/пороги confidence и decision rules в PrivateCore, Taskiq orchestration и запись результата — в Backend
 - [ ] Waveform generation (pre-render формы волны для UI)
 
 ## Чат и комментарии
@@ -163,6 +178,7 @@
   - Заполнение при загрузке из `request.client.host` + headers
   - Admin endpoint для просмотра
   - Автоудаление через N дней (GDPR)
+  - Retention-константа и условия удаления в PrivateCore, планировщик/удаление записей — в Backend
 
 ## Удаление аккаунта
 
@@ -170,6 +186,7 @@
   - `DELETE /api/v1/users/me` -> `deleted_at` timestamp, `is_active = False`
   - Логин в течение 30 дней восстанавливает аккаунт
   - Taskiq job для hard delete после 30 дней
+  - Grace period и decision "hard delete сейчас или нет" держать в PrivateCore
 - [ ] **Политика удаления данных**
   - Профиль, аватар, настройки EQ -- удалить
   - Лайки, дизлайки, подписки -- удалить
@@ -182,13 +199,16 @@
   - Повторная авторизация
   - Текстовое подтверждение ("DELETE")
   - Email/Telegram уведомление
+  - Политику re-auth/cooldown/max-attempts для удаления хранить в PrivateCore
 
 ## Frontend / Mini App
 
 - [x] Восстановление позиции воспроизведения при перезапуске
 - [x] Монохром-фильтр в настройках
 - [ ] Админ-панель: управление пользователями
+  - Если добавятся баны/risk flags/anti-abuse actions, decision rules и пороги должны идти из PrivateCore
 - [ ] Админ-панель: модерация контента
+  - Пороги auto-hide/escalation и moderation policy держать в PrivateCore, панель — UI + вызовы Backend API
 - [ ] Админ-панель: управление бэкапами (см. выше)
 
 ## Frontend оптимизация
@@ -235,4 +255,4 @@
 
 ---
 
-*Последнее обновление: 2026-04-14 агентом (Sprint 2 Security Layers)*
+*Последнее обновление: 2026-04-14 агентом (PrivateCore Boundary Audit & TODO Update)*

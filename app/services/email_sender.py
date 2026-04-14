@@ -4,6 +4,9 @@ import asyncio
 import functools
 
 import structlog
+from dotsound_private_core.services.auth_policy import (
+    FALLBACK_CODE_TTL,
+)
 
 from app.config import settings
 
@@ -94,6 +97,12 @@ async def send_totp_fallback_code(
 ) -> None:
     mid = len(code) // 2
     display_code = f"{code[:mid]} {code[mid:]}"
+    if FALLBACK_CODE_TTL % 60 == 0:
+        ttl_text = (
+            f"{FALLBACK_CODE_TTL // 60} minutes"
+        )
+    else:
+        ttl_text = f"{FALLBACK_CODE_TTL} seconds"
     html = (
         "<div style='font-family:sans-serif;"
         "max-width:480px;margin:0 auto;'>"
@@ -107,7 +116,8 @@ async def send_totp_fallback_code(
         + display_code
         + "</div>"
         "<p>This code expires in "
-        "5 minutes.</p>"
+        + ttl_text
+        + ".</p>"
         "<hr style='margin-top:32px;"
         "border:none;"
         "border-top:1px solid #eee;'>"
