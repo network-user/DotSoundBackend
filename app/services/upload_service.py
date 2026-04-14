@@ -96,6 +96,9 @@ class UploadService:
                 detail="Audio file exceeds 100 MB limit",
             )
 
+        from app.services.file_validator import validate_audio
+        validate_audio(data, file.filename)
+
         if uploader_id is not None:
             used_bytes = await self._repo.get_total_uploaded_bytes(uploader_id)
             if used_bytes + len(data) > _MAX_STORAGE_QUOTA:
@@ -171,6 +174,16 @@ class UploadService:
         if len(data) > _MAX_COVER_BYTES:
             logger.warning(
                 "cover_rejected_size", size_bytes=len(data)
+            )
+            return None
+
+        from app.services.file_validator import validate_image
+        try:
+            validate_image(data, cover.filename)
+        except Exception:
+            logger.warning(
+                "cover_rejected_magic",
+                filename=cover.filename,
             )
             return None
 

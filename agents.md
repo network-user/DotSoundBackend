@@ -30,10 +30,41 @@ DotSound — музыкальная платформа в Telegram (SoundCloud-s
   -> `DotSoundPrivateCore`
 - **Anti-abuse / модерация** (правила фильтрации, детекции,
   auto-hide) -> `DotSoundPrivateCore`
+- **Allowlist / blocklist** (допустимые MIME-типы, опасные
+  расширения, размерные лимиты) -> `DotSoundPrivateCore`
 - **Redis/DB/HTTP вызов** -> `DotSoundBackend` (adapter)
 - **Schema / Model / SQL** -> `DotSoundBackend`
+- **Библиотечный вызов** (magic bytes detection, FFmpeg,
+  Pillow, HTTP-клиент) -> `DotSoundBackend` (transport)
+- **HTTPException / FastAPI-специфичный код** -> `DotSoundBackend`
 
 Паттерн: PrivateCore = правила, Backend = транспорт.
+
+### Пример: Upload Security
+
+**ПРАВИЛЬНО:**
+```
+PrivateCore (upload_policy.py):
+  ALLOWED_AUDIO_MIMES = frozenset({...})  # константа
+  DANGEROUS_EXTENSIONS = frozenset({...}) # константа
+  is_audio_mime_allowed(mime) -> bool      # решение
+  is_extension_dangerous(name) -> bool     # решение
+
+Backend (file_validator.py):
+  magic.from_buffer(data, mime=True)       # transport
+  if not is_audio_mime_allowed(detected):  # вызов PrivateCore
+      raise HTTPException(415, ...)        # FastAPI transport
+```
+
+**НЕПРАВИЛЬНО:**
+```
+Backend (file_validator.py):
+  _ALLOWED_MIMES = frozenset({...})  # ← константа в Backend!
+  def _is_dangerous(name): ...       # ← решение в Backend!
+```
+
+Если при добавлении security-логики агент сомневается --
+остановиться и спросить: "Это правило или транспорт?"
 
 ### Текущие модули PrivateCore
 - `services/auth_policy.py` -- auth constants + decision functions
@@ -42,6 +73,8 @@ DotSound — музыкальная платформа в Telegram (SoundCloud-s
 - `services/web_auth.py` -- OTP generation, IP masking, UA parsing
 - `services/internal_bridge.py` -- URL/header builders
 - `services/import_rules.py` -- import limits
+- `services/upload_policy.py` -- upload security: MIME allowlists,
+  dangerous extensions, size limits, decision functions
 - `contracts/` -- protocol constants
 
 ## Стек
