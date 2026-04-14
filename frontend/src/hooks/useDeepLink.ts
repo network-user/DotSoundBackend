@@ -1,18 +1,22 @@
 import { useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
 
-export function useDeepLink() {
+export function useTrackDeepLink() {
+  const { trackId } = useParams<{ trackId: string }>()
   const { playTrack } = usePlayer()
+  const navigate = useNavigate()
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const trackId = params.get('track_id')
     if (!trackId) return
     api.getTrack(Number(trackId))
-      .then((track) => playTrack(track))
-      .catch(() => {})
-  // playTrack is stable (defined in context), runs once on mount
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+      .then((track) => {
+        playTrack(track)
+        navigate('/', { replace: true })
+      })
+      .catch(() => {
+        navigate('/', { replace: true })
+      })
+  }, [trackId])
 }

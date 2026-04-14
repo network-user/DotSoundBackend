@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -127,6 +128,51 @@ interface PlayerContextValue {
   stop: () => void
   updateTrack: (updated: Partial<Track> & { id: number }) => void
 }
+
+interface PlayerStateValue {
+  currentTime: number
+  duration: number
+  isPlaying: boolean
+}
+
+interface PlayerActionsValue {
+  playTrack: (t: Track, url?: string) => Promise<void>
+  togglePlay: () => void
+  seek: (pct: number) => void
+  playNext: () => Promise<void>
+  playPrev: () => Promise<void>
+  setVolume: (v: number) => void
+  stop: () => void
+  setEqBand: (idx: number, gain: number) => void
+  setEqPreset: (preset: string | null) => void
+  toggleEqBypass: () => void
+  resetEq: () => void
+  openComplaint: () => void
+  closeComplaint: () => void
+  openCard: () => void
+  closeCard: () => void
+  openLyrics: () => void
+  closeLyrics: () => void
+  openEq: () => void
+  closeEq: () => void
+  updateTrack: (updated: Partial<Track> & { id: number }) => void
+}
+
+interface PlayerMetaValue {
+  track: Track | null
+  volume: number
+  isComplaintOpen: boolean
+  isCardOpen: boolean
+  isLyricsOpen: boolean
+  isEqOpen: boolean
+  eqBands: number[]
+  eqPreset: string | null
+  eqBypassed: boolean
+}
+
+const PlayerStateCtx = createContext<PlayerStateValue | null>(null)
+const PlayerActionsCtx = createContext<PlayerActionsValue | null>(null)
+const PlayerMetaCtx = createContext<PlayerMetaValue | null>(null)
 
 const PlayerContext =
   createContext<PlayerContextValue | null>(null)
@@ -808,47 +854,93 @@ export function PlayerProvider({
     [],
   )
 
+  const stateValue = useMemo<PlayerStateValue>(
+    () => ({ currentTime, duration, isPlaying }),
+    [currentTime, duration, isPlaying],
+  )
+
+  const openComplaint = useCallback(
+    () => setIsComplaintOpen(true), [],
+  )
+  const closeComplaint = useCallback(
+    () => setIsComplaintOpen(false), [],
+  )
+  const openCard = useCallback(
+    () => setIsCardOpen(true), [],
+  )
+  const closeCard = useCallback(
+    () => setIsCardOpen(false), [],
+  )
+  const openLyrics = useCallback(
+    () => setIsLyricsOpen(true), [],
+  )
+  const closeLyrics = useCallback(
+    () => setIsLyricsOpen(false), [],
+  )
+  const openEq = useCallback(
+    () => setIsEqOpen(true), [],
+  )
+  const closeEq = useCallback(
+    () => setIsEqOpen(false), [],
+  )
+
+  const actionsValue = useMemo<PlayerActionsValue>(
+    () => ({
+      playTrack, togglePlay, seek,
+      playNext, playPrev, setVolume, stop,
+      setEqBand, setEqPreset, toggleEqBypass, resetEq,
+      openComplaint, closeComplaint,
+      openCard, closeCard,
+      openLyrics, closeLyrics,
+      openEq, closeEq,
+      updateTrack,
+    }),
+    [
+      playTrack, togglePlay, seek,
+      playNext, playPrev, setVolume, stop,
+      setEqBand, setEqPreset, toggleEqBypass, resetEq,
+      openComplaint, closeComplaint,
+      openCard, closeCard,
+      openLyrics, closeLyrics,
+      openEq, closeEq,
+      updateTrack,
+    ],
+  )
+
+  const metaValue = useMemo<PlayerMetaValue>(
+    () => ({
+      track, volume,
+      isComplaintOpen, isCardOpen,
+      isLyricsOpen, isEqOpen,
+      eqBands, eqPreset, eqBypassed,
+    }),
+    [
+      track, volume,
+      isComplaintOpen, isCardOpen,
+      isLyricsOpen, isEqOpen,
+      eqBands, eqPreset, eqBypassed,
+    ],
+  )
+
+  const legacyValue = useMemo<PlayerContextValue>(
+    () => ({
+      ...stateValue,
+      ...actionsValue,
+      ...metaValue,
+    }),
+    [stateValue, actionsValue, metaValue],
+  )
+
   return (
-    <PlayerContext.Provider
-      value={{
-        track,
-        isPlaying,
-        currentTime,
-        duration,
-        volume,
-        setVolume,
-        isComplaintOpen,
-        isCardOpen,
-        isLyricsOpen,
-        isEqOpen,
-        eqBands,
-        eqPreset,
-        eqBypassed,
-        playTrack,
-        togglePlay,
-        seek,
-        playNext,
-        playPrev,
-        setEqBand,
-        setEqPreset,
-        toggleEqBypass,
-        resetEq,
-        openComplaint: () =>
-          setIsComplaintOpen(true),
-        closeComplaint: () =>
-          setIsComplaintOpen(false),
-        openCard: () => setIsCardOpen(true),
-        closeCard: () => setIsCardOpen(false),
-        openLyrics: () => setIsLyricsOpen(true),
-        closeLyrics: () => setIsLyricsOpen(false),
-        openEq: () => setIsEqOpen(true),
-        closeEq: () => setIsEqOpen(false),
-        stop,
-        updateTrack,
-      }}
-    >
-      <audio ref={audioRef} preload="none" />
-      {children}
+    <PlayerContext.Provider value={legacyValue}>
+      <PlayerStateCtx.Provider value={stateValue}>
+        <PlayerActionsCtx.Provider value={actionsValue}>
+          <PlayerMetaCtx.Provider value={metaValue}>
+            <audio ref={audioRef} preload="none" />
+            {children}
+          </PlayerMetaCtx.Provider>
+        </PlayerActionsCtx.Provider>
+      </PlayerStateCtx.Provider>
     </PlayerContext.Provider>
   )
 }
@@ -858,6 +950,33 @@ export function usePlayer() {
   if (!ctx)
     throw new Error(
       'usePlayer must be used within PlayerProvider',
+    )
+  return ctx
+}
+
+export function usePlayerState() {
+  const ctx = useContext(PlayerStateCtx)
+  if (!ctx)
+    throw new Error(
+      'usePlayerState must be used within PlayerProvider',
+    )
+  return ctx
+}
+
+export function usePlayerActions() {
+  const ctx = useContext(PlayerActionsCtx)
+  if (!ctx)
+    throw new Error(
+      'usePlayerActions must be used within PlayerProvider',
+    )
+  return ctx
+}
+
+export function usePlayerMeta() {
+  const ctx = useContext(PlayerMetaCtx)
+  if (!ctx)
+    throw new Error(
+      'usePlayerMeta must be used within PlayerProvider',
     )
   return ctx
 }

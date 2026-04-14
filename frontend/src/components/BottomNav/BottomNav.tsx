@@ -1,63 +1,52 @@
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 
-export type ViewName =
-  | 'home'
-  | 'search'
-  | 'upload'
-  | 'liked'
-  | 'playlists'
-  | 'profile'
-  | 'chats'
-  | 'chat'
-
 interface NavItem {
-  view: ViewName
+  path: string
   icon: string
   label: string
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { view: 'home', icon: 'home', label: 'Главная' },
+  { path: '/', icon: 'home', label: 'Главная' },
   {
-    view: 'search',
+    path: '/search',
     icon: 'search',
     label: 'Поиск',
   },
   {
-    view: 'chats',
+    path: '/chats',
     icon: 'message-circle',
     label: 'Чаты',
   },
   {
-    view: 'upload',
+    path: '/upload',
     icon: 'upload',
     label: 'Загрузить',
   },
   {
-    view: 'profile',
+    path: '/profile',
     icon: 'user',
     label: 'Профиль',
   },
 ]
 
-interface Props {
-  activeView: ViewName
-  onSwitch: (view: ViewName) => void
-}
+export function BottomNav() {
+  const navigate = useNavigate()
+  const location = useLocation()
 
-export function BottomNav({
-  activeView,
-  onSwitch,
-}: Props) {
+  const isActive = (path: string) => {
+    if (path === '/') return location.pathname === '/'
+    return location.pathname.startsWith(path)
+  }
+
   return (
     <nav id="nav">
-      {NAV_ITEMS.map(({ view, icon, label }) => (
+      {NAV_ITEMS.map(({ path, icon, label }) => (
         <button
-          key={view}
-          id={`nav-btn-${view}`}
-          className={`nav-btn${activeView === view ? ' active' : ''}`}
-          data-view={view}
-          onClick={() => onSwitch(view)}
+          key={path}
+          className={`nav-btn${isActive(path) ? ' active' : ''}`}
+          onClick={() => navigate(path)}
         >
           <span className="nav-icon">
             <Icon name={icon} size={20} />

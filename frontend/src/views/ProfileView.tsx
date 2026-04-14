@@ -20,16 +20,10 @@ import { NotificationBell } from '@/components/Notifications/NotificationBell'
 type ProfileTab = 'profile' | 'import'
 
 interface Props {
-  active: boolean
-  onNavigate: (
-    view: 'liked' | 'playlists' | 'upload'
-  ) => void
   onOpenSettings?: () => void
 }
 
 export function ProfileView({
-  active,
-  onNavigate,
   onOpenSettings,
 }: Props) {
   const { playTrack } = usePlayer()
@@ -53,7 +47,6 @@ export function ProfileView({
   const tgUser = tg.initDataUnsafe?.user
 
   useEffect(() => {
-    if (!active) return
     const internalId = getInternalUserId()
     if (!internalId) return
 
@@ -108,7 +101,7 @@ export function ProfileView({
       .getMyTracks()
       .then((data) => setMyTracks(data.items))
       .catch(() => {})
-  }, [active])
+  }, [])
 
   const handleSave = async () => {
     setSaving(true)
@@ -156,7 +149,7 @@ export function ProfileView({
   return (
     <section
       id="view-profile"
-      className={`view${active ? ' active' : ''}`}
+      className="view active"
     >
       <div className="profile-tabs-row">
         <div className="profile-tabs">
@@ -201,9 +194,7 @@ export function ProfileView({
             onDisplayNameChange={setDisplayName}
           />
           <ProfileStats stats={stats} />
-          <ProfileActions
-            onNavigate={onNavigate}
-          />
+          <ProfileActions />
           <ProfileTrackList
             tracks={myTracks}
             onPlay={playTrack}
