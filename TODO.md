@@ -81,11 +81,14 @@
 
 ## Интернационализация (i18n)
 
-- [ ] **Английская версия сайта**
-  - `react-i18next` + JSON-каталоги `ru.json` / `en.json`
-  - Автоопределение языка: `navigator.language` + Telegram `language_code`
-  - Хранение выбора: `localStorage` + поле `locale` в модели User
-  - Переключатель языка в настройках
+- [x] **Английская версия сайта (базовая)**
+  - `react-i18next` + `i18next-browser-languagedetector`
+  - JSON-каталоги `ru.json` / `en.json` (ключевые экраны: Auth, Home, Nav, Search, Liked, Upload, Profile, Playlists, Settings)
+  - Telegram `language_code` custom detector
+  - Переключатель языка в SettingsSheet
+  - Поле `locale` в модели User + PATCH /users/me
+  - Alembic миграция `0024`
+- [ ] i18n: мигрировать оставшиеся ~35 .tsx файлов на `useTranslation`
 
 ## Эквалайзер
 
@@ -120,13 +123,13 @@
 - [x] Удаление видео (`DELETE /tracks/{id}/video`)
 - [x] Отдача видео (`GET /tracks/{id}/video`, proxy из S3)
 - [x] UI: фоновое видео (muted, loop) в TrackCardSheet + FullscreenLyrics
-- [ ] **Оптимизация/сжатие видео**
-  - Taskiq task `transcode_video`: FFmpeg H.264 + AAC
-  - Два качества: 720p + 360p (CRF 23-28, `-preset medium`)
-  - Генерация thumbnail (FFmpeg seek + один кадр)
-  - `processing_status` для видео ("processing" -> "ready")
-  - Placeholder в UI пока видео обрабатывается
-- [ ] Увеличить лимит загрузки до 50-100MB
+- [x] **Оптимизация/сжатие видео**
+  - Taskiq task `transcode_video` (`video_transcoding.py`): FFmpeg H.264 + AAC
+  - Max 720p, CRF 23, `-preset medium`, `-movflags +faststart`
+  - Thumbnail генерация (FFmpeg `-ss 1 -frames:v 1`)
+  - `video_processing_status` + `video_thumbnail_key` на Track (миграция `0023`)
+  - Upload -> temp S3 -> queue -> async transcode -> update status
+- [x] Увеличить лимит загрузки до 50MB (из PrivateCore `MAX_VIDEO_BYTES`)
 - [ ] Адаптивный HLS для видео (как для аудио)
 - [ ] Ограничение длительности видео (Canvas-стиль или длина трека)
 - [ ] Учёт видео в storage quota пользователя
@@ -161,31 +164,33 @@
 - [x] Предзагрузка следующей пачки в боте (DotSoundBot)
 - [x] `GET /tracks/{id}/adjacent` (sequential/shuffle/repeat_one)
 - [x] hls.js с ABR (`startLevel: -1`, `enableWorker: true`)
-- [ ] **Prefetch в Mini App / браузере**
-  - Prefetch manifest следующего трека за ~15 сек до конца
-  - Batch adjacent: `GET /tracks/{id}/adjacent?count=3`
-  - Redis-кеш adjacent-списков (TTL 5 мин)
+- [x] **Prefetch в Mini App / браузере**
+  - `GET /tracks/{id}/queue?count=3` -- новый endpoint
+  - `TrackRepository.get_next_tracks()` возвращает N следующих треков
+  - Кеш в `PlayerContext` через `useRef` (`prefetchCacheRef`)
+  - `playNext` использует кеш, fallback на `getAdjacentTracks`
 
 ## Идентификация загрузчика
 
 - [x] `uploaded_by_id` на Track (FK -> User с telegram_id)
 - [x] `created_at` / `updated_at` timestamps
 - [x] `RequestLoggingMiddleware` логирует `client_ip` в structlog
-- [ ] **Расширенные метаданные загрузки (admin-only)**
-  - Модель `TrackUploadMeta`: `upload_ip`, `upload_user_agent`
-  - `upload_telegram_data` (JSONB, initData snapshot)
-  - Заполнение при загрузке из `request.client.host` + headers
-  - Admin endpoint для просмотра
-  - Автоудаление через N дней (GDPR)
-  - Retention-константа и условия удаления в PrivateCore, планировщик/удаление записей — в Backend
+- [x] **Расширенные метаданные загрузки (admin-only)**
+  - Модель `TrackUploadMeta` (миграция `0022`): `upload_ip`, `upload_user_agent`, `upload_telegram_data` (JSON)
+  - Заполнение при upload из `request.client.host` + headers
+  - Admin endpoint `GET /admin/tracks/{id}/upload-meta`
+  - PrivateCore: `UPLOAD_META_RETENTION_DAYS = 90`
+- [ ] Taskiq job для автоудаления meta старше retention (GDPR)
 
 ## Удаление аккаунта
 
-- [ ] **Soft delete с grace period (30 дней)**
-  - `DELETE /api/v1/users/me` -> `deleted_at` timestamp, `is_active = False`
-  - Логин в течение 30 дней восстанавливает аккаунт
-  - Taskiq job для hard delete после 30 дней
-  - Grace period и decision "hard delete сейчас или нет" держать в PrivateCore
+- [x] **Soft delete с grace period (30 дней)**
+  - `DELETE /api/v1/users/me` (body: `{"confirmation": "DELETE"}`)
+  - `POST /api/v1/users/me/restore` -- восстановление в grace period
+  - `deleted_at` на User (миграция `0021`)
+  - PrivateCore: `account_deletion_policy.py` (GRACE_PERIOD_DAYS, is_within_grace_period, is_valid_confirmation)
+  - Auth flow: soft-deleted пользователи в grace period проходят auth
+- [ ] Taskiq job для hard delete после 30 дней
 - [ ] **Политика удаления данных**
   - Профиль, аватар, настройки EQ -- удалить
   - Лайки, дизлайки, подписки -- удалить
@@ -227,10 +232,10 @@
   - `BottomNav` через `useNavigate` + `useLocation`
   - `BrowserRouter basename="/mini_app"`
   - Browser back/forward, shareable URLs, deep links
-- [ ] **Code splitting (lazy loading)**
-  - `React.lazy()` для ChatView, UploadView, SearchView
+- [x] **Code splitting (lazy loading)**
+  - `React.lazy()` для ChatView, UploadView, SearchView, LikedView, PlaylistsView, ChatsView, ProfileView
   - `hls.js` в отдельный chunk (`manualChunks`)
-  - Lazy-load модалок (TrackCardSheet, Equalizer, SettingsSheet)
+  - `<Suspense>` обёртка для route-level lazy loading
 - [ ] **TanStack Query (API кеширование)**
   - Автоматический кеш, дедупликация, stale-while-revalidate
   - Постепенное внедрение (endpoint за endpoint)
@@ -256,4 +261,4 @@
 
 ---
 
-*Последнее обновление: 2026-04-14 агентом (Sprint 3 PWA + Frontend Architecture)*
+*Последнее обновление: 2026-04-14 агентом (Sprints 4-5-6)*

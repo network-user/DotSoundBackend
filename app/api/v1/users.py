@@ -25,6 +25,7 @@ from app.schemas.eq import (
 from app.schemas.track import TrackListResponse, TrackResponse
 from app.schemas.user import (
     AvatarResponse,
+    DeleteAccountRequest,
     UserCreate,
     UserResponse,
     UserStatsResponse,
@@ -111,20 +112,80 @@ async def update_me(
     current_user: User = Depends(get_current_user),
 ) -> UserResponse:
     structlog.contextvars.bind_contextvars(user_id=current_user.id)
-    if not data.display_name:
+    if not data.display_name and data.locale is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No fields to update",
         )
     service = UserService(session)
-    user = await service.update_display_name(
-        current_user.id, data.display_name
-    )
+    user = await service.get_by_id(current_user.id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
+    if data.display_name:
+        user = await service.update_display_name(
+            current_user.id, data.display_name
+        )
+    if data.locale is not None and user:
+        user.locale = data.locale
+        session = service._repo._session
+        await session.flush()
+        await session.refresh(user)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return UserResponse.model_validate(user)
+
+
+@router.delete(
+    "/me",
+    status_code=status.HTTP_200_OK,
+    summary="Request account deletion (soft delete)",
+)
+@limiter.limit("3/hour")
+async def delete_me(
+    request: Request,
+    data: DeleteAccountRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    service = UserService(session)
+    ok = await service.request_deletion(
+        current_user.id, data.confirmation
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid confirmation text",
+        )
+    return {"status": "deletion_scheduled"}
+
+
+@router.post(
+    "/me/restore",
+    response_model=UserResponse,
+    summary="Cancel account deletion within grace period",
+)
+@limiter.limit("5/hour")
+async def restore_me(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserResponse:
+    service = UserService(session)
+    ok = await service.cancel_deletion(
+        current_user.id
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No pending deletion or grace period expired",
+        )
+    user = await service.get_by_id(current_user.id)
     return UserResponse.model_validate(user)
 
 

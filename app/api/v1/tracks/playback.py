@@ -17,6 +17,7 @@ from app.schemas.track import (
     PlaybackMode,
     PlayResponse,
     StreamResponse,
+    TrackQueueResponse,
     TrackResponse,
 )
 from app.services.card_service import CardService
@@ -275,6 +276,30 @@ async def get_adjacent_tracks(
 
     prev_id, next_id = await repo.get_adjacent(track_id)
     return AdjacentTracksResponse(prev_id=prev_id, next_id=next_id)
+
+
+@router.get(
+    "/{track_id}/queue",
+    response_model=TrackQueueResponse,
+    summary="Get next tracks for prefetch",
+)
+@limiter.limit("120/minute")
+async def get_track_queue(
+    request: Request,
+    track_id: int,
+    count: int = Query(3, ge=1, le=10),
+    session: AsyncSession = Depends(get_db),
+) -> TrackQueueResponse:
+    repo = TrackRepository(session)
+    tracks = await repo.get_next_tracks(
+        track_id, count
+    )
+    return TrackQueueResponse(
+        next_tracks=[
+            TrackResponse.model_validate(t)
+            for t in tracks
+        ]
+    )
 
 
 @router.get(

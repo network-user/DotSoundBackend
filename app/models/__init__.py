@@ -27,6 +27,7 @@ from app.models.message import (
 from app.models.notification import Notification
 from app.models.playlist import Playlist, PlaylistTrack
 from app.models.track import Track
+from app.models.upload_meta import TrackUploadMeta
 from app.models.user import User
 
 __all__ = [
@@ -51,6 +52,7 @@ __all__ = [
     "Track",
     "TrackComment",
     "TrackLyrics",
+    "TrackUploadMeta",
     "User",
     "UserBlock",
     "UserEqSettings",

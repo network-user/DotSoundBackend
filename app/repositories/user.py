@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy import select
@@ -124,6 +125,28 @@ class UserRepository(BaseRepository[User]):
         user.avatar_key = avatar_key
         await self._session.flush()
         await self._session.refresh(user)
+        return user
+
+    async def soft_delete(
+        self, user_id: int
+    ) -> User | None:
+        user = await self.get_by_id(user_id)
+        if not user:
+            return None
+        user.deleted_at = datetime.now(timezone.utc)
+        user.is_active = False
+        await self._session.flush()
+        return user
+
+    async def restore(
+        self, user_id: int
+    ) -> User | None:
+        user = await self.get_by_id(user_id)
+        if not user or user.deleted_at is None:
+            return None
+        user.deleted_at = None
+        user.is_active = True
+        await self._session.flush()
         return user
 
     async def search(

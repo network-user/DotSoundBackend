@@ -1,0 +1,62 @@
+{
+  "auth": {
+    "welcome": "Welcome",
+    "tagline": "Music without ads.",
+    "subtitle": "Listen. Share. Discover.",
+    "loginTelegram": "Sign in with Telegram",
+    "loginEmail": "Sign in with email"
+  },
+  "nav": {
+    "home": "Home",
+    "search": "Search",
+    "chats": "Chats",
+    "upload": "Upload",
+    "profile": "Profile"
+  },
+  "home": {
+    "title": ".sound",
+    "tagline": "Listen. Share. Discover.",
+    "empty": "No tracks yet. Upload the first one!"
+  },
+  "search": {
+    "placeholder": "Track or artist…",
+    "startTyping": "Start typing a name",
+    "onPlatform": "On platform",
+    "notFound": "Nothing found"
+  },
+  "liked": {
+    "title": "Liked",
+    "empty": "You haven't liked anything yet",
+    "loadMore": "Load more",
+    "loading": "Loading..."
+  },
+  "upload": {
+    "title": "Upload track",
+    "tabFile": "File",
+    "tabSoundCloud": "SoundCloud"
+  },
+  "profile": {
+    "title": "Profile",
+    "import": "Import",
+    "uploadTrack": "Upload track",
+    "myPlaylists": "My playlists",
+    "liked": "Liked"
+  },
+  "playlists": {
+    "title": "Playlists",
+    "subtitle": "Your collections",
+    "create": "Create playlist",
+    "nameLabel": "Playlist name",
+    "namePlaceholder": "My playlist",
+    "cancel": "Cancel",
+    "createBtn": "Create",
+    "empty": "No playlists yet",
+    "emptyHint": "Create your first collection",
+    "tracks": "tracks"
+  },
+  "settings": {
+    "language": "Language",
+    "languageRu": "Русский",
+    "languageEn": "English"
+  }
+}

@@ -59,7 +59,21 @@ async def get_current_user(
     user = await repo.get_by_id(user_id)
     if not user:
         user = await repo.get_by_telegram_id(user_id)
-    if not user or not user.is_active:
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+        )
+    if not user.is_active and user.deleted_at:
+        from dotsound_private_core.services.account_deletion_policy import (
+            is_within_grace_period,
+        )
+        if not is_within_grace_period(user.deleted_at):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Account deleted",
+            )
+    elif not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",

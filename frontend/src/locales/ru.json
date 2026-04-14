@@ -1,0 +1,62 @@
+{
+  "auth": {
+    "welcome": "Добро пожаловать",
+    "tagline": "Музыка без рекламы.",
+    "subtitle": "Слушай. Делись. Открывай.",
+    "loginTelegram": "Войти через Telegram",
+    "loginEmail": "Войти по email"
+  },
+  "nav": {
+    "home": "Главная",
+    "search": "Поиск",
+    "chats": "Чаты",
+    "upload": "Загрузить",
+    "profile": "Профиль"
+  },
+  "home": {
+    "title": ".sound",
+    "tagline": "Слушай. Делись. Открывай.",
+    "empty": "Треков пока нет. Загрузи первый!"
+  },
+  "search": {
+    "placeholder": "Трек или исполнитель…",
+    "startTyping": "Начните вводить название",
+    "onPlatform": "На платформе",
+    "notFound": "Ничего не найдено"
+  },
+  "liked": {
+    "title": "Мне нравится",
+    "empty": "Ты ещё ничего не лайкал",
+    "loadMore": "Показать ещё",
+    "loading": "Загрузка..."
+  },
+  "upload": {
+    "title": "Загрузить трек",
+    "tabFile": "Файл",
+    "tabSoundCloud": "SoundCloud"
+  },
+  "profile": {
+    "title": "Профиль",
+    "import": "Импорт",
+    "uploadTrack": "Загрузить трек",
+    "myPlaylists": "Мои плейлисты",
+    "liked": "Понравившееся"
+  },
+  "playlists": {
+    "title": "Плейлисты",
+    "subtitle": "Твои подборки",
+    "create": "Создать плейлист",
+    "nameLabel": "Название плейлиста",
+    "namePlaceholder": "Мой плейлист",
+    "cancel": "Отмена",
+    "createBtn": "Создать",
+    "empty": "Плейлистов пока нет",
+    "emptyHint": "Создай свою первую подборку",
+    "tracks": "треков"
+  },
+  "settings": {
+    "language": "Язык",
+    "languageRu": "Русский",
+    "languageEn": "English"
+  }
+}

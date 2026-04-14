@@ -72,6 +72,7 @@ export default defineConfig({
             'react-dom',
             '@twa-dev/sdk',
           ],
+          hls: ['hls.js'],
         },
       },
     },

@@ -79,6 +79,22 @@ async def upload_track(
         is_public=is_public,
         background_tasks=background_tasks,
     )
+
+    from app.models.upload_meta import TrackUploadMeta
+    meta = TrackUploadMeta(
+        track_id=track.id,
+        upload_ip=(
+            request.client.host
+            if request.client
+            else None
+        ),
+        upload_user_agent=request.headers.get(
+            "user-agent"
+        ),
+    )
+    session.add(meta)
+    await session.flush()
+
     return TrackUploadResponse.model_validate(track)
 
 
@@ -299,7 +315,10 @@ async def regenerate_track_cover(
 _ALLOWED_VIDEO_MIMES = frozenset(
     {"video/mp4", "video/webm"}
 )
-_MAX_VIDEO_BYTES = 15 * 1024 * 1024
+
+from dotsound_private_core.services.upload_policy import (
+    MAX_VIDEO_BYTES as _MAX_VIDEO_BYTES,
+)
 
 
 @router.post(
@@ -329,7 +348,7 @@ async def upload_track_video(
     if len(data) > _MAX_VIDEO_BYTES:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Video exceeds 15 MB limit",
+            detail=f"Video exceeds {_MAX_VIDEO_BYTES // (1024 * 1024)} MB limit",
         )
 
     from app.services.file_validator import validate_video
@@ -341,18 +360,28 @@ async def upload_track_video(
         except Exception:
             pass
 
-    ext = "mp4" if "mp4" in mime else "webm"
-    key = (
-        f"videos/{current_user.id}/"
-        f"{uuid.uuid4().hex}.{ext}"
-    )
+    import re
+    safe_name = re.sub(
+        r"[^\w.\-]", "_", video.filename or "video"
+    )[:100]
+    raw_key = f"temp/video/{track.id}_{safe_name}"
     await s3.upload_object(
-        key=key, data=data, content_type=mime
+        key=raw_key, data=data, content_type=mime
     )
-    track.video_key = key
-    await session.flush()
-    await session.refresh(track)
 
+    track.video_processing_status = "processing"
+    await session.flush()
+
+    from app.services.video_transcoding import (
+        transcode_video,
+    )
+    await transcode_video.kiq(
+        track_id=track.id,
+        raw_key=raw_key,
+        original_filename=video.filename or "video.mp4",
+    )
+
+    await session.refresh(track)
     return TrackResponse.model_validate(track)
 
 

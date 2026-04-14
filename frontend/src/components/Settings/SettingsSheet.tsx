@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
 import { getInternalUserId } from '@/lib/telegram'
@@ -17,6 +18,7 @@ export function SettingsSheet({
   onClose,
   onLogout,
 }: Props) {
+  const { t, i18n } = useTranslation()
   const { openEq } = usePlayer()
   const [videoEnabled, setVideoEnabled] =
     useState(
@@ -76,6 +78,14 @@ export function SettingsSheet({
       'monochrome',
       next,
     )
+  }
+
+  const handleLanguageChange = (lng: string) => {
+    i18n.changeLanguage(lng)
+    const uid = getInternalUserId()
+    if (uid) {
+      api.updateProfile(undefined, lng).catch(() => {})
+    }
   }
 
   const handleOpenBrowser = () => {
@@ -145,6 +155,19 @@ export function SettingsSheet({
             >
               <div className="settings-toggle-dot" />
             </div>
+          </div>
+
+          <div className="settings-item">
+            <Icon name="globe" size={20} />
+            <span>{t('settings.language')}</span>
+            <select
+              className="settings-select"
+              value={i18n.language?.startsWith('ru') ? 'ru' : 'en'}
+              onChange={(e) => handleLanguageChange(e.target.value)}
+            >
+              <option value="ru">{t('settings.languageRu')}</option>
+              <option value="en">{t('settings.languageEn')}</option>
+            </select>
           </div>
 
           <button

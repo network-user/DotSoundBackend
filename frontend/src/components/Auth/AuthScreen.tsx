@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { EmailAuth } from './EmailAuth'
 import { TelegramAuth } from './TelegramAuth'
 
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function AuthScreen({ onAuth }: Props) {
+  const { t } = useTranslation()
   const params = new URLSearchParams(
     window.location.search,
   )
@@ -47,24 +49,24 @@ export function AuthScreen({ onAuth }: Props) {
       <div className="auth-card">
         <div className="auth-logo">.sound</div>
         <h2 className="auth-title">
-          Добро пожаловать
+          {t('auth.welcome')}
         </h2>
         <p className="auth-hint">
-          Музыка без рекламы.
+          {t('auth.tagline')}
           <br />
-          Слушай. Делись. Открывай.
+          {t('auth.subtitle')}
         </p>
         <button
           className="btn-primary auth-tg-btn"
           onClick={() => setMethod('telegram')}
         >
-          Войти через Telegram
+          {t('auth.loginTelegram')}
         </button>
         <button
           className="btn-secondary auth-back"
           onClick={() => setMethod('email')}
         >
-          Войти по email
+          {t('auth.loginEmail')}
         </button>
       </div>
     </div>
