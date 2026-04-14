@@ -3,10 +3,29 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
+from dotsound_private_core.services.abuse import (
+    is_disposable_email,
+)
+from dotsound_private_core.services.auth_policy import (
+    FALLBACK_CODE_LENGTH,
+    FALLBACK_CODE_TTL,
+    FALLBACK_COOLDOWN_TTL,
+    FALLBACK_PREFIX,
+    FALLBACK_RATE_TTL,
+    MAGIC_LINK_PREFIX,
+    MAGIC_LINK_TOKEN_TYPE,
+    TWO_FACTOR_SESSION_TOKEN_TYPE,
+    TWO_FACTOR_SESSION_TTL,
+    should_burn_code,
+    should_cooldown_account,
+)
+from dotsound_private_core.services.web_auth import (
+    generate_code,
+)
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,17 +33,6 @@ from app.config import settings
 from app.core.auth import (
     _ALGORITHM,
     create_access_token,
-)
-from dotsound_private_core.services.abuse import (
-    is_disposable_email,
-)
-from dotsound_private_core.services.auth_policy import (
-    FALLBACK_CODE_TTL,
-    FALLBACK_COOLDOWN_TTL,
-    FALLBACK_PREFIX,
-    FALLBACK_RATE_TTL,
-    should_burn_code,
-    should_cooldown_account,
 )
 from app.core.totp import (
     decrypt_secret,
@@ -47,12 +55,6 @@ logger: structlog.stdlib.BoundLogger = (
     structlog.get_logger(__name__)
 )
 
-_MAGIC_LINK_TYPE = "magic_link"
-_2FA_SESSION_TYPE = "2fa_session"
-_ML_PREFIX = "magic_link:"
-_2FA_PREFIX = "2fa_session:"
-_2FA_SESSION_TTL = 300
-
 
 class EmailAuthError(Exception):
     pass
@@ -65,12 +67,12 @@ async def _get_redis() -> Any:
 
 
 def _create_magic_token(email: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
+    expire = datetime.now(UTC) + timedelta(
         minutes=settings.magic_link_ttl_minutes,
     )
     payload: dict[str, object] = {
         "sub": email.lower().strip(),
-        "type": _MAGIC_LINK_TYPE,
+        "type": MAGIC_LINK_TOKEN_TYPE,
         "exp": expire,
         "jti": secrets.token_hex(16),
     }
@@ -98,7 +100,7 @@ def _decode_magic_token(
         raise EmailAuthError(
             "Invalid or expired token"
         ) from exc
-    if payload.get("type") != _MAGIC_LINK_TYPE:
+    if payload.get("type") != MAGIC_LINK_TOKEN_TYPE:
         raise EmailAuthError("Invalid token type")
     return payload  # type: ignore[return-value]
 
@@ -106,12 +108,12 @@ def _decode_magic_token(
 def _create_2fa_session_token(
     user_id: int,
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        seconds=_2FA_SESSION_TTL,
+    expire = datetime.now(UTC) + timedelta(
+        seconds=TWO_FACTOR_SESSION_TTL,
     )
     payload: dict[str, object] = {
         "sub": str(user_id),
-        "type": _2FA_SESSION_TYPE,
+        "type": TWO_FACTOR_SESSION_TOKEN_TYPE,
         "exp": expire,
         "jti": secrets.token_hex(16),
     }
@@ -139,7 +141,7 @@ def _decode_2fa_session_token(
         raise EmailAuthError(
             "Invalid or expired 2FA session"
         ) from exc
-    if payload.get("type") != _2FA_SESSION_TYPE:
+    if payload.get("type") != TWO_FACTOR_SESSION_TOKEN_TYPE:
         raise EmailAuthError(
             "Invalid session token type"
         )
@@ -165,7 +167,7 @@ async def request_magic_link(
 
     redis = await _get_redis()
     await redis.setex(
-        f"{_ML_PREFIX}{token_hash}",
+        f"{MAGIC_LINK_PREFIX}{token_hash}",
         settings.magic_link_ttl_minutes * 60,
         normalized,
     )
@@ -190,7 +192,7 @@ async def verify_magic_link(
     ).hexdigest()
 
     redis = await _get_redis()
-    key = f"{_ML_PREFIX}{token_hash}"
+    key = f"{MAGIC_LINK_PREFIX}{token_hash}"
     stored = await redis.get(key)
     if not stored:
         await redis.aclose()
@@ -400,7 +402,7 @@ async def send_2fa_fallback(
             "another code"
         )
 
-    code = f"{secrets.randbelow(10**6):06d}"
+    code = generate_code(FALLBACK_CODE_LENGTH)
     await redis.setex(
         f"{FALLBACK_PREFIX}code:{user.id}",
         FALLBACK_CODE_TTL,

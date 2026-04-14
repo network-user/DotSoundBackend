@@ -3,17 +3,23 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
+from dotsound_private_core.services.abuse import (
+    is_disposable_email,
+)
+from dotsound_private_core.services.auth_policy import (
+    ACCOUNT_LINK_EMAIL_PREFIX,
+    ACCOUNT_LINK_EMAIL_TOKEN_TYPE,
+    ACCOUNT_LINK_TELEGRAM_PREFIX,
+    ACCOUNT_LINK_TTL,
+)
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.auth import _ALGORITHM
-from app.core.disposable_email import (
-    is_disposable_email,
-)
 from app.models.account_merge import AccountMerge
 from app.models.user import User
 from app.repositories.user import UserRepository
@@ -24,11 +30,6 @@ from app.services.email_sender import (
 logger: structlog.stdlib.BoundLogger = (
     structlog.get_logger(__name__)
 )
-
-_LINK_EMAIL_TYPE = "link_email"
-_LINK_PREFIX = "link_email:"
-_LINK_TG_PREFIX = "link_tg:"
-_LINK_TTL = 900
 
 
 class LinkingError(Exception):
@@ -58,13 +59,13 @@ async def _get_redis():  # type: ignore[no-untyped-def]
 def _create_link_email_token(
     user_id: int, email: str
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        seconds=_LINK_TTL,
+    expire = datetime.now(UTC) + timedelta(
+        seconds=ACCOUNT_LINK_TTL,
     )
     payload: dict[str, object] = {
         "sub": str(user_id),
         "email": email.lower().strip(),
-        "type": _LINK_EMAIL_TYPE,
+        "type": ACCOUNT_LINK_EMAIL_TOKEN_TYPE,
         "exp": expire,
         "jti": secrets.token_hex(16),
     }
@@ -97,8 +98,8 @@ async def request_link_email(
 
     redis = await _get_redis()
     await redis.setex(
-        f"{_LINK_PREFIX}{token_hash}",
-        _LINK_TTL,
+        f"{ACCOUNT_LINK_EMAIL_PREFIX}{token_hash}",
+        ACCOUNT_LINK_TTL,
         json.dumps(
             {
                 "user_id": user.id,
@@ -131,7 +132,7 @@ async def verify_link_email(
             "Invalid or expired token"
         ) from exc
 
-    if payload.get("type") != _LINK_EMAIL_TYPE:
+    if payload.get("type") != ACCOUNT_LINK_EMAIL_TOKEN_TYPE:
         raise LinkingError("Invalid token type")
 
     user_id = int(str(payload["sub"]))
@@ -142,7 +143,7 @@ async def verify_link_email(
     ).hexdigest()
     redis = await _get_redis()
     stored = await redis.get(
-        f"{_LINK_PREFIX}{token_hash}"
+        f"{ACCOUNT_LINK_EMAIL_PREFIX}{token_hash}"
     )
     if not stored:
         await redis.aclose()
@@ -150,7 +151,7 @@ async def verify_link_email(
             "Token already used or expired"
         )
     await redis.delete(
-        f"{_LINK_PREFIX}{token_hash}"
+        f"{ACCOUNT_LINK_EMAIL_PREFIX}{token_hash}"
     )
     await redis.aclose()
 
@@ -193,8 +194,8 @@ async def generate_link_telegram_code(
     code = secrets.token_hex(16)
     redis = await _get_redis()
     await redis.setex(
-        f"{_LINK_TG_PREFIX}{code}",
-        _LINK_TTL,
+        f"{ACCOUNT_LINK_TELEGRAM_PREFIX}{code}",
+        ACCOUNT_LINK_TTL,
         str(user.id),
     )
     await redis.aclose()
@@ -207,7 +208,7 @@ async def verify_link_telegram(
     session: AsyncSession,
 ) -> User:
     redis = await _get_redis()
-    key = f"{_LINK_TG_PREFIX}{code}"
+    key = f"{ACCOUNT_LINK_TELEGRAM_PREFIX}{code}"
     stored = await redis.get(key)
     if not stored:
         await redis.aclose()
