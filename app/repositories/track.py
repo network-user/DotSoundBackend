@@ -252,6 +252,37 @@ class TrackRepository(BaseRepository[Track]):
         ).scalar_one_or_none()
         return prev_row, next_row
 
+    async def get_next_tracks(
+        self, track_id: int, count: int = 3
+    ) -> list[Track]:
+        track = await self.get_by_id(track_id)
+        if not track:
+            return []
+        ct = track.created_at
+        tid = track.id
+        base = (
+            Track.is_active.is_(True)
+            & Track.is_public.is_(True)
+            & (Track.id != track_id)
+        )
+        result = await self._session.execute(
+            select(Track)
+            .where(
+                base
+                & or_(
+                    Track.created_at < ct,
+                    (Track.created_at == ct)
+                    & (Track.id < tid),
+                )
+            )
+            .order_by(
+                Track.created_at.desc(),
+                Track.id.desc(),
+            )
+            .limit(count)
+        )
+        return list(result.scalars().all())
+
     async def get_random_id(self, exclude_id: int) -> int | None:
         """Return a random active public track id, excluding exclude_id."""
         result = await self._session.execute(

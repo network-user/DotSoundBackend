@@ -28,6 +28,7 @@ class UserResponse(BaseModel):
     totp_enabled: bool = False
     is_active: bool
     is_admin: bool = False
+    locale: str | None = None
     created_at: datetime
 
 
@@ -37,6 +38,15 @@ class UserUpdateRequest(BaseModel):
         min_length=1,
         max_length=64,
         pattern=r"^[^\s].*[^\s]$|^[^\s]$"
+    )
+    locale: str | None = Field(
+        None, max_length=10
+    )
+
+
+class DeleteAccountRequest(BaseModel):
+    confirmation: str = Field(
+        ..., min_length=1, max_length=20
     )
 
 

@@ -95,3 +95,40 @@ class UserService:
         return await self._repo.update_avatar_key(
             user.id, avatar_key
         )
+
+    async def request_deletion(
+        self, user_id: int, confirmation: str
+    ) -> bool:
+        from dotsound_private_core.services.account_deletion_policy import (
+            is_valid_confirmation,
+        )
+        if not is_valid_confirmation(confirmation):
+            return False
+        result = await self._repo.soft_delete(user_id)
+        if result:
+            logger.info(
+                "user_deletion_requested",
+                user_id=user_id,
+            )
+        return result is not None
+
+    async def cancel_deletion(
+        self, user_id: int
+    ) -> bool:
+        from dotsound_private_core.services.account_deletion_policy import (
+            is_within_grace_period,
+        )
+        user = await self._repo.get_by_id(user_id)
+        if (
+            not user
+            or user.deleted_at is None
+            or not is_within_grace_period(user.deleted_at)
+        ):
+            return False
+        result = await self._repo.restore(user_id)
+        if result:
+            logger.info(
+                "user_deletion_cancelled",
+                user_id=user_id,
+            )
+        return result is not None

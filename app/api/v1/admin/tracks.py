@@ -183,3 +183,35 @@ async def admin_transcode_batch(
         )
     logger.info("admin_transcode_batch_queued", count=len(tracks))
     return {"queued": len(tracks)}
+
+
+@router.get(
+    "/tracks/{track_id}/upload-meta",
+    summary="[Admin] Get upload metadata for a track",
+)
+@limiter.limit("60/minute")
+async def admin_get_upload_meta(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> dict:
+    from app.models.upload_meta import TrackUploadMeta
+    result = await session.execute(
+        select(TrackUploadMeta).where(
+            TrackUploadMeta.track_id == track_id
+        )
+    )
+    meta = result.scalar_one_or_none()
+    if not meta:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Upload meta not found",
+        )
+    return {
+        "track_id": meta.track_id,
+        "upload_ip": meta.upload_ip,
+        "upload_user_agent": meta.upload_user_agent,
+        "upload_telegram_data": meta.upload_telegram_data,
+        "created_at": str(meta.created_at),
+    }

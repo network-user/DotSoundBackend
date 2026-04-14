@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { tg } from '@/lib/telegram'
@@ -14,18 +14,19 @@ import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
 import { useTrackDeepLink } from '@/hooks/useDeepLink'
 import { HomeView } from '@/views/HomeView'
-import { LikedView } from '@/views/LikedView'
-import { ChatView } from '@/views/ChatView'
-import { ChatsView } from '@/views/ChatsView'
-import { PlaylistsView } from '@/views/PlaylistsView'
-import { ProfileView } from '@/views/ProfileView'
-import { SearchView } from '@/views/SearchView'
-import { UploadView } from '@/views/UploadView'
 import {
   connectWS,
   disconnectWS,
 } from '@/lib/ws'
 import { useLikes } from '@/store/LikesContext'
+
+const SearchView = lazy(() => import('@/views/SearchView').then(m => ({ default: m.SearchView })))
+const UploadView = lazy(() => import('@/views/UploadView').then(m => ({ default: m.UploadView })))
+const LikedView = lazy(() => import('@/views/LikedView').then(m => ({ default: m.LikedView })))
+const PlaylistsView = lazy(() => import('@/views/PlaylistsView').then(m => ({ default: m.PlaylistsView })))
+const ChatsView = lazy(() => import('@/views/ChatsView').then(m => ({ default: m.ChatsView })))
+const ChatView = lazy(() => import('@/views/ChatView').then(m => ({ default: m.ChatView })))
+const ProfileView = lazy(() => import('@/views/ProfileView').then(m => ({ default: m.ProfileView })))
 
 function TrackDeepLinkRoute() {
   useTrackDeepLink()
@@ -188,6 +189,7 @@ export function App() {
   return (
     <div id="app">
       <main id="main">
+        <Suspense fallback={<div className="loader" />}>
         <Routes>
           <Route path="/" element={<HomeView />} />
           <Route path="/search" element={<SearchView />} />
@@ -215,6 +217,7 @@ export function App() {
           />
           <Route path="/track/:trackId" element={<TrackDeepLinkRoute />} />
         </Routes>
+        </Suspense>
       </main>
       <PlayerBar />
       <FullscreenLyrics />

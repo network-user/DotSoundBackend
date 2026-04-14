@@ -285,6 +285,10 @@ export function PlayerProvider({
   const initialEqRef = useRef(_loadEqState())
   const audioRef = useRef<HTMLAudioElement>(null)
   const hlsRef = useRef<Hls | null>(null)
+  const prefetchCacheRef = useRef<{
+    forTrackId: number
+    tracks: Track[]
+  } | null>(null)
   const audioCtxRef =
     useRef<AudioContext | null>(null)
   const filtersRef = useRef<BiquadFilterNode[]>([])
@@ -784,6 +788,20 @@ export function PlayerProvider({
   const playNext = async () => {
     if (!track) return
     try {
+      const cache = prefetchCacheRef.current
+      if (
+        cache &&
+        cache.forTrackId === track.id &&
+        cache.tracks.length > 0
+      ) {
+        const next = cache.tracks[0]
+        prefetchCacheRef.current = {
+          forTrackId: next.id,
+          tracks: cache.tracks.slice(1),
+        }
+        await playTrack(next)
+        return
+      }
       const adj = await api.getAdjacentTracks(
         track.id,
       )
@@ -793,6 +811,21 @@ export function PlayerProvider({
       }
     } catch {}
   }
+
+  useEffect(() => {
+    if (!track) return
+    let cancelled = false
+    api.getTrackQueue(track.id, 3)
+      .then((res) => {
+        if (cancelled) return
+        prefetchCacheRef.current = {
+          forTrackId: track.id,
+          tracks: res.next_tracks,
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [track?.id])
 
   const playPrev = async () => {
     if (!track) return

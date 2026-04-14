@@ -1,7 +1,10 @@
+from datetime import datetime
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    DateTime,
     String,
     Text,
 )
@@ -67,4 +70,10 @@ class User(Base, TimestampMixin):
     )
     backup_codes_hash: Mapped[str | None] = (
         mapped_column(Text, nullable=True)
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    locale: Mapped[str | None] = mapped_column(
+        String(10), nullable=True
     )

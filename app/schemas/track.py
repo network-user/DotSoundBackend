@@ -18,6 +18,8 @@ class TrackResponse(BaseModel):
     cover_key: str | None = None
     description: str | None = None
     video_key: str | None = None
+    video_processing_status: str | None = None
+    video_thumbnail_key: str | None = None
     play_count: int
     is_active: bool
     is_public: bool = True
@@ -107,3 +109,7 @@ class PlaybackMode(str, Enum):
 class AdjacentTracksResponse(BaseModel):
     prev_id: int | None = None
     next_id: int | None = None
+
+
+class TrackQueueResponse(BaseModel):
+    next_tracks: list[TrackResponse]

@@ -171,6 +171,15 @@ export const api = {
     )
   },
 
+  getTrackQueue(
+    trackId: number,
+    count = 3,
+  ): Promise<{ next_tracks: Track[] }> {
+    return request(
+      `/api/v1/tracks/${trackId}/queue?count=${count}`,
+    )
+  },
+
   getGenres(): Promise<string[]> {
     return request('/api/v1/tracks/genres')
   },
@@ -268,11 +277,17 @@ export const api = {
     return request(`/api/v1/users/${userId}/stats`)
   },
 
-  updateProfile(display_name: string): Promise<UserResponse> {
+  updateProfile(
+    display_name?: string,
+    locale?: string,
+  ): Promise<UserResponse> {
+    const body: Record<string, string> = {}
+    if (display_name) body.display_name = display_name
+    if (locale !== undefined) body.locale = locale
     return request('/api/v1/users/me', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ display_name }),
+      body: JSON.stringify(body),
     })
   },
 
