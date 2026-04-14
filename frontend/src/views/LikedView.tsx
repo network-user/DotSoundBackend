@@ -4,13 +4,9 @@ import { api } from '@/lib/api'
 import { getUserId } from '@/lib/telegram'
 import type { Track } from '@/types/api'
 
-interface Props {
-  active: boolean
-}
-
 const PAGE_SIZE = 20
 
-export function LikedView({ active }: Props) {
+export function LikedView() {
   const [tracks, setTracks] = useState<
     Track[] | null
   >(null)
@@ -19,7 +15,6 @@ export function LikedView({ active }: Props) {
   const pageRef = useRef(1)
 
   useEffect(() => {
-    if (!active) return
     const uid = getUserId()
     if (!uid) {
       setTracks([])
@@ -35,7 +30,7 @@ export function LikedView({ active }: Props) {
         pageRef.current = 1
       })
       .catch(() => setTracks([]))
-  }, [active])
+  }, [])
 
   const loadMore = useCallback(async () => {
     if (loading || !hasMore) return
@@ -62,7 +57,7 @@ export function LikedView({ active }: Props) {
   return (
     <section
       id="view-liked"
-      className={`view${active ? ' active' : ''}`}
+      className="view active"
     >
       <div className="view-header">
         <h2>Мне нравится</h2>

@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import type { ChatListItem } from '@/types/api'
 import { Icon } from '@/components/Icon/Icon'
 
 interface Props {
   items: ChatListItem[]
-  onOpenChat: (convId: number, title?: string) => void
 }
 
-export function ChatList({ items, onOpenChat }: Props) {
+export function ChatList({ items }: Props) {
+  const navigate = useNavigate()
   const [onlineMap, setOnlineMap] = useState<Record<number, boolean>>({})
 
   useEffect(() => {
@@ -41,9 +42,9 @@ export function ChatList({ items, onOpenChat }: Props) {
           key={item.conversation.id}
           className="chat-list-item fade-in-stagger"
           style={{ animationDelay: `${i * 50}ms` }}
-          onClick={() => onOpenChat(
-            item.conversation.id,
-            item.conversation.title || undefined,
+          onClick={() => navigate(
+            `/chats/${item.conversation.id}`,
+            { state: { title: item.conversation.title } },
           )}
         >
           <div className="chat-list-avatar">

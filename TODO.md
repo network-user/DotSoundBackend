@@ -105,12 +105,11 @@
 
 - [x] Media Session API (lock-screen контроли: play/pause/next/prev/seekto)
 - [x] Браузерная версия с email auth + Telegram code auth
-- [ ] **PWA-слой поверх текущего SPA**
-  - `manifest.json` (name, icons 192/512, `display: standalone`, theme_color)
-  - `<link rel="manifest">` в `index.html`
-  - Service Worker через `vite-plugin-pwa`
-  - Стратегия: `NetworkFirst` для API, `CacheFirst` для статики
-  - Иконки: 192x192, 512x512, maskable
+- [x] **PWA-слой поверх текущего SPA**
+  - `manifest.json` через `vite-plugin-pwa` (name, icons SVG, standalone, theme_color)
+  - Service Worker: `NetworkFirst` для API, `CacheFirst` для статики
+  - Иконки: 192x192 и 512x512 SVG в `frontend/public/`
+  - Meta-теги: theme-color, apple-touch-icon, apple-mobile-web-app-capable
 - [ ] Picture-in-Picture для видео-треков
   - `video.requestPictureInPicture()` в `TrackCardSheet.tsx`
 - [ ] Offline-кэш треков (Service Worker)
@@ -213,19 +212,21 @@
 
 ## Frontend оптимизация
 
-- [ ] **PlayerContext split (производительность)**
-  - Разделить на `PlayerStateContext` (currentTime, duration, isPlaying),
-    `PlayerActionsContext` (playTrack, togglePlay, seek -- useCallback),
-    `PlayerMetaContext` (track, volume, EQ, модалки)
-  - Или: `currentTime` в `useRef` + `useSyncExternalStore`
+- [x] **PlayerContext split (производительность)**
+  - 3 контекста: `PlayerStateCtx` (currentTime, duration, isPlaying),
+    `PlayerActionsCtx` (стабильные callbacks через useCallback),
+    `PlayerMetaCtx` (track, volume, EQ, модалки)
+  - 3 хука: `usePlayerState()`, `usePlayerActions()`, `usePlayerMeta()`
+  - `usePlayer()` -- compat shim для плавной миграции
 - [x] **LikesContext оптимизация**
   - `useMemo` на value, `useCallback` на все функции
-- [ ] **React Router (deep links, PWA)**
-  - `react-router-dom` v6
+- [x] **React Router (deep links, PWA)**
+  - `react-router-dom` v7 (React Router)
   - Маршруты: `/`, `/search`, `/upload`, `/liked`, `/playlists`,
-    `/chats`, `/chats/:id`, `/profile`, `/profile/:userId`, `/track/:trackId`
-  - `BottomNav` через `useNavigate`
-  - Browser back/forward, shareable URLs
+    `/chats`, `/chats/:id`, `/profile`, `/track/:trackId`
+  - `BottomNav` через `useNavigate` + `useLocation`
+  - `BrowserRouter basename="/mini_app"`
+  - Browser back/forward, shareable URLs, deep links
 - [ ] **Code splitting (lazy loading)**
   - `React.lazy()` для ChatView, UploadView, SearchView
   - `hls.js` в отдельный chunk (`manualChunks`)
@@ -255,4 +256,4 @@
 
 ---
 
-*Последнее обновление: 2026-04-14 агентом (PrivateCore Boundary Audit & TODO Update)*
+*Последнее обновление: 2026-04-14 агентом (Sprint 3 PWA + Frontend Architecture)*

@@ -4,26 +4,18 @@ import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { api } from '@/lib/api'
 import type { Track } from '@/types/api'
 
-interface Props {
-  active: boolean
-}
-
-export function HomeView({ active }: Props) {
+export function HomeView() {
   const [tracks, setTracks] = useState<Track[] | null>(null)
 
-  const load = () => {
+  useEffect(() => {
     setTracks(null)
     api.getTracks({ size: 50 })
       .then((data) => setTracks(data.items))
       .catch(() => setTracks([]))
-  }
-
-  useEffect(() => {
-    if (active) load()
-  }, [active])
+  }, [])
 
   return (
-    <section id="view-home" className={`view${active ? ' active' : ''}`}>
+    <section id="view-home" className="view active">
       <div className="view-header view-header-row">
         <div>
           <h2>.sound</h2>

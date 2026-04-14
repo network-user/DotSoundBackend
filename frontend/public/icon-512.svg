@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="64" fill="#000"/>
+  <circle cx="148" cy="340" r="32" fill="#fff"/>
+  <text x="192" y="360" font-family="Inter, -apple-system, sans-serif" font-weight="800" font-size="148" fill="#fff" letter-spacing="-5">sound</text>
+</svg>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { onWS } from '@/lib/ws'
 import { ChatList } from '@/components/Chat/ChatList'
@@ -16,16 +17,14 @@ interface UserResult {
 }
 
 interface Props {
-  active: boolean
   onOpenAuthor: (userId: number) => void
-  onOpenChat: (convId: number, title?: string) => void
 }
 
 export function ChatsView({
-  active,
   onOpenAuthor,
-  onOpenChat,
 }: Props) {
+  const navigate = useNavigate()
+  const active = true
   const [chats, setChats] = useState<ChatListItem[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
@@ -93,7 +92,7 @@ export function ChatsView({
 
   const handleOpenSaved = async () => {
     const res = await api.getSavedChat()
-    onOpenChat(res.conversation.id, 'Избранное')
+    navigate(`/chats/${res.conversation.id}`, { state: { title: 'Избранное' } })
   }
 
   const handleSelectUser = async (userId: number) => {
@@ -104,7 +103,7 @@ export function ChatsView({
       : undefined
     setQuery('')
     setSearchResults([])
-    onOpenChat(res.conversation.id, name)
+    navigate(`/chats/${res.conversation.id}`, { state: { title: name } })
   }
 
   return (
@@ -207,7 +206,7 @@ export function ChatsView({
               Нет чатов. Найдите пользователя через поиск выше.
             </div>
           ) : (
-            <ChatList items={chats} onOpenChat={onOpenChat} />
+            <ChatList items={chats} />
           )}
         </>
       )}

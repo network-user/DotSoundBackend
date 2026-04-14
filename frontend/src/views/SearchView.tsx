@@ -9,11 +9,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { Icon } from '@/components/Icon/Icon'
 import type { SCSearchResult, Track } from '@/types/api'
 
-interface Props {
-  active: boolean
-}
-
-export function SearchView({ active }: Props) {
+export function SearchView() {
   const { playTrack } = usePlayer()
   const { toggleLike } = useLikes()
   const [query, setQuery] = useState('')
@@ -25,8 +21,8 @@ export function SearchView({ active }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (active) inputRef.current?.focus()
-  }, [active])
+    inputRef.current?.focus()
+  }, [])
 
   useEffect(() => {
     if (!debouncedQuery.trim()) {
@@ -90,7 +86,7 @@ export function SearchView({ active }: Props) {
   }
 
   return (
-    <section id="view-search" className={`view${active ? ' active' : ''}`}>
+    <section id="view-search" className="view active">
       <div className="search-bar">
         <span className="search-icon"><Icon name="search" size={16} /></span>
         <input

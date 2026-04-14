@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { onWS } from '@/lib/ws'
 import { getInternalUserId } from '@/lib/telegram'
@@ -14,14 +15,14 @@ const ACTIVITY_LABELS: Record<string, string> = {
   sending_photo: 'отправляет фото...',
 }
 
-interface Props {
-  active: boolean
-  conversationId: number | null
-  title: string | null
-  onBack: () => void
-}
-
-export function ChatView({ active, conversationId, title, onBack }: Props) {
+export function ChatView() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const conversationId = id ? Number(id) : null
+  const title = (location.state as { title?: string } | null)?.title ?? null
+  const onBack = () => navigate('/chats')
+  const active = true
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [peerStatus, setPeerStatus] = useState<string>('offline')

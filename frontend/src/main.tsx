@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import { LikesProvider } from '@/store/LikesContext'
 import { PlayerProvider } from '@/store/PlayerContext'
 import { App } from './App'
@@ -8,10 +9,12 @@ import './styles/animations.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <PlayerProvider>
-      <LikesProvider>
-        <App />
-      </LikesProvider>
-    </PlayerProvider>
+    <BrowserRouter basename="/mini_app">
+      <PlayerProvider>
+        <LikesProvider>
+          <App />
+        </LikesProvider>
+      </PlayerProvider>
+    </BrowserRouter>
   </StrictMode>,
 )

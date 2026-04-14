@@ -4,13 +4,9 @@ import { getUserId } from '@/lib/telegram'
 import type { Playlist, PlaylistWithTracks } from '@/types/api'
 import { TrackList } from '@/components/TrackList/TrackList'
 
-interface Props {
-  active: boolean
-}
-
 type Screen = 'list' | 'detail'
 
-export function PlaylistsView({ active }: Props) {
+export function PlaylistsView() {
   const [screen, setScreen] = useState<Screen>('list')
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null)
   const [selected, setSelected] = useState<PlaylistWithTracks | null>(null)
@@ -28,8 +24,8 @@ export function PlaylistsView({ active }: Props) {
   }
 
   useEffect(() => {
-    if (active) loadPlaylists()
-  }, [active])
+    loadPlaylists()
+  }, [])
 
   const openPlaylist = async (p: Playlist) => {
     try {
@@ -57,7 +53,7 @@ export function PlaylistsView({ active }: Props) {
     return (
       <section
         id="view-playlists"
-        className={`view${active ? ' active' : ''}`}
+        className="view active"
       >
         <div className="view-header" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button
@@ -81,7 +77,7 @@ export function PlaylistsView({ active }: Props) {
   }
 
   return (
-    <section id="view-playlists" className={`view${active ? ' active' : ''}`}>
+    <section id="view-playlists" className="view active">
       <div className="view-header">
         <h2>Плейлисты</h2>
         <span className="hint">Твои подборки</span>

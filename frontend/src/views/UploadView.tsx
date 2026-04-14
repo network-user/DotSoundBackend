@@ -1,28 +1,24 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { usePlayer } from '@/store/PlayerContext'
 import { UploadFileTab } from '@/components/Upload/UploadFileTab'
 import { UploadSoundCloudTab } from '@/components/Upload/UploadSoundCloudTab'
-import type { ViewName } from '@/components/BottomNav/BottomNav'
 import type { Track } from '@/types/api'
-
-interface Props {
-  active: boolean
-  onNavigate: (view: ViewName) => void
-}
 
 type Tab = 'file' | 'soundcloud'
 
-export function UploadView({ active, onNavigate }: Props) {
+export function UploadView() {
+  const navigate = useNavigate()
   const { playTrack } = usePlayer()
   const [tab, setTab] = useState<Tab>('file')
 
   const handleSuccess = async (track: Track) => {
-    onNavigate('home')
+    navigate('/')
     await playTrack(track)
   }
 
   return (
-    <section id="view-upload" className={`view${active ? ' active' : ''}`}>
+    <section id="view-upload" className="view active">
       <div className="view-header"><h2>Загрузить трек</h2></div>
 
       <div className="upload-tabs">
