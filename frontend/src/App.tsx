@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
-import { tg } from '@/lib/telegram'
+import { tg, getInitData } from '@/lib/telegram'
 import { AuthScreen } from '@/components/Auth/AuthScreen'
 import { ArtistView } from '@/components/ArtistView/ArtistView'
 import { AuthorView } from '@/components/AuthorView/AuthorView'
@@ -48,12 +48,28 @@ export function App() {
   const [artistName, setArtistName] = useState<
     string | null
   >(null)
+  const [authError, setAuthError] = useState<
+    string | null
+  >(null)
 
   useEffect(() => {
     const init = async () => {
       let authenticated = false
-      const hasTelegramContext = Boolean(
-        tg.initData,
+      const initData = getInitData()
+      const hasTelegramContext =
+        Boolean(initData)
+
+      console.info(
+        '[App] init',
+        'sdk.initData:',
+        tg.initData ? tg.initData.length : 0,
+        'native.initData:',
+        window.Telegram?.WebApp?.initData
+          ? window.Telegram.WebApp.initData
+              .length
+          : 0,
+        'resolved:',
+        hasTelegramContext,
       )
 
       const params = new URLSearchParams(
@@ -95,18 +111,23 @@ export function App() {
           hasTelegramContext
         ) {
           const authRes =
-            await api.authTelegram(
-              tg.initData,
-            )
+            await api.authTelegram(initData)
           if (authRes?.access_token) {
             connectWS(authRes.access_token)
             authenticated = true
           }
         }
       } catch (err) {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : String(err)
         console.error(
-          '[App] Auth failed:',
-          err,
+          '[App] Telegram auth failed:',
+          msg,
+        )
+        setAuthError(
+          `Telegram auth: ${msg}`,
         )
       }
 
@@ -179,9 +200,11 @@ export function App() {
     return (
       <AuthScreen
         onAuth={() => {
+          setAuthError(null)
           setNeedsAuth(false)
           reloadLikes()
         }}
+        error={authError}
       />
     )
   }

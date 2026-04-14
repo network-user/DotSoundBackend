@@ -217,14 +217,21 @@ function _updateMediaSession(
 ) {
   if (!('mediaSession' in navigator)) return
   try {
+    const coverPath = track.cover_key
+      ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`
+      : null
+    const coverAbsolute = coverPath
+      ? new URL(coverPath, window.location.origin).href
+      : null
+
     navigator.mediaSession.metadata =
       new MediaMetadata({
         title: track.title,
         artist: track.artist || '',
-        artwork: track.cover_key
+        artwork: coverAbsolute
           ? [
               {
-                src: `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`,
+                src: coverAbsolute,
                 sizes: '512x512',
                 type: 'image/png',
               },
@@ -573,7 +580,7 @@ export function PlayerProvider({
       const fallback = `/api/v1/tracks/${saved.track.id}/audio`
 
       if (Hls.isSupported()) {
-        startHlsPlayback(audio, hlsUrl, fallback)
+        startHlsPlayback(audio, hlsUrl, fallback, false)
           .then(seekAfterLoad)
           .catch(() => {})
       } else {
@@ -588,6 +595,8 @@ export function PlayerProvider({
     if (!audio) return
     const onPlay = () => {
       setIsPlaying(true)
+      if ('mediaSession' in navigator)
+        navigator.mediaSession.playbackState = 'playing'
       if (audioCtxRef.current?.state === 'suspended')
         audioCtxRef.current.resume()
       if (
@@ -599,7 +608,11 @@ export function PlayerProvider({
         api.postPlay(track.id).catch(() => {})
       }
     }
-    const onPause = () => setIsPlaying(false)
+    const onPause = () => {
+      setIsPlaying(false)
+      if ('mediaSession' in navigator)
+        navigator.mediaSession.playbackState = 'paused'
+    }
     const onEnded = () => {
       setIsPlaying(false)
       setCurrentTime(0)
@@ -620,6 +633,16 @@ export function PlayerProvider({
       'durationchange',
       onDur,
     )
+
+    if (track) {
+      _updateMediaSession(
+        track,
+        audio,
+        () => playNext(),
+        () => playPrev(),
+      )
+    }
+
     return () => {
       audio.removeEventListener('play', onPlay)
       audio.removeEventListener('pause', onPause)
@@ -674,6 +697,7 @@ export function PlayerProvider({
       audio: HTMLAudioElement,
       sourceUrl: string,
       fallbackUrl?: string,
+      autoplay = true,
     ) =>
       new Promise<void>((resolve) => {
         const hls = new Hls({
@@ -687,7 +711,7 @@ export function PlayerProvider({
           Hls.Events.MANIFEST_PARSED,
           () => {
             audio.volume = volume
-            audio.play().catch(() => {})
+            if (autoplay) audio.play().catch(() => {})
             resolve()
           },
         )
@@ -699,7 +723,7 @@ export function PlayerProvider({
             audio.crossOrigin = 'anonymous'
             audio.src = fallbackUrl
             audio.volume = volume
-            audio.play().catch(() => {})
+            if (autoplay) audio.play().catch(() => {})
           }
           resolve()
         })
@@ -866,6 +890,10 @@ export function PlayerProvider({
     if (hlsRef.current) {
       hlsRef.current.destroy()
       hlsRef.current = null
+    }
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.metadata = null
+      navigator.mediaSession.playbackState = 'none'
     }
     setTrack(null)
     setIsPlaying(false)

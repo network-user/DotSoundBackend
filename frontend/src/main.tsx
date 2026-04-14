@@ -8,6 +8,12 @@ import { App } from './App'
 import './styles/global.css'
 import './styles/animations.css'
 
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => r.unregister())
+  })
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter basename="/mini_app">

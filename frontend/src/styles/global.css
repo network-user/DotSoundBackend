@@ -740,6 +740,8 @@ body.monochrome #app {
 }
 
 #pb-controls { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.pb-close { opacity: 0.35; margin-left: 2px; }
+.pb-close:hover { opacity: 0.7; }
 
 .play-btn {
   width: 40px;
