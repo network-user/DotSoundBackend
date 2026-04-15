@@ -296,6 +296,9 @@ export function PlayerProvider({
     forTrackId: number
     tracks: Track[]
   } | null>(null)
+  const historyRef = useRef<Track[]>([])
+  const prefetchAudioRef =
+    useRef<HTMLAudioElement | null>(null)
   const audioCtxRef =
     useRef<AudioContext | null>(null)
   const filtersRef = useRef<BiquadFilterNode[]>([])
@@ -765,6 +768,19 @@ export function PlayerProvider({
   ) => {
     const audio = audioRef.current
     if (!audio) return
+    setTrack((prev) => {
+      if (prev && prev.id !== newTrack.id) {
+        const h = historyRef.current
+        if (
+          h.length === 0 ||
+          h[h.length - 1].id !== prev.id
+        ) {
+          h.push(prev)
+          if (h.length > 50) h.shift()
+        }
+      }
+      return newTrack
+    })
     await loadEqSettings()
     _initAudioCtx()
     if (hlsRef.current) {
@@ -774,7 +790,6 @@ export function PlayerProvider({
     playCountSentRef.current = false
     listenSignalSentRef.current = false
     listenStartTimeRef.current = 0
-    setTrack(newTrack)
     setCurrentTime(0)
     setDuration(0)
     _saveState(newTrack, 0)
@@ -870,13 +885,28 @@ export function PlayerProvider({
     if (!track) return
     let cancelled = false
 
+    const preloadFirst = (tracks: Track[]) => {
+      if (cancelled || !tracks.length) return
+      const nextId = tracks[0].id
+      if (prefetchAudioRef.current) {
+        prefetchAudioRef.current.src = ''
+        prefetchAudioRef.current = null
+      }
+      const pa = new Audio()
+      pa.preload = 'auto'
+      pa.src = `/api/v1/tracks/${nextId}/audio`
+      prefetchAudioRef.current = pa
+    }
+
     api.getRadio(track.id, 5)
       .then((res) => {
-        if (cancelled || !res.tracks.length) throw new Error('empty')
+        if (cancelled || !res.tracks.length)
+          throw new Error('empty')
         prefetchCacheRef.current = {
           forTrackId: track.id,
           tracks: res.tracks,
         }
+        preloadFirst(res.tracks)
       })
       .catch(() => {
         api.getTrackQueue(track.id, 3)
@@ -886,10 +916,17 @@ export function PlayerProvider({
               forTrackId: track.id,
               tracks: res.next_tracks,
             }
+            preloadFirst(res.next_tracks)
           })
           .catch(() => {})
       })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+      if (prefetchAudioRef.current) {
+        prefetchAudioRef.current.src = ''
+        prefetchAudioRef.current = null
+      }
+    }
   }, [track?.id])
 
   const playPrev = async () => {
@@ -897,6 +934,11 @@ export function PlayerProvider({
     const a = audioRef.current
     if (a && a.currentTime > 3) {
       a.currentTime = 0
+      return
+    }
+    const prev = historyRef.current.pop()
+    if (prev) {
+      await playTrack(prev)
       return
     }
     try {

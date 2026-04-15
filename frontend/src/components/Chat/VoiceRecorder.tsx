@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { Icon } from '@/components/Icon/Icon'
 
 interface Props {
@@ -6,67 +11,235 @@ interface Props {
   onCancel: () => void
 }
 
-export function VoiceRecorder({ onSend, onCancel }: Props) {
+type Phase = 'recording' | 'preview'
+
+function pickMimeType(): string {
+  const preferred = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/mp4',
+  ]
+  for (const mt of preferred) {
+    if (MediaRecorder.isTypeSupported(mt))
+      return mt
+  }
+  return ''
+}
+
+export function VoiceRecorder({
+  onSend,
+  onCancel,
+}: Props) {
+  const [phase, setPhase] =
+    useState<Phase>('recording')
   const [seconds, setSeconds] = useState(0)
-  const mediaRef = useRef<MediaRecorder | null>(null)
+  const [playing, setPlaying] = useState(false)
+  const [error, setError] = useState('')
+  const mediaRef = useRef<MediaRecorder | null>(
+    null,
+  )
+  const streamRef = useRef<MediaStream | null>(
+    null,
+  )
   const chunksRef = useRef<Blob[]>([])
-  const timerRef = useRef<ReturnType<typeof setInterval>>()
+  const timerRef =
+    useRef<ReturnType<typeof setInterval>>()
+  const blobRef = useRef<Blob | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(
+    null,
+  )
+  const urlRef = useRef<string | null>(null)
+  const onCancelRef = useRef(onCancel)
+  onCancelRef.current = onCancel
+
+  const stopStream = useCallback(() => {
+    streamRef.current
+      ?.getTracks()
+      .forEach((t) => t.stop())
+    streamRef.current = null
+  }, [])
+
+  const initDone = useRef(false)
 
   useEffect(() => {
-    let stream: MediaStream | null = null
+    if (initDone.current) return
+    initDone.current = true
 
-    navigator.mediaDevices.getUserMedia({ audio: true }).then((s) => {
-      stream = s
-      const recorder = new MediaRecorder(s, { mimeType: 'audio/webm;codecs=opus' })
-      mediaRef.current = recorder
-      chunksRef.current = []
+    const mimeType = pickMimeType()
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data)
-      }
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((s) => {
+        streamRef.current = s
+        const opts: MediaRecorderOptions = {}
+        if (mimeType) opts.mimeType = mimeType
+        const recorder = new MediaRecorder(
+          s,
+          opts,
+        )
+        mediaRef.current = recorder
+        chunksRef.current = []
 
-      recorder.start()
-      timerRef.current = setInterval(() => setSeconds((p) => p + 1), 1000)
-    }).catch(() => onCancel())
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0)
+            chunksRef.current.push(e.data)
+        }
+
+        recorder.start()
+        timerRef.current = setInterval(
+          () => setSeconds((p) => p + 1),
+          1000,
+        )
+      })
+      .catch(() => {
+        setError('Нет доступа к микрофону')
+        setTimeout(
+          () => onCancelRef.current(),
+          2000,
+        )
+      })
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current)
-      stream?.getTracks().forEach((t) => t.stop())
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = undefined
+      }
+      stopStream()
+      if (urlRef.current)
+        URL.revokeObjectURL(urlRef.current)
     }
-  }, [onCancel])
+  }, [stopStream])
 
-  const handleSend = () => {
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = undefined
+    }
+  }, [])
+
+  const handleStop = () => {
     const recorder = mediaRef.current
-    if (!recorder) return
+    if (
+      !recorder ||
+      recorder.state !== 'recording'
+    )
+      return
 
+    clearTimer()
     recorder.onstop = () => {
-      const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-      onSend(blob)
+      const mt =
+        recorder.mimeType || 'audio/webm'
+      const blob = new Blob(chunksRef.current, {
+        type: mt,
+      })
+      blobRef.current = blob
+      urlRef.current = URL.createObjectURL(blob)
+      stopStream()
+      setPhase('preview')
     }
     recorder.stop()
-    if (timerRef.current) clearInterval(timerRef.current)
+  }
+
+  const handlePlayPause = () => {
+    if (!urlRef.current) return
+    if (!audioRef.current) {
+      audioRef.current = new Audio(
+        urlRef.current,
+      )
+      audioRef.current.onended = () =>
+        setPlaying(false)
+    }
+    if (playing) {
+      audioRef.current.pause()
+    } else {
+      audioRef.current.currentTime = 0
+      audioRef.current.play()
+    }
+    setPlaying(!playing)
+  }
+
+  const handleSend = () => {
+    audioRef.current?.pause()
+    if (blobRef.current) {
+      onSend(blobRef.current)
+    }
   }
 
   const handleCancel = () => {
+    audioRef.current?.pause()
     mediaRef.current?.stop()
-    if (timerRef.current) clearInterval(timerRef.current)
+    if (timerRef.current)
+      clearInterval(timerRef.current)
+    stopStream()
     onCancel()
   }
 
   const formatTime = (s: number) =>
     `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
+  if (error) {
+    return (
+      <div className="voice-recorder">
+        <span className="voice-timer">
+          {error}
+        </span>
+      </div>
+    )
+  }
+
+  if (phase === 'preview') {
+    return (
+      <div className="voice-recorder">
+        <button
+          className="voice-cancel-btn"
+          onClick={handleCancel}
+        >
+          <Icon name="x" size={20} />
+        </button>
+        <button
+          className="voice-play-preview"
+          onClick={handlePlayPause}
+        >
+          <Icon
+            name={playing ? 'pause' : 'play'}
+            size={18}
+          />
+        </button>
+        <div className="voice-recording-indicator">
+          <span className="voice-timer">
+            {formatTime(seconds)}
+          </span>
+        </div>
+        <button
+          className="voice-send-btn"
+          onClick={handleSend}
+        >
+          <Icon name="send" size={20} />
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="voice-recorder">
-      <button className="voice-cancel-btn" onClick={handleCancel}>
+      <button
+        className="voice-cancel-btn"
+        onClick={handleCancel}
+      >
         <Icon name="x" size={20} />
       </button>
       <div className="voice-recording-indicator">
         <span className="voice-pulse" />
-        <span className="voice-timer">{formatTime(seconds)}</span>
+        <span className="voice-timer">
+          {formatTime(seconds)}
+        </span>
       </div>
-      <button className="voice-send-btn" onClick={handleSend}>
-        <Icon name="send" size={20} />
+      <button
+        className="voice-send-btn"
+        onClick={handleStop}
+      >
+        <Icon name="check" size={20} />
       </button>
     </div>
   )

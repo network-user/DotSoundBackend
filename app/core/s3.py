@@ -146,13 +146,20 @@ async def upload_voice(
         process_voice,
     )
 
-    ogg_data, duration, waveform = (
+    processed, duration, waveform = (
         await process_voice(data)
     )
 
+    is_converted = processed is not data
+    ext = "ogg" if is_converted else "webm"
+    content_type = (
+        "audio/ogg"
+        if is_converted
+        else "audio/webm"
+    )
     owner = str(user_id) if user_id else "anon"
     file_key = (
-        f"voice/{owner}/{uuid.uuid4().hex}.ogg"
+        f"voice/{owner}/{uuid.uuid4().hex}.{ext}"
     )
     logger.info(
         "s3_voice_upload_started",
@@ -163,8 +170,8 @@ async def upload_voice(
         await s3.put_object(
             Bucket=settings.minio_bucket,
             Key=file_key,
-            Body=ogg_data,
-            ContentType="audio/ogg",
+            Body=processed,
+            ContentType=content_type,
         )
     logger.info(
         "s3_voice_upload_completed",

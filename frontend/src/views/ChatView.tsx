@@ -208,7 +208,7 @@ export function ChatView() {
           return sorted
         })
       } catch {}
-    }, 5_000)
+    }, 3_000)
     return () => clearInterval(interval)
   }, [conversationId])
 
@@ -350,8 +350,13 @@ export function ChatView() {
 
   const handleSendVoice = async (blob: Blob) => {
     if (!conversationId) return
+    const ext = blob.type.includes('webm')
+      ? 'webm'
+      : blob.type.includes('mp4')
+        ? 'mp4'
+        : 'ogg'
     const fd = new FormData()
-    fd.append('file', blob, 'voice.ogg')
+    fd.append('file', blob, `voice.${ext}`)
     const msg = await api.sendVoice(conversationId, fd)
     addMessage(msg)
   }
@@ -480,9 +485,15 @@ export function ChatView() {
             />
           ))
         )}
-        {peerActivity === 'typing' && (
+        {peerActivity && (
           <div className="typing-indicator">
             <span /><span /><span />
+            {peerActivity !== 'typing' &&
+              ACTIVITY_LABELS[peerActivity] && (
+                <span className="activity-label">
+                  {ACTIVITY_LABELS[peerActivity]}
+                </span>
+              )}
           </div>
         )}
       </div>

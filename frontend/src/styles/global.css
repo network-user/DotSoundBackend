@@ -1169,10 +1169,19 @@ textarea.form-input { resize: none; }
 .tcs-close {
   position: absolute;
   top: 10px;
-  right: 14px;
+  right: max(14px, env(safe-area-inset-right, 0px));
   font-size: 16px;
-  color: var(--text-muted);
-  z-index: 1;
+  color: var(--text);
+  z-index: 10;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 50%;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
 /* Cover — large square */
@@ -1207,10 +1216,47 @@ textarea.form-input { resize: none; }
   z-index: 0;
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
+.tcs-video-mode {
+  max-height: 100dvh;
+}
+.tcs-track-content {
+  animation: tcsTrackIn 0.35s ease;
+}
+@keyframes tcsTrackIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+.tcs-video-gradient {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent 30%,
+    rgba(10, 10, 10, 0.4) 50%,
+    rgba(10, 10, 10, 0.85) 70%,
+    rgba(10, 10, 10, 0.95) 85%,
+    var(--bg-elevated) 100%
+  );
+  pointer-events: none;
+}
+.tcs-video-spacer {
+  position: relative;
+  z-index: 2;
+  min-height: 35dvh;
+}
 .tcs-video-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(10, 10, 10, 0.7);
+  background: rgba(10, 10, 10, 0.45);
   z-index: 1;
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
@@ -1241,45 +1287,91 @@ textarea.form-input { resize: none; }
   z-index: 2;
   border-radius: var(--radius-lg);
 }
-.tcs-lyrics-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(10, 10, 10, 0.85);
-  z-index: 1;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+.tcs-lyrics-section {
+  position: relative;
+  z-index: 2;
+  min-height: 200px;
+  max-height: 45dvh;
   display: flex;
   flex-direction: column;
+  padding: 16px 0 0;
 }
-.tcs-lyrics-overlay .lyrics-panel {
+.tcs-lyrics-section .lyrics-panel {
   margin: 0;
   border: none;
-  padding: 12px;
+  padding: 0 24px;
   flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-.tcs-lyrics-overlay .lyrics-panel-header {
+.tcs-lyrics-section .lyrics-panel-header {
   flex-shrink: 0;
   margin-bottom: 8px;
 }
-.tcs-lyrics-overlay .lyrics-content {
+.tcs-lyrics-section .lyrics-content {
   flex: 1;
   max-height: none;
   padding: 0;
   overflow-y: auto;
   scrollbar-width: none;
 }
-.tcs-lyrics-overlay .lyrics-content::-webkit-scrollbar { display: none; }
+.tcs-lyrics-section
+  .lyrics-content::-webkit-scrollbar {
+  display: none;
+}
 .tcs-lyrics-expand {
   position: absolute;
   top: 8px;
-  right: 8px;
+  right: 14px;
   z-index: 2;
   color: var(--text-secondary);
 }
-.tcs-lyrics-expand:hover { color: var(--text); }
+.tcs-lyrics-expand:hover {
+  color: var(--text);
+}
+.tcs-video-standby {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 35dvh;
+}
+.tcs-lyrics-over-video {
+  background: rgba(10, 10, 10, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius-lg);
+  margin: 16px 12px 0;
+  padding: 16px 0 0;
+  min-height: 180px;
+  max-height: 40dvh;
+}
+.tcs-info-cover-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.tcs-info-cover-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius);
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+}
+.tcs-info-cover-text {
+  flex: 1;
+  min-width: 0;
+}
+.tcs-info-cover-text .tcs-title {
+  font-size: 18px;
+}
+.tcs-info-cover-text .tcs-artist {
+  margin-top: 2px;
+  font-size: 13px;
+}
 .tcs-title-row {
   display: flex;
   align-items: center;
@@ -1352,6 +1444,13 @@ textarea.form-input { resize: none; }
   gap: 10px;
   padding: 16px 20px 0;
 }
+.tcs-video-mode .tcs-actions {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.tcs-video-mode .tcs-action-btn {
+  padding: 10px 6px;
+}
 
 .tcs-action-btn {
   display: flex;
@@ -1420,9 +1519,8 @@ textarea.form-input { resize: none; }
 .tcs-play-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 16px;
-  padding: 12px 0;
+  justify-content: space-between;
+  padding: 12px 28px;
 }
 .tcs-play-row .play-btn {
   width: 48px;
@@ -1473,6 +1571,55 @@ textarea.form-input { resize: none; }
 .tcs-edit-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+.tcs-edit-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.tcs-dimmed {
+  opacity: 0.3;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.tcs-lyrics-edit-inline {
+  padding: 16px 20px;
+  border-top: 1px solid var(--accent);
+  border-bottom: 1px solid var(--accent);
+  background: var(--bg-card);
+  position: relative;
+  z-index: 3;
+}
+.tcs-lyrics-edit-inline .lyrics-panel {
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+.tcs-lyrics-edit-inline .le-panel {
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+.tcs-lyrics-edit-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.tcs-lyrics-edit-close:hover {
+  color: var(--text);
+  border-color: var(--border-hover);
 }
 
 .tcs-volume-section {

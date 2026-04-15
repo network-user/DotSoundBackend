@@ -11,6 +11,7 @@ from app.models.conversation import (
     ConversationMember,
 )
 from app.models.message import Message
+from app.models.user import User
 
 logger: structlog.stdlib.BoundLogger = (
     structlog.get_logger(__name__)
@@ -199,6 +200,36 @@ class ChatRepository:
             )
         )
         await self._s.flush()
+
+    async def get_dm_peers(
+        self,
+        user_id: int,
+        conversation_ids: list[int],
+    ) -> dict[int, User]:
+        if not conversation_ids:
+            return {}
+        rows = await self._s.execute(
+            select(
+                ConversationMember.conversation_id,
+                User,
+            )
+            .join(
+                User,
+                User.id
+                == ConversationMember.user_id,
+            )
+            .where(
+                ConversationMember.conversation_id.in_(
+                    conversation_ids
+                ),
+                ConversationMember.user_id
+                != user_id,
+            )
+        )
+        result: dict[int, User] = {}
+        for conv_id, user in rows:
+            result[conv_id] = user
+        return result
 
     async def get_unread_count(
         self, conv_id: int, user_id: int

@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import json
 from datetime import datetime, timedelta, timezone
-from urllib.parse import parse_qs, unquote
+from urllib.parse import parse_qs
 
 import structlog
 from dotsound_private_core.services.auth_policy import (
@@ -29,7 +29,7 @@ def verify_telegram_init_data(
 ) -> dict[str, object]:
     """Validate Telegram WebApp initData via HMAC-SHA256."""
     parsed = parse_qs(
-        unquote(init_data), keep_blank_values=True
+        init_data, keep_blank_values=True
     )
 
     hash_values = parsed.pop("hash", [])

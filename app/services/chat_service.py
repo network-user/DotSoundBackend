@@ -147,8 +147,18 @@ class ChatService:
                 user_id
             )
         )
-        return [
-            {
+        dm_conv_ids = [
+            r["conversation"].id
+            for r in rows
+            if r["conversation"].type == "dm"
+        ]
+        peers = await self._repo.get_dm_peers(
+            user_id, dm_conv_ids
+        )
+
+        result: list[dict[str, Any]] = []
+        for r in rows:
+            item: dict[str, Any] = {
                 "conversation": _conv_to_dict(
                     r["conversation"]
                 ),
@@ -161,8 +171,18 @@ class ChatService:
                     else None
                 ),
             }
-            for r in rows
-        ]
+            peer = peers.get(r["conversation"].id)
+            if peer:
+                item["peer"] = {
+                    "id": peer.id,
+                    "first_name": peer.first_name,
+                    "last_name": peer.last_name,
+                    "display_name": peer.display_name,
+                    "username": peer.username,
+                    "avatar_key": peer.avatar_key,
+                }
+            result.append(item)
+        return result
 
     async def pin_chat(
         self, user_id: int, conv_id: int

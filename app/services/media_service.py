@@ -4,6 +4,7 @@ import asyncio
 import io
 import json
 import struct
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -82,15 +83,57 @@ def process_image(
     return processed, thumb, w, h
 
 
+def _ffmpeg_available() -> bool:
+    try:
+        subprocess.run(
+            ["ffmpeg", "-version"],
+            capture_output=True,
+            timeout=5,
+        )
+        return True
+    except (FileNotFoundError, OSError):
+        return False
+
+
+_HAS_FFMPEG: bool | None = None
+
+
+def _check_ffmpeg() -> bool:
+    global _HAS_FFMPEG  # noqa: PLW0603
+    if _HAS_FFMPEG is None:
+        _HAS_FFMPEG = _ffmpeg_available()
+        if not _HAS_FFMPEG:
+            logger.warning(
+                "ffmpeg_not_found",
+                hint="voice messages will be "
+                "stored without conversion",
+            )
+    return _HAS_FFMPEG
+
+
+def _run_ffmpeg(
+    *args: str,
+) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        args,
+        capture_output=True,
+    )
+
+
 async def process_voice(
     data: bytes,
 ) -> tuple[bytes, int, list[float]]:
+    if not _check_ffmpeg():
+        logger.info("voice_passthrough_no_ffmpeg")
+        return data, 0, [0.5] * 50
+
     with tempfile.TemporaryDirectory() as tmp:
         in_path = Path(tmp) / "input"
         out_path = Path(tmp) / "output.ogg"
         in_path.write_bytes(data)
 
-        proc = await asyncio.create_subprocess_exec(
+        result = await asyncio.to_thread(
+            _run_ffmpeg,
             "ffmpeg",
             "-i",
             str(in_path),
@@ -107,20 +150,17 @@ async def process_voice(
             str(settings.voice_max_duration),
             str(out_path),
             "-y",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await proc.communicate()
 
-        if proc.returncode != 0:
+        if result.returncode != 0:
             logger.error(
                 "ffmpeg_voice_failed",
-                returncode=proc.returncode,
-                stderr=stderr.decode(errors="replace")[
-                    :500
-                ],
+                returncode=result.returncode,
+                stderr=result.stderr.decode(
+                    errors="replace"
+                )[:500],
             )
-            raise RuntimeError("Voice encoding failed")
+            return data, 0, [0.5] * 50
 
         ogg_data = out_path.read_bytes()
         duration = await _get_duration(
@@ -140,64 +180,83 @@ async def process_voice(
 
 
 async def _get_duration(path: str) -> int:
-    proc = await asyncio.create_subprocess_exec(
-        "ffprobe",
-        "-v",
-        "quiet",
-        "-print_format",
-        "json",
-        "-show_format",
-        path,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, _ = await proc.communicate()
-    info = json.loads(stdout)
-    return int(
-        float(info["format"].get("duration", 0))
-    )
+    if not _check_ffmpeg():
+        return 0
+    try:
+        result = await asyncio.to_thread(
+            _run_ffmpeg,
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-print_format",
+            "json",
+            "-show_format",
+            path,
+        )
+        info = json.loads(result.stdout)
+        return int(
+            float(
+                info["format"].get("duration", 0)
+            )
+        )
+    except Exception:
+        return 0
 
 
 async def _get_waveform(
     path: str,
     bars: int = 100,
 ) -> list[float]:
-    proc = await asyncio.create_subprocess_exec(
-        "ffmpeg",
-        "-i",
-        path,
-        "-ac",
-        "1",
-        "-ar",
-        "8000",
-        "-f",
-        "s16le",
-        "-",
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, _ = await proc.communicate()
+    if not _check_ffmpeg():
+        return [0.5] * bars
+    try:
+        result = await asyncio.to_thread(
+            _run_ffmpeg,
+            "ffmpeg",
+            "-i",
+            path,
+            "-ac",
+            "1",
+            "-ar",
+            "8000",
+            "-f",
+            "s16le",
+            "-",
+        )
+        stdout = result.stdout
 
-    if not stdout:
-        return [0.0] * bars
+        if not stdout:
+            return [0.0] * bars
 
-    samples = struct.unpack(
-        f"<{len(stdout) // 2}h", stdout
-    )
-    chunk = max(1, len(samples) // bars)
-    result: list[float] = []
-    for i in range(bars):
-        start = i * chunk
-        end = min(start + chunk, len(samples))
-        if start >= len(samples):
-            result.append(0.0)
-            continue
-        peak = max(abs(s) for s in samples[start:end])
-        result.append(round(peak / 32768.0, 3))
+        samples = struct.unpack(
+            f"<{len(stdout) // 2}h", stdout
+        )
+        chunk = max(1, len(samples) // bars)
+        waveform: list[float] = []
+        for i in range(bars):
+            start = i * chunk
+            end = min(
+                start + chunk, len(samples)
+            )
+            if start >= len(samples):
+                waveform.append(0.0)
+                continue
+            peak = max(
+                abs(s)
+                for s in samples[start:end]
+            )
+            waveform.append(
+                round(peak / 32768.0, 3)
+            )
 
-    max_val = max(result) if result else 1.0
-    if max_val > 0:
-        result = [
-            round(v / max_val, 3) for v in result
-        ]
-    return result
+        max_val = (
+            max(waveform) if waveform else 1.0
+        )
+        if max_val > 0:
+            waveform = [
+                round(v / max_val, 3)
+                for v in waveform
+            ]
+        return waveform
+    except Exception:
+        return [0.5] * bars
