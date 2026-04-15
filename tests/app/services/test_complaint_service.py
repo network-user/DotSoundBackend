@@ -45,11 +45,15 @@ async def test_submit_complaint(
         track_id=tid,
         user_id=uid,
         reason="spam",
+        reason_type="copyright",
         contact_email=None,
+        rightsholder_name="Rights Holder",
+        proof_url="https://example.com/proof",
         threshold=10,
     )
 
     assert complaint.reason == "spam"
+    assert complaint.reason_type == "copyright"
     assert hidden is False
 
 
@@ -61,12 +65,26 @@ async def test_submit_duplicate_raises(
 
     svc = ComplaintService(session)
     await svc.submit(
-        tid, uid, "spam", None, threshold=10
+        tid,
+        uid,
+        "spam",
+        "other",
+        None,
+        None,
+        None,
+        threshold=10,
     )
 
     with pytest.raises(ValueError, match="already"):
         await svc.submit(
-            tid, uid, "again", None, threshold=10
+            tid,
+            uid,
+            "again",
+            "other",
+            None,
+            None,
+            None,
+            threshold=10,
         )
 
 
@@ -80,13 +98,13 @@ async def test_submit_auto_hides_track(
 
     svc = ComplaintService(session)
     await svc.submit(
-        tid, uid1, "r1", None, threshold=3
+        tid, uid1, "r1", "other", None, None, None, threshold=3
     )
     await svc.submit(
-        tid, uid2, "r2", None, threshold=3
+        tid, uid2, "r2", "other", None, None, None, threshold=3
     )
     _, hidden = await svc.submit(
-        tid, uid3, "r3", None, threshold=3
+        tid, uid3, "r3", "other", None, None, None, threshold=3
     )
 
     assert hidden is True
@@ -102,7 +120,10 @@ async def test_submit_user_not_found(
             track_id=1,
             user_id=9999,
             reason="x",
+            reason_type="other",
             contact_email=None,
+            rightsholder_name=None,
+            proof_url=None,
             threshold=5,
         )
 

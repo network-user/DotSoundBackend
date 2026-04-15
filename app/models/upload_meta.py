@@ -1,5 +1,6 @@
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     ForeignKey,
     String,
     Text,
@@ -26,6 +27,12 @@ class TrackUploadMeta(Base, TimestampMixin):
     )
     upload_user_agent: Mapped[str | None] = mapped_column(
         Text, nullable=True
+    )
+    upload_terms_accepted: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
+    upload_terms_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
     )
     upload_telegram_data: Mapped[dict | None] = mapped_column(
         JSON, nullable=True

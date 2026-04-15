@@ -16,6 +16,7 @@ export function UploadFileTab({ onSuccess }: Props) {
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [isPublic, setIsPublic] = useState(true)
+  const [termsAccepted, setTermsAccepted] = useState(false)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -85,6 +86,7 @@ export function UploadFileTab({ onSuccess }: Props) {
     setError('')
     setProgress(0)
     setIsPublic(true)
+    setTermsAccepted(false)
   }
 
   const handleSubmit = async (e: FormEvent) => {
@@ -93,6 +95,12 @@ export function UploadFileTab({ onSuccess }: Props) {
 
     if (!title.trim()) { setError('Введите название трека'); return }
     if (!audioFile) { setError('Выберите аудиофайл'); return }
+    if (!termsAccepted) {
+      setError(
+        'Подтвердите права на контент и согласие с условиями загрузки',
+      )
+      return
+    }
 
     setUploading(true)
     animateProgress()
@@ -105,6 +113,7 @@ export function UploadFileTab({ onSuccess }: Props) {
       if (genre.trim()) fd.append('genre', genre.trim())
       if (coverFile) fd.append('cover', coverFile)
       fd.append('is_public', String(isPublic))
+      fd.append('upload_terms_accepted', 'true')
 
       const uploaded = await api.uploadTrack(fd)
 
@@ -144,7 +153,7 @@ export function UploadFileTab({ onSuccess }: Props) {
         <div className="cover-preview">
           {coverPreview
             ? <img src={coverPreview} alt="cover" />
-            : <span className="cover-placeholder">🎵</span>
+            : <span className="cover-placeholder">Track</span>
           }
         </div>
         <span className="cover-label">Добавить обложку</span>
@@ -202,7 +211,7 @@ export function UploadFileTab({ onSuccess }: Props) {
       <div className="form-group">
         <label className="form-label">Аудиофайл *</label>
         <label className="file-pick-btn" htmlFor="audio-input">
-          <span>📁</span> Выбрать файл
+          <span>FILE</span> Выбрать файл
         </label>
         <p className="file-name">{audioFile ? audioFile.name : 'Файл не выбран'}</p>
         <input
@@ -222,7 +231,9 @@ export function UploadFileTab({ onSuccess }: Props) {
             className={`lyrics-editor-trigger${lyrics ? ' active' : ''}`}
             onClick={() => setShowLyricsEditor(true)}
           >
-            {lyrics ? '✅ Текст добавлен (изменить)' : '📝 Добавить текст / таймкоды'}
+            {lyrics
+              ? 'Текст добавлен (изменить)'
+              : 'Добавить текст / таймкоды'}
           </button>
         </div>
       )}
@@ -250,6 +261,46 @@ export function UploadFileTab({ onSuccess }: Props) {
           checked={isPublic}
           onChange={(e) => setIsPublic(e.target.checked)}
         />
+      </div>
+
+      <div className="form-group">
+        <label className="form-group-row">
+          <input
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(e) => setTermsAccepted(e.target.checked)}
+          />
+          <span>
+            Я подтверждаю, что обладаю правами на загружаемый контент
+            и согласен с
+            {' '}
+            <a
+              href="/legal/terms"
+              target="_blank"
+              rel="noreferrer"
+            >
+              пользовательским соглашением
+            </a>
+            ,
+            {' '}
+            <a
+              href="/legal/upload-rules"
+              target="_blank"
+              rel="noreferrer"
+            >
+              правилами загрузки
+            </a>
+            {' '}и{' '}
+            <a
+              href="/legal/privacy"
+              target="_blank"
+              rel="noreferrer"
+            >
+              политикой обработки данных
+            </a>
+            .
+          </span>
+        </label>
       </div>
 
       {error && <div className="form-error">{error}</div>}

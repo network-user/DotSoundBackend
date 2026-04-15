@@ -24,9 +24,13 @@ class TrackResponse(BaseModel):
     is_active: bool
     is_public: bool = True
     source: str = "internal"
+    catalog_type: str = "ugc"
+    access_mode: str = "internal_stream"
+    source_platform: str | None = None
     sc_url: str | None = None
     sc_uri: str | None = None
     source_url: str | None = None
+    canonical_source_url: str | None = None
     source_name: str | None = None
     uploaded_by_id: int | None = None
     album_id: int | None = None
@@ -59,6 +63,10 @@ class TrackUploadResponse(BaseModel):
     cover_key: str | None
     duration_seconds: int | None
     source: str = "internal"
+    catalog_type: str = "ugc"
+    access_mode: str = "internal_stream"
+    source_platform: str | None = None
+    canonical_source_url: str | None = None
     is_public: bool = True
     created_at: datetime
 

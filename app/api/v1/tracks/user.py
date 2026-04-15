@@ -42,6 +42,7 @@ _ALLOWED_COVER_MIMES = frozenset(
     {"image/jpeg", "image/png", "image/webp"}
 )
 _MAX_COVER_BYTES = 5 * 1024 * 1024
+_CURRENT_UPLOAD_TERMS_VERSION = "2026-04-15"
 
 
 @router.post(
@@ -58,6 +59,7 @@ async def upload_track(
     artist: str | None = Form(None, max_length=256),
     genre: str | None = Form(None, max_length=100),
     is_public: bool = Form(True),
+    upload_terms_accepted: bool = Form(False),
     cover: UploadFile | None = File(None),
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -68,6 +70,11 @@ async def upload_track(
         uploader_id=current_user.id,
     )
     logger.info("track_upload_endpoint_called")
+    if not upload_terms_accepted:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Upload terms must be accepted",
+        )
     service = UploadService(session)
     track = await service.upload_track(
         file=file,
@@ -90,6 +97,10 @@ async def upload_track(
         ),
         upload_user_agent=request.headers.get(
             "user-agent"
+        ),
+        upload_terms_accepted=True,
+        upload_terms_version=(
+            _CURRENT_UPLOAD_TERMS_VERSION
         ),
     )
     session.add(meta)

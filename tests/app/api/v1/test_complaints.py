@@ -34,7 +34,10 @@ async def test_submit_complaint(
                 "Нарушение авторских прав:"
                 " трек принадлежит мне"
             ),
+            "reason_type": "copyright",
             "contact_email": "rights@example.com",
+            "rightsholder_name": "Rights Holder LLC",
+            "proof_url": "https://example.com/proof",
         },
         headers=headers,
     )
@@ -43,7 +46,10 @@ async def test_submit_complaint(
         complaint=IsPartialDict(
             track_id=track["id"],
             reason=IsStr(regex=r"^Нарушение.*"),
+            reason_type="copyright",
             contact_email="rights@example.com",
+            rightsholder_name="Rights Holder LLC",
+            proof_url="https://example.com/proof",
         ),
         track_hidden=IsInstance(bool),
     )
@@ -66,6 +72,7 @@ async def test_duplicate_complaint_rejected(
             "Повторная жалоба на тот же трек"
             " проверка"
         ),
+        "reason_type": "other",
     }
     r1 = await client.post(
         "/api/v1/complaints",
@@ -100,6 +107,7 @@ async def test_list_complaints(
                 "Нарушение: незаконное"
                 " использование записи"
             ),
+            "reason_type": "other",
         },
         headers=headers,
     )
@@ -146,6 +154,7 @@ async def test_track_auto_hidden_at_threshold(
                     f"Жалоба #{i + 1}"
                     " на авторское право"
                 ),
+                "reason_type": "other",
             },
             headers=headers,
         )
@@ -153,3 +162,29 @@ async def test_track_auto_hidden_at_threshold(
         data = r.json()
         if i == threshold - 1:
             assert data["track_hidden"] is True
+
+
+async def test_copyright_notice_requires_supporting_fields(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 10004)
+    track = await create_test_track(
+        client, "CopyrightTrack", user["id"]
+    )
+    headers = await auth_headers(
+        client, user["id"]
+    )
+
+    r = await client.post(
+        "/api/v1/complaints",
+        json={
+            "track_id": track["id"],
+            "reason": (
+                "Нарушение авторских прав на фонограмму"
+            ),
+            "reason_type": "copyright",
+        },
+        headers=headers,
+    )
+
+    assert r.status_code == 422

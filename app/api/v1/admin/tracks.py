@@ -212,6 +212,10 @@ async def admin_get_upload_meta(
         "track_id": meta.track_id,
         "upload_ip": meta.upload_ip,
         "upload_user_agent": meta.upload_user_agent,
+        "upload_terms_accepted": (
+            meta.upload_terms_accepted
+        ),
+        "upload_terms_version": meta.upload_terms_version,
         "upload_telegram_data": meta.upload_telegram_data,
         "created_at": str(meta.created_at),
     }

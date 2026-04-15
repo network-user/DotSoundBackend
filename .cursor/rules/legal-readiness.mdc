@@ -1,0 +1,19 @@
+---
+description: Keep legal texts aligned with actual media flows
+alwaysApply: true
+---
+
+# Legal Readiness
+
+- Distinguish `UGC`, `licensed`, and `external-source` tracks in code
+  and user-facing text.
+- Never claim the service does not store audio if any `UGC` upload
+  flow writes audio to DotSound storage.
+- If changes touch `upload`, `import`, `playback`, `complaints`, or
+  `LegalView`, review `LEGAL.md` and `docs/legal/*.md`.
+- If changes affect external sources, also review
+  `docs/legal/SOURCE_TERMS_CHECKLIST.md`.
+- If complaint or rightsholder fields exist in schema/model, keep the
+  frontend, route, service, and repository in sync.
+- Treat own playback over third-party stream URLs as high-risk: do not
+  expand it casually or describe it as low-risk `source-first`.

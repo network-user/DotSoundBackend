@@ -3,6 +3,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.conftest import (
     auth_headers,
@@ -33,7 +35,10 @@ async def test_upload_invalid_mime(
     )
     response = await client.post(
         "/api/v1/tracks/upload",
-        data={"title": "Bad File"},
+        data={
+            "title": "Bad File",
+            "upload_terms_accepted": "true",
+        },
         files={
             "file": (
                 "image.png",
@@ -59,7 +64,10 @@ async def test_upload_too_large(
     )
     response = await client.post(
         "/api/v1/tracks/upload",
-        data={"title": "Huge"},
+        data={
+            "title": "Huge",
+            "upload_terms_accepted": "true",
+        },
         files={
             "file": (
                 "big.mp3",
@@ -70,6 +78,85 @@ async def test_upload_too_large(
         headers=headers,
     )
     assert response.status_code == 413
+
+
+async def test_upload_requires_terms_acceptance(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 60005)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    response = await client.post(
+        "/api/v1/tracks/upload",
+        data={"title": "No Terms"},
+        files={
+            "file": (
+                "track.mp3",
+                BytesIO(b"\xff\xfb" + b"\x00" * 64),
+                "audio/mpeg",
+            )
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Upload terms must be accepted"
+    )
+
+
+async def test_upload_stores_terms_acceptance(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    from app.models.upload_meta import TrackUploadMeta
+
+    user = await create_test_user(client, 60006)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    with patch(
+        "app.core.s3.upload_object",
+        new_callable=AsyncMock,
+    ), patch(
+        "app.services.file_validator.validate_audio",
+        return_value=None,
+    ), patch(
+        "app.services.upload_service.transcode_and_upload.kiq",
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        "app.services.upload_service.generate_and_upload_cover.kiq",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        response = await client.post(
+            "/api/v1/tracks/upload",
+            data={
+                "title": "Accepted Terms",
+                "upload_terms_accepted": "true",
+            },
+            files={
+                "file": (
+                    "track.mp3",
+                    BytesIO(b"\xff\xfb" + b"\x00" * 64),
+                    "audio/mpeg",
+                )
+            },
+            headers=headers,
+        )
+
+    assert response.status_code == 201
+    track_id = response.json()["id"]
+    result = await db_session.execute(
+        select(TrackUploadMeta).where(
+            TrackUploadMeta.track_id == track_id
+        )
+    )
+    meta = result.scalar_one()
+    assert meta.upload_terms_accepted is True
+    assert meta.upload_terms_version == "2026-04-15"
 
 
 async def test_upload_no_artist(

@@ -283,7 +283,6 @@ export function TrackCardSheet({
   const pct = duration
     ? (currentTime / duration) * 100
     : 0
-  const isSC = track.source === 'soundcloud'
 
   return (
     <div
@@ -402,6 +401,14 @@ export function TrackCardSheet({
             }
           >
             {track.artist ?? '—'}
+          </p>
+          <p className="tcs-meta">
+            {track.catalog_type === 'ugc' &&
+              'Каталог: пользовательская загрузка'}
+            {track.catalog_type === 'licensed' &&
+              'Каталог: лицензированный материал'}
+            {track.catalog_type === 'external_reference' &&
+              'Каталог: внешний reference'}
           </p>
           {card?.author && (
             <div
@@ -579,8 +586,9 @@ export function TrackCardSheet({
               </a>
             </span>
             <p className="tcs-disclaimer">
-              Материал размещён пользователем. Правообладатель
-              может запросить удаление через форму жалобы.
+              {track.access_mode === 'third_party_stream'
+                ? 'Внешний трек: аудиофайл не хранится в хранилище DotSound. Воспроизведение выполняется через поток стороннего сервиса внутри интерфейса DotSound. Правообладатель может направить уведомление через форму жалобы.'
+                : 'Внешний трек: DotSound хранит метаданные и ссылку на оригинальный источник, но не размещает этот аудиофайл в собственном хранилище. Правообладатель может направить уведомление через форму жалобы.'}
             </p>
           </div>
         )}

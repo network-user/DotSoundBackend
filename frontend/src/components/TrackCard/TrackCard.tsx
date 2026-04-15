@@ -20,6 +20,19 @@ function fmtDuration(sec: number | null): string {
   return `${m}:${s}`
 }
 
+function getCatalogLabel(track: Track): string | null {
+  if (track.catalog_type === 'external_reference') {
+    return 'EXT'
+  }
+  if (track.catalog_type === 'licensed') {
+    return 'LIC'
+  }
+  if (track.catalog_type === 'ugc') {
+    return 'UGC'
+  }
+  return null
+}
+
 export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
   const { isLiked, toggleLike } = useLikes()
   const { track: currentTrack, playTrack } = usePlayer()
@@ -28,6 +41,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
   const liked = isLiked(track.id)
   const internalId = getInternalUserId()
   const isOwner = internalId !== null && track.uploaded_by_id === internalId
+  const catalogLabel = getCatalogLabel(track)
 
   const handleLike = async (e: MouseEvent) => {
     e.stopPropagation()
@@ -75,6 +89,9 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
           {track.source === 'telegram' && (
             <span className="track-badge track-badge-tg">TG</span>
           )}
+          {catalogLabel && (
+            <span className="track-badge">{catalogLabel}</span>
+          )}
         </div>
         <p className="track-card-artist">{track.artist ?? 'Неизвестный исполнитель'}</p>
         <p className="track-card-meta">
@@ -83,7 +100,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
         </p>
         {(track.source_url || track.sc_url) && (
           <span className="track-source">
-            источник:{' '}
+            внешний источник:{' '}
             <a
               href={track.source_url || track.sc_url || '#'}
               target="_blank"
@@ -93,6 +110,26 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
             >
               {track.source_name || track.source}
             </a>
+          </span>
+        )}
+        {track.access_mode === 'third_party_stream' && (
+          <span className="track-source">
+            режим доступа: внешний поток стороннего сервиса
+          </span>
+        )}
+        {track.catalog_type === 'ugc' && (
+          <span className="track-source">
+            тип каталога: пользовательская загрузка
+          </span>
+        )}
+        {track.catalog_type === 'licensed' && (
+          <span className="track-source">
+            тип каталога: лицензированный материал
+          </span>
+        )}
+        {track.catalog_type === 'external_reference' && (
+          <span className="track-source">
+            тип каталога: внешний reference
           </span>
         )}
         {!track.source_url && !track.sc_url && track.source === 'telegram' && (

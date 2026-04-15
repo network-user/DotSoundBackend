@@ -31,7 +31,10 @@ async def submit_complaint(
             track_id=body.track_id,
             user_id=current_user.id,
             reason=body.reason,
+            reason_type=body.reason_type,
             contact_email=body.contact_email,
+            rightsholder_name=body.rightsholder_name,
+            proof_url=body.proof_url,
             threshold=cfg.complaint_threshold,
         )
     except ValueError as exc:

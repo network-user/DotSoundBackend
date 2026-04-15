@@ -25,7 +25,10 @@ class ComplaintService:
         track_id: int,
         user_id: int,
         reason: str,
+        reason_type: str,
         contact_email: str | None,
+        rightsholder_name: str | None,
+        proof_url: str | None,
         threshold: int,
     ) -> tuple[Complaint, bool]:
         user = await self._resolve_user(user_id)
@@ -37,7 +40,10 @@ class ComplaintService:
             track_id=track_id,
             user_id=user.id,
             reason=reason,
+            reason_type=reason_type,
             contact_email=contact_email,
+            rightsholder_name=rightsholder_name,
+            proof_url=proof_url,
         )
 
         count = await self._repo.count_by_track(track_id)
@@ -60,6 +66,7 @@ class ComplaintService:
             complaint_id=complaint.id,
             track_id=track_id,
             user_id=user.id,
+            reason_type=reason_type,
             track_hidden=track_hidden,
         )
         return complaint, track_hidden

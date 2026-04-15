@@ -336,3 +336,28 @@ async def test_get_stream_url(
     )
 
     assert url == "https://cdn/a.mp3"
+
+
+async def test_import_or_get_track_sets_provenance(
+    session: AsyncSession,
+) -> None:
+    svc = SoundCloudService("test_id", session)
+    sc_url = "https://soundcloud.com/test/track"
+    track = await svc.import_or_get_track(
+        {
+            "permalink_url": sc_url,
+            "title": "Imported Track",
+            "user": {"username": "Artist"},
+            "duration": 123000,
+            "uri": "sc:track",
+        },
+        uploader_id=1,
+    )
+
+    assert track.source == "soundcloud"
+    assert track.catalog_type == "external_reference"
+    assert track.access_mode == "third_party_stream"
+    assert track.source_platform == "soundcloud"
+    assert track.source_url == sc_url
+    assert track.canonical_source_url == sc_url
+    assert track.source_name == "SoundCloud"

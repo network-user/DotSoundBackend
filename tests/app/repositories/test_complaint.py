@@ -39,11 +39,16 @@ async def test_create_complaint(
         track_id=track.id,
         user_id=user.id,
         reason="spam",
+        reason_type="copyright",
         contact_email=None,
+        rightsholder_name="Rights Holder",
+        proof_url="https://example.com/proof",
     )
 
     assert complaint.id is not None
     assert complaint.reason == "spam"
+    assert complaint.reason_type == "copyright"
+    assert complaint.rightsholder_name == "Rights Holder"
 
 
 async def test_count_by_track(
@@ -58,7 +63,10 @@ async def test_count_by_track(
         track_id=track.id,
         user_id=user.id,
         reason="spam",
+        reason_type="other",
         contact_email=None,
+        rightsholder_name=None,
+        proof_url=None,
     )
     assert await repo.count_by_track(track.id) == 1
 
@@ -78,7 +86,10 @@ async def test_exists(
         track_id=track.id,
         user_id=user.id,
         reason="copyright",
+        reason_type="copyright",
         contact_email="a@b.com",
+        rightsholder_name="Holder",
+        proof_url="https://example.com/proof",
     )
     assert (
         await repo.exists(user.id, track.id) is True
