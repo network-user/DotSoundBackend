@@ -57,6 +57,12 @@ async def websocket_endpoint(
 
             event = data.get("event")
             conv_id = data.get("conversation_id")
+            logger.debug(
+                "ws_incoming",
+                user_id=user_id,
+                event=event,
+                conv_id=conv_id,
+            )
 
             if not conv_id:
                 continue
@@ -79,6 +85,13 @@ async def websocket_endpoint(
                     for uid in member_ids
                     if uid != user_id
                 ]
+                logger.info(
+                    "ws_activity_broadcast",
+                    user_id=user_id,
+                    conv_id=conv_id,
+                    activity=activity,
+                    targets=members,
+                )
                 await ws_manager.broadcast_activity(
                     user_id,
                     conv_id,

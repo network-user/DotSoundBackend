@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { api } from '@/lib/api'
-import { onWS } from '@/lib/ws'
+import { onWS, isWSConnected, sendWS } from '@/lib/ws'
 import { getInternalUserId } from '@/lib/telegram'
 import { ChatBubble } from '@/components/Chat/ChatBubble'
 import { ChatInput } from '@/components/Chat/ChatInput'
@@ -25,14 +25,39 @@ export function ChatView() {
   const active = true
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
-  const [peerStatus, setPeerStatus] = useState<string>('offline')
-  const [peerActivity, setPeerActivity] = useState<string | null>(null)
-  const [peerLastSeen, setPeerLastSeen] = useState<number>(0)
-  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null)
+  const [peerStatus, setPeerStatus] =
+    useState<string>('offline')
+  const [peerActivity, setPeerActivity] =
+    useState<string | null>(null)
+  const [peerLastSeen, setPeerLastSeen] =
+    useState<number>(0)
+  const [peerId, setPeerId] = useState<
+    number | null
+  >(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [isBlocked, setIsBlocked] =
+    useState(false)
+  const [viewingPhoto, setViewingPhoto] =
+    useState<string | null>(null)
+  const [devOpen, setDevOpen] = useState(false)
+  const [debugLog, setDebugLog] = useState<
+    string[]
+  >([])
+  const addDebug = useCallback(
+    (msg: string) =>
+      setDebugLog((p) => [
+        ...p.slice(-19),
+        `${new Date().toLocaleTimeString()} ${msg}`,
+      ]),
+    [],
+  )
   const listRef = useRef<HTMLDivElement>(null)
-  const activityTimer = useRef<ReturnType<typeof setTimeout>>()
-  const uploadAbort = useRef<AbortController | null>(null)
+  const activityTimer =
+    useRef<ReturnType<typeof setTimeout>>()
+  const uploadAbort =
+    useRef<AbortController | null>(null)
   const uploadTempId = useRef<number | null>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const myId = getInternalUserId()
 
   const mergeIncomingMessage = (
@@ -151,13 +176,12 @@ export function ChatView() {
     api
       .getChatPresence(conversationId)
       .then((res) => {
-        const members = Object.values(
-          res.members,
-        )
-        if (members.length > 0) {
-          const peer = members[0]
-          setPeerStatus(peer.status)
-          setPeerLastSeen(peer.last_seen)
+        const keys = Object.keys(res.members)
+        const vals = Object.values(res.members)
+        if (vals.length > 0) {
+          setPeerId(Number(keys[0]))
+          setPeerStatus(vals[0].status)
+          setPeerLastSeen(vals[0].last_seen)
         } else {
           setPeerStatus('self')
         }
@@ -171,20 +195,60 @@ export function ChatView() {
     if (!active || !conversationId) return
     loadMessages()
     refreshPresence()
+    api
+      .listBlocks()
+      .then((res) => {
+        if (peerId) {
+          setIsBlocked(
+            res.blocked_user_ids.includes(
+              peerId,
+            ),
+          )
+        }
+      })
+      .catch(() => {})
   }, [
     active,
     conversationId,
     loadMessages,
     refreshPresence,
+    peerId,
   ])
 
   useEffect(() => {
     if (!conversationId) return
     const interval = setInterval(() => {
       refreshPresence()
-    }, 30_000)
+    }, 10_000)
     return () => clearInterval(interval)
   }, [conversationId, refreshPresence])
+
+  useEffect(() => {
+    if (
+      !conversationId ||
+      peerStatus === 'self'
+    )
+      return
+    const poll = async () => {
+      try {
+        const res =
+          await api.getActivity(conversationId)
+        if (res.activities.length > 0) {
+          const a = res.activities[0]
+          setPeerActivity(a.activity)
+          setPeerStatus('online')
+          if (activityTimer.current)
+            clearTimeout(activityTimer.current)
+          activityTimer.current = setTimeout(
+            () => setPeerActivity(null),
+            4000,
+          )
+        }
+      } catch {}
+    }
+    const interval = setInterval(poll, 1000)
+    return () => clearInterval(interval)
+  }, [conversationId, peerStatus])
 
   useEffect(() => {
     if (!conversationId) return
@@ -215,40 +279,81 @@ export function ChatView() {
   useEffect(() => {
     if (!conversationId) return
 
-    const offNew = onWS('message.new', (data) => {
-      if (data.conversation_id === conversationId) {
-        mergeIncomingMessage(data)
-        const msgId = Number(
-          data.id ?? data.message_id,
+    addDebug(
+      `WS handlers for conv ${conversationId}, ws=${isWSConnected() ? 'OPEN' : 'CLOSED'}`,
+    )
+
+    const offAll = onWS('*', (data) => {
+      addDebug(
+        `WS event: ${String(data.event)} conv=${data.conversation_id}`,
+      )
+    })
+
+    const offNew = onWS(
+      'message.new',
+      (data) => {
+        if (
+          data.conversation_id ===
+          conversationId
+        ) {
+          mergeIncomingMessage(data)
+          const msgId = Number(
+            data.id ?? data.message_id,
+          )
+          if (
+            Number.isFinite(msgId) &&
+            data.sender_id !== myId
+          ) {
+            api.markRead(conversationId, msgId)
+          }
+          setPeerActivity(null)
+        }
+      },
+    )
+
+    const offDel = onWS(
+      'message.deleted',
+      (data) => {
+        if (
+          data.conversation_id ===
+          conversationId
+        ) {
+          setMessages((prev) =>
+            prev.filter(
+              (m) => m.id !== data.message_id,
+            ),
+          )
+        }
+      },
+    )
+
+    const offActivity = onWS(
+      'activity',
+      (data) => {
+        addDebug(
+          `activity: ${data.activity} from=${data.user_id} conv=${data.conversation_id} match=${data.conversation_id === conversationId} notMe=${data.user_id !== myId}`,
         )
         if (
-          Number.isFinite(msgId) &&
-          data.sender_id !== myId
+          data.conversation_id ===
+            conversationId &&
+          data.user_id !== myId
         ) {
-          api.markRead(conversationId, msgId)
+          const activity =
+            data.activity as string
+          if (activity === 'idle') {
+            setPeerActivity(null)
+          } else {
+            setPeerActivity(activity)
+            if (activityTimer.current)
+              clearTimeout(activityTimer.current)
+            activityTimer.current = setTimeout(
+              () => setPeerActivity(null),
+              5000,
+            )
+          }
         }
-        setPeerActivity(null)
-      }
-    })
-
-    const offDel = onWS('message.deleted', (data) => {
-      if (data.conversation_id === conversationId) {
-        setMessages((prev) => prev.filter((m) => m.id !== data.message_id))
-      }
-    })
-
-    const offActivity = onWS('activity', (data) => {
-      if (data.conversation_id === conversationId && data.user_id !== myId) {
-        const activity = data.activity as string
-        if (activity === 'idle') {
-          setPeerActivity(null)
-        } else {
-          setPeerActivity(activity)
-          if (activityTimer.current) clearTimeout(activityTimer.current)
-          activityTimer.current = setTimeout(() => setPeerActivity(null), 5000)
-        }
-      }
-    })
+      },
+    )
 
     const offReaction = onWS(
       'message.reaction',
@@ -262,6 +367,7 @@ export function ChatView() {
     )
 
     return () => {
+      offAll()
       offNew()
       offDel()
       offActivity()
@@ -381,6 +487,41 @@ export function ChatView() {
     await api.addReaction(msgId, type)
   }
 
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleClick = (e: MouseEvent) => {
+      if (
+        menuRef.current &&
+        !menuRef.current.contains(
+          e.target as Node,
+        )
+      ) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener(
+      'mousedown',
+      handleClick,
+    )
+    return () =>
+      document.removeEventListener(
+        'mousedown',
+        handleClick,
+      )
+  }, [menuOpen])
+
+  const handleBlock = async () => {
+    if (!peerId) return
+    if (isBlocked) {
+      await api.unblockUser(peerId)
+      setIsBlocked(false)
+    } else {
+      await api.blockUser(peerId)
+      setIsBlocked(true)
+    }
+    setMenuOpen(false)
+  }
+
   const formatLastSeen = (ts: number) => {
     if (!ts) return 'давно'
     const d = new Date(ts * 1000)
@@ -423,8 +564,15 @@ export function ChatView() {
   return (
     <div className="chat-view slide-in">
       <div className="chat-view-header">
-        <button className="chat-back-btn" onClick={onBack}>
-          <Icon name="chevron" size={20} className="chat-back-icon" />
+        <button
+          className="chat-back-btn"
+          onClick={onBack}
+        >
+          <Icon
+            name="chevron"
+            size={20}
+            className="chat-back-icon"
+          />
         </button>
         {peerStatus === 'self' && (
           <div className="chat-header-avatar saved">
@@ -436,14 +584,62 @@ export function ChatView() {
             <span className="chat-view-title">
               {title || 'Чат'}
             </span>
-            {peerStatus === 'online' && <span className="presence-dot online" />}
+            {peerActivity ? (
+              <span className="presence-dot activity-pulse" />
+            ) : (
+              peerStatus === 'online' && (
+                <span className="presence-dot online" />
+              )
+            )}
           </div>
           <div className="chat-header-status">
-            {peerStatus === 'self'
-              ? <span className="chat-status-text offline">личное пространство</span>
-              : renderStatusLine()}
+            {peerStatus === 'self' ? (
+              <span className="chat-status-text offline">
+                личное пространство
+              </span>
+            ) : (
+              renderStatusLine()
+            )}
           </div>
         </div>
+        {peerStatus !== 'self' && (
+          <div
+            className="chat-menu-wrap"
+            ref={menuRef}
+          >
+            <button
+              className="chat-menu-btn icon-btn"
+              onClick={() =>
+                setMenuOpen((v) => !v)
+              }
+            >
+              <Icon
+                name="more-vertical"
+                size={20}
+              />
+            </button>
+            {menuOpen && (
+              <div className="chat-dropdown scale-in">
+                <button
+                  className="chat-dropdown-item"
+                  onClick={handleBlock}
+                >
+                  <Icon
+                    name={
+                      isBlocked
+                        ? 'check'
+                        : 'block'
+                    }
+                    size={16}
+                  />
+                  {isBlocked
+                    ? 'Разблокировать'
+                    : 'Заблокировать'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <div className="chat-messages" ref={listRef}>
         {loading ? (
@@ -508,6 +704,212 @@ export function ChatView() {
           src={viewingPhoto}
           onClose={() => setViewingPhoto(null)}
         />
+      )}
+      {!devOpen && (
+        <button
+          style={{
+            position: 'fixed',
+            bottom: 80,
+            right: 10,
+            width: 32,
+            height: 32,
+            borderRadius: '50%',
+            background: 'rgba(40,40,40,0.85)',
+            border:
+              '1px solid rgba(255,255,255,0.12)',
+            color: 'rgba(255,255,255,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 9999,
+            backdropFilter: 'blur(6px)',
+          }}
+          onClick={() => setDevOpen(true)}
+        >
+          <Icon name="settings" size={14} />
+        </button>
+      )}
+      {devOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 80,
+            left: 8,
+            right: 8,
+            background: 'rgba(10,10,10,0.95)',
+            border:
+              '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 10,
+            padding: '8px 10px',
+            fontSize: 10,
+            fontFamily: 'monospace',
+            color: 'rgba(255,255,255,0.7)',
+            zIndex: 9999,
+            maxHeight: '40vh',
+            overflow: 'auto',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              marginBottom: 6,
+              flexWrap: 'wrap',
+            }}
+          >
+            <span
+              style={{
+                fontWeight: 700,
+                color: '#fff',
+                fontSize: 11,
+              }}
+            >
+              DevTools
+            </span>
+            <span
+              style={{
+                padding: '1px 5px',
+                borderRadius: 4,
+                fontSize: 9,
+                background: isWSConnected()
+                  ? 'rgba(74,222,128,0.2)'
+                  : 'rgba(239,68,68,0.2)',
+                color: isWSConnected()
+                  ? '#4ade80'
+                  : '#ef4444',
+              }}
+            >
+              WS{' '}
+              {isWSConnected()
+                ? 'OPEN'
+                : 'CLOSED'}
+            </span>
+            <span>
+              peer:{String(peerId)}
+            </span>
+            <span>me:{String(myId)}</span>
+            <div
+              style={{
+                marginLeft: 'auto',
+                display: 'flex',
+                gap: 4,
+              }}
+            >
+              <button
+                style={{
+                  fontSize: 9,
+                  padding: '3px 8px',
+                  background:
+                    'rgba(255,255,255,0.08)',
+                  color: '#fff',
+                  border:
+                    '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+                onClick={() => {
+                  if (!conversationId) return
+                  addDebug(
+                    `SEND typing ws=${isWSConnected()}`,
+                  )
+                  sendWS({
+                    event: 'activity',
+                    conversation_id:
+                      conversationId,
+                    activity: 'typing',
+                  })
+                  api
+                    .postActivity(
+                      conversationId,
+                      'typing',
+                    )
+                    .then(() =>
+                      addDebug(
+                        'REST typing OK',
+                      ),
+                    )
+                    .catch((e: Error) =>
+                      addDebug(
+                        `REST err: ${e.message}`,
+                      ),
+                    )
+                }}
+              >
+                Test typing
+              </button>
+              <button
+                style={{
+                  fontSize: 9,
+                  padding: '3px 8px',
+                  background:
+                    'rgba(255,255,255,0.08)',
+                  color: '#fff',
+                  border:
+                    '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+                onClick={() =>
+                  setDebugLog([])
+                }
+              >
+                Clear
+              </button>
+              <button
+                style={{
+                  fontSize: 9,
+                  padding: '3px 8px',
+                  background:
+                    'rgba(255,255,255,0.08)',
+                  color: '#fff',
+                  border:
+                    '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                }}
+                onClick={() =>
+                  setDevOpen(false)
+                }
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <div
+            style={{
+              borderTop:
+                '1px solid rgba(255,255,255,0.08)',
+              paddingTop: 4,
+            }}
+          >
+            {debugLog.length === 0 ? (
+              <div
+                style={{
+                  opacity: 0.3,
+                  padding: 4,
+                }}
+              >
+                No events yet
+              </div>
+            ) : (
+              debugLog.map((line, i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: '1px 0',
+                    borderBottom:
+                      '1px solid rgba(255,255,255,0.03)',
+                  }}
+                >
+                  {line}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

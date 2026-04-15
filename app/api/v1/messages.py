@@ -11,12 +11,22 @@ from fastapi import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pydantic import BaseModel
+
 from app.core.s3 import (
     upload_image,
     upload_voice,
 )
-from app.dependencies import get_current_user, get_db
+from app.core.ws_manager import (
+    ACTIVITY_TYPES,
+    ws_manager,
+)
+from app.dependencies import (
+    get_current_user,
+    get_db,
+)
 from app.models.user import User
+from app.repositories.chat import ChatRepository
 from app.repositories.message import (
     MessageRepository,
 )
@@ -30,6 +40,51 @@ from app.services.message_service import (
 )
 
 router = APIRouter(tags=["messages"])
+
+
+class ActivityRequest(BaseModel):
+    activity: str = "typing"
+
+
+@router.post("/chats/{conv_id}/activity")
+async def post_activity(
+    conv_id: int,
+    body: ActivityRequest,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    if body.activity not in ACTIVITY_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid activity type",
+        )
+    repo = ChatRepository(session)
+    member_ids = await repo.get_member_ids(
+        conv_id
+    )
+    targets = [
+        uid
+        for uid in member_ids
+        if uid != user.id
+    ]
+    await ws_manager.broadcast_activity(
+        user.id, conv_id, targets, body.activity
+    )
+    await ws_manager.set_chat_activity(
+        conv_id, user.id, body.activity
+    )
+    return {"status": "ok"}
+
+
+@router.get("/chats/{conv_id}/activity")
+async def get_activity(
+    conv_id: int,
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    data = await ws_manager.get_chat_activity(
+        conv_id, user.id
+    )
+    return data
 
 
 @router.get("/chats/{conv_id}/messages")

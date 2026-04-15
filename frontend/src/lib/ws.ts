@@ -36,6 +36,7 @@ export function connectWS(token: string) {
 
   socket.onopen = () => {
     reconnectDelay = 1000
+    console.info('[WS] connected to', url)
   }
 
   socket.onmessage = (e) => {
@@ -45,6 +46,7 @@ export function connectWS(token: string) {
       ) as Record<string, unknown>
       const event = data.event as string
       if (event) {
+        console.debug('[WS] <<', event, data)
         const set = handlers.get(event)
         if (set)
           set.forEach((fn) => fn(data))
@@ -55,12 +57,19 @@ export function connectWS(token: string) {
     } catch {}
   }
 
-  socket.onclose = () => {
+  socket.onclose = (ev) => {
+    console.warn(
+      '[WS] closed, code:',
+      ev.code,
+      'intentional:',
+      intentionalClose,
+    )
     if (!intentionalClose)
       scheduleReconnect()
   }
 
   socket.onerror = () => {
+    console.error('[WS] error')
     socket?.close()
   }
 }
@@ -103,6 +112,13 @@ export function onWS(event: string, handler: EventHandler) {
 export function sendWS(data: Record<string, unknown>) {
   if (socket?.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(data))
+  } else {
+    console.warn(
+      '[WS] not connected, dropping:',
+      data.event,
+      'state:',
+      socket?.readyState ?? 'null',
+    )
   }
 }
 

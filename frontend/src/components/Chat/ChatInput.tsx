@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { api } from '@/lib/api'
 import { sendWS } from '@/lib/ws'
 import { Icon } from '@/components/Icon/Icon'
 import { PhotoPreview } from '@/components/Chat/PhotoPreview'
@@ -23,31 +24,58 @@ export function ChatInput({
 }: Props) {
   const [text, setText] = useState('')
   const [recording, setRecording] = useState(false)
-  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null)
+  const [pendingPhoto, setPendingPhoto] =
+    useState<File | null>(null)
   const [fileError, setFileError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
-  const typingTimer = useRef<ReturnType<typeof setTimeout>>()
+  const typingTimer =
+    useRef<ReturnType<typeof setTimeout>>()
+  const lastActivity = useRef<string | null>(
+    null,
+  )
 
-  const isOverLimit = text.length > MAX_MSG_LENGTH
-  const showCounter = text.length >= COUNTER_THRESHOLD
+  const isOverLimit =
+    text.length > MAX_MSG_LENGTH
+  const showCounter =
+    text.length >= COUNTER_THRESHOLD
 
   const emitActivity = useCallback(
     (activity: string) => {
       if (!conversationId) return
+      if (
+        activity === lastActivity.current &&
+        activity !== 'idle'
+      )
+        return
+      lastActivity.current = activity
       sendWS({
         event: 'activity',
         conversation_id: conversationId,
         activity,
       })
+      api
+        .postActivity(conversationId, activity)
+        .catch(() => {})
     },
     [conversationId],
   )
 
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value)
-    if (typingTimer.current) clearTimeout(typingTimer.current)
-    emitActivity('typing')
-    typingTimer.current = setTimeout(() => emitActivity('idle'), 3000)
+  const handleTextChange = (
+    e: React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    const val = e.target.value
+    setText(val)
+    if (typingTimer.current)
+      clearTimeout(typingTimer.current)
+    if (val.length > 0) {
+      emitActivity('typing')
+      typingTimer.current = setTimeout(
+        () => emitActivity('idle'),
+        3000,
+      )
+    } else {
+      emitActivity('idle')
+    }
   }
 
   const handleSubmit = () => {

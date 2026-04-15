@@ -58,5 +58,15 @@
     "language": "Язык",
     "languageRu": "Русский",
     "languageEn": "English"
+  },
+  "lyrics": {
+    "detectText": "Определить текст",
+    "detectTextWithSync": "Определить текст + таймкоды",
+    "addSync": "Добавить таймкоды",
+    "generating": "Определение...",
+    "notFound": "Текст не определён",
+    "showSync": "Подсветка по строкам",
+    "edit": "Редактировать",
+    "title": "Текст"
   }
 }

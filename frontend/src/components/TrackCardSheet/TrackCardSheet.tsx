@@ -397,6 +397,7 @@ export function TrackCardSheet({
                 hasLyrics={
                   card?.has_lyrics ?? false
                 }
+                hasAudio={!!track.file_key}
               />
             </div>
           )}
@@ -423,23 +424,42 @@ export function TrackCardSheet({
                 hasLyrics={
                   card?.has_lyrics ?? false
                 }
+                hasAudio={!!track.file_key}
               />
             </div>
           )}
 
         <div className="tcs-info">
-          {visualMode && coverSrc && (
+          {visualMode ? (
             <div className="tcs-info-cover-row">
-              <img
-                className="tcs-info-cover-thumb"
-                src={coverSrc}
-                alt=""
-              />
+              {coverSrc && (
+                <img
+                  className="tcs-info-cover-thumb"
+                  src={coverSrc}
+                  alt=""
+                />
+              )}
               <div className="tcs-info-cover-text">
                 <h2 className="tcs-title">
                   {track.title}
                 </h2>
-                <p className="tcs-artist">
+                <p
+                  className="tcs-artist"
+                  onClick={() => {
+                    if (
+                      track.artist &&
+                      onOpenArtist
+                    ) {
+                      closeCard()
+                      onOpenArtist(track.artist)
+                    }
+                  }}
+                  style={
+                    track.artist
+                      ? { cursor: 'pointer' }
+                      : undefined
+                  }
+                >
                   {track.artist ?? '—'}
                 </p>
               </div>
@@ -450,53 +470,53 @@ export function TrackCardSheet({
                 <Icon name="link" size={18} />
               </button>
             </div>
-          )}
-          {!visualMode && (
-            <div className="tcs-title-row">
-              <h2 className="tcs-title">
-                {track.title}
-              </h2>
-              <button
-                className="icon-btn"
-                onClick={handleShare}
-              >
-                <Icon name="link" size={18} />
-              </button>
-            </div>
-          )}
-          {!visualMode && (
-            <p
-              className="tcs-artist"
-              onClick={() => {
-                if (
-                  track.artist &&
-                  onOpenArtist
-                ) {
-                  closeCard()
-                  onOpenArtist(track.artist)
+          ) : (
+            <>
+              <div className="tcs-title-row">
+                <h2 className="tcs-title">
+                  {track.title}
+                </h2>
+                <button
+                  className="icon-btn"
+                  onClick={handleShare}
+                >
+                  <Icon
+                    name="link"
+                    size={18}
+                  />
+                </button>
+              </div>
+              <p
+                className="tcs-artist"
+                onClick={() => {
+                  if (
+                    track.artist &&
+                    onOpenArtist
+                  ) {
+                    closeCard()
+                    onOpenArtist(track.artist)
+                  }
+                }}
+                style={
+                  track.artist
+                    ? { cursor: 'pointer' }
+                    : undefined
                 }
-              }}
-              style={
-                track.artist
-                  ? { cursor: 'pointer' }
-                  : undefined
-              }
-            >
-              {track.artist ?? '—'}
-            </p>
+              >
+                {track.artist ?? '—'}
+              </p>
+            </>
           )}
-          {!hasActiveVideo && (
-            <p className="tcs-meta">
-              {track.catalog_type === 'ugc' &&
-                'Каталог: пользовательская загрузка'}
-              {track.catalog_type === 'licensed' &&
-                'Каталог: лицензированный материал'}
-              {track.catalog_type ===
-                'external_reference' &&
-                'Каталог: внешний reference'}
-            </p>
-          )}
-          {!hasActiveVideo && card?.author && (
+          <p className="tcs-meta">
+            {track.catalog_type === 'ugc' &&
+              'Каталог: пользовательская загрузка'}
+            {track.catalog_type === 'licensed' &&
+              'Каталог: лицензированный материал'}
+            {track.catalog_type ===
+              'external_reference' &&
+              'Каталог: внешний reference'}
+          </p>
+          {card?.author && (
             <div
               className="tcs-author-row"
               onClick={handleAuthor}
@@ -744,6 +764,7 @@ export function TrackCardSheet({
               hasLyrics={
                 card?.has_lyrics ?? false
               }
+              hasAudio={!!track.file_key}
               forceEdit
             />
             <button

@@ -1551,6 +1551,66 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
+.presence-dot.activity-pulse {
+  background: #60a5fa;
+  animation: activityPulse 1s infinite;
+}
+
+@keyframes activityPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 4px rgba(96, 165, 250, 0.3);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 10px rgba(96, 165, 250, 0.6);
+    opacity: 0.6;
+  }
+}
+
+.chat-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.chat-menu-btn {
+  padding: 8px;
+}
+
+.chat-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  min-width: 180px;
+  background: var(--bg-elevated, #1a1a1a);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 6px;
+  z-index: 50;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.chat-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text, #fff);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.chat-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .chat-list-avatar {
   position: relative;
 }
