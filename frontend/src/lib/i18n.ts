@@ -35,8 +35,8 @@ i18n
     fallbackLng: 'ru',
     detection: {
       order: [
-        'localStorage',
         'telegramDetector',
+        'localStorage',
         'navigator',
       ],
       caches: ['localStorage'],

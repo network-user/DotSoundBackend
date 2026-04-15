@@ -4,9 +4,18 @@ let socket: WebSocket | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectDelay = 1000
 let intentionalClose = false
+let currentToken: string | null = null
+let tokenProvider: (() => string | null) | null =
+  null
 const MAX_RECONNECT_DELAY = 30000
 
 const handlers: Map<string, Set<EventHandler>> = new Map()
+
+export function setWSTokenProvider(
+  provider: () => string | null,
+) {
+  tokenProvider = provider
+}
 
 export function connectWS(token: string) {
   if (
@@ -15,8 +24,12 @@ export function connectWS(token: string) {
   )
     return
 
+  currentToken = token
   intentionalClose = false
-  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const protocol =
+    location.protocol === 'https:'
+      ? 'wss:'
+      : 'ws:'
   const url = `${protocol}//${location.host}/api/v1/ws?token=${token}`
 
   socket = new WebSocket(url)
@@ -27,19 +40,24 @@ export function connectWS(token: string) {
 
   socket.onmessage = (e) => {
     try {
-      const data = JSON.parse(e.data) as Record<string, unknown>
+      const data = JSON.parse(
+        e.data,
+      ) as Record<string, unknown>
       const event = data.event as string
       if (event) {
         const set = handlers.get(event)
-        if (set) set.forEach((fn) => fn(data))
+        if (set)
+          set.forEach((fn) => fn(data))
         const all = handlers.get('*')
-        if (all) all.forEach((fn) => fn(data))
+        if (all)
+          all.forEach((fn) => fn(data))
       }
     } catch {}
   }
 
   socket.onclose = () => {
-    if (!intentionalClose) scheduleReconnect(token)
+    if (!intentionalClose)
+      scheduleReconnect()
   }
 
   socket.onerror = () => {
@@ -47,12 +65,20 @@ export function connectWS(token: string) {
   }
 }
 
-function scheduleReconnect(token: string) {
+function scheduleReconnect() {
   if (reconnectTimer) return
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null
-    connectWS(token)
-    reconnectDelay = Math.min(reconnectDelay * 2, MAX_RECONNECT_DELAY)
+    const freshToken =
+      tokenProvider?.() ?? currentToken
+    if (freshToken) {
+      socket = null
+      connectWS(freshToken)
+    }
+    reconnectDelay = Math.min(
+      reconnectDelay * 2,
+      MAX_RECONNECT_DELAY,
+    )
   }, reconnectDelay)
 }
 
