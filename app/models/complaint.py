@@ -18,9 +18,22 @@ class Complaint(Base, TimestampMixin):
         type_=BigInteger,
         nullable=False,
     )
-    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(
+        Text, nullable=False
+    )
+    reason_type: Mapped[str] = mapped_column(
+        String(30),
+        server_default="other",
+        nullable=False,
+    )
     contact_email: Mapped[str | None] = mapped_column(
         String(255), nullable=True
+    )
+    rightsholder_name: Mapped[str | None] = (
+        mapped_column(String(255), nullable=True)
+    )
+    proof_url: Mapped[str | None] = mapped_column(
+        Text, nullable=True
     )
     is_resolved: Mapped[bool] = mapped_column(
         Boolean, server_default="false", nullable=False

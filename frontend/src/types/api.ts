@@ -12,6 +12,8 @@ export interface Track {
   source: 'internal' | 'soundcloud' | 'telegram'
   sc_url: string | null
   sc_uri: string | null
+  source_url: string | null
+  source_name: string | null
   uploaded_by_id: number | null
   video_key: string | null
   created_at: string
@@ -289,6 +291,29 @@ export interface AppNotification {
   data: Record<string, unknown> | null
   is_read: boolean
   created_at: string
+}
+
+// ── Recommendations ───────────────────────────────────────────────────────
+
+export interface HomeSection {
+  title: string
+  section_type: string
+  tracks: Track[]
+}
+
+export interface HomePageResponse {
+  sections: HomeSection[]
+  maturity: string
+}
+
+export interface ArtistInfo {
+  id: number
+  name: string
+  image_key: string | null
+  source: string
+  bio: string | null
+  created_at: string
+  track_count?: number
 }
 
 // ── Import ────────────────────────────────────────────────────────────────

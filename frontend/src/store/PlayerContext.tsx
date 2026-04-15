@@ -354,6 +354,8 @@ export function PlayerProvider({
     useState(initialEqRef.current.bypassed)
 
   const playCountSentRef = useRef(false)
+  const listenSignalSentRef = useRef(false)
+  const listenStartTimeRef = useRef(0)
   const restoredRef = useRef(false)
 
   const applyEqBands = useCallback(
@@ -593,6 +595,28 @@ export function PlayerProvider({
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
+    const sendListenSignal = () => {
+      if (
+        listenSignalSentRef.current ||
+        !track ||
+        track.id <= 0
+      )
+        return
+      const listened = Math.floor(
+        audio.currentTime - listenStartTimeRef.current,
+      )
+      if (listened <= 0) return
+      listenSignalSentRef.current = true
+      api
+        .recordListen({
+          track_id: track.id,
+          duration_listened: listened,
+          total_duration: track.duration_seconds,
+          source_context: 'player',
+        })
+        .catch(() => {})
+    }
+
     const onPlay = () => {
       setIsPlaying(true)
       if ('mediaSession' in navigator)
@@ -607,15 +631,19 @@ export function PlayerProvider({
         playCountSentRef.current = true
         api.postPlay(track.id).catch(() => {})
       }
+      listenStartTimeRef.current =
+        audio.currentTime
     }
     const onPause = () => {
       setIsPlaying(false)
       if ('mediaSession' in navigator)
         navigator.mediaSession.playbackState = 'paused'
+      sendListenSignal()
     }
     const onEnded = () => {
       setIsPlaying(false)
       setCurrentTime(0)
+      sendListenSignal()
       playNext()
     }
     const onTime = () => {
@@ -744,6 +772,8 @@ export function PlayerProvider({
       hlsRef.current = null
     }
     playCountSentRef.current = false
+    listenSignalSentRef.current = false
+    listenStartTimeRef.current = 0
     setTrack(newTrack)
     setCurrentTime(0)
     setDuration(0)
@@ -839,15 +869,26 @@ export function PlayerProvider({
   useEffect(() => {
     if (!track) return
     let cancelled = false
-    api.getTrackQueue(track.id, 3)
+
+    api.getRadio(track.id, 5)
       .then((res) => {
-        if (cancelled) return
+        if (cancelled || !res.tracks.length) throw new Error('empty')
         prefetchCacheRef.current = {
           forTrackId: track.id,
-          tracks: res.next_tracks,
+          tracks: res.tracks,
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        api.getTrackQueue(track.id, 3)
+          .then((res) => {
+            if (cancelled) return
+            prefetchCacheRef.current = {
+              forTrackId: track.id,
+              tracks: res.next_tracks,
+            }
+          })
+          .catch(() => {})
+      })
     return () => { cancelled = true }
   }, [track?.id])
 

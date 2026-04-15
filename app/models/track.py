@@ -72,8 +72,18 @@ class Track(Base, TimestampMixin):
     video_thumbnail_key: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
-    sc_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sc_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sc_url: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    sc_uri: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    source_url: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    source_name: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )
     hls_manifest_key: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
