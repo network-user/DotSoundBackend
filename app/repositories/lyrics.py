@@ -18,20 +18,38 @@ class LyricsRepository:
         return result.scalar_one_or_none()
 
     async def create_or_update(
-        self, track_id: int, plain_text: str
+        self,
+        track_id: int,
+        plain_text: str,
+        source: str = "manual",
+        synced_lines: list[dict] | None = None,
     ) -> TrackLyrics:
         existing = await self.get_by_track_id(track_id)
         if existing:
             existing.plain_text = plain_text
+            existing.source = source
+            if synced_lines is not None:
+                existing.synced_lines = synced_lines
+            elif source == "manual":
+                existing.synced_lines = None
             await self._session.flush()
             await self._session.refresh(existing)
-            logger.debug("db_lyrics_updated", track_id=track_id)
+            logger.debug(
+                "db_lyrics_updated", track_id=track_id
+            )
             return existing
-        lyrics = TrackLyrics(track_id=track_id, plain_text=plain_text)
+        lyrics = TrackLyrics(
+            track_id=track_id,
+            plain_text=plain_text,
+            source=source,
+            synced_lines=synced_lines,
+        )
         self._session.add(lyrics)
         await self._session.flush()
         await self._session.refresh(lyrics)
-        logger.debug("db_lyrics_created", track_id=track_id)
+        logger.debug(
+            "db_lyrics_created", track_id=track_id
+        )
         return lyrics
 
     async def update_sync(

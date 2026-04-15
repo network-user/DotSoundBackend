@@ -202,6 +202,54 @@ class ConnectionManager:
             if uid != user_id:
                 await self.send_to_user(uid, event)
 
+    async def set_chat_activity(
+        self,
+        conversation_id: int,
+        user_id: int,
+        activity: str,
+    ) -> None:
+        if not self._redis:
+            return
+        import time
+
+        key = f"activity:{conversation_id}:{user_id}"
+        if activity == "idle":
+            await self._redis.delete(key)
+        else:
+            value = json.dumps(
+                {
+                    "activity": activity,
+                    "user_id": user_id,
+                    "ts": time.time(),
+                }
+            )
+            await self._redis.set(key, value, ex=8)
+
+    async def get_chat_activity(
+        self,
+        conversation_id: int,
+        exclude_user_id: int,
+    ) -> dict[str, Any]:
+        if not self._redis:
+            return {"activities": []}
+        import time
+
+        pattern = f"activity:{conversation_id}:*"
+        activities: list[dict[str, Any]] = []
+        async for key in self._redis.scan_iter(
+            match=pattern
+        ):
+            raw = await self._redis.get(key)
+            if not raw:
+                continue
+            data = json.loads(raw)
+            if data["user_id"] == exclude_user_id:
+                continue
+            if time.time() - data["ts"] > 8:
+                continue
+            activities.append(data)
+        return {"activities": activities}
+
     async def _presence_heartbeat(self) -> None:
         try:
             while True:
@@ -223,6 +271,13 @@ class ConnectionManager:
         conns = self._connections.get(
             user_id, []
         ).copy()
+        if not conns:
+            logger.debug(
+                "ws_no_local_conns",
+                user_id=user_id,
+                event=data.get("event"),
+            )
+            return
         payload = json.dumps(data)
         dead: list[WebSocket] = []
         for ws in conns:
@@ -232,6 +287,12 @@ class ConnectionManager:
                 dead.append(ws)
         for ws in dead:
             await self.disconnect(user_id, ws)
+        logger.debug(
+            "ws_delivered",
+            user_id=user_id,
+            event=data.get("event"),
+            count=len(conns) - len(dead),
+        )
 
     def _parse_and_deliver(
         self, msg: dict[str, Any]

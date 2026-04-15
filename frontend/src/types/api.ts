@@ -194,8 +194,17 @@ export interface LyricsResponse {
   track_id: number
   plain_text: string
   synced_lines: SyncedLine[] | null
+  source: string
   created_at: string
   updated_at: string
+}
+
+export interface LyricsAutoResponse {
+  task_id: string
+}
+
+export interface LyricsAutoStatusResponse {
+  status: string
 }
 
 // ── Share ───────────────────────────────────────────────────────────────────

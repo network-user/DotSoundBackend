@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
+from app.core.tkq import broker
 from app.schemas.lyrics import (
+    LyricsAutoRequest,
+    LyricsAutoResponse,
+    LyricsAutoStatusResponse,
     LyricsCreateRequest,
     LyricsResponse,
     LyricsSyncRequest,
@@ -105,3 +109,76 @@ async def delete_lyrics(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Lyrics not found",
         )
+
+
+@router.post(
+    "/{track_id}/lyrics/auto",
+    response_model=LyricsAutoResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger auto-detection of lyrics (owner only)",
+)
+@limiter.limit("10/minute")
+async def trigger_auto_lyrics(
+    request: Request,
+    track_id: int,
+    body: LyricsAutoRequest = LyricsAutoRequest(),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> LyricsAutoResponse:
+    structlog.contextvars.bind_contextvars(
+        track_id=track_id
+    )
+    service = LyricsService(session)
+    task_id = await service.trigger_auto_generation(
+        track_id=track_id,
+        user_id=current_user.id,
+        with_sync=body.with_sync,
+    )
+    return LyricsAutoResponse(task_id=task_id)
+
+
+@router.get(
+    "/{track_id}/lyrics/auto/status",
+    response_model=LyricsAutoStatusResponse,
+    summary="Poll auto-detection task status",
+)
+@limiter.limit("60/minute")
+async def get_auto_lyrics_status(
+    request: Request,
+    track_id: int,
+    task_id: str,
+) -> LyricsAutoStatusResponse:
+    if not task_id or len(task_id) > 128:
+        return LyricsAutoStatusResponse(
+            status="error"
+        )
+    try:
+        result = await broker.result_backend.get_result(  # type: ignore[union-attr]
+            task_id
+        )
+    except Exception:
+        return LyricsAutoStatusResponse(
+            status="pending"
+        )
+    if not result.is_err and result.return_value:
+        raw_status = result.return_value.get(
+            "status", "pending"
+        )
+        allowed = {
+            "pending",
+            "found",
+            "not_found",
+            "error",
+        }
+        return LyricsAutoStatusResponse(
+            status=raw_status
+            if raw_status in allowed
+            else "error"
+        )
+    if result.is_err:
+        return LyricsAutoStatusResponse(
+            status="error"
+        )
+    return LyricsAutoStatusResponse(
+        status="pending"
+    )

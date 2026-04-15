@@ -6,6 +6,9 @@ from app.models.lyrics import TrackLyrics
 from app.repositories.lyrics import LyricsRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
+from app.services.lyrics_worker import (
+    generate_lyrics_task,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -86,9 +89,31 @@ class LyricsService:
         logger.info("lyrics_sync_updated", track_id=track_id)
         return lyrics
 
-    async def delete_lyrics(self, track_id: int, user_id: int) -> bool:
+    async def delete_lyrics(
+        self, track_id: int, user_id: int
+    ) -> bool:
         await self._get_owned_track(track_id, user_id)
-        removed = await self._repo.delete_by_track_id(track_id)
+        removed = await self._repo.delete_by_track_id(
+            track_id
+        )
         if removed:
             await self._session.commit()
         return removed
+
+    async def trigger_auto_generation(
+        self,
+        track_id: int,
+        user_id: int,
+        with_sync: bool = False,
+    ) -> str:
+        await self._get_owned_track(track_id, user_id)
+        task = await generate_lyrics_task.kiq(
+            track_id=track_id, with_sync=with_sync
+        )
+        logger.info(
+            "lyrics_auto_triggered",
+            track_id=track_id,
+            task_id=task.task_id,
+            with_sync=with_sync,
+        )
+        return task.task_id

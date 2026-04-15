@@ -15,6 +15,8 @@ import type {
   FollowToggleResponse,
   ImportJobResponse,
   LikeToggleResponse,
+  LyricsAutoResponse,
+  LyricsAutoStatusResponse,
   LyricsResponse,
   Playlist,
   PlaylistWithTracks,
@@ -350,6 +352,33 @@ export const api = {
 
   deleteLyrics(trackId: number): Promise<void> {
     return request(`/api/v1/tracks/${trackId}/lyrics`, { method: 'DELETE' })
+  },
+
+  generateLyrics(
+    trackId: number,
+    withSync: boolean = false,
+  ): Promise<LyricsAutoResponse> {
+    return request(
+      `/api/v1/tracks/${trackId}/lyrics/auto`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          with_sync: withSync,
+        }),
+      },
+    )
+  },
+
+  getLyricsAutoStatus(
+    trackId: number,
+    taskId: string,
+  ): Promise<LyricsAutoStatusResponse> {
+    return request(
+      `/api/v1/tracks/${trackId}/lyrics/auto/status?task_id=${taskId}`,
+    )
   },
 
   // ── Follow ────────────────────────────────────────────────────────────────
@@ -857,6 +886,34 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content, ...opts }),
     })
+  },
+
+  postActivity(
+    convId: number,
+    activity: string,
+  ): Promise<void> {
+    return request(
+      `/api/v1/chats/${convId}/activity`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ activity }),
+      },
+    )
+  },
+
+  getActivity(convId: number): Promise<{
+    activities: {
+      activity: string
+      user_id: number
+      ts: number
+    }[]
+  }> {
+    return request(
+      `/api/v1/chats/${convId}/activity`,
+    )
   },
 
   deleteMessage(messageId: number): Promise<void> {

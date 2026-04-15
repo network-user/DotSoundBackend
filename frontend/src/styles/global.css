@@ -1290,8 +1290,8 @@ textarea.form-input { resize: none; }
 .tcs-lyrics-section {
   position: relative;
   z-index: 2;
-  min-height: 200px;
-  max-height: 45dvh;
+  min-height: 280px;
+  max-height: 60dvh;
   display: flex;
   flex-direction: column;
   padding: 16px 0 0;
@@ -1299,7 +1299,7 @@ textarea.form-input { resize: none; }
 .tcs-lyrics-section .lyrics-panel {
   margin: 0;
   border: none;
-  padding: 0 24px;
+  padding: 0 28px;
   flex: 1;
   overflow: hidden;
   display: flex;
@@ -1343,10 +1343,10 @@ textarea.form-input { resize: none; }
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border-radius: var(--radius-lg);
-  margin: 16px 12px 0;
+  margin: 16px 20px 0;
   padding: 16px 0 0;
   min-height: 180px;
-  max-height: 40dvh;
+  max-height: 55dvh;
 }
 .tcs-info-cover-row {
   display: flex;
@@ -1712,7 +1712,6 @@ textarea.form-input { resize: none; }
   color: var(--text);
   font-weight: 600;
   font-size: 16px;
-  transform: scale(1.02);
 }
 
 /* Plain text lyrics */

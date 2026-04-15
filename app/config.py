@@ -52,6 +52,9 @@ class AppSettings(BaseSettings):
         "none", "lightweight", "clamav"
     ] = "none"
 
+    lyrics_provider_token: str = ""
+    provider_model_size: str = "tiny"
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [

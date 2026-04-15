@@ -79,12 +79,15 @@ const PATHS: Record<string, string> = {
   block: 'M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z M4.93 4.93l14.14 14.14',
   moon: 'M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z',
   check: 'M20 6L9 17l-5-5',
+  'more-vertical':
+    'M12 5a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z',
 }
 
 const FILLED_ICONS = new Set([
   'heart',
   'play',
   'pause',
+  'more-vertical',
 ])
 
 export function Icon({

@@ -58,5 +58,15 @@
     "language": "Language",
     "languageRu": "Русский",
     "languageEn": "English"
+  },
+  "lyrics": {
+    "detectText": "Detect lyrics",
+    "detectTextWithSync": "Detect lyrics + timecodes",
+    "addSync": "Add timecodes",
+    "generating": "Detecting...",
+    "notFound": "Lyrics not detected",
+    "showSync": "Line highlighting",
+    "edit": "Edit",
+    "title": "Lyrics"
   }
 }
