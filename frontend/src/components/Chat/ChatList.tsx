@@ -35,22 +35,49 @@ export function ChatList({ items }: Props) {
     return () => { cancelled = true }
   }, [items])
 
+  const chatDisplayName = (
+    item: ChatListItem,
+  ) => {
+    if (item.peer) {
+      return (
+        item.peer.display_name ||
+        item.peer.first_name +
+          (item.peer.last_name
+            ? ` ${item.peer.last_name}`
+            : '')
+      )
+    }
+    return (
+      item.conversation.title ||
+      `Чат #${item.conversation.id}`
+    )
+  }
+
   return (
     <div className="chat-list">
       {items.map((item, i) => (
         <button
           key={item.conversation.id}
           className="chat-list-item fade-in-stagger"
-          style={{ animationDelay: `${i * 50}ms` }}
-          onClick={() => navigate(
-            `/chats/${item.conversation.id}`,
-            { state: { title: item.conversation.title } },
-          )}
+          style={{
+            animationDelay: `${i * 50}ms`,
+          }}
+          onClick={() =>
+            navigate(
+              `/chats/${item.conversation.id}`,
+              {
+                state: {
+                  title: chatDisplayName(item),
+                },
+              },
+            )
+          }
         >
           <div className="chat-list-avatar">
             <Icon
               name={
-                item.conversation.type === 'saved'
+                item.conversation.type ===
+                'saved'
                   ? 'heart'
                   : 'user'
               }
@@ -62,18 +89,28 @@ export function ChatList({ items }: Props) {
           </div>
           <div className="chat-list-info">
             <span className="chat-list-name">
-              {item.conversation.title || `Chat #${item.conversation.id}`}
+              {chatDisplayName(item)}
               {item.member.is_pinned && (
-                <Icon name="pin" size={12} className="chat-pin-icon" />
+                <Icon
+                  name="pin"
+                  size={12}
+                  className="chat-pin-icon"
+                />
               )}
             </span>
             <span className="chat-list-preview">
               {item.last_message_at
-                ? new Date(item.last_message_at).toLocaleString()
+                ? new Date(
+                    item.last_message_at,
+                  ).toLocaleString()
                 : 'Нет сообщений'}
             </span>
           </div>
-          <Icon name="chevron" size={16} className="chat-list-chevron" />
+          <Icon
+            name="chevron"
+            size={16}
+            className="chat-list-chevron"
+          />
         </button>
       ))}
     </div>

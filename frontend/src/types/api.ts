@@ -260,10 +260,24 @@ export interface ChatConversation {
   created_at: string
 }
 
+export interface ChatPeer {
+  id: number
+  first_name: string
+  last_name: string | null
+  display_name: string | null
+  username: string | null
+  avatar_key: string | null
+}
+
 export interface ChatListItem {
   conversation: ChatConversation
-  member: { is_pinned: boolean; is_muted: boolean; last_read_message_id: number | null }
+  member: {
+    is_pinned: boolean
+    is_muted: boolean
+    last_read_message_id: number | null
+  }
   last_message_at: string | null
+  peer?: ChatPeer
 }
 
 export interface MessageAttachment {

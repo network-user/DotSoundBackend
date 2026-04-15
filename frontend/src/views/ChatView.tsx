@@ -146,23 +146,71 @@ export function ChatView() {
     }
   }, [conversationId])
 
+  const refreshPresence = useCallback(() => {
+    if (!conversationId) return
+    api
+      .getChatPresence(conversationId)
+      .then((res) => {
+        const members = Object.values(
+          res.members,
+        )
+        if (members.length > 0) {
+          const peer = members[0]
+          setPeerStatus(peer.status)
+          setPeerLastSeen(peer.last_seen)
+        } else {
+          setPeerStatus('self')
+        }
+      })
+      .catch(() => {
+        setPeerStatus('self')
+      })
+  }, [conversationId])
+
   useEffect(() => {
     if (!active || !conversationId) return
     loadMessages()
+    refreshPresence()
+  }, [
+    active,
+    conversationId,
+    loadMessages,
+    refreshPresence,
+  ])
 
-    api.getChatPresence(conversationId).then((res) => {
-      const members = Object.values(res.members)
-      if (members.length > 0) {
-        const peer = members[0]
-        setPeerStatus(peer.status)
-        setPeerLastSeen(peer.last_seen)
-      } else {
-        setPeerStatus('self')
-      }
-    }).catch(() => {
-      setPeerStatus('self')
-    })
-  }, [active, conversationId, loadMessages])
+  useEffect(() => {
+    if (!conversationId) return
+    const interval = setInterval(() => {
+      refreshPresence()
+    }, 30_000)
+    return () => clearInterval(interval)
+  }, [conversationId, refreshPresence])
+
+  useEffect(() => {
+    if (!conversationId) return
+    const interval = setInterval(async () => {
+      try {
+        const msgs =
+          await api.getMessages(conversationId)
+        const sorted = msgs.reverse()
+        setMessages((prev) => {
+          if (sorted.length === 0) return prev
+          const lastPrev = prev[prev.length - 1]
+          const lastNew =
+            sorted[sorted.length - 1]
+          if (
+            lastPrev &&
+            lastNew &&
+            lastPrev.id === lastNew.id
+          ) {
+            return prev
+          }
+          return sorted
+        })
+      } catch {}
+    }, 5_000)
+    return () => clearInterval(interval)
+  }, [conversationId])
 
   useEffect(() => {
     if (!conversationId) return

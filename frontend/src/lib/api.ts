@@ -117,14 +117,25 @@ function loadStoredToken():
 
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers = new Headers(opts.headers)
+  const sentWithAuth =
+    Boolean(accessToken) ||
+    headers.has('Authorization')
   if (accessToken && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${accessToken}`)
+    headers.set(
+      'Authorization',
+      `Bearer ${accessToken}`,
+    )
   }
 
   try {
-    const res = await fetch(path, { ...opts, headers })
-    if (res.status === 401) {
-      console.error(`[API] 401 Unauthorized: ${path}. Token present: ${!!accessToken}`)
+    const res = await fetch(path, {
+      ...opts,
+      headers,
+    })
+    if (res.status === 401 && sentWithAuth) {
+      console.error(
+        `[API] 401 Unauthorized: ${path}`,
+      )
       accessToken = null
       persistToken(null)
       onUnauthorized?.()
@@ -133,7 +144,10 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     if (res.status === 204) return null as T
     return res.json() as Promise<T>
   } catch (err) {
-    console.error(`[API] Fetch error for ${path}:`, err)
+    console.error(
+      `[API] Fetch error for ${path}:`,
+      err,
+    )
     throw err
   }
 }
@@ -432,6 +446,7 @@ export const api = {
 
   getAuthConfig(): Promise<{
     bot_username: string
+    debug?: boolean
   }> {
     return request('/api/v1/auth/config')
   },

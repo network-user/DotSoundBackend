@@ -1,4 +1,10 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { Routes, Route, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { tg, getInitData } from '@/lib/telegram'
@@ -18,6 +24,7 @@ import { HomeView } from '@/views/HomeView'
 import {
   connectWS,
   disconnectWS,
+  setWSTokenProvider,
 } from '@/lib/ws'
 import { useLikes } from '@/store/LikesContext'
 
@@ -56,25 +63,63 @@ export function App() {
   const [authError, setAuthError] = useState<
     string | null
   >(null)
+  const [authDebug, setAuthDebug] = useState<
+    Record<string, string>
+  >({})
   const [needsOnboarding, setNeedsOnboarding] =
     useState(false)
+  const initCalled = useRef(false)
 
   useEffect(() => {
+    if (initCalled.current) return
+    initCalled.current = true
+    setWSTokenProvider(() => api.getToken())
+
     const init = async () => {
       let authenticated = false
-      const initData = getInitData()
-      const hasTelegramContext =
-        Boolean(initData)
+      const debug: Record<string, string> = {}
 
-      console.info(
-        '[App] init',
-        'sdk.initData:',
+      let initData = getInitData()
+
+      debug.sdkInitData = String(
         tg.initData ? tg.initData.length : 0,
-        'native.initData:',
+      )
+      debug.nativeInitData = String(
         window.Telegram?.WebApp?.initData
           ? window.Telegram.WebApp.initData
               .length
           : 0,
+      )
+      debug.platform =
+        (tg as { platform?: string })
+          .platform ?? 'unknown'
+
+      if (!initData) {
+        await new Promise((r) =>
+          setTimeout(r, 300),
+        )
+        initData = getInitData()
+        debug.sdkInitDataRetry = String(
+          tg.initData ? tg.initData.length : 0,
+        )
+        debug.nativeInitDataRetry = String(
+          window.Telegram?.WebApp?.initData
+            ? window.Telegram.WebApp.initData
+                .length
+            : 0,
+        )
+      }
+
+      const hasTelegramContext =
+        Boolean(initData)
+      debug.resolved = String(hasTelegramContext)
+
+      console.info(
+        '[App] init',
+        'sdk.initData:',
+        debug.sdkInitData,
+        'native.initData:',
+        debug.nativeInitData,
         'resolved:',
         hasTelegramContext,
       )
@@ -122,6 +167,7 @@ export function App() {
           if (authRes?.access_token) {
             connectWS(authRes.access_token)
             authenticated = true
+            debug.authResult = 'ok'
           }
         }
       } catch (err) {
@@ -133,9 +179,31 @@ export function App() {
           '[App] Telegram auth failed:',
           msg,
         )
-        setAuthError(
-          `Telegram auth: ${msg}`,
-        )
+        debug.authError = msg
+
+        try {
+          await new Promise((r) =>
+            setTimeout(r, 500),
+          )
+          const retryRes =
+            await api.authTelegram(
+              getInitData(),
+            )
+          if (retryRes?.access_token) {
+            connectWS(retryRes.access_token)
+            authenticated = true
+            debug.authResult = 'ok (retry)'
+          }
+        } catch (retryErr) {
+          const retryMsg =
+            retryErr instanceof Error
+              ? retryErr.message
+              : String(retryErr)
+          debug.authRetryError = retryMsg
+          setAuthError(
+            `Telegram auth: ${msg}`,
+          )
+        }
       }
 
       if (!authenticated) {
@@ -143,6 +211,9 @@ export function App() {
         if (restored?.token) {
           connectWS(restored.token)
           authenticated = true
+          debug.storedToken = 'restored'
+        } else {
+          debug.storedToken = 'none/expired'
         }
       }
 
@@ -150,6 +221,7 @@ export function App() {
         setNeedsAuth(true)
       }
 
+      setAuthDebug(debug)
       api.setOnUnauthorized(() => {
         disconnectWS()
         setNeedsAuth(true)
@@ -219,6 +291,7 @@ export function App() {
           reloadLikes()
         }}
         error={authError}
+        debugInfo={authDebug}
       />
     )
   }
