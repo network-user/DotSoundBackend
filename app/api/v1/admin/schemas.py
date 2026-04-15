@@ -20,7 +20,10 @@ class AdminComplaintResponse(BaseModel):
     track_id: int
     reported_by_user_id: int
     reason: str
+    reason_type: str
     contact_email: str | None
+    rightsholder_name: str | None
+    proof_url: str | None
     is_resolved: bool
     created_at: datetime
 

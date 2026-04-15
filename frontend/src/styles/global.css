@@ -3102,6 +3102,13 @@ textarea.form-input { resize: none; }
   gap: 20px;
 }
 
+.legal-doc-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 .legal-section h2 {
   font-size: 16px;
   font-weight: 600;
@@ -3118,6 +3125,17 @@ textarea.form-input { resize: none; }
 .legal-section ul {
   padding-left: 20px;
   margin: 8px 0;
+}
+
+.linklike-btn {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
 }
 
 /* ── Radio ──────────────────────────────────── */

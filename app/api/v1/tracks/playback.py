@@ -55,7 +55,7 @@ async def stream_track(
             detail="Track not found",
         )
     _check_public(track)
-    if track.source == "soundcloud":
+    if track.access_mode == "third_party_stream":
         if not track.sc_url:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -178,7 +178,7 @@ async def audio_stream(
             status_code=302,
         )
 
-    if track.source == "soundcloud":
+    if track.access_mode == "third_party_stream":
         if not track.sc_url:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -102,3 +102,16 @@ async def test_soundcloud_import_uses_current_user(
         response.json()["uploaded_by_id"]
         == owner["id"]
     )
+    assert (
+        response.json()["catalog_type"]
+        == "external_reference"
+    )
+    assert (
+        response.json()["access_mode"]
+        == "third_party_stream"
+    )
+    assert (
+        response.json()["source_platform"]
+        == "soundcloud"
+    )
+    assert response.json()["source_url"] == sc_url

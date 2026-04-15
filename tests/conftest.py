@@ -169,7 +169,10 @@ async def create_test_track(
     title: str = "Test Track",
     uploader_id: int | None = None,
 ) -> dict[str, Any]:
-    data: dict[str, str] = {"title": title}
+    data: dict[str, str] = {
+        "title": title,
+        "upload_terms_accepted": "true",
+    }
     headers: dict[str, str] = {}
     if uploader_id is not None:
         headers = await auth_headers(
@@ -177,9 +180,12 @@ async def create_test_track(
         )
 
     with patch(
-        "app.core.s3.upload_audio",
+        "app.core.s3.upload_object",
         new_callable=AsyncMock,
-        return_value=f"anon/{title}.mp3",
+        return_value=None,
+    ), patch(
+        "app.services.file_validator.validate_audio",
+        return_value=None,
     ), patch(
         "app.services.upload_service"
         ".transcode_and_upload.kiq",

@@ -116,7 +116,9 @@ export function SearchView() {
 
           {scResults.length > 0 && (
             <div className="search-section">
-              <p className="search-section-label">SoundCloud</p>
+              <p className="search-section-label">
+                SoundCloud · внешний источник
+              </p>
               {scResults.map((r) => {
                 const imported = importedSC[r.sc_url]
                 if (imported) {
@@ -145,7 +147,7 @@ export function SearchView() {
                         )}
                       </p>
                       <span className="track-source">
-                        источник:{' '}
+                        внешний источник:{' '}
                         <a
                           href={r.sc_url}
                           target="_blank"
@@ -156,18 +158,22 @@ export function SearchView() {
                           SoundCloud
                         </a>
                       </span>
+                      <span className="track-source">
+                        после добавления трек будет доступен как
+                        внешний поток стороннего сервиса
+                      </span>
                     </div>
                     <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
                       <button
                         className="track-card-like"
-                        title="Лайк"
+                        title="Добавить и лайкнуть"
                         onClick={(e) => handleLikeSC(e, r)}
                         disabled={importing === r.sc_url}
                       >
-                        🤍
+                        <Icon name="heart-outline" size={18} />
                       </button>
                       <span className="sc-play-hint">
-                        {importing === r.sc_url ? '…' : '▶'}
+                        {importing === r.sc_url ? '...' : 'Добавить и слушать'}
                       </span>
                     </div>
                   </div>

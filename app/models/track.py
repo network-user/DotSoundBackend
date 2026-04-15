@@ -63,6 +63,19 @@ class Track(Base, TimestampMixin):
     source: Mapped[str] = mapped_column(
         String(20), server_default="internal", nullable=False
     )
+    catalog_type: Mapped[str] = mapped_column(
+        String(32),
+        server_default="ugc",
+        nullable=False,
+    )
+    access_mode: Mapped[str] = mapped_column(
+        String(32),
+        server_default="internal_stream",
+        nullable=False,
+    )
+    source_platform: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
     video_key: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
@@ -79,6 +92,9 @@ class Track(Base, TimestampMixin):
         Text, nullable=True
     )
     source_url: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
+    canonical_source_url: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
     source_name: Mapped[str | None] = mapped_column(

@@ -123,6 +123,13 @@
   - **Плеер**: `playTrack()` проверяет Cache API перед сетевым запросом; оффлайн-треки играют без интернета
   - **Синхронизация**: при появлении сети — sync play counts (Background Sync API); обновление метаданных
   - **Ограничения**: HLS-треки кешировать как один файл через fallback endpoint `/audio`; DRM/лицензирование не применяется (UGC-платформа)
+- [ ] **Грамотный единый плеер для разных платформ / источников**
+  - Привести к единому UX `ugc`, `licensed`, `external_reference`
+  - Разделить `access_mode`: `internal_stream`, `third_party_stream`, `official_embed`, `external_link`
+  - Показать пользователю понятный режим доступа: наш стрим / внешний поток / открыть источник
+  - Для каждого источника определить допустимую механику playback и ограничения по Terms
+  - Гармонизировать `PlayerContext`, `TrackCard`, `TrackCardSheet`, deep links и search/import UX
+  - Не смешивать в UI внешний reference и внутренний storage-backed трек как один и тот же тип воспроизведения
 
 ## Видео к трекам
 
@@ -346,6 +353,63 @@
   страница правообладателям, форма загрузки с подтверждением прав
 - [ ] Рекомендации по изменению архитектуры DotSound на основе анализа
 
+## Юридическая готовность
+
+- [x] Базовый legal package в репозитории
+  - `LEGAL.md`
+  - `LEGAL_AUDIT_RU.md`
+  - `docs/legal/USER_AGREEMENT.md`
+  - `docs/legal/PRIVACY_POLICY.md`
+  - `docs/legal/COPYRIGHT_POLICY.md`
+  - `docs/legal/UPLOAD_RULES.md`
+  - `docs/legal/LEGAL_TEXTS.md`
+- [x] Синхронизировать complaint/rightsholder flow во frontend и backend
+  - `reason_type`, `rightsholder_name`, `proof_url` теперь проходят
+    через schema -> route -> service -> repository -> UI
+- [x] Обязательный акцепт условий при `UGC` upload
+  - Checkbox в `UploadFileTab.tsx`
+  - backend validation в `api/v1/tracks/user.py`
+  - логирование версии условий в `track_upload_meta`
+- [x] Постоянные guardrails для агентов и docs
+  - `AGENTS.md`
+  - `docs/ai-boundary-policy.md`
+  - `.cursor/rules/legal-readiness.mdc`
+- [x] Явно размечен current MVP external playback
+  - В `Track` добавлены `access_mode`, `source_platform`,
+    `canonical_source_url`
+  - `SoundCloud` import помечает трек как
+    `third_party_stream`
+  - UI показывает внешний источник и режим доступа
+- [x] На уровне модели разделены категории треков
+  - В `Track` добавлен `catalog_type`
+  - Базовое разделение: `ugc`, `licensed`, `external_reference`
+  - `SoundCloud` -> `external_reference`, `upload/telegram` -> `ugc`
+- [x] Опубликовать legal docs в самом продукте как отдельные доступные
+  страницы
+  - `/legal` стал hub-страницей
+  - Добавлены маршруты `/legal/terms`, `/legal/privacy`,
+    `/legal/copyright`, `/legal/upload-rules`
+  - Upload и complaint flow теперь ссылаются на конкретные legal docs
+- [x] Разделить на уровне модели/API `UGC`, `licensed` и
+  `external-source` треки, не полагаясь только на текстовые
+  дисклеймеры
+- [x] Проверить current MVP с собственным playback поверх
+  stream URL стороннего сервиса для текущего внешнего источника
+  (`SoundCloud`) и зафиксировать residual risk
+- [x] Разделить обычную пользовательскую жалобу и надлежащее
+  уведомление правообладателя в отдельные UX и workflow
+- [x] Базово разделить обычную жалобу и уведомление правообладателя
+  в UX
+  - `ComplaintModal` поддерживает режимы `user` и `rightsholder`
+  - Правообладательский режим требует доп. поля и отдельный текст
+- [x] Internal checklist для Terms внешних источников
+  - `docs/legal/SOURCE_TERMS_CHECKLIST.md`
+  - rule/docs привязаны к проверке external-source integrations
+- [x] Сделать тексты внешнего импорта и поиска более честными
+  - `SearchView` явно помечает SoundCloud как внешний источник
+  - Текст предупреждает, что после добавления трек идёт как внешний
+    поток стороннего сервиса
+
 ## DevOps / CI
 
 - [ ] GitHub Actions: lint + test на PR
@@ -354,4 +418,4 @@
 
 ---
 
-*Последнее обновление: 2026-04-15 агентом (Sprint 7: рекомендации + юридический аудит)*
+*Последнее обновление: 2026-04-15 агентом (Sprint 7: legal package + compliance hardening)*

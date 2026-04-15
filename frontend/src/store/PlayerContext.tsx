@@ -782,7 +782,7 @@ export function PlayerProvider({
     try {
       audio.crossOrigin = 'anonymous'
 
-      if (newTrack.source === 'soundcloud') {
+      if (newTrack.access_mode === 'third_party_stream') {
         const stream = await api.getStream(
           newTrack.id,
         )

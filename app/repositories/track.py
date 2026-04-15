@@ -35,7 +35,14 @@ class TrackRepository(BaseRepository[Track]):
     def _playable_filter():  # type: ignore[no-untyped-def]
         return (
             Track.file_key.isnot(None)
-            | (Track.source == "soundcloud")
+            | (
+                Track.access_mode.in_(
+                    (
+                        "third_party_stream",
+                        "official_embed",
+                    )
+                )
+            )
         )
 
     async def list_active(

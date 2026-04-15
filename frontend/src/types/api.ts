@@ -10,9 +10,17 @@ export interface Track {
   is_active: boolean
   is_public: boolean
   source: 'internal' | 'soundcloud' | 'telegram'
+  catalog_type: 'ugc' | 'licensed' | 'external_reference'
+  access_mode:
+    | 'internal_stream'
+    | 'third_party_stream'
+    | 'official_embed'
+    | 'external_link'
+  source_platform: string | null
   sc_url: string | null
   sc_uri: string | null
   source_url: string | null
+  canonical_source_url: string | null
   source_name: string | null
   uploaded_by_id: number | null
   video_key: string | null
@@ -34,6 +42,10 @@ export interface TrackUploadResponse {
   cover_key: string | null
   duration_seconds: number | null
   source: string
+  catalog_type: string
+  access_mode: string
+  source_platform: string | null
+  canonical_source_url: string | null
   is_public: boolean
   created_at: string
 }
@@ -64,13 +76,28 @@ export interface UserLikesResponse {
 
 export interface ComplaintCreate {
   track_id: number
+  reason: string
+  reason_type: 'other' | 'copyright' | 'neighboring_rights'
+  contact_email: string | null
+  rightsholder_name: string | null
+  proof_url: string | null
+}
+
+export interface Complaint {
+  id: number
+  track_id: number
   reported_by_user_id: number
   reason: string
+  reason_type: 'other' | 'copyright' | 'neighboring_rights'
   contact_email: string | null
+  rightsholder_name: string | null
+  proof_url: string | null
+  is_resolved: boolean
+  created_at: string
 }
 
 export interface ComplaintSubmitResponse {
-  complaint: object
+  complaint: Complaint
   track_hidden: boolean
 }
 

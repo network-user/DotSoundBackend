@@ -56,6 +56,25 @@ The project follows the Telegram open-source model:
 7. Do not implement recommendation, scoring, ML, or anti-abuse
    logic directly in this repository.
 
+## Legal Readiness Rules
+
+- Keep `UGC`, `licensed`, and `external-source` media flows distinct in
+  code and user-facing text.
+- Do not rely on `source` alone when media needs legal/product
+  separation; use explicit fields like `catalog_type` and
+  `access_mode`.
+- Do not claim that DotSound does not store audio if any `UGC` flow
+  stores audio in project-controlled infrastructure.
+- Changes touching `upload`, `import`, `playback`, `complaints`,
+  `recommendation`, or legal UI must be checked against `LEGAL.md` and
+  `docs/legal/*.md`.
+- If complaint fields exist in schemas or models, propagate them
+  consistently through the route, service, repository, tests, and UI.
+- Keep ordinary user complaints and rightsholder notices separate at
+  the UX level whenever possible.
+- Treat own playback over third-party stream URLs as a high-risk
+  product mode; do not describe it as low-risk `source-first`.
+
 ## Frontend Exposure Policy
 
 - Frontend code is public by design.

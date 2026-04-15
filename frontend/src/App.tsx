@@ -29,6 +29,7 @@ const ChatsView = lazy(() => import('@/views/ChatsView').then(m => ({ default: m
 const ChatView = lazy(() => import('@/views/ChatView').then(m => ({ default: m.ChatView })))
 const ProfileView = lazy(() => import('@/views/ProfileView').then(m => ({ default: m.ProfileView })))
 const LegalView = lazy(() => import('@/views/LegalView').then(m => ({ default: m.LegalView })))
+const LegalDocView = lazy(() => import('@/views/LegalDocView').then(m => ({ default: m.LegalDocView })))
 const DailyMixView = lazy(() => import('@/views/DailyMixView').then(m => ({ default: m.DailyMixView })))
 const RadioView = lazy(() => import('@/views/RadioView').then(m => ({ default: m.RadioView })))
 
@@ -264,6 +265,7 @@ export function App() {
           />
           <Route path="/track/:trackId" element={<TrackDeepLinkRoute />} />
           <Route path="/legal" element={<LegalView />} />
+          <Route path="/legal/:docId" element={<LegalDocView />} />
           <Route path="/daily-mix" element={<DailyMixView />} />
           <Route path="/radio" element={<RadioView />} />
         </Routes>

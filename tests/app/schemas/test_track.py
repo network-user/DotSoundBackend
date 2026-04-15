@@ -31,6 +31,8 @@ def test_track_response_valid() -> None:
     assert resp.genre is None
     assert resp.processing_status == "active"
     assert resp.source == "internal"
+    assert resp.catalog_type == "ugc"
+    assert resp.access_mode == "internal_stream"
     assert resp.cover_url is None
 
 
@@ -61,6 +63,29 @@ def test_track_response_cover_url_none() -> None:
         created_at="2024-01-01T00:00:00",
     )
     assert resp.cover_url is None
+
+
+def test_track_response_provenance_fields() -> None:
+    resp = TrackResponse(
+        id=1,
+        title="External",
+        artist="Artist",
+        duration_seconds=60,
+        play_count=0,
+        is_active=True,
+        source="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+        source_platform="soundcloud",
+        source_url="https://soundcloud.com/a/b",
+        canonical_source_url="https://soundcloud.com/a/b",
+        source_name="SoundCloud",
+        created_at="2024-01-01T00:00:00",
+    )
+    assert resp.access_mode == "third_party_stream"
+    assert resp.catalog_type == "external_reference"
+    assert resp.source_platform == "soundcloud"
+    assert resp.canonical_source_url == "https://soundcloud.com/a/b"
 
 
 def test_track_response_missing_required() -> None:
@@ -112,6 +137,8 @@ def test_track_upload_response_valid() -> None:
     )
     assert resp.processing_status == "processing"
     assert resp.source == "internal"
+    assert resp.catalog_type == "ugc"
+    assert resp.access_mode == "internal_stream"
     assert resp.is_public is True
 
 

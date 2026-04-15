@@ -29,6 +29,28 @@ def test_complaint_create_with_email() -> None:
     assert req.contact_email == "user@example.com"
 
 
+def test_complaint_create_copyright_notice() -> None:
+    req = ComplaintCreate(
+        track_id=1,
+        reason="Трек размещен без разрешения правообладателя",
+        reason_type="copyright",
+        contact_email="rights@example.com",
+        rightsholder_name="Rights Holder LLC",
+        proof_url="https://example.com/proof",
+    )
+    assert req.reason_type == "copyright"
+    assert req.rightsholder_name == "Rights Holder LLC"
+
+
+def test_complaint_create_copyright_notice_requires_fields() -> None:
+    with pytest.raises(ValidationError):
+        ComplaintCreate(
+            track_id=1,
+            reason="Трек размещен без разрешения правообладателя",
+            reason_type="copyright",
+        )
+
+
 def test_complaint_create_reason_too_short() -> None:
     with pytest.raises(ValidationError):
         ComplaintCreate(
@@ -89,7 +111,10 @@ def test_complaint_response_valid() -> None:
         track_id=2,
         reported_by_user_id=3,
         reason="Copyright",
+        reason_type="other",
         contact_email=None,
+        rightsholder_name=None,
+        proof_url=None,
         is_resolved=False,
         created_at=now,
     )
@@ -113,7 +138,10 @@ def test_complaint_submit_response_valid() -> None:
         track_id=5,
         reported_by_user_id=1,
         reason="Spam track",
+        reason_type="other",
         contact_email=None,
+        rightsholder_name=None,
+        proof_url=None,
         is_resolved=False,
         created_at=now,
     )
