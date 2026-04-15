@@ -7,7 +7,6 @@ import tempfile
 import structlog
 from sqlalchemy import select
 
-from app.config import settings
 from app.core import s3
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
@@ -64,9 +63,7 @@ async def generate_lyrics_task(
                 generate_lyrics,
                 artist=artist,
                 title=title,
-                api_token=settings.lyrics_provider_token,
                 audio_path=audio_path,
-                model_size=settings.provider_model_size,
             )
 
             if gen_result is None:

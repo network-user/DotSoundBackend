@@ -48,13 +48,11 @@ def _make_lyrics_result(
 
 
 @pytest.fixture(autouse=True)
-def _patch_settings():
-    with patch(
-        "app.services.lyrics_worker.settings"
-    ) as mock:
-        mock.lyrics_provider_token = "test-token"
-        mock.provider_model_size = "tiny"
-        yield mock
+def _patch_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "LYRICS_PROVIDER_TOKEN", "test-token"
+    )
+    monkeypatch.setenv("PROVIDER_MODEL_SIZE", "tiny")
 
 
 @pytest.fixture
