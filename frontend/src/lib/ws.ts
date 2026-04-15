@@ -105,3 +105,7 @@ export function sendWS(data: Record<string, unknown>) {
     socket.send(JSON.stringify(data))
   }
 }
+
+export function isWSConnected(): boolean {
+  return socket?.readyState === WebSocket.OPEN
+}

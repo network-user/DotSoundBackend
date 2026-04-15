@@ -69,6 +69,8 @@ export function TrackCardSheet({
     useState<TrackCardResponse | null>(null)
   const [showLyrics, setShowLyrics] =
     useState(false)
+  const [editingLyrics, setEditingLyrics] =
+    useState(false)
   const [showEdit, setShowEdit] = useState(false)
   const [similarTracks, setSimilarTracks] =
     useState<Track[]>([])
@@ -97,6 +99,7 @@ export function TrackCardSheet({
     if (!isCardOpen || !track) {
       setCard(null)
       setShowLyrics(false)
+      setEditingLyrics(false)
       setShowEdit(false)
       setAuthorAvatarUrl(null)
       setCoverKey(null)
@@ -106,6 +109,8 @@ export function TrackCardSheet({
     }
     setCoverKey(track.cover_key)
     setCoverVer((v) => v + 1)
+    setShowEdit(false)
+    setVideoReady(false)
     setLoading(true)
     api
       .getTrackCard(track.id)
@@ -284,12 +289,20 @@ export function TrackCardSheet({
     ? (currentTime / duration) * 100
     : 0
 
+  const hasActiveVideo =
+    !!videoSrc && videoEnabled
+  const visualMode =
+    showLyrics || hasActiveVideo
+
   return (
     <div
       className="tcs-backdrop"
       onClick={handleBackdrop}
     >
-      <div className="tcs-sheet" ref={sheetRef}>
+      <div
+        className={`tcs-sheet${hasActiveVideo ? ' tcs-video-mode' : ''}`}
+        ref={sheetRef}
+      >
         <div className="tcs-handle" />
         <button
           className="tcs-close icon-btn"
@@ -298,7 +311,11 @@ export function TrackCardSheet({
           <Icon name="x" size={18} />
         </button>
 
-        {videoSrc && videoEnabled && (
+        <div
+          key={track.id}
+          className="tcs-track-content"
+        >
+        {hasActiveVideo && (
           <>
             <video
               className="tcs-video-bg"
@@ -314,43 +331,54 @@ export function TrackCardSheet({
                 setVideoReady(false)
               }
             />
-            <div className="tcs-video-overlay" />
+            <div className="tcs-video-gradient" />
           </>
         )}
 
-        <div
-          className="tcs-cover-wrap"
-          style={{ position: 'relative' }}
-        >
-          {coverBusy && (
-            <div className="tcs-cover-loading">
-              <div className="loader" />
-            </div>
+        {hasActiveVideo && !videoReady && (
+          <div className="tcs-video-standby">
+            <Icon
+              name="video"
+              size={32}
+              className="tcs-video-pulse"
+            />
+          </div>
+        )}
+
+        {hasActiveVideo &&
+          videoReady &&
+          !showLyrics && (
+            <div className="tcs-video-spacer" />
           )}
-          {videoSrc &&
-            videoEnabled &&
-            !videoReady && (
-              <div className="tcs-video-loading">
-                <Icon
-                  name="video"
-                  size={32}
-                  className="tcs-video-pulse"
-                />
+
+        {!hasActiveVideo && !showLyrics && (
+          <div
+            className="tcs-cover-wrap"
+            style={{ position: 'relative' }}
+          >
+            {coverBusy && (
+              <div className="tcs-cover-loading">
+                <div className="loader" />
               </div>
             )}
-          {coverSrc ? (
-            <img
-              className="tcs-cover"
-              src={coverSrc}
-              alt=""
-            />
-          ) : (
-            <div className="tcs-cover-placeholder">
-              <Icon name="music" size={72} />
-            </div>
-          )}
-          {showLyrics && (
-            <div className="tcs-lyrics-overlay">
+            {coverSrc ? (
+              <img
+                className="tcs-cover"
+                src={coverSrc}
+                alt=""
+              />
+            ) : (
+              <div className="tcs-cover-placeholder">
+                <Icon name="music" size={72} />
+              </div>
+            )}
+          </div>
+        )}
+
+        {showLyrics &&
+          !editingLyrics &&
+          !hasActiveVideo && (
+            <div className="tcs-lyrics-section">
               <button
                 className="tcs-lyrics-expand icon-btn"
                 onClick={() => {
@@ -372,45 +400,103 @@ export function TrackCardSheet({
               />
             </div>
           )}
-        </div>
+
+        {showLyrics &&
+          !editingLyrics &&
+          hasActiveVideo && (
+            <div className="tcs-lyrics-section tcs-lyrics-over-video">
+              <button
+                className="tcs-lyrics-expand icon-btn"
+                onClick={() => {
+                  setShowLyrics(false)
+                  openLyrics()
+                }}
+              >
+                <Icon
+                  name="maximize"
+                  size={16}
+                />
+              </button>
+              <LyricsPanel
+                trackId={track.id}
+                isOwner={isOwner}
+                hasLyrics={
+                  card?.has_lyrics ?? false
+                }
+              />
+            </div>
+          )}
 
         <div className="tcs-info">
-          <div className="tcs-title-row">
-            <h2 className="tcs-title">
-              {track.title}
-            </h2>
-            <button
-              className="icon-btn"
-              onClick={handleShare}
-            >
-              <Icon name="link" size={18} />
-            </button>
-          </div>
-          <p
-            className="tcs-artist"
-            onClick={() => {
-              if (track.artist && onOpenArtist) {
-                closeCard()
-                onOpenArtist(track.artist)
+          {visualMode && coverSrc && (
+            <div className="tcs-info-cover-row">
+              <img
+                className="tcs-info-cover-thumb"
+                src={coverSrc}
+                alt=""
+              />
+              <div className="tcs-info-cover-text">
+                <h2 className="tcs-title">
+                  {track.title}
+                </h2>
+                <p className="tcs-artist">
+                  {track.artist ?? '—'}
+                </p>
+              </div>
+              <button
+                className="icon-btn"
+                onClick={handleShare}
+              >
+                <Icon name="link" size={18} />
+              </button>
+            </div>
+          )}
+          {!visualMode && (
+            <div className="tcs-title-row">
+              <h2 className="tcs-title">
+                {track.title}
+              </h2>
+              <button
+                className="icon-btn"
+                onClick={handleShare}
+              >
+                <Icon name="link" size={18} />
+              </button>
+            </div>
+          )}
+          {!visualMode && (
+            <p
+              className="tcs-artist"
+              onClick={() => {
+                if (
+                  track.artist &&
+                  onOpenArtist
+                ) {
+                  closeCard()
+                  onOpenArtist(track.artist)
+                }
+              }}
+              style={
+                track.artist
+                  ? { cursor: 'pointer' }
+                  : undefined
               }
-            }}
-            style={
-              track.artist
-                ? { cursor: 'pointer' }
-                : undefined
-            }
-          >
-            {track.artist ?? '—'}
-          </p>
-          <p className="tcs-meta">
-            {track.catalog_type === 'ugc' &&
-              'Каталог: пользовательская загрузка'}
-            {track.catalog_type === 'licensed' &&
-              'Каталог: лицензированный материал'}
-            {track.catalog_type === 'external_reference' &&
-              'Каталог: внешний reference'}
-          </p>
-          {card?.author && (
+            >
+              {track.artist ?? '—'}
+            </p>
+          )}
+          {!hasActiveVideo && (
+            <p className="tcs-meta">
+              {track.catalog_type === 'ugc' &&
+                'Каталог: пользовательская загрузка'}
+              {track.catalog_type === 'licensed' &&
+                'Каталог: лицензированный материал'}
+              {track.catalog_type ===
+                'external_reference' &&
+                'Каталог: внешний reference'}
+            </p>
+          )}
+          {!hasActiveVideo && card?.author && (
             <div
               className="tcs-author-row"
               onClick={handleAuthor}
@@ -440,6 +526,7 @@ export function TrackCardSheet({
               />
             </div>
           )}
+        </div>
         </div>
 
         <div className="tcs-player-controls">
@@ -493,7 +580,9 @@ export function TrackCardSheet({
           </div>
         </div>
 
-        <div className="tcs-actions">
+        <div
+          className={`tcs-actions${editingLyrics ? ' tcs-dimmed' : ''}`}
+        >
           <button
             className={`tcs-action-btn${liked ? ' active' : ''}`}
             onClick={() => toggleLike(track.id)}
@@ -526,8 +615,12 @@ export function TrackCardSheet({
 
           <button
             className={`tcs-action-btn${showLyrics ? ' active' : ''}`}
-            onClick={() =>
+            onClick={() => {
               setShowLyrics((v) => !v)
+              setEditingLyrics(false)
+            }}
+            disabled={
+              !card?.has_lyrics && !isOwner
             }
           >
             <Icon name="text" size={20} />
@@ -573,6 +666,98 @@ export function TrackCardSheet({
           </button>
         </div>
 
+        {showEdit && isOwner && (
+          <div className="tcs-edit-panel">
+            <div className="tcs-edit-title">
+              Редактирование
+            </div>
+            <div className="tcs-edit-actions">
+              <button
+                className="tcs-edit-btn"
+                onClick={handleCoverUpload}
+                disabled={coverBusy}
+              >
+                <Icon
+                  name="image"
+                  size={18}
+                />
+                Обложка
+              </button>
+              <button
+                className="tcs-edit-btn"
+                onClick={handleGenerate}
+                disabled={
+                  coverBusy || genCooldown > 0
+                }
+              >
+                <Icon
+                  name="sparkle"
+                  size={18}
+                />
+                {genCooldown > 0
+                  ? `${genCooldown}с`
+                  : 'Генерация'}
+              </button>
+              <button
+                className={`tcs-edit-btn${editingLyrics ? ' active' : ''}`}
+                onClick={() => {
+                  setEditingLyrics((v) => !v)
+                }}
+              >
+                <Icon
+                  name="text"
+                  size={18}
+                />
+                Текст
+              </button>
+              <button
+                className="tcs-edit-btn"
+                onClick={handleVideoUpload}
+              >
+                <Icon
+                  name="video"
+                  size={18}
+                />
+                Видео
+              </button>
+              {track.video_key && (
+                <button
+                  className="tcs-edit-btn"
+                  onClick={handleVideoDelete}
+                >
+                  <Icon
+                    name="x"
+                    size={18}
+                  />
+                  Удалить видео
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {editingLyrics && isOwner && (
+          <div className="tcs-lyrics-edit-inline">
+            <LyricsPanel
+              trackId={track.id}
+              isOwner={isOwner}
+              hasLyrics={
+                card?.has_lyrics ?? false
+              }
+              forceEdit
+            />
+            <button
+              className="tcs-lyrics-edit-close"
+              onClick={() =>
+                setEditingLyrics(false)
+              }
+            >
+              <Icon name="x" size={16} />
+              Закрыть редактор
+            </button>
+          </div>
+        )}
+
         {(track.source_url || track.sc_url) && (
           <div className="tcs-source-info">
             <span className="tcs-source-label">
@@ -613,64 +798,6 @@ export function TrackCardSheet({
                   </div>
                 </div>
               ))}
-            </div>
-          </div>
-        )}
-
-        {showEdit && isOwner && (
-          <div className="tcs-edit-panel">
-            <div className="tcs-edit-title">
-              Редактирование
-            </div>
-            <div className="tcs-edit-actions">
-              <button
-                className="tcs-edit-btn"
-                onClick={handleCoverUpload}
-                disabled={coverBusy}
-              >
-                <Icon
-                  name="image"
-                  size={18}
-                />
-                Обложка
-              </button>
-              <button
-                className="tcs-edit-btn"
-                onClick={handleGenerate}
-                disabled={
-                  coverBusy || genCooldown > 0
-                }
-              >
-                <Icon
-                  name="sparkle"
-                  size={18}
-                />
-                {genCooldown > 0
-                  ? `${genCooldown}с`
-                  : 'Генерация'}
-              </button>
-              <button
-                className="tcs-edit-btn"
-                onClick={handleVideoUpload}
-              >
-                <Icon
-                  name="video"
-                  size={18}
-                />
-                Видео
-              </button>
-              {track.video_key && (
-                <button
-                  className="tcs-edit-btn"
-                  onClick={handleVideoDelete}
-                >
-                  <Icon
-                    name="x"
-                    size={18}
-                  />
-                  Удалить видео
-                </button>
-              )}
             </div>
           </div>
         )}

@@ -71,12 +71,16 @@ async def _get_redis() -> Any:
 
 class AuthConfigResponse(BaseModel):
     bot_username: str
+    debug: bool = False
 
 
-@router.get("/config", response_model=AuthConfigResponse)
+@router.get(
+    "/config", response_model=AuthConfigResponse
+)
 async def get_auth_config() -> AuthConfigResponse:
     return AuthConfigResponse(
         bot_username=settings.telegram_bot_username,
+        debug=settings.debug,
     )
 
 
@@ -101,7 +105,14 @@ async def auth_telegram(
         )
     except AuthError as exc:
         logger.warning(
-            "telegram_auth_failed", error=str(exc)
+            "telegram_auth_failed",
+            error=str(exc),
+            client_ip=(
+                request.client.host
+                if request.client
+                else None
+            ),
+            init_data_len=len(body.init_data),
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -5,7 +5,6 @@ import {
 } from 'react'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
-import { Icon } from '@/components/Icon/Icon'
 import type { LyricsResponse } from '@/types/api'
 import { LyricsEditor } from './LyricsEditor'
 
@@ -13,12 +12,14 @@ interface Props {
   trackId: number
   isOwner: boolean
   hasLyrics: boolean
+  forceEdit?: boolean
 }
 
 export function LyricsPanel({
   trackId,
   isOwner,
   hasLyrics,
+  forceEdit,
 }: Props) {
   const { currentTime, duration, seek } =
     usePlayer()
@@ -29,7 +30,7 @@ export function LyricsPanel({
     string | null
   >(null)
   const [editing, setEditing] = useState(
-    !hasLyrics && isOwner,
+    forceEdit || (!hasLyrics && isOwner),
   )
   const activeRef = useRef<HTMLDivElement>(null)
 
@@ -117,15 +118,6 @@ export function LyricsPanel({
         <span className="lyrics-panel-title">
           Текст
         </span>
-        {isOwner && (
-          <button
-            className="lyrics-edit-btn"
-            onClick={() => setEditing(true)}
-          >
-            <Icon name="edit" size={14} />
-            Редактировать
-          </button>
-        )}
       </div>
 
       <div className="lyrics-content">
