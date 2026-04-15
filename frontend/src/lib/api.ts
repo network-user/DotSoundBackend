@@ -987,4 +987,117 @@ export const api = {
   }> {
     return request(`/api/v1/chats/${convId}/presence`)
   },
+
+  // ── Onboarding ──────────────────────────────────
+
+  getOnboardingStatus(): Promise<{
+    onboarding_completed: boolean
+    calibration_completed: boolean
+    preferred_genres: string[] | null
+    preferred_moods: string[] | null
+  }> {
+    return request('/api/v1/onboarding/status')
+  },
+
+  getOnboardingGenres(): Promise<string[]> {
+    return request('/api/v1/onboarding/genres')
+  },
+
+  getOnboardingArtists(genres?: string[]): Promise<{ id: number; name: string; image_key: string | null }[]> {
+    const params = genres?.length ? `?genres=${genres.join(',')}` : ''
+    return request(`/api/v1/onboarding/artists${params}`)
+  },
+
+  saveOnboardingPreferences(data: {
+    genres: string[]
+    artist_ids: number[]
+    moods: string[]
+  }): Promise<void> {
+    return request('/api/v1/onboarding/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+  },
+
+  getCalibrationTracks(): Promise<Track[]> {
+    return request('/api/v1/onboarding/calibration')
+  },
+
+  saveCalibration(items: { track_id: number; liked: boolean }[]): Promise<void> {
+    return request('/api/v1/onboarding/calibration', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items }),
+    })
+  },
+
+  completeOnboarding(): Promise<void> {
+    return request('/api/v1/onboarding/complete', { method: 'POST' })
+  },
+
+  // ── Signals ─────────────────────────────────────
+
+  recordListen(data: {
+    track_id: number
+    duration_listened: number
+    total_duration: number | null
+    source_context?: string
+  }): Promise<void> {
+    return request('/api/v1/signals/listen', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+  },
+
+  recordSearchClick(data: {
+    query: string
+    results_count?: number
+    clicked_track_id?: number
+  }): Promise<void> {
+    return request('/api/v1/signals/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+  },
+
+  // ── Recommendations ─────────────────────────────
+
+  getHomeRecommendations(): Promise<{
+    sections: { title: string; section_type: string; tracks: Track[] }[]
+    maturity: string
+  }> {
+    return request('/api/v1/recommendations/home')
+  },
+
+  getSimilarTracks(trackId: number): Promise<{ seed_track_id: number; tracks: Track[] }> {
+    return request(`/api/v1/recommendations/similar/${trackId}`)
+  },
+
+  getDailyMix(): Promise<{ tracks: Track[]; generated_at: string }> {
+    return request('/api/v1/recommendations/daily-mix')
+  },
+
+  getRadio(seedTrackId: number, queueSize?: number): Promise<{ seed_type: string; seed_id: string; tracks: Track[] }> {
+    const qs = queueSize ? `&queue_size=${queueSize}` : ''
+    return request(`/api/v1/recommendations/radio?seed_track_id=${seedTrackId}${qs}`)
+  },
+
+  // ── Artists ─────────────────────────────────────
+
+  getArtists(q?: string): Promise<{ items: { id: number; name: string; image_key: string | null; source: string; bio: string | null; created_at: string }[]; total: number }> {
+    const qs = q ? `?q=${encodeURIComponent(q)}` : ''
+    return request(`/api/v1/artists${qs}`)
+  },
+
+  getArtist(artistId: number): Promise<{ id: number; name: string; image_key: string | null; track_count: number; bio: string | null }> {
+    return request(`/api/v1/artists/${artistId}`)
+  },
+
+  getArtistTracks(artistId: number, page?: number): Promise<TrackListResponse> {
+    const p = page || 1
+    return request(`/api/v1/artists/${artistId}/tracks?page=${p}`)
+  },
 }

@@ -1,0 +1,115 @@
+import structlog
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.artist import Artist, TrackArtist
+from app.repositories.base import BaseRepository
+
+logger = structlog.get_logger(__name__)
+
+
+class ArtistRepository(BaseRepository[Artist]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(session, Artist)
+
+    async def find_by_normalized_name(
+        self, name_normalized: str
+    ) -> Artist | None:
+        result = await self._session.execute(
+            select(Artist).where(
+                Artist.name_normalized == name_normalized
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def search(
+        self,
+        query: str,
+        limit: int = 20,
+    ) -> list[Artist]:
+        pattern = f"%{query.lower()}%"
+        result = await self._session.execute(
+            select(Artist)
+            .where(
+                Artist.name_normalized.ilike(pattern)
+            )
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def list_popular(
+        self,
+        limit: int = 50,
+        genre_filter: list[str] | None = None,
+    ) -> list[Artist]:
+        q = (
+            select(
+                Artist,
+                func.count(TrackArtist.track_id).label(
+                    "track_count"
+                ),
+            )
+            .join(
+                TrackArtist,
+                TrackArtist.artist_id == Artist.id,
+            )
+            .group_by(Artist.id)
+            .order_by(
+                func.count(
+                    TrackArtist.track_id
+                ).desc()
+            )
+            .limit(limit)
+        )
+        result = await self._session.execute(q)
+        return [row[0] for row in result.all()]
+
+    async def link_track(
+        self,
+        track_id: int,
+        artist_id: int,
+        role: str = "primary",
+        position: int = 0,
+    ) -> None:
+        existing = await self._session.execute(
+            select(TrackArtist).where(
+                TrackArtist.track_id == track_id,
+                TrackArtist.artist_id == artist_id,
+            )
+        )
+        if existing.scalar_one_or_none():
+            return
+        link = TrackArtist(
+            track_id=track_id,
+            artist_id=artist_id,
+            role=role,
+            position=position,
+        )
+        self._session.add(link)
+        await self._session.flush()
+
+    async def get_track_artists(
+        self, track_id: int
+    ) -> list[Artist]:
+        result = await self._session.execute(
+            select(Artist)
+            .join(
+                TrackArtist,
+                TrackArtist.artist_id == Artist.id,
+            )
+            .where(TrackArtist.track_id == track_id)
+            .order_by(TrackArtist.position)
+        )
+        return list(result.scalars().all())
+
+    async def get_artist_track_ids(
+        self,
+        artist_id: int,
+        limit: int = 100,
+    ) -> list[int]:
+        result = await self._session.execute(
+            select(TrackArtist.track_id)
+            .where(TrackArtist.artist_id == artist_id)
+            .limit(limit)
+        )
+        return list(result.scalars().all())

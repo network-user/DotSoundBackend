@@ -11,8 +11,9 @@ import {
 } from '@/lib/telegram'
 import { useLikes } from '@/store/LikesContext'
 import { usePlayer } from '@/store/PlayerContext'
+import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
-import type { TrackCardResponse } from '@/types/api'
+import type { Track, TrackCardResponse } from '@/types/api'
 import { LyricsPanel } from './LyricsPanel'
 
 interface Props {
@@ -55,6 +56,7 @@ export function TrackCardSheet({
     openLyrics,
     openComplaint,
     updateTrack,
+    playTrack,
   } = usePlayer()
   const {
     isLiked,
@@ -68,6 +70,8 @@ export function TrackCardSheet({
   const [showLyrics, setShowLyrics] =
     useState(false)
   const [showEdit, setShowEdit] = useState(false)
+  const [similarTracks, setSimilarTracks] =
+    useState<Track[]>([])
   const [authorAvatarUrl, setAuthorAvatarUrl] =
     useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -118,6 +122,11 @@ export function TrackCardSheet({
       })
       .catch(() => {})
       .finally(() => setLoading(false))
+
+    setSimilarTracks([])
+    api.getSimilarTracks(track.id)
+      .then((r) => setSimilarTracks(r.tracks))
+      .catch(() => {})
   }, [isCardOpen, track?.id])
 
   useEffect(() => {
@@ -546,18 +555,59 @@ export function TrackCardSheet({
           )}
 
 
-          {!isSC && (
-            <button
-              className="tcs-action-btn"
-              onClick={openComplaint}
-            >
-              <Icon name="flag" size={20} />
-              <span className="tcs-action-label">
-                Жалоба
-              </span>
-            </button>
-          )}
+          <button
+            className="tcs-action-btn"
+            onClick={openComplaint}
+          >
+            <Icon name="flag" size={20} />
+            <span className="tcs-action-label">
+              Жалоба
+            </span>
+          </button>
         </div>
+
+        {(track.source_url || track.sc_url) && (
+          <div className="tcs-source-info">
+            <span className="tcs-source-label">
+              Источник:{' '}
+              <a
+                href={track.source_url || track.sc_url || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {track.source_name || track.source}
+              </a>
+            </span>
+            <p className="tcs-disclaimer">
+              Материал размещён пользователем. Правообладатель
+              может запросить удаление через форму жалобы.
+            </p>
+          </div>
+        )}
+
+        {similarTracks.length > 0 && (
+          <div className="tcs-similar-section">
+            <h3 className="tcs-similar-title">Похожие треки</h3>
+            <div className="tcs-similar-list">
+              {similarTracks.slice(0, 5).map((st) => (
+                <div
+                  key={st.id}
+                  className="tcs-similar-item"
+                  onClick={() => {
+                    closeCard()
+                    playTrack(st)
+                  }}
+                >
+                  <CoverImage coverKey={st.cover_key} />
+                  <div className="tcs-similar-info">
+                    <span className="tcs-similar-track-title">{st.title}</span>
+                    <span className="tcs-similar-track-artist">{st.artist ?? '—'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {showEdit && isOwner && (
           <div className="tcs-edit-panel">

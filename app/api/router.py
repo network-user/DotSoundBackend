@@ -4,6 +4,7 @@ from app.api.v1 import (
     account,
     admin,
     albums,
+    artists,
     auth,
     auth_email,
     blocks,
@@ -19,7 +20,10 @@ from app.api.v1 import (
     messages,
     metadata,
     notifications,
+    onboarding,
     playlists,
+    recommendations,
+    signals,
     soundcloud,
     tracks,
     users,
@@ -50,4 +54,8 @@ api_router.include_router(messages.router)
 api_router.include_router(comments.router)
 api_router.include_router(blocks.router)
 api_router.include_router(notifications.router)
+api_router.include_router(onboarding.router)
+api_router.include_router(recommendations.router)
+api_router.include_router(signals.router)
+api_router.include_router(artists.router)
 api_router.include_router(ws.router)

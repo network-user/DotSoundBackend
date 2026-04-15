@@ -26,6 +26,8 @@ class TrackResponse(BaseModel):
     source: str = "internal"
     sc_url: str | None = None
     sc_uri: str | None = None
+    source_url: str | None = None
+    source_name: str | None = None
     uploaded_by_id: int | None = None
     album_id: int | None = None
     created_at: datetime

@@ -5,15 +5,30 @@ import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { api } from '@/lib/api'
 import type { Track } from '@/types/api'
 
+interface HomeSection {
+  title: string
+  section_type: string
+  tracks: Track[]
+}
+
 export function HomeView() {
   const { t } = useTranslation()
-  const [tracks, setTracks] = useState<Track[] | null>(null)
+  const [sections, setSections] = useState<HomeSection[] | null>(null)
+  const [maturity, setMaturity] = useState('cold')
+  const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(null)
 
   useEffect(() => {
-    setTracks(null)
-    api.getTracks({ size: 50 })
-      .then((data) => setTracks(data.items))
-      .catch(() => setTracks([]))
+    setSections(null)
+    api.getHomeRecommendations()
+      .then((data) => {
+        setSections(data.sections)
+        setMaturity(data.maturity)
+      })
+      .catch(() => {
+        api.getTracks({ size: 50 })
+          .then((data) => setFallbackTracks(data.items))
+          .catch(() => setFallbackTracks([]))
+      })
   }, [])
 
   return (
@@ -25,7 +40,28 @@ export function HomeView() {
         </div>
         <NotificationBell />
       </div>
-      <TrackList tracks={tracks} emptyMessage={t('home.empty')} />
+
+      {sections === null && fallbackTracks === null && (
+        <div className="loader" />
+      )}
+
+      {sections && sections.map((section, i) => (
+        <div key={`${section.section_type}-${i}`} className="home-section">
+          <h3 className="home-section-title">{section.title}</h3>
+          <TrackList
+            tracks={section.tracks}
+            emptyMessage={t('home.empty')}
+          />
+        </div>
+      ))}
+
+      {sections && sections.length === 0 && (
+        <TrackList tracks={[]} emptyMessage={t('home.empty')} />
+      )}
+
+      {!sections && fallbackTracks !== null && (
+        <TrackList tracks={fallbackTracks} emptyMessage={t('home.empty')} />
+      )}
     </section>
   )
 }

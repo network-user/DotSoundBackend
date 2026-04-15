@@ -3,6 +3,7 @@ import { Routes, Route, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { tg, getInitData } from '@/lib/telegram'
 import { AuthScreen } from '@/components/Auth/AuthScreen'
+import { Onboarding } from '@/components/Onboarding/Onboarding'
 import { ArtistView } from '@/components/ArtistView/ArtistView'
 import { AuthorView } from '@/components/AuthorView/AuthorView'
 import { BottomNav } from '@/components/BottomNav/BottomNav'
@@ -27,6 +28,9 @@ const PlaylistsView = lazy(() => import('@/views/PlaylistsView').then(m => ({ de
 const ChatsView = lazy(() => import('@/views/ChatsView').then(m => ({ default: m.ChatsView })))
 const ChatView = lazy(() => import('@/views/ChatView').then(m => ({ default: m.ChatView })))
 const ProfileView = lazy(() => import('@/views/ProfileView').then(m => ({ default: m.ProfileView })))
+const LegalView = lazy(() => import('@/views/LegalView').then(m => ({ default: m.LegalView })))
+const DailyMixView = lazy(() => import('@/views/DailyMixView').then(m => ({ default: m.DailyMixView })))
+const RadioView = lazy(() => import('@/views/RadioView').then(m => ({ default: m.RadioView })))
 
 function TrackDeepLinkRoute() {
   useTrackDeepLink()
@@ -51,6 +55,8 @@ export function App() {
   const [authError, setAuthError] = useState<
     string | null
   >(null)
+  const [needsOnboarding, setNeedsOnboarding] =
+    useState(false)
 
   useEffect(() => {
     const init = async () => {
@@ -168,6 +174,13 @@ export function App() {
     const token = api.getToken()
     if (token) {
       connectWS(token)
+      api.getOnboardingStatus()
+        .then(s => {
+          if (!s.onboarding_completed) {
+            setNeedsOnboarding(true)
+          }
+        })
+        .catch(() => {})
     }
   }, [needsAuth])
 
@@ -209,6 +222,17 @@ export function App() {
     )
   }
 
+  if (needsOnboarding) {
+    return (
+      <Onboarding
+        onComplete={() => {
+          setNeedsOnboarding(false)
+          reloadLikes()
+        }}
+      />
+    )
+  }
+
   return (
     <div id="app">
       <main id="main">
@@ -239,6 +263,9 @@ export function App() {
             }
           />
           <Route path="/track/:trackId" element={<TrackDeepLinkRoute />} />
+          <Route path="/legal" element={<LegalView />} />
+          <Route path="/daily-mix" element={<DailyMixView />} />
+          <Route path="/radio" element={<RadioView />} />
         </Routes>
         </Suspense>
       </main>

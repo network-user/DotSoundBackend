@@ -81,21 +81,21 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
           ▶ {track.play_count}
           {track.duration_seconds ? ` · ${fmtDuration(track.duration_seconds)}` : ''}
         </p>
-        {track.source === 'soundcloud' && track.sc_url && (
+        {(track.source_url || track.sc_url) && (
           <span className="track-source">
             источник:{' '}
             <a
-              href={track.sc_url}
+              href={track.source_url || track.sc_url || '#'}
               target="_blank"
               rel="noopener noreferrer"
               className="track-source-link"
               onClick={(e) => e.stopPropagation()}
             >
-              SoundCloud
+              {track.source_name || track.source}
             </a>
           </span>
         )}
-        {track.source === 'telegram' && (
+        {!track.source_url && !track.sc_url && track.source === 'telegram' && (
           <span className="track-source">источник: Telegram</span>
         )}
       </div>
