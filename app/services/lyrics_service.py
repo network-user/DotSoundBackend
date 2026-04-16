@@ -132,3 +132,71 @@ class LyricsService:
             with_sync=with_sync,
         )
         return progress_id
+
+    async def redefine_lyrics(
+        self,
+        track_id: int,
+        user_id: int,
+        with_sync: bool = False,
+    ) -> str:
+        """Delete existing lyrics and re-run detection from scratch.
+
+        Returns: progress_id for tracking the new generation task
+        """
+        await self._get_owned_track(track_id, user_id)
+
+        # Delete existing lyrics
+        await self._repo.delete_by_track_id(track_id)
+        await self._session.commit()
+        logger.info("lyrics_redefine_deleted", track_id=track_id)
+
+        # Trigger new auto-generation
+        progress_id = await self.trigger_auto_generation(
+            track_id=track_id,
+            user_id=user_id,
+            with_sync=with_sync,
+        )
+        logger.info(
+            "lyrics_redefine_triggered",
+            track_id=track_id,
+            progress_id=progress_id,
+        )
+        return progress_id
+
+    async def cancel_auto_generation(
+        self,
+        track_id: int,
+        user_id: int,
+        progress_id: str,
+    ) -> bool:
+        """Request cancellation of a running lyrics detection task.
+
+        Returns: True if cancellation flag was set, False if task already completed
+        """
+        await self._get_owned_track(track_id, user_id)
+
+        from app.config import settings
+        from app.services.lyrics_worker import set_lyrics_progress
+        from redis.asyncio import Redis
+
+        redis = Redis.from_url(
+            settings.redis_url, decode_responses=True
+        )
+        try:
+            # Set cancellation flag
+            await redis.set(
+                f"lyrics:cancel:{progress_id}", "1", ex=600
+            )
+            await set_lyrics_progress(
+                progress_id,
+                "cancelling",
+                "cancellation requested by user",
+            )
+            logger.info(
+                "lyrics_cancel_requested",
+                track_id=track_id,
+                progress_id=progress_id,
+            )
+            return True
+        finally:
+            await redis.aclose()

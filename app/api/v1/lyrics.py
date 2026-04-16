@@ -183,6 +183,9 @@ async def get_auto_lyrics_status(
     has_error_log = any(
         "ERROR:" in line for line in logs
     )
+    has_cancelled_log = any(
+        "cancelled by user" in line for line in logs
+    )
 
     if has_done_log:
         return LyricsAutoStatusResponse(
@@ -203,11 +206,81 @@ async def get_auto_lyrics_status(
             logs=logs,
         )
 
+    if has_cancelled_log:
+        return LyricsAutoStatusResponse(
+            status="cancelled",
+            stage=stage,
+            logs=logs,
+        )
+
     return LyricsAutoStatusResponse(
         status="pending",
         stage=stage,
         logs=logs,
     )
+
+
+@router.post(
+    "/{track_id}/lyrics/redefine",
+    response_model=LyricsAutoResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Delete existing lyrics and re-run auto-detection",
+)
+@limiter.limit("10/minute")
+async def redefine_lyrics(
+    request: Request,
+    track_id: int,
+    body: LyricsAutoRequest = LyricsAutoRequest(),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> LyricsAutoResponse:
+    """Delete existing lyrics for a track and re-run detection from scratch.
+
+    Useful when auto-detection failed or produced incorrect results.
+    """
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    service = LyricsService(session)
+    progress_id = await service.redefine_lyrics(
+        track_id=track_id,
+        user_id=current_user.id,
+        with_sync=body.with_sync,
+    )
+    return LyricsAutoResponse(task_id=progress_id)
+
+
+@router.post(
+    "/{track_id}/lyrics/auto/cancel",
+    summary="Cancel running lyrics detection task",
+)
+@limiter.limit("30/minute")
+async def cancel_lyrics_generation(
+    request: Request,
+    track_id: int,
+    task_id: str,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Request cancellation of a running lyrics detection task.
+
+    Must provide the task_id returned from the auto-detection request.
+    """
+    if not task_id or len(task_id) > 128:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid task_id",
+        )
+
+    structlog.contextvars.bind_contextvars(
+        track_id=track_id, task_id=task_id
+    )
+    service = LyricsService(session)
+    await service.cancel_auto_generation(
+        track_id=track_id,
+        user_id=current_user.id,
+        progress_id=task_id,
+    )
+
+    return {"status": "cancel_requested"}
 
 
 # ========== DEBUG ENDPOINTS (only available when DEBUG=true) ==========

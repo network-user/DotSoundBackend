@@ -41,7 +41,7 @@ export function LyricsPanel({
     Boolean(forceEdit),
   )
   const [lyricsChoiceStep, setLyricsChoiceStep] = useState<
-    'root' | 'auto'
+    'root' | 'auto' | 'debug'
   >('root')
   const [showSync, setShowSync] = useState(true)
   const activeRef = useRef<HTMLDivElement>(null)
@@ -58,6 +58,7 @@ export function LyricsPanel({
     startGeneration,
     clearTask,
     clearDebugLog,
+    cancelGeneration,
   } = useLyricsTask(trackId)
 
   useEffect(() => {
@@ -146,10 +147,11 @@ export function LyricsPanel({
   }, [devOpen, debugLog.length])
 
   const handleGenerate = async (
-    withSync: boolean,
+    withSync?: boolean,
+    debugTier?: number,
   ) => {
     try {
-      await startGeneration(withSync)
+      await startGeneration(withSync, debugTier)
     } catch {
       // Важно: не блокируем UI. Если авто-определение не стартовало
       // (например, 422/валидация), пользователь должен иметь возможность
@@ -276,6 +278,25 @@ export function LyricsPanel({
                     )
                   : ''}
             </span>
+
+            {generating && (
+              <button
+                onClick={() => cancelGeneration()}
+                style={{
+                  background: 'rgba(239,68,68,0.2)',
+                  border: '1px solid rgba(239,68,68,0.5)',
+                  color: '#ef4444',
+                  borderRadius: 4,
+                  padding: '2px 8px',
+                  fontSize: 11,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                }}
+              >
+                Отмена
+              </button>
+            )}
+
             <button
               onClick={() =>
                 setDevOpen((v) => !v)
@@ -451,7 +472,7 @@ export function LyricsPanel({
                       Определить автоматически
                     </span>
                     <span className="lyrics-choice-hint">
-                      Сначала выбор режима
+                      Авто + Дебаг режимы
                     </span>
                   </div>
                 </button>
@@ -473,6 +494,11 @@ export function LyricsPanel({
               </>
             ) : (
               <>
+                {/* Автоматические режимы */}
+                <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 4 }}>
+                  Автоматические режимы:
+                </div>
+
                 <button
                   className="lyrics-choice-btn"
                   onClick={() => {
@@ -506,6 +532,67 @@ export function LyricsPanel({
                       </span>
                       <span className="lyrics-choice-hint">
                         С синхронизацией
+                      </span>
+                    </div>
+                  </button>
+                )}
+
+                {/* Дебаг режимы */}
+                <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 12, marginBottom: 4 }}>
+                  Дебаг режимы (тестирование отдельных этапов):
+                </div>
+
+                <button
+                  className="lyrics-choice-btn"
+                  onClick={() => {
+                    if (wasNotFound) clearTask()
+                    handleGenerate(undefined, 1)
+                  }}
+                >
+                  <Icon name="settings" size={22} />
+                  <div>
+                    <span className="lyrics-choice-label">
+                      Дебаг: Сценарий 1
+                    </span>
+                    <span className="lyrics-choice-hint">
+                      Тестирование вариант A
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  className="lyrics-choice-btn"
+                  onClick={() => {
+                    if (wasNotFound) clearTask()
+                    handleGenerate(undefined, 2)
+                  }}
+                >
+                  <Icon name="settings" size={22} />
+                  <div>
+                    <span className="lyrics-choice-label">
+                      Дебаг: Сценарий 2
+                    </span>
+                    <span className="lyrics-choice-hint">
+                      Тестирование вариант B
+                    </span>
+                  </div>
+                </button>
+
+                {hasAudio && (
+                  <button
+                    className="lyrics-choice-btn"
+                    onClick={() => {
+                      if (wasNotFound) clearTask()
+                      handleGenerate(undefined, 3)
+                    }}
+                  >
+                    <Icon name="settings" size={22} />
+                    <div>
+                      <span className="lyrics-choice-label">
+                        Дебаг: Сценарий 3
+                      </span>
+                      <span className="lyrics-choice-hint">
+                        Тестирование вариант C
                       </span>
                     </div>
                   </button>
