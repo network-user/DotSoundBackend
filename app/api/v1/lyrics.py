@@ -4,6 +4,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
@@ -207,3 +208,67 @@ async def get_auto_lyrics_status(
         stage=stage,
         logs=logs,
     )
+
+
+# ========== DEBUG ENDPOINTS (only available when DEBUG=true) ==========
+
+
+@router.post(
+    "/{track_id}/lyrics/debug/tier/{tier_num}",
+    response_model=LyricsAutoResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="[DEBUG] Test individual lyrics detection tier (1, 2, or 3)",
+)
+@limiter.limit("20/minute")
+async def trigger_debug_lyrics(
+    request: Request,
+    track_id: int,
+    tier_num: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> LyricsAutoResponse:
+    if not settings.debug:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debug mode not enabled",
+        )
+
+    if tier_num not in (1, 2, 3):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="tier must be 1, 2, or 3",
+        )
+
+    structlog.contextvars.bind_contextvars(
+        track_id=track_id, debug_tier=tier_num
+    )
+
+    service = LyricsService(session)
+    await service._get_owned_track(
+        track_id=track_id, user_id=current_user.id
+    )
+
+    from app.services.lyrics_worker import (
+        generate_lyrics_debug_task,
+        set_lyrics_progress,
+    )
+    import uuid
+
+    progress_id = uuid.uuid4().hex
+    task = await generate_lyrics_debug_task.kiq(
+        track_id=track_id, tier=tier_num, progress_id=progress_id
+    )
+    await set_lyrics_progress(
+        progress_id,
+        "queued",
+        f"debug task queued (tier={tier_num}): taskiq_id={task.task_id}",
+    )
+
+    logger.info(
+        "debug_lyrics_triggered",
+        tier=tier_num,
+        task_id=task.task_id,
+        progress_id=progress_id,
+    )
+
+    return LyricsAutoResponse(task_id=progress_id)
