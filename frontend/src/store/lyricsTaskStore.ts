@@ -60,7 +60,8 @@ function startPolling(trackId: number): void {
         notify()
       } else if (
         status === 'not_found' ||
-        status === 'error'
+        status === 'error' ||
+        status === 'cancelled'
       ) {
         stopPolling(trackId)
         tasks.set(trackId, {
@@ -115,13 +116,31 @@ function stopPolling(trackId: number): void {
 
 async function startGeneration(
   trackId: number,
-  withSync: boolean,
+  withSync?: boolean,
+  debugTier?: number,
 ): Promise<void> {
   const now = Date.now()
-  const { task_id } = await api.generateLyrics(
-    trackId,
-    withSync,
-  )
+  let task_id: string
+
+  if (debugTier) {
+    // Debug tier mode
+    const response = await api.generateLyricsDebug(
+      trackId,
+      debugTier,
+    )
+    task_id = response.task_id
+  } else {
+    // Normal auto-generation
+    const response = await api.generateLyrics(
+      trackId,
+      withSync ?? false,
+    )
+    task_id = response.task_id
+  }
+
+  const modeLabel = debugTier
+    ? `DEBUG tier=${debugTier}`
+    : `AUTO (withSync=${withSync})`
 
   tasks.set(trackId, {
     taskId: task_id,
@@ -131,7 +150,7 @@ async function startGeneration(
     genStatus: null,
     startedAt: now,
     debugLog: [
-      `[client] started (withSync=${withSync})`,
+      `[client] started (${modeLabel})`,
       `[client] progress_id=${task_id}`,
     ],
   })
@@ -156,6 +175,39 @@ function clearDebugLog(trackId: number): void {
   notify()
 }
 
+async function cancelGeneration(
+  trackId: number,
+): Promise<void> {
+  const state = tasks.get(trackId)
+  if (!state) return
+
+  try {
+    await api.cancelLyricsGeneration(trackId, state.taskId)
+    tasks.set(trackId, {
+      ...state,
+      generating: false,
+      genStatus: 'cancelled',
+      debugLog: [
+        ...state.debugLog,
+        '[client] cancellation requested',
+      ],
+    })
+    stopPolling(trackId)
+    notify()
+  } catch (err) {
+    const msg =
+      err instanceof Error ? err.message : 'cancel failed'
+    tasks.set(trackId, {
+      ...state,
+      debugLog: [
+        ...state.debugLog,
+        `[client] ERROR cancelling: ${msg}`,
+      ],
+    })
+    notify()
+  }
+}
+
 function getSnapshot(): Map<number, TaskState> {
   return tasks
 }
@@ -169,8 +221,8 @@ export function useLyricsTask(trackId: number) {
   const state = store.get(trackId)
 
   const start = useCallback(
-    async (withSync: boolean) => {
-      await startGeneration(trackId, withSync)
+    async (withSync?: boolean, debugTier?: number) => {
+      await startGeneration(trackId, withSync, debugTier)
     },
     [trackId],
   )
@@ -181,6 +233,10 @@ export function useLyricsTask(trackId: number) {
 
   const clearLog = useCallback(() => {
     clearDebugLog(trackId)
+  }, [trackId])
+
+  const cancel = useCallback(async () => {
+    await cancelGeneration(trackId)
   }, [trackId])
 
   useEffect(() => {
@@ -202,5 +258,6 @@ export function useLyricsTask(trackId: number) {
     startGeneration: start,
     clearTask: clear,
     clearDebugLog: clearLog,
+    cancelGeneration: cancel,
   }
 }

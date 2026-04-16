@@ -372,12 +372,39 @@ export const api = {
     )
   },
 
+  generateLyricsDebug(
+    trackId: number,
+    tier: number,
+  ): Promise<LyricsAutoResponse> {
+    return request(
+      `/api/v1/tracks/${trackId}/lyrics/debug/tier/${tier}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
+    )
+  },
+
   getLyricsAutoStatus(
     trackId: number,
     taskId: string,
   ): Promise<LyricsAutoStatusResponse> {
     return request(
       `/api/v1/tracks/${trackId}/lyrics/auto/status?task_id=${taskId}`,
+    )
+  },
+
+  cancelLyricsGeneration(
+    trackId: number,
+    taskId: string,
+  ): Promise<{ status: string }> {
+    return request(
+      `/api/v1/tracks/${trackId}/lyrics/auto/cancel?task_id=${taskId}`,
+      {
+        method: 'POST',
+      },
     )
   },
 

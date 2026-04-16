@@ -20,6 +20,7 @@ from app.repositories.lyrics import LyricsRepository
 logger = structlog.stdlib.get_logger(__name__)
 
 PROGRESS_KEY_PREFIX = "lyrics:progress:"
+CANCEL_KEY_PREFIX = "lyrics:cancel:"
 _PROGRESS_TTL = 600
 
 
@@ -90,6 +91,26 @@ async def get_lyrics_progress(
         await redis.aclose()
 
 
+async def _should_cancel(progress_id: str) -> bool:
+    """Check if cancellation was requested for this task."""
+    redis = await _get_redis()
+    try:
+        return await redis.exists(
+            f"{CANCEL_KEY_PREFIX}{progress_id}"
+        ) > 0
+    finally:
+        await redis.aclose()
+
+
+async def _clear_cancel(progress_id: str) -> None:
+    """Clear cancellation flag after handling."""
+    redis = await _get_redis()
+    try:
+        await redis.delete(f"{CANCEL_KEY_PREFIX}{progress_id}")
+    finally:
+        await redis.aclose()
+
+
 @broker.task
 async def generate_lyrics_task(
     track_id: int,
@@ -139,6 +160,14 @@ async def generate_lyrics_task(
         tmp_dir: str | None = None
 
         try:
+            # Check for cancellation before starting
+            if await _should_cancel(progress_id):
+                await _log(
+                    "cancelled", "task cancelled by user"
+                )
+                await _clear_cancel(progress_id)
+                return {"status": "cancelled"}
+
             if track.file_key:
                 await _log(
                     "downloading_audio",
@@ -189,6 +218,15 @@ async def generate_lyrics_task(
             pc_logger.setLevel(logging.DEBUG)
 
             await _log("searching", "calling generate_lyrics()")
+
+            # Check for cancellation before starting generation
+            if await _should_cancel(progress_id):
+                await _log(
+                    "cancelled",
+                    "task cancelled by user before lyrics generation",
+                )
+                await _clear_cancel(progress_id)
+                return {"status": "cancelled"}
 
             try:
                 gen_result = await asyncio.to_thread(
@@ -303,6 +341,14 @@ async def generate_lyrics_debug_task(
             f"[DEBUG TIER {tier}] searching lyrics: artist={artist!r} title={title!r}",
         )
 
+        # Check for cancellation before starting
+        if await _should_cancel(progress_id):
+            await _log(
+                "cancelled", "task cancelled by user"
+            )
+            await _clear_cancel(progress_id)
+            return {"status": "cancelled"}
+
         audio_path: str | None = None
         tmp_dir: str | None = None
 
@@ -358,6 +404,15 @@ async def generate_lyrics_debug_task(
             pc_logger.setLevel(logging.DEBUG)
 
             await _log("searching", f"calling generate_lyrics_debug(tier={tier})")
+
+            # Check for cancellation before starting generation
+            if await _should_cancel(progress_id):
+                await _log(
+                    "cancelled",
+                    "task cancelled by user before lyrics generation",
+                )
+                await _clear_cancel(progress_id)
+                return {"status": "cancelled"}
 
             try:
                 gen_result = await asyncio.to_thread(
