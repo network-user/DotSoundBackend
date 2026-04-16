@@ -83,6 +83,8 @@ export function TrackCardSheet({
   >(null)
   const [coverVer, setCoverVer] = useState(0)
   const [coverBusy, setCoverBusy] = useState(false)
+  const [coverFailed, setCoverFailed] =
+    useState(false)
   const [genCooldown, setGenCooldown] = useState(0)
   const [videoReady, setVideoReady] =
     useState(false)
@@ -109,6 +111,7 @@ export function TrackCardSheet({
     }
     setCoverKey(track.cover_key)
     setCoverVer((v) => v + 1)
+    setCoverFailed(false)
     setShowEdit(false)
     setVideoReady(false)
     setLoading(true)
@@ -190,6 +193,8 @@ export function TrackCardSheet({
         if (up.cover_key) {
           setCoverKey(up.cover_key)
           setCoverVer((v) => v + 1)
+          setCoverFailed(false)
+          updateTrack(up)
         }
       } catch {}
       finally {
@@ -197,7 +202,7 @@ export function TrackCardSheet({
         e.target.value = ''
       }
     },
-    [track],
+    [track, updateTrack],
   )
 
   const handleGenerate =
@@ -221,6 +226,7 @@ export function TrackCardSheet({
             ) {
               setCoverKey(u.cover_key)
               setCoverVer((v) => v + 1)
+              setCoverFailed(false)
               break
             }
           } catch {}
@@ -230,6 +236,25 @@ export function TrackCardSheet({
         setCoverBusy(false)
       }
     }, [track, genCooldown, coverKey])
+
+  const handleRestoreCover =
+    useCallback(async () => {
+      if (!track) return
+      setCoverBusy(true)
+      try {
+        const updated =
+          await api.restoreTrackCover(track.id)
+        if (updated.cover_key) {
+          setCoverKey(updated.cover_key)
+          setCoverVer((v) => v + 1)
+          setCoverFailed(false)
+          updateTrack(updated)
+        }
+      } catch {}
+      finally {
+        setCoverBusy(false)
+      }
+    }, [track, updateTrack])
 
   const handleVideoUpload = useCallback(
     () => videoInputRef.current?.click(),
@@ -361,11 +386,12 @@ export function TrackCardSheet({
                 <div className="loader" />
               </div>
             )}
-            {coverSrc ? (
+            {coverSrc && !coverFailed ? (
               <img
                 className="tcs-cover"
                 src={coverSrc}
                 alt=""
+                onError={() => setCoverFailed(true)}
               />
             ) : (
               <div className="tcs-cover-placeholder">
@@ -397,7 +423,7 @@ export function TrackCardSheet({
                 hasLyrics={
                   card?.has_lyrics ?? false
                 }
-                hasAudio={!!track.file_key}
+                hasAudio={track.source === 'internal'}
               />
             </div>
           )}
@@ -424,7 +450,7 @@ export function TrackCardSheet({
                 hasLyrics={
                   card?.has_lyrics ?? false
                 }
-                hasAudio={!!track.file_key}
+                hasAudio={track.source === 'internal'}
               />
             </div>
           )}
@@ -692,32 +718,49 @@ export function TrackCardSheet({
               Редактирование
             </div>
             <div className="tcs-edit-actions">
-              <button
-                className="tcs-edit-btn"
-                onClick={handleCoverUpload}
-                disabled={coverBusy}
-              >
-                <Icon
-                  name="image"
-                  size={18}
-                />
-                Обложка
-              </button>
-              <button
-                className="tcs-edit-btn"
-                onClick={handleGenerate}
-                disabled={
-                  coverBusy || genCooldown > 0
-                }
-              >
-                <Icon
-                  name="sparkle"
-                  size={18}
-                />
-                {genCooldown > 0
-                  ? `${genCooldown}с`
-                  : 'Генерация'}
-              </button>
+              {track.source === 'internal' && (
+                <>
+                  <button
+                    className="tcs-edit-btn"
+                    onClick={handleCoverUpload}
+                    disabled={coverBusy}
+                  >
+                    <Icon
+                      name="image"
+                      size={18}
+                    />
+                    Обложка
+                  </button>
+                  <button
+                    className="tcs-edit-btn"
+                    onClick={handleGenerate}
+                    disabled={
+                      coverBusy || genCooldown > 0
+                    }
+                  >
+                    <Icon
+                      name="sparkle"
+                      size={18}
+                    />
+                    {genCooldown > 0
+                      ? `${genCooldown}с`
+                      : 'Генерация'}
+                  </button>
+                </>
+              )}
+              {track.source === 'soundcloud' && (
+                <button
+                  className="tcs-edit-btn"
+                  onClick={handleRestoreCover}
+                  disabled={coverBusy}
+                >
+                  <Icon
+                    name="image"
+                    size={18}
+                  />
+                  Восстановить обложку
+                </button>
+              )}
               <button
                 className={`tcs-edit-btn${editingLyrics ? ' active' : ''}`}
                 onClick={() => {
@@ -764,7 +807,7 @@ export function TrackCardSheet({
               hasLyrics={
                 card?.has_lyrics ?? false
               }
-              hasAudio={!!track.file_key}
+              hasAudio={track.source === 'internal'}
               forceEdit
             />
             <button

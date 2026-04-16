@@ -35,7 +35,14 @@ export function LyricsPanel({
   const [error, setError] = useState<
     string | null
   >(null)
-  const [editing, setEditing] = useState(false)
+  // При forceEdit (редактирование из карточки) нужно открыть редактор сразу,
+  // а не после первого рендера useEffect.
+  const [editing, setEditing] = useState(() =>
+    Boolean(forceEdit),
+  )
+  const [lyricsChoiceStep, setLyricsChoiceStep] = useState<
+    'root' | 'auto'
+  >('root')
   const [showSync, setShowSync] = useState(true)
   const activeRef = useRef<HTMLDivElement>(null)
   const [devOpen, setDevOpen] = useState(false)
@@ -60,7 +67,17 @@ export function LyricsPanel({
   }, [forceEdit])
 
   useEffect(() => {
+    // После выхода из редактора возвращаемся к первому выбору
+    if (!editing) setLyricsChoiceStep('root')
+  }, [editing])
+
+  useEffect(() => {
+    setLyricsChoiceStep('root')
+  }, [trackId, genStatus])
+
+  useEffect(() => {
     if (genStatus === 'found' && !lyrics) {
+      if (editing) return
       api
         .getLyrics(trackId)
         .then((updated) => {
@@ -77,20 +94,19 @@ export function LyricsPanel({
 
   useEffect(() => {
     if (!hasLyrics) return
+    if (editing) return
     setLoading(true)
     api
       .getLyrics(trackId)
       .then(setLyrics)
-      .catch(() =>
-        setError(
-          t(
-            'lyrics.notFound',
-            'Не удалось загрузить',
-          ),
-        ),
-      )
+      .catch(() => {
+        // 404/ошибка загрузки не должна ломать UI —
+        // считаем, что текста нет и показываем выбор/редактор.
+        setLyrics(null)
+        setError(null)
+      })
       .finally(() => setLoading(false))
-  }, [trackId, hasLyrics, t])
+  }, [trackId, hasLyrics, t, editing])
 
   const activeIdx = (() => {
     if (
@@ -135,12 +151,13 @@ export function LyricsPanel({
     try {
       await startGeneration(withSync)
     } catch {
-      setError(
-        t(
-          'lyrics.notFound',
-          'Не удалось запустить определение',
-        ),
-      )
+      // Важно: не блокируем UI. Если авто-определение не стартовало
+      // (например, 422/валидация), пользователь должен иметь возможность
+      // выбрать "ввести вручную" или попробовать снова.
+      setError(null)
+      setLyrics(null)
+      clearTask()
+      setLyricsChoiceStep('root')
     }
   }
 
@@ -161,32 +178,32 @@ export function LyricsPanel({
     ? ((Date.now() - startedAt) / 1000).toFixed(1)
     : '0'
 
-  if (loading)
-    return (
-      <div className="lyrics-panel">
-        <div className="loader" />
-      </div>
-    )
-  if (error)
-    return (
-      <div className="lyrics-panel lyrics-error">
-        {error}
-      </div>
-    )
-
   if (editing) {
     return (
       <LyricsEditor
         trackId={trackId}
         existingLyrics={lyrics}
         onSaved={handleSaved}
-        onCancel={() =>
-          (hasLyrics || lyrics) &&
-          setEditing(false)
-        }
+        onCancel={() => setEditing(false)}
       />
     )
   }
+
+  if (loading)
+    return (
+      <div className="lyrics-panel">
+        <div className="loader" />
+      </div>
+    )
+  if (error && !(isOwner && !lyrics))
+    return (
+      <div className="lyrics-panel lyrics-error">
+        {error}
+      </div>
+    )
+
+  const lyricsLoading =
+    genStatus === 'found' && !lyrics
 
   const stageProgress: Record<string, number> = {
     searching: 25,
@@ -199,9 +216,6 @@ export function LyricsPanel({
     : lyricsLoading
       ? 100
       : 0
-
-  const lyricsLoading =
-    genStatus === 'found' && !lyrics
 
   if (
     generating ||
@@ -404,100 +418,110 @@ export function LyricsPanel({
       </div>
     )
 
-  if (
-    genStatus === 'not_found' ||
-    genStatus === 'error'
-  ) {
+  if (!lyrics && isOwner) {
+    const wasNotFound =
+      genStatus === 'not_found' ||
+      genStatus === 'error'
+
     return (
       <div className="lyrics-panel">
-        <div className="lyrics-not-found">
-          <span>
-            {t(
-              'lyrics.notFound',
-              'Текст не определён',
-            )}
-          </span>
-          {isOwner && (
-            <div
-              style={{
-                display: 'flex',
-                gap: 8,
-                flexWrap: 'wrap',
-                marginTop: 8,
-              }}
-            >
-              <button
-                className="btn-secondary"
-                onClick={() => {
-                  clearTask()
-                  handleGenerate(false)
-                }}
-              >
-                {t(
-                  'lyrics.detectText',
-                  'Определить текст',
+        <div className="lyrics-empty-state">
+          {(wasNotFound || error) && (
+            <p className="lyrics-empty-msg">
+              {error ||
+                t(
+                  'lyrics.notFound',
+                  'Текст не определён',
                 )}
-              </button>
-              {hasAudio && (
+            </p>
+          )}
+
+          <div className="lyrics-choice-grid">
+            {lyricsChoiceStep === 'root' ? (
+              <>
                 <button
-                  className="btn-secondary"
+                  className="lyrics-choice-btn"
                   onClick={() => {
-                    clearTask()
-                    handleGenerate(true)
+                    setLyricsChoiceStep('auto')
                   }}
                 >
-                  {t(
-                    'lyrics.detectTextWithSync',
-                    'Определить текст + таймкоды',
-                  )}
+                  <Icon name="sparkle" size={22} />
+                  <div>
+                    <span className="lyrics-choice-label">
+                      Определить автоматически
+                    </span>
+                    <span className="lyrics-choice-hint">
+                      Сначала выбор режима
+                    </span>
+                  </div>
                 </button>
-              )}
-              <button
-                className="btn-text"
-                onClick={() => setEditing(true)}
-              >
-                {t(
-                  'lyrics.edit',
-                  'Редактировать',
-                )}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  }
 
-  if (!lyrics && isOwner) {
-    return (
-      <div className="lyrics-panel">
-        <div className="lyrics-auto-actions">
-          <button
-            className="btn-secondary"
-            onClick={() => handleGenerate(false)}
-          >
-            {t(
-              'lyrics.detectText',
-              'Определить текст',
+                <button
+                  className="lyrics-choice-btn"
+                  onClick={() => setEditing(true)}
+                >
+                  <Icon name="text" size={22} />
+                  <div>
+                    <span className="lyrics-choice-label">
+                      Ввести вручную
+                    </span>
+                    <span className="lyrics-choice-hint">
+                      Текст с таймкодами или без
+                    </span>
+                  </div>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className="lyrics-choice-btn"
+                  onClick={() => {
+                    if (wasNotFound) clearTask()
+                    handleGenerate(false)
+                  }}
+                >
+                  <Icon name="sparkle" size={22} />
+                  <div>
+                    <span className="lyrics-choice-label">
+                      Авто: только текст
+                    </span>
+                    <span className="lyrics-choice-hint">
+                      Без таймкодов
+                    </span>
+                  </div>
+                </button>
+
+                {hasAudio && (
+                  <button
+                    className="lyrics-choice-btn"
+                    onClick={() => {
+                      if (wasNotFound) clearTask()
+                      handleGenerate(true)
+                    }}
+                  >
+                    <Icon name="sparkle" size={22} />
+                    <div>
+                      <span className="lyrics-choice-label">
+                        Авто: текст + таймкоды
+                      </span>
+                      <span className="lyrics-choice-hint">
+                        С синхронизацией
+                      </span>
+                    </div>
+                  </button>
+                )}
+
+                <button
+                  className="btn-secondary"
+                  onClick={() =>
+                    setLyricsChoiceStep('root')
+                  }
+                >
+                  Назад
+                </button>
+              </>
             )}
-          </button>
-          {hasAudio && (
-            <button
-              className="btn-secondary"
-              onClick={() => handleGenerate(true)}
-            >
-              {t(
-                'lyrics.detectTextWithSync',
-                'Определить текст + таймкоды',
-              )}
-            </button>
-          )}
-          <button
-            className="btn-text"
-            onClick={() => setEditing(true)}
-          >
-            {t('lyrics.edit', 'Редактировать')}
-          </button>
+          </div>
         </div>
       </div>
     )

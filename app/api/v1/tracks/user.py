@@ -257,6 +257,12 @@ async def upload_track_cover(
         track_id, current_user, session
     )
 
+    if track.source != "internal":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cover cannot be changed for external tracks",
+        )
+
     mime = cover.content_type or ""
     if not mime or mime == "application/octet-stream":
         guessed, _ = mimetypes.guess_type(
@@ -276,11 +282,7 @@ async def upload_track_cover(
             detail="Cover exceeds 5 MB limit",
         )
 
-    if track.cover_key:
-        try:
-            await s3.delete_object(track.cover_key)
-        except Exception:
-            pass
+    old_cover_key = track.cover_key
 
     cover_key = await s3.upload_cover(
         data=data,
@@ -290,6 +292,12 @@ async def upload_track_cover(
     track.cover_key = cover_key
     await session.flush()
     await session.refresh(track)
+
+    if old_cover_key:
+        try:
+            await s3.delete_object(old_cover_key)
+        except Exception:
+            pass
 
     logger.info(
         "track_cover_uploaded",
@@ -313,6 +321,12 @@ async def regenerate_track_cover(
     track = await _get_owned_track(
         track_id, current_user, session
     )
+
+    if track.source != "internal":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cover cannot be changed for external tracks",
+        )
 
     await generate_and_upload_cover.kiq(track.id)
 
@@ -417,3 +431,61 @@ async def delete_track_video(
             pass
         track.video_key = None
         await session.flush()
+
+
+@router.post(
+    "/{track_id}/cover/restore",
+    response_model=TrackResponse,
+)
+@limiter.limit("5/minute")
+async def restore_external_cover(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TrackResponse:
+    track = await _get_owned_track(
+        track_id, current_user, session
+    )
+
+    if track.source != "soundcloud" or not track.sc_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only SoundCloud tracks can restore covers",
+        )
+
+    from app.config import settings
+    from app.services.soundcloud_service import SoundCloudService
+
+    sc_service = SoundCloudService(
+        settings.sc_client_id, session
+    )
+    sc_data = await sc_service.resolve_url(track.sc_url)
+    artwork_url: str | None = sc_data.get("artwork_url")
+    if not artwork_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No artwork found on SoundCloud for this track",
+        )
+
+    cover_key = await sc_service._download_thumbnail(
+        artwork_url, current_user.id
+    )
+
+    old_cover_key = track.cover_key
+    track.cover_key = cover_key
+    await session.flush()
+    await session.refresh(track)
+
+    if old_cover_key and old_cover_key != cover_key:
+        try:
+            await s3.delete_object(old_cover_key)
+        except Exception:
+            pass
+
+    logger.info(
+        "track_cover_restored",
+        track_id=track_id,
+        cover_key=cover_key,
+    )
+    return TrackResponse.model_validate(track)

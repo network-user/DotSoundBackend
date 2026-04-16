@@ -106,15 +106,20 @@ export function SettingsSheet({
       <div className="settings-sheet">
         <div className="settings-handle" />
         <div className="settings-header">
-          <span className="settings-title">
-            Настройки
-          </span>
           <button
             className="icon-btn"
             onClick={onClose}
           >
-            <Icon name="x" size={18} />
+            <Icon
+              name="chevron"
+              size={20}
+              className="back-chevron"
+            />
           </button>
+          <span className="settings-title">
+            Настройки
+          </span>
+          <div style={{ width: 20 }} />
         </div>
 
         <div className="settings-list">

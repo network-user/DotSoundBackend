@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.rate_limit import limiter
-from app.dependencies import get_db
+from app.dependencies import get_db, get_optional_user
+from app.models.user import User
 from app.repositories.track import TrackRepository
 from app.schemas.card import TrackCardResponse
 from app.schemas.share import ShareResponse
@@ -312,10 +313,14 @@ async def get_track_card(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> TrackCardResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = CardService(session)
-    card = await service.get_card(track_id)
+    card = await service.get_card(
+        track_id,
+        requester_id=current_user.id if current_user else None,
+    )
     if not card:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -783,6 +783,15 @@ export const api = {
     )
   },
 
+  restoreTrackCover(
+    trackId: number,
+  ): Promise<Track> {
+    return request(
+      `/api/v1/tracks/${trackId}/cover/restore`,
+      { method: 'POST' },
+    )
+  },
+
   uploadTrackVideo(
     trackId: number,
     formData: FormData,
