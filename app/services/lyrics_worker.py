@@ -139,10 +139,10 @@ async def generate_lyrics_task(
         tmp_dir: str | None = None
 
         try:
-            if with_sync and track.file_key:
+            if track.file_key:
                 await _log(
                     "downloading_audio",
-                    f"downloading audio: {track.file_key}",
+                    f"downloading audio for processing fallback: {track.file_key}",
                 )
                 tmp_dir = tempfile.mkdtemp()
                 audio_path = os.path.join(
@@ -214,7 +214,177 @@ async def generate_lyrics_task(
             )
 
             synced_dicts: list[dict] | None = None
-            if gen_result.synced_lines:
+            if with_sync and gen_result.synced_lines:
+                synced_dicts = [
+                    {
+                        "time_ms": sl.time_ms,
+                        "text": sl.text,
+                    }
+                    for sl in gen_result.synced_lines
+                ]
+
+            repo = LyricsRepository(session)
+            await repo.create_or_update(
+                track_id=track_id,
+                plain_text=gen_result.text,
+                source="auto",
+                synced_lines=synced_dicts,
+            )
+            await session.commit()
+
+            has_sync = synced_dicts is not None
+            await _log(
+                "saving",
+                f"saved to DB (has_sync={has_sync})",
+            )
+            return {
+                "status": "found",
+                "has_sync": has_sync,
+            }
+
+        except Exception as exc:
+            logger.exception("lyrics_generation_error")
+            await _log(
+                "error", f"ERROR: {exc}"
+            )
+            return {"status": "error"}
+        finally:
+            if tmp_dir and os.path.isdir(tmp_dir):
+                import shutil
+
+                shutil.rmtree(
+                    tmp_dir, ignore_errors=True
+                )
+
+
+@broker.task
+async def generate_lyrics_debug_task(
+    track_id: int,
+    tier: int,
+    progress_id: str = "",
+) -> dict:
+    """Debug task: run only a specific tier (1, 2, or 3)."""
+    t0 = time.monotonic()
+    structlog.contextvars.bind_contextvars(
+        track_id=track_id, progress_id=progress_id
+    )
+    logger.info(
+        "lyrics_debug_started",
+        tier=tier,
+    )
+
+    def _elapsed() -> str:
+        return f"{time.monotonic() - t0:.1f}s"
+
+    async def _log(stage: str, msg: str) -> None:
+        line = f"[{_elapsed()}] {msg}"
+        logger.info(msg, stage=stage)
+        await set_lyrics_progress(
+            progress_id, stage, line
+        )
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Track).where(Track.id == track_id)
+        )
+        track = result.scalar_one_or_none()
+        if not track or not track.is_active:
+            await _log("error", "track not found")
+            return {
+                "status": "error",
+                "detail": "track_not_found",
+            }
+
+        artist = track.artist or ""
+        title = track.title or ""
+
+        await _log(
+            "searching",
+            f"[DEBUG TIER {tier}] searching lyrics: artist={artist!r} title={title!r}",
+        )
+
+        audio_path: str | None = None
+        tmp_dir: str | None = None
+
+        try:
+            # Only download audio for stage 3
+            if tier == 3 and track.file_key:
+                await _log(
+                    "downloading_audio",
+                    f"downloading audio for stage 3: {track.file_key}",
+                )
+                tmp_dir = tempfile.mkdtemp()
+                audio_path = os.path.join(
+                    tmp_dir, "audio.mp3"
+                )
+                data = await s3.download_object(
+                    track.file_key
+                )
+                with open(audio_path, "wb") as f:
+                    f.write(data)
+                await _log(
+                    "downloading_audio",
+                    f"audio downloaded: {len(data)} bytes",
+                )
+
+            from dotsound_private_core.services.lyrics_provider import (
+                generate_lyrics_debug,
+            )
+
+            loop = asyncio.get_running_loop()
+
+            def on_progress(stage: str) -> None:
+                asyncio.run_coroutine_threadsafe(
+                    _log(stage, f"privatecore: stage={stage}"),
+                    loop,
+                )
+
+            import logging
+
+            class _LogCapture(logging.Handler):
+                def emit(self, record: logging.LogRecord) -> None:
+                    msg = self.format(record)
+                    asyncio.run_coroutine_threadsafe(
+                        append_lyrics_log(progress_id, f"[{_elapsed()}] {msg}"),
+                        loop,
+                    )
+
+            pc_logger = logging.getLogger(
+                "dotsound_private_core.services.lyrics_provider"
+            )
+            handler = _LogCapture()
+            handler.setLevel(logging.DEBUG)
+            pc_logger.addHandler(handler)
+            pc_logger.setLevel(logging.DEBUG)
+
+            await _log("searching", f"calling generate_lyrics_debug(tier={tier})")
+
+            try:
+                gen_result = await asyncio.to_thread(
+                    generate_lyrics_debug,
+                    artist=artist,
+                    title=title,
+                    audio_path=audio_path,
+                    tier=tier,
+                    on_progress=on_progress,
+                )
+            finally:
+                pc_logger.removeHandler(handler)
+
+            if gen_result is None:
+                await _log(
+                    "searching", "lyrics not found"
+                )
+                return {"status": "not_found"}
+
+            await _log(
+                "saving",
+                f"lyrics found: {len(gen_result.text)} chars, "
+                f"synced={gen_result.synced_lines is not None}",
+            )
+
+            synced_dicts: list[dict] | None = None
+            if with_sync and gen_result.synced_lines:
                 synced_dicts = [
                     {
                         "time_ms": sl.time_ms,
