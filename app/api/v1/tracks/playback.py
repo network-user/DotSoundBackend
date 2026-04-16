@@ -118,7 +118,7 @@ async def play_track(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
-    play_count = track.play_count if track else 0
+    play_count = (track.play_count or 0) + 1
     logger.info(
         "play_count_updated",
         track_id=track_id,

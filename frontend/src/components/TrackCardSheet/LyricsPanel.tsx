@@ -59,6 +59,7 @@ export function LyricsPanel({
     clearTask,
     clearDebugLog,
     cancelGeneration,
+    resumeTask,
   } = useLyricsTask(trackId)
 
   useEffect(() => {
@@ -167,6 +168,28 @@ export function LyricsPanel({
     if (!duration) return
     const pct = (timeMs / 1000 / duration) * 100
     seek(pct)
+  }
+
+  const handleDelete = async () => {
+    try {
+      await api.deleteLyrics(trackId)
+      setLyrics(null)
+      clearTask()
+      setLyricsChoiceStep('root')
+    } catch {
+      // ignore
+    }
+  }
+
+  const handleRedefine = async (withSync: boolean = false) => {
+    try {
+      setLyricsChoiceStep('root')
+      const { task_id } = await api.redefineLyrics(trackId, withSync)
+      setLyrics(null)
+      resumeTask(task_id)
+    } catch {
+      setLyricsChoiceStep('root')
+    }
   }
 
   const handleSaved = (
@@ -517,25 +540,31 @@ export function LyricsPanel({
                   </div>
                 </button>
 
-                {hasAudio && (
-                  <button
-                    className="lyrics-choice-btn"
-                    onClick={() => {
-                      if (wasNotFound) clearTask()
-                      handleGenerate(true)
-                    }}
-                  >
-                    <Icon name="sparkle" size={22} />
-                    <div>
-                      <span className="lyrics-choice-label">
-                        Авто: текст + таймкоды
-                      </span>
-                      <span className="lyrics-choice-hint">
-                        С синхронизацией
-                      </span>
-                    </div>
-                  </button>
-                )}
+                <button
+                  className="lyrics-choice-btn"
+                  onClick={() => {
+                    if (wasNotFound) clearTask()
+                    handleGenerate(true)
+                  }}
+                  disabled={!hasAudio}
+                  style={
+                    !hasAudio
+                      ? { opacity: 0.5, cursor: 'not-allowed' }
+                      : undefined
+                  }
+                >
+                  <Icon name="sparkle" size={22} />
+                  <div>
+                    <span className="lyrics-choice-label">
+                      Авто: текст + таймкоды
+                    </span>
+                    <span className="lyrics-choice-hint">
+                      {!hasAudio
+                        ? 'Требуется аудиофайл'
+                        : 'С синхронизацией'}
+                    </span>
+                  </div>
+                </button>
 
                 {/* Дебаг режимы */}
                 <div style={{ gridColumn: '1 / -1', fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 12, marginBottom: 4 }}>
@@ -578,25 +607,32 @@ export function LyricsPanel({
                   </div>
                 </button>
 
-                {hasAudio && (
-                  <button
-                    className="lyrics-choice-btn"
-                    onClick={() => {
-                      if (wasNotFound) clearTask()
-                      handleGenerate(undefined, 3)
-                    }}
-                  >
-                    <Icon name="settings" size={22} />
-                    <div>
-                      <span className="lyrics-choice-label">
-                        Дебаг: Сценарий 3
-                      </span>
-                      <span className="lyrics-choice-hint">
-                        Тестирование вариант C
-                      </span>
-                    </div>
-                  </button>
-                )}
+                <button
+                  className="lyrics-choice-btn"
+                  onClick={() => {
+                    if (!hasAudio) return
+                    if (wasNotFound) clearTask()
+                    handleGenerate(undefined, 3)
+                  }}
+                  disabled={!hasAudio}
+                  style={
+                    !hasAudio
+                      ? { opacity: 0.5, cursor: 'not-allowed' }
+                      : undefined
+                  }
+                >
+                  <Icon name="settings" size={22} />
+                  <div>
+                    <span className="lyrics-choice-label">
+                      Дебаг: Сценарий 3
+                    </span>
+                    <span className="lyrics-choice-hint">
+                      {!hasAudio
+                        ? 'Требуется аудиофайл'
+                        : 'Тестирование вариант C'}
+                    </span>
+                  </div>
+                </button>
 
                 <button
                   className="btn-secondary"
@@ -608,6 +644,60 @@ export function LyricsPanel({
                 </button>
               </>
             )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Redefine chooser — shown over existing lyrics
+  if (isOwner && lyricsChoiceStep === 'redefine') {
+    return (
+      <div className="lyrics-panel">
+        <div className="lyrics-empty-state">
+          <p className="lyrics-empty-msg">
+            Выберите сценарий переопределения
+          </p>
+          <div className="lyrics-choice-grid">
+            <button
+              className="lyrics-choice-btn"
+              onClick={() => handleRedefine(false)}
+            >
+              <Icon name="sparkle" size={22} />
+              <div>
+                <span className="lyrics-choice-label">
+                  Только текст
+                </span>
+                <span className="lyrics-choice-hint">
+                  Без таймкодов
+                </span>
+              </div>
+            </button>
+
+            <button
+              className="lyrics-choice-btn"
+              onClick={() => handleRedefine(true)}
+              disabled={!hasAudio}
+              style={!hasAudio ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
+            >
+              <Icon name="sparkle" size={22} />
+              <div>
+                <span className="lyrics-choice-label">
+                  Текст + таймкоды
+                </span>
+                <span className="lyrics-choice-hint">
+                  {!hasAudio ? 'Требуется аудиофайл' : 'С синхронизацией'}
+                </span>
+              </div>
+            </button>
+
+            <button
+              className="btn-secondary"
+              style={{ gridColumn: '1 / -1' }}
+              onClick={() => setLyricsChoiceStep('root')}
+            >
+              Назад
+            </button>
           </div>
         </div>
       </div>
@@ -626,48 +716,23 @@ export function LyricsPanel({
         <span className="lyrics-panel-title">
           {t('lyrics.title', 'Текст')}
         </span>
-        <div className="lyrics-panel-controls">
-          {hasSyncData && (
-            <label className="lyrics-sync-toggle">
-              <input
-                type="checkbox"
-                checked={showSync}
-                onChange={(e) =>
-                  setShowSync(e.target.checked)
-                }
-              />
-              <span>
-                {t(
-                  'lyrics.showSync',
-                  'Подсветка по строкам',
-                )}
-              </span>
-            </label>
-          )}
-          {isOwner && (
-            <button
-              className="btn-text btn-sm"
-              onClick={() => setEditing(true)}
-            >
-              {t('lyrics.edit', 'Редактировать')}
-            </button>
-          )}
-          {isOwner &&
-            !hasSyncData &&
-            hasAudio && (
-              <button
-                className="btn-text btn-sm"
-                onClick={() =>
-                  handleGenerate(true)
-                }
-              >
-                {t(
-                  'lyrics.addSync',
-                  'Добавить таймкоды',
-                )}
-              </button>
-            )}
-        </div>
+        {hasSyncData && (
+          <label className="lyrics-sync-toggle">
+            <input
+              type="checkbox"
+              checked={showSync}
+              onChange={(e) =>
+                setShowSync(e.target.checked)
+              }
+            />
+            <span>
+              {t(
+                'lyrics.showSync',
+                'Подсветка по строкам',
+              )}
+            </span>
+          </label>
+        )}
       </div>
 
       <div className="lyrics-content">
@@ -696,6 +761,41 @@ export function LyricsPanel({
               </pre>
             )}
       </div>
+
+      {isOwner && (
+        <div className="lyrics-actions">
+          <button
+            className="lyrics-action-btn"
+            onClick={() => setEditing(true)}
+          >
+            <Icon name="text" size={15} />
+            {t('lyrics.edit', 'Редактировать')}
+          </button>
+          <button
+            className="lyrics-action-btn"
+            onClick={() => setLyricsChoiceStep('redefine')}
+          >
+            <Icon name="sparkle" size={15} />
+            {t('lyrics.redefine', 'Переопределить')}
+          </button>
+          {!hasSyncData && hasAudio && (
+            <button
+              className="lyrics-action-btn"
+              onClick={() => handleGenerate(true)}
+            >
+              <Icon name="eq" size={15} />
+              {t('lyrics.addSync', 'Таймкоды')}
+            </button>
+          )}
+          <button
+            className="lyrics-action-btn lyrics-action-btn--danger"
+            onClick={handleDelete}
+          >
+            <Icon name="trash" size={15} />
+            {t('lyrics.delete', 'Удалить')}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

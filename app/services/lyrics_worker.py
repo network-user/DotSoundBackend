@@ -19,6 +19,59 @@ from app.repositories.lyrics import LyricsRepository
 
 logger = structlog.stdlib.get_logger(__name__)
 
+
+async def _fetch_audio_to_file(
+    track: Track,
+    tmp_dir: str,
+    session,  # AsyncSession
+) -> str | None:
+    """Download track audio to a temp file.
+
+    Handles both internal (S3) and SoundCloud tracks transparently.
+    Returns local file path, or None if audio is unavailable.
+    """
+    path = os.path.join(tmp_dir, "audio.mp3")
+
+    if track.file_key:
+        data = await s3.download_object(track.file_key)
+        with open(path, "wb") as f:
+            f.write(data)
+        return path
+
+    if getattr(track, "sc_url", None):
+        try:
+            import httpx
+            from app.services.soundcloud_service import SoundCloudService
+
+            sc = SoundCloudService(settings.sc_client_id, session)
+            stream_url, protocol = await sc.get_stream_info(track.sc_url)
+
+            if protocol != "progressive":
+                logger.info(
+                    "sc_audio_skip_hls",
+                    protocol=protocol,
+                    track_id=track.id,
+                )
+                return None
+
+            async with httpx.AsyncClient(
+                timeout=60, follow_redirects=True
+            ) as client:
+                resp = await client.get(stream_url)
+                resp.raise_for_status()
+                with open(path, "wb") as f:
+                    f.write(resp.content)
+
+            return path
+        except Exception:
+            logger.exception(
+                "sc_audio_download_failed", track_id=track.id
+            )
+            return None
+
+    return None
+
+
 PROGRESS_KEY_PREFIX = "lyrics:progress:"
 CANCEL_KEY_PREFIX = "lyrics:cancel:"
 _PROGRESS_TTL = 600
@@ -168,24 +221,26 @@ async def generate_lyrics_task(
                 await _clear_cancel(progress_id)
                 return {"status": "cancelled"}
 
-            if track.file_key:
+            if track.file_key or getattr(track, "sc_url", None):
                 await _log(
                     "downloading_audio",
-                    f"downloading audio for processing fallback: {track.file_key}",
+                    "downloading audio for processing fallback",
                 )
                 tmp_dir = tempfile.mkdtemp()
-                audio_path = os.path.join(
-                    tmp_dir, "audio.mp3"
+                audio_path = await _fetch_audio_to_file(
+                    track, tmp_dir, session
                 )
-                data = await s3.download_object(
-                    track.file_key
-                )
-                with open(audio_path, "wb") as f:
-                    f.write(data)
-                await _log(
-                    "downloading_audio",
-                    f"audio downloaded: {len(data)} bytes",
-                )
+                if audio_path:
+                    size = os.path.getsize(audio_path)
+                    await _log(
+                        "downloading_audio",
+                        f"audio ready: {size} bytes",
+                    )
+                else:
+                    await _log(
+                        "downloading_audio",
+                        "audio unavailable, skipping processing fallback",
+                    )
 
             from dotsound_private_core.services.lyrics_provider import (  # noqa: E501
                 generate_lyrics,
@@ -354,24 +409,28 @@ async def generate_lyrics_debug_task(
 
         try:
             # Only download audio for stage 3
-            if tier == 3 and track.file_key:
+            if tier == 3 and (
+                track.file_key or getattr(track, "sc_url", None)
+            ):
                 await _log(
                     "downloading_audio",
-                    f"downloading audio for stage 3: {track.file_key}",
+                    "downloading audio for stage 3",
                 )
                 tmp_dir = tempfile.mkdtemp()
-                audio_path = os.path.join(
-                    tmp_dir, "audio.mp3"
+                audio_path = await _fetch_audio_to_file(
+                    track, tmp_dir, session
                 )
-                data = await s3.download_object(
-                    track.file_key
-                )
-                with open(audio_path, "wb") as f:
-                    f.write(data)
-                await _log(
-                    "downloading_audio",
-                    f"audio downloaded: {len(data)} bytes",
-                )
+                if audio_path:
+                    size = os.path.getsize(audio_path)
+                    await _log(
+                        "downloading_audio",
+                        f"audio ready: {size} bytes",
+                    )
+                else:
+                    await _log(
+                        "downloading_audio",
+                        "audio unavailable for stage 3",
+                    )
 
             from dotsound_private_core.services.lyrics_provider import (
                 generate_lyrics_debug,
@@ -438,33 +497,23 @@ async def generate_lyrics_debug_task(
                 f"synced={gen_result.synced_lines is not None}",
             )
 
-            synced_dicts: list[dict] | None = None
-            if with_sync and gen_result.synced_lines:
-                synced_dicts = [
-                    {
-                        "time_ms": sl.time_ms,
-                        "text": sl.text,
-                    }
-                    for sl in gen_result.synced_lines
-                ]
-
+            # Debug mode: save plain text only (no synced lines)
             repo = LyricsRepository(session)
             await repo.create_or_update(
                 track_id=track_id,
                 plain_text=gen_result.text,
                 source="auto",
-                synced_lines=synced_dicts,
+                synced_lines=None,
             )
             await session.commit()
 
-            has_sync = synced_dicts is not None
             await _log(
                 "saving",
-                f"saved to DB (has_sync={has_sync})",
+                f"saved to DB (debug mode, synced_lines ignored)",
             )
             return {
                 "status": "found",
-                "has_sync": has_sync,
+                "has_sync": False,
             }
 
         except Exception as exc:

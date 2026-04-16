@@ -175,6 +175,26 @@ function clearDebugLog(trackId: number): void {
   notify()
 }
 
+function resumeTask(
+  trackId: number,
+  taskId: string,
+): void {
+  tasks.set(trackId, {
+    taskId,
+    trackId,
+    generating: true,
+    stage: 'queued',
+    genStatus: null,
+    startedAt: Date.now(),
+    debugLog: [
+      '[client] redefine: old lyrics deleted',
+      `[client] new task started, progress_id=${taskId}`,
+    ],
+  })
+  notify()
+  startPolling(trackId)
+}
+
 async function cancelGeneration(
   trackId: number,
 ): Promise<void> {
@@ -239,6 +259,13 @@ export function useLyricsTask(trackId: number) {
     await cancelGeneration(trackId)
   }, [trackId])
 
+  const resume = useCallback(
+    (taskId: string) => {
+      resumeTask(trackId, taskId)
+    },
+    [trackId],
+  )
+
   useEffect(() => {
     if (
       state?.generating &&
@@ -259,5 +286,6 @@ export function useLyricsTask(trackId: number) {
     clearTask: clear,
     clearDebugLog: clearLog,
     cancelGeneration: cancel,
+    resumeTask: resume,
   }
 }

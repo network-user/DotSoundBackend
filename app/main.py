@@ -81,6 +81,7 @@ def create_app() -> FastAPI:
         allow_origins=settings.allowed_origins_list,
         allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["*"],
+        max_age=3600,
     )
     application.add_middleware(
         TrustedHostMiddleware,

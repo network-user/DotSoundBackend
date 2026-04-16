@@ -3,6 +3,7 @@ from dotsound_private_core.services.moderation import (
     should_auto_hide_track,
 )
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.complaint import Complaint
@@ -46,20 +47,26 @@ class ComplaintService:
             proof_url=proof_url,
         )
 
+        # Lock the track row to prevent concurrent complaint races
+        result = await self._session.execute(
+            select(Track)
+            .where(Track.id == track_id)
+            .with_for_update()
+        )
+        track = result.scalar_one_or_none()
+
         count = await self._repo.count_by_track(track_id)
         track_hidden = False
 
-        if should_auto_hide_track(count, threshold):
-            track = await self._session.get(Track, track_id)
-            if track and track.is_active:
-                track.is_active = False
-                track_hidden = True
-                logger.warning(
-                    "track_auto_hidden",
-                    track_id=track_id,
-                    complaint_count=count,
-                    threshold=threshold,
-                )
+        if should_auto_hide_track(count, threshold) and track and track.is_active:
+            track.is_active = False
+            track_hidden = True
+            logger.warning(
+                "track_auto_hidden",
+                track_id=track_id,
+                complaint_count=count,
+                threshold=threshold,
+            )
 
         logger.info(
             "complaint_submitted",
