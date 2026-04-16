@@ -27,7 +27,8 @@ resend = "^2.0"
 pyotp = "^2.9"
 qrcode = {extras = ["pil"], version = "^8.0"}
 pydantic = {extras = ["email"], version = "^2.0"}
-python-magic-bin = "^0.4"
+python-magic = "^0.4"
+python-magic-bin = {version = "^0.4", markers = "sys_platform == 'win32'"}
 dotsound-private-core = { path = "../DotSoundPrivateCore", develop = true }
 
 [tool.poetry.group.dev.dependencies]

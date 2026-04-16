@@ -12,16 +12,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
     curl \
+    libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -sSL https://install.python-poetry.org | python3 -
 
 WORKDIR /app
 
-COPY pyproject.toml poetry.lock ./
-RUN poetry install --no-interaction --no-ansi --no-root
+COPY DotSoundPrivateCore /DotSoundPrivateCore
 
-COPY . .
+COPY DotSoundBackend/pyproject.toml DotSoundBackend/poetry.lock ./
+RUN poetry lock --no-update && poetry install --no-interaction --no-ansi --no-root
+
+COPY DotSoundBackend/. .
 RUN poetry install --no-interaction --no-ansi
 
 EXPOSE 8000

@@ -205,6 +205,8 @@ export interface LyricsAutoResponse {
 
 export interface LyricsAutoStatusResponse {
   status: string
+  stage?: string
+  logs?: string[]
 }
 
 // ── Share ───────────────────────────────────────────────────────────────────

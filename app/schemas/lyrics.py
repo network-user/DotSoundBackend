@@ -51,3 +51,5 @@ class LyricsAutoResponse(BaseModel):
 
 class LyricsAutoStatusResponse(BaseModel):
     status: str
+    stage: str | None = None
+    logs: list[str] = []

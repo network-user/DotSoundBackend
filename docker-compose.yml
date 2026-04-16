@@ -63,7 +63,9 @@ services:
       - dotsound
 
   backend:
-    build: .
+    build:
+      context: ..
+      dockerfile: DotSoundBackend/Dockerfile
     restart: unless-stopped
     env_file:
       - .env
@@ -87,9 +89,11 @@ services:
       - dotsound
 
   worker:
-    build: .
+    build:
+      context: ..
+      dockerfile: DotSoundBackend/Dockerfile
     restart: unless-stopped
-    command: taskiq worker app.core.tkq:broker app.services.transcoding
+    command: taskiq worker app.core.tkq:broker app.services.transcoding app.services.import_worker app.services.cover_worker app.services.lyrics_worker
     env_file:
       - .env
     environment:

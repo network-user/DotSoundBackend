@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
-from app.core.tkq import broker
 from app.schemas.lyrics import (
     LyricsAutoRequest,
     LyricsAutoResponse,
@@ -148,37 +147,63 @@ async def get_auto_lyrics_status(
     track_id: int,
     task_id: str,
 ) -> LyricsAutoStatusResponse:
+    from app.services.lyrics_worker import (
+        get_lyrics_progress,
+    )
+
     if not task_id or len(task_id) > 128:
         return LyricsAutoStatusResponse(
             status="error"
         )
-    try:
-        result = await broker.result_backend.get_result(  # type: ignore[union-attr]
-            task_id
-        )
-    except Exception:
+
+    progress = await get_lyrics_progress(task_id)
+    stage = progress.get("stage") if progress else None
+    logs = progress.get("logs", []) if progress else []
+
+    status_from_stage: dict[str, str] = {
+        "error": "error",
+    }
+    final_status = status_from_stage.get(
+        stage or "", ""
+    )
+    if final_status:
         return LyricsAutoStatusResponse(
-            status="pending"
+            status=final_status,
+            stage=stage,
+            logs=logs,
         )
-    if not result.is_err and result.return_value:
-        raw_status = result.return_value.get(
-            "status", "pending"
-        )
-        allowed = {
-            "pending",
-            "found",
-            "not_found",
-            "error",
-        }
+
+    has_done_log = any(
+        "saved to DB" in line for line in logs
+    )
+    has_not_found_log = any(
+        "lyrics not found" in line for line in logs
+    )
+    has_error_log = any(
+        "ERROR:" in line for line in logs
+    )
+
+    if has_done_log:
         return LyricsAutoStatusResponse(
-            status=raw_status
-            if raw_status in allowed
-            else "error"
+            status="found",
+            stage=stage,
+            logs=logs,
         )
-    if result.is_err:
+    if has_not_found_log:
         return LyricsAutoStatusResponse(
-            status="error"
+            status="not_found",
+            stage=stage,
+            logs=logs,
         )
+    if has_error_log:
+        return LyricsAutoStatusResponse(
+            status="error",
+            stage=stage,
+            logs=logs,
+        )
+
     return LyricsAutoStatusResponse(
-        status="pending"
+        status="pending",
+        stage=stage,
+        logs=logs,
     )

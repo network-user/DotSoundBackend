@@ -1,32 +1,119 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import tempfile
+import time
 
 import structlog
+from redis.asyncio import Redis
 from sqlalchemy import select
 
 from app.core import s3
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
+from app.config import settings
 from app.models.track import Track
 from app.repositories.lyrics import LyricsRepository
 
 logger = structlog.stdlib.get_logger(__name__)
+
+PROGRESS_KEY_PREFIX = "lyrics:progress:"
+_PROGRESS_TTL = 600
+
+
+async def _get_redis() -> Redis:  # type: ignore[type-arg]
+    return Redis.from_url(
+        settings.redis_url, decode_responses=True
+    )
+
+
+async def set_lyrics_progress(
+    progress_id: str,
+    stage: str,
+    log_line: str | None = None,
+) -> None:
+    redis = await _get_redis()
+    try:
+        key = f"{PROGRESS_KEY_PREFIX}{progress_id}"
+        data_raw = await redis.get(key)
+        if data_raw:
+            data = json.loads(data_raw)
+        else:
+            data = {"stage": stage, "logs": []}
+        data["stage"] = stage
+        if log_line:
+            data["logs"] = data["logs"][-99:] + [
+                log_line
+            ]
+        await redis.set(
+            key, json.dumps(data), ex=_PROGRESS_TTL
+        )
+    finally:
+        await redis.aclose()
+
+
+async def append_lyrics_log(
+    progress_id: str, log_line: str
+) -> None:
+    redis = await _get_redis()
+    try:
+        key = f"{PROGRESS_KEY_PREFIX}{progress_id}"
+        data_raw = await redis.get(key)
+        if data_raw:
+            data = json.loads(data_raw)
+        else:
+            data = {"stage": "unknown", "logs": []}
+        data["logs"] = data["logs"][-99:] + [
+            log_line
+        ]
+        await redis.set(
+            key, json.dumps(data), ex=_PROGRESS_TTL
+        )
+    finally:
+        await redis.aclose()
+
+
+async def get_lyrics_progress(
+    progress_id: str,
+) -> dict | None:
+    redis = await _get_redis()
+    try:
+        raw = await redis.get(
+            f"{PROGRESS_KEY_PREFIX}{progress_id}"
+        )
+        if not raw:
+            return None
+        return json.loads(raw)  # type: ignore[no-any-return]
+    finally:
+        await redis.aclose()
 
 
 @broker.task
 async def generate_lyrics_task(
     track_id: int,
     with_sync: bool = False,
+    progress_id: str = "",
 ) -> dict:
+    t0 = time.monotonic()
     structlog.contextvars.bind_contextvars(
-        track_id=track_id
+        track_id=track_id, progress_id=progress_id
     )
     logger.info(
-        "lyrics_generation_started", with_sync=with_sync
+        "lyrics_generation_started",
+        with_sync=with_sync,
     )
+
+    def _elapsed() -> str:
+        return f"{time.monotonic() - t0:.1f}s"
+
+    async def _log(stage: str, msg: str) -> None:
+        line = f"[{_elapsed()}] {msg}"
+        logger.info(msg, stage=stage)
+        await set_lyrics_progress(
+            progress_id, stage, line
+        )
 
     async with AsyncSessionLocal() as session:
         result = await session.execute(
@@ -34,17 +121,29 @@ async def generate_lyrics_task(
         )
         track = result.scalar_one_or_none()
         if not track or not track.is_active:
-            logger.warning("lyrics_track_not_found")
-            return {"status": "error", "detail": "track_not_found"}
+            await _log("error", "track not found")
+            return {
+                "status": "error",
+                "detail": "track_not_found",
+            }
 
         artist = track.artist or ""
         title = track.title or ""
+
+        await _log(
+            "searching",
+            f"searching lyrics: artist={artist!r} title={title!r}",
+        )
 
         audio_path: str | None = None
         tmp_dir: str | None = None
 
         try:
             if with_sync and track.file_key:
+                await _log(
+                    "downloading_audio",
+                    f"downloading audio: {track.file_key}",
+                )
                 tmp_dir = tempfile.mkdtemp()
                 audio_path = os.path.join(
                     tmp_dir, "audio.mp3"
@@ -54,21 +153,65 @@ async def generate_lyrics_task(
                 )
                 with open(audio_path, "wb") as f:
                     f.write(data)
+                await _log(
+                    "downloading_audio",
+                    f"audio downloaded: {len(data)} bytes",
+                )
 
             from dotsound_private_core.services.lyrics_provider import (  # noqa: E501
                 generate_lyrics,
             )
 
-            gen_result = await asyncio.to_thread(
-                generate_lyrics,
-                artist=artist,
-                title=title,
-                audio_path=audio_path,
+            loop = asyncio.get_running_loop()
+
+            def on_progress(stage: str) -> None:
+                asyncio.run_coroutine_threadsafe(
+                    _log(stage, f"privatecore: stage={stage}"),
+                    loop,
+                )
+
+            import logging
+
+            class _LogCapture(logging.Handler):
+                def emit(self, record: logging.LogRecord) -> None:
+                    msg = self.format(record)
+                    asyncio.run_coroutine_threadsafe(
+                        append_lyrics_log(progress_id, f"[{_elapsed()}] {msg}"),
+                        loop,
+                    )
+
+            pc_logger = logging.getLogger(
+                "dotsound_private_core.services.lyrics_provider"
             )
+            handler = _LogCapture()
+            handler.setLevel(logging.DEBUG)
+            pc_logger.addHandler(handler)
+            pc_logger.setLevel(logging.DEBUG)
+
+            await _log("searching", "calling generate_lyrics()")
+
+            try:
+                gen_result = await asyncio.to_thread(
+                    generate_lyrics,
+                    artist=artist,
+                    title=title,
+                    audio_path=audio_path,
+                    on_progress=on_progress,
+                )
+            finally:
+                pc_logger.removeHandler(handler)
 
             if gen_result is None:
-                logger.info("lyrics_not_found")
+                await _log(
+                    "searching", "lyrics not found"
+                )
                 return {"status": "not_found"}
+
+            await _log(
+                "saving",
+                f"lyrics found: {len(gen_result.text)} chars, "
+                f"synced={gen_result.synced_lines is not None}",
+            )
 
             synced_dicts: list[dict] | None = None
             if gen_result.synced_lines:
@@ -90,20 +233,25 @@ async def generate_lyrics_task(
             await session.commit()
 
             has_sync = synced_dicts is not None
-            logger.info(
-                "lyrics_generation_done",
-                has_sync=has_sync,
+            await _log(
+                "saving",
+                f"saved to DB (has_sync={has_sync})",
             )
             return {
                 "status": "found",
                 "has_sync": has_sync,
             }
 
-        except Exception:
+        except Exception as exc:
             logger.exception("lyrics_generation_error")
+            await _log(
+                "error", f"ERROR: {exc}"
+            )
             return {"status": "error"}
         finally:
             if tmp_dir and os.path.isdir(tmp_dir):
                 import shutil
 
-                shutil.rmtree(tmp_dir, ignore_errors=True)
+                shutil.rmtree(
+                    tmp_dir, ignore_errors=True
+                )
