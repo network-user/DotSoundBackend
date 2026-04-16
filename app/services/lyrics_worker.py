@@ -9,6 +9,7 @@ import time
 import structlog
 from redis.asyncio import Redis
 from sqlalchemy import select
+from taskiq import TaskiqEvents, TaskiqState
 
 from app.core import s3
 from app.core.db import AsyncSessionLocal
@@ -18,6 +19,23 @@ from app.models.track import Track
 from app.repositories.lyrics import LyricsRepository
 
 logger = structlog.stdlib.get_logger(__name__)
+
+
+@broker.on_event(TaskiqEvents.WORKER_STARTUP)
+async def _preload_lyrics_assets(_state: TaskiqState) -> None:
+    """Preload heavy assets used by the lyrics provider.
+
+    Runs once per worker process. Heavy ML model is downloaded
+    to local cache here so that the first user request doesn't
+    pay the 5–10 minute download latency.
+    """
+    from dotsound_private_core.services.lyrics_provider import (
+        warmup_lyrics_provider,
+    )
+
+    logger.info("lyrics_assets_preload_start")
+    await asyncio.to_thread(warmup_lyrics_provider)
+    logger.info("lyrics_assets_preload_done")
 
 
 async def _fetch_audio_to_file(
@@ -312,6 +330,7 @@ async def generate_lyrics_task(
                     {
                         "time_ms": sl.time_ms,
                         "text": sl.text,
+                        "confidence": sl.confidence,
                     }
                     for sl in gen_result.synced_lines
                 ]

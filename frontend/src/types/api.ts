@@ -188,6 +188,7 @@ export interface TrackCardResponse {
 export interface SyncedLine {
   time_ms: number
   text: string
+  confidence?: number
 }
 
 export interface LyricsResponse {

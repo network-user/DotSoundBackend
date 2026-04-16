@@ -8,6 +8,12 @@ class SyncedLine(BaseModel):
         ge=0, description="Timestamp in milliseconds"
     )
     text: str
+    confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Alignment confidence 0.0–1.0",
+    )
 
 
 class LyricsCreateRequest(BaseModel):

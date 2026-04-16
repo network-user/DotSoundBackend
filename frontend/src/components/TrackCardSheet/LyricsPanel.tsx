@@ -746,9 +746,14 @@ export function LyricsPanel({
                       ? activeRef
                       : null
                   }
-                  className={`lyrics-line${i === activeIdx ? ' lyrics-line-active' : ''}`}
+                  className={`lyrics-line${i === activeIdx ? ' lyrics-line-active' : ''}${(line.confidence ?? 0) < 0.5 ? ' lyrics-line-uncertain' : ''}`}
                   onClick={() =>
                     handleLineClick(line.time_ms)
+                  }
+                  title={
+                    (line.confidence ?? 0) < 0.5
+                      ? 'Таймкод неточный'
+                      : undefined
                   }
                 >
                   {line.text}

@@ -1774,6 +1774,10 @@ textarea.form-input { resize: none; }
   font-weight: 600;
   font-size: 16px;
 }
+.lyrics-line-uncertain {
+  opacity: 0.55;
+  font-style: italic;
+}
 
 /* Plain text lyrics */
 .lyrics-plain {
