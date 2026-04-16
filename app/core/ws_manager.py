@@ -275,7 +275,7 @@ class ConnectionManager:
             logger.debug(
                 "ws_no_local_conns",
                 user_id=user_id,
-                event=data.get("event"),
+                ws_event=data.get("event"),
             )
             return
         payload = json.dumps(data)
@@ -290,7 +290,7 @@ class ConnectionManager:
         logger.debug(
             "ws_delivered",
             user_id=user_id,
-            event=data.get("event"),
+            ws_event=data.get("event"),
             count=len(conns) - len(dead),
         )
 
@@ -316,10 +316,14 @@ class ConnectionManager:
             return
         try:
             while True:
-                msg = await pubsub.get_message(
-                    ignore_subscribe_messages=True,
-                    timeout=0.5,
-                )
+                try:
+                    msg = await pubsub.get_message(
+                        ignore_subscribe_messages=True,
+                        timeout=0.5,
+                    )
+                except RuntimeError:
+                    await asyncio.sleep(0.5)
+                    continue
                 if not msg:
                     await asyncio.sleep(0.01)
                     continue
@@ -335,10 +339,15 @@ class ConnectionManager:
                     )
 
                 for _ in range(64):
-                    extra = await pubsub.get_message(
-                        ignore_subscribe_messages=True,
-                        timeout=0.0,
-                    )
+                    try:
+                        extra = (
+                            await pubsub.get_message(
+                                ignore_subscribe_messages=True,
+                                timeout=0.0,
+                            )
+                        )
+                    except RuntimeError:
+                        break
                     if not extra:
                         break
                     if extra["type"] != "message":

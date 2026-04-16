@@ -106,14 +106,29 @@ class LyricsService:
         user_id: int,
         with_sync: bool = False,
     ) -> str:
+        import uuid
+
+        from app.services.lyrics_worker import (
+            set_lyrics_progress,
+        )
+
         await self._get_owned_track(track_id, user_id)
+        progress_id = uuid.uuid4().hex
         task = await generate_lyrics_task.kiq(
-            track_id=track_id, with_sync=with_sync
+            track_id=track_id,
+            with_sync=with_sync,
+            progress_id=progress_id,
+        )
+        await set_lyrics_progress(
+            progress_id,
+            "queued",
+            f"task queued: taskiq_id={task.task_id}",
         )
         logger.info(
             "lyrics_auto_triggered",
             track_id=track_id,
             task_id=task.task_id,
+            progress_id=progress_id,
             with_sync=with_sync,
         )
-        return task.task_id
+        return progress_id

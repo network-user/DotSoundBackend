@@ -60,7 +60,7 @@ async def websocket_endpoint(
             logger.debug(
                 "ws_incoming",
                 user_id=user_id,
-                event=event,
+                ws_event=event,
                 conv_id=conv_id,
             )
 

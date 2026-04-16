@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -7,6 +6,8 @@ import {
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
+import { useLyricsTask } from '@/store/lyricsTaskStore'
+import { Icon } from '@/components/Icon/Icon'
 import type { LyricsResponse } from '@/types/api'
 import { LyricsEditor } from './LyricsEditor'
 
@@ -35,21 +36,44 @@ export function LyricsPanel({
     string | null
   >(null)
   const [editing, setEditing] = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [genStatus, setGenStatus] = useState<
-    string | null
-  >(null)
   const [showSync, setShowSync] = useState(true)
   const activeRef = useRef<HTMLDivElement>(null)
-  const pollRef = useRef<ReturnType<
-    typeof setInterval
-  > | null>(null)
+  const [devOpen, setDevOpen] = useState(false)
+  const logEndRef = useRef<HTMLDivElement>(null)
+
+  const {
+    generating,
+    stage,
+    genStatus,
+    taskId: activeTaskId,
+    startedAt,
+    debugLog,
+    startGeneration,
+    clearTask,
+    clearDebugLog,
+  } = useLyricsTask(trackId)
 
   useEffect(() => {
-    if (forceEdit || (!hasLyrics && isOwner)) {
+    if (forceEdit) {
       setEditing(true)
     }
-  }, [forceEdit, hasLyrics, isOwner])
+  }, [forceEdit])
+
+  useEffect(() => {
+    if (genStatus === 'found' && !lyrics) {
+      api
+        .getLyrics(trackId)
+        .then((updated) => {
+          setLyrics(updated)
+        })
+        .catch((err) => {
+          console.error(
+            'Failed to load lyrics after detection:',
+            err,
+          )
+        })
+    }
+  }, [genStatus, trackId, lyrics])
 
   useEffect(() => {
     if (!hasLyrics) return
@@ -59,7 +83,10 @@ export function LyricsPanel({
       .then(setLyrics)
       .catch(() =>
         setError(
-          t('lyrics.notFound', 'Не удалось загрузить'),
+          t(
+            'lyrics.notFound',
+            'Не удалось загрузить',
+          ),
         ),
       )
       .finally(() => setLoading(false))
@@ -94,60 +121,28 @@ export function LyricsPanel({
     }
   }, [activeIdx])
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
+  useEffect(() => {
+    if (devOpen && logEndRef.current) {
+      logEndRef.current.scrollIntoView({
+        behavior: 'smooth',
+      })
     }
-  }, [])
+  }, [devOpen, debugLog.length])
 
-  useEffect(() => () => stopPolling(), [stopPolling])
-
-  const handleGenerate = useCallback(
-    async (withSync: boolean) => {
-      setGenerating(true)
-      setGenStatus(null)
-      try {
-        const { task_id } =
-          await api.generateLyrics(
-            trackId,
-            withSync,
-          )
-        pollRef.current = setInterval(async () => {
-          try {
-            const { status } =
-              await api.getLyricsAutoStatus(
-                trackId,
-                task_id,
-              )
-            if (status === 'found') {
-              stopPolling()
-              const updated =
-                await api.getLyrics(trackId)
-              setLyrics(updated)
-              setGenerating(false)
-              setGenStatus(null)
-            } else if (
-              status === 'not_found' ||
-              status === 'error'
-            ) {
-              stopPolling()
-              setGenerating(false)
-              setGenStatus(status)
-            }
-          } catch {
-            stopPolling()
-            setGenerating(false)
-            setGenStatus('error')
-          }
-        }, 2000)
-      } catch {
-        setGenerating(false)
-        setGenStatus('error')
-      }
-    },
-    [trackId, stopPolling],
-  )
+  const handleGenerate = async (
+    withSync: boolean,
+  ) => {
+    try {
+      await startGeneration(withSync)
+    } catch {
+      setError(
+        t(
+          'lyrics.notFound',
+          'Не удалось запустить определение',
+        ),
+      )
+    }
+  }
 
   const handleLineClick = (timeMs: number) => {
     if (!duration) return
@@ -161,6 +156,10 @@ export function LyricsPanel({
     setLyrics(updated)
     setEditing(false)
   }
+
+  const elapsed = startedAt
+    ? ((Date.now() - startedAt) / 1000).toFixed(1)
+    : '0'
 
   if (loading)
     return (
@@ -189,18 +188,219 @@ export function LyricsPanel({
     )
   }
 
-  if (generating)
+  const stageProgress: Record<string, number> = {
+    searching: 25,
+    downloading_audio: 50,
+    processing: 75,
+    saving: 95,
+  }
+  const progressPct = generating
+    ? stageProgress[stage ?? ''] ?? 10
+    : lyricsLoading
+      ? 100
+      : 0
+
+  const lyricsLoading =
+    genStatus === 'found' && !lyrics
+
+  if (
+    generating ||
+    lyricsLoading ||
+    (devOpen && debugLog.length > 0)
+  )
     return (
-      <div className="lyrics-panel">
+      <div
+        className="lyrics-panel"
+        style={{ position: 'relative' }}
+      >
         <div className="lyrics-generating">
-          <div className="loader" />
-          <span>
-            {t(
-              'lyrics.generating',
-              'Определение...',
-            )}
-          </span>
+          <div
+            style={{
+              width: '100%',
+              height: 3,
+              borderRadius: 2,
+              background:
+                'rgba(255,255,255,0.08)',
+              overflow: 'hidden',
+              marginBottom: 12,
+            }}
+          >
+            <div
+              style={{
+                width: `${progressPct}%`,
+                height: '100%',
+                borderRadius: 2,
+                background:
+                  'rgba(255,255,255,0.5)',
+                transition:
+                  'width 0.6s ease-in-out',
+              }}
+            />
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 12,
+                color: 'rgba(255,255,255,0.4)',
+              }}
+            >
+              {generating
+                ? t(
+                    'lyrics.generating',
+                    'Определение...',
+                  )
+                : lyricsLoading
+                  ? t(
+                      'lyrics.generating',
+                      'Загрузка...',
+                    )
+                  : ''}
+            </span>
+            <button
+              onClick={() =>
+                setDevOpen((v) => !v)
+              }
+              style={{
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 2,
+                display: 'flex',
+                alignItems: 'center',
+                color: 'rgba(255,255,255,0.7)',
+              }}
+            >
+              <Icon
+                name="settings"
+                size={16}
+              />
+            </button>
+          </div>
         </div>
+        {devOpen && (
+          <div
+            style={{
+              background: 'rgba(10,10,10,0.95)',
+              border:
+                '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 10,
+              padding: '8px 10px',
+              fontSize: 10,
+              fontFamily: 'monospace',
+              color: 'rgba(255,255,255,0.7)',
+              maxHeight: '40vh',
+              overflow: 'auto',
+              marginTop: 8,
+              backdropFilter: 'blur(8px)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                marginBottom: 6,
+                flexWrap: 'wrap',
+              }}
+            >
+              <span
+                style={{
+                  fontWeight: 700,
+                  color: '#fff',
+                  fontSize: 11,
+                }}
+              >
+                DevTools — Lyrics
+              </span>
+              <span
+                style={{
+                  padding: '1px 5px',
+                  borderRadius: 4,
+                  fontSize: 9,
+                  background: generating
+                    ? 'rgba(250,204,21,0.2)'
+                    : 'rgba(74,222,128,0.2)',
+                  color: generating
+                    ? '#facc15'
+                    : '#4ade80',
+                }}
+              >
+                {generating ? 'RUNNING' : 'DONE'}
+              </span>
+              <button
+                onClick={() => clearDebugLog()}
+                style={{
+                  marginLeft: 'auto',
+                  background:
+                    'rgba(255,255,255,0.08)',
+                  border: 'none',
+                  color: 'rgba(255,255,255,0.5)',
+                  borderRadius: 4,
+                  padding: '2px 6px',
+                  fontSize: 9,
+                  cursor: 'pointer',
+                }}
+              >
+                Clear
+              </button>
+              <button
+                onClick={() => setDevOpen(false)}
+                style={{
+                  background:
+                    'rgba(255,255,255,0.08)',
+                  border: 'none',
+                  color: 'rgba(255,255,255,0.5)',
+                  borderRadius: 4,
+                  padding: '2px 6px',
+                  fontSize: 9,
+                  cursor: 'pointer',
+                }}
+              >
+                Close
+              </button>
+            </div>
+            <div
+              style={{
+                color: 'rgba(255,255,255,0.4)',
+                fontSize: 9,
+                marginBottom: 4,
+              }}
+            >
+              task: {activeTaskId ?? '-'}
+              {' | '}
+              elapsed: {elapsed}s
+              {' | '}
+              stage: {stage ?? '-'}
+            </div>
+            <div
+              style={{
+                borderTop:
+                  '1px solid rgba(255,255,255,0.08)',
+                paddingTop: 4,
+              }}
+            >
+              {debugLog.map((line, i) => (
+                <div
+                  key={i}
+                  style={{
+                    padding: '1px 0',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-all',
+                  }}
+                >
+                  {line}
+                </div>
+              ))}
+              <div ref={logEndRef} />
+            </div>
+          </div>
+        )}
       </div>
     )
 
@@ -218,12 +418,50 @@ export function LyricsPanel({
             )}
           </span>
           {isOwner && (
-            <button
-              className="btn-secondary"
-              onClick={() => setEditing(true)}
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                flexWrap: 'wrap',
+                marginTop: 8,
+              }}
             >
-              {t('lyrics.edit', 'Редактировать')}
-            </button>
+              <button
+                className="btn-secondary"
+                onClick={() => {
+                  clearTask()
+                  handleGenerate(false)
+                }}
+              >
+                {t(
+                  'lyrics.detectText',
+                  'Определить текст',
+                )}
+              </button>
+              {hasAudio && (
+                <button
+                  className="btn-secondary"
+                  onClick={() => {
+                    clearTask()
+                    handleGenerate(true)
+                  }}
+                >
+                  {t(
+                    'lyrics.detectTextWithSync',
+                    'Определить текст + таймкоды',
+                  )}
+                </button>
+              )}
+              <button
+                className="btn-text"
+                onClick={() => setEditing(true)}
+              >
+                {t(
+                  'lyrics.edit',
+                  'Редактировать',
+                )}
+              </button>
+            </div>
           )}
         </div>
       </div>
