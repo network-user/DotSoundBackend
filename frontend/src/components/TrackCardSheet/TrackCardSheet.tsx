@@ -423,7 +423,7 @@ export function TrackCardSheet({
                 hasLyrics={
                   card?.has_lyrics ?? false
                 }
-                hasAudio={track.source === 'internal'}
+                hasAudio={track.source === 'internal' || track.source === 'soundcloud'}
               />
             </div>
           )}
@@ -450,7 +450,7 @@ export function TrackCardSheet({
                 hasLyrics={
                   card?.has_lyrics ?? false
                 }
-                hasAudio={track.source === 'internal'}
+                hasAudio={track.source === 'internal' || track.source === 'soundcloud'}
               />
             </div>
           )}
@@ -807,7 +807,7 @@ export function TrackCardSheet({
               hasLyrics={
                 card?.has_lyrics ?? false
               }
-              hasAudio={track.source === 'internal'}
+              hasAudio={track.source === 'internal' || track.source === 'soundcloud'}
               forceEdit
             />
             <button

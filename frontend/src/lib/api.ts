@@ -354,6 +354,20 @@ export const api = {
     return request(`/api/v1/tracks/${trackId}/lyrics`, { method: 'DELETE' })
   },
 
+  redefineLyrics(
+    trackId: number,
+    withSync: boolean = false,
+  ): Promise<LyricsAutoResponse> {
+    return request(
+      `/api/v1/tracks/${trackId}/lyrics/redefine`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ with_sync: withSync }),
+      },
+    )
+  },
+
   generateLyrics(
     trackId: number,
     withSync: boolean = false,

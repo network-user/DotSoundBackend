@@ -201,10 +201,6 @@ async def upload_my_avatar(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> AvatarResponse:
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Avatar uploads are temporarily frozen. Enjoy your auto-generated identicon!",
-    )
     structlog.contextvars.bind_contextvars(user_id=current_user.id)
     mime = avatar.content_type or ""
     if not mime or mime == "application/octet-stream":
