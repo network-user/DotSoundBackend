@@ -139,7 +139,7 @@ async function startGeneration(
   }
 
   const modeLabel = debugTier
-    ? `DEBUG tier=${debugTier}`
+    ? `DEBUG stage=${debugTier}`
     : `AUTO (withSync=${withSync})`
 
   tasks.set(trackId, {

@@ -391,7 +391,7 @@ export const api = {
     tier: number,
   ): Promise<LyricsAutoResponse> {
     return request(
-      `/api/v1/tracks/${trackId}/lyrics/debug/tier/${tier}`,
+      `/api/v1/tracks/${trackId}/lyrics/debug/stage/${tier}`,
       {
         method: 'POST',
         headers: {

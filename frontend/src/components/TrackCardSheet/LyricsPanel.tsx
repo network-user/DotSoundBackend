@@ -80,16 +80,19 @@ export function LyricsPanel({
   useEffect(() => {
     if (genStatus === 'found' && !lyrics) {
       if (editing) return
+      console.debug('[LyricsPanel] fetching lyrics after detection', { trackId })
       api
         .getLyrics(trackId)
         .then((updated) => {
+          console.debug('[LyricsPanel] lyrics loaded', { chars: updated.plain_text?.length })
           setLyrics(updated)
         })
         .catch((err) => {
           console.error(
-            'Failed to load lyrics after detection:',
+            '[LyricsPanel] Failed to load lyrics after detection:',
             err,
           )
+          clearTask()
         })
     }
   }, [genStatus, trackId, lyrics])
@@ -302,9 +305,15 @@ export function LyricsPanel({
                   : ''}
             </span>
 
-            {generating && (
+            {(generating || lyricsLoading) && (
               <button
-                onClick={() => cancelGeneration()}
+                onClick={() => {
+                  if (generating) {
+                    cancelGeneration()
+                  } else {
+                    clearTask()
+                  }
+                }}
                 style={{
                   background: 'rgba(239,68,68,0.2)',
                   border: '1px solid rgba(239,68,68,0.5)',
