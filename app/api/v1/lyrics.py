@@ -157,7 +157,11 @@ async def get_auto_lyrics_status(
             status="error"
         )
 
-    progress = await get_lyrics_progress(task_id)
+    try:
+        progress = await get_lyrics_progress(task_id)
+    except Exception:
+        logger.exception("lyrics_progress_fetch_error", task_id=task_id)
+        return LyricsAutoStatusResponse(status="pending")
     stage = progress.get("stage") if progress else None
     logs = progress.get("logs", []) if progress else []
 
@@ -287,16 +291,16 @@ async def cancel_lyrics_generation(
 
 
 @router.post(
-    "/{track_id}/lyrics/debug/tier/{tier_num}",
+    "/{track_id}/lyrics/debug/stage/{stage_id}",
     response_model=LyricsAutoResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    summary="[DEBUG] Test individual lyrics detection tier (1, 2, or 3)",
+    summary="[DEBUG] Test individual lyrics detection stage",
 )
 @limiter.limit("20/minute")
 async def trigger_debug_lyrics(
     request: Request,
     track_id: int,
-    tier_num: int,
+    stage_id: int,
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> LyricsAutoResponse:
@@ -306,14 +310,14 @@ async def trigger_debug_lyrics(
             detail="Debug mode not enabled",
         )
 
-    if tier_num not in (1, 2, 3):
+    if stage_id not in (1, 2, 3):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="tier must be 1, 2, or 3",
+            detail="invalid stage_id",
         )
 
     structlog.contextvars.bind_contextvars(
-        track_id=track_id, debug_tier=tier_num
+        track_id=track_id, debug_stage_id=stage_id
     )
 
     service = LyricsService(session)
@@ -329,17 +333,17 @@ async def trigger_debug_lyrics(
 
     progress_id = uuid.uuid4().hex
     task = await generate_lyrics_debug_task.kiq(
-        track_id=track_id, tier=tier_num, progress_id=progress_id
+        track_id=track_id, stage_id=stage_id, progress_id=progress_id
     )
     await set_lyrics_progress(
         progress_id,
         "queued",
-        f"debug task queued (tier={tier_num}): taskiq_id={task.task_id}",
+        f"debug task queued: taskiq_id={task.task_id}",
     )
 
     logger.info(
         "debug_lyrics_triggered",
-        tier=tier_num,
+        stage_id=stage_id,
         task_id=task.task_id,
         progress_id=progress_id,
     )
