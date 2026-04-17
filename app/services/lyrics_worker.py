@@ -374,7 +374,7 @@ async def generate_lyrics_task(
 @broker.task
 async def generate_lyrics_debug_task(
     track_id: int,
-    tier: int,
+    stage_id: int,
     progress_id: str = "",
 ) -> dict:
     """Debug task: run only a specific provider stage in isolation."""
@@ -384,7 +384,7 @@ async def generate_lyrics_debug_task(
     )
     logger.info(
         "lyrics_debug_started",
-        tier=tier,
+        stage_id=stage_id,
     )
 
     def _elapsed() -> str:
@@ -414,7 +414,7 @@ async def generate_lyrics_debug_task(
 
         await _log(
             "searching",
-            f"[DEBUG stage={tier}] searching lyrics: artist={artist!r} title={title!r}",
+            f"[DEBUG] searching lyrics: artist={artist!r} title={title!r}",
         )
 
         # Check for cancellation before starting
@@ -430,7 +430,7 @@ async def generate_lyrics_debug_task(
 
         try:
             # Only download audio when the selected stage needs it.
-            if tier == 3 and (
+            if stage_id == 3 and (
                 track.file_key or getattr(track, "sc_url", None)
             ):
                 await _log(
@@ -461,7 +461,10 @@ async def generate_lyrics_debug_task(
 
             def on_progress(stage: str) -> None:
                 asyncio.run_coroutine_threadsafe(
-                    _log(stage, f"privatecore: stage={stage}"),
+                    _log(
+                        _opaque_stage(stage),
+                        f"privatecore: stage={stage}",
+                    ),
                     loop,
                 )
 
@@ -483,7 +486,7 @@ async def generate_lyrics_debug_task(
             pc_logger.addHandler(handler)
             pc_logger.setLevel(logging.DEBUG)
 
-            await _log("searching", f"calling generate_lyrics_debug(stage={tier})")
+            await _log("searching", "calling internal debug provider")
 
             # Check for cancellation before starting generation
             if await _should_cancel(progress_id):
@@ -500,7 +503,7 @@ async def generate_lyrics_debug_task(
                     artist=artist,
                     title=title,
                     audio_path=audio_path,
-                    tier=tier,
+                    tier=stage_id,
                     on_progress=on_progress,
                 )
             finally:
