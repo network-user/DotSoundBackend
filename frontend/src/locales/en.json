@@ -72,5 +72,23 @@
     "showSync": "Line highlighting",
     "edit": "Edit",
     "title": "Lyrics"
+  },
+  "artist": {
+    "performer": "Artist",
+    "age_one": "{{count}} year",
+    "age_other": "{{count}} years",
+    "born": "Born",
+    "birthplace": "Birthplace",
+    "bio_title": "About the artist",
+    "bio_show_more": "Show more",
+    "bio_show_less": "Collapse",
+    "website": "Website",
+    "no_info": "No artist info available yet",
+    "tracks_title": "Tracks on the platform",
+    "tracks_empty": "No tracks from this artist yet",
+    "enrich_button": "Identify artist",
+    "enrich_loading": "Identifying…",
+    "enrich_failed": "Couldn't identify artist",
+    "enrichment_pending": "Loading data…"
   }
 }

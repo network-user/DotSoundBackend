@@ -83,3 +83,23 @@ export function getInternalUserId():
 export function getUserId(): number | null {
   return _internalUserId
 }
+
+const IS_ADMIN_KEY = 'auth-is-admin'
+
+export function setIsAdmin(value: boolean): void {
+  try {
+    if (value) {
+      localStorage.setItem(IS_ADMIN_KEY, '1')
+    } else {
+      localStorage.removeItem(IS_ADMIN_KEY)
+    }
+  } catch {}
+}
+
+export function getIsAdmin(): boolean {
+  try {
+    return localStorage.getItem(IS_ADMIN_KEY) === '1'
+  } catch {
+    return false
+  }
+}

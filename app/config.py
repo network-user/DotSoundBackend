@@ -53,6 +53,10 @@ class AppSettings(BaseSettings):
         "none", "lightweight", "clamav"
     ] = "none"
 
+    artist_enrichment_timeout_seconds: float = 25.0
+    artist_image_max_bytes: int = 5 * 1024 * 1024
+    artist_enrichment_min_confidence: float = 0.3
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [

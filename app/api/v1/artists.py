@@ -1,23 +1,96 @@
-from fastapi import APIRouter, Depends, Query
+from datetime import date, datetime, timezone
+
+import structlog
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_db
+from app.core import s3
+from app.core.rate_limit import limiter
+from app.dependencies import get_db, require_admin
+from app.models.artist import Artist
+from app.models.track import Track
+from app.models.user import User
+from app.repositories.artist import ArtistRepository
+from app.repositories.track import TrackRepository  # noqa: F401
 from app.schemas.artist import (
     ArtistDetailResponse,
     ArtistListResponse,
+    ArtistResolveResponse,
     ArtistResponse,
 )
 from app.schemas.track import (
     TrackListResponse,
     TrackResponse,
 )
-from app.services.artist_service import (
-    ArtistService,
+from app.services.artist_enrichment_service import (
+    ArtistEnrichmentService,
+    ArtistNotFound,
+)
+from app.services.artist_service import ArtistService
+from dotsound_private_core.services.artist_normalizer import (
+    is_fuzzy_match,
+    normalize_name,
 )
 
 router = APIRouter(
     prefix="/artists", tags=["artists"]
 )
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _compute_age(birth: date | None) -> int | None:
+    if birth is None:
+        return None
+    today = datetime.now(timezone.utc).date()
+    years = today.year - birth.year
+    if (today.month, today.day) < (birth.month, birth.day):
+        years -= 1
+    return years if years >= 0 else None
+
+
+async def _build_artist_detail(
+    session: AsyncSession, artist_id: int
+) -> ArtistDetailResponse:
+    svc = ArtistService(session)
+    artist = await svc.get_by_id(artist_id)
+    if not artist:
+        raise HTTPException(
+            status_code=404, detail="Artist not found"
+        )
+
+    repo = ArtistRepository(session)
+    track_ids = await repo.get_artist_track_ids(artist_id)
+
+    image_url: str | None = None
+    if artist.image_key:
+        try:
+            image_url = await s3.get_presigned_url(
+                artist.image_key
+            )
+        except Exception:
+            logger.exception(
+                "artist_image_presign_failed",
+                artist_id=artist_id,
+            )
+
+    return ArtistDetailResponse(
+        id=artist.id,
+        name=artist.name,
+        image_key=artist.image_key,
+        image_url=image_url,
+        source=artist.source,
+        bio=artist.bio,
+        birth_date=artist.birth_date,
+        birthplace=artist.birthplace,
+        country=artist.country,
+        website_url=artist.website_url,
+        enrichment_status=artist.enrichment_status,
+        enriched_at=artist.enriched_at,
+        created_at=artist.created_at,
+        track_count=len(track_ids),
+        age=_compute_age(artist.birth_date),
+    )
 
 
 @router.get("", response_model=ArtistListResponse)
@@ -41,6 +114,37 @@ async def list_artists(
 
 
 @router.get(
+    "/resolve",
+    response_model=ArtistResolveResponse,
+    summary="Resolve artist name to id (for opening artist card by name).",
+)
+async def resolve_artist(
+    name: str = Query(..., min_length=1, max_length=256),
+    db: AsyncSession = Depends(get_db),
+) -> ArtistResolveResponse:
+    normalized = normalize_name(name)
+    repo = ArtistRepository(db)
+
+    exact = await repo.find_by_normalized_name(normalized)
+    if exact:
+        return ArtistResolveResponse(id=exact.id)
+
+    if len(normalized) >= 3:
+        candidates = await repo.search(
+            normalized[:3], limit=50
+        )
+        for candidate in candidates:
+            if is_fuzzy_match(
+                normalized, candidate.name_normalized
+            ):
+                return ArtistResolveResponse(id=candidate.id)
+
+    raise HTTPException(
+        status_code=404, detail="Artist not found"
+    )
+
+
+@router.get(
     "/{artist_id}",
     response_model=ArtistDetailResponse,
 )
@@ -48,32 +152,29 @@ async def get_artist(
     artist_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    from fastapi import HTTPException
+    return await _build_artist_detail(db, artist_id)
 
-    svc = ArtistService(db)
-    artist = await svc.get_by_id(artist_id)
-    if not artist:
+
+@router.post(
+    "/{artist_id}/enrich",
+    response_model=ArtistDetailResponse,
+    summary="[Admin] Manually trigger artist enrichment from external metadata.",
+)
+@limiter.limit("10/minute")
+async def enrich_artist(
+    request: Request,
+    artist_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> ArtistDetailResponse:
+    enrichment = ArtistEnrichmentService(db)
+    try:
+        await enrichment.enrich(artist_id)
+    except ArtistNotFound:
         raise HTTPException(
-            status_code=404,
-            detail="Artist not found",
+            status_code=404, detail="Artist not found"
         )
-    from app.repositories.artist import (
-        ArtistRepository,
-    )
-
-    repo = ArtistRepository(db)
-    track_ids = await repo.get_artist_track_ids(
-        artist_id
-    )
-    return ArtistDetailResponse(
-        id=artist.id,
-        name=artist.name,
-        image_key=artist.image_key,
-        source=artist.source,
-        bio=artist.bio,
-        created_at=artist.created_at,
-        track_count=len(track_ids),
-    )
+    return await _build_artist_detail(db, artist_id)
 
 
 @router.get(
@@ -86,13 +187,6 @@ async def get_artist_tracks(
     size: int = Query(default=20, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.repositories.artist import (
-        ArtistRepository,
-    )
-    from app.repositories.track import (
-        TrackRepository,
-    )
-
     artist_repo = ArtistRepository(db)
     track_ids = await artist_repo.get_artist_track_ids(
         artist_id, limit=500
@@ -102,11 +196,6 @@ async def get_artist_tracks(
         return TrackListResponse(
             items=[], total=0, page=page, size=size
         )
-
-    track_repo = TrackRepository(db)
-    from sqlalchemy import select
-
-    from app.models.track import Track
 
     offset = (page - 1) * size
     result = await db.execute(
@@ -121,8 +210,6 @@ async def get_artist_tracks(
         .limit(size)
     )
     tracks = list(result.scalars().all())
-
-    from sqlalchemy import func
 
     total_result = await db.execute(
         select(func.count()).where(

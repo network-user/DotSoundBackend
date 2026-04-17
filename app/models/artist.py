@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from datetime import date, datetime
+
 from sqlalchemy import (
+    Date,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -34,6 +38,27 @@ class Artist(Base, TimestampMixin):
     )
     bio: Mapped[str | None] = mapped_column(
         Text, nullable=True
+    )
+    birth_date: Mapped[date | None] = mapped_column(
+        Date, nullable=True
+    )
+    birthplace: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    country: Mapped[str | None] = mapped_column(
+        String(2), nullable=True
+    )
+    website_url: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    enrichment_status: Mapped[str] = mapped_column(
+        String(16),
+        server_default="pending",
+        nullable=False,
+        index=True,
+    )
+    enriched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     track_links: Mapped[list[TrackArtist]] = relationship(

@@ -1,9 +1,11 @@
 import {
   getInternalUserId,
   setInternalUserId,
+  setIsAdmin,
 } from '@/lib/telegram'
 import type {
   AppNotification,
+  ArtistDetail,
   AuthorProfile,
   AvatarResponse,
   ChatListItem,
@@ -456,6 +458,7 @@ export const api = {
     accessToken = res.access_token
     persistToken(accessToken)
     setInternalUserId(res.user_id)
+    setIsAdmin(res.is_admin)
     return res
   },
 
@@ -466,6 +469,7 @@ export const api = {
     accessToken = res.access_token
     persistToken(accessToken)
     setInternalUserId(res.user_id)
+    setIsAdmin(res.is_admin)
     return res
   },
 
@@ -508,6 +512,7 @@ export const api = {
     accessToken = null
     persistToken(null)
     setInternalUserId(null)
+    setIsAdmin(false)
   },
 
   setOnUnauthorized(cb: (() => void) | null) {
@@ -537,6 +542,7 @@ export const api = {
     accessToken = res.access_token
     persistToken(accessToken)
     setInternalUserId(res.user_id)
+    setIsAdmin(res.is_admin)
     return res
   },
 
@@ -576,6 +582,7 @@ export const api = {
       accessToken = res.access_token
       persistToken(accessToken)
       setInternalUserId(res.user_id)
+      setIsAdmin(res.is_admin)
     }
     return res
   },
@@ -602,6 +609,7 @@ export const api = {
       accessToken = res.access_token
       persistToken(accessToken)
       setInternalUserId(res.user_id)
+      setIsAdmin(res.is_admin)
     }
     return res
   },
@@ -628,6 +636,7 @@ export const api = {
       accessToken = res.access_token
       persistToken(accessToken)
       setInternalUserId(res.user_id)
+      setIsAdmin(res.is_admin)
     }
     return res
   },
@@ -671,6 +680,7 @@ export const api = {
       accessToken = res.access_token
       persistToken(accessToken)
       setInternalUserId(res.user_id)
+      setIsAdmin(res.is_admin)
     }
     return res
   },
@@ -1214,12 +1224,28 @@ export const api = {
     return request(`/api/v1/artists${qs}`)
   },
 
-  getArtist(artistId: number): Promise<{ id: number; name: string; image_key: string | null; track_count: number; bio: string | null }> {
+  getArtist(artistId: number): Promise<ArtistDetail> {
     return request(`/api/v1/artists/${artistId}`)
   },
 
   getArtistTracks(artistId: number, page?: number): Promise<TrackListResponse> {
     const p = page || 1
     return request(`/api/v1/artists/${artistId}/tracks?page=${p}`)
+  },
+
+  enrichArtist(artistId: number): Promise<ArtistDetail> {
+    return request(`/api/v1/artists/${artistId}/enrich`, {
+      method: 'POST',
+    })
+  },
+
+  async resolveArtistByName(name: string): Promise<{ id: number } | null> {
+    try {
+      return await request<{ id: number }>(
+        `/api/v1/artists/resolve?name=${encodeURIComponent(name)}`,
+      )
+    } catch {
+      return null
+    }
   },
 }

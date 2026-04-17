@@ -369,6 +369,31 @@ export interface ArtistInfo {
   track_count?: number
 }
 
+export type ArtistEnrichmentStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'done'
+  | 'not_found'
+  | 'failed'
+
+export interface ArtistDetail {
+  id: number
+  name: string
+  image_key: string | null
+  image_url: string | null
+  source: string
+  bio: string | null
+  birth_date: string | null
+  age: number | null
+  birthplace: string | null
+  country: string | null
+  website_url: string | null
+  enrichment_status: ArtistEnrichmentStatus
+  enriched_at: string | null
+  track_count: number
+  created_at: string
+}
+
 // ── Import ────────────────────────────────────────────────────────────────
 
 export interface ImportAudioInfo {
