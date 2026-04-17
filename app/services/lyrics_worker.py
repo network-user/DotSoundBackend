@@ -25,9 +25,9 @@ logger = structlog.stdlib.get_logger(__name__)
 async def _preload_lyrics_assets(_state: TaskiqState) -> None:
     """Preload heavy assets used by the lyrics provider.
 
-    Runs once per worker process. Heavy ML model is downloaded
-    to local cache here so that the first user request doesn't
-    pay the 5–10 minute download latency.
+    Runs once per worker process. Heavy internal assets are
+    materialised in local cache here so that the first user
+    request doesn't pay the one-off latency.
     """
     from dotsound_private_core.services.lyrics_provider import (
         warmup_lyrics_provider,
@@ -93,6 +93,24 @@ async def _fetch_audio_to_file(
 PROGRESS_KEY_PREFIX = "lyrics:progress:"
 CANCEL_KEY_PREFIX = "lyrics:cancel:"
 _PROGRESS_TTL = 600
+
+# Allow-list of stage labels that may cross the backend↔frontend boundary.
+# Any provider stage that falls outside this set is collapsed to "processing"
+# so internal implementation details can't leak via the progress channel.
+_PUBLIC_STAGES: frozenset[str] = frozenset(
+    {
+        "searching",
+        "downloading_audio",
+        "processing",
+        "saving",
+        "error",
+        "cancelled",
+    }
+)
+
+
+def _opaque_stage(stage: str) -> str:
+    return stage if stage in _PUBLIC_STAGES else "processing"
 
 
 async def _get_redis() -> Redis:  # type: ignore[type-arg]
@@ -239,10 +257,10 @@ async def generate_lyrics_task(
                 await _clear_cancel(progress_id)
                 return {"status": "cancelled"}
 
-            if track.file_key or getattr(track, "sc_url", None):
+            if with_sync and (track.file_key or getattr(track, "sc_url", None)):
                 await _log(
                     "downloading_audio",
-                    "downloading audio for processing fallback",
+                    "downloading audio for audio-based fallback",
                 )
                 tmp_dir = tempfile.mkdtemp()
                 audio_path = await _fetch_audio_to_file(
@@ -257,7 +275,7 @@ async def generate_lyrics_task(
                 else:
                     await _log(
                         "downloading_audio",
-                        "audio unavailable, skipping processing fallback",
+                        "audio unavailable, skipping audio-based fallback",
                     )
 
             from dotsound_private_core.services.lyrics_provider import (  # noqa: E501
@@ -267,30 +285,17 @@ async def generate_lyrics_task(
             loop = asyncio.get_running_loop()
 
             def on_progress(stage: str) -> None:
+                # Translate provider stage to opaque label before exposing
+                # it to users via Redis-backed progress.
                 asyncio.run_coroutine_threadsafe(
-                    _log(stage, f"privatecore: stage={stage}"),
+                    _log(
+                        _opaque_stage(stage),
+                        f"stage: {_opaque_stage(stage)}",
+                    ),
                     loop,
                 )
 
-            import logging
-
-            class _LogCapture(logging.Handler):
-                def emit(self, record: logging.LogRecord) -> None:
-                    msg = self.format(record)
-                    asyncio.run_coroutine_threadsafe(
-                        append_lyrics_log(progress_id, f"[{_elapsed()}] {msg}"),
-                        loop,
-                    )
-
-            pc_logger = logging.getLogger(
-                "dotsound_private_core.services.lyrics_provider"
-            )
-            handler = _LogCapture()
-            handler.setLevel(logging.DEBUG)
-            pc_logger.addHandler(handler)
-            pc_logger.setLevel(logging.DEBUG)
-
-            await _log("searching", "calling generate_lyrics()")
+            await _log("searching", "calling lyrics provider")
 
             # Check for cancellation before starting generation
             if await _should_cancel(progress_id):
@@ -301,16 +306,13 @@ async def generate_lyrics_task(
                 await _clear_cancel(progress_id)
                 return {"status": "cancelled"}
 
-            try:
-                gen_result = await asyncio.to_thread(
-                    generate_lyrics,
-                    artist=artist,
-                    title=title,
-                    audio_path=audio_path,
-                    on_progress=on_progress,
-                )
-            finally:
-                pc_logger.removeHandler(handler)
+            gen_result = await asyncio.to_thread(
+                generate_lyrics,
+                artist=artist,
+                title=title,
+                audio_path=audio_path,
+                on_progress=on_progress,
+            )
 
             if gen_result is None:
                 await _log(
@@ -375,7 +377,7 @@ async def generate_lyrics_debug_task(
     tier: int,
     progress_id: str = "",
 ) -> dict:
-    """Debug task: run only a specific tier (1, 2, or 3)."""
+    """Debug task: run only a specific provider stage in isolation."""
     t0 = time.monotonic()
     structlog.contextvars.bind_contextvars(
         track_id=track_id, progress_id=progress_id
@@ -412,7 +414,7 @@ async def generate_lyrics_debug_task(
 
         await _log(
             "searching",
-            f"[DEBUG TIER {tier}] searching lyrics: artist={artist!r} title={title!r}",
+            f"[DEBUG stage={tier}] searching lyrics: artist={artist!r} title={title!r}",
         )
 
         # Check for cancellation before starting
@@ -427,13 +429,13 @@ async def generate_lyrics_debug_task(
         tmp_dir: str | None = None
 
         try:
-            # Only download audio for stage 3
+            # Only download audio when the selected stage needs it.
             if tier == 3 and (
                 track.file_key or getattr(track, "sc_url", None)
             ):
                 await _log(
                     "downloading_audio",
-                    "downloading audio for stage 3",
+                    "downloading audio for stage",
                 )
                 tmp_dir = tempfile.mkdtemp()
                 audio_path = await _fetch_audio_to_file(
@@ -448,7 +450,7 @@ async def generate_lyrics_debug_task(
                 else:
                     await _log(
                         "downloading_audio",
-                        "audio unavailable for stage 3",
+                        "audio unavailable for stage",
                     )
 
             from dotsound_private_core.services.lyrics_provider import (
@@ -481,7 +483,7 @@ async def generate_lyrics_debug_task(
             pc_logger.addHandler(handler)
             pc_logger.setLevel(logging.DEBUG)
 
-            await _log("searching", f"calling generate_lyrics_debug(tier={tier})")
+            await _log("searching", f"calling generate_lyrics_debug(stage={tier})")
 
             # Check for cancellation before starting generation
             if await _should_cancel(progress_id):

@@ -66,7 +66,7 @@
     "generating": "Определение...",
     "stageSearching": "Поиск текста...",
     "stageDownloading": "Загрузка аудио...",
-    "stageProcessing": "Распознавание речи...",
+    "stageProcessing": "Обработка аудио...",
     "stageSaving": "Сохранение...",
     "notFound": "Текст не определён",
     "showSync": "Подсветка по строкам",

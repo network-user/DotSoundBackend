@@ -24,6 +24,10 @@ COPY DotSoundPrivateCore /DotSoundPrivateCore
 COPY DotSoundBackend/pyproject.toml DotSoundBackend/poetry.lock ./
 RUN poetry lock --no-update && poetry install --no-interaction --no-ansi --no-root
 
+# PrivateCore runtime extras are installed separately so they never appear
+# in the backend's declarative dependency graph.
+RUN pip install --no-cache-dir "/DotSoundPrivateCore[ml]"
+
 COPY DotSoundBackend/. .
 RUN poetry install --no-interaction --no-ansi
 

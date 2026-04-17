@@ -61,7 +61,7 @@ frontend/src/
 src/dotsound_private_core/
   contracts/internal_api.py   ← константы внутреннего API
   services/
-    lyrics_provider.py        ← multi-stage: Provider API → scrape → Provider
+    lyrics_provider.py        ← автоопределение текста (внутренняя реализация)
     artist_normalizer.py      ← парсинг "Kai Angel & 9mice", fuzzy match
     recommendation_engine.py  ← скоринг треков, daily mix, radio
     auth_policy.py            ← TTL, IP-диапазоны, burn/cooldown
@@ -75,21 +75,20 @@ src/dotsound_private_core/
 
 ---
 
-## Lyrics — как работает
+## Lyrics — как работает (со стороны Backend)
 
 1. Пользователь нажимает "Авто-генерация"
 2. Backend ставит задачу в Taskiq → `generate_lyrics_task`
-3. Воркер вызывает `PrivateCore.generate_lyrics(artist, title, audio_path)`
-4. PrivateCore: 
-   - Stage 1: Provider API (токен `LYRICS_PROVIDER_TOKEN`)
-   - Stage 2: Scrape provider.com (без токена)
-   - Stage 3: Provider транскрипция аудио (`PROVIDER_MODEL_SIZE`, default "tiny")
-5. Если текст найден + есть аудио → alignment: Provider слова по таймкодам + сопоставление с эталонным текстом
-6. Результат → PostgreSQL (`track_lyrics.synced_lines` JSONB)
-7. Фронтенд поллит `/lyrics/auto/status/{track_id}` каждые 2 сек
+3. При необходимости Backend скачивает аудио трека во временный файл
+   (источник: S3 или внешний URL, зависит от трека)
+4. Воркер вызывает `PrivateCore.generate_lyrics(artist, title, audio_path)`
+   и получает обратно текст + опциональные синхронизированные строки
+5. Результат → PostgreSQL (`track_lyrics.synced_lines` JSONB)
+6. Фронтенд поллит `/lyrics/auto/status/{track_id}` каждые 2 сек
 
-**Важно:** Section headers (`Припев`, `[Куплет]`, `Intro` и т.д.) — аннотации, не матчатся в alignment.
-`_is_annotation()` покрывает как `[Припев]` так и голое `Припев`/`Припев:` (исправлено 2026-04-16).
+Всё, что относится к источникам текста, распознаванию и
+сопоставлению — внутренняя реализация PrivateCore и в этом
+документе не описывается.
 
 ---
 
@@ -140,7 +139,7 @@ Internal services → scoped JWT (15 мин) + IP whitelist
 | `transcode_video` | После загрузки видео |
 | `generate_and_upload_cover` | Нет обложки |
 | `generate_lyrics_task` | Кнопка авто-генерации |
-| `generate_lyrics_debug_task` | Debug UI (stage 1/2/3) |
+| `generate_lyrics_debug_task` | Debug UI (изолированный запуск отдельной стадии провайдера) |
 | `import_soundcloud_track` | Импорт по URL |
 | `import_telegram_profile` | Сканирование профиля бота |
 
@@ -150,14 +149,16 @@ Internal services → scoped JWT (15 мин) + IP whitelist
 
 | Переменная | Где используется |
 |-----------|----------------|
-| `LYRICS_PROVIDER_TOKEN` | PrivateCore: Provider API stage-1 |
-| `PROVIDER_MODEL_SIZE` | PrivateCore: размер модели (tiny/base/small/...) |
 | `JWT_SECRET` | Backend: подпись JWT |
 | `TELEGRAM_BOT_TOKEN` | Backend: верификация Telegram HMAC |
 | `RESEND_API_KEY` | Backend: отправка email |
 | `TOTP_ENCRYPTION_KEY` | Backend: шифрование TOTP secret |
 | `CHAT_ENCRYPTION_KEY` | Backend: шифрование сообщений |
 | `DEBUG` | Backend: разрешает mock auth и debug endpoints |
+
+Переменные окружения, относящиеся к PrivateCore, описаны внутри
+самого PrivateCore (см. `DotSoundPrivateCore/.env.example`) и здесь
+не дублируются по правилу чёрного ящика.
 
 ---
 

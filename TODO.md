@@ -161,23 +161,21 @@
 - [x] Поле `description` в модели Track (TEXT, nullable)
   - Alembic миграция `651109411149`
 - [x] **Автоопределение текста песен (lyrics auto-detection)**
-  - Весь пайплайн в PrivateCore (черная коробка): Provider + Provider + alignment
+  - Весь пайплайн в PrivateCore (чёрная коробка)
   - Backend: тонкий адаптер (S3 download, вызов PrivateCore, сохранение в БД)
   - Выбор режима: "Определить текст" (без таймкодов) / "Определить текст + таймкоды"
   - Кеш таймкодов: synced_lines хранятся в БД, переключение без пересчёта
   - Редактирование автосгенерированного текста, source manual/auto
   - Поддержка внешних треков без аудио (только текст)
-  - Provider: настраиваемая модель (PROVIDER_MODEL_SIZE=tiny|base|small)
   - Миграция 0030: колонка source в track_lyrics
   - Taskiq-задача generate_lyrics_task
   - API: POST /lyrics/auto, GET /lyrics/auto/status
   - Frontend: кнопки автогенерации, toggle таймкодов, i18n
-- [ ] **Auto-lyrics: Provider через внешний GPU API (далёкое будущее)**
-  - Отдельный сервер/сервис с GPU для speech-to-text
-  - Backend отправляет аудиофайл на внешний API, получает текст + таймкоды
-  - `faster-provider` `small`+ модель для лучшего качества
-  - Demucs для разделения вокала (улучшает WER на ~20-30%)
-  - Интеграция через тот же `lyrics_provider.py` в PrivateCore
+- [ ] **Auto-lyrics: вынос тяжёлой обработки на внешний GPU-сервис (далёкое будущее)**
+  - Отдельный сервер/сервис с GPU для обработки аудио
+  - Backend отправляет аудиофайл во внутренний API PrivateCore,
+    а PrivateCore уже сам решает, обрабатывать локально или вызывать внешний GPU-сервис
+  - Интеграция через существующий `lyrics_provider` в PrivateCore (внешние детали — внутри чёрного ящика)
 - [ ] Теги (`tags`, JSONB или отдельная таблица)
 - [ ] BPM auto-detection (background task, `librosa` / `essentia`)
   - Извлечение фич/пороги confidence и decision rules в PrivateCore, Taskiq orchestration и запись результата — в Backend
@@ -436,4 +434,4 @@
 
 ---
 
-*Последнее обновление: 2026-04-15 агентом (Sprint 8: lyrics auto-detection + Provider/Provider pipeline)*
+*Последнее обновление: 2026-04-15 агентом (Sprint 8: lyrics auto-detection)*
