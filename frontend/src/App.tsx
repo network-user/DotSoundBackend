@@ -57,8 +57,8 @@ export function App() {
     useState(false)
   const [settingsOpen, setSettingsOpen] =
     useState(false)
-  const [artistName, setArtistName] = useState<
-    string | null
+  const [artistId, setArtistId] = useState<
+    number | null
   >(null)
   const [authError, setAuthError] = useState<
     string | null
@@ -355,9 +355,11 @@ export function App() {
       <ComplaintModal />
       <TrackCardSheet
         onOpenAuthor={handleOpenAuthor}
-        onOpenArtist={(name) =>
-          setArtistName(name)
-        }
+        onOpenArtist={async (name) => {
+          const res =
+            await api.resolveArtistByName(name)
+          if (res) setArtistId(res.id)
+        }}
       />
       {authorId !== null && (
         <AuthorView
@@ -365,10 +367,10 @@ export function App() {
           onClose={handleCloseAuthor}
         />
       )}
-      {artistName !== null && (
+      {artistId !== null && (
         <ArtistView
-          artistName={artistName}
-          onClose={() => setArtistName(null)}
+          artistId={artistId}
+          onClose={() => setArtistId(null)}
         />
       )}
       <BottomNav />

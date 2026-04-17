@@ -87,6 +87,19 @@ class ArtistService:
             name=canonical,
             id=artist.id,
         )
+        try:
+            from app.services.artist_enrichment_worker import (
+                enrich_artist_task,
+            )
+
+            await enrich_artist_task.kiq(
+                artist_id=artist.id
+            )
+        except Exception:
+            logger.exception(
+                "artist_enrich_schedule_failed",
+                artist_id=artist.id,
+            )
         return artist
 
     async def get_by_id(

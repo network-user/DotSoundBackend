@@ -72,5 +72,25 @@
     "showSync": "Подсветка по строкам",
     "edit": "Редактировать",
     "title": "Текст"
+  },
+  "artist": {
+    "performer": "Исполнитель",
+    "age_one": "{{count}} год",
+    "age_few": "{{count}} года",
+    "age_many": "{{count}} лет",
+    "age_other": "{{count}} лет",
+    "born": "Родился",
+    "birthplace": "Место рождения",
+    "bio_title": "О артисте",
+    "bio_show_more": "Показать больше",
+    "bio_show_less": "Свернуть",
+    "website": "Сайт",
+    "no_info": "Информация об артисте пока не найдена",
+    "tracks_title": "Треки на платформе",
+    "tracks_empty": "Треков этого исполнителя пока нет",
+    "enrich_button": "Определить артиста",
+    "enrich_loading": "Определяю…",
+    "enrich_failed": "Не удалось определить",
+    "enrichment_pending": "Данные подгружаются…"
   }
 }
