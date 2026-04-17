@@ -29,6 +29,7 @@ class _FakeLyricsResult:
 class _FakeSyncedLine:
     time_ms: int = 0
     text: str = ""
+    confidence: float | None = None
 
 
 def _make_lyrics_result(
@@ -45,14 +46,6 @@ def _make_lyrics_result(
             ),
         ]
     return result
-
-
-@pytest.fixture(autouse=True)
-def _patch_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(
-        "LYRICS_PROVIDER_TOKEN", "test-token"
-    )
-    monkeypatch.setenv("PROVIDER_MODEL_SIZE", "tiny")
 
 
 @pytest.fixture
