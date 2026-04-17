@@ -581,16 +581,25 @@ export function PlayerProvider({
         }
       }
 
-      const hlsUrl = `/api/v1/tracks/${saved.track.id}/hls/master.m3u8`
-      const fallback = `/api/v1/tracks/${saved.track.id}/audio`
-
-      if (Hls.isSupported()) {
-        startHlsPlayback(audio, hlsUrl, fallback, false)
-          .then(seekAfterLoad)
+      if (!saved.track.is_public) {
+        api.getStream(saved.track.id)
+          .then((stream) => {
+            audio.src = stream.url
+            seekAfterLoad()
+          })
           .catch(() => {})
       } else {
-        audio.src = fallback
-        seekAfterLoad()
+        const hlsUrl = `/api/v1/tracks/${saved.track.id}/hls/master.m3u8`
+        const fallback = `/api/v1/tracks/${saved.track.id}/audio`
+
+        if (Hls.isSupported()) {
+          startHlsPlayback(audio, hlsUrl, fallback, false)
+            .then(seekAfterLoad)
+            .catch(() => {})
+        } else {
+          audio.src = fallback
+          seekAfterLoad()
+        }
       }
     }
   }, [])
@@ -822,6 +831,13 @@ export function PlayerProvider({
           () => playNext(),
           () => playPrev(),
         )
+        return
+      }
+
+      if (!newTrack.is_public) {
+        const stream = await api.getStream(newTrack.id)
+        await startDirectPlayback(audio, stream.url)
+        _updateMediaSession(newTrack, audio, () => playNext(), () => playPrev())
         return
       }
 

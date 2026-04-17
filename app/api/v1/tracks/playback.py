@@ -28,12 +28,15 @@ router = APIRouter()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
-def _check_public(track: object) -> None:
-    if not getattr(track, "is_public", True):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Track not found",
-        )
+def _check_access(track: object, current_user: User | None = None) -> None:
+    if getattr(track, "is_public", True):
+        return
+    if current_user and getattr(track, "uploaded_by_id", None) == current_user.id:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Track not found",
+    )
 
 
 @router.get(
@@ -46,6 +49,7 @@ async def stream_track(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> StreamResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
@@ -55,7 +59,7 @@ async def stream_track(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
-    _check_public(track)
+    _check_access(track, current_user)
     if track.access_mode == "third_party_stream":
         if not track.sc_url:
             raise HTTPException(
@@ -103,15 +107,17 @@ async def play_track(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> PlayResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     repo = TrackRepository(session)
     track = await repo.get_by_id(track_id)
-    if not track or not track.is_active or not track.is_public:
+    if not track or not track.is_active:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
+    _check_access(track, current_user)
     found = await repo.increment_play_count(track_id)
     if not found:
         raise HTTPException(
@@ -137,6 +143,7 @@ async def get_cover(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> StreamResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
@@ -146,7 +153,7 @@ async def get_cover(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Cover not found",
         )
-    _check_public(track)
+    _check_access(track, current_user)
     url = await s3.get_presigned_url(track.cover_key)
     return StreamResponse(track_id=track_id, url=url)
 
@@ -161,6 +168,7 @@ async def audio_stream(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> StreamingResponse | RedirectResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
@@ -170,7 +178,7 @@ async def audio_stream(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
-    _check_public(track)
+    _check_access(track, current_user)
 
     # Prefer HLS adaptive streaming when available
     if track.hls_manifest_key:
@@ -339,6 +347,7 @@ async def get_share_links(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> ShareResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
@@ -348,7 +357,7 @@ async def get_share_links(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
-    _check_public(track)
+    _check_access(track, current_user)
     from app.config import settings
 
     mini_app_url = settings.mini_app_url or ""
@@ -375,6 +384,7 @@ async def video_proxy(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> Response:
     service = TrackService(session)
     track = await service.get_track(track_id)
@@ -383,7 +393,7 @@ async def video_proxy(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Video not found",
         )
-    _check_public(track)
+    _check_access(track, current_user)
     try:
         data = await s3.download_object(
             track.video_key
@@ -415,6 +425,7 @@ async def get_track(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> TrackResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
@@ -424,5 +435,5 @@ async def get_track(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
-    _check_public(track)
+    _check_access(track, current_user)
     return TrackResponse.model_validate(track)

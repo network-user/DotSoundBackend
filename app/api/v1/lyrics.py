@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.rate_limit import limiter
-from app.dependencies import get_current_user, get_db
+from app.dependencies import get_current_user, get_db, get_optional_user
 from app.models.user import User
 from app.schemas.lyrics import (
     LyricsAutoRequest,
@@ -53,10 +53,14 @@ async def get_lyrics(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> LyricsResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = LyricsService(session)
-    lyrics = await service.get_lyrics(track_id)
+    lyrics = await service.get_lyrics(
+        track_id,
+        requester_id=current_user.id if current_user else None,
+    )
     if not lyrics:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
