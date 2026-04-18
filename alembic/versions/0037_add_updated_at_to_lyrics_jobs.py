@@ -1,7 +1,7 @@
-"""add updated_at to compute_workers and lyrics_jobs
+"""add updated_at to lyrics_jobs
 
-Revision ID: 0036
-Revises: 0035
+Revision ID: 0037
+Revises: 0036
 Create Date: 2026-04-18
 """
 
@@ -9,22 +9,13 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0036"
-down_revision = "0035"
+revision = "0037"
+down_revision = "0036"
 branch_labels = None
 depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "compute_workers",
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
-    )
     op.add_column(
         "lyrics_jobs",
         sa.Column(
@@ -38,4 +29,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("lyrics_jobs", "updated_at")
-    op.drop_column("compute_workers", "updated_at")
