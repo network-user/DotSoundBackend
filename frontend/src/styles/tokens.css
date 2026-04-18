@@ -65,26 +65,11 @@
   --z-toast: 200;
 }
 
-/* Telegram theme bridge: when the WebApp exposes theme params,
- * we re-map a subset of them onto the local color tokens. The
- * bridge is opt-in — global.css keeps the dark monochrome
- * palette as the deterministic default. */
-:root.tg-theme-on {
-  --bg: var(--tg-theme-bg-color, #0a0a0a);
-  --bg-elevated: var(
-    --tg-theme-secondary-bg-color,
-    #111111
-  );
-  --text: var(--tg-theme-text-color, #ffffff);
-  --text-secondary: var(
-    --tg-theme-hint-color,
-    #a0a0a0
-  );
-  --accent: var(
-    --tg-theme-button-color,
-    #ffffff
-  );
-}
+/* Palette: strictly monochrome. The colour tokens defined in
+ * global.css (`--bg`, `--text`, `--accent`, `--surface`, …) are
+ * the single source of truth and are intentionally NOT overridden
+ * by Telegram theme parameters — DotSound keeps a black + white +
+ * neutral-grey look in every theme. */
 
 @media (prefers-reduced-motion: reduce) {
   :root {

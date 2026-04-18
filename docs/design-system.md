@@ -61,13 +61,24 @@ user has `prefers-reduced-motion: reduce`.
 
 ## Colour and theming
 
-The base palette stays monochrome (`--bg`, `--surface`, `--text`,
-`--text-secondary`, `--accent`). When the WebApp exposes Telegram
-theme parameters, they are remapped onto a subset of the base
-tokens by `installTelegramThemeBridge()` in
-`frontend/src/lib/telegram.ts`. The bridge only activates when
-the document gains the `tg-theme-on` class — pure-browser users
-keep the default dark monochrome look.
+The palette is strictly **monochrome** (black + white + neutral
+greys) and is **NOT** overridden by Telegram theme parameters.
+The colour tokens defined in `frontend/src/styles/global.css`
+(`--bg`, `--surface`, `--text`, `--text-secondary`, `--accent`,
+`--border`, glass tokens `--glass-bg / --glass-blur /
+--glass-border`) are the single source of truth in every theme
+(Telegram Light / Dark / Sea / Custom).
+
+`installTelegramThemeBridge()` in `frontend/src/lib/telegram.ts`
+is intentionally a no-op kept only for backwards compatibility
+of imports. If at some point a thin opt-in adaptation to the
+Telegram theme is needed (e.g. matching only the system bar
+colour, not the UI palette), it should be exposed through an
+explicit user setting — never enabled automatically.
+
+Surfaces that need an iOS-style frosted look (PlayerBar, BottomNav,
+overflow menu, bottom sheets, modal backdrops) reuse the glass
+tokens with `backdrop-filter: var(--glass-blur) saturate(180%)`.
 
 ## UI primitives
 
