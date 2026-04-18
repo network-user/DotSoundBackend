@@ -44,6 +44,16 @@ export function LyricsPanel({
     'root' | 'auto' | 'debug'
   >('root')
   const [showSync, setShowSync] = useState(true)
+  const [karaoke, setKaraoke] = useState<boolean>(
+    () => localStorage.getItem('setting-lyrics-karaoke') === '1',
+  )
+  const [offsetMs] = useState<number>(() => {
+    const raw = localStorage.getItem(
+      'setting-lyrics-sync-offset-ms',
+    )
+    const n = raw ? Number(raw) : 0
+    return Number.isFinite(n) ? n : 0
+  })
   const activeRef = useRef<HTMLDivElement>(null)
   const [devOpen, setDevOpen] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
@@ -113,25 +123,32 @@ export function LyricsPanel({
       .finally(() => setLoading(false))
   }, [trackId, hasLyrics, t, editing])
 
+  const adjustedMs = currentTime * 1000 + offsetMs
+
   const activeIdx = (() => {
     if (
       !showSync ||
       !lyrics?.synced_lines?.length
     )
       return -1
-    const ms = currentTime * 1000
     let idx = 0
     for (
       let i = 0;
       i < lyrics.synced_lines.length;
       i++
     ) {
-      if (lyrics.synced_lines[i].time_ms <= ms)
+      if (lyrics.synced_lines[i].time_ms <= adjustedMs)
         idx = i
       else break
     }
     return idx
   })()
+
+  const hasWordTimes = !!lyrics?.synced_lines?.some(
+    (l) => l.word_times && l.word_times.length > 0,
+  )
+  const karaokeActive =
+    karaoke && hasWordTimes && lyrics?.sync_quality === 'word'
 
   useEffect(() => {
     if (activeRef.current) {
@@ -742,20 +759,58 @@ export function LyricsPanel({
             </span>
           </label>
         )}
+        {hasWordTimes && (
+          <label className="lyrics-sync-toggle">
+            <input
+              type="checkbox"
+              checked={karaokeActive}
+              onChange={(e) => {
+                const next = e.target.checked
+                setKaraoke(next)
+                try {
+                  localStorage.setItem(
+                    'setting-lyrics-karaoke',
+                    next ? '1' : '0',
+                  )
+                } catch {}
+              }}
+            />
+            <span>
+              {t('lyrics.karaokeMode', 'Караоке')}
+            </span>
+          </label>
+        )}
       </div>
 
       <div className="lyrics-content">
         {showSync && hasSyncData
-          ? lyrics.synced_lines!.map(
-              (line, i) => (
+          ? lyrics.synced_lines!.map((line, i) => {
+              const isActive = i === activeIdx
+              let wordIdx = -1
+              if (
+                karaokeActive &&
+                isActive &&
+                line.word_times &&
+                line.word_times.length > 0
+              ) {
+                for (let j = 0; j < line.word_times.length; j++) {
+                  const w = line.word_times[j]
+                  if (
+                    adjustedMs >= w.start_ms &&
+                    adjustedMs < w.start_ms + w.dur_ms
+                  ) {
+                    wordIdx = j
+                    break
+                  }
+                }
+              }
+              return (
                 <div
                   key={i}
                   ref={
-                    i === activeIdx
-                      ? activeRef
-                      : null
+                    isActive ? activeRef : null
                   }
-                  className={`lyrics-line${i === activeIdx ? ' lyrics-line-active' : ''}${(line.confidence ?? 0) < 0.5 ? ' lyrics-line-uncertain' : ''}`}
+                  className={`lyrics-line${isActive ? ' lyrics-line-active' : ''}${(line.confidence ?? 0) < 0.5 ? ' lyrics-line-uncertain' : ''}`}
                   onClick={() =>
                     handleLineClick(line.time_ms)
                   }
@@ -765,10 +820,23 @@ export function LyricsPanel({
                       : undefined
                   }
                 >
-                  {line.text}
+                  {karaokeActive &&
+                  line.word_times &&
+                  line.word_times.length > 0 ? (
+                    line.word_times.map((w, j) => (
+                      <span
+                        key={j}
+                        className={`lyrics-word${j === wordIdx ? ' lyrics-word-active' : ''}${isActive && wordIdx >= 0 && j < wordIdx ? ' lyrics-word-past' : ''}`}
+                      >
+                        {w.text}{' '}
+                      </span>
+                    ))
+                  ) : (
+                    line.text
+                  )}
                 </div>
-              ),
-            )
+              )
+            })
           : (
               <pre className="lyrics-plain">
                 {lyrics.plain_text}

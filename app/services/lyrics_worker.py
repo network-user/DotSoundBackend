@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
+import re
+import shutil
 import tempfile
 import time
+import unicodedata
 
 import structlog
-from redis.asyncio import Redis
 from sqlalchemy import select
 from taskiq import TaskiqEvents, TaskiqState
 
 from app.core import s3
 from app.core.db import AsyncSessionLocal
+from app.core.redis import get_redis_client
 from app.core.tkq import broker
 from app.config import settings
 from app.models.track import Track
@@ -38,20 +42,392 @@ async def _preload_lyrics_assets(_state: TaskiqState) -> None:
     logger.info("lyrics_assets_preload_done")
 
 
+PROGRESS_KEY_PREFIX = "lyrics:progress:"
+CANCEL_KEY_PREFIX = "lyrics:cancel:"
+EVENTS_CHANNEL_PREFIX = "lyrics:events:"
+SEARCH_CACHE_PREFIX = "lyrics:search:"
+PARTIAL_KEY_PREFIX = "lyrics:partial:"
+
+
+_PUBLIC_STAGES: frozenset[str] = frozenset(
+    {
+        "queued",
+        "searching",
+        "downloading_audio",
+        "processing",
+        "saving",
+        "error",
+        "cancelled",
+        "cancelling",
+    }
+)
+
+_STAGE_LABELS: dict[str, str] = {
+    "queued": "waiting in queue",
+    "searching": "looking up lyrics in sources",
+    "downloading_audio": "downloading audio track",
+    "processing": "audio-based provider processing (may take minutes)",
+    "saving": "persisting results",
+    "error": "error occurred",
+    "cancelled": "task cancelled",
+    "cancelling": "cancellation in progress",
+}
+
+TERMINAL_STATES: frozenset[str] = frozenset(
+    {"found", "not_found", "error", "cancelled"}
+)
+
+
+def _opaque_stage(stage: str) -> str:
+    return stage if stage in _PUBLIC_STAGES else "processing"
+
+
+def _max_audio_bytes() -> int:
+    return int(settings.lyrics_max_audio_mb) * 1024 * 1024
+
+
+def _normalise_for_cache(value: str) -> str:
+    normalised = unicodedata.normalize("NFKC", value or "")
+    normalised = normalised.casefold().strip()
+    normalised = re.sub(r"\s+", " ", normalised)
+    return normalised
+
+
+def _search_cache_key(artist: str, title: str) -> str:
+    raw = (
+        f"{_normalise_for_cache(artist)}|"
+        f"{_normalise_for_cache(title)}"
+    )
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f"{SEARCH_CACHE_PREFIX}{digest[:32]}"
+
+
+async def get_cached_lyrics_result(
+    artist: str, title: str
+) -> dict | None:
+    redis = get_redis_client()
+    key = _search_cache_key(artist, title)
+    raw = await redis.get(key)
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        await redis.delete(key)
+        return None
+
+
+async def set_cached_lyrics_result(
+    artist: str, title: str, payload: dict
+) -> None:
+    redis = get_redis_client()
+    key = _search_cache_key(artist, title)
+    await redis.set(
+        key,
+        json.dumps(payload, ensure_ascii=False),
+        ex=int(settings.lyrics_search_cache_ttl_seconds),
+    )
+
+
+async def invalidate_cached_lyrics_result(
+    artist: str, title: str
+) -> None:
+    redis = get_redis_client()
+    await redis.delete(_search_cache_key(artist, title))
+
+
+def _events_channel(progress_id: str) -> str:
+    return f"{EVENTS_CHANNEL_PREFIX}{progress_id}"
+
+
+async def _publish_event(progress_id: str, payload: dict) -> None:
+    redis = get_redis_client()
+    try:
+        await redis.publish(
+            _events_channel(progress_id),
+            json.dumps(payload, ensure_ascii=False),
+        )
+    except Exception:
+        logger.debug(
+            "lyrics_event_publish_failed",
+            progress_id=progress_id,
+        )
+
+
+async def store_partial_text(
+    progress_id: str, plain_text: str
+) -> None:
+    if not plain_text:
+        return
+    redis = get_redis_client()
+    payload = {"plain_text": plain_text}
+    await redis.set(
+        f"{PARTIAL_KEY_PREFIX}{progress_id}",
+        json.dumps(payload, ensure_ascii=False),
+        ex=int(settings.lyrics_partial_ttl_seconds),
+    )
+    await _publish_event(
+        progress_id,
+        {"type": "partial.text", "plain_text": plain_text},
+    )
+
+
+async def store_partial_synced(
+    progress_id: str, synced_lines: list[dict]
+) -> None:
+    if not synced_lines:
+        return
+    redis = get_redis_client()
+    key = f"{PARTIAL_KEY_PREFIX}{progress_id}"
+    raw = await redis.get(key)
+    data: dict = {}
+    if raw:
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):
+            data = {}
+    data["synced_lines"] = synced_lines
+    await redis.set(
+        key,
+        json.dumps(data, ensure_ascii=False),
+        ex=int(settings.lyrics_partial_ttl_seconds),
+    )
+    await _publish_event(
+        progress_id,
+        {"type": "partial.synced", "synced_lines": synced_lines},
+    )
+
+
+async def get_partial_result(
+    progress_id: str,
+) -> dict | None:
+    redis = get_redis_client()
+    raw = await redis.get(f"{PARTIAL_KEY_PREFIX}{progress_id}")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+async def set_lyrics_progress(
+    progress_id: str,
+    stage: str | None = None,
+    log_line: str | None = None,
+    *,
+    terminal_state: str | None = None,
+    percent: int | None = None,
+    meta: dict | None = None,
+) -> None:
+    """Update lyrics progress snapshot in Redis.
+
+    Keeps only the most recent 100 log lines. Publishes a
+    matching event to Pub/Sub so SSE subscribers stay in sync
+    without polling.
+    """
+    redis = get_redis_client()
+    key = f"{PROGRESS_KEY_PREFIX}{progress_id}"
+    raw = await redis.get(key)
+    if raw:
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):
+            data = {}
+    else:
+        data = {}
+    data.setdefault("logs", [])
+    data.setdefault("stage", stage or "queued")
+
+    if stage is not None:
+        data["stage"] = stage
+    if terminal_state is not None:
+        data["terminal_state"] = terminal_state
+    if percent is not None:
+        data["percent"] = max(0, min(100, int(percent)))
+    if log_line:
+        data["logs"] = (data.get("logs") or [])[-99:] + [log_line]
+
+    await redis.set(
+        key,
+        json.dumps(data, ensure_ascii=False),
+        ex=int(settings.lyrics_progress_ttl_seconds),
+    )
+
+    event: dict = {"type": "progress"}
+    if stage is not None:
+        event["stage"] = data.get("stage")
+    if terminal_state is not None:
+        event["terminal_state"] = terminal_state
+    if "percent" in data:
+        event["percent"] = data["percent"]
+    if log_line:
+        event["log"] = log_line
+    if meta:
+        event["meta"] = meta
+    await _publish_event(progress_id, event)
+
+
+async def append_lyrics_log(
+    progress_id: str, log_line: str
+) -> None:
+    await set_lyrics_progress(progress_id, log_line=log_line)
+
+
+async def get_lyrics_progress(
+    progress_id: str,
+) -> dict | None:
+    redis = get_redis_client()
+    raw = await redis.get(f"{PROGRESS_KEY_PREFIX}{progress_id}")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+async def _should_cancel(progress_id: str) -> bool:
+    redis = get_redis_client()
+    return (
+        await redis.exists(f"{CANCEL_KEY_PREFIX}{progress_id}")
+    ) > 0
+
+
+async def _clear_cancel(progress_id: str) -> None:
+    redis = get_redis_client()
+    await redis.delete(f"{CANCEL_KEY_PREFIX}{progress_id}")
+
+
+async def _finalise(
+    progress_id: str, terminal_state: str, log_line: str | None = None
+) -> None:
+    stage = terminal_state
+    if terminal_state == "found":
+        stage = "saving"
+    elif terminal_state == "not_found":
+        stage = "searching"
+    percent = 100 if terminal_state == "found" else None
+    await set_lyrics_progress(
+        progress_id,
+        stage=stage,
+        terminal_state=terminal_state,
+        percent=percent,
+        log_line=log_line,
+    )
+
+
+async def _stream_http_to_file(
+    client,  # httpx.AsyncClient
+    url: str,
+    path: str,
+    max_bytes: int,
+) -> int:
+    """Stream an HTTP response body to disk with size cap.
+
+    Raises ValueError if the response exceeds ``max_bytes``.
+    """
+    async with client.stream("GET", url) as resp:
+        resp.raise_for_status()
+        written = 0
+        with open(path, "wb") as f:
+            async for chunk in resp.aiter_bytes(chunk_size=65536):
+                if not chunk:
+                    continue
+                written += len(chunk)
+                if written > max_bytes:
+                    raise ValueError(
+                        f"audio exceeds lyrics_max_audio_mb limit "
+                        f"({settings.lyrics_max_audio_mb} MB)"
+                    )
+                f.write(chunk)
+        return written
+
+
+async def _hls_to_file(m3u8_url: str, path: str) -> bool:
+    """Download an HLS playlist into a local mp4 using ffmpeg.
+
+    Returns True on success, False when ffmpeg is unavailable or
+    fails. The output is stream-copied, so no re-encoding happens.
+    """
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        logger.info("lyrics_ffmpeg_unavailable")
+        return False
+    cmd = [
+        ffmpeg,
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-protocol_whitelist",
+        "file,http,https,tcp,tls,crypto",
+        "-i",
+        m3u8_url,
+        "-c",
+        "copy",
+        "-movflags",
+        "+faststart",
+        "-y",
+        path,
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        logger.warning(
+            "lyrics_ffmpeg_failed",
+            rc=proc.returncode,
+            stderr=(stderr or b"")[-512:].decode(
+                "utf-8", errors="replace"
+            ),
+        )
+        return False
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        size = 0
+    if size <= 0:
+        return False
+    max_bytes = _max_audio_bytes()
+    if size > max_bytes:
+        os.remove(path)
+        logger.warning(
+            "lyrics_ffmpeg_oversize",
+            size=size,
+            max_bytes=max_bytes,
+        )
+        return False
+    return True
+
+
 async def _fetch_audio_to_file(
     track: Track,
     tmp_dir: str,
     session,  # AsyncSession
 ) -> str | None:
-    """Download track audio to a temp file.
+    """Download track audio to a temp file, streaming with a cap.
 
-    Handles both internal (S3) and SoundCloud tracks transparently.
-    Returns local file path, or None if audio is unavailable.
+    Handles both internal (S3) and SoundCloud tracks. For HLS
+    SoundCloud streams ffmpeg is used to remux into a local mp4,
+    when available. Returns local file path, or None if audio is
+    unavailable or exceeds configured limits.
     """
-    path = os.path.join(tmp_dir, "audio.mp3")
+    max_bytes = _max_audio_bytes()
 
     if track.file_key:
         data = await s3.download_object(track.file_key)
+        if len(data) > max_bytes:
+            logger.warning(
+                "lyrics_s3_audio_oversize",
+                size=len(data),
+                max_bytes=max_bytes,
+                track_id=track.id,
+            )
+            return None
+        path = os.path.join(tmp_dir, "audio.mp3")
         with open(path, "wb") as f:
             f.write(data)
         return path
@@ -59,27 +435,40 @@ async def _fetch_audio_to_file(
     if getattr(track, "sc_url", None):
         try:
             import httpx
-            from app.services.soundcloud_service import SoundCloudService
+            from app.services.soundcloud_service import (
+                SoundCloudService,
+            )
 
             sc = SoundCloudService(settings.sc_client_id, session)
-            stream_url, protocol = await sc.get_stream_info(track.sc_url)
+            stream_url, protocol = await sc.get_stream_info(
+                track.sc_url
+            )
 
-            if protocol != "progressive":
+            if protocol == "progressive":
+                path = os.path.join(tmp_dir, "audio.mp3")
+                async with httpx.AsyncClient(
+                    timeout=120, follow_redirects=True
+                ) as client:
+                    try:
+                        await _stream_http_to_file(
+                            client, stream_url, path, max_bytes
+                        )
+                    except ValueError:
+                        logger.warning(
+                            "lyrics_sc_audio_oversize",
+                            track_id=track.id,
+                        )
+                        return None
+                return path
+
+            path = os.path.join(tmp_dir, "audio.mp4")
+            ok = await _hls_to_file(stream_url, path)
+            if not ok:
                 logger.info(
-                    "sc_audio_skip_hls",
-                    protocol=protocol,
+                    "lyrics_sc_hls_fallback_failed",
                     track_id=track.id,
                 )
                 return None
-
-            async with httpx.AsyncClient(
-                timeout=60, follow_redirects=True
-            ) as client:
-                resp = await client.get(stream_url)
-                resp.raise_for_status()
-                with open(path, "wb") as f:
-                    f.write(resp.content)
-
             return path
         except Exception:
             logger.exception(
@@ -88,38 +477,6 @@ async def _fetch_audio_to_file(
             return None
 
     return None
-
-
-PROGRESS_KEY_PREFIX = "lyrics:progress:"
-CANCEL_KEY_PREFIX = "lyrics:cancel:"
-_PROGRESS_TTL = 600
-
-# Allow-list of stage labels that may cross the backend↔frontend boundary.
-# Any provider stage that falls outside this set is collapsed to "processing"
-# so internal implementation details can't leak via the progress channel.
-_PUBLIC_STAGES: frozenset[str] = frozenset(
-    {
-        "searching",
-        "downloading_audio",
-        "processing",
-        "saving",
-        "error",
-        "cancelled",
-    }
-)
-
-_STAGE_LABELS: dict[str, str] = {
-    "searching": "looking up lyrics in sources",
-    "downloading_audio": "downloading audio track",
-    "processing": "audio-based provider processing (may take minutes)",
-    "saving": "persisting results",
-    "error": "error occurred",
-    "cancelled": "task cancelled",
-}
-
-
-def _opaque_stage(stage: str) -> str:
-    return stage if stage in _PUBLIC_STAGES else "processing"
 
 
 async def _heartbeat_loop(
@@ -140,97 +497,120 @@ async def _heartbeat_loop(
             elapsed = f"{time.monotonic() - t0:.1f}s"
             await append_lyrics_log(
                 progress_id,
-                f"[{elapsed}] \u23f3 still processing... (internal provider running)",
+                f"[{elapsed}] \u23f3 still processing... "
+                "(internal provider running)",
             )
     except asyncio.CancelledError:
         pass
 
 
-async def _get_redis() -> Redis:  # type: ignore[type-arg]
-    return Redis.from_url(
-        settings.redis_url, decode_responses=True
-    )
+def _parse_progress_event(event) -> tuple[str, int | None]:
+    """Accept both legacy ``str`` and future structured dict progress.
+
+    Returns ``(stage, percent)`` — percent is None if not supplied.
+    """
+    if isinstance(event, str):
+        return event, None
+    if isinstance(event, dict):
+        stage = str(event.get("stage") or "processing")
+        raw_percent = event.get("percent")
+        percent: int | None = None
+        if isinstance(raw_percent, (int, float)):
+            percent = max(0, min(100, int(raw_percent)))
+        return stage, percent
+    return "processing", None
 
 
-async def set_lyrics_progress(
-    progress_id: str,
-    stage: str,
-    log_line: str | None = None,
-) -> None:
-    redis = await _get_redis()
+def _call_provider(
+    func,
+    *,
+    artist: str,
+    title: str,
+    audio_path: str | None,
+    on_progress,
+    on_cancel,
+    tier: int | None = None,
+) -> object:
+    """Invoke a lyrics provider entry point with graceful kw fallback.
+
+    Older provider versions may not accept ``on_cancel``; we try the
+    richer call first and fall back to the minimal signature.
+    """
+    kwargs = {
+        "artist": artist,
+        "title": title,
+        "audio_path": audio_path,
+        "on_progress": on_progress,
+    }
+    if tier is not None:
+        kwargs["tier"] = tier
     try:
-        key = f"{PROGRESS_KEY_PREFIX}{progress_id}"
-        data_raw = await redis.get(key)
-        if data_raw:
-            data = json.loads(data_raw)
-        else:
-            data = {"stage": stage, "logs": []}
-        data["stage"] = stage
-        if log_line:
-            data["logs"] = data["logs"][-99:] + [
-                log_line
-            ]
-        await redis.set(
-            key, json.dumps(data), ex=_PROGRESS_TTL
+        return func(**kwargs, on_cancel=on_cancel)
+    except TypeError:
+        return func(**kwargs)
+
+
+_ALLOWED_SYNC_QUALITY = {"line", "word", "none"}
+_ALLOWED_SYNC_PROFILE = {"cpu_light", "gpu_full"}
+
+
+def _word_times_from(sl) -> list[dict] | None:
+    raw = getattr(sl, "word_times", None)
+    if not raw:
+        return None
+    parsed: list[dict] = []
+    for wt in raw:
+        try:
+            text = str(getattr(wt, "text", "") or "")
+            start_ms = int(getattr(wt, "start_ms", 0) or 0)
+            dur_ms = int(getattr(wt, "dur_ms", 0) or 0)
+            conf = getattr(wt, "confidence", 0.0)
+            conf = float(conf) if conf is not None else 0.0
+        except (TypeError, ValueError):
+            continue
+        if start_ms < 0 or dur_ms < 0:
+            continue
+        parsed.append(
+            {
+                "text": text[:200],
+                "start_ms": start_ms,
+                "dur_ms": dur_ms,
+                "confidence": max(0.0, min(1.0, conf)),
+            }
         )
-    finally:
-        await redis.aclose()
+    return parsed or None
 
 
-async def append_lyrics_log(
-    progress_id: str, log_line: str
-) -> None:
-    redis = await _get_redis()
-    try:
-        key = f"{PROGRESS_KEY_PREFIX}{progress_id}"
-        data_raw = await redis.get(key)
-        if data_raw:
-            data = json.loads(data_raw)
-        else:
-            data = {"stage": "unknown", "logs": []}
-        data["logs"] = data["logs"][-99:] + [
-            log_line
-        ]
-        await redis.set(
-            key, json.dumps(data), ex=_PROGRESS_TTL
-        )
-    finally:
-        await redis.aclose()
+def _result_to_payload(gen_result) -> dict:
+    synced: list[dict] | None = None
+    if gen_result.synced_lines:
+        synced = []
+        for sl in gen_result.synced_lines:
+            line: dict = {
+                "time_ms": int(sl.time_ms),
+                "text": sl.text,
+                "confidence": float(sl.confidence)
+                if sl.confidence is not None
+                else 0.0,
+            }
+            wts = _word_times_from(sl)
+            if wts is not None:
+                line["word_times"] = wts
+            synced.append(line)
 
+    sync_quality = getattr(gen_result, "sync_quality", None)
+    if sync_quality not in _ALLOWED_SYNC_QUALITY:
+        sync_quality = None
+    sync_profile = getattr(gen_result, "sync_profile", None)
+    if sync_profile not in _ALLOWED_SYNC_PROFILE:
+        sync_profile = None
 
-async def get_lyrics_progress(
-    progress_id: str,
-) -> dict | None:
-    redis = await _get_redis()
-    try:
-        raw = await redis.get(
-            f"{PROGRESS_KEY_PREFIX}{progress_id}"
-        )
-        if not raw:
-            return None
-        return json.loads(raw)  # type: ignore[no-any-return]
-    finally:
-        await redis.aclose()
-
-
-async def _should_cancel(progress_id: str) -> bool:
-    """Check if cancellation was requested for this task."""
-    redis = await _get_redis()
-    try:
-        return await redis.exists(
-            f"{CANCEL_KEY_PREFIX}{progress_id}"
-        ) > 0
-    finally:
-        await redis.aclose()
-
-
-async def _clear_cancel(progress_id: str) -> None:
-    """Clear cancellation flag after handling."""
-    redis = await _get_redis()
-    try:
-        await redis.delete(f"{CANCEL_KEY_PREFIX}{progress_id}")
-    finally:
-        await redis.aclose()
+    return {
+        "text": gen_result.text,
+        "synced_lines": synced,
+        "sync_quality": sync_quality,
+        "sync_profile": sync_profile,
+    }
 
 
 @broker.task
@@ -239,7 +619,13 @@ async def generate_lyrics_task(
     with_sync: bool = False,
     progress_id: str = "",
 ) -> dict:
+    from app.services.lyrics_eta import record_stage_duration
+
     t0 = time.monotonic()
+    stage_started: dict[str, float] = {}
+    last_stage: str | None = None
+    profile = "cpu_light"
+
     structlog.contextvars.bind_contextvars(
         track_id=track_id, progress_id=progress_id
     )
@@ -251,11 +637,34 @@ async def generate_lyrics_task(
     def _elapsed() -> str:
         return f"{time.monotonic() - t0:.1f}s"
 
-    async def _log(stage: str, msg: str) -> None:
+    async def _log(
+        stage: str,
+        msg: str,
+        *,
+        percent: int | None = None,
+    ) -> None:
+        nonlocal last_stage
         line = f"[{_elapsed()}] {msg}"
         logger.info(msg, stage=stage)
+        if stage != last_stage:
+            now = time.monotonic()
+            if last_stage and last_stage in stage_started:
+                duration_ms = int(
+                    (now - stage_started[last_stage]) * 1000
+                )
+                try:
+                    await record_stage_duration(
+                        profile, last_stage, duration_ms
+                    )
+                except Exception:
+                    pass
+            stage_started[stage] = now
+            last_stage = stage
         await set_lyrics_progress(
-            progress_id, stage, line
+            progress_id,
+            stage=stage,
+            log_line=line,
+            percent=percent,
         )
 
     async with AsyncSessionLocal() as session:
@@ -264,7 +673,11 @@ async def generate_lyrics_task(
         )
         track = result.scalar_one_or_none()
         if not track or not track.is_active:
-            await _log("error", "track not found")
+            await _finalise(
+                progress_id,
+                "error",
+                log_line=f"[{_elapsed()}] ERROR: track not found",
+            )
             return {
                 "status": "error",
                 "detail": "track_not_found",
@@ -276,24 +689,60 @@ async def generate_lyrics_task(
         await _log(
             "searching",
             f"searching lyrics: artist={artist!r} title={title!r}",
+            percent=5,
         )
+
+        cached = await get_cached_lyrics_result(artist, title)
+        if cached and not with_sync and cached.get("text"):
+            await _log(
+                "saving",
+                "cache hit: reusing previous lyrics result",
+                percent=90,
+            )
+            repo = LyricsRepository(session)
+            await repo.create_or_update(
+                track_id=track_id,
+                plain_text=cached["text"],
+                source="auto",
+                synced_lines=None,
+                sync_quality=cached.get("sync_quality"),
+                sync_profile=cached.get("sync_profile"),
+            )
+            await session.commit()
+            await _finalise(
+                progress_id,
+                "found",
+                log_line=f"[{_elapsed()}] saved to DB (cache)",
+            )
+            return {
+                "status": "found",
+                "has_sync": False,
+                "cache": True,
+            }
 
         audio_path: str | None = None
         tmp_dir: str | None = None
 
         try:
-            # Check for cancellation before starting
             if await _should_cancel(progress_id):
-                await _log(
-                    "cancelled", "task cancelled by user"
+                await _finalise(
+                    progress_id,
+                    "cancelled",
+                    log_line=(
+                        f"[{_elapsed()}] task cancelled by user"
+                    ),
                 )
                 await _clear_cancel(progress_id)
                 return {"status": "cancelled"}
 
-            if with_sync and (track.file_key or getattr(track, "sc_url", None)):
+            if with_sync and (
+                track.file_key
+                or getattr(track, "sc_url", None)
+            ):
                 await _log(
                     "downloading_audio",
                     "downloading audio for audio-based fallback",
+                    percent=15,
                 )
                 tmp_dir = tempfile.mkdtemp()
                 audio_path = await _fetch_audio_to_file(
@@ -304,11 +753,14 @@ async def generate_lyrics_task(
                     await _log(
                         "downloading_audio",
                         f"audio ready: {size} bytes",
+                        percent=25,
                     )
                 else:
                     await _log(
                         "downloading_audio",
-                        "audio unavailable, skipping audio-based fallback",
+                        "audio unavailable, skipping audio-based "
+                        "fallback",
+                        percent=25,
                     )
 
             from dotsound_private_core.services.lyrics_provider import (  # noqa: E501
@@ -317,22 +769,43 @@ async def generate_lyrics_task(
 
             loop = asyncio.get_running_loop()
 
-            def on_progress(stage: str) -> None:
+            def on_progress(event) -> None:
+                stage, percent_val = _parse_progress_event(event)
                 opaque = _opaque_stage(stage)
                 label = _STAGE_LABELS.get(opaque, "")
-                desc = f" — {label}" if label else ""
+                desc = f" \u2014 {label}" if label else ""
                 asyncio.run_coroutine_threadsafe(
-                    _log(opaque, f"stage: {opaque}{desc}"),
+                    _log(
+                        opaque,
+                        f"stage: {opaque}{desc}",
+                        percent=percent_val,
+                    ),
                     loop,
                 )
 
-            await _log("searching", "calling lyrics provider")
+            def on_cancel() -> bool:
+                fut = asyncio.run_coroutine_threadsafe(
+                    _should_cancel(progress_id), loop
+                )
+                try:
+                    return bool(fut.result(timeout=2))
+                except Exception:
+                    return False
 
-            # Check for cancellation before starting generation
+            await _log(
+                "searching",
+                "calling lyrics provider",
+                percent=30,
+            )
+
             if await _should_cancel(progress_id):
-                await _log(
+                await _finalise(
+                    progress_id,
                     "cancelled",
-                    "task cancelled by user before lyrics generation",
+                    log_line=(
+                        f"[{_elapsed()}] task cancelled by user "
+                        "before lyrics generation"
+                    ),
                 )
                 await _clear_cancel(progress_id)
                 return {"status": "cancelled"}
@@ -343,19 +816,25 @@ async def generate_lyrics_task(
             )
             try:
                 gen_result = await asyncio.to_thread(
+                    _call_provider,
                     generate_lyrics,
                     artist=artist,
                     title=title,
                     audio_path=audio_path,
                     on_progress=on_progress,
+                    on_cancel=on_cancel,
                 )
             finally:
                 _stop_evt.set()
                 _hb_task.cancel()
 
             if gen_result is None:
-                await _log(
-                    "searching", "lyrics not found"
+                await _finalise(
+                    progress_id,
+                    "not_found",
+                    log_line=(
+                        f"[{_elapsed()}] lyrics not found"
+                    ),
                 )
                 return {"status": "not_found"}
 
@@ -363,32 +842,56 @@ async def generate_lyrics_task(
                 "saving",
                 f"lyrics found: {len(gen_result.text)} chars, "
                 f"synced={gen_result.synced_lines is not None}",
+                percent=85,
             )
 
+            payload = _result_to_payload(gen_result)
+            try:
+                await set_cached_lyrics_result(
+                    artist, title, payload
+                )
+            except Exception:
+                logger.debug(
+                    "lyrics_cache_write_failed",
+                    track_id=track_id,
+                )
+
+            try:
+                await store_partial_text(
+                    progress_id, payload["text"]
+                )
+            except Exception:
+                pass
+
             synced_dicts: list[dict] | None = None
-            if with_sync and gen_result.synced_lines:
-                synced_dicts = [
-                    {
-                        "time_ms": sl.time_ms,
-                        "text": sl.text,
-                        "confidence": sl.confidence,
-                    }
-                    for sl in gen_result.synced_lines
-                ]
+            if with_sync and payload["synced_lines"]:
+                synced_dicts = payload["synced_lines"]
+                try:
+                    await store_partial_synced(
+                        progress_id, synced_dicts
+                    )
+                except Exception:
+                    pass
 
             repo = LyricsRepository(session)
             await repo.create_or_update(
                 track_id=track_id,
-                plain_text=gen_result.text,
+                plain_text=payload["text"],
                 source="auto",
                 synced_lines=synced_dicts,
+                sync_quality=payload.get("sync_quality"),
+                sync_profile=payload.get("sync_profile"),
             )
             await session.commit()
 
             has_sync = synced_dicts is not None
-            await _log(
-                "saving",
-                f"saved to DB (has_sync={has_sync})",
+            await _finalise(
+                progress_id,
+                "found",
+                log_line=(
+                    f"[{_elapsed()}] saved to DB "
+                    f"(has_sync={has_sync})"
+                ),
             )
             return {
                 "status": "found",
@@ -397,17 +900,15 @@ async def generate_lyrics_task(
 
         except Exception as exc:
             logger.exception("lyrics_generation_error")
-            await _log(
-                "error", f"ERROR: {exc}"
+            await _finalise(
+                progress_id,
+                "error",
+                log_line=f"[{_elapsed()}] ERROR: {exc}",
             )
             return {"status": "error"}
         finally:
             if tmp_dir and os.path.isdir(tmp_dir):
-                import shutil
-
-                shutil.rmtree(
-                    tmp_dir, ignore_errors=True
-                )
+                shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 @broker.task
@@ -429,11 +930,19 @@ async def generate_lyrics_debug_task(
     def _elapsed() -> str:
         return f"{time.monotonic() - t0:.1f}s"
 
-    async def _log(stage: str, msg: str) -> None:
+    async def _log(
+        stage: str,
+        msg: str,
+        *,
+        percent: int | None = None,
+    ) -> None:
         line = f"[{_elapsed()}] {msg}"
         logger.info(msg, stage=stage)
         await set_lyrics_progress(
-            progress_id, stage, line
+            progress_id,
+            stage=stage,
+            log_line=line,
+            percent=percent,
         )
 
     async with AsyncSessionLocal() as session:
@@ -442,7 +951,11 @@ async def generate_lyrics_debug_task(
         )
         track = result.scalar_one_or_none()
         if not track or not track.is_active:
-            await _log("error", "track not found")
+            await _finalise(
+                progress_id,
+                "error",
+                log_line=f"[{_elapsed()}] ERROR: track not found",
+            )
             return {
                 "status": "error",
                 "detail": "track_not_found",
@@ -453,13 +966,18 @@ async def generate_lyrics_debug_task(
 
         await _log(
             "searching",
-            f"[DEBUG] searching lyrics: artist={artist!r} title={title!r}",
+            f"[DEBUG] searching lyrics: artist={artist!r} "
+            f"title={title!r}",
+            percent=5,
         )
 
-        # Check for cancellation before starting
         if await _should_cancel(progress_id):
-            await _log(
-                "cancelled", "task cancelled by user"
+            await _finalise(
+                progress_id,
+                "cancelled",
+                log_line=(
+                    f"[{_elapsed()}] task cancelled by user"
+                ),
             )
             await _clear_cancel(progress_id)
             return {"status": "cancelled"}
@@ -468,13 +986,14 @@ async def generate_lyrics_debug_task(
         tmp_dir: str | None = None
 
         try:
-            # Only download audio when the selected stage needs it.
             if stage_id == 3 and (
-                track.file_key or getattr(track, "sc_url", None)
+                track.file_key
+                or getattr(track, "sc_url", None)
             ):
                 await _log(
                     "downloading_audio",
                     "downloading audio for stage",
+                    percent=20,
                 )
                 tmp_dir = tempfile.mkdtemp()
                 audio_path = await _fetch_audio_to_file(
@@ -485,35 +1004,56 @@ async def generate_lyrics_debug_task(
                     await _log(
                         "downloading_audio",
                         f"audio ready: {size} bytes",
+                        percent=30,
                     )
                 else:
                     await _log(
                         "downloading_audio",
                         "audio unavailable for stage",
+                        percent=30,
                     )
 
-            from dotsound_private_core.services.lyrics_provider import (
+            from dotsound_private_core.services.lyrics_provider import (  # noqa: E501
                 generate_lyrics_debug,
             )
 
             loop = asyncio.get_running_loop()
 
-            def on_progress(stage: str) -> None:
+            def on_progress(event) -> None:
+                stage, percent_val = _parse_progress_event(event)
                 opaque = _opaque_stage(stage)
                 label = _STAGE_LABELS.get(opaque, "")
-                desc = f" — {label}" if label else ""
+                desc = f" \u2014 {label}" if label else ""
                 asyncio.run_coroutine_threadsafe(
-                    _log(opaque, f"stage: {opaque}{desc}"),
+                    _log(
+                        opaque,
+                        f"stage: {opaque}{desc}",
+                        percent=percent_val,
+                    ),
                     loop,
                 )
+
+            def on_cancel() -> bool:
+                fut = asyncio.run_coroutine_threadsafe(
+                    _should_cancel(progress_id), loop
+                )
+                try:
+                    return bool(fut.result(timeout=2))
+                except Exception:
+                    return False
 
             import logging
 
             class _LogCapture(logging.Handler):
-                def emit(self, record: logging.LogRecord) -> None:
+                def emit(
+                    self, record: logging.LogRecord
+                ) -> None:
                     msg = self.format(record)
                     asyncio.run_coroutine_threadsafe(
-                        append_lyrics_log(progress_id, f"[{_elapsed()}] {msg}"),
+                        append_lyrics_log(
+                            progress_id,
+                            f"[{_elapsed()}] {msg}",
+                        ),
                         loop,
                     )
 
@@ -525,13 +1065,20 @@ async def generate_lyrics_debug_task(
             pc_logger.addHandler(handler)
             pc_logger.setLevel(logging.DEBUG)
 
-            await _log("searching", "calling internal debug provider")
+            await _log(
+                "searching",
+                "calling internal debug provider",
+                percent=40,
+            )
 
-            # Check for cancellation before starting generation
             if await _should_cancel(progress_id):
-                await _log(
+                await _finalise(
+                    progress_id,
                     "cancelled",
-                    "task cancelled by user before lyrics generation",
+                    log_line=(
+                        f"[{_elapsed()}] task cancelled by user "
+                        "before lyrics generation"
+                    ),
                 )
                 await _clear_cancel(progress_id)
                 return {"status": "cancelled"}
@@ -542,12 +1089,14 @@ async def generate_lyrics_debug_task(
             )
             try:
                 gen_result = await asyncio.to_thread(
+                    _call_provider,
                     generate_lyrics_debug,
                     artist=artist,
                     title=title,
                     audio_path=audio_path,
-                    tier=stage_id,
                     on_progress=on_progress,
+                    on_cancel=on_cancel,
+                    tier=stage_id,
                 )
             finally:
                 _stop_evt.set()
@@ -555,8 +1104,12 @@ async def generate_lyrics_debug_task(
                 pc_logger.removeHandler(handler)
 
             if gen_result is None:
-                await _log(
-                    "searching", "lyrics not found"
+                await _finalise(
+                    progress_id,
+                    "not_found",
+                    log_line=(
+                        f"[{_elapsed()}] lyrics not found"
+                    ),
                 )
                 return {"status": "not_found"}
 
@@ -564,9 +1117,9 @@ async def generate_lyrics_debug_task(
                 "saving",
                 f"lyrics found: {len(gen_result.text)} chars, "
                 f"synced={gen_result.synced_lines is not None}",
+                percent=85,
             )
 
-            # Debug mode: save plain text only (no synced lines)
             repo = LyricsRepository(session)
             await repo.create_or_update(
                 track_id=track_id,
@@ -576,9 +1129,13 @@ async def generate_lyrics_debug_task(
             )
             await session.commit()
 
-            await _log(
-                "saving",
-                f"saved to DB (debug mode, synced_lines ignored)",
+            await _finalise(
+                progress_id,
+                "found",
+                log_line=(
+                    f"[{_elapsed()}] saved to DB "
+                    "(debug mode, synced_lines ignored)"
+                ),
             )
             return {
                 "status": "found",
@@ -587,14 +1144,12 @@ async def generate_lyrics_debug_task(
 
         except Exception as exc:
             logger.exception("lyrics_generation_error")
-            await _log(
-                "error", f"ERROR: {exc}"
+            await _finalise(
+                progress_id,
+                "error",
+                log_line=f"[{_elapsed()}] ERROR: {exc}",
             )
             return {"status": "error"}
         finally:
             if tmp_dir and os.path.isdir(tmp_dir):
-                import shutil
-
-                shutil.rmtree(
-                    tmp_dir, ignore_errors=True
-                )
+                shutil.rmtree(tmp_dir, ignore_errors=True)

@@ -1,0 +1,287 @@
+"""Admin manifest builder.
+
+Serves as the source of truth for what an admin can see and do
+in the UI. Non-admin users never reach this code — backend
+returns 404 for them before any construction happens.
+
+All strings shown to the user are resolved server-side so they
+don't end up in the public JS bundle.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import json
+import time
+from typing import Iterable
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
+from app.models.admin_capability import AdminCapability
+from app.models.user import User
+
+
+KNOWN_CAPABILITIES: frozenset[str] = frozenset(
+    {
+        "users.manage",
+        "users.grant_admin",
+        "tracks.manage",
+        "tracks.delete",
+        "complaints.moderate",
+        "artists.enrich",
+        "audio_compute.manage",
+        "audio_compute.view_audit",
+        "audio_compute.rotate_secret",
+        "lyrics.routing",
+        "metrics.view",
+        "settings.manage",
+    }
+)
+
+
+_LABELS_RU: dict[str, str] = {
+    "menu.dashboard": "Дашборд",
+    "menu.users": "Пользователи",
+    "menu.tracks": "Треки",
+    "menu.complaints": "Жалобы",
+    "menu.artists": "Артисты",
+    "menu.audio_compute": "Compute",
+    "menu.audit": "Аудит",
+    "menu.settings": "Настройки",
+    "slot.tracks.hide": "Скрыть",
+    "slot.tracks.delete": "Удалить",
+    "slot.artists.enrich": "Обогатить",
+    "slot.complaints.resolve": "Решить",
+}
+_LABELS_EN: dict[str, str] = {
+    "menu.dashboard": "Dashboard",
+    "menu.users": "Users",
+    "menu.tracks": "Tracks",
+    "menu.complaints": "Complaints",
+    "menu.artists": "Artists",
+    "menu.audio_compute": "Compute",
+    "menu.audit": "Audit",
+    "menu.settings": "Settings",
+    "slot.tracks.hide": "Hide",
+    "slot.tracks.delete": "Delete",
+    "slot.artists.enrich": "Enrich",
+    "slot.complaints.resolve": "Resolve",
+}
+
+
+def _labels(locale: str) -> dict[str, str]:
+    if locale.lower().startswith("ru"):
+        return _LABELS_RU
+    return _LABELS_EN
+
+
+async def _effective_capabilities(
+    session: AsyncSession, user: User
+) -> set[str]:
+    if not user.is_admin:
+        return set()
+    result = await session.execute(
+        select(AdminCapability).where(
+            AdminCapability.user_id == user.id
+        )
+    )
+    rows = result.scalars().all()
+    caps = {
+        row.capability
+        for row in rows
+        if row.capability in KNOWN_CAPABILITIES
+    }
+    return caps
+
+
+def _filter_menu(
+    caps: set[str], locale: str
+) -> list[dict]:
+    labels = _labels(locale)
+    raw: list[dict] = [
+        {
+            "id": "dashboard",
+            "label": labels["menu.dashboard"],
+            "route": "/admin",
+            "capability": None,
+            "icon": "home",
+        },
+        {
+            "id": "users",
+            "label": labels["menu.users"],
+            "route": "/admin/users",
+            "capability": "users.manage",
+            "icon": "user",
+        },
+        {
+            "id": "tracks",
+            "label": labels["menu.tracks"],
+            "route": "/admin/tracks",
+            "capability": "tracks.manage",
+            "icon": "music",
+        },
+        {
+            "id": "complaints",
+            "label": labels["menu.complaints"],
+            "route": "/admin/complaints",
+            "capability": "complaints.moderate",
+            "icon": "flag",
+        },
+        {
+            "id": "artists",
+            "label": labels["menu.artists"],
+            "route": "/admin/artists",
+            "capability": "artists.enrich",
+            "icon": "sparkle",
+        },
+        {
+            "id": "audio_compute",
+            "label": labels["menu.audio_compute"],
+            "route": "/admin/audio-compute",
+            "capability": "audio_compute.manage",
+            "icon": "brain",
+        },
+        {
+            "id": "audit",
+            "label": labels["menu.audit"],
+            "route": "/admin/audit",
+            "capability": "audio_compute.view_audit",
+            "icon": "eye",
+        },
+        {
+            "id": "settings",
+            "label": labels["menu.settings"],
+            "route": "/admin/settings",
+            "capability": "settings.manage",
+            "icon": "settings",
+        },
+    ]
+    return [
+        m
+        for m in raw
+        if m["capability"] is None or m["capability"] in caps
+    ]
+
+
+def _filter_slots(
+    caps: set[str], locale: str
+) -> dict[str, list[dict]]:
+    labels = _labels(locale)
+    raw: dict[str, list[dict]] = {
+        "track.card": [
+            {
+                "id": "hide",
+                "label": labels["slot.tracks.hide"],
+                "capability": "tracks.manage",
+                "icon": "eye",
+                "action": "tracks.hide",
+            },
+            {
+                "id": "delete",
+                "label": labels["slot.tracks.delete"],
+                "capability": "tracks.delete",
+                "icon": "trash",
+                "action": "tracks.delete",
+                "confirm": True,
+            },
+        ],
+        "artist.page": [
+            {
+                "id": "enrich",
+                "label": labels["slot.artists.enrich"],
+                "capability": "artists.enrich",
+                "icon": "sparkle",
+                "action": "artists.enrich",
+            },
+        ],
+        "complaint.row": [
+            {
+                "id": "resolve",
+                "label": labels["slot.complaints.resolve"],
+                "capability": "complaints.moderate",
+                "icon": "check",
+                "action": "complaints.resolve",
+            },
+        ],
+    }
+    filtered: dict[str, list[dict]] = {}
+    for ctx, items in raw.items():
+        allowed = [
+            i for i in items if i["capability"] in caps
+        ]
+        if allowed:
+            filtered[ctx] = allowed
+    return filtered
+
+
+def sign_bundle_token(
+    user_id: int, ttl_s: int = 3600
+) -> tuple[str, int]:
+    exp = int(time.time()) + int(ttl_s)
+    raw = f"admin:{user_id}:{exp}"
+    sig = hmac.new(
+        settings.jwt_secret.encode("utf-8"),
+        raw.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{exp}.{sig}", exp
+
+
+def verify_bundle_token(
+    token: str, user_id: int
+) -> bool:
+    try:
+        exp_str, sig = token.split(".", 1)
+        exp = int(exp_str)
+    except (ValueError, AttributeError):
+        return False
+    if exp < int(time.time()):
+        return False
+    raw = f"admin:{user_id}:{exp}"
+    expected = hmac.new(
+        settings.jwt_secret.encode("utf-8"),
+        raw.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, sig)
+
+
+async def build_manifest(
+    session: AsyncSession,
+    user: User,
+    *,
+    locale: str | None = None,
+) -> dict:
+    loc = (locale or getattr(user, "locale", None) or "ru").strip()
+    caps = await _effective_capabilities(session, user)
+
+    menu = _filter_menu(caps, loc)
+    slots = _filter_slots(caps, loc)
+
+    token, exp = sign_bundle_token(user.id)
+    bundle_url = (
+        f"/mini_app/assets/secure/admin-bundle.js"
+        f"?t={token}&u={user.id}"
+    )
+    issued_at = int(time.time())
+
+    return {
+        "capabilities": sorted(caps),
+        "menu": menu,
+        "slots": slots,
+        "adminBundleUrl": bundle_url,
+        "issuedAt": issued_at,
+        "expiresIn": max(60, exp - issued_at),
+        "locale": loc,
+    }
+
+
+__all__ = [
+    "KNOWN_CAPABILITIES",
+    "build_manifest",
+    "sign_bundle_token",
+    "verify_bundle_token",
+]

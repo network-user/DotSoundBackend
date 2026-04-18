@@ -108,26 +108,71 @@ class LyricsService:
     ) -> str:
         import uuid
 
+        from app.models.lyrics_job import LyricsJob
+        from app.services.compute_router import select_profile
         from app.services.lyrics_worker import (
             set_lyrics_progress,
         )
 
         await self._get_owned_track(track_id, user_id)
         progress_id = uuid.uuid4().hex
-        task = await generate_lyrics_task.kiq(
+        profile = (
+            await select_profile(self._session)
+            or "cpu_light"
+        )
+
+        job = LyricsJob(
+            id=f"lj_{uuid.uuid4().hex[:16]}",
             track_id=track_id,
-            with_sync=with_sync,
             progress_id=progress_id,
+            requested_by_user_id=user_id,
+            profile=profile,
+            status="queued",
+        )
+        self._session.add(job)
+        await self._session.flush()
+
+        taskiq_id = None
+        if profile == "cpu_light":
+            task = await generate_lyrics_task.kiq(
+                track_id=track_id,
+                with_sync=with_sync,
+                progress_id=progress_id,
+            )
+            taskiq_id = task.task_id
+            job.status = "queued"
+
+        await self._session.commit()
+
+        queued_log = (
+            f"task queued: taskiq_id={taskiq_id}"
+            if taskiq_id
+            else f"task queued for profile={profile}"
         )
         await set_lyrics_progress(
             progress_id,
-            "queued",
-            f"task queued: taskiq_id={task.task_id}",
+            stage="queued",
+            log_line=queued_log,
+            percent=2,
         )
+        try:
+            from app.services.lyrics_eta import (
+                publish_initial_eta,
+            )
+
+            await publish_initial_eta(
+                progress_id, profile
+            )
+        except Exception:
+            logger.debug(
+                "lyrics_eta_seed_failed",
+                progress_id=progress_id,
+            )
         logger.info(
             "lyrics_auto_triggered",
             track_id=track_id,
-            task_id=task.task_id,
+            task_id=taskiq_id,
+            profile=profile,
             progress_id=progress_id,
             with_sync=with_sync,
         )
@@ -171,32 +216,29 @@ class LyricsService:
     ) -> bool:
         """Request cancellation of a running lyrics detection task.
 
-        Returns: True if cancellation flag was set, False if task already completed
+        Returns: True if cancellation flag was set, False if
+        task already completed.
         """
         await self._get_owned_track(track_id, user_id)
 
-        from app.config import settings
-        from app.services.lyrics_worker import set_lyrics_progress
-        from redis.asyncio import Redis
-
-        redis = Redis.from_url(
-            settings.redis_url, decode_responses=True
+        from app.core.redis import get_redis_client
+        from app.services.lyrics_worker import (
+            CANCEL_KEY_PREFIX,
+            set_lyrics_progress,
         )
-        try:
-            # Set cancellation flag
-            await redis.set(
-                f"lyrics:cancel:{progress_id}", "1", ex=600
-            )
-            await set_lyrics_progress(
-                progress_id,
-                "cancelling",
-                "cancellation requested by user",
-            )
-            logger.info(
-                "lyrics_cancel_requested",
-                track_id=track_id,
-                progress_id=progress_id,
-            )
-            return True
-        finally:
-            await redis.aclose()
+
+        redis = get_redis_client()
+        await redis.set(
+            f"{CANCEL_KEY_PREFIX}{progress_id}", "1", ex=600
+        )
+        await set_lyrics_progress(
+            progress_id,
+            stage="cancelling",
+            log_line="cancellation requested by user",
+        )
+        logger.info(
+            "lyrics_cancel_requested",
+            track_id=track_id,
+            progress_id=progress_id,
+        )
+        return True

@@ -22,5 +22,11 @@ class TrackLyrics(Base, TimestampMixin):
     source: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="manual"
     )
+    sync_quality: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )
+    sync_profile: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )
 
     track = relationship("Track", back_populates="lyrics")

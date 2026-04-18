@@ -10,6 +10,20 @@ from app.services.lyrics_worker import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _reset_lyrics_cache():
+    with patch(
+        "app.services.lyrics_worker.get_cached_lyrics_result",
+        new_callable=AsyncMock,
+        return_value=None,
+    ), patch(
+        "app.services.lyrics_worker.set_cached_lyrics_result",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        yield
+
+
 @dataclass
 class _FakeTrack:
     id: int = 1

@@ -29,6 +29,7 @@ from app.api.v1 import (
     users,
     ws,
 )
+from app.api.v1.internal import audio_compute
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health.router)
@@ -58,4 +59,5 @@ api_router.include_router(onboarding.router)
 api_router.include_router(recommendations.router)
 api_router.include_router(signals.router)
 api_router.include_router(artists.router)
+api_router.include_router(audio_compute.router)
 api_router.include_router(ws.router)

@@ -114,3 +114,43 @@ async def require_admin(
             detail="Admin access required",
         )
     return user
+
+
+def require_capability(capability: str):
+    """Return a FastAPI dependency that enforces a capability.
+
+    Superadmins (``is_admin`` True) bypass granular checks and
+    always succeed. Regular admins must have the capability row
+    in ``admin_capabilities``. Anyone else gets 403.
+    """
+
+    async def _dep(
+        user: User = Depends(get_current_user),
+        session=Depends(get_db),
+    ) -> User:
+        if not user.is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access required",
+            )
+        from sqlalchemy import select
+
+        from app.models.admin_capability import (
+            AdminCapability,
+        )
+
+        result = await session.execute(
+            select(AdminCapability).where(
+                AdminCapability.user_id == user.id,
+                AdminCapability.capability == capability,
+            )
+        )
+        has = result.scalar_one_or_none() is not None
+        if not has:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="capability required",
+            )
+        return user
+
+    return _dep

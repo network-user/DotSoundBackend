@@ -1,12 +1,30 @@
-"""Lyrics endpoints — CRUD + synced timecodes for tracks."""
+"""Lyrics endpoints — CRUD + synced timecodes + progress stream."""
+
+from __future__ import annotations
+
+import asyncio
+import json
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Request,
+    Response,
+    status,
+)
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.rate_limit import limiter
-from app.dependencies import get_current_user, get_db, get_optional_user
+from app.core.redis import get_redis_client
+from app.dependencies import (
+    get_current_user,
+    get_db,
+    get_optional_user,
+)
 from app.models.user import User
 from app.schemas.lyrics import (
     LyricsAutoRequest,
@@ -17,6 +35,11 @@ from app.schemas.lyrics import (
     LyricsSyncRequest,
 )
 from app.services.lyrics_service import LyricsService
+from app.services.lyrics_worker import (
+    EVENTS_CHANNEL_PREFIX,
+    TERMINAL_STATES,
+    get_lyrics_progress,
+)
 
 router = APIRouter(prefix="/tracks", tags=["lyrics"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -38,7 +61,9 @@ async def upsert_lyrics(
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = LyricsService(session)
     lyrics = await service.create_or_update(
-        track_id=track_id, user_id=current_user.id, plain_text=body.plain_text
+        track_id=track_id,
+        user_id=current_user.id,
+        plain_text=body.plain_text,
     )
     return LyricsResponse.model_validate(lyrics)
 
@@ -72,7 +97,10 @@ async def get_lyrics(
 @router.put(
     "/{track_id}/lyrics/sync",
     response_model=LyricsResponse,
-    summary="Update synced timecodes (owner only). Requires existing plain-text lyrics.",
+    summary=(
+        "Update synced timecodes (owner only). Requires "
+        "existing plain-text lyrics."
+    ),
 )
 @limiter.limit("30/minute")
 async def update_sync(
@@ -84,9 +112,13 @@ async def update_sync(
 ) -> LyricsResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = LyricsService(session)
-    synced_dicts = [line.model_dump() for line in body.synced_lines]
+    synced_dicts = [
+        line.model_dump() for line in body.synced_lines
+    ]
     lyrics = await service.update_sync(
-        track_id=track_id, user_id=current_user.id, synced_lines=synced_dicts
+        track_id=track_id,
+        user_id=current_user.id,
+        synced_lines=synced_dicts,
     )
     return LyricsResponse.model_validate(lyrics)
 
@@ -102,7 +134,7 @@ async def delete_lyrics(
     track_id: int,
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> None:
+) -> Response:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = LyricsService(session)
     removed = await service.delete_lyrics(
@@ -113,6 +145,7 @@ async def delete_lyrics(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Lyrics not found",
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(
@@ -129,9 +162,7 @@ async def trigger_auto_lyrics(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> LyricsAutoResponse:
-    structlog.contextvars.bind_contextvars(
-        track_id=track_id
-    )
+    structlog.contextvars.bind_contextvars(track_id=track_id)
     service = LyricsService(session)
     task_id = await service.trigger_auto_generation(
         track_id=track_id,
@@ -139,6 +170,37 @@ async def trigger_auto_lyrics(
         with_sync=body.with_sync,
     )
     return LyricsAutoResponse(task_id=task_id)
+
+
+def _validate_task_id(task_id: str) -> bool:
+    return bool(task_id) and len(task_id) <= 128
+
+
+def _status_from_progress(
+    progress: dict | None,
+) -> LyricsAutoStatusResponse:
+    if not progress:
+        return LyricsAutoStatusResponse(status="pending")
+
+    stage = progress.get("stage")
+    logs = progress.get("logs", []) or []
+    percent = progress.get("percent")
+    terminal = progress.get("terminal_state")
+
+    if terminal in TERMINAL_STATES:
+        return LyricsAutoStatusResponse(
+            status=terminal,
+            stage=stage,
+            percent=percent,
+            logs=logs,
+        )
+
+    return LyricsAutoStatusResponse(
+        status="pending",
+        stage=stage,
+        percent=percent,
+        logs=logs,
+    )
 
 
 @router.get(
@@ -152,79 +214,109 @@ async def get_auto_lyrics_status(
     track_id: int,
     task_id: str,
 ) -> LyricsAutoStatusResponse:
-    from app.services.lyrics_worker import (
-        get_lyrics_progress,
-    )
-
-    if not task_id or len(task_id) > 128:
-        return LyricsAutoStatusResponse(
-            status="error"
-        )
+    if not _validate_task_id(task_id):
+        return LyricsAutoStatusResponse(status="error")
 
     try:
         progress = await get_lyrics_progress(task_id)
     except Exception:
-        logger.exception("lyrics_progress_fetch_error", task_id=task_id)
+        logger.exception(
+            "lyrics_progress_fetch_error", task_id=task_id
+        )
         return LyricsAutoStatusResponse(status="pending")
-    stage = progress.get("stage") if progress else None
-    logs = progress.get("logs", []) if progress else []
 
-    status_from_stage: dict[str, str] = {
-        "error": "error",
-    }
-    final_status = status_from_stage.get(
-        stage or "", ""
-    )
-    if final_status:
-        return LyricsAutoStatusResponse(
-            status=final_status,
-            stage=stage,
-            logs=logs,
+    return _status_from_progress(progress)
+
+
+def _sse_event(name: str, data: dict) -> str:
+    payload = json.dumps(data, ensure_ascii=False)
+    return f"event: {name}\ndata: {payload}\n\n"
+
+
+@router.get(
+    "/{track_id}/lyrics/auto/events",
+    summary=(
+        "Server-Sent Events stream for auto-detection progress"
+    ),
+)
+async def stream_auto_lyrics_events(
+    request: Request,
+    track_id: int,
+    task_id: str,
+) -> StreamingResponse:
+    if not _validate_task_id(task_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid task_id",
         )
 
-    has_done_log = any(
-        "saved to DB" in line for line in logs
-    )
-    has_not_found_log = any(
-        "lyrics not found" in line for line in logs
-    )
-    has_error_log = any(
-        "ERROR:" in line for line in logs
-    )
-    has_cancelled_log = any(
-        "cancelled by user" in line for line in logs
-    )
+    channel = f"{EVENTS_CHANNEL_PREFIX}{task_id}"
 
-    if has_done_log:
-        return LyricsAutoStatusResponse(
-            status="found",
-            stage=stage,
-            logs=logs,
-        )
-    if has_not_found_log:
-        return LyricsAutoStatusResponse(
-            status="not_found",
-            stage=stage,
-            logs=logs,
-        )
-    if has_error_log:
-        return LyricsAutoStatusResponse(
-            status="error",
-            stage=stage,
-            logs=logs,
-        )
+    async def event_generator():
+        redis = get_redis_client()
+        pubsub = redis.pubsub()
+        await pubsub.subscribe(channel)
 
-    if has_cancelled_log:
-        return LyricsAutoStatusResponse(
-            status="cancelled",
-            stage=stage,
-            logs=logs,
-        )
+        try:
+            snapshot = await get_lyrics_progress(task_id)
+            resp = _status_from_progress(snapshot)
+            yield _sse_event(
+                "snapshot", resp.model_dump()
+            )
 
-    return LyricsAutoStatusResponse(
-        status="pending",
-        stage=stage,
-        logs=logs,
+            if resp.status in TERMINAL_STATES:
+                return
+
+            idle_retries = 0
+            while True:
+                if await request.is_disconnected():
+                    break
+                msg = await pubsub.get_message(
+                    ignore_subscribe_messages=True,
+                    timeout=15.0,
+                )
+                if msg is None:
+                    idle_retries += 1
+                    yield ": keep-alive\n\n"
+                    if idle_retries > 40:
+                        break
+                    continue
+                idle_retries = 0
+                data_raw = msg.get("data")
+                if not data_raw:
+                    continue
+                try:
+                    data = (
+                        json.loads(data_raw)
+                        if isinstance(data_raw, str)
+                        else json.loads(
+                            data_raw.decode("utf-8")
+                        )
+                    )
+                except (TypeError, ValueError):
+                    continue
+                yield _sse_event(
+                    data.get("type", "progress"), data
+                )
+                if data.get("terminal_state") in TERMINAL_STATES:
+                    break
+        except asyncio.CancelledError:
+            raise
+        finally:
+            try:
+                await pubsub.unsubscribe(channel)
+                await pubsub.aclose()
+            except Exception:
+                pass
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
 
 
@@ -242,9 +334,10 @@ async def redefine_lyrics(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> LyricsAutoResponse:
-    """Delete existing lyrics for a track and re-run detection from scratch.
+    """Delete existing lyrics for a track and re-run detection.
 
-    Useful when auto-detection failed or produced incorrect results.
+    Useful when auto-detection failed or produced incorrect
+    results.
     """
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = LyricsService(session)
@@ -268,11 +361,7 @@ async def cancel_lyrics_generation(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    """Request cancellation of a running lyrics detection task.
-
-    Must provide the task_id returned from the auto-detection request.
-    """
-    if not task_id or len(task_id) > 128:
+    if not _validate_task_id(task_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid task_id",
@@ -289,9 +378,6 @@ async def cancel_lyrics_generation(
     )
 
     return {"status": "cancel_requested"}
-
-
-# ========== DEBUG ENDPOINTS (only available when DEBUG=true) ==========
 
 
 @router.post(
@@ -337,12 +423,15 @@ async def trigger_debug_lyrics(
 
     progress_id = uuid.uuid4().hex
     task = await generate_lyrics_debug_task.kiq(
-        track_id=track_id, stage_id=stage_id, progress_id=progress_id
+        track_id=track_id,
+        stage_id=stage_id,
+        progress_id=progress_id,
     )
     await set_lyrics_progress(
         progress_id,
-        "queued",
-        f"debug task queued: taskiq_id={task.task_id}",
+        stage="queued",
+        log_line=f"debug task queued: taskiq_id={task.task_id}",
+        percent=2,
     )
 
     logger.info(

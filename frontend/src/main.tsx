@@ -2,6 +2,7 @@ import '@/lib/i18n'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
+import { AdminProvider } from '@/components/Admin/AdminContext'
 import { LikesProvider } from '@/store/LikesContext'
 import { PlayerProvider } from '@/store/PlayerContext'
 import { App } from './App'
@@ -17,11 +18,13 @@ if ('serviceWorker' in navigator) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter basename="/mini_app">
-      <PlayerProvider>
-        <LikesProvider>
-          <App />
-        </LikesProvider>
-      </PlayerProvider>
+      <AdminProvider>
+        <PlayerProvider>
+          <LikesProvider>
+            <App />
+          </LikesProvider>
+        </PlayerProvider>
+      </AdminProvider>
     </BrowserRouter>
   </StrictMode>,
 )

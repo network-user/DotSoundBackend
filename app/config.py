@@ -57,6 +57,12 @@ class AppSettings(BaseSettings):
     artist_image_max_bytes: int = 5 * 1024 * 1024
     artist_enrichment_min_confidence: float = 0.3
 
+    lyrics_max_audio_mb: int = 50
+    lyrics_search_cache_ttl_seconds: int = 7 * 24 * 3600
+    lyrics_progress_ttl_seconds: int = 600
+    lyrics_partial_ttl_seconds: int = 3600
+    lyrics_stream_maxlen: int = 500
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [

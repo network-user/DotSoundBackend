@@ -39,6 +39,11 @@ const LegalView = lazy(() => import('@/views/LegalView').then(m => ({ default: m
 const LegalDocView = lazy(() => import('@/views/LegalDocView').then(m => ({ default: m.LegalDocView })))
 const DailyMixView = lazy(() => import('@/views/DailyMixView').then(m => ({ default: m.DailyMixView })))
 const RadioView = lazy(() => import('@/views/RadioView').then(m => ({ default: m.RadioView })))
+const AdminDashboardView = lazy(() =>
+  import('@/admin/AdminDashboardView').then((m) => ({
+    default: m.AdminDashboardView,
+  })),
+)
 
 function TrackDeepLinkRoute() {
   useTrackDeepLink()
@@ -341,6 +346,8 @@ export function App() {
           <Route path="/legal/:docId" element={<LegalDocView />} />
           <Route path="/daily-mix" element={<DailyMixView />} />
           <Route path="/radio" element={<RadioView />} />
+          <Route path="/admin" element={<AdminDashboardView />} />
+          <Route path="/admin/*" element={<AdminDashboardView />} />
         </Routes>
         </Suspense>
       </main>

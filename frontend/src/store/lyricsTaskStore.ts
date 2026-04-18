@@ -7,20 +7,23 @@ interface TaskState {
   generating: boolean
   stage: string | null
   genStatus: string | null
+  percent: number | null
   startedAt: number
   debugLog: string[]
 }
 
 type Listener = () => void
 
+const TERMINAL = new Set(['found', 'not_found', 'error', 'cancelled'])
+const POLLING_INTERVAL_MS = 2000
+
 let tasks = new Map<number, TaskState>()
-const timers = new Map<number, ReturnType<typeof setInterval>>()
+const pollTimers = new Map<number, ReturnType<typeof setInterval>>()
+const eventSources = new Map<number, EventSource>()
 const listeners = new Set<Listener>()
-let version = 0
 
 function notify(): void {
   tasks = new Map(tasks)
-  version++
   listeners.forEach((l) => l())
 }
 
@@ -29,88 +32,173 @@ function subscribe(listener: Listener): () => void {
   return () => listeners.delete(listener)
 }
 
+function stopSubscription(trackId: number): void {
+  const es = eventSources.get(trackId)
+  if (es) {
+    try {
+      es.close()
+    } catch {}
+    eventSources.delete(trackId)
+  }
+  const timer = pollTimers.get(trackId)
+  if (timer) {
+    clearInterval(timer)
+    pollTimers.delete(trackId)
+  }
+}
+
+function appendClientLog(trackId: number, line: string): void {
+  const state = tasks.get(trackId)
+  if (!state) return
+  tasks.set(trackId, {
+    ...state,
+    debugLog: [...state.debugLog, line],
+  })
+  notify()
+}
+
+function applyPayload(
+  trackId: number,
+  payload: {
+    status?: string
+    stage?: string | null
+    terminal_state?: string | null
+    percent?: number | null
+    log?: string
+    logs?: string[]
+  },
+): void {
+  const state = tasks.get(trackId)
+  if (!state) return
+
+  const terminal =
+    payload.terminal_state ??
+    (payload.status && TERMINAL.has(payload.status) ? payload.status : null)
+
+  const nextStage =
+    payload.stage !== undefined ? (payload.stage ?? null) : state.stage
+
+  const nextPercent =
+    payload.percent !== undefined && payload.percent !== null
+      ? Math.max(0, Math.min(100, Math.round(payload.percent)))
+      : state.percent
+
+  let nextLogs = state.debugLog
+  if (payload.logs && payload.logs.length > 0) {
+    nextLogs = payload.logs
+  } else if (payload.log) {
+    nextLogs = [...state.debugLog, payload.log]
+  }
+
+  if (terminal) {
+    tasks.set(trackId, {
+      ...state,
+      generating: false,
+      genStatus: terminal,
+      stage: nextStage,
+      percent: terminal === 'found' ? 100 : nextPercent,
+      debugLog: nextLogs,
+    })
+    stopSubscription(trackId)
+  } else {
+    tasks.set(trackId, {
+      ...state,
+      stage: nextStage,
+      percent: nextPercent,
+      debugLog: nextLogs,
+    })
+  }
+  notify()
+}
+
 function startPolling(trackId: number): void {
-  if (timers.has(trackId)) return
+  if (pollTimers.has(trackId)) return
 
   const timer = setInterval(async () => {
     const state = tasks.get(trackId)
     if (!state) {
-      stopPolling(trackId)
+      stopSubscription(trackId)
       return
     }
 
     try {
-      const { status, stage, logs } =
-        await api.getLyricsAutoStatus(
-          state.trackId,
-          state.taskId,
-        )
-
-      const serverLogs = logs ?? []
-
-      if (status === 'found') {
-        stopPolling(trackId)
+      const resp = await api.getLyricsAutoStatus(
+        state.trackId,
+        state.taskId,
+      )
+      applyPayload(trackId, {
+        status: resp.status,
+        stage: resp.stage ?? null,
+        percent: resp.percent ?? null,
+        logs: resp.logs ?? [],
+      })
+    } catch (err) {
+      stopSubscription(trackId)
+      const msg = err instanceof Error ? err.message : 'polling failed'
+      const current = tasks.get(trackId)
+      if (current) {
         tasks.set(trackId, {
-          ...state,
+          ...current,
           generating: false,
-          genStatus: 'found',
-          stage: stage ?? null,
-          debugLog: serverLogs,
-        })
-        notify()
-      } else if (
-        status === 'not_found' ||
-        status === 'error' ||
-        status === 'cancelled'
-      ) {
-        stopPolling(trackId)
-        tasks.set(trackId, {
-          ...state,
-          generating: false,
-          genStatus: status,
-          stage: stage ?? null,
-          debugLog: serverLogs,
-        })
-        notify()
-      } else {
-        tasks.set(trackId, {
-          ...state,
-          stage: stage ?? state.stage,
-          debugLog:
-            serverLogs.length > 0
-              ? serverLogs
-              : state.debugLog,
+          genStatus: 'error',
+          stage: null,
+          debugLog: [...current.debugLog, `[client] ERROR: ${msg}`],
         })
         notify()
       }
-    } catch (err) {
-      stopPolling(trackId)
-      const msg =
-        err instanceof Error
-          ? err.message
-          : 'polling failed'
-      tasks.set(trackId, {
-        ...state,
-        generating: false,
-        genStatus: 'error',
-        stage: null,
-        debugLog: [
-          ...state.debugLog,
-          `[client] ERROR: ${msg}`,
-        ],
-      })
-      notify()
     }
-  }, 2000)
+  }, POLLING_INTERVAL_MS)
 
-  timers.set(trackId, timer)
+  pollTimers.set(trackId, timer)
 }
 
-function stopPolling(trackId: number): void {
-  const timer = timers.get(trackId)
-  if (timer) {
-    clearInterval(timer)
-    timers.delete(trackId)
+function startSubscription(trackId: number): void {
+  if (eventSources.has(trackId) || pollTimers.has(trackId)) return
+
+  const state = tasks.get(trackId)
+  if (!state) return
+
+  const supportsSSE =
+    typeof window !== 'undefined' && typeof window.EventSource !== 'undefined'
+
+  if (!supportsSSE) {
+    startPolling(trackId)
+    return
+  }
+
+  try {
+    const url = api.lyricsAutoEventsUrl(state.trackId, state.taskId)
+    const es = new EventSource(url, { withCredentials: true })
+
+    const onMessage = (ev: MessageEvent) => {
+      try {
+        const data = JSON.parse(ev.data as string)
+        applyPayload(trackId, {
+          stage: data.stage ?? null,
+          percent: data.percent ?? null,
+          terminal_state: data.terminal_state ?? null,
+          log: data.log ?? undefined,
+        })
+      } catch {}
+    }
+
+    es.addEventListener('snapshot', onMessage)
+    es.addEventListener('progress', onMessage)
+    es.addEventListener('error', () => {
+      try {
+        es.close()
+      } catch {}
+      eventSources.delete(trackId)
+      const cur = tasks.get(trackId)
+      if (cur?.generating) {
+        appendClientLog(trackId, '[client] SSE disconnected, polling')
+        startPolling(trackId)
+      }
+    })
+
+    eventSources.set(trackId, es)
+  } catch {
+    startPolling(trackId)
   }
 }
 
@@ -123,18 +211,10 @@ async function startGeneration(
   let task_id: string
 
   if (debugTier) {
-    // Debug tier mode
-    const response = await api.generateLyricsDebug(
-      trackId,
-      debugTier,
-    )
+    const response = await api.generateLyricsDebug(trackId, debugTier)
     task_id = response.task_id
   } else {
-    // Normal auto-generation
-    const response = await api.generateLyrics(
-      trackId,
-      withSync ?? false,
-    )
+    const response = await api.generateLyrics(trackId, withSync ?? false)
     task_id = response.task_id
   }
 
@@ -148,6 +228,7 @@ async function startGeneration(
     generating: true,
     stage: 'queued',
     genStatus: null,
+    percent: 0,
     startedAt: now,
     debugLog: [
       `[client] started (${modeLabel})`,
@@ -155,12 +236,11 @@ async function startGeneration(
     ],
   })
   notify()
-
-  startPolling(trackId)
+  startSubscription(trackId)
 }
 
 function clearTask(trackId: number): void {
-  stopPolling(trackId)
+  stopSubscription(trackId)
   tasks.delete(trackId)
   notify()
 }
@@ -175,16 +255,14 @@ function clearDebugLog(trackId: number): void {
   notify()
 }
 
-function resumeTask(
-  trackId: number,
-  taskId: string,
-): void {
+function resumeTask(trackId: number, taskId: string): void {
   tasks.set(trackId, {
     taskId,
     trackId,
     generating: true,
     stage: 'queued',
     genStatus: null,
+    percent: 0,
     startedAt: Date.now(),
     debugLog: [
       '[client] redefine: old lyrics deleted',
@@ -192,39 +270,36 @@ function resumeTask(
     ],
   })
   notify()
-  startPolling(trackId)
+  startSubscription(trackId)
 }
 
-async function cancelGeneration(
-  trackId: number,
-): Promise<void> {
+async function cancelGeneration(trackId: number): Promise<void> {
   const state = tasks.get(trackId)
   if (!state) return
 
   try {
     await api.cancelLyricsGeneration(trackId, state.taskId)
-    tasks.set(trackId, {
-      ...state,
-      generating: false,
-      genStatus: 'cancelled',
-      debugLog: [
-        ...state.debugLog,
-        '[client] cancellation requested',
-      ],
-    })
-    stopPolling(trackId)
-    notify()
+    const cur = tasks.get(trackId)
+    if (cur) {
+      tasks.set(trackId, {
+        ...cur,
+        generating: false,
+        genStatus: 'cancelled',
+        debugLog: [...cur.debugLog, '[client] cancellation requested'],
+      })
+      stopSubscription(trackId)
+      notify()
+    }
   } catch (err) {
-    const msg =
-      err instanceof Error ? err.message : 'cancel failed'
-    tasks.set(trackId, {
-      ...state,
-      debugLog: [
-        ...state.debugLog,
-        `[client] ERROR cancelling: ${msg}`,
-      ],
-    })
-    notify()
+    const msg = err instanceof Error ? err.message : 'cancel failed'
+    const cur = tasks.get(trackId)
+    if (cur) {
+      tasks.set(trackId, {
+        ...cur,
+        debugLog: [...cur.debugLog, `[client] ERROR cancelling: ${msg}`],
+      })
+      notify()
+    }
   }
 }
 
@@ -233,10 +308,7 @@ function getSnapshot(): Map<number, TaskState> {
 }
 
 export function useLyricsTask(trackId: number) {
-  const store = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-  )
+  const store = useSyncExternalStore(subscribe, getSnapshot)
 
   const state = store.get(trackId)
 
@@ -269,9 +341,10 @@ export function useLyricsTask(trackId: number) {
   useEffect(() => {
     if (
       state?.generating &&
-      !timers.has(trackId)
+      !eventSources.has(trackId) &&
+      !pollTimers.has(trackId)
     ) {
-      startPolling(trackId)
+      startSubscription(trackId)
     }
   }, [trackId, state?.generating])
 
@@ -279,6 +352,7 @@ export function useLyricsTask(trackId: number) {
     generating: state?.generating ?? false,
     stage: state?.stage ?? null,
     genStatus: state?.genStatus ?? null,
+    percent: state?.percent ?? null,
     taskId: state?.taskId ?? null,
     startedAt: state?.startedAt ?? 0,
     debugLog: state?.debugLog ?? [],
