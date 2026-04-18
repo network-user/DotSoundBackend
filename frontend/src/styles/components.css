@@ -386,10 +386,20 @@
   bottom: calc(100% + var(--space-2));
   right: 0;
   min-width: 200px;
-  background: var(--surface, #1a1a1a);
-  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  background: var(--glass-bg, rgba(16, 16, 16, 0.85));
+  backdrop-filter: var(--glass-blur, blur(20px))
+    saturate(180%);
+  -webkit-backdrop-filter: var(
+      --glass-blur,
+      blur(20px)
+    )
+    saturate(180%);
+  border: 1px solid
+    var(--glass-border, rgba(255, 255, 255, 0.08));
   border-radius: var(--r-md);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
   padding: var(--space-1);
   z-index: var(--z-player);
   animation: menu-pop var(--dur-fast)
@@ -463,6 +473,8 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -474,7 +486,16 @@
 .sheet-inner {
   width: 100%;
   max-width: 720px;
-  background: var(--surface, #1a1a1a);
+  background: var(--glass-bg, rgba(16, 16, 16, 0.85));
+  backdrop-filter: var(--glass-blur, blur(20px))
+    saturate(180%);
+  -webkit-backdrop-filter: var(
+      --glass-blur,
+      blur(20px)
+    )
+    saturate(180%);
+  border-top: 1px solid
+    var(--glass-border, rgba(255, 255, 255, 0.06));
   border-radius: var(--r-xl) var(--r-xl) 0 0;
   padding-bottom: var(--safe-bottom);
   max-height: 90vh;
@@ -486,6 +507,7 @@
     var(--ease-standard);
   animation: sheet-enter var(--dur-med)
     var(--ease-emph);
+  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
 }
 
 .sheet-handle-zone {

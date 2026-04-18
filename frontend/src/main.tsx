@@ -5,17 +5,13 @@ import { BrowserRouter } from 'react-router-dom'
 import { AdminProvider } from '@/components/Admin/AdminContext'
 import { LikesProvider } from '@/store/LikesContext'
 import { PlayerProvider } from '@/store/PlayerContext'
-import {
-  installTelegramThemeBridge,
-  installViewportListener,
-} from '@/lib/telegram'
+import { installViewportListener } from '@/lib/telegram'
 import { App } from './App'
 import './styles/tokens.css'
 import './styles/global.css'
 import './styles/animations.css'
 import './styles/components.css'
 
-installTelegramThemeBridge()
 installViewportListener()
 
 if (

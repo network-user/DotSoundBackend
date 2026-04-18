@@ -18,38 +18,20 @@ export const tg = WebApp
 
 type HapticImpact = 'light' | 'medium' | 'heavy'
 
-let _themeBridgeInstalled = false
-
-function applyTelegramTheme(): void {
-  try {
-    const params =
-      (WebApp as any).themeParams ??
-      window.Telegram?.WebApp?.initDataUnsafe ??
-      {}
-    if (!params || typeof params !== 'object') return
-    const root = document.documentElement
-    root.classList.add('tg-theme-on')
-    for (const [k, v] of Object.entries(params)) {
-      if (typeof v !== 'string') continue
-      root.style.setProperty(`--tg-theme-${k}`, v)
-    }
-  } catch {
-    /* ignore */
-  }
-}
-
+/**
+ * No-op kept for backwards compatibility.
+ *
+ * The original implementation copied Telegram theme parameters
+ * onto the document and toggled a `tg-theme-on` class so CSS
+ * could re-derive its palette from the running Telegram theme.
+ * That broke the deterministic monochrome design (e.g. blue
+ * accents in the default Telegram theme), so the palette is now
+ * fixed in `global.css` and this bridge intentionally does
+ * nothing. The function is kept exported so existing imports
+ * stay valid.
+ */
 export function installTelegramThemeBridge(): void {
-  if (_themeBridgeInstalled) return
-  _themeBridgeInstalled = true
-  applyTelegramTheme()
-  try {
-    ;(WebApp as any).onEvent?.(
-      'themeChanged',
-      applyTelegramTheme,
-    )
-  } catch {
-    /* ignore */
-  }
+  /* deliberately no-op — see docstring */
 }
 
 export function installViewportListener(): void {
