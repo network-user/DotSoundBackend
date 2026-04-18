@@ -4,17 +4,13 @@ from datetime import date, datetime, timezone
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_db, require_admin
-from app.models.artist import Artist
-from app.models.track import Track
 from app.models.user import User
 from app.repositories.artist import ArtistRepository
-from app.repositories.track import TrackRepository  # noqa: F401
 from app.schemas.artist import (
     ArtistDetailResponse,
     ArtistListResponse,
@@ -262,39 +258,10 @@ async def get_artist_tracks(
     size: int = Query(default=20, le=100),
     db: AsyncSession = Depends(get_db),
 ):
-    artist_repo = ArtistRepository(db)
-    track_ids = await artist_repo.get_artist_track_ids(
-        artist_id, limit=500
+    svc = ArtistService(db)
+    tracks, total = await svc.list_artist_tracks(
+        artist_id=artist_id, page=page, size=size
     )
-
-    if not track_ids:
-        return TrackListResponse(
-            items=[], total=0, page=page, size=size
-        )
-
-    offset = (page - 1) * size
-    result = await db.execute(
-        select(Track)
-        .where(
-            Track.id.in_(track_ids),
-            Track.is_active.is_(True),
-            Track.is_public.is_(True),
-        )
-        .order_by(Track.play_count.desc())
-        .offset(offset)
-        .limit(size)
-    )
-    tracks = list(result.scalars().all())
-
-    total_result = await db.execute(
-        select(func.count()).where(
-            Track.id.in_(track_ids),
-            Track.is_active.is_(True),
-            Track.is_public.is_(True),
-        )
-    )
-    total = total_result.scalar_one()
-
     return TrackListResponse(
         items=[
             TrackResponse.model_validate(t)

@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
-import { getUserId } from '@/lib/telegram'
+import {
+  getUserId,
+  setBackButton,
+} from '@/lib/telegram'
 import type { Playlist, PlaylistWithTracks } from '@/types/api'
 import { TrackList } from '@/components/TrackList/TrackList'
+import { Icon } from '@/components/Icon/Icon'
 
 type Screen = 'list' | 'detail'
 
@@ -26,6 +30,14 @@ export function PlaylistsView() {
   useEffect(() => {
     loadPlaylists()
   }, [])
+
+  useEffect(() => {
+    if (screen !== 'detail') return
+    return setBackButton(true, () => {
+      setScreen('list')
+      setSelected(null)
+    })
+  }, [screen])
 
   const openPlaylist = async (p: Playlist) => {
     try {
@@ -55,16 +67,16 @@ export function PlaylistsView() {
         id="view-playlists"
         className="view active"
       >
-        <div className="view-header" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="view-header view-header-detail">
           <button
-            className="icon-btn"
+            className="icon-btn back-btn"
             onClick={() => { setScreen('list'); setSelected(null) }}
-            style={{ fontSize: 22, padding: '4px 8px' }}
+            aria-label="Назад"
           >
-            ←
+            <Icon name="chevron" size={20} className="back-chevron" />
           </button>
           <div>
-            <h2 style={{ fontSize: 20 }}>{selected.name}</h2>
+            <h2 className="view-detail-title">{selected.name}</h2>
             <span className="hint">{selected.tracks.length} треков</span>
           </div>
         </div>
@@ -87,7 +99,7 @@ export function PlaylistsView() {
         className="create-playlist-btn"
         onClick={() => setCreating(true)}
       >
-        <span className="icon">＋</span>
+        <Icon name="plus" size={18} />
         Создать плейлист
       </button>
 
@@ -143,7 +155,9 @@ export function PlaylistsView() {
               className="playlist-card"
               onClick={() => openPlaylist(p)}
             >
-              <div className="playlist-cover">▤</div>
+              <div className="playlist-cover">
+                <Icon name="list" size={20} />
+              </div>
               <div className="playlist-info">
                 <div className="playlist-name">{p.name}</div>
                 <div className="playlist-meta">

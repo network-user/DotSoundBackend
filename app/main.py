@@ -87,9 +87,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
         max_age=3600,
     )
+    hosts = settings.allowed_hosts_list
+    if not settings.debug and hosts == ["*"]:
+        logger.warning(
+            "trusted_host_wildcard_in_production",
+            hint="Set ALLOWED_HOSTS to a real list",
+        )
     application.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["*"],
+        allowed_hosts=hosts,
     )
 
     application.include_router(api_router)

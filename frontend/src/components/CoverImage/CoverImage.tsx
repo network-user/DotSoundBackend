@@ -22,6 +22,10 @@ export function CoverImage({ coverKey, externalUrl, size = 50, className }: Prop
         <img
           src={src}
           alt=""
+          width={size}
+          height={size}
+          loading="lazy"
+          decoding="async"
           onError={() => setFailed(true)}
         />
       ) : (

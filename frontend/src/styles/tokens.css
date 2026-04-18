@@ -1,0 +1,95 @@
+/*
+ * Design tokens for DotSound Mini App.
+ * Defines the systemic spacing, motion, typography and radii
+ * used across all components. Older variables in global.css
+ * remain for compatibility while the visual layer is migrated.
+ *
+ * Naming follows an 8pt-grid; sizes scale on a perfect-fourth.
+ */
+
+:root {
+  /* Spacing (8pt grid, 4 increments) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 56px;
+  --space-10: 72px;
+
+  /* Radii */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+  --r-pill: 999px;
+
+  /* Type scale */
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-15: 15px;
+  --fs-16: 16px;
+  --fs-18: 18px;
+  --fs-22: 22px;
+  --fs-28: 28px;
+  --fs-36: 36px;
+  --fs-48: 48px;
+
+  --lh-tight: 1.2;
+  --lh-normal: 1.5;
+  --lh-loose: 1.7;
+
+  /* Motion */
+  --dur-fast: 120ms;
+  --dur-med: 220ms;
+  --dur-slow: 360ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emph: cubic-bezier(0.3, 0, 0, 1.2);
+
+  /* Tap target & layout helpers */
+  --tap: 44px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* Z-index scale */
+  --z-nav: 80;
+  --z-player: 90;
+  --z-sheet: 110;
+  --z-modal: 130;
+  --z-toast: 200;
+}
+
+/* Telegram theme bridge: when the WebApp exposes theme params,
+ * we re-map a subset of them onto the local color tokens. The
+ * bridge is opt-in — global.css keeps the dark monochrome
+ * palette as the deterministic default. */
+:root.tg-theme-on {
+  --bg: var(--tg-theme-bg-color, #0a0a0a);
+  --bg-elevated: var(
+    --tg-theme-secondary-bg-color,
+    #111111
+  );
+  --text: var(--tg-theme-text-color, #ffffff);
+  --text-secondary: var(
+    --tg-theme-hint-color,
+    #a0a0a0
+  );
+  --accent: var(
+    --tg-theme-button-color,
+    #ffffff
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur-med: 0ms;
+    --dur-slow: 0ms;
+  }
+}

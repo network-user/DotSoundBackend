@@ -85,14 +85,26 @@
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
   <script>
-    // Hide loader when the app is initialized
-    window.addEventListener('load', () => {
-      const loader = document.getElementById('ds-loader');
-      setTimeout(() => {
+    // Hide loader once the app marks itself as ready, with
+    // a hard ceiling so we don't block on slow networks.
+    (function () {
+      var loader = document.getElementById('ds-loader');
+      var done = false;
+      function hide() {
+        if (done || !loader) return;
+        done = true;
         loader.classList.add('fade-out');
-        setTimeout(() => loader.remove(), 550);
-      }, 1800); // Minimum time for the animation to look good
-    });
+        setTimeout(function () {
+          if (loader && loader.parentNode) {
+            loader.parentNode.removeChild(loader);
+          }
+        }, 350);
+      }
+      window.addEventListener('app-ready', hide);
+      // Hard cap: do not spin past 1200ms even if the
+      // app event never fires.
+      setTimeout(hide, 1200);
+    })();
   </script>
 </body>
 </html>

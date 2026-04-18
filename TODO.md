@@ -428,10 +428,52 @@
 
 ## DevOps / CI
 
-- [ ] GitHub Actions: lint + test на PR
+- [x] GitHub Actions: lint + test на PR (Backend, Bot, PrivateCore)
 - [ ] Автоматический деплой на VPS
-- [ ] Health monitoring + alerting (uptime check)
+- [x] Расширенный healthcheck (`/api/v1/health/deep` — БД, Redis, S3)
+- [ ] Health monitoring + alerting (uptime check, внешний)
+
+## Sprint 0..9 редизайна (2026-04, single-pass)
+
+- [x] Bot: like/dislike — добавлен Bearer + правильный internal id
+- [x] Frontend: `--progress` пробрасывается в `#pb-seek` (WebKit fix)
+- [x] Frontend: SW unregister только в dev-режиме
+- [x] Frontend: `env(safe-area-inset-bottom)` в `#nav`, `#player-bar`, `#main`
+- [x] PrivateCore: `is_within_grace_period` отсекает будущие `deleted_at`
+- [x] PrivateCore: `is_disposable_email` валидирует формат email
+- [x] PrivateCore: тесты для `account_deletion_policy` (15 кейсов)
+- [x] Backend: inline SQL вынесен из `artists.py`, `admin/audio_compute.py`
+- [x] Backend: `dependencies.require_capability` использует репозиторий
+- [x] Backend: `transcoding._upload_hls` использует `asyncio.to_thread`
+- [x] Backend: `TrustedHostMiddleware` через `settings.allowed_hosts`
+- [x] Bot: throttling middleware подключён к callback и inline_query
+- [x] Bot: внутренний HTTP-сервер binds `127.0.0.1` (через config)
+- [x] Bot: HTML escape во всех форматтерах (`base`, `audio`, `inline`, `stats`)
+- [x] Bot: единый `mini_app_url` (убран `backend_base_url` для WebApp)
+- [x] Bot: internal API возвращает opaque error codes
+- [x] Bot: глобальный `errors` handler с user-friendly fallback
+- [x] Bot: prefetched URLs используются в `_edit_audio_batch` (gap-less)
+- [x] Bot: Dockerfile multi-stage с PrivateCore из родительской директории
+- [x] Frontend: дизайн-токены в `tokens.css` (8pt grid, motion, type scale)
+- [x] Frontend: `components.css` с Press, Sheet, Skeleton, EmptyState стилями
+- [x] Frontend: `Press`, `Sheet`, `EmptyState`, `SkeletonList`, `OfflineBanner`
+- [x] Frontend: расширен Icon-set (more-horizontal, queue, chevron-up/down)
+- [x] Frontend: Unicode заменён на `<Icon>` в FullscreenLyrics, PlaylistsView,
+  ComplaintModal, TrackCard, PlayerBar
+- [x] Frontend: `installTelegramThemeBridge`, `installViewportListener`,
+  `setBackButton`, `haptic`, `hapticNotification`
+- [x] Frontend: PlayerBar v2 — overflow menu + breakpoints + skeleton hit-area
+- [x] Frontend: TrackCard переключён на `usePlayerMeta` + `usePlayerActions`
+- [x] Frontend: CoverImage с `loading="lazy"` + `width/height`
+- [x] Frontend: aria-label/aria-pressed/aria-current на ключевых контролах
+- [x] Frontend: `useConfirm` переписан с правильным unmount cleanup
+- [x] Frontend: index.html splash сокращён с 1800ms до 1200ms safety cap
+- [x] PrivateCore: README актуализирован, версия `0.2.0`, policy с
+  bounded-transport exception
+- [x] Backend: `/api/v1/health/deep` (DB / Redis / S3 ping)
+- [x] Backend: `X-Request-ID` отдаётся в заголовке ответа
+- [x] Docs: `docs/design-system.md`, `docs/redesign-rationale.md`
 
 ---
 
-*Последнее обновление: 2026-04-15 агентом (Sprint 8: lyrics auto-detection)*
+*Последнее обновление: 2026-04-18 агентом (Sprint 0..9 single-pass).*

@@ -16,6 +16,118 @@ WebApp.expand()
 
 export const tg = WebApp
 
+type HapticImpact = 'light' | 'medium' | 'heavy'
+
+let _themeBridgeInstalled = false
+
+function applyTelegramTheme(): void {
+  try {
+    const params =
+      (WebApp as any).themeParams ??
+      window.Telegram?.WebApp?.initDataUnsafe ??
+      {}
+    if (!params || typeof params !== 'object') return
+    const root = document.documentElement
+    root.classList.add('tg-theme-on')
+    for (const [k, v] of Object.entries(params)) {
+      if (typeof v !== 'string') continue
+      root.style.setProperty(`--tg-theme-${k}`, v)
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function installTelegramThemeBridge(): void {
+  if (_themeBridgeInstalled) return
+  _themeBridgeInstalled = true
+  applyTelegramTheme()
+  try {
+    ;(WebApp as any).onEvent?.(
+      'themeChanged',
+      applyTelegramTheme,
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
+export function installViewportListener(): void {
+  const update = () => {
+    try {
+      const h =
+        (WebApp as any).viewportStableHeight ||
+        window.innerHeight
+      document.documentElement.style.setProperty(
+        '--vh',
+        `${h * 0.01}px`,
+      )
+    } catch {
+      /* ignore */
+    }
+  }
+  update()
+  try {
+    ;(WebApp as any).onEvent?.(
+      'viewportChanged',
+      update,
+    )
+  } catch {
+    /* ignore */
+  }
+  window.addEventListener('resize', update)
+}
+
+export function setBackButton(
+  visible: boolean,
+  onClick?: () => void,
+): () => void {
+  try {
+    const bb = (WebApp as any).BackButton
+    if (!bb) return () => undefined
+    if (visible && onClick) {
+      bb.onClick(onClick)
+      bb.show()
+      return () => {
+        try {
+          bb.offClick(onClick)
+          bb.hide()
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    bb.hide()
+  } catch {
+    /* ignore */
+  }
+  return () => undefined
+}
+
+export function haptic(
+  kind: HapticImpact = 'light',
+): void {
+  try {
+    ;(
+      WebApp as any
+    ).HapticFeedback?.impactOccurred?.(kind)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function hapticNotification(
+  kind: 'success' | 'warning' | 'error',
+): void {
+  try {
+    ;(
+      WebApp as any
+    ).HapticFeedback?.notificationOccurred?.(kind)
+  } catch {
+    /* ignore */
+  }
+}
+
 function nativeInitData(): string {
   try {
     return window.Telegram?.WebApp?.initData ?? ''

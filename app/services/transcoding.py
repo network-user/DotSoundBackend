@@ -4,7 +4,6 @@ import shutil
 import tempfile
 
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.db import AsyncSessionLocal
@@ -192,15 +191,26 @@ async def transcode_hls_only(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def _read_file_bytes(path: str) -> bytes:
+    with open(path, "rb") as fh:
+        return fh.read()
+
+
 async def _upload_hls(
     track_id: int, hi_dir: str, lo_dir: str
 ) -> str:
     """Upload HLS segments + playlists, return master manifest key."""
     prefix = f"hls/{track_id}"
 
-    for variant, local_dir in (("hi", hi_dir), ("lo", lo_dir)):
+    for variant, local_dir in (
+        ("hi", hi_dir),
+        ("lo", lo_dir),
+    ):
         for fname in sorted(os.listdir(local_dir)):
-            data = open(os.path.join(local_dir, fname), "rb").read()
+            full_path = os.path.join(local_dir, fname)
+            data = await asyncio.to_thread(
+                _read_file_bytes, full_path
+            )
             ctype = (
                 "application/vnd.apple.mpegurl"
                 if fname.endswith(".m3u8")

@@ -248,6 +248,8 @@ export function FullscreenLyrics() {
             max={100}
             step={0.1}
             value={pct}
+            style={{ ['--progress' as any]: `${pct}%` }}
+            aria-label="Перемотка трека"
             onChange={(e) =>
               seek(Number(e.target.value))
             }
@@ -259,20 +261,26 @@ export function FullscreenLyrics() {
             <button
               className="ctrl-btn"
               onClick={playPrev}
+              aria-label="Предыдущий трек"
             >
-              ⏮
+              <Icon name="skip-back" size={18} />
             </button>
             <button
               className="play-btn"
               onClick={togglePlay}
+              aria-label={isPlaying ? 'Пауза' : 'Воспроизвести'}
             >
-              {isPlaying ? '⏸' : '▶'}
+              <Icon
+                name={isPlaying ? 'pause' : 'play'}
+                size={16}
+              />
             </button>
             <button
               className="ctrl-btn"
               onClick={playNext}
+              aria-label="Следующий трек"
             >
-              ⏭
+              <Icon name="skip-forward" size={18} />
             </button>
           </div>
           <span className="fl-time">{fmt(duration)}</span>

@@ -8,13 +8,11 @@ import type { Track } from '@/types/api'
 export function DailyMixView() {
   const navigate = useNavigate()
   const [tracks, setTracks] = useState<Track[] | null>(null)
-  const [generatedAt, setGeneratedAt] = useState('')
 
   useEffect(() => {
     api.getDailyMix()
       .then((data) => {
         setTracks(data.tracks)
-        setGeneratedAt(data.generated_at)
       })
       .catch(() => setTracks([]))
   }, [])

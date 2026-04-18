@@ -82,7 +82,10 @@ body.monochrome #app {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding-bottom: calc(var(--nav-h) + var(--player-h) + 12px);
+  padding-bottom: calc(
+    var(--nav-h) + var(--player-h) + 12px +
+      env(safe-area-inset-bottom, 0px)
+  );
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   width: 100%;
@@ -616,7 +619,9 @@ body.monochrome #app {
 /* ── Player bar (glassmorphism) ── */
 #player-bar {
   position: fixed;
-  bottom: var(--nav-h);
+  bottom: calc(
+    var(--nav-h) + env(safe-area-inset-bottom, 0px)
+  );
   left: 0;
   right: 0;
   background: var(--glass-bg);
@@ -801,7 +806,10 @@ body.monochrome #app {
   bottom: 0;
   left: 0;
   right: 0;
-  height: var(--nav-h);
+  height: calc(
+    var(--nav-h) + env(safe-area-inset-bottom, 0px)
+  );
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);

@@ -1,0 +1,521 @@
+/*
+ * Component-level styles introduced in the Sprint 3+ redesign.
+ * They use the design tokens declared in tokens.css. Older
+ * styles in global.css are kept untouched for compatibility.
+ */
+
+/* ---------- Press / accessible button utility ---------- */
+
+.press {
+  -webkit-tap-highlight-color: transparent;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: var(--tap);
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  border-radius: var(--r-md);
+  transition:
+    background-color var(--dur-fast)
+      var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
+}
+
+.press:hover {
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.press:active {
+  transform: scale(0.97);
+}
+
+.press:focus-visible {
+  outline: 2px solid var(--accent, #fff);
+  outline-offset: 2px;
+}
+
+.press[disabled],
+.press[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Icon-only buttons — square, no text padding */
+.press--icon {
+  padding: 0;
+  width: var(--tap);
+  height: var(--tap);
+}
+
+/* Primary monochrome button */
+.press--primary {
+  background: var(--accent, #fff);
+  color: var(--bg, #000);
+}
+
+.press--primary:hover {
+  background: var(--accent-hover, #e0e0e0);
+}
+
+/* Ghost button */
+.press--ghost {
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+}
+
+/* ---------- Sheet handle ---------- */
+
+.sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.18);
+  margin: var(--space-2) auto var(--space-3);
+}
+
+/* ---------- Detail-view header ---------- */
+
+.view-header-detail {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.view-detail-title {
+  font-size: var(--fs-22);
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  margin: 0;
+}
+
+.back-btn {
+  min-width: var(--tap);
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.back-chevron {
+  transform: rotate(180deg);
+}
+
+/* ---------- Track meta tweaks ---------- */
+
+.meta-icon {
+  vertical-align: -1px;
+  opacity: 0.7;
+}
+
+/* ---------- Skeleton loader ---------- */
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: var(--r-sm);
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.06),
+    transparent
+  );
+  animation: skeleton-shimmer 1.4s linear infinite;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    animation: none;
+  }
+}
+
+/* ---------- Skeleton list ---------- */
+
+.skeleton-list {
+  padding: var(--space-2) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.skeleton-cover {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+}
+
+.skeleton-meta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.skeleton-line {
+  height: 12px;
+  border-radius: var(--r-pill);
+}
+
+.skeleton-line--title {
+  width: 70%;
+}
+
+.skeleton-line--sub {
+  width: 40%;
+}
+
+/* ---------- Like spring ---------- */
+
+@keyframes like-spring {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.18);
+  }
+  70% {
+    transform: scale(0.95);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.icon-btn.liked.spring,
+.pb-like.liked.spring {
+  animation: like-spring var(--dur-med)
+    var(--ease-emph);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn.liked.spring,
+  .pb-like.liked.spring {
+    animation: none;
+  }
+}
+
+/* ---------- Empty state ---------- */
+
+.empty-state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-8) var(--space-5);
+  text-align: center;
+  color: var(--text-secondary, #a0a0a0);
+}
+
+.empty-state-card .empty-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.04);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-state-card .empty-title {
+  font-size: var(--fs-16);
+  font-weight: 600;
+  color: var(--text, #fff);
+}
+
+.empty-state-card .empty-hint {
+  font-size: var(--fs-13);
+  max-width: 280px;
+}
+
+/* ---------- Offline banner ---------- */
+
+.offline-banner {
+  position: fixed;
+  top: calc(var(--safe-top) + var(--space-2));
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.92);
+  color: #000;
+  font-size: var(--fs-13);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--r-pill);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: var(--z-toast);
+  pointer-events: none;
+  animation: fade-in var(--dur-med)
+    var(--ease-standard);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ---------- Focus visible global helper ---------- */
+
+:focus-visible {
+  outline: 2px solid var(--accent, #fff);
+  outline-offset: 2px;
+}
+
+/* ---------- PlayerBar v2 ---------- */
+
+#pb-seek-wrap.pb-seek-zone {
+  /* Bigger hit-area for the scrubber: padding around
+   * the visible track makes the touch zone ~24px tall
+   * while the track itself is only 4–6px. */
+  padding: var(--space-2) 0;
+  cursor: pointer;
+}
+
+#pb-seek-wrap.pb-seek-zone #pb-seek {
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(
+    to right,
+    var(--accent, #fff) 0,
+    var(--accent, #fff) var(--progress, 0%),
+    var(--surface-2, #2a2a2a) var(--progress, 0%),
+    var(--surface-2, #2a2a2a) 100%
+  );
+  transition: none;
+}
+
+#pb-seek-wrap.pb-seek-zone #pb-seek:hover {
+  height: 7px;
+}
+
+#pb-row.pb-row-v2 {
+  display: grid;
+  grid-template-columns:
+    auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+}
+
+.pb-ctl-v2 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+}
+
+.pb-ctl-v2 .ctrl-btn,
+.pb-ctl-v2 .icon-btn {
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pb-ctl-v2 .play-btn {
+  width: 40px;
+  height: 40px;
+}
+
+.pb-ctl-v2 .pb-like.liked {
+  color: var(--accent, #fff);
+}
+
+/* Hide secondary controls on the smallest screens
+ * to keep the bar uncluttered. The overflow menu
+ * still gives access to them. */
+@media (max-width: 480px) {
+  .pb-ctl-v2 .pb-like,
+  .pb-ctl-v2 .pb-prev {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  #pb-row.pb-row-v2 {
+    grid-template-columns: 320px 1fr 320px;
+    gap: var(--space-5);
+  }
+  .pb-ctl-v2 {
+    justify-content: center;
+  }
+}
+
+/* ---------- Overflow menu ---------- */
+
+.pb-overflow-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.pb-overflow-menu {
+  position: absolute;
+  bottom: calc(100% + var(--space-2));
+  right: 0;
+  min-width: 200px;
+  background: var(--surface, #1a1a1a);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--r-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: var(--space-1);
+  z-index: var(--z-player);
+  animation: menu-pop var(--dur-fast)
+    var(--ease-emph);
+  transform-origin: bottom right;
+}
+
+@keyframes menu-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.pb-menu-item {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border: 0;
+  color: var(--text, #fff);
+  font-size: var(--fs-14);
+  text-align: left;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  min-height: 40px;
+}
+
+.pb-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.pb-menu-item.active {
+  color: var(--accent, #fff);
+}
+
+.pb-menu-item-danger {
+  color: var(--text-secondary, #a0a0a0);
+}
+
+.pb-menu-item-danger:hover {
+  background: rgba(255, 80, 80, 0.12);
+  color: #ff8080;
+}
+
+/* ---------- HLS error toast ---------- */
+
+.pb-error-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin: 0 var(--space-3) var(--space-2);
+  background: rgba(255, 90, 90, 0.12);
+  border: 1px solid rgba(255, 90, 90, 0.4);
+  color: #ffb0b0;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-13);
+  cursor: pointer;
+}
+
+/* ---------- Sheet ---------- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: var(--z-sheet);
+  animation: fade-in var(--dur-med)
+    var(--ease-standard);
+}
+
+.sheet-inner {
+  width: 100%;
+  max-width: 720px;
+  background: var(--surface, #1a1a1a);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  padding-bottom: var(--safe-bottom);
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(0);
+  transition: transform var(--dur-med)
+    var(--ease-standard);
+  animation: sheet-enter var(--dur-med)
+    var(--ease-emph);
+}
+
+.sheet-handle-zone {
+  padding: var(--space-2) 0 var(--space-1);
+  cursor: grab;
+  touch-action: none;
+}
+
+.sheet-handle-zone:active {
+  cursor: grabbing;
+}
+
+.sheet-content {
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-5)
+    var(--space-6);
+}
+
+@keyframes sheet-enter {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-backdrop,
+  .sheet-inner {
+    animation: none;
+  }
+}

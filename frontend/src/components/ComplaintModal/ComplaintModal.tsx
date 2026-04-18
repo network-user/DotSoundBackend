@@ -1,7 +1,8 @@
-import { useState, type MouseEvent } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { api } from '@/lib/api'
 import { tg } from '@/lib/telegram'
 import { usePlayer } from '@/store/PlayerContext'
+import { Icon } from '@/components/Icon/Icon'
 
 type ReasonType =
   | 'other'
@@ -24,6 +25,16 @@ export function ComplaintModal() {
   const [proofUrl, setProofUrl] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (!isComplaintOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeComplaint()
+    }
+    window.addEventListener('keydown', onKey)
+    return () =>
+      window.removeEventListener('keydown', onKey)
+  }, [isComplaintOpen, closeComplaint])
 
   if (!isComplaintOpen || !track) return null
 
@@ -112,8 +123,12 @@ export function ComplaintModal() {
               ? 'Уведомление правообладателя'
               : 'Жалоба на контент'}
           </h3>
-          <button className="icon-btn" onClick={closeComplaint}>
-            ×
+          <button
+            className="icon-btn"
+            onClick={closeComplaint}
+            aria-label="Закрыть"
+          >
+            <Icon name="x" size={18} />
           </button>
         </div>
         <p className="modal-hint">

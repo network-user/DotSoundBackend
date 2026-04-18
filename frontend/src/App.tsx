@@ -41,6 +41,7 @@ import { SettingsSheet } from '@/components/Settings/SettingsSheet'
 import { Equalizer } from '@/components/Equalizer/Equalizer'
 import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics'
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
+import { OfflineBanner } from '@/components/ui/OfflineBanner'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
 import { useTrackDeepLink } from '@/hooks/useDeepLink'
 import { HomeView } from '@/views/HomeView'
@@ -337,6 +338,7 @@ export function App() {
 
   return (
     <div id="app">
+      <OfflineBanner />
       <main id="main">
         <ErrorBoundary>
         <Suspense fallback={<div className="loader" />}>

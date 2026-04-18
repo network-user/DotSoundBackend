@@ -30,6 +30,7 @@ class AppSettings(BaseSettings):
     debug: bool = False
     redact_logs: bool = True
     allowed_origins: str = "*"
+    allowed_hosts: str = "*"
     bot_internal_url: str = "http://localhost:8081"
     bot_internal_secret: str = ""
 
@@ -70,6 +71,15 @@ class AppSettings(BaseSettings):
             for o in self.allowed_origins.split(",")
             if o.strip()
         ]
+
+    @property
+    def allowed_hosts_list(self) -> list[str]:
+        items = [
+            h.strip()
+            for h in self.allowed_hosts.split(",")
+            if h.strip()
+        ]
+        return items or ["*"]
 
 
 settings = AppSettings()
