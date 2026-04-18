@@ -1,7 +1,11 @@
 from app.models.account_merge import AccountMerge
+from app.models.admin_action_log import AdminActionLog
+from app.models.admin_capability import AdminCapability
 from app.models.album import Album
+from app.models.app_setting import AppSetting
 from app.models.artist import Artist, TrackArtist
 from app.models.block import UserBlock
+from app.models.compute_worker import ComputeWorker
 from app.models.comment import (
     CommentHide,
     CommentVote,
@@ -21,6 +25,7 @@ from app.models.like import Like
 from app.models.listen_event import ListenEvent
 from app.models.login_history import LoginHistory
 from app.models.lyrics import TrackLyrics
+from app.models.lyrics_job import LyricsJob
 from app.models.message import (
     Message,
     MessageAttachment,
@@ -33,14 +38,19 @@ from app.models.track import Track
 from app.models.upload_meta import TrackUploadMeta
 from app.models.user import User
 from app.models.user_preference import UserPreference
+from app.models.worker_audit import WorkerAuditLog
 
 __all__ = [
     "AccountMerge",
+    "AdminActionLog",
+    "AdminCapability",
     "Album",
+    "AppSetting",
     "Artist",
     "CommentHide",
     "CommentVote",
     "Complaint",
+    "ComputeWorker",
     "Conversation",
     "ConversationMember",
     "Dislike",
@@ -49,6 +59,7 @@ __all__ = [
     "Like",
     "ListenEvent",
     "LoginHistory",
+    "LyricsJob",
     "Message",
     "MessageAttachment",
     "MessageReaction",
@@ -66,4 +77,5 @@ __all__ = [
     "UserEqSettings",
     "UserFollow",
     "UserPreference",
+    "WorkerAuditLog",
 ]

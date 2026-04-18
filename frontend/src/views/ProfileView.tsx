@@ -16,6 +16,7 @@ import { ProfileActions } from '@/components/Profile/ProfileActions'
 import { ProfileTrackList } from '@/components/Profile/ProfileTrackList'
 import { ImportView } from '@/components/Import/ImportView'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
+import { ProfileAdminButton } from '@/components/Admin/ProfileAdminButton'
 
 type ProfileTab = 'profile' | 'import'
 
@@ -168,6 +169,7 @@ export function ProfileView({
         </div>
         <div className="profile-header-actions">
           <NotificationBell />
+          <ProfileAdminButton />
           {onOpenSettings && (
             <button
               className="icon-btn profile-settings-btn"

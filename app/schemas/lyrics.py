@@ -3,6 +3,13 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class WordTime(BaseModel):
+    text: str = Field(max_length=200)
+    start_ms: int = Field(ge=0)
+    dur_ms: int = Field(ge=0)
+    confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+
+
 class SyncedLine(BaseModel):
     time_ms: int = Field(
         ge=0, description="Timestamp in milliseconds"
@@ -14,6 +21,7 @@ class SyncedLine(BaseModel):
         le=1.0,
         description="Alignment confidence 0.0–1.0",
     )
+    word_times: list[WordTime] | None = None
 
 
 class LyricsCreateRequest(BaseModel):
@@ -43,6 +51,8 @@ class LyricsResponse(BaseModel):
     plain_text: str
     synced_lines: list[SyncedLine] | None = None
     source: str = "manual"
+    sync_quality: str | None = None
+    sync_profile: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -58,4 +68,5 @@ class LyricsAutoResponse(BaseModel):
 class LyricsAutoStatusResponse(BaseModel):
     status: str
     stage: str | None = None
+    percent: int | None = None
     logs: list[str] = []

@@ -12,9 +12,13 @@ class LyricsRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_by_track_id(self, track_id: int) -> TrackLyrics | None:
+    async def get_by_track_id(
+        self, track_id: int
+    ) -> TrackLyrics | None:
         result = await self._session.execute(
-            select(TrackLyrics).where(TrackLyrics.track_id == track_id)
+            select(TrackLyrics).where(
+                TrackLyrics.track_id == track_id
+            )
         )
         return result.scalar_one_or_none()
 
@@ -24,6 +28,8 @@ class LyricsRepository:
         plain_text: str,
         source: str = "manual",
         synced_lines: list[dict] | None = None,
+        sync_quality: str | None = None,
+        sync_profile: str | None = None,
     ) -> TrackLyrics:
         from datetime import datetime, timezone
 
@@ -38,6 +44,13 @@ class LyricsRepository:
         elif source == "manual":
             update_values["synced_lines"] = None
 
+        if source == "auto":
+            update_values["sync_quality"] = sync_quality
+            update_values["sync_profile"] = sync_profile
+        elif source == "manual":
+            update_values["sync_quality"] = None
+            update_values["sync_profile"] = None
+
         stmt = (
             insert(TrackLyrics)
             .values(
@@ -45,6 +58,8 @@ class LyricsRepository:
                 plain_text=plain_text,
                 source=source,
                 synced_lines=synced_lines,
+                sync_quality=sync_quality,
+                sync_profile=sync_profile,
                 created_at=now,
                 updated_at=now,
             )
@@ -70,13 +85,23 @@ class LyricsRepository:
         existing.synced_lines = synced_lines
         await self._session.flush()
         await self._session.refresh(existing)
-        logger.debug("db_lyrics_sync_updated", track_id=track_id)
+        logger.debug(
+            "db_lyrics_sync_updated", track_id=track_id
+        )
         return existing
 
-    async def delete_by_track_id(self, track_id: int) -> bool:
+    async def delete_by_track_id(
+        self, track_id: int
+    ) -> bool:
         result = await self._session.execute(
-            delete(TrackLyrics).where(TrackLyrics.track_id == track_id)
+            delete(TrackLyrics).where(
+                TrackLyrics.track_id == track_id
+            )
         )
         removed = result.rowcount > 0
-        logger.debug("db_lyrics_deleted", track_id=track_id, found=removed)
+        logger.debug(
+            "db_lyrics_deleted",
+            track_id=track_id,
+            found=removed,
+        )
         return removed

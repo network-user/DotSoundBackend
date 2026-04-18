@@ -414,6 +414,15 @@ export const api = {
     )
   },
 
+  lyricsAutoEventsUrl(
+    trackId: number,
+    taskId: string,
+  ): string {
+    return `/api/v1/tracks/${trackId}/lyrics/auto/events?task_id=${encodeURIComponent(
+      taskId,
+    )}`
+  },
+
   cancelLyricsGeneration(
     trackId: number,
     taskId: string,
@@ -424,6 +433,35 @@ export const api = {
         method: 'POST',
       },
     )
+  },
+
+  getAdminManifest(locale?: string): Promise<{
+    capabilities: string[]
+    menu: Array<{
+      id: string
+      label: string
+      route: string
+      icon?: string
+      capability?: string | null
+    }>
+    slots: Record<
+      string,
+      Array<{
+        id: string
+        label: string
+        capability: string
+        icon?: string
+        action: string
+        confirm?: boolean
+      }>
+    >
+    adminBundleUrl: string
+    issuedAt: number
+    expiresIn: number
+    locale: string
+  }> {
+    const qs = locale ? `?locale=${encodeURIComponent(locale)}` : ''
+    return request(`/api/v1/admin/manifest${qs}`)
   },
 
   // ── Follow ────────────────────────────────────────────────────────────────

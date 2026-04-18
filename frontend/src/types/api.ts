@@ -185,10 +185,18 @@ export interface TrackCardResponse {
 
 // ── Lyrics ──────────────────────────────────────────────────────────────────
 
+export interface WordTime {
+  text: string
+  start_ms: number
+  dur_ms: number
+  confidence?: number
+}
+
 export interface SyncedLine {
   time_ms: number
   text: string
   confidence?: number
+  word_times?: WordTime[] | null
 }
 
 export interface LyricsResponse {
@@ -196,6 +204,8 @@ export interface LyricsResponse {
   plain_text: string
   synced_lines: SyncedLine[] | null
   source: string
+  sync_quality?: string | null
+  sync_profile?: string | null
   created_at: string
   updated_at: string
 }
@@ -207,6 +217,7 @@ export interface LyricsAutoResponse {
 export interface LyricsAutoStatusResponse {
   status: string
   stage?: string
+  percent?: number | null
   logs?: string[]
 }
 
