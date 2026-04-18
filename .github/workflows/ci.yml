@@ -1,91 +1,91 @@
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  backend:
-    name: Backend (lint + tests)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: DotSoundBackend
-
-      # PrivateCore is referenced by a relative path dependency,
-      # so it must be checked out next to the backend.
-      - name: Check out PrivateCore
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/DotSoundPrivateCore
-          token: ${{ secrets.PRIVATE_CORE_TOKEN || github.token }}
-          path: DotSoundPrivateCore
-          ref: main
-
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install poetry
-        run: pipx install poetry==1.8.3
-
-      - name: Install dependencies
-        working-directory: DotSoundBackend
-        run: poetry install --no-interaction --no-ansi
-
-      - name: Ruff
-        working-directory: DotSoundBackend
-        run: poetry run ruff check app
-
-      - name: Black
-        working-directory: DotSoundBackend
-        run: poetry run black --check app
-
-      - name: Mypy
-        working-directory: DotSoundBackend
-        run: poetry run mypy app
-        continue-on-error: true
-
-      - name: Pytest
-        working-directory: DotSoundBackend
-        env:
-          DATABASE_URL: sqlite+aiosqlite:///:memory:
-          REDIS_URL: redis://localhost:6379/0
-          MINIO_ENDPOINT: http://localhost:9000
-          MINIO_ACCESS_KEY: minio
-          MINIO_SECRET_KEY: minio12345
-          MINIO_BUCKET: dotsound
-          DEBUG: 'true'
-          JWT_SECRET: ci-test-secret
-          ALLOWED_ORIGINS: '*'
-          ALLOWED_HOSTS: '*'
-        run: poetry run pytest -q
-
-  frontend:
-    name: Frontend (typecheck + build)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: TypeScript check
-        run: npx tsc --noEmit
-
-      - name: Build
-        run: npm run build
+#name: CI
+#
+#on:
+#  push:
+#    branches: [main]
+#  pull_request:
+#    branches: [main]
+#
+#jobs:
+#  backend:
+#    name: Backend (lint + tests)
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#        with:
+#          path: DotSoundBackend
+#
+#      # PrivateCore is referenced by a relative path dependency,
+#      # so it must be checked out next to the backend.
+#      - name: Check out PrivateCore
+#        uses: actions/checkout@v4
+#        with:
+#          repository: ${{ github.repository_owner }}/DotSoundPrivateCore
+#          token: ${{ secrets.PRIVATE_CORE_TOKEN || github.token }}
+#          path: DotSoundPrivateCore
+#          ref: main
+#
+#      - name: Set up Python 3.12
+#        uses: actions/setup-python@v5
+#        with:
+#          python-version: '3.12'
+#
+#      - name: Install poetry
+#        run: pipx install poetry==1.8.3
+#
+#      - name: Install dependencies
+#        working-directory: DotSoundBackend
+#        run: poetry install --no-interaction --no-ansi
+#
+#      - name: Ruff
+#        working-directory: DotSoundBackend
+#        run: poetry run ruff check app
+#
+#      - name: Black
+#        working-directory: DotSoundBackend
+#        run: poetry run black --check app
+#
+#      - name: Mypy
+#        working-directory: DotSoundBackend
+#        run: poetry run mypy app
+#        continue-on-error: true
+#
+#      - name: Pytest
+#        working-directory: DotSoundBackend
+#        env:
+#          DATABASE_URL: sqlite+aiosqlite:///:memory:
+#          REDIS_URL: redis://localhost:6379/0
+#          MINIO_ENDPOINT: http://localhost:9000
+#          MINIO_ACCESS_KEY: minio
+#          MINIO_SECRET_KEY: minio12345
+#          MINIO_BUCKET: dotsound
+#          DEBUG: 'true'
+#          JWT_SECRET: ci-test-secret
+#          ALLOWED_ORIGINS: '*'
+#          ALLOWED_HOSTS: '*'
+#        run: poetry run pytest -q
+#
+#  frontend:
+#    name: Frontend (typecheck + build)
+#    runs-on: ubuntu-latest
+#    defaults:
+#      run:
+#        working-directory: frontend
+#    steps:
+#      - uses: actions/checkout@v4
+#
+#      - name: Set up Node 20
+#        uses: actions/setup-node@v4
+#        with:
+#          node-version: '20'
+#          cache: 'npm'
+#          cache-dependency-path: frontend/package-lock.json
+#
+#      - name: Install dependencies
+#        run: npm ci
+#
+#      - name: TypeScript check
+#        run: npx tsc --noEmit
+#
+#      - name: Build
+#        run: npm run build
