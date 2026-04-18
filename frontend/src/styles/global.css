@@ -3908,3 +3908,99 @@ textarea.form-input { resize: none; }
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+
+/* ── UX improvements ── */
+
+/* Player error toast */
+.pb-error-toast {
+  background: rgba(220,50,50,0.9);
+  color: #fff;
+  font-size: 12px;
+  padding: 6px 12px;
+  text-align: center;
+  cursor: pointer;
+  border-radius: 0 0 var(--radius, 12px) var(--radius, 12px);
+}
+
+/* Drag-and-drop zones */
+.cover-picker.drag-over { border: 2px dashed var(--accent, #fff); opacity: 0.8; }
+.audio-drop-zone {
+  border: 2px dashed var(--border, rgba(255,255,255,0.15));
+  border-radius: var(--radius, 12px);
+  padding: 12px;
+  transition: border-color 0.2s, opacity 0.2s;
+}
+.audio-drop-zone.drag-over { border-color: var(--accent, #fff); opacity: 0.8; }
+
+/* Track card skeleton */
+.track-card-skeleton {
+  height: 68px;
+  border-radius: var(--radius, 12px);
+  margin: 0 8px 2px;
+  background: var(--bg-card, rgba(255,255,255,0.05));
+}
+
+/* Search idle hint */
+.search-idle-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 64px 24px;
+  gap: 12px;
+  color: var(--text-muted, rgba(255,255,255,0.35));
+  text-align: center;
+  font-size: 14px;
+}
+
+/* Search history */
+.search-history { padding: 8px 0; }
+.search-history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  color: var(--text-secondary, rgba(255,255,255,0.6));
+  font-size: 14px;
+  transition: background 0.15s;
+}
+.search-history-item:active { background: var(--bg-card, rgba(255,255,255,0.05)); }
+.search-history-item span { flex: 1; }
+
+/* Error boundary */
+.error-boundary-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-secondary, rgba(255,255,255,0.6));
+}
+
+/* Playlist create spinner */
+.btn-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  vertical-align: middle;
+}
+
+/* Two-tap delete confirm state */
+.track-card-delete.danger { color: #FF6B6B; }
+
+/* EQ reset confirm state */
+.eq-reset-confirm { color: #FF6B6B !important; }
+
+/* Audio file duration */
+.file-meta {
+  font-size: 12px;
+  color: var(--text-muted, rgba(255,255,255,0.35));
+  margin-top: 4px;
+}

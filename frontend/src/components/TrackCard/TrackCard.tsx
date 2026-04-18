@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react'
+import { useRef, useState, type MouseEvent } from 'react'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
@@ -36,6 +36,8 @@ function getCatalogLabel(track: Track): string | null {
 export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
   const { isLiked, toggleLike } = useLikes()
   const { track: currentTrack, playTrack } = usePlayer()
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const playing = currentTrack?.id === track.id
   const liked = isLiked(track.id)
@@ -51,7 +53,13 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
   const handleDelete = async (e: MouseEvent) => {
     e.stopPropagation()
     if (!internalId) return
-    if (!confirm('Удалить трек?')) return
+    if (!confirmingDelete) {
+      setConfirmingDelete(true)
+      confirmTimerRef.current = setTimeout(() => setConfirmingDelete(false), 3000)
+      return
+    }
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current)
+    setConfirmingDelete(false)
     try {
       await api.deleteTrack(track.id)
       onDeleted?.(track.id)
@@ -150,11 +158,11 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
               <Icon name={track.is_public ? 'eye' : 'lock'} size={16} />
             </button>
             <button
-              className="track-card-delete"
-              title="Удалить трек"
+              className={`track-card-delete${confirmingDelete ? ' danger' : ''}`}
+              title={confirmingDelete ? 'Нажмите ещё раз для удаления' : 'Удалить трек'}
               onClick={handleDelete}
             >
-              <Icon name="trash" size={16} />
+              <Icon name={confirmingDelete ? 'check' : 'trash'} size={16} />
             </button>
           </>
         )}

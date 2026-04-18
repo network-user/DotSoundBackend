@@ -68,6 +68,7 @@ export function FullscreenLyrics() {
     null,
   )
   const [loading, setLoading] = useState(false)
+  const [videoFailed, setVideoFailed] = useState(false)
   const [offsetMs, setOffsetMs] = useState<number>(readOffset)
   const [karaoke, setKaraoke] = useState<boolean>(readKaraoke)
   const activeRef = useRef<HTMLDivElement>(null)
@@ -139,7 +140,7 @@ export function FullscreenLyrics() {
 
   return (
     <div className="fl-overlay">
-      {videoSrc && (
+      {videoSrc && !videoFailed && (
         <video
           className="fl-video-bg"
           src={videoSrc}
@@ -147,6 +148,7 @@ export function FullscreenLyrics() {
           loop
           muted
           playsInline
+          onError={() => setVideoFailed(true)}
         />
       )}
       <div className="fl-gradient" />

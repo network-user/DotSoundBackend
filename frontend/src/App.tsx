@@ -4,7 +4,30 @@ import {
   useEffect,
   useRef,
   useState,
+  Component,
+  type ReactNode,
+  type ErrorInfo,
 } from 'react'
+
+class ErrorBoundary extends Component<
+  { children: ReactNode; fallback?: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false }
+  static getDerivedStateFromError() { return { hasError: true } }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error('[ErrorBoundary]', error, info) }
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback ?? (
+        <div className="error-boundary-fallback">
+          <p>Что-то пошло не так</p>
+          <button onClick={() => this.setState({ hasError: false })}>Попробовать снова</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 import { Routes, Route, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { tg, getInitData } from '@/lib/telegram'
@@ -315,6 +338,7 @@ export function App() {
   return (
     <div id="app">
       <main id="main">
+        <ErrorBoundary>
         <Suspense fallback={<div className="loader" />}>
         <Routes>
           <Route path="/" element={<HomeView />} />
@@ -350,6 +374,7 @@ export function App() {
           <Route path="/admin/*" element={<AdminDashboardView />} />
         </Routes>
         </Suspense>
+        </ErrorBoundary>
       </main>
       <PlayerBar />
       <FullscreenLyrics />

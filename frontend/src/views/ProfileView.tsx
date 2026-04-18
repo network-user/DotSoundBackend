@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import {
   getInternalUserId,
@@ -44,6 +44,8 @@ export function ProfileView({
     string | null
   >(null)
   const [saving, setSaving] = useState(false)
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<number>>(new Set())
+  const deleteTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
 
   const tgUser = tg.initDataUnsafe?.user
 
@@ -133,8 +135,27 @@ export function ProfileView({
   }
 
   const handleDelete = async (track: Track) => {
-    if (!confirm(`Удалить "${track.title}"?`))
+    if (!pendingDeleteIds.has(track.id)) {
+      setPendingDeleteIds((prev) => new Set([...prev, track.id]))
+      const t = setTimeout(() => {
+        setPendingDeleteIds((prev) => {
+          const n = new Set(prev)
+          n.delete(track.id)
+          return n
+        })
+        deleteTimers.current.delete(track.id)
+      }, 3000)
+      deleteTimers.current.set(track.id, t)
       return
+    }
+    const timer = deleteTimers.current.get(track.id)
+    if (timer) clearTimeout(timer)
+    deleteTimers.current.delete(track.id)
+    setPendingDeleteIds((prev) => {
+      const n = new Set(prev)
+      n.delete(track.id)
+      return n
+    })
     try {
       await api.deleteTrack(track.id)
       setMyTracks((prev) =>

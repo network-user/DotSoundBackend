@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent, type DragEvent } from 'react'
 import { api } from '@/lib/api'
 import type { LyricsResponse, Track } from '@/types/api'
 import { LyricsEditor } from '../TrackCardSheet/LyricsEditor'
@@ -7,23 +7,35 @@ interface Props {
   onSuccess: (track: Track) => void
 }
 
+function fmtDuration(sec: number): string {
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60).toString().padStart(2, '0')
+  return `${m}:${s}`
+}
+
+const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/flac', 'audio/mp4', 'audio/aac']
+const MAX_AUDIO_BYTES = 50 * 1024 * 1024
+
 export function UploadFileTab({ onSuccess }: Props) {
   const [title, setTitle] = useState('')
   const [artist, setArtist] = useState('')
   const [genre, setGenre] = useState('')
+  const [genreMode, setGenreMode] = useState<'pick' | 'custom'>('pick')
   const [genres, setGenres] = useState<string[]>([])
   const [audioFile, setAudioFile] = useState<File | null>(null)
+  const [audioDuration, setAudioDuration] = useState<number | null>(null)
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
   const [isPublic, setIsPublic] = useState(true)
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
-  const [progress, setProgress] = useState(0)
+  const [uploadDone, setUploadDone] = useState(false)
   const [lyrics, setLyrics] = useState<LyricsResponse | null>(null)
   const [showLyricsEditor, setShowLyricsEditor] = useState(false)
   const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(null)
-  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [coverDragging, setCoverDragging] = useState(false)
+  const [audioDragging, setAudioDragging] = useState(false)
 
   useEffect(() => {
     api.getGenres().then(setGenres).catch(() => {})
@@ -35,56 +47,62 @@ export function UploadFileTab({ onSuccess }: Props) {
     }
   }, [localAudioUrl])
 
-  const handleAudioChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null
-    setAudioFile(file)
-    if (file) {
-      if (localAudioUrl) URL.revokeObjectURL(localAudioUrl)
-      setLocalAudioUrl(URL.createObjectURL(file))
+  const applyAudioFile = (file: File) => {
+    if (!ALLOWED_AUDIO_TYPES.includes(file.type)) {
+      setError('Формат файла не поддерживается')
+      return
     }
+    if (file.size > MAX_AUDIO_BYTES) {
+      setError('Файл слишком большой (макс. 50 МБ)')
+      return
+    }
+    setError('')
+    setAudioFile(file)
+    if (localAudioUrl) URL.revokeObjectURL(localAudioUrl)
+    const url = URL.createObjectURL(file)
+    setLocalAudioUrl(url)
+
+    const tmp = new Audio()
+    tmp.preload = 'metadata'
+    tmp.src = url
+    tmp.onloadedmetadata = () => {
+      setAudioDuration(tmp.duration)
+    }
+  }
+
+  const handleAudioChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) applyAudioFile(file)
+  }
+
+  const applyCoverFile = (file: File) => {
+    if (!file.type.startsWith('image/')) return
+    setCoverFile(file)
+    const reader = new FileReader()
+    reader.onload = (ev) => setCoverPreview(ev.target?.result as string)
+    reader.readAsDataURL(file)
   }
 
   const handleCoverChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] ?? null
-    setCoverFile(file)
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (ev) => setCoverPreview(ev.target?.result as string)
-      reader.readAsDataURL(file)
-    } else {
-      setCoverPreview(null)
-    }
-  }
-
-  const animateProgress = () => {
-    setProgress(0)
-    progressTimerRef.current = setInterval(() => {
-      setProgress((prev) => {
-        const next = Math.min(prev + Math.random() * 12, 85)
-        if (next >= 85 && progressTimerRef.current) {
-          clearInterval(progressTimerRef.current)
-        }
-        return next
-      })
-    }, 300)
-  }
-
-  const stopProgress = () => {
-    if (progressTimerRef.current) clearInterval(progressTimerRef.current)
-    progressTimerRef.current = null
+    const file = e.target.files?.[0]
+    if (file) applyCoverFile(file)
+    else { setCoverFile(null); setCoverPreview(null) }
   }
 
   const reset = () => {
     setTitle('')
     setArtist('')
     setGenre('')
+    setGenreMode('pick')
     setAudioFile(null)
+    setAudioDuration(null)
     setCoverFile(null)
     setCoverPreview(null)
     setLyrics(null)
     setLocalAudioUrl(null)
     setError('')
-    setProgress(0)
+    setUploading(false)
+    setUploadDone(false)
     setIsPublic(true)
     setTermsAccepted(false)
   }
@@ -96,14 +114,12 @@ export function UploadFileTab({ onSuccess }: Props) {
     if (!title.trim()) { setError('Введите название трека'); return }
     if (!audioFile) { setError('Выберите аудиофайл'); return }
     if (!termsAccepted) {
-      setError(
-        'Подтвердите права на контент и согласие с условиями загрузки',
-      )
+      setError('Подтвердите права на контент и согласие с условиями загрузки')
       return
     }
 
     setUploading(true)
-    animateProgress()
+    setUploadDone(false)
 
     try {
       const fd = new FormData()
@@ -117,7 +133,6 @@ export function UploadFileTab({ onSuccess }: Props) {
 
       const uploaded = await api.uploadTrack(fd)
 
-      // Save lyrics if provided
       if (lyrics) {
         if (lyrics.synced_lines) {
           await api.saveLyricsSync(uploaded.id, lyrics.synced_lines)
@@ -125,19 +140,16 @@ export function UploadFileTab({ onSuccess }: Props) {
           await api.saveLyrics(uploaded.id, lyrics.plain_text)
         }
       }
-      stopProgress()
-      setProgress(100)
+      setUploadDone(true)
 
       setTimeout(async () => {
-        setUploading(false)
-        reset()
         const fullTrack = await api.getTrack(uploaded.id)
+        reset()
         onSuccess(fullTrack)
       }, 600)
     } catch (err: unknown) {
-      stopProgress()
-      setProgress(0)
       setUploading(false)
+      setUploadDone(false)
       const msg = err instanceof Error ? err.message : ''
       setError(
         msg === '415' ? 'Формат файла не поддерживается' :
@@ -149,7 +161,19 @@ export function UploadFileTab({ onSuccess }: Props) {
 
   return (
     <form id="upload-form" noValidate onSubmit={handleSubmit}>
-      <label className="cover-picker" htmlFor="cover-input">
+      <label
+        className={`cover-picker${coverDragging ? ' drag-over' : ''}`}
+        htmlFor="cover-input"
+        onDragOver={(e) => { e.preventDefault(); setCoverDragging(true) }}
+        onDragEnter={(e) => { e.preventDefault(); setCoverDragging(true) }}
+        onDragLeave={() => setCoverDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault()
+          setCoverDragging(false)
+          const file = e.dataTransfer.files[0]
+          if (file) applyCoverFile(file)
+        }}
+      >
         <div className="cover-preview">
           {coverPreview
             ? <img src={coverPreview} alt="cover" />
@@ -193,27 +217,58 @@ export function UploadFileTab({ onSuccess }: Props) {
       </div>
 
       <div className="form-group">
-        <label className="form-label" htmlFor="genre-input">Жанр</label>
-        <input
-          id="genre-input"
+        <label className="form-label" htmlFor="genre-select">Жанр</label>
+        <select
+          id="genre-select"
           className="form-input"
-          type="text"
-          list="genres-list"
-          placeholder="Выбери или введи свой"
-          value={genre}
-          onChange={(e) => setGenre(e.target.value)}
-        />
-        <datalist id="genres-list">
-          {genres.map((g) => <option key={g} value={g} />)}
-        </datalist>
+          value={genreMode === 'pick' ? genre : '_custom'}
+          onChange={(e) => {
+            if (e.target.value === '_custom') {
+              setGenreMode('custom')
+              setGenre('')
+            } else {
+              setGenreMode('pick')
+              setGenre(e.target.value)
+            }
+          }}
+        >
+          <option value="">Выбрать жанр</option>
+          {genres.map((g) => <option key={g} value={g}>{g}</option>)}
+          <option value="_custom">Другой жанр…</option>
+        </select>
+        {genreMode === 'custom' && (
+          <input
+            className="form-input"
+            style={{ marginTop: 8 }}
+            placeholder="Введи жанр"
+            value={genre}
+            onChange={(e) => setGenre(e.target.value)}
+          />
+        )}
       </div>
 
       <div className="form-group">
         <label className="form-label">Аудиофайл *</label>
-        <label className="file-pick-btn" htmlFor="audio-input">
-          <span>FILE</span> Выбрать файл
-        </label>
-        <p className="file-name">{audioFile ? audioFile.name : 'Файл не выбран'}</p>
+        <div
+          className={`audio-drop-zone${audioDragging ? ' drag-over' : ''}`}
+          onDragOver={(e: DragEvent) => { e.preventDefault(); setAudioDragging(true) }}
+          onDragEnter={(e: DragEvent) => { e.preventDefault(); setAudioDragging(true) }}
+          onDragLeave={() => setAudioDragging(false)}
+          onDrop={(e: DragEvent) => {
+            e.preventDefault()
+            setAudioDragging(false)
+            const file = e.dataTransfer.files[0]
+            if (file) applyAudioFile(file)
+          }}
+        >
+          <label className="file-pick-btn" htmlFor="audio-input">
+            <span>FILE</span> Выбрать файл
+          </label>
+          <p className="file-name">{audioFile ? audioFile.name : 'Файл не выбран или перетащи сюда'}</p>
+          {audioFile && audioDuration !== null && (
+            <p className="file-meta">{fmtDuration(audioDuration)}</p>
+          )}
+        </div>
         <input
           id="audio-input"
           type="file"
@@ -274,28 +329,15 @@ export function UploadFileTab({ onSuccess }: Props) {
             Я подтверждаю, что обладаю правами на загружаемый контент
             и согласен с
             {' '}
-            <a
-              href="/legal/terms"
-              target="_blank"
-              rel="noreferrer"
-            >
+            <a href="/legal/terms" target="_blank" rel="noreferrer">
               пользовательским соглашением
             </a>
-            ,
-            {' '}
-            <a
-              href="/legal/upload-rules"
-              target="_blank"
-              rel="noreferrer"
-            >
+            ,{' '}
+            <a href="/legal/upload-rules" target="_blank" rel="noreferrer">
               правилами загрузки
             </a>
             {' '}и{' '}
-            <a
-              href="/legal/privacy"
-              target="_blank"
-              rel="noreferrer"
-            >
+            <a href="/legal/privacy" target="_blank" rel="noreferrer">
               политикой обработки данных
             </a>
             .
@@ -312,9 +354,14 @@ export function UploadFileTab({ onSuccess }: Props) {
       {uploading && (
         <div>
           <div className="progress-bar-wrap">
-            <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
+            <div
+              className={`progress-bar-fill${uploadDone ? '' : ' shimmer'}`}
+              style={{ width: uploadDone ? '100%' : undefined }}
+            />
           </div>
-          <p className="progress-label">Загрузка…</p>
+          <p className="progress-label">
+            {uploadDone ? 'Обработка…' : 'Загружаем файл…'}
+          </p>
         </div>
       )}
     </form>
