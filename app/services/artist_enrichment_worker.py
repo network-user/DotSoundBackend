@@ -43,12 +43,22 @@ async def _preload_artist_info_provider(
 
 
 @broker.task
-async def enrich_artist_task(artist_id: int) -> dict:
-    structlog.contextvars.bind_contextvars(artist_id=artist_id)
+async def enrich_artist_task(
+    artist_id: int,
+    progress_id: str = "",
+    bypass_cache: bool = False,
+) -> dict:
+    structlog.contextvars.bind_contextvars(
+        artist_id=artist_id, progress_id=progress_id
+    )
     async with AsyncSessionLocal() as session:
         svc = ArtistEnrichmentService(session)
         try:
-            await svc.enrich(artist_id)
+            await svc.enrich(
+                artist_id,
+                bypass_cache=bypass_cache,
+                progress_id=progress_id or None,
+            )
             return {"status": "ok"}
         except ArtistNotFound:
             logger.info("artist_enrichment_missing_artist")

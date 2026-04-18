@@ -9,6 +9,8 @@ names anywhere.
 from __future__ import annotations
 
 import asyncio
+import re
+import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -19,9 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core import s3
-from app.models.artist import Artist
+from app.models.artist import Artist, TrackArtist
 from app.models.track import Track
-from app.models.artist import TrackArtist
+from app.services import artist_enrichment_progress as progress
 
 if TYPE_CHECKING:
     pass
@@ -33,6 +35,51 @@ _ALLOWED_IMAGE_MIMES = frozenset(
 )
 _MAX_BIO_CHARS = 8000
 
+_ARTIST_STAGE_LABELS: dict[str, str] = {
+    "searching": "searching external sources",
+    "fetching_details": "fetching artist detail pages",
+    "merging": "merging results from sources",
+    "saving": "saving to database",
+}
+
+_WIKITEXT_TEMPLATE = re.compile(r"\{\{[^}]*\}\}")
+_WIKILINK_ALIAS = re.compile(r"\[\[(?:[^\]|]+)\|([^\]]+)\]\]")
+_WIKILINK_PLAIN = re.compile(r"\[\[([^\]]+)\]\]")
+_WIKI_JUNK = re.compile(r"[{}\[\]|]")
+
+
+def _strip_wiki_markup(text: str) -> str:
+    text = _WIKITEXT_TEMPLATE.sub("", text)
+    text = _WIKILINK_ALIAS.sub(r"\1", text)
+    text = _WIKILINK_PLAIN.sub(r"\1", text)
+    text = _WIKI_JUNK.sub("", text)
+    return " ".join(text.split()).strip()
+
+
+async def _heartbeat_loop(
+    progress_id: str,
+    t0: float,
+    stop_event: asyncio.Event,
+    log_fn,
+    interval: float = 5.0,
+) -> None:
+    try:
+        while True:
+            try:
+                await asyncio.wait_for(
+                    stop_event.wait(), timeout=interval
+                )
+                break
+            except asyncio.TimeoutError:
+                pass
+            elapsed = f"{time.monotonic() - t0:.1f}s"
+            await log_fn(
+                "processing",
+                f"\u23f3 still processing... (provider running, {elapsed} elapsed)",
+            )
+    except asyncio.CancelledError:
+        pass
+
 
 class ArtistNotFound(Exception):
     pass
@@ -42,43 +89,101 @@ class ArtistEnrichmentService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def enrich(self, artist_id: int) -> Artist:
+    async def enrich(
+        self,
+        artist_id: int,
+        bypass_cache: bool = False,
+        progress_id: str | None = None,
+    ) -> Artist:
         """Pull external metadata, persist, upload image to S3.
+
+        When ``bypass_cache`` is True, the provider is asked to skip any
+        internal cache and re-query sources — used by the manual admin
+        "re-identify" button.
+
+        When ``progress_id`` is supplied, stage labels and a short log
+        are written to Redis so the UI can poll the debug panel.
 
         Guarantees:
           - never raises on provider-side issues; sets enrichment_status='failed'.
           - uses SELECT FOR UPDATE SKIP LOCKED to avoid duplicate work.
           - updates enrichment_status + enriched_at on every terminal path.
         """
+        t0 = time.monotonic()
+
+        async def _log(stage: str, msg: str) -> None:
+            if not progress_id:
+                return
+            line = f"[{time.monotonic() - t0:.1f}s] {msg}"
+            await progress.set_progress(
+                progress_id,
+                progress.opaque_stage(stage),
+                line,
+            )
+
         artist = await self._lock_artist(artist_id)
         if artist is None:
+            await _log("error", "artist not found")
             raise ArtistNotFound(str(artist_id))
+
+        await _log("queued", f"artist: {artist.name!r}")
 
         # Mark in-progress so concurrent triggers bail out early.
         artist.enrichment_status = "in_progress"
         await self._session.commit()
 
         hints = await self._collect_hints(artist)
+        await _log(
+            "searching",
+            f"hints={hints or '{}'}; calling provider",
+        )
+
+        loop = asyncio.get_running_loop()
+
+        def _on_progress(stage: str) -> None:
+            if not progress_id:
+                return
+            label = _ARTIST_STAGE_LABELS.get(stage, "")
+            desc = f" — {label}" if label else ""
+            asyncio.run_coroutine_threadsafe(
+                _log(stage, f"stage: {stage}{desc}"),
+                loop,
+            )
 
         try:
             from dotsound_private_core.services.artist_info_provider import (  # noqa: E501
                 fetch_artist_info,
             )
 
-            info = await asyncio.wait_for(
-                fetch_artist_info(
-                    name=artist.name,
-                    hints=hints,
-                    timeout_seconds=settings.artist_enrichment_timeout_seconds,
-                ),
-                timeout=settings.artist_enrichment_timeout_seconds + 5,
-            )
-        except Exception:
+            _stop_evt = asyncio.Event()
+            _hb_task: asyncio.Task | None = None
+            if progress_id:
+                _hb_task = asyncio.create_task(
+                    _heartbeat_loop(progress_id, t0, _stop_evt, _log)
+                )
+            try:
+                info = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        fetch_artist_info,
+                        name=artist.name,
+                        hints=hints,
+                        timeout_seconds=settings.artist_enrichment_timeout_seconds,
+                        bypass_cache=bypass_cache,
+                        on_progress=_on_progress,
+                    ),
+                    timeout=settings.artist_enrichment_timeout_seconds + 5,
+                )
+            finally:
+                _stop_evt.set()
+                if _hb_task is not None:
+                    _hb_task.cancel()
+        except Exception as exc:
             logger.exception(
                 "artist_enrichment_error",
                 artist_id=artist_id,
                 stage="provider",
             )
+            await _log("error", f"provider error: {exc}")
             await self._finalize(artist, "failed")
             return artist
 
@@ -88,8 +193,24 @@ class ArtistEnrichmentService:
                 artist_id=artist_id,
                 confidence=getattr(info, "confidence", None),
             )
+            conf = getattr(info, "confidence", None)
+            await _log(
+                "not_found",
+                f"no reliable match (confidence={conf})",
+            )
             await self._finalize(artist, "not_found")
             return artist
+
+        await _log(
+            "saving",
+            (
+                f"match confidence={info.confidence:.2f}; "
+                f"bio={'Y' if info.bio else 'N'} "
+                f"birth={'Y' if info.birth_date else 'N'} "
+                f"place={'Y' if info.birthplace else 'N'} "
+                f"image={'Y' if info.image_url else 'N'}"
+            ),
+        )
 
         # Save text fields first so that an image-download failure does
         # not wipe out usable data.
@@ -98,13 +219,18 @@ class ArtistEnrichmentService:
         if info.birth_date:
             artist.birth_date = info.birth_date
         if info.birthplace:
-            artist.birthplace = info.birthplace[:128]
+            artist.birthplace = _strip_wiki_markup(info.birthplace)[:128]
         if info.country:
             artist.country = info.country.upper()[:2]
         if info.website_url:
             artist.website_url = info.website_url[:512]
 
+        raw_discography = getattr(info, "discography", None)
+        if raw_discography and isinstance(raw_discography, list):
+            artist.discography = raw_discography
+
         if info.image_url:
+            await _log("saving", "downloading image")
             try:
                 new_key = await self._download_and_store_image(
                     info.image_url
@@ -126,8 +252,13 @@ class ArtistEnrichmentService:
                     "artist_image_download_failed",
                     artist_id=artist_id,
                 )
+                await _log(
+                    "saving",
+                    "image download failed (keeping text)",
+                )
 
         await self._finalize(artist, "done")
+        await _log("done", "saved to DB")
         logger.info(
             "artist_enrichment_success",
             artist_id=artist_id,

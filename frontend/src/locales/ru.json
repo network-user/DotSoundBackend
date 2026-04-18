@@ -91,6 +91,11 @@
     "enrich_button": "Определить артиста",
     "enrich_loading": "Определяю…",
     "enrich_failed": "Не удалось определить",
-    "enrichment_pending": "Данные подгружаются…"
+    "enrichment_pending": "Данные подгружаются…",
+    "debug_toggle": "Отладка",
+    "debug_stage": "Этап",
+    "debug_run": "Запустить с логами",
+    "debug_running": "Идёт определение…",
+    "debug_empty": "Нажмите «Запустить с логами», чтобы увидеть этапы работы"
   }
 }

@@ -1,6 +1,6 @@
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,7 +60,7 @@ async def test_enrich_success_full_info(
         "sys.modules",
         {
             "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
-                fetch_artist_info=AsyncMock(return_value=info),
+                fetch_artist_info=MagicMock(return_value=info),
                 warmup_artist_info_provider=lambda: None,
             ),
         },
@@ -88,7 +88,7 @@ async def test_enrich_partial_info_keeps_status_done(
         "sys.modules",
         {
             "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
-                fetch_artist_info=AsyncMock(return_value=info),
+                fetch_artist_info=MagicMock(return_value=info),
                 warmup_artist_info_provider=lambda: None,
             ),
         },
@@ -111,7 +111,7 @@ async def test_enrich_returns_none_sets_not_found(
         "sys.modules",
         {
             "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
-                fetch_artist_info=AsyncMock(return_value=None),
+                fetch_artist_info=MagicMock(return_value=None),
                 warmup_artist_info_provider=lambda: None,
             ),
         },
@@ -134,7 +134,7 @@ async def test_enrich_low_confidence_sets_not_found(
         "sys.modules",
         {
             "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
-                fetch_artist_info=AsyncMock(return_value=info),
+                fetch_artist_info=MagicMock(return_value=info),
                 warmup_artist_info_provider=lambda: None,
             ),
         },
@@ -152,7 +152,7 @@ async def test_enrich_provider_raises_sets_failed(
 ) -> None:
     artist = await _make_artist(db_session)
 
-    async def _boom(*args, **kwargs):
+    def _boom(*args, **kwargs):
         raise RuntimeError("boom")
 
     with patch.dict(
@@ -189,7 +189,7 @@ async def test_enrich_image_download_failure_keeps_text(
         "sys.modules",
         {
             "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
-                fetch_artist_info=AsyncMock(return_value=info),
+                fetch_artist_info=MagicMock(return_value=info),
                 warmup_artist_info_provider=lambda: None,
             ),
         },
@@ -225,7 +225,7 @@ async def test_enrich_bio_truncation(
         "sys.modules",
         {
             "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
-                fetch_artist_info=AsyncMock(return_value=info),
+                fetch_artist_info=MagicMock(return_value=info),
                 warmup_artist_info_provider=lambda: None,
             ),
         },

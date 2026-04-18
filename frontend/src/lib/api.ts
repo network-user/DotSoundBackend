@@ -6,6 +6,8 @@ import {
 import type {
   AppNotification,
   ArtistDetail,
+  ArtistEnrichStatusResponse,
+  ArtistEnrichWatchResponse,
   AuthorProfile,
   AvatarResponse,
   ChatListItem,
@@ -1239,10 +1241,30 @@ export const api = {
     })
   },
 
+  enrichArtistWatch(
+    artistId: number,
+  ): Promise<ArtistEnrichWatchResponse> {
+    return request(
+      `/api/v1/artists/${artistId}/enrich/watch`,
+      { method: 'POST' },
+    )
+  },
+
+  getArtistEnrichStatus(
+    artistId: number,
+    taskId: string,
+  ): Promise<ArtistEnrichStatusResponse> {
+    return request(
+      `/api/v1/artists/${artistId}/enrich/status`
+        + `?task_id=${encodeURIComponent(taskId)}`,
+    )
+  },
+
   async resolveArtistByName(name: string): Promise<{ id: number } | null> {
     try {
       return await request<{ id: number }>(
         `/api/v1/artists/resolve?name=${encodeURIComponent(name)}`,
+        { method: 'POST' },
       )
     } catch {
       return null

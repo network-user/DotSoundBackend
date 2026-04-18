@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -43,7 +43,7 @@ def _mock_provider(info):
         "sys.modules",
         {
             "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
-                fetch_artist_info=AsyncMock(
+                fetch_artist_info=MagicMock(
                     return_value=info
                 ),
                 warmup_artist_info_provider=lambda: None,
@@ -131,7 +131,7 @@ async def test_resolve_artist_by_name_exact(
     db_session: AsyncSession,
 ) -> None:
     artist_id = await _make_artist(db_session, "Exact Name")
-    r = await client.get(
+    r = await client.post(
         "/api/v1/artists/resolve",
         params={"name": "Exact Name"},
     )
@@ -139,14 +139,15 @@ async def test_resolve_artist_by_name_exact(
     assert r.json()["id"] == artist_id
 
 
-async def test_resolve_artist_by_name_not_found(
+async def test_resolve_artist_by_name_creates_when_missing(
     client: AsyncClient,
 ) -> None:
-    r = await client.get(
+    r = await client.post(
         "/api/v1/artists/resolve",
-        params={"name": "No Such Artist"},
+        params={"name": "Brand New Artist"},
     )
-    assert r.status_code == 404
+    assert r.status_code == 200
+    assert isinstance(r.json()["id"], int)
 
 
 async def test_get_artist_returns_new_fields(

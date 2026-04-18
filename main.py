@@ -22,6 +22,7 @@ if __name__ == "__main__":
             "app.services.import_worker",
             "app.services.cover_worker",
             "app.services.lyrics_worker",
+            "app.services.artist_enrichment_worker",
         ],
         stdout=sys.stdout,
         stderr=sys.stderr,

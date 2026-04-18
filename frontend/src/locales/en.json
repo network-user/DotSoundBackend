@@ -89,6 +89,11 @@
     "enrich_button": "Identify artist",
     "enrich_loading": "Identifying…",
     "enrich_failed": "Couldn't identify artist",
-    "enrichment_pending": "Loading data…"
+    "enrichment_pending": "Loading data…",
+    "debug_toggle": "Debug",
+    "debug_stage": "Stage",
+    "debug_run": "Run with logs",
+    "debug_running": "Running…",
+    "debug_empty": "Press \"Run with logs\" to see pipeline stages"
   }
 }

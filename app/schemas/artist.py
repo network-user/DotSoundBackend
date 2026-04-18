@@ -29,6 +29,7 @@ class ArtistListResponse(BaseModel):
 class ArtistDetailResponse(ArtistResponse):
     track_count: int = 0
     age: int | None = None
+    discography: list[dict] | None = None
 
 
 class ArtistResolveResponse(BaseModel):

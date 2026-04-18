@@ -376,6 +376,22 @@ export type ArtistEnrichmentStatus =
   | 'not_found'
   | 'failed'
 
+export interface ArtistEnrichWatchResponse {
+  task_id: string
+}
+
+export interface ArtistEnrichStatusResponse {
+  status: 'pending' | 'done' | 'not_found' | 'error'
+  stage: string | null
+  logs: string[]
+}
+
+export interface DiscographyItem {
+  title: string
+  year?: number
+  type?: string
+}
+
 export interface ArtistDetail {
   id: number
   name: string
@@ -392,6 +408,7 @@ export interface ArtistDetail {
   enriched_at: string | null
   track_count: number
   created_at: string
+  discography?: DiscographyItem[] | null
 }
 
 // ── Import ────────────────────────────────────────────────────────────────
