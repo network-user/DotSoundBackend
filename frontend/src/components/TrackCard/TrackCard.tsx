@@ -2,7 +2,10 @@ import { useRef, useState, type MouseEvent } from 'react'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
-import { usePlayer } from '@/store/PlayerContext'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+} from '@/store/PlayerContext'
 import { getInternalUserId } from '@/lib/telegram'
 import { api } from '@/lib/api'
 import type { Track } from '@/types/api'
@@ -35,7 +38,8 @@ function getCatalogLabel(track: Track): string | null {
 
 export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
   const { isLiked, toggleLike } = useLikes()
-  const { track: currentTrack, playTrack } = usePlayer()
+  const { track: currentTrack } = usePlayerMeta()
+  const { playTrack } = usePlayerActions()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -103,7 +107,9 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
         </div>
         <p className="track-card-artist">{track.artist ?? 'Неизвестный исполнитель'}</p>
         <p className="track-card-meta">
-          ▶ {track.play_count}
+          <Icon name="play" size={11} className="meta-icon" />
+          {' '}
+          {track.play_count}
           {track.duration_seconds ? ` · ${fmtDuration(track.duration_seconds)}` : ''}
         </p>
         {(track.source_url || track.sc_url) && (
@@ -145,7 +151,13 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
         )}
       </div>
       <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
-        <button className="track-card-like" title="Лайк" onClick={handleLike}>
+        <button
+          className={`track-card-like${liked ? ' liked spring' : ''}`}
+          title="Лайк"
+          aria-label={liked ? 'Убрать лайк' : 'Поставить лайк'}
+          aria-pressed={liked}
+          onClick={handleLike}
+        >
           <Icon name={liked ? 'heart' : 'heart-outline'} size={18} />
         </button>
         {isOwner && (

@@ -126,27 +126,21 @@ def require_capability(capability: str):
 
     async def _dep(
         user: User = Depends(get_current_user),
-        session=Depends(get_db),
+        session: AsyncSession = Depends(get_db),
     ) -> User:
         if not user.is_admin:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Admin access required",
             )
-        from sqlalchemy import select
-
-        from app.models.admin_capability import (
-            AdminCapability,
+        from app.repositories.admin_capability import (
+            AdminCapabilityRepository,
         )
 
-        result = await session.execute(
-            select(AdminCapability).where(
-                AdminCapability.user_id == user.id,
-                AdminCapability.capability == capability,
-            )
-        )
-        has = result.scalar_one_or_none() is not None
-        if not has:
+        repo = AdminCapabilityRepository(session)
+        if not await repo.has_capability(
+            user.id, capability
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="capability required",

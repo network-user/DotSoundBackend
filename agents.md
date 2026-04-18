@@ -150,10 +150,10 @@ api/v1/ → services/ → repositories/ → models/
 
 ### Известные нарушения (tech debt)
 - `admin/tracks.py`, `admin/users.py`, `admin/complaints.py` —
-  inline SQL в роутах (нужны AdminService + AdminRepository)
+ inline SQL в роутах (нужны AdminService + AdminRepository)
 - `metadata.py:get_popular_genres` — inline grouped query
 - `users.py:get_login_history` — inline select + hardcoded limit
-- `account_linking_service.py:_LINK_TTL` — hardcoded, не в PrivateCore
+- `internal/audio_compute.py` — inline ORM в worker-роутах
 
 ## Правила DI
 - Сессии БД только через `dependencies.get_db()`

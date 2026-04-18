@@ -51,6 +51,8 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             (time.perf_counter() - start) * 1000, 2
         )
 
+        response.headers["X-Request-ID"] = request_id
+
         if not skip:
             logger.info(
                 "http_request_completed",

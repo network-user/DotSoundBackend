@@ -97,6 +97,19 @@ const PATHS: Record<string, string> = {
     'M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3',
   'repeat-one':
     'M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3 M11 10v4',
+  'more-horizontal':
+    'M5 12a1 1 0 110-2 1 1 0 010 2zm7 0a1 1 0 110-2 1 1 0 010 2zm7 0a1 1 0 110-2 1 1 0 010 2z',
+  queue:
+    'M3 12h13M3 6h13M3 18h9 M19 12v6 M16 15h6',
+  'arrow-up': 'M12 19V5 M5 12l7-7 7 7',
+  'arrow-down': 'M12 5v14 M19 12l-7 7-7-7',
+  'arrow-left': 'M19 12H5 M12 19l-7-7 7-7',
+  'chevron-up': 'M18 15l-6-6-6 6',
+  'chevron-down': 'M6 9l6 6 6-6',
+  refresh:
+    'M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0114.85-3.36L23 10 M20.49 15a9 9 0 01-14.85 3.36L1 14',
+  star:
+    'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
 }
 
 const FILLED_ICONS = new Set([

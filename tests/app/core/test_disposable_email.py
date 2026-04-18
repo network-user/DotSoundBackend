@@ -66,11 +66,11 @@ def test_whitespace_stripped(
     assert is_disposable_email(email) is expected
 
 
-def test_multiple_at_signs_uses_last_part() -> None:
+def test_multiple_at_signs_treated_as_invalid() -> None:
     _reset_cache()
     assert is_disposable_email(
         "bad@@mailinator.com"
-    ) is True
+    ) is False
 
 
 def test_empty_string_returns_false() -> None:

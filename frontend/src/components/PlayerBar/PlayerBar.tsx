@@ -1,7 +1,14 @@
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from 'react'
+import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
 import { usePlayer } from '@/store/PlayerContext'
-import { Icon } from '@/components/Icon/Icon'
-import type { MouseEvent } from 'react'
+import { haptic } from '@/lib/telegram'
 
 function fmt(sec: number) {
   if (!sec || isNaN(sec)) return '0:00'
@@ -33,6 +40,39 @@ export function PlayerBar() {
     clearHlsError,
   } = usePlayer()
   const { isLiked, toggleLike } = useLikes()
+  const [overflowOpen, setOverflowOpen] =
+    useState(false)
+  const overflowRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!overflowOpen) return
+    const onDocClick = (e: globalThis.MouseEvent) => {
+      if (
+        overflowRef.current &&
+        !overflowRef.current.contains(
+          e.target as Node,
+        )
+      ) {
+        setOverflowOpen(false)
+      }
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape')
+        setOverflowOpen(false)
+    }
+    document.addEventListener(
+      'pointerdown',
+      onDocClick,
+    )
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener(
+        'pointerdown',
+        onDocClick,
+      )
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [overflowOpen])
 
   if (!track) return null
 
@@ -52,12 +92,42 @@ export function PlayerBar() {
 
   const handleLike = async (e: MouseEvent) => {
     e.stopPropagation()
+    haptic(liked ? 'light' : 'medium')
     await toggleLike(track.id)
   }
 
+  const handlePlay = (e: MouseEvent) => {
+    e.stopPropagation()
+    haptic('light')
+    togglePlay()
+  }
+
+  const handleNext = (e: MouseEvent) => {
+    e.stopPropagation()
+    haptic('light')
+    playNext()
+  }
+
+  const handlePrev = (e: MouseEvent) => {
+    e.stopPropagation()
+    haptic('light')
+    playPrev()
+  }
+
+  const seekStyle = {
+    '--progress': `${pct}%`,
+  } as CSSProperties
+
+  const repeatTitle =
+    repeatMode === 'none'
+      ? 'Повтор выкл.'
+      : repeatMode === 'one'
+        ? 'Повтор трека'
+        : 'Повтор всех'
+
   return (
     <div id="player-bar">
-      <div id="pb-seek-wrap">
+      <div id="pb-seek-wrap" className="pb-seek-zone">
         <input
           type="range"
           id="pb-seek"
@@ -65,68 +135,55 @@ export function PlayerBar() {
           max={100}
           step={0.1}
           value={pct}
+          style={seekStyle}
+          aria-label="Перемотка трека"
           onChange={(e) =>
             seek(Number(e.target.value))
           }
         />
       </div>
-      <div id="pb-row">
+
+      <div id="pb-row" className="pb-row-v2">
         <div
           className="pb-cover-img pb-clickable"
           onClick={handleOpenCard}
         >
           {coverSrc ? (
-            <img src={coverSrc} alt="" />
+            <img
+              src={coverSrc}
+              alt=""
+              loading="lazy"
+            />
           ) : (
             <Icon name="music" size={18} />
           )}
         </div>
+
         <div
           id="pb-info"
           className="pb-clickable"
           onClick={handleOpenCard}
         >
-          <p className="pb-title">
-            {track.title}
-          </p>
+          <p className="pb-title">{track.title}</p>
           <p className="pb-artist hint">
             {track.artist ?? '—'}
           </p>
         </div>
-        <div id="pb-controls">
+
+        <div id="pb-controls" className="pb-ctl-v2">
           <button
-            className={`icon-btn${liked ? ' liked' : ''}`}
-            onClick={handleLike}
-          >
-            <Icon
-              name={
-                liked ? 'heart' : 'heart-outline'
-              }
-              size={18}
-            />
-          </button>
-          <button
-            className="ctrl-btn"
-            onClick={openEq}
-          >
-            <Icon name="eq" size={18} />
-          </button>
-          <button
-            className={`ctrl-btn${shuffleOn ? ' active' : ''}`}
-            onClick={toggleShuffle}
-            title="Перемешать"
-          >
-            <Icon name="shuffle" size={16} />
-          </button>
-          <button
-            className="ctrl-btn"
-            onClick={playPrev}
+            className="ctrl-btn pb-prev"
+            onClick={handlePrev}
+            aria-label="Предыдущий"
           >
             <Icon name="skip-back" size={18} />
           </button>
           <button
             className="play-btn"
-            onClick={togglePlay}
+            onClick={handlePlay}
+            aria-label={
+              isPlaying ? 'Пауза' : 'Воспроизвести'
+            }
           >
             <Icon
               name={isPlaying ? 'pause' : 'play'}
@@ -135,38 +192,124 @@ export function PlayerBar() {
           </button>
           <button
             className="ctrl-btn"
-            onClick={playNext}
+            onClick={handleNext}
+            aria-label="Следующий"
+          >
+            <Icon name="skip-forward" size={18} />
+          </button>
+          <button
+            className={`icon-btn pb-like ${liked ? 'liked' : ''}`}
+            onClick={handleLike}
+            aria-label={
+              liked ? 'Убрать лайк' : 'Лайк'
+            }
+            aria-pressed={liked}
           >
             <Icon
-              name="skip-forward"
+              name={
+                liked ? 'heart' : 'heart-outline'
+              }
               size={18}
             />
           </button>
-          <button
-            className={`ctrl-btn${repeatMode !== 'none' ? ' active' : ''}`}
-            onClick={toggleRepeat}
-            title={repeatMode === 'none' ? 'Повтор выкл.' : repeatMode === 'one' ? 'Повтор трека' : 'Повтор всех'}
+          <div
+            className="pb-overflow-wrap"
+            ref={overflowRef}
           >
-            <Icon name={repeatMode === 'one' ? 'repeat-one' : 'repeat'} size={16} />
-          </button>
-          <button
-            className="ctrl-btn pb-close"
-            onClick={(e) => {
-              e.stopPropagation()
-              stop()
-            }}
-          >
-            <Icon name="x" size={16} />
-          </button>
+            <button
+              className="ctrl-btn pb-overflow-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                setOverflowOpen((v) => !v)
+              }}
+              aria-label="Дополнительно"
+              aria-expanded={overflowOpen}
+              aria-haspopup="menu"
+            >
+              <Icon
+                name="more-horizontal"
+                size={18}
+              />
+            </button>
+            {overflowOpen && (
+              <div
+                className="pb-overflow-menu"
+                role="menu"
+              >
+                <button
+                  role="menuitem"
+                  className="pb-menu-item"
+                  onClick={() => {
+                    setOverflowOpen(false)
+                    openEq()
+                  }}
+                >
+                  <Icon name="eq" size={16} />
+                  Эквалайзер
+                </button>
+                <button
+                  role="menuitem"
+                  className={`pb-menu-item ${shuffleOn ? 'active' : ''}`}
+                  onClick={() => {
+                    haptic('light')
+                    toggleShuffle()
+                    setOverflowOpen(false)
+                  }}
+                >
+                  <Icon name="shuffle" size={16} />
+                  Перемешать
+                </button>
+                <button
+                  role="menuitem"
+                  className={`pb-menu-item ${repeatMode !== 'none' ? 'active' : ''}`}
+                  onClick={() => {
+                    haptic('light')
+                    toggleRepeat()
+                    setOverflowOpen(false)
+                  }}
+                  title={repeatTitle}
+                >
+                  <Icon
+                    name={
+                      repeatMode === 'one'
+                        ? 'repeat-one'
+                        : 'repeat'
+                    }
+                    size={16}
+                  />
+                  {repeatTitle}
+                </button>
+                <button
+                  role="menuitem"
+                  className="pb-menu-item pb-menu-item-danger"
+                  onClick={() => {
+                    setOverflowOpen(false)
+                    stop()
+                  }}
+                >
+                  <Icon name="x" size={16} />
+                  Остановить
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
       <div id="pb-time">
         <span>{fmt(currentTime)}</span>
         <span>{fmt(duration)}</span>
       </div>
+
       {hlsError && (
-        <div className="pb-error-toast" onClick={clearHlsError}>
-          {hlsError} ✕
+        <div
+          className="pb-error-toast"
+          onClick={clearHlsError}
+          role="button"
+          aria-label="Закрыть ошибку"
+        >
+          <span>{hlsError}</span>
+          <Icon name="x" size={14} />
         </div>
       )}
     </div>

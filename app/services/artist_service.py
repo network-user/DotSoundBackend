@@ -1,15 +1,16 @@
 import structlog
+from dotsound_private_core.services.artist_normalizer import (
+    is_fuzzy_match,
+    normalize_name,
+    resolve_artist_names,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist import Artist, TrackArtist
 from app.models.track import Track
 from app.repositories.artist import ArtistRepository
-from dotsound_private_core.services.artist_normalizer import (
-    is_fuzzy_match,
-    normalize_name,
-    resolve_artist_names,
-)
+from app.repositories.track import TrackRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -200,4 +201,26 @@ class ArtistService:
     ) -> list[Artist]:
         return await self._repo.get_track_artists(
             track_id
+        )
+
+    async def list_artist_tracks(
+        self,
+        artist_id: int,
+        page: int = 1,
+        size: int = 20,
+        public_only: bool = True,
+        max_artist_tracks: int = 500,
+    ) -> tuple[list[Track], int]:
+        track_ids = await self._repo.get_artist_track_ids(
+            artist_id, limit=max_artist_tracks
+        )
+        if not track_ids:
+            return [], 0
+        track_repo = TrackRepository(self._session)
+        offset = (page - 1) * size
+        return await track_repo.list_by_artist_track_ids(
+            track_ids=track_ids,
+            offset=offset,
+            limit=size,
+            public_only=public_only,
         )

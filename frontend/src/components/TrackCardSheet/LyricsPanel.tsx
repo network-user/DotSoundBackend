@@ -41,7 +41,7 @@ export function LyricsPanel({
     Boolean(forceEdit),
   )
   const [lyricsChoiceStep, setLyricsChoiceStep] = useState<
-    'root' | 'auto' | 'debug'
+    'root' | 'auto' | 'debug' | 'redefine'
   >('root')
   const [showSync, setShowSync] = useState(true)
   const [karaoke, setKaraoke] = useState<boolean>(

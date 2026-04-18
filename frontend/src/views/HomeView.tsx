@@ -14,7 +14,6 @@ interface HomeSection {
 export function HomeView() {
   const { t } = useTranslation()
   const [sections, setSections] = useState<HomeSection[] | null>(null)
-  const [maturity, setMaturity] = useState('cold')
   const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(null)
 
   useEffect(() => {
@@ -22,7 +21,6 @@ export function HomeView() {
     api.getHomeRecommendations()
       .then((data) => {
         setSections(data.sections)
-        setMaturity(data.maturity)
       })
       .catch(() => {
         api.getTracks({ size: 50 })

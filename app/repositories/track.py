@@ -69,6 +69,36 @@ class TrackRepository(BaseRepository[Track]):
         )
         return list(tracks_result.scalars().all()), total
 
+    async def list_by_artist_track_ids(
+        self,
+        track_ids: list[int],
+        offset: int = 0,
+        limit: int = 20,
+        public_only: bool = True,
+    ) -> tuple[list[Track], int]:
+        if not track_ids:
+            return [], 0
+        condition = Track.id.in_(track_ids) & (
+            Track.is_active.is_(True)
+        )
+        if public_only:
+            condition = condition & Track.is_public.is_(True)
+        total_result = await self._session.execute(
+            select(func.count()).where(condition)
+        )
+        total = int(total_result.scalar_one())
+        tracks_result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.play_count.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return (
+            list(tracks_result.scalars().all()),
+            total,
+        )
+
     async def list_by_user(
         self,
         user_id: int,
