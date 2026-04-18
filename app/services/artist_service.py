@@ -1,7 +1,9 @@
 import structlog
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.artist import Artist
+from app.models.artist import Artist, TrackArtist
+from app.models.track import Track
 from app.repositories.artist import ArtistRepository
 from dotsound_private_core.services.artist_normalizer import (
     is_fuzzy_match,
@@ -106,6 +108,73 @@ class ArtistService:
         self, artist_id: int
     ) -> Artist | None:
         return await self._repo.get_by_id(artist_id)
+
+    async def find_or_create_by_name(
+        self, raw_name: str
+    ) -> Artist | None:
+        """Look up artist by (fuzzy) name, creating a new row if missing.
+
+        Returns None if the raw name cannot be normalized into anything
+        usable. Newly-created rows schedule background enrichment and get
+        back-linked to any existing tracks whose `track.artist` string
+        matches.
+        """
+        matches = resolve_artist_names(raw_name)
+        if not matches:
+            return None
+        primary = matches[0]
+        artist = await self._find_or_create(
+            canonical=primary.raw,
+            normalized=primary.canonical,
+            source="internal",
+            external_id=None,
+        )
+        await self._backfill_track_links(artist)
+        return artist
+
+    async def _backfill_track_links(
+        self, artist: Artist
+    ) -> None:
+        """Link tracks whose string `artist` field matches to this Artist row."""
+        existing = await self._session.execute(
+            select(TrackArtist.track_id).where(
+                TrackArtist.artist_id == artist.id
+            )
+        )
+        already_linked = {row[0] for row in existing.all()}
+
+        result = await self._session.execute(
+            select(Track.id, Track.artist).where(
+                Track.artist.is_not(None)
+            )
+        )
+        candidates = []
+        for track_id, raw_artist in result.all():
+            if track_id in already_linked:
+                continue
+            if not raw_artist:
+                continue
+            if is_fuzzy_match(
+                artist.name_normalized,
+                normalize_name(raw_artist),
+            ) or artist.name_normalized in normalize_name(
+                raw_artist
+            ):
+                candidates.append(track_id)
+
+        for track_id in candidates:
+            await self._repo.link_track(
+                track_id=track_id,
+                artist_id=artist.id,
+                role="primary",
+                position=0,
+            )
+        if candidates:
+            logger.info(
+                "artist_tracks_backfilled",
+                artist_id=artist.id,
+                count=len(candidates),
+            )
 
     async def search(
         self,

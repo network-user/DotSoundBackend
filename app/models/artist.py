@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -59,6 +60,9 @@ class Artist(Base, TimestampMixin):
     )
     enriched_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    discography: Mapped[list | None] = mapped_column(
+        JSON, nullable=True
     )
 
     track_links: Mapped[list[TrackArtist]] = relationship(

@@ -1,7 +1,9 @@
+import uuid
 from datetime import date, datetime, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,15 +25,22 @@ from app.schemas.track import (
     TrackListResponse,
     TrackResponse,
 )
+from app.services import artist_enrichment_progress as progress
 from app.services.artist_enrichment_service import (
     ArtistEnrichmentService,
     ArtistNotFound,
 )
 from app.services.artist_service import ArtistService
-from dotsound_private_core.services.artist_normalizer import (
-    is_fuzzy_match,
-    normalize_name,
-)
+
+
+class ArtistEnrichWatchResponse(BaseModel):
+    task_id: str
+
+
+class ArtistEnrichStatusResponse(BaseModel):
+    status: str
+    stage: str | None = None
+    logs: list[str] = []
 
 router = APIRouter(
     prefix="/artists", tags=["artists"]
@@ -90,6 +99,7 @@ async def _build_artist_detail(
         created_at=artist.created_at,
         track_count=len(track_ids),
         age=_compute_age(artist.birth_date),
+        discography=artist.discography,
     )
 
 
@@ -113,35 +123,22 @@ async def list_artists(
     )
 
 
-@router.get(
+@router.post(
     "/resolve",
     response_model=ArtistResolveResponse,
-    summary="Resolve artist name to id (for opening artist card by name).",
+    summary="Resolve artist name to id, creating a stub if missing.",
 )
 async def resolve_artist(
     name: str = Query(..., min_length=1, max_length=256),
     db: AsyncSession = Depends(get_db),
 ) -> ArtistResolveResponse:
-    normalized = normalize_name(name)
-    repo = ArtistRepository(db)
-
-    exact = await repo.find_by_normalized_name(normalized)
-    if exact:
-        return ArtistResolveResponse(id=exact.id)
-
-    if len(normalized) >= 3:
-        candidates = await repo.search(
-            normalized[:3], limit=50
+    svc = ArtistService(db)
+    artist = await svc.find_or_create_by_name(name)
+    if artist is None:
+        raise HTTPException(
+            status_code=400, detail="Invalid artist name"
         )
-        for candidate in candidates:
-            if is_fuzzy_match(
-                normalized, candidate.name_normalized
-            ):
-                return ArtistResolveResponse(id=candidate.id)
-
-    raise HTTPException(
-        status_code=404, detail="Artist not found"
-    )
+    return ArtistResolveResponse(id=artist.id)
 
 
 @router.get(
@@ -158,7 +155,7 @@ async def get_artist(
 @router.post(
     "/{artist_id}/enrich",
     response_model=ArtistDetailResponse,
-    summary="[Admin] Manually trigger artist enrichment from external metadata.",
+    summary="[Admin] Manually trigger artist enrichment (sync).",
 )
 @limiter.limit("10/minute")
 async def enrich_artist(
@@ -169,12 +166,90 @@ async def enrich_artist(
 ) -> ArtistDetailResponse:
     enrichment = ArtistEnrichmentService(db)
     try:
-        await enrichment.enrich(artist_id)
+        await enrichment.enrich(artist_id, bypass_cache=True)
     except ArtistNotFound:
         raise HTTPException(
             status_code=404, detail="Artist not found"
         )
     return await _build_artist_detail(db, artist_id)
+
+
+@router.post(
+    "/{artist_id}/enrich/watch",
+    response_model=ArtistEnrichWatchResponse,
+    summary="[Admin] Trigger enrichment in background, return task_id for polling.",
+)
+@limiter.limit("10/minute")
+async def enrich_artist_watch(
+    request: Request,
+    artist_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> ArtistEnrichWatchResponse:
+    svc = ArtistService(db)
+    artist = await svc.get_by_id(artist_id)
+    if not artist:
+        raise HTTPException(
+            status_code=404, detail="Artist not found"
+        )
+    task_id = uuid.uuid4().hex
+    await progress.set_progress(
+        task_id, "queued", f"enrichment queued for {artist.name!r}"
+    )
+    try:
+        from app.services.artist_enrichment_worker import (
+            enrich_artist_task,
+        )
+
+        await enrich_artist_task.kiq(
+            artist_id=artist_id,
+            progress_id=task_id,
+            bypass_cache=True,
+        )
+    except Exception:
+        logger.exception(
+            "artist_enrich_watch_schedule_failed",
+            artist_id=artist_id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Worker unavailable; try again.",
+        )
+    return ArtistEnrichWatchResponse(task_id=task_id)
+
+
+@router.get(
+    "/{artist_id}/enrich/status",
+    response_model=ArtistEnrichStatusResponse,
+    summary="[Admin] Poll enrichment task status by task_id.",
+)
+@limiter.limit("120/minute")
+async def enrich_artist_status(
+    request: Request,
+    artist_id: int,
+    task_id: str = Query(..., min_length=1, max_length=128),
+    _admin: User = Depends(require_admin),
+) -> ArtistEnrichStatusResponse:
+    data = await progress.get_progress(task_id)
+    if not data:
+        return ArtistEnrichStatusResponse(
+            status="pending", stage="queued", logs=[]
+        )
+    stage_raw = data.get("stage")
+    stage = (
+        str(stage_raw) if isinstance(stage_raw, str) else None
+    )
+    logs_raw = data.get("logs") or []
+    logs = [str(x) for x in logs_raw if isinstance(x, str)]
+    status_map = {
+        "done": "done",
+        "not_found": "not_found",
+        "error": "error",
+    }
+    status_value = status_map.get(stage or "", "pending")
+    return ArtistEnrichStatusResponse(
+        status=status_value, stage=stage, logs=logs
+    )
 
 
 @router.get(

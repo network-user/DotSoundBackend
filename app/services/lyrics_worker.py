@@ -108,9 +108,42 @@ _PUBLIC_STAGES: frozenset[str] = frozenset(
     }
 )
 
+_STAGE_LABELS: dict[str, str] = {
+    "searching": "looking up lyrics in sources",
+    "downloading_audio": "downloading audio track",
+    "processing": "audio-based provider processing (may take minutes)",
+    "saving": "persisting results",
+    "error": "error occurred",
+    "cancelled": "task cancelled",
+}
+
 
 def _opaque_stage(stage: str) -> str:
     return stage if stage in _PUBLIC_STAGES else "processing"
+
+
+async def _heartbeat_loop(
+    progress_id: str,
+    t0: float,
+    stop_event: asyncio.Event,
+    interval: float = 5.0,
+) -> None:
+    try:
+        while True:
+            try:
+                await asyncio.wait_for(
+                    stop_event.wait(), timeout=interval
+                )
+                break
+            except asyncio.TimeoutError:
+                pass
+            elapsed = f"{time.monotonic() - t0:.1f}s"
+            await append_lyrics_log(
+                progress_id,
+                f"[{elapsed}] \u23f3 still processing... (internal provider running)",
+            )
+    except asyncio.CancelledError:
+        pass
 
 
 async def _get_redis() -> Redis:  # type: ignore[type-arg]
@@ -285,13 +318,11 @@ async def generate_lyrics_task(
             loop = asyncio.get_running_loop()
 
             def on_progress(stage: str) -> None:
-                # Translate provider stage to opaque label before exposing
-                # it to users via Redis-backed progress.
+                opaque = _opaque_stage(stage)
+                label = _STAGE_LABELS.get(opaque, "")
+                desc = f" — {label}" if label else ""
                 asyncio.run_coroutine_threadsafe(
-                    _log(
-                        _opaque_stage(stage),
-                        f"stage: {_opaque_stage(stage)}",
-                    ),
+                    _log(opaque, f"stage: {opaque}{desc}"),
                     loop,
                 )
 
@@ -306,13 +337,21 @@ async def generate_lyrics_task(
                 await _clear_cancel(progress_id)
                 return {"status": "cancelled"}
 
-            gen_result = await asyncio.to_thread(
-                generate_lyrics,
-                artist=artist,
-                title=title,
-                audio_path=audio_path,
-                on_progress=on_progress,
+            _stop_evt = asyncio.Event()
+            _hb_task = asyncio.create_task(
+                _heartbeat_loop(progress_id, t0, _stop_evt)
             )
+            try:
+                gen_result = await asyncio.to_thread(
+                    generate_lyrics,
+                    artist=artist,
+                    title=title,
+                    audio_path=audio_path,
+                    on_progress=on_progress,
+                )
+            finally:
+                _stop_evt.set()
+                _hb_task.cancel()
 
             if gen_result is None:
                 await _log(
@@ -460,11 +499,11 @@ async def generate_lyrics_debug_task(
             loop = asyncio.get_running_loop()
 
             def on_progress(stage: str) -> None:
+                opaque = _opaque_stage(stage)
+                label = _STAGE_LABELS.get(opaque, "")
+                desc = f" — {label}" if label else ""
                 asyncio.run_coroutine_threadsafe(
-                    _log(
-                        _opaque_stage(stage),
-                        f"privatecore: stage={stage}",
-                    ),
+                    _log(opaque, f"stage: {opaque}{desc}"),
                     loop,
                 )
 
@@ -497,6 +536,10 @@ async def generate_lyrics_debug_task(
                 await _clear_cancel(progress_id)
                 return {"status": "cancelled"}
 
+            _stop_evt = asyncio.Event()
+            _hb_task = asyncio.create_task(
+                _heartbeat_loop(progress_id, t0, _stop_evt)
+            )
             try:
                 gen_result = await asyncio.to_thread(
                     generate_lyrics_debug,
@@ -507,6 +550,8 @@ async def generate_lyrics_debug_task(
                     on_progress=on_progress,
                 )
             finally:
+                _stop_evt.set()
+                _hb_task.cancel()
                 pc_logger.removeHandler(handler)
 
             if gen_result is None:
