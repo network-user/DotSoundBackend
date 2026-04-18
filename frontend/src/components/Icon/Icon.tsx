@@ -91,6 +91,12 @@ const PATHS: Record<string, string> = {
     'M3 7h18 M3 12h18 M3 17h18',
   circle:
     'M12 22a10 10 0 110-20 10 10 0 010 20z',
+  shuffle:
+    'M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5',
+  repeat:
+    'M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3',
+  'repeat-one':
+    'M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3 M11 10v4',
 }
 
 const FILLED_ICONS = new Set([

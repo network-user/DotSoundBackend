@@ -120,7 +120,7 @@ export function PlaylistsView() {
               onClick={handleCreate}
               disabled={!newName.trim() || loading}
             >
-              {loading ? '...' : 'Создать'}
+              {loading ? <span className="btn-spinner" /> : 'Создать'}
             </button>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { api } from '@/lib/api'
 import type { ImportAudioInfo, ImportJobResponse } from '@/types/api'
 import { ImportSourcePicker } from './ImportSourcePicker'
@@ -29,6 +29,8 @@ export function ImportView({ active }: { active: boolean }) {
   const [audios, setAudios] = useState<AudioInfo[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
+  const pollCountRef = useRef(0)
+  const MAX_POLLS = 150
 
   useEffect(() => {
     if (!active) return
@@ -55,7 +57,15 @@ export function ImportView({ active }: { active: boolean }) {
 
   useEffect(() => {
     if (phase !== 'importing' || !job) return
+    pollCountRef.current = 0
     const interval = setInterval(async () => {
+      pollCountRef.current++
+      if (pollCountRef.current > MAX_POLLS) {
+        clearInterval(interval)
+        setError('Импорт занял слишком много времени. Попробуйте позже.')
+        setPhase('pick')
+        return
+      }
       try {
         const updated = await api.getImportStatus(job.id)
         setJob(updated)
@@ -130,6 +140,7 @@ export function ImportView({ active }: { active: boolean }) {
     setAudios([])
     setSelected(new Set())
     setError(null)
+    pollCountRef.current = 0
   }
 
   if (!active) return null

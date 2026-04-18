@@ -20,6 +20,26 @@ export function SearchView() {
   const debouncedQuery = useDebounce(query, 350)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const [history, setHistory] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('search-history') || '[]') } catch { return [] }
+  })
+
+  const saveToHistory = (q: string) => {
+    setHistory((prev) => {
+      const next = [q, ...prev.filter((h) => h !== q)].slice(0, 8)
+      localStorage.setItem('search-history', JSON.stringify(next))
+      return next
+    })
+  }
+
+  const removeFromHistory = (q: string) => {
+    setHistory((prev) => {
+      const next = prev.filter((h) => h !== q)
+      localStorage.setItem('search-history', JSON.stringify(next))
+      return next
+    })
+  }
+
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
@@ -32,6 +52,7 @@ export function SearchView() {
     }
     setTracks(null)
     setSCResults([])
+    saveToHistory(debouncedQuery.trim())
     let cancelled = false
     Promise.all([
       api.getTracks({ q: debouncedQuery, size: 20 }).catch(() => ({
@@ -54,10 +75,7 @@ export function SearchView() {
     if (importing === result.sc_url) return null
     setImporting(result.sc_url)
     try {
-      const track = await api.importSCTrack(
-        result.sc_url,
-        true,
-      )
+      const track = await api.importSCTrack(result.sc_url, true)
       setImportedSC((prev) => ({ ...prev, [result.sc_url]: track }))
       return track
     } catch {
@@ -103,11 +121,43 @@ export function SearchView() {
         )}
       </div>
 
-      {tracks === 'idle' ? (
-        <p className="empty-hint">Начните вводить название</p>
-      ) : (
+      {tracks === 'idle' && history.length === 0 && (
+        <div className="search-idle-hint">
+          <Icon name="search" size={32} />
+          <p>Начните вводить название трека или исполнителя</p>
+        </div>
+      )}
+
+      {tracks === 'idle' && history.length > 0 && (
+        <div className="search-history">
+          <p className="search-section-label">Недавние</p>
+          {history.map((h) => (
+            <div key={h} className="search-history-item" onClick={() => setQuery(h)}>
+              <Icon name="search" size={14} />
+              <span>{h}</span>
+              <button
+                className="icon-btn"
+                onClick={(e) => { e.stopPropagation(); removeFromHistory(h) }}
+              >
+                <Icon name="x" size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tracks === null && (
+        <div className="search-section">
+          <p className="search-section-label">На платформе</p>
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="track-card-skeleton shimmer" />
+          ))}
+        </div>
+      )}
+
+      {Array.isArray(tracks) && (
         <>
-          {Array.isArray(tracks) && tracks.length > 0 && (
+          {tracks.length > 0 && (
             <div className="search-section">
               <p className="search-section-label">На платформе</p>
               <TrackList tracks={tracks} emptyMessage="" />
@@ -182,7 +232,7 @@ export function SearchView() {
             </div>
           )}
 
-          {Array.isArray(tracks) && tracks.length === 0 && scResults.length === 0 && (
+          {tracks.length === 0 && scResults.length === 0 && (
             <p className="empty-hint">Ничего не найдено</p>
           )}
         </>

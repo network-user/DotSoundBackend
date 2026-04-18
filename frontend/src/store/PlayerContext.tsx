@@ -105,6 +105,12 @@ interface PlayerContextValue {
   eqBands: number[]
   eqPreset: string | null
   eqBypassed: boolean
+  repeatMode: 'none' | 'one' | 'all'
+  shuffleOn: boolean
+  hlsError: string | null
+  toggleRepeat: () => void
+  toggleShuffle: () => void
+  clearHlsError: () => void
   playTrack: (
     t: Track,
     url?: string,
@@ -147,6 +153,9 @@ interface PlayerActionsValue {
   setEqPreset: (preset: string | null) => void
   toggleEqBypass: () => void
   resetEq: () => void
+  toggleRepeat: () => void
+  toggleShuffle: () => void
+  clearHlsError: () => void
   openComplaint: () => void
   closeComplaint: () => void
   openCard: () => void
@@ -168,6 +177,9 @@ interface PlayerMetaValue {
   eqBands: number[]
   eqPreset: string | null
   eqBypassed: boolean
+  repeatMode: 'none' | 'one' | 'all'
+  shuffleOn: boolean
+  hlsError: string | null
 }
 
 const PlayerStateCtx = createContext<PlayerStateValue | null>(null)
@@ -355,6 +367,17 @@ export function PlayerProvider({
     )
   const [eqBypassed, setEqBypassed] =
     useState(initialEqRef.current.bypassed)
+  const [repeatMode, setRepeatMode] = useState<'none' | 'one' | 'all'>(
+    () => (localStorage.getItem('player-repeat') as 'none' | 'one' | 'all') ?? 'none',
+  )
+  const [shuffleOn, setShuffleOn] = useState(
+    () => localStorage.getItem('player-shuffle') === 'true',
+  )
+  const [hlsError, setHlsError] = useState<string | null>(null)
+  const repeatModeRef = useRef<'none' | 'one' | 'all'>(
+    (localStorage.getItem('player-repeat') as 'none' | 'one' | 'all') ?? 'none',
+  )
+  const shuffleOnRef = useRef(localStorage.getItem('player-shuffle') === 'true')
 
   const playCountSentRef = useRef(false)
   const listenSignalSentRef = useRef(false)
@@ -656,7 +679,13 @@ export function PlayerProvider({
       setIsPlaying(false)
       setCurrentTime(0)
       sendListenSignal()
-      playNext()
+      const audio = audioRef.current
+      if (repeatModeRef.current === 'one' && audio) {
+        audio.currentTime = 0
+        audio.play().catch(() => {})
+      } else {
+        playNext()
+      }
     }
     const onTime = () => {
       setCurrentTime(audio.currentTime)
@@ -716,6 +745,25 @@ export function PlayerProvider({
     return () => clearInterval(i)
   }, [track])
 
+  const toggleRepeat = useCallback(() => {
+    setRepeatMode((prev) => {
+      const next = prev === 'none' ? 'one' : prev === 'one' ? 'all' : 'none'
+      repeatModeRef.current = next
+      localStorage.setItem('player-repeat', next)
+      return next
+    })
+  }, [])
+
+  const toggleShuffle = useCallback(() => {
+    setShuffleOn((prev) => {
+      shuffleOnRef.current = !prev
+      localStorage.setItem('player-shuffle', String(!prev))
+      return !prev
+    })
+  }, [])
+
+  const clearHlsError = useCallback(() => setHlsError(null), [])
+
   const setVolume = (v: number) =>
     setVolumeState(Math.max(0, Math.min(1, v)))
 
@@ -764,6 +812,8 @@ export function PlayerProvider({
             audio.src = fallbackUrl
             audio.volume = volume
             if (autoplay) audio.play().catch(() => {})
+          } else {
+            setHlsError('Ошибка воспроизведения')
           }
           resolve()
         })
@@ -879,10 +929,20 @@ export function PlayerProvider({
         cache.forTrackId === track.id &&
         cache.tracks.length > 0
       ) {
-        const next = cache.tracks[0]
-        prefetchCacheRef.current = {
-          forTrackId: next.id,
-          tracks: cache.tracks.slice(1),
+        let next: Track
+        if (shuffleOnRef.current && cache.tracks.length > 1) {
+          const idx = Math.floor(Math.random() * cache.tracks.length)
+          next = cache.tracks[idx]
+          prefetchCacheRef.current = {
+            forTrackId: next.id,
+            tracks: cache.tracks.filter((_, i) => i !== idx),
+          }
+        } else {
+          next = cache.tracks[0]
+          prefetchCacheRef.current = {
+            forTrackId: next.id,
+            tracks: cache.tracks.slice(1),
+          }
         }
         await playTrack(next)
         return
@@ -1049,6 +1109,7 @@ export function PlayerProvider({
       playTrack, togglePlay, seek,
       playNext, playPrev, setVolume, stop,
       setEqBand, setEqPreset, toggleEqBypass, resetEq,
+      toggleRepeat, toggleShuffle, clearHlsError,
       openComplaint, closeComplaint,
       openCard, closeCard,
       openLyrics, closeLyrics,
@@ -1059,6 +1120,7 @@ export function PlayerProvider({
       playTrack, togglePlay, seek,
       playNext, playPrev, setVolume, stop,
       setEqBand, setEqPreset, toggleEqBypass, resetEq,
+      toggleRepeat, toggleShuffle, clearHlsError,
       openComplaint, closeComplaint,
       openCard, closeCard,
       openLyrics, closeLyrics,
@@ -1073,12 +1135,14 @@ export function PlayerProvider({
       isComplaintOpen, isCardOpen,
       isLyricsOpen, isEqOpen,
       eqBands, eqPreset, eqBypassed,
+      repeatMode, shuffleOn, hlsError,
     }),
     [
       track, volume,
       isComplaintOpen, isCardOpen,
       isLyricsOpen, isEqOpen,
       eqBands, eqPreset, eqBypassed,
+      repeatMode, shuffleOn, hlsError,
     ],
   )
 

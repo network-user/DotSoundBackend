@@ -25,6 +25,12 @@ export function PlayerBar() {
     openCard,
     openEq,
     stop,
+    repeatMode,
+    shuffleOn,
+    hlsError,
+    toggleRepeat,
+    toggleShuffle,
+    clearHlsError,
   } = usePlayer()
   const { isLiked, toggleLike } = useLikes()
 
@@ -106,6 +112,13 @@ export function PlayerBar() {
             <Icon name="eq" size={18} />
           </button>
           <button
+            className={`ctrl-btn${shuffleOn ? ' active' : ''}`}
+            onClick={toggleShuffle}
+            title="Перемешать"
+          >
+            <Icon name="shuffle" size={16} />
+          </button>
+          <button
             className="ctrl-btn"
             onClick={playPrev}
           >
@@ -130,6 +143,13 @@ export function PlayerBar() {
             />
           </button>
           <button
+            className={`ctrl-btn${repeatMode !== 'none' ? ' active' : ''}`}
+            onClick={toggleRepeat}
+            title={repeatMode === 'none' ? 'Повтор выкл.' : repeatMode === 'one' ? 'Повтор трека' : 'Повтор всех'}
+          >
+            <Icon name={repeatMode === 'one' ? 'repeat-one' : 'repeat'} size={16} />
+          </button>
+          <button
             className="ctrl-btn pb-close"
             onClick={(e) => {
               e.stopPropagation()
@@ -144,6 +164,11 @@ export function PlayerBar() {
         <span>{fmt(currentTime)}</span>
         <span>{fmt(duration)}</span>
       </div>
+      {hlsError && (
+        <div className="pb-error-toast" onClick={clearHlsError}>
+          {hlsError} ✕
+        </div>
+      )}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
@@ -46,6 +46,8 @@ export function Equalizer() {
     useState<string | null>(null)
   const [previewSource, setPreviewSource] =
     useState<string | null>(null)
+  const [confirmReset, setConfirmReset] = useState(false)
+  const confirmResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const handlePreset = (name: string) => {
     const values = PRESETS[name]
@@ -132,10 +134,23 @@ export function Equalizer() {
               {eqBypassed ? 'Без EQ' : 'С EQ'}
             </button>
             <button
-              className="icon-btn"
-              onClick={resetEq}
+              className={`icon-btn${confirmReset ? ' eq-reset-confirm' : ''}`}
+              title={confirmReset ? 'Нажмите ещё раз для сброса' : 'Сбросить EQ'}
+              onClick={() => {
+                if (confirmReset) {
+                  if (confirmResetTimerRef.current) clearTimeout(confirmResetTimerRef.current)
+                  setConfirmReset(false)
+                  resetEq()
+                } else {
+                  setConfirmReset(true)
+                  confirmResetTimerRef.current = setTimeout(() => setConfirmReset(false), 2500)
+                }
+              }}
             >
-              <Icon name="undo" size={18} />
+              {confirmReset
+                ? <span style={{ fontSize: 12, fontWeight: 600 }}>Сбросить?</span>
+                : <Icon name="undo" size={18} />
+              }
             </button>
           </div>
         </div>
