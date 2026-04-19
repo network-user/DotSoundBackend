@@ -159,10 +159,9 @@ export function ArtistView({
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [supplemental, setSupplemental] =
     useState<ArtistSupplementalResponse | null>(null)
-  const [supplementalOpen, setSupplementalOpen] =
-    useState(false)
   const [refreshingSupplemental, setRefreshingSupplemental] =
     useState(false)
+  const supplementalPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
   const isAdmin = getIsAdmin()
 
@@ -192,7 +191,6 @@ export function ArtistView({
     setSelectedSourceId(null)
     setAvatarOpen(false)
     setSupplemental(null)
-    setSupplementalOpen(false)
 
     api
       .getArtist(artistId)
@@ -213,33 +211,50 @@ export function ArtistView({
     api
       .getArtistSupplemental(artistId)
       .then((data) => {
-        if (!cancelled) setSupplemental(data)
+        if (!cancelled) {
+          setSupplemental(data)
+          if (data.status === 'fetching' || data.status === 'pending') {
+            startSupplementalPoll(artistId, 0, () => cancelled)
+          }
+        }
       })
-      .catch(() => {
-        /* supplemental is optional, ignore errors */
-      })
+      .catch(() => { /* supplemental is optional */ })
 
     return () => {
       cancelled = true
+      if (supplementalPollRef.current) clearTimeout(supplementalPollRef.current)
     }
   }, [artistId])
 
+  function startSupplementalPoll(
+    id: number,
+    attempts: number,
+    isCancelled: () => boolean,
+  ) {
+    if (attempts >= 20) return
+    supplementalPollRef.current = setTimeout(async () => {
+      if (isCancelled()) return
+      try {
+        const data = await api.getArtistSupplemental(id)
+        if (!isCancelled()) {
+          setSupplemental(data)
+          if (data.status === 'fetching' || data.status === 'pending') {
+            startSupplementalPoll(id, attempts + 1, isCancelled)
+          }
+        }
+      } catch { }
+    }, 3000)
+  }
+
   const handleRefreshSupplemental = async () => {
     setRefreshingSupplemental(true)
+    if (supplementalPollRef.current) clearTimeout(supplementalPollRef.current)
+    let cancelled = false
     try {
       const data = await api.refreshArtistSupplemental(artistId)
       setSupplemental(data)
       if (data.status === 'fetching' || data.status === 'pending') {
-        const poll = async () => {
-          try {
-            const updated = await api.getArtistSupplemental(artistId)
-            setSupplemental(updated)
-            if (updated.status === 'fetching' || updated.status === 'pending') {
-              setTimeout(poll, 2000)
-            }
-          } catch { /* ignore */ }
-        }
-        setTimeout(poll, 2000)
+        startSupplementalPoll(artistId, 0, () => cancelled)
       }
     } catch { /* ignore */ } finally {
       setRefreshingSupplemental(false)
@@ -324,19 +339,30 @@ export function ArtistView({
 
   const view = useMemo<ArtistViewData | null>(() => {
     if (!artist) return null
+    if (selectedSourceId === 'yandex') {
+      return {
+        source_id: 'yandex',
+        source_name: t('artistSupplemental.tabLabel', { defaultValue: 'Яндекс' }),
+        source_page_url: null,
+        bio: supplemental?.content ?? null,
+        birth_date: null,
+        birthplace: null,
+        country: null,
+        image_url: artist.image_url,
+        website_url: null,
+        discography: [],
+      }
+    }
     if (selectedSourceId) {
       const found = profiles.find(
         (p) => p.source_id === selectedSourceId,
       )
       if (found) {
-        return buildProfileView(
-          found,
-          artist.image_url,
-        )
+        return buildProfileView(found, artist.image_url)
       }
     }
     return buildMergedView(artist)
-  }, [artist, profiles, selectedSourceId])
+  }, [artist, profiles, selectedSourceId, supplemental])
 
   const primaryProfile = useMemo<
     ArtistSourceProfile | null
@@ -466,7 +492,7 @@ export function ArtistView({
           {metaParts.join(' • ')}
         </p>
 
-        {profiles.length > 0 && (
+        {(profiles.length > 0 || supplemental?.status === 'done') && (
           <div
             className="artist-source-switcher"
             role="tablist"
@@ -481,9 +507,7 @@ export function ArtistView({
                   ? 'artist-source-chip active'
                   : 'artist-source-chip'
               }
-              onClick={() =>
-                setSelectedSourceId(null)
-              }
+              onClick={() => setSelectedSourceId(null)}
             >
               {t('artist.bio_title')}
             </button>
@@ -492,21 +516,36 @@ export function ArtistView({
                 key={p.source_id}
                 type="button"
                 role="tab"
-                aria-selected={
-                  selectedSourceId === p.source_id
-                }
+                aria-selected={selectedSourceId === p.source_id}
                 className={
                   selectedSourceId === p.source_id
                     ? 'artist-source-chip active'
                     : 'artist-source-chip'
                 }
-                onClick={() =>
-                  setSelectedSourceId(p.source_id)
-                }
+                onClick={() => setSelectedSourceId(p.source_id)}
               >
                 {p.source_name}
               </button>
             ))}
+            {supplemental && (supplemental.status === 'done' || supplemental.status === 'fetching' || supplemental.status === 'pending') && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selectedSourceId === 'yandex'}
+                className={
+                  selectedSourceId === 'yandex'
+                    ? 'artist-source-chip active'
+                    : 'artist-source-chip'
+                }
+                onClick={() => supplemental.status === 'done' ? setSelectedSourceId('yandex') : undefined}
+                disabled={supplemental.status !== 'done'}
+                title={supplemental.status !== 'done' ? t('artistSupplemental.loading', { defaultValue: 'Загрузка...' }) : undefined}
+              >
+                {supplemental.status === 'done'
+                  ? t('artistSupplemental.tabLabel', { defaultValue: 'Яндекс' })
+                  : t('artistSupplemental.loading', { defaultValue: 'Яндекс…' })}
+              </button>
+            )}
           </div>
         )}
 
@@ -911,59 +950,18 @@ export function ArtistView({
         </div>
       )}
 
-      {/* Supplemental AI info */}
-      {supplemental && supplemental.status === 'done' && supplemental.content && (
-        <div className="artist-supplemental-section">
-          <button
-            className="section-header artist-bio-toggle"
-            onClick={() => setSupplementalOpen((v) => !v)}
-          >
-            <span className="section-title">
-              {t('artistSupplemental.title', { defaultValue: 'Дополнительная информация' })}
-            </span>
-            <span className="track-info-ai-badge">
-              {t('trackInfo.aiSource', { defaultValue: 'Источник: ИИ' })}
-            </span>
-            <span className="artist-bio-chevron">
-              <Icon name="chevron" size={14} />
-            </span>
-          </button>
-          {supplementalOpen && (
-            <div className="artist-supplemental-content">
-              {supplemental.content.split('\n').map((line, i) => (
-                <p key={i} className={line === '' ? 'track-info-spacer' : undefined}>
-                  {line}
-                </p>
-              ))}
-              {isAdmin && (
-                <button
-                  className="btn-secondary artist-supplemental-refresh"
-                  onClick={handleRefreshSupplemental}
-                  disabled={refreshingSupplemental}
-                >
-                  <Icon name="refresh" size={13} />
-                  {refreshingSupplemental
-                    ? t('trackInfo.loading', { defaultValue: 'Получение...' })
-                    : t('trackInfo.refresh', { defaultValue: 'Обновить' })}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Show refresh button for admin even when no supplemental yet */}
-      {isAdmin && (!supplemental || supplemental.status !== 'done') && (
+      {/* Admin: refresh Yandex supplemental (only when done) */}
+      {isAdmin && supplemental?.status === 'done' && (
         <div style={{ padding: '0 16px 8px' }}>
           <button
             className="btn-secondary artist-supplemental-refresh"
             onClick={handleRefreshSupplemental}
-            disabled={refreshingSupplemental || supplemental?.status === 'fetching'}
+            disabled={refreshingSupplemental}
           >
             <Icon name="refresh" size={13} />
-            {supplemental?.status === 'fetching'
-              ? t('trackInfo.loading', { defaultValue: 'Получение...' })
-              : t('artistSupplemental.fetch', { defaultValue: 'Получить AI-информацию' })}
+            {refreshingSupplemental
+              ? t('trackInfo.loading', { defaultValue: 'Обновление...' })
+              : t('trackInfo.refresh', { defaultValue: 'Обновить Яндекс' })}
           </button>
         </div>
       )}
