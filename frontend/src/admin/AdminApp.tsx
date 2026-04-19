@@ -13,7 +13,9 @@ import { AdminShell } from './components/layout/AdminShell'
 import { adminApi } from './lib/adminApi'
 import { setUserTokenProvider } from './lib/adminApi'
 import { useAdminAuth } from './store/adminAuthStore'
+import { ArtistsRoute } from './routes/ArtistsRoute'
 import { AuditRoute } from './routes/AuditRoute'
+import { AudioComputeRoute } from './routes/AudioComputeRoute'
 import { ComplaintsRoute } from './routes/ComplaintsRoute'
 import { ContainersRoute } from './routes/ContainersRoute'
 import { DashboardRoute } from './routes/DashboardRoute'
@@ -148,6 +150,14 @@ export function AdminApp() {
               <Route
                 path="/admin/complaints"
                 element={<ComplaintsRoute />}
+              />
+              <Route
+                path="/admin/artists"
+                element={<ArtistsRoute />}
+              />
+              <Route
+                path="/admin/audio-compute"
+                element={<AudioComputeRoute />}
               />
               <Route
                 path="/admin/tasks"

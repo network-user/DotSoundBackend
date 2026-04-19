@@ -133,9 +133,7 @@ async def export_csv(
 async def login_history(
     user_id: int | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
-    _admin: User = Depends(
-        require_capability("audit.view")
-    ),
+    _admin: User = Depends(require_capability("audit.view")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """User login history (replaces inline SQL from
@@ -146,12 +144,8 @@ async def login_history(
     """
     query = select(LoginHistory)
     if user_id is not None:
-        query = query.where(
-            LoginHistory.user_id == user_id
-        )
-    query = query.order_by(
-        desc(LoginHistory.created_at)
-    ).limit(limit)
+        query = query.where(LoginHistory.user_id == user_id)
+    query = query.order_by(desc(LoginHistory.created_at)).limit(limit)
     result = await session.execute(query)
     rows = list(result.scalars().all())
     return {

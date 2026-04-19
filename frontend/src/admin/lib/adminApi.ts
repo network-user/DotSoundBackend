@@ -335,6 +335,64 @@ export const adminApi = {
     adminFetch<Record<string, unknown>>(
       '/system/services',
     ),
+  dashboardTimeseries: (
+    metric: string,
+    minutes: number,
+    stepSeconds: number,
+  ) =>
+    adminFetch<Record<string, unknown>>(
+      '/dashboard/timeseries',
+      {
+        query: {
+          metric,
+          minutes,
+          step_seconds: stepSeconds,
+        },
+      },
+    ),
+  metricsAllowlist: () =>
+    adminFetch<{ metrics: string[] }>(
+      '/dashboard/metrics-allowlist',
+    ),
+  auditLoginHistory: (
+    userId?: number,
+    limit: number = 100,
+  ) =>
+    adminFetch<{
+      items: Array<Record<string, unknown>>
+      user_id: number | null
+      count: number
+    }>('/audit/login-history', {
+      query: { user_id: userId, limit },
+    }),
+  listBackups: () =>
+    adminFetch<{
+      root: string
+      remote_configured: boolean
+      daily: Array<Record<string, unknown>>
+      weekly: Array<Record<string, unknown>>
+      monthly: Array<Record<string, unknown>>
+      scanned_at: string
+    }>('/system/backups'),
+  runBackup: (kind: string) =>
+    adminFetch<{
+      queued: boolean
+      task_id: string | null
+      kind: string
+    }>('/system/backups/run', {
+      method: 'POST',
+      body: { kind },
+    }),
+  antiAbuseEvents: (limit: number = 100) =>
+    adminFetch<{
+      items: Array<{
+        id: string
+        data: Record<string, string>
+      }>
+      count: number
+    }>('/security/anti-abuse-events', {
+      query: { limit },
+    }),
   featureFlags: () =>
     adminFetch<{
       items: Array<{

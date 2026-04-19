@@ -107,9 +107,7 @@ _ANTI_ABUSE_STREAM = "anti_abuse:events"
 @router.get("/anti-abuse-events")
 async def anti_abuse_events(
     limit: int = Query(100, ge=1, le=500),
-    _admin: User = Depends(
-        require_capability("security.view")
-    ),
+    _admin: User = Depends(require_capability("security.view")),
 ) -> dict[str, Any]:
     """Read recent anti-abuse events from Redis stream.
 
@@ -120,9 +118,7 @@ async def anti_abuse_events(
     redis = get_redis_client()
     items: list[dict[str, Any]] = []
     try:
-        raw = await redis.xrevrange(
-            _ANTI_ABUSE_STREAM, count=limit
-        )
+        raw = await redis.xrevrange(_ANTI_ABUSE_STREAM, count=limit)
     except Exception:
         raw = []
     for entry_id, fields in raw:
@@ -134,16 +130,8 @@ async def anti_abuse_events(
             )
             decoded: dict[str, Any] = {}
             for key, value in fields.items():
-                k = (
-                    key.decode()
-                    if isinstance(key, bytes)
-                    else str(key)
-                )
-                v = (
-                    value.decode()
-                    if isinstance(value, bytes)
-                    else str(value)
-                )
+                k = key.decode() if isinstance(key, bytes) else str(key)
+                v = value.decode() if isinstance(value, bytes) else str(value)
                 decoded[k] = v
             items.append(
                 {
