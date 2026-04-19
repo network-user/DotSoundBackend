@@ -21,6 +21,11 @@ from app.repositories.app_settings import (
 from app.services.admin_manifest_service import (
     KNOWN_CAPABILITIES,
 )
+from app.services.backup_service import (
+    ALLOWED_KINDS,
+    enqueue_backup,
+    list_backups,
+)
 from app.services.container_health_service import (
     get_container_summary,
 )
@@ -116,3 +121,43 @@ async def known_capabilities(
     _admin: User = Depends(require_capability("settings.manage")),
 ) -> dict[str, Any]:
     return {"capabilities": sorted(KNOWN_CAPABILITIES)}
+
+
+@router.get("/backups")
+async def backups(
+    _admin: User = Depends(
+        require_capability("backups.view")
+    ),
+) -> dict[str, Any]:
+    return await list_backups()
+
+
+@router.post("/backups/run")
+async def run_backup(
+    kind: str = Body(
+        "full",
+        embed=True,
+        min_length=2,
+        max_length=16,
+    ),
+    _admin: User = Depends(
+        require_step_up("system.backups.run")
+    ),
+) -> dict[str, Any]:
+    if kind not in ALLOWED_KINDS:
+        raise HTTPException(
+            status_code=400,
+            detail="unknown backup kind",
+        )
+    try:
+        result = await enqueue_backup(kind=kind)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=str(exc)
+        ) from exc
+    logger.info(
+        "admin_backup_run_requested",
+        kind=kind,
+        task_id=result.get("task_id"),
+    )
+    return {"queued": True, **result}
