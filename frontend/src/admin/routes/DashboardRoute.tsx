@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { adminApi } from '../lib/adminApi'
 import { KpiCard } from '../components/widgets/KpiCard'
@@ -16,24 +17,28 @@ function formatBytes(bytes: number): string {
 }
 
 export function DashboardRoute() {
+  const { t } = useTranslation()
   const { data, error, isLoading } = useQuery({
     queryKey: ['admin', 'dashboard', 'overview'],
     queryFn: () => adminApi.dashboardOverview(),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
   const containers = useQuery({
     queryKey: ['admin', 'containers', 'overview'],
     queryFn: () => adminApi.containers(),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 
   if (isLoading) {
-    return <div>Loading dashboard…</div>
+    return <div>{t('admin.dashboard.loading')}</div>
   }
   if (error) {
     return (
       <div className="admin-error">
-        Failed: {(error as Error).message}
+        {t('admin.dashboard.loadFailed')}:{' '}
+        {(error as Error).message}
       </div>
     )
   }
@@ -48,31 +53,46 @@ export function DashboardRoute() {
   const total = containers.data?.total || 0
   return (
     <div className="admin-dashboard">
-      <h1>Dashboard</h1>
+      <h1>{t('admin.dashboard.title')}</h1>
       <section className="kpi-grid">
         <KpiCard
-          label="Online now"
+          label={t(
+            'admin.dashboard.kpi.onlineNow',
+          )}
           value={data.users.online_now}
-          hint={`${data.users.active} active accounts`}
+          hint={t(
+            'admin.dashboard.kpi.activeAccounts',
+            { count: data.users.active },
+          )}
         />
         <KpiCard
-          label="Users (total)"
+          label={t(
+            'admin.dashboard.kpi.usersTotal',
+          )}
           value={data.users.total}
-          hint={`${data.users.new_24h} new in 24h`}
+          hint={t(
+            'admin.dashboard.kpi.newIn24h',
+            { count: data.users.new_24h },
+          )}
         />
         <KpiCard
-          label="Tracks"
+          label={t('admin.dashboard.kpi.tracks')}
           value={data.tracks.total}
-          hint={`${data.tracks.new_24h} new in 24h`}
+          hint={t(
+            'admin.dashboard.kpi.newIn24h',
+            { count: data.tracks.new_24h },
+          )}
         />
         <KpiCard
-          label="Storage"
+          label={t('admin.dashboard.kpi.storage')}
           value={formatBytes(
             data.tracks.storage_bytes,
           )}
         />
         <KpiCard
-          label="Open complaints"
+          label={t(
+            'admin.dashboard.kpi.openComplaints',
+          )}
           value={data.complaints.open}
           accent={
             data.complaints.open > 0
@@ -81,12 +101,17 @@ export function DashboardRoute() {
           }
         />
         <KpiCard
-          label="Active jobs"
+          label={t(
+            'admin.dashboard.kpi.activeJobs',
+          )}
           value={data.jobs.active}
           hint={
             data.jobs.failed_1h
-              ? `${data.jobs.failed_1h} failed (1h)`
-              : 'no failures'
+              ? t(
+                  'admin.dashboard.kpi.failedIn1h',
+                  { count: data.jobs.failed_1h },
+                )
+              : t('admin.dashboard.kpi.noFailures')
           }
           accent={
             data.jobs.failed_1h > 0
@@ -96,22 +121,37 @@ export function DashboardRoute() {
         />
       </section>
       <section className="admin-card">
-        <h2>Containers</h2>
+        <h2>{t('admin.dashboard.containers.title')}</h2>
         <p className="admin-card__sub">
-          {total} containers tracked
+          {t(
+            'admin.dashboard.containers.tracked',
+            { count: total },
+          )}
         </p>
         <div className="status-row">
           <StatusPill kind="ok">
-            healthy {containerCounts.ok}
+            {t(
+              'admin.dashboard.containers.healthy',
+              { count: containerCounts.ok },
+            )}
           </StatusPill>
           <StatusPill kind="warn">
-            warning {containerCounts.warning}
+            {t(
+              'admin.dashboard.containers.warning',
+              { count: containerCounts.warning },
+            )}
           </StatusPill>
           <StatusPill kind="error">
-            error {containerCounts.error}
+            {t(
+              'admin.dashboard.containers.error',
+              { count: containerCounts.error },
+            )}
           </StatusPill>
           <StatusPill kind="unknown">
-            unknown {containerCounts.unknown}
+            {t(
+              'admin.dashboard.containers.unknown',
+              { count: containerCounts.unknown },
+            )}
           </StatusPill>
         </div>
       </section>

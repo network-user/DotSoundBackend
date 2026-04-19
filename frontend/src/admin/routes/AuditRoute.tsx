@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   keepPreviousData,
   useQuery,
@@ -62,6 +63,7 @@ const columns: ColumnDef<AuditRow>[] = [
 ]
 
 export function AuditRoute() {
+  const { t } = useTranslation()
   const canExport = useCapability('audit.export')
   const [page, setPage] = useState(1)
   const [action, setAction] = useState('')
@@ -92,11 +94,13 @@ export function AuditRoute() {
   )
   return (
     <div>
-      <h1>Audit log</h1>
+      <h1>{t('admin.audit.title')}</h1>
       <div className="admin-toolbar">
         <input
           type="text"
-          placeholder="action filter"
+          placeholder={t(
+            'admin.audit.actionPlaceholder',
+          )}
           value={action}
           onChange={(e) => {
             setAction(e.target.value)
@@ -105,7 +109,9 @@ export function AuditRoute() {
         />
         <input
           type="text"
-          placeholder="user_id"
+          placeholder={t(
+            'admin.audit.userPlaceholder',
+          )}
           inputMode="numeric"
           value={userId}
           onChange={(e) => {
@@ -122,7 +128,7 @@ export function AuditRoute() {
             target="_blank"
             rel="noreferrer"
           >
-            Export CSV (step-up required)
+            {t('admin.audit.export')}
           </a>
         )}
       </div>
@@ -138,10 +144,11 @@ export function AuditRoute() {
             setPage((p) => Math.max(1, p - 1))
           }
         >
-          Prev
+          {t('admin.common.prev')}
         </Press>
         <span>
-          {page} / {totalPages} · {total} total
+          {page} / {totalPages} ·{' '}
+          {t('admin.common.total', { count: total })}
         </span>
         <Press
           variant="ghost"
@@ -150,7 +157,7 @@ export function AuditRoute() {
           }
           onClick={() => setPage((p) => p + 1)}
         >
-          Next
+          {t('admin.common.next')}
         </Press>
       </div>
     </div>

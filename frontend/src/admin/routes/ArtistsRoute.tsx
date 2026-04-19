@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   keepPreviousData,
   useMutation,
@@ -69,6 +70,7 @@ async function enrichArtist(
 }
 
 export function ArtistsRoute() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
@@ -124,7 +126,7 @@ export function ArtistsRoute() {
         if (!status)
           return (
             <StatusPill kind="unknown">
-              none
+              {t('admin.artists.noEnrichment')}
             </StatusPill>
           )
         if (status === 'done')
@@ -176,8 +178,8 @@ export function ArtistsRoute() {
           }
         >
           {busyId === info.row.original.id
-            ? 'Enriching…'
-            : 'Enrich'}
+            ? t('admin.artists.enriching')
+            : t('admin.artists.enrich')}
         </Press>
       ),
     },
@@ -191,11 +193,13 @@ export function ArtistsRoute() {
 
   return (
     <div>
-      <h1>Artists</h1>
+      <h1>{t('admin.artists.title')}</h1>
       <div className="admin-toolbar">
         <input
           type="search"
-          placeholder="Search by name…"
+          placeholder={t(
+            'admin.artists.searchPlaceholder',
+          )}
           value={q}
           onChange={(e) => {
             setQ(e.target.value)
@@ -213,7 +217,7 @@ export function ArtistsRoute() {
         rows={
           (list.data?.items as ArtistRow[]) || []
         }
-        emptyHint="No artists yet"
+        emptyHint={t('admin.artists.empty')}
       />
       <div className="admin-pagination">
         <Press
@@ -223,17 +227,18 @@ export function ArtistsRoute() {
             setPage((p) => Math.max(1, p - 1))
           }
         >
-          Prev
+          {t('admin.common.prev')}
         </Press>
         <span>
-          {page} / {totalPages} · {total} total
+          {page} / {totalPages} ·{' '}
+          {t('admin.common.total', { count: total })}
         </span>
         <Press
           variant="ghost"
           disabled={page >= totalPages}
           onClick={() => setPage((p) => p + 1)}
         >
-          Next
+          {t('admin.common.next')}
         </Press>
       </div>
     </div>

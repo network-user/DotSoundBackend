@@ -164,3 +164,7 @@ async def test_get_artist_returns_new_fields(
     assert "image_url" in data
     assert "country" in data
     assert "website_url" in data
+    assert "source_profiles" in data
+    assert data["source_profiles"] is None
+    assert "primary_source_id" in data
+    assert data["primary_source_id"] is None

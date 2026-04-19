@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   keepPreviousData,
   useQuery,
@@ -65,6 +66,7 @@ const columns: ColumnDef<UserRow>[] = [
 ]
 
 export function UsersRoute() {
+  const { t } = useTranslation()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [activeOnly, setActiveOnly] =
@@ -95,11 +97,13 @@ export function UsersRoute() {
 
   return (
     <div>
-      <h1>Users</h1>
+      <h1>{t('admin.users.title')}</h1>
       <div className="admin-toolbar">
         <input
           type="search"
-          placeholder="Search by name/email…"
+          placeholder={t(
+            'admin.users.searchPlaceholder',
+          )}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value)
@@ -124,9 +128,15 @@ export function UsersRoute() {
             setPage(1)
           }}
         >
-          <option value="all">All</option>
-          <option value="active">Active</option>
-          <option value="banned">Banned</option>
+          <option value="all">
+            {t('admin.users.filterAll')}
+          </option>
+          <option value="active">
+            {t('admin.users.filterActive')}
+          </option>
+          <option value="banned">
+            {t('admin.users.filterBanned')}
+          </option>
         </select>
       </div>
       <DataTable
@@ -141,10 +151,11 @@ export function UsersRoute() {
             setPage((p) => Math.max(1, p - 1))
           }
         >
-          Prev
+          {t('admin.common.prev')}
         </Press>
         <span>
-          {page} / {totalPages} · {total} total
+          {page} / {totalPages} ·{' '}
+          {t('admin.common.total', { count: total })}
         </span>
         <Press
           variant="ghost"
@@ -153,7 +164,7 @@ export function UsersRoute() {
           }
           onClick={() => setPage((p) => p + 1)}
         >
-          Next
+          {t('admin.common.next')}
         </Press>
       </div>
     </div>

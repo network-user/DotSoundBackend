@@ -105,6 +105,7 @@ class LyricsService:
         track_id: int,
         user_id: int,
         with_sync: bool = False,
+        bypass_cache: bool = False,
     ) -> str:
         import uuid
 
@@ -138,21 +139,24 @@ class LyricsService:
                 track_id=track_id,
                 with_sync=with_sync,
                 progress_id=progress_id,
+                bypass_cache=bypass_cache,
             )
             taskiq_id = task.task_id
             job.status = "queued"
 
         await self._session.commit()
 
-        queued_log = (
+        queued_log_parts = [
             f"task queued: taskiq_id={taskiq_id}"
             if taskiq_id
-            else f"task queued for profile={profile}"
-        )
+            else f"task queued for profile={profile}",
+            f"with_sync={with_sync}",
+            f"bypass_cache={bypass_cache}",
+        ]
         await set_lyrics_progress(
             progress_id,
             stage="queued",
-            log_line=queued_log,
+            log_line=" | ".join(queued_log_parts),
             percent=2,
         )
         try:
@@ -175,6 +179,7 @@ class LyricsService:
             profile=profile,
             progress_id=progress_id,
             with_sync=with_sync,
+            bypass_cache=bypass_cache,
         )
         return progress_id
 
@@ -183,28 +188,63 @@ class LyricsService:
         track_id: int,
         user_id: int,
         with_sync: bool = False,
+        bypass_cache: bool = False,
     ) -> str:
         """Delete existing lyrics and re-run detection from scratch.
 
+        The (artist, title) Redis search cache is ALWAYS invalidated
+        here so a real re-detection happens instead of silently
+        re-loading the previously cached provider answer.
+
+        ``bypass_cache`` additionally instructs the worker to skip
+        any cache read on this run (admin / debug force-mode).
+
         Returns: progress_id for tracking the new generation task
         """
-        await self._get_owned_track(track_id, user_id)
+        from app.services.lyrics_worker import (
+            invalidate_cached_lyrics_for_track,
+        )
 
-        # Delete existing lyrics
+        track = await self._get_owned_track(track_id, user_id)
+
+        artist = track.artist or ""
+        title = track.title or ""
+
         await self._repo.delete_by_track_id(track_id)
         await self._session.commit()
-        logger.info("lyrics_redefine_deleted", track_id=track_id)
+        logger.info(
+            "lyrics_redefine_deleted",
+            track_id=track_id,
+            artist=artist,
+            title=title,
+            bypass_cache=bypass_cache,
+        )
 
-        # Trigger new auto-generation
+        try:
+            await invalidate_cached_lyrics_for_track(
+                artist, title
+            )
+            logger.info(
+                "lyrics_redefine_cache_invalidated",
+                track_id=track_id,
+            )
+        except Exception:
+            logger.exception(
+                "lyrics_redefine_cache_invalidate_failed",
+                track_id=track_id,
+            )
+
         progress_id = await self.trigger_auto_generation(
             track_id=track_id,
             user_id=user_id,
             with_sync=with_sync,
+            bypass_cache=bypass_cache,
         )
         logger.info(
             "lyrics_redefine_triggered",
             track_id=track_id,
             progress_id=progress_id,
+            bypass_cache=bypass_cache,
         )
         return progress_id
 

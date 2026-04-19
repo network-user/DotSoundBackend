@@ -28,6 +28,34 @@ class ErrorBoundary extends Component<
     return this.props.children
   }
 }
+
+function RouteFallback({
+  timeoutMs = 8000,
+}: {
+  timeoutMs?: number
+}) {
+  const [stuck, setStuck] = useState(false)
+  useEffect(() => {
+    const id = window.setTimeout(
+      () => setStuck(true),
+      timeoutMs,
+    )
+    return () => window.clearTimeout(id)
+  }, [timeoutMs])
+  if (stuck) {
+    return (
+      <div className="error-boundary-fallback">
+        <p>Не удалось загрузить раздел</p>
+        <button
+          onClick={() => window.location.reload()}
+        >
+          Перезагрузить
+        </button>
+      </div>
+    )
+  }
+  return <div className="loader" />
+}
 import { Routes, Route, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { tg, getInitData } from '@/lib/telegram'
@@ -186,11 +214,8 @@ export function App() {
         }
       }
 
-      try {
-        if (
-          !authenticated &&
-          hasTelegramContext
-        ) {
+      if (hasTelegramContext) {
+        try {
           const authRes =
             await api.authTelegram(initData)
           if (authRes?.access_token) {
@@ -198,41 +223,43 @@ export function App() {
             authenticated = true
             debug.authResult = 'ok'
           }
-        }
-      } catch (err) {
-        const msg =
-          err instanceof Error
-            ? err.message
-            : String(err)
-        console.error(
-          '[App] Telegram auth failed:',
-          msg,
-        )
-        debug.authError = msg
+        } catch (err) {
+          const msg =
+            err instanceof Error
+              ? err.message
+              : String(err)
+          console.error(
+            '[App] Telegram auth failed:',
+            msg,
+          )
+          debug.authError = msg
 
-        try {
-          await new Promise((r) =>
-            setTimeout(r, 500),
-          )
-          const retryRes =
-            await api.authTelegram(
-              getInitData(),
+          try {
+            await new Promise((r) =>
+              setTimeout(r, 500),
             )
-          if (retryRes?.access_token) {
-            connectWS(retryRes.access_token)
-            authenticated = true
-            debug.authResult = 'ok (retry)'
+            const retryRes =
+              await api.authTelegram(
+                getInitData(),
+              )
+            if (retryRes?.access_token) {
+              connectWS(retryRes.access_token)
+              authenticated = true
+              debug.authResult = 'ok (retry)'
+            }
+          } catch (retryErr) {
+            const retryMsg =
+              retryErr instanceof Error
+                ? retryErr.message
+                : String(retryErr)
+            debug.authRetryError = retryMsg
+            setAuthError(
+              `Telegram auth: ${msg}`,
+            )
           }
-        } catch (retryErr) {
-          const retryMsg =
-            retryErr instanceof Error
-              ? retryErr.message
-              : String(retryErr)
-          debug.authRetryError = retryMsg
-          setAuthError(
-            `Telegram auth: ${msg}`,
-          )
         }
+      } else {
+        debug.authResult = 'skipped (no initData)'
       }
 
       if (!authenticated) {
@@ -248,6 +275,14 @@ export function App() {
 
       if (!authenticated) {
         setNeedsAuth(true)
+      } else {
+        try {
+          window.dispatchEvent(
+            new Event('app-auth-ready'),
+          )
+        } catch {
+          /* ignore */
+        }
       }
 
       setAuthDebug(debug)
@@ -341,7 +376,7 @@ export function App() {
       <OfflineBanner />
       <main id="main">
         <ErrorBoundary>
-        <Suspense fallback={<div className="loader" />}>
+        <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<HomeView />} />
           <Route path="/search" element={<SearchView />} />

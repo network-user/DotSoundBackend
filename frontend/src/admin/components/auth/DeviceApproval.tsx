@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Press } from '@/components/ui/Press'
 import { adminApi } from '../../lib/adminApi'
 import { useAdminAuth } from '../../store/adminAuthStore'
 import { TotpInput } from './TotpInput'
 
 export function DeviceApproval() {
+  const { t } = useTranslation()
   const { pendingDeviceId, setSession } =
     useAdminAuth((s) => ({
       pendingDeviceId: s.pendingDeviceId,
@@ -74,9 +76,9 @@ export function DeviceApproval() {
   if (!pendingDeviceId) {
     return (
       <div className="admin-auth-card">
-        <h2>Device approval</h2>
+        <h2>{t('admin.device.title')}</h2>
         <p className="admin-auth-hint">
-          No pending device.
+          {t('admin.device.noPending')}
         </p>
       </div>
     )
@@ -84,14 +86,12 @@ export function DeviceApproval() {
 
   return (
     <div className="admin-auth-card">
-      <h2>Approve new device</h2>
+      <h2>{t('admin.device.title')}</h2>
       <p className="admin-auth-hint">
-        We sent a confirmation code to your email
-        and an alert to the bound Telegram account.
-        Enter both codes to trust this device.
+        {t('admin.device.hint')}
       </p>
       <label className="admin-auth-label">
-        Email code
+        {t('admin.device.emailCode')}
         <input
           type="text"
           inputMode="numeric"
@@ -107,7 +107,7 @@ export function DeviceApproval() {
         />
       </label>
       <label className="admin-auth-label">
-        Authenticator code
+        {t('admin.device.totpLabel')}
       </label>
       <TotpInput
         value={totpCode}
@@ -115,14 +115,16 @@ export function DeviceApproval() {
         disabled={busy}
       />
       <label className="admin-auth-label">
-        Device label
+        {t('admin.device.deviceLabel')}
         <input
           type="text"
           value={label}
           onChange={(e) =>
             setLabel(e.target.value)
           }
-          placeholder="e.g. desktop-firefox"
+          placeholder={t(
+            'admin.device.deviceLabelPlaceholder',
+          )}
           maxLength={64}
         />
       </label>
@@ -141,8 +143,8 @@ export function DeviceApproval() {
         }
       >
         {busy
-          ? 'Approving…'
-          : 'Approve device'}
+          ? t('admin.device.approving')
+          : t('admin.device.approve')}
       </Press>
     </div>
   )

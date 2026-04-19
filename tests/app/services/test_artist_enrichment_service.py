@@ -236,3 +236,159 @@ async def test_enrich_bio_truncation(
     await db_session.refresh(artist)
     assert artist.bio is not None
     assert len(artist.bio) == 8000
+
+
+async def test_enrich_persists_source_profiles(
+    db_session: AsyncSession,
+) -> None:
+    artist = await _make_artist(db_session)
+    profile = SimpleNamespace(
+        source_id="wiki_en",
+        source_name="Wikipedia (EN)",
+        source_page_url=(
+            "https://en.wikipedia.org/wiki/X"
+        ),
+        bio="wiki bio",
+        birth_date=date(1990, 5, 12),
+        birthplace="Berlin",
+        country="de",
+        image_url=None,
+        website_url=None,
+        discography=(
+            SimpleNamespace(
+                title="Album One",
+                year=2018,
+                type=None,
+                url=None,
+            ),
+        ),
+    )
+    info = _make_info(
+        bio="merged",
+        confidence=0.9,
+        source_profiles=(profile,),
+        primary_source_id="wiki_en",
+        discography=(
+            SimpleNamespace(
+                title="Album One",
+                year=2018,
+                type=None,
+                url=None,
+            ),
+        ),
+    )
+
+    with patch.dict(
+        "sys.modules",
+        {
+            "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
+                fetch_artist_info=MagicMock(
+                    return_value=info
+                ),
+                warmup_artist_info_provider=lambda: None,
+            ),
+        },
+    ):
+        svc = ArtistEnrichmentService(db_session)
+        await svc.enrich(artist.id)
+
+    await db_session.refresh(artist)
+    assert artist.primary_source_id == "wiki_en"
+    assert artist.source_profiles is not None
+    assert len(artist.source_profiles) == 1
+    saved = artist.source_profiles[0]
+    assert saved["source_id"] == "wiki_en"
+    assert saved["source_name"] == "Wikipedia (EN)"
+    assert saved["source_page_url"].startswith("https://")
+    assert saved["bio"] == "wiki bio"
+    assert saved["country"] == "DE"
+    assert saved["discography"][0]["title"] == "Album One"
+    assert saved["discography"][0]["year"] == 2018
+    assert artist.discography is not None
+    assert artist.discography[0]["title"] == "Album One"
+
+
+async def test_enrich_drops_invalid_source_url(
+    db_session: AsyncSession,
+) -> None:
+    artist = await _make_artist(db_session)
+    profile = SimpleNamespace(
+        source_id="wiki_en",
+        source_name="Wikipedia (EN)",
+        source_page_url="javascript:alert(1)",
+        bio="wiki bio",
+        birth_date=None,
+        birthplace=None,
+        country="de",
+        image_url=None,
+        website_url="https://example.org",
+        discography=(),
+    )
+    info = _make_info(
+        bio="merged",
+        confidence=0.9,
+        source_profiles=(profile,),
+        primary_source_id="wiki_en",
+    )
+
+    with patch.dict(
+        "sys.modules",
+        {
+            "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
+                fetch_artist_info=MagicMock(
+                    return_value=info
+                ),
+                warmup_artist_info_provider=lambda: None,
+            ),
+        },
+    ):
+        svc = ArtistEnrichmentService(db_session)
+        await svc.enrich(artist.id)
+
+    await db_session.refresh(artist)
+    assert artist.source_profiles is not None
+    saved = artist.source_profiles[0]
+    assert saved["source_id"] == "wiki_en"
+    assert "source_page_url" not in saved
+    assert saved["website_url"] == "https://example.org"
+
+
+async def test_enrich_skips_profile_without_source_id(
+    db_session: AsyncSession,
+) -> None:
+    artist = await _make_artist(db_session)
+    profile = SimpleNamespace(
+        source_id="",
+        source_name="Unknown",
+        source_page_url="https://example.org/source",
+        bio="bio",
+        birth_date=None,
+        birthplace=None,
+        country=None,
+        image_url=None,
+        website_url=None,
+        discography=(),
+    )
+    info = _make_info(
+        bio="merged",
+        confidence=0.9,
+        source_profiles=(profile,),
+        primary_source_id="wiki_en",
+    )
+
+    with patch.dict(
+        "sys.modules",
+        {
+            "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
+                fetch_artist_info=MagicMock(
+                    return_value=info
+                ),
+                warmup_artist_info_provider=lambda: None,
+            ),
+        },
+    ):
+        svc = ArtistEnrichmentService(db_session)
+        await svc.enrich(artist.id)
+
+    await db_session.refresh(artist)
+    assert artist.source_profiles is None

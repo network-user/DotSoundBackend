@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   useMutation,
   useQuery,
@@ -180,6 +181,7 @@ const auditColumns: ColumnDef<AuditRow>[] = [
 ]
 
 export function AudioComputeRoute() {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const workers = useQuery({
     queryKey: ['admin', 'compute', 'workers'],
@@ -187,7 +189,8 @@ export function AudioComputeRoute() {
       adminFetch<WorkerRow[]>(
         '/audio-compute/workers',
       ),
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
   const jobs = useQuery({
     queryKey: ['admin', 'compute', 'jobs'],
@@ -195,7 +198,8 @@ export function AudioComputeRoute() {
       adminFetch<JobRow[]>(
         '/audio-compute/jobs',
       ),
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
   const audit = useQuery({
     queryKey: ['admin', 'compute', 'audit'],
@@ -285,10 +289,10 @@ export function AudioComputeRoute() {
 
   return (
     <div>
-      <h1>Audio compute</h1>
+      <h1>{t('admin.audioCompute.title')}</h1>
 
       <section className="admin-card">
-        <h2>Routing mode</h2>
+        <h2>{t('admin.audioCompute.routingMode')}</h2>
         <div className="admin-toolbar">
           <select
             value={
@@ -314,7 +318,7 @@ export function AudioComputeRoute() {
       </section>
 
       <section className="admin-card">
-        <h2>Workers</h2>
+        <h2>{t('admin.audioCompute.workers')}</h2>
         <div className="admin-toolbar">
           <input
             type="text"
@@ -418,7 +422,7 @@ export function AudioComputeRoute() {
       </section>
 
       <section className="admin-card">
-        <h2>Recent jobs</h2>
+        <h2>{t('admin.audioCompute.jobs')}</h2>
         <DataTable
           columns={jobColumns}
           rows={

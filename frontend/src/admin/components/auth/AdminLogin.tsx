@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Press } from '@/components/ui/Press'
 import { adminApi } from '../../lib/adminApi'
 import { computeFingerprint } from '../../lib/fingerprint'
@@ -6,6 +7,7 @@ import { useAdminAuth } from '../../store/adminAuthStore'
 import { TotpInput } from './TotpInput'
 
 export function AdminLogin() {
+  const { t } = useTranslation()
   const setSession = useAdminAuth(
     (s) => s.setSession,
   )
@@ -56,10 +58,9 @@ export function AdminLogin() {
 
   return (
     <div className="admin-auth-card">
-      <h2>Admin sign-in</h2>
+      <h2>{t('admin.auth.signInTitle')}</h2>
       <p className="admin-auth-hint">
-        Open your authenticator app and enter the
-        current 6-digit code for DotSound.
+        {t('admin.auth.signInHint')}
       </p>
       <TotpInput
         value={code}
@@ -78,7 +79,9 @@ export function AdminLogin() {
         onClick={handleSubmit}
         disabled={busy || code.length < 6}
       >
-        {busy ? 'Signing in…' : 'Sign in'}
+        {busy
+          ? t('admin.auth.signingIn')
+          : t('admin.auth.signIn')}
       </Press>
     </div>
   )

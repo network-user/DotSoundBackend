@@ -1,11 +1,13 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react'
+import i18n from '@/lib/i18n'
 import { api } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
 
@@ -74,11 +76,6 @@ export function useAdminSlotEntries(
   return useAdmin().manifest?.slots?.[context] ?? []
 }
 
-function importByHint(hint: string) {
-  /* @vite-ignore */
-  return import(/* @vite-ignore */ hint)
-}
-
 export function AdminProvider({
   children,
 }: {
@@ -91,28 +88,56 @@ export function AdminProvider({
   const [slotRenderers, setSlotRenderers] = useState<
     Record<string, SlotRenderer>
   >({})
+  const [authTick, setAuthTick] = useState(0)
+  const [langTick, setLangTick] = useState(0)
 
-  useEffect(() => {
-    if (!getIsAdmin()) return
-    if (manifest || loading || failed) return
+  const fetchManifest = useCallback(() => {
     setLoading(true)
+    setFailed(false)
     api
-      .getAdminManifest()
-      .then(async (m) => {
-        setManifest(m)
-        if (m?.adminBundleUrl) {
-          try {
-            await importByHint(m.adminBundleUrl)
-          } catch {
-            setFailed(true)
-          }
-        }
-      })
+      .getAdminManifest(i18n.language)
+      .then((m) => setManifest(m))
       .catch(() => {
+        setManifest(null)
         setFailed(true)
       })
       .finally(() => setLoading(false))
-  }, [manifest, loading, failed])
+  }, [])
+
+  useEffect(() => {
+    if (!getIsAdmin()) return
+    if (!api.getToken()) return
+    if (loading) return
+    if (manifest && manifest.locale === i18n.language) {
+      return
+    }
+    fetchManifest()
+  }, [
+    fetchManifest,
+    loading,
+    manifest,
+    authTick,
+    langTick,
+  ])
+
+  useEffect(() => {
+    const onAuthReady = () => setAuthTick((t) => t + 1)
+    window.addEventListener('app-auth-ready', onAuthReady)
+    return () =>
+      window.removeEventListener(
+        'app-auth-ready',
+        onAuthReady,
+      )
+  }, [])
+
+  useEffect(() => {
+    const onLangChange = () =>
+      setLangTick((t) => t + 1)
+    i18n.on('languageChanged', onLangChange)
+    return () => {
+      i18n.off('languageChanged', onLangChange)
+    }
+  }, [])
 
   const registerSlotRenderer = useMemo(
     () =>

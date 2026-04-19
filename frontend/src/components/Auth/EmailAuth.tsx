@@ -1,6 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { setInternalUserId } from '@/lib/telegram'
+import { connectWS } from '@/lib/ws'
+
+function notifyAuthReady(token: string | null): void {
+  if (token) {
+    try {
+      connectWS(token)
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    window.dispatchEvent(
+      new Event('app-auth-ready'),
+    )
+  } catch {
+    /* ignore */
+  }
+}
 
 type Step =
   | 'email'
@@ -86,6 +104,7 @@ export function EmailAuth({
         setStep('totp')
       } else if (res.user_id) {
         setInternalUserId(res.user_id)
+        notifyAuthReady(res.access_token)
         setStep('success')
         successTimer.current = setTimeout(
           onAuth,
@@ -126,6 +145,7 @@ export function EmailAuth({
       }
       if (res.user_id) {
         setInternalUserId(res.user_id)
+        notifyAuthReady(res.access_token)
         setStep('success')
         successTimer.current = setTimeout(
           onAuth,

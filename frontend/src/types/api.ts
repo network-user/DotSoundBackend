@@ -401,6 +401,20 @@ export interface DiscographyItem {
   title: string
   year?: number
   type?: string
+  url?: string
+}
+
+export interface ArtistSourceProfile {
+  source_id: string
+  source_name: string
+  source_page_url?: string | null
+  bio?: string | null
+  birth_date?: string | null
+  birthplace?: string | null
+  country?: string | null
+  image_url?: string | null
+  website_url?: string | null
+  discography?: DiscographyItem[] | null
 }
 
 export interface ArtistDetail {
@@ -420,6 +434,8 @@ export interface ArtistDetail {
   track_count: number
   created_at: string
   discography?: DiscographyItem[] | null
+  source_profiles?: ArtistSourceProfile[] | null
+  primary_source_id?: string | null
 }
 
 // ── Import ────────────────────────────────────────────────────────────────

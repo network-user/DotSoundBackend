@@ -136,6 +136,64 @@ async def invalidate_cached_lyrics_result(
     await redis.delete(_search_cache_key(artist, title))
 
 
+def _cache_keys_for_track(
+    artist: str, title: str
+) -> list[str]:
+    """Cache keys covering every search attempt for this track.
+
+    Mirrors :func:`_lyrics_search_attempts` so callers can wipe the
+    artist+title key together with its title-only fallback in one
+    Redis ``DEL``.
+    """
+    seen: set[str] = set()
+    keys: list[str] = []
+    for cache_artist, cache_title, _mode in _lyrics_search_attempts(
+        artist, title
+    ):
+        key = _search_cache_key(cache_artist, cache_title)
+        if key in seen:
+            continue
+        seen.add(key)
+        keys.append(key)
+    return keys
+
+
+async def invalidate_cached_lyrics_for_track(
+    artist: str, title: str
+) -> None:
+    """Wipe every cache key associated with ``(artist, title)``.
+
+    Unlike :func:`invalidate_cached_lyrics_result`, this also drops
+    the title-only fallback entry so a follow-up redefine cannot be
+    silently served from a stale alias.
+    """
+    keys = _cache_keys_for_track(artist, title)
+    if not keys:
+        return
+    redis = get_redis_client()
+    await redis.delete(*keys)
+
+
+def _cached_satisfies_request(
+    cached: dict | None, with_sync: bool
+) -> bool:
+    """Whether a cached payload covers the current request.
+
+    Text-only requests are happy with anything that has ``text``.
+    Sync requests additionally require non-empty ``synced_lines`` so
+    we never hand back a text-only cache as if it were aligned.
+    """
+    if not isinstance(cached, dict):
+        return False
+    if not cached.get("text"):
+        return False
+    if with_sync:
+        synced = cached.get("synced_lines")
+        if not isinstance(synced, list) or not synced:
+            return False
+    return True
+
+
 def _events_channel(progress_id: str) -> str:
     return f"{EVENTS_CHANNEL_PREFIX}{progress_id}"
 
@@ -613,11 +671,23 @@ def _result_to_payload(gen_result) -> dict:
     }
 
 
+def _lyrics_search_attempts(
+    artist: str, title: str
+) -> list[tuple[str, str, str]]:
+    attempts: list[tuple[str, str, str]] = [
+        (artist, title, "artist_title")
+    ]
+    if artist.strip():
+        attempts.append(("", title, "title_only"))
+    return attempts
+
+
 @broker.task
 async def generate_lyrics_task(
     track_id: int,
     with_sync: bool = False,
     progress_id: str = "",
+    bypass_cache: bool = False,
 ) -> dict:
     from app.services.lyrics_eta import record_stage_duration
 
@@ -632,6 +702,7 @@ async def generate_lyrics_task(
     logger.info(
         "lyrics_generation_started",
         with_sync=with_sync,
+        bypass_cache=bypass_cache,
     )
 
     def _elapsed() -> str:
@@ -685,6 +756,7 @@ async def generate_lyrics_task(
 
         artist = track.artist or ""
         title = track.title or ""
+        search_attempts = _lyrics_search_attempts(artist, title)
 
         await _log(
             "searching",
@@ -692,33 +764,106 @@ async def generate_lyrics_task(
             percent=5,
         )
 
-        cached = await get_cached_lyrics_result(artist, title)
-        if cached and not with_sync and cached.get("text"):
+        if bypass_cache:
             await _log(
-                "saving",
-                "cache hit: reusing previous lyrics result",
-                percent=90,
+                "searching",
+                "cache bypass enabled for this run",
+                percent=8,
             )
-            repo = LyricsRepository(session)
-            await repo.create_or_update(
-                track_id=track_id,
-                plain_text=cached["text"],
-                source="auto",
-                synced_lines=None,
-                sync_quality=cached.get("sync_quality"),
-                sync_profile=cached.get("sync_profile"),
-            )
-            await session.commit()
-            await _finalise(
-                progress_id,
-                "found",
-                log_line=f"[{_elapsed()}] saved to DB (cache)",
-            )
-            return {
-                "status": "found",
-                "has_sync": False,
-                "cache": True,
-            }
+        else:
+            for (
+                cache_artist,
+                cache_title,
+                cache_mode,
+            ) in search_attempts:
+                cached = await get_cached_lyrics_result(
+                    cache_artist, cache_title
+                )
+                if not _cached_satisfies_request(
+                    cached, with_sync
+                ):
+                    if (
+                        with_sync
+                        and isinstance(cached, dict)
+                        and cached.get("text")
+                    ):
+                        await _log(
+                            "searching",
+                            "cache holds text without timecodes "
+                            "\u2014 ignoring cache for sync run",
+                            percent=10,
+                        )
+                    continue
+
+                cached_synced_raw = cached.get("synced_lines")
+                cached_synced: list[dict] | None = None
+                if (
+                    with_sync
+                    and isinstance(cached_synced_raw, list)
+                    and cached_synced_raw
+                ):
+                    cached_synced = list(cached_synced_raw)
+
+                if cache_mode == "artist_title":
+                    cache_log = (
+                        "cache hit: reusing previous lyrics "
+                        "result"
+                    )
+                else:
+                    cache_log = (
+                        "cache hit: reusing title-only "
+                        "fallback result"
+                    )
+                if cached_synced is not None:
+                    cache_log += " (with timecodes)"
+                await _log(
+                    "saving",
+                    cache_log,
+                    percent=90,
+                )
+                repo = LyricsRepository(session)
+                await repo.create_or_update(
+                    track_id=track_id,
+                    plain_text=cached["text"],
+                    source="auto",
+                    synced_lines=cached_synced,
+                    sync_quality=cached.get("sync_quality"),
+                    sync_profile=cached.get("sync_profile"),
+                )
+                await session.commit()
+
+                if cached_synced is not None:
+                    try:
+                        await store_partial_synced(
+                            progress_id, cached_synced
+                        )
+                    except Exception:
+                        pass
+
+                if cache_mode != "artist_title":
+                    try:
+                        await set_cached_lyrics_result(
+                            artist, title, cached
+                        )
+                    except Exception:
+                        logger.debug(
+                            "lyrics_cache_alias_write_failed",
+                            track_id=track_id,
+                        )
+
+                await _finalise(
+                    progress_id,
+                    "found",
+                    log_line=(
+                        f"[{_elapsed()}] saved to DB (cache, "
+                        f"has_sync={cached_synced is not None})"
+                    ),
+                )
+                return {
+                    "status": "found",
+                    "has_sync": cached_synced is not None,
+                    "cache": True,
+                }
 
         audio_path: str | None = None
         tmp_dir: str | None = None
@@ -792,41 +937,71 @@ async def generate_lyrics_task(
                 except Exception:
                     return False
 
-            await _log(
-                "searching",
-                "calling lyrics provider",
-                percent=30,
-            )
+            gen_result = None
+            used_artist = artist
+            used_title = title
+            used_mode = "artist_title"
 
-            if await _should_cancel(progress_id):
-                await _finalise(
-                    progress_id,
-                    "cancelled",
-                    log_line=(
-                        f"[{_elapsed()}] task cancelled by user "
-                        "before lyrics generation"
-                    ),
-                )
-                await _clear_cancel(progress_id)
-                return {"status": "cancelled"}
+            for attempt_idx, (
+                attempt_artist,
+                attempt_title,
+                attempt_mode,
+            ) in enumerate(search_attempts):
+                if await _should_cancel(progress_id):
+                    await _finalise(
+                        progress_id,
+                        "cancelled",
+                        log_line=(
+                            f"[{_elapsed()}] task cancelled by user "
+                            "before lyrics generation"
+                        ),
+                    )
+                    await _clear_cancel(progress_id)
+                    return {"status": "cancelled"}
 
-            _stop_evt = asyncio.Event()
-            _hb_task = asyncio.create_task(
-                _heartbeat_loop(progress_id, t0, _stop_evt)
-            )
-            try:
-                gen_result = await asyncio.to_thread(
-                    _call_provider,
-                    generate_lyrics,
-                    artist=artist,
-                    title=title,
-                    audio_path=audio_path,
-                    on_progress=on_progress,
-                    on_cancel=on_cancel,
+                if attempt_idx > 0:
+                    await _log(
+                        "searching",
+                        "retrying lyrics search with title-only "
+                        "fallback",
+                        percent=38,
+                    )
+
+                attempt_label = (
+                    "title-only fallback"
+                    if attempt_mode == "title_only"
+                    else "artist+title"
                 )
-            finally:
-                _stop_evt.set()
-                _hb_task.cancel()
+                await _log(
+                    "searching",
+                    f"calling lyrics provider ({attempt_label})",
+                    percent=30 if attempt_idx == 0 else 40,
+                )
+
+                _stop_evt = asyncio.Event()
+                _hb_task = asyncio.create_task(
+                    _heartbeat_loop(progress_id, t0, _stop_evt)
+                )
+                try:
+                    current_result = await asyncio.to_thread(
+                        _call_provider,
+                        generate_lyrics,
+                        artist=attempt_artist,
+                        title=attempt_title,
+                        audio_path=audio_path,
+                        on_progress=on_progress,
+                        on_cancel=on_cancel,
+                    )
+                finally:
+                    _stop_evt.set()
+                    _hb_task.cancel()
+
+                if current_result is not None:
+                    gen_result = current_result
+                    used_artist = attempt_artist
+                    used_title = attempt_title
+                    used_mode = attempt_mode
+                    break
 
             if gen_result is None:
                 await _finalise(
@@ -844,17 +1019,28 @@ async def generate_lyrics_task(
                 f"synced={gen_result.synced_lines is not None}",
                 percent=85,
             )
+            if used_mode == "title_only":
+                await _log(
+                    "saving",
+                    "lyrics resolved via title-only fallback",
+                    percent=82,
+                )
 
             payload = _result_to_payload(gen_result)
-            try:
-                await set_cached_lyrics_result(
-                    artist, title, payload
-                )
-            except Exception:
-                logger.debug(
-                    "lyrics_cache_write_failed",
-                    track_id=track_id,
-                )
+            cache_pairs = {
+                (artist, title),
+                (used_artist, used_title),
+            }
+            for cache_artist, cache_title in cache_pairs:
+                try:
+                    await set_cached_lyrics_result(
+                        cache_artist, cache_title, payload
+                    )
+                except Exception:
+                    logger.debug(
+                        "lyrics_cache_write_failed",
+                        track_id=track_id,
+                    )
 
             try:
                 await store_partial_text(
@@ -872,6 +1058,13 @@ async def generate_lyrics_task(
                     )
                 except Exception:
                     pass
+            elif with_sync:
+                await _log(
+                    "saving",
+                    "alignment did not produce timecodes "
+                    "\u2014 saving text only",
+                    percent=86,
+                )
 
             repo = LyricsRepository(session)
             await repo.create_or_update(

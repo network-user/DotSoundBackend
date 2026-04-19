@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Press } from '@/components/ui/Press'
@@ -26,6 +27,7 @@ interface FlagRow {
 }
 
 export function SettingsRoute() {
+  const { t } = useTranslation()
   const stepUp = useStepUp()
   const canManageFlags = useCapability(
     'feature_flags.manage',
@@ -69,7 +71,7 @@ export function SettingsRoute() {
   async function revokeDevice(id: number) {
     if (
       !window.confirm(
-        'Revoke this device? It will be signed out.',
+        t('admin.settings.revokeConfirm'),
       )
     )
       return
@@ -88,7 +90,8 @@ export function SettingsRoute() {
       header: 'Label',
       accessorKey: 'label',
       cell: (i) =>
-        i.row.original.label || '(no label)',
+        i.row.original.label ||
+        t('admin.settings.noLabel'),
     },
     {
       header: 'Fingerprint',
@@ -108,11 +111,11 @@ export function SettingsRoute() {
       cell: (i) =>
         i.row.original.trusted_at ? (
           <StatusPill kind="ok">
-            trusted
+            {t('admin.settings.trusted')}
           </StatusPill>
         ) : (
           <StatusPill kind="warn">
-            pending
+            {t('admin.settings.pending')}
           </StatusPill>
         ),
     },
@@ -135,7 +138,7 @@ export function SettingsRoute() {
             revokeDevice(i.row.original.id)
           }
         >
-          Revoke
+          {t('admin.settings.revoke')}
         </Press>
       ),
     },
@@ -155,9 +158,13 @@ export function SettingsRoute() {
       header: 'Enabled',
       cell: (i) =>
         i.row.original.value?.enabled ? (
-          <StatusPill kind="ok">on</StatusPill>
+          <StatusPill kind="ok">
+            {t('admin.settings.on')}
+          </StatusPill>
         ) : (
-          <StatusPill kind="unknown">off</StatusPill>
+          <StatusPill kind="unknown">
+            {t('admin.settings.off')}
+          </StatusPill>
         ),
     },
     {
@@ -187,7 +194,9 @@ export function SettingsRoute() {
               )
             }
           >
-            {enabled ? 'Disable' : 'Enable'}
+            {enabled
+              ? t('admin.settings.disable')
+              : t('admin.settings.enable')}
           </Press>
         )
       },
@@ -196,20 +205,22 @@ export function SettingsRoute() {
 
   return (
     <div>
-      <h1>Settings</h1>
+      <h1>{t('admin.settings.title')}</h1>
       <section className="admin-card">
-        <h2>Trusted devices</h2>
+        <h2>{t('admin.settings.trustedDevices')}</h2>
         <DataTable
           columns={deviceColumns}
           rows={
             (devices.data?.items ||
               []) as DeviceRow[]
           }
-          emptyHint="No active devices"
+          emptyHint={t(
+            'admin.settings.noDevices',
+          )}
         />
       </section>
       <section className="admin-card">
-        <h2>Feature flags</h2>
+        <h2>{t('admin.settings.featureFlags')}</h2>
         <FeatureFlagCreator
           onCreated={() => flags.refetch()}
           stepUp={stepUp}
@@ -219,7 +230,7 @@ export function SettingsRoute() {
           rows={
             (flags.data?.items || []) as FlagRow[]
           }
-          emptyHint="No flags yet"
+          emptyHint={t('admin.settings.noFlags')}
         />
       </section>
       <BackupsSection />
@@ -228,6 +239,7 @@ export function SettingsRoute() {
 }
 
 function BackupsSection() {
+  const { t } = useTranslation()
   const stepUp = useStepUp()
   const canRun = useCapability('backups.run')
   const canView = useCapability('backups.view')
@@ -236,7 +248,8 @@ function BackupsSection() {
     queryKey: ['admin', 'settings', 'backups'],
     queryFn: () => adminApi.listBackups(),
     enabled: canView,
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
   })
 
   async function handleRun(kind: string) {
@@ -286,12 +299,16 @@ function BackupsSection() {
 
   return (
     <section className="admin-card">
-      <h2>Backups</h2>
+      <h2>{t('admin.settings.backups')}</h2>
       <p className="admin-card__sub">
         root: <code>{list.data?.root || '–'}</code>
         {list.data?.remote_configured
-          ? ' · remote configured'
-          : ' · remote not configured'}
+          ? ` · ${t(
+              'admin.settings.remoteConfigured',
+            )}`
+          : ` · ${t(
+              'admin.settings.remoteNotConfigured',
+            )}`}
       </p>
       {canRun && (
         <div className="admin-toolbar">
@@ -300,14 +317,14 @@ function BackupsSection() {
             disabled={busy}
             onClick={() => handleRun('full')}
           >
-            Run full backup
+            {t('admin.settings.runFull')}
           </Press>
           <Press
             variant="ghost"
             disabled={busy}
             onClick={() => handleRun('pg')}
           >
-            Run PG-only
+            {t('admin.settings.runPg')}
           </Press>
         </div>
       )}

@@ -58,6 +58,12 @@ class AppSettings(BaseSettings):
     artist_image_max_bytes: int = 5 * 1024 * 1024
     artist_enrichment_min_confidence: float = 0.3
 
+    outbound_user_agent: str = (
+        "metadata-fetcher/1.0 "
+        "(+mailto:webmaster@example.invalid)"
+    )
+    outbound_contact_email: str = ""
+
     lyrics_max_audio_mb: int = 50
     lyrics_search_cache_ttl_seconds: int = 7 * 24 * 3600
     lyrics_progress_ttl_seconds: int = 600

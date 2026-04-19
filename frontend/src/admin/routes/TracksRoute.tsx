@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   keepPreviousData,
   useQuery,
@@ -51,6 +52,7 @@ const columns: ColumnDef<TrackRow>[] = [
 ]
 
 export function TracksRoute() {
+  const { t } = useTranslation()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const { data, isFetching } = useQuery({
@@ -70,11 +72,13 @@ export function TracksRoute() {
   )
   return (
     <div>
-      <h1>Tracks</h1>
+      <h1>{t('admin.tracks.title')}</h1>
       <div className="admin-toolbar">
         <input
           type="search"
-          placeholder="Search by title/artist…"
+          placeholder={t(
+            'admin.tracks.searchPlaceholder',
+          )}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value)
@@ -94,10 +98,11 @@ export function TracksRoute() {
             setPage((p) => Math.max(1, p - 1))
           }
         >
-          Prev
+          {t('admin.common.prev')}
         </Press>
         <span>
-          {page} / {totalPages} · {total} total
+          {page} / {totalPages} ·{' '}
+          {t('admin.common.total', { count: total })}
         </span>
         <Press
           variant="ghost"
@@ -106,7 +111,7 @@ export function TracksRoute() {
           }
           onClick={() => setPage((p) => p + 1)}
         >
-          Next
+          {t('admin.common.next')}
         </Press>
       </div>
     </div>

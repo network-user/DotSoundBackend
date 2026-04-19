@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Press } from '@/components/ui/Press'
@@ -49,6 +50,7 @@ const attemptColumns: ColumnDef<AttemptRow>[] = [
 ]
 
 export function SecurityRoute() {
+  const { t } = useTranslation()
   const stepUp = useStepUp()
   const canRelease = useCapability(
     'security.release_lockout',
@@ -68,12 +70,14 @@ export function SecurityRoute() {
         minutes: 240,
         limit: 200,
       }),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
   const locked = useQuery({
     queryKey: ['admin', 'security', 'locked'],
     queryFn: () => adminApi.lockedUsers(),
-    refetchInterval: 5000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 
   async function handleRelease(userId: number) {
@@ -114,7 +118,7 @@ export function SecurityRoute() {
               )
             }
           >
-            Release
+            {t('admin.security.release')}
           </Press>
         ) : null,
     },
@@ -122,19 +126,19 @@ export function SecurityRoute() {
 
   return (
     <div>
-      <h1>Security</h1>
+      <h1>{t('admin.security.title')}</h1>
       <section className="admin-card">
-        <h2>Locked admins</h2>
+        <h2>{t('admin.security.lockedUsers')}</h2>
         <DataTable
           columns={lockedColumns}
           rows={
             (locked.data?.items || []) as LockedRow[]
           }
-          emptyHint="No active lockouts"
+          emptyHint="—"
         />
       </section>
       <section className="admin-card">
-        <h2>Login attempts (last 4h)</h2>
+        <h2>{t('admin.security.attempts')}</h2>
         <div className="admin-toolbar">
           <label className="admin-checkbox">
             <input
@@ -146,7 +150,7 @@ export function SecurityRoute() {
                 )
               }
             />
-            Failed only
+            {t('admin.security.failedOnly')}
           </label>
         </div>
         <DataTable

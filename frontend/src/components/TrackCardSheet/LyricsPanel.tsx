@@ -5,6 +5,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
+import { getIsAdmin } from '@/lib/telegram'
 import { usePlayer } from '@/store/PlayerContext'
 import { useLyricsTask } from '@/store/lyricsTaskStore'
 import { Icon } from '@/components/Icon/Icon'
@@ -57,6 +58,16 @@ export function LyricsPanel({
   const activeRef = useRef<HTMLDivElement>(null)
   const [devOpen, setDevOpen] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
+  const [
+    lastRequestMeta,
+    setLastRequestMeta,
+  ] = useState<{
+    mode: 'auto' | 'debug' | 'redefine'
+    withSync: boolean
+    debugTier: number | null
+    bypassCache: boolean
+  } | null>(null)
+  const isAdmin = getIsAdmin()
 
   const {
     generating,
@@ -70,6 +81,7 @@ export function LyricsPanel({
     clearDebugLog,
     cancelGeneration,
     resumeTask,
+    appendDebugLog,
   } = useLyricsTask(trackId)
 
   useEffect(() => {
@@ -95,6 +107,9 @@ export function LyricsPanel({
         .getLyrics(trackId)
         .then((updated) => {
           console.debug('[LyricsPanel] lyrics loaded', { chars: updated.plain_text?.length })
+          appendDebugLog(
+            `[client] lyrics loaded chars=${updated.plain_text?.length ?? 0} synced=${updated.synced_lines?.length ?? 0}`,
+          )
           setLyrics(updated)
         })
         .catch((err) => {
@@ -102,10 +117,24 @@ export function LyricsPanel({
             '[LyricsPanel] Failed to load lyrics after detection:',
             err,
           )
+          const msg =
+            err instanceof Error
+              ? err.message
+              : 'load failed'
+          appendDebugLog(
+            `[client] ERROR loading lyrics after detection: ${msg}`,
+          )
           clearTask()
         })
     }
-  }, [genStatus, trackId, lyrics])
+  }, [
+    appendDebugLog,
+    clearTask,
+    editing,
+    genStatus,
+    trackId,
+    lyrics,
+  ])
 
   useEffect(() => {
     if (!hasLyrics) return
@@ -171,8 +200,18 @@ export function LyricsPanel({
     withSync?: boolean,
     debugTier?: number,
   ) => {
+    const requestMeta = {
+      mode: debugTier ? 'debug' : 'auto',
+      withSync: Boolean(withSync),
+      debugTier: debugTier ?? null,
+      bypassCache: false,
+    } as const
+    setLastRequestMeta(requestMeta)
     try {
       await startGeneration(withSync, debugTier)
+      appendDebugLog(
+        `[client] request accepted mode=${requestMeta.mode} with_sync=${requestMeta.withSync} debug_stage=${requestMeta.debugTier ?? '-'}`,
+      )
     } catch {
       // Важно: не блокируем UI. Если авто-определение не стартовало
       // (например, 422/валидация), пользователь должен иметь возможность
@@ -201,12 +240,29 @@ export function LyricsPanel({
     }
   }
 
-  const handleRedefine = async (withSync: boolean = false) => {
+  const handleRedefine = async (
+    withSync: boolean = false,
+    bypassCache: boolean = false,
+  ) => {
+    const requestMeta = {
+      mode: 'redefine',
+      withSync,
+      debugTier: null,
+      bypassCache,
+    } as const
+    setLastRequestMeta(requestMeta)
     try {
       setLyricsChoiceStep('root')
-      const { task_id } = await api.redefineLyrics(trackId, withSync)
+      const { task_id } = await api.redefineLyrics(
+        trackId,
+        withSync,
+        bypassCache,
+      )
       setLyrics(null)
-      resumeTask(task_id)
+      resumeTask(task_id, { withSync, bypassCache })
+      appendDebugLog(
+        `[client] redefine queued with_sync=${withSync} bypass_cache=${bypassCache} admin=${isAdmin}`,
+      )
     } catch {
       setLyricsChoiceStep('root')
     }
@@ -222,6 +278,9 @@ export function LyricsPanel({
   const elapsed = startedAt
     ? ((Date.now() - startedAt) / 1000).toFixed(1)
     : '0'
+  const lastRequestLabel = lastRequestMeta
+    ? `mode=${lastRequestMeta.mode} | with_sync=${lastRequestMeta.withSync} | debug_stage=${lastRequestMeta.debugTier ?? '-'} | bypass_cache=${lastRequestMeta.bypassCache}`
+    : '-'
 
   if (editing) {
     return (
@@ -461,6 +520,12 @@ export function LyricsPanel({
               elapsed: {elapsed}s
               {' | '}
               stage: {stage ?? '-'}
+              {' | '}
+              status: {genStatus ?? '-'}
+              {' | '}
+              role: {isAdmin ? 'admin' : 'owner'}
+              {' | '}
+              {lastRequestLabel}
             </div>
             <div
               style={{
@@ -716,6 +781,64 @@ export function LyricsPanel({
                 </span>
               </div>
             </button>
+
+            {isAdmin && (
+              <>
+                <div
+                  style={{
+                    gridColumn: '1 / -1',
+                    fontSize: 12,
+                    color: 'rgba(255,255,255,0.5)',
+                    marginTop: 12,
+                    marginBottom: 4,
+                  }}
+                >
+                  Админ-режим (обход кеша):
+                </div>
+
+                <button
+                  className="lyrics-choice-btn"
+                  onClick={() =>
+                    handleRedefine(false, true)
+                  }
+                >
+                  <Icon name="settings" size={22} />
+                  <div>
+                    <span className="lyrics-choice-label">
+                      Админ: без кеша (текст)
+                    </span>
+                    <span className="lyrics-choice-hint">
+                      Прямой запрос bypass_cache=true
+                    </span>
+                  </div>
+                </button>
+
+                <button
+                  className="lyrics-choice-btn"
+                  onClick={() =>
+                    handleRedefine(true, true)
+                  }
+                  disabled={!hasAudio}
+                  style={
+                    !hasAudio
+                      ? { opacity: 0.5, cursor: 'not-allowed' }
+                      : undefined
+                  }
+                >
+                  <Icon name="settings" size={22} />
+                  <div>
+                    <span className="lyrics-choice-label">
+                      Админ: без кеша + таймкоды
+                    </span>
+                    <span className="lyrics-choice-hint">
+                      {!hasAudio
+                        ? 'Требуется аудиофайл'
+                        : 'С принудительным bypass_cache'}
+                    </span>
+                  </div>
+                </button>
+              </>
+            )}
 
             <button
               className="btn-secondary"

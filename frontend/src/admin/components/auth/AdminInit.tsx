@@ -3,6 +3,7 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import QRCode from 'qrcode'
 import { Press } from '@/components/ui/Press'
 import { adminApi } from '../../lib/adminApi'
@@ -11,6 +12,7 @@ import { useAdminAuth } from '../../store/adminAuthStore'
 import { TotpInput } from './TotpInput'
 
 export function AdminInit() {
+  const { t } = useTranslation()
   const setSession = useAdminAuth(
     (s) => s.setSession,
   )
@@ -62,9 +64,9 @@ export function AdminInit() {
   const heading = useMemo(
     () =>
       backupCodes
-        ? 'Backup codes'
-        : 'Set up admin authenticator',
-    [backupCodes],
+        ? t('admin.init.backupCodes')
+        : t('admin.init.title'),
+    [backupCodes, t],
   )
 
   async function handleConfirm() {
@@ -100,8 +102,7 @@ export function AdminInit() {
       <div className="admin-auth-card">
         <h2>{heading}</h2>
         <p className="admin-auth-hint">
-          Save these one-time recovery codes
-          somewhere safe. They are shown only once.
+          {t('admin.init.backupCodesHint')}
         </p>
         <ul className="admin-backup-codes">
           {backupCodes.map((code) => (
@@ -116,7 +117,7 @@ export function AdminInit() {
             window.location.href = '/admin'
           }}
         >
-          Continue to dashboard
+          {t('admin.init.continue')}
         </Press>
       </div>
     )
@@ -126,9 +127,7 @@ export function AdminInit() {
     <div className="admin-auth-card">
       <h2>{heading}</h2>
       <p className="admin-auth-hint">
-        Scan the QR with Google Authenticator,
-        Authy, 1Password or Bitwarden, then enter
-        the 6-digit code to confirm.
+        {t('admin.init.hint')}
       </p>
       {qrDataUrl ? (
         <img
@@ -146,7 +145,9 @@ export function AdminInit() {
         className="admin-auth-toggle"
         onClick={() => setShowSecret((v) => !v)}
       >
-        {showSecret ? 'Hide secret' : 'Show secret'}
+        {showSecret
+          ? t('admin.init.hideSecret')
+          : t('admin.init.showSecret')}
       </button>
       {showSecret && secret && (
         <code className="admin-auth-secret">
@@ -154,14 +155,16 @@ export function AdminInit() {
         </code>
       )}
       <label className="admin-auth-label">
-        Device label
+        {t('admin.init.deviceLabel')}
         <input
           type="text"
           value={label}
           onChange={(e) =>
             setLabel(e.target.value)
           }
-          placeholder="e.g. macbook-work"
+          placeholder={t(
+            'admin.init.deviceLabelPlaceholder',
+          )}
           maxLength={64}
         />
       </label>
@@ -182,7 +185,9 @@ export function AdminInit() {
         onClick={handleConfirm}
         disabled={busy || code.length < 6}
       >
-        {busy ? 'Confirming…' : 'Confirm'}
+        {busy
+          ? t('admin.auth.confirming')
+          : t('admin.auth.confirm')}
       </Press>
     </div>
   )

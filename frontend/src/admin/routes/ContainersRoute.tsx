@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { adminApi } from '../lib/adminApi'
 import { StatusPill } from '../components/widgets/StatusPill'
@@ -98,6 +99,7 @@ const columns: ColumnDef<ContainerRow>[] = [
 ]
 
 export function ContainersRoute() {
+  const { t } = useTranslation()
   const { data, isLoading, error, refetch } =
     useQuery({
       queryKey: [
@@ -106,10 +108,12 @@ export function ContainersRoute() {
         'detail',
       ],
       queryFn: () => adminApi.containers(),
-      refetchInterval: 5000,
+      refetchInterval: 30_000,
+      refetchIntervalInBackground: false,
     })
 
-  if (isLoading) return <div>Loading…</div>
+  if (isLoading)
+    return <div>{t('admin.common.loading')}</div>
   if (error)
     return (
       <div className="admin-error">
@@ -119,14 +123,18 @@ export function ContainersRoute() {
 
   return (
     <div>
-      <h1>Containers</h1>
+      <h1>{t('admin.containers.title')}</h1>
       <p className="admin-card__sub">
-        {data?.total || 0} containers ·{' '}
+        {t(
+          'admin.dashboard.containers.tracked',
+          { count: data?.total || 0 },
+        )}{' '}
+        ·{' '}
         <button
           className="admin-link"
           onClick={() => refetch()}
         >
-          refresh
+          {t('admin.logs.refresh')}
         </button>
       </p>
       <DataTable
@@ -134,7 +142,7 @@ export function ContainersRoute() {
         rows={
           (data?.containers || []) as ContainerRow[]
         }
-        emptyHint="No containers reachable"
+        emptyHint="—"
       />
     </div>
   )

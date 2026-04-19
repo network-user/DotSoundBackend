@@ -99,6 +99,190 @@
       "techDetails": "Technical details"
     }
   },
+  "admin": {
+    "shell": {
+      "title": "Admin Panel",
+      "brandTag": "admin",
+      "signOut": "Sign out"
+    },
+    "auth": {
+      "checking": "Checking session…",
+      "adminOnly": "Admin only",
+      "adminOnlyHint": "This area is for accounts with the admin flag. Sign in to your account first, then return here.",
+      "sessionExpired": "Session expired, please sign in again",
+      "signInTitle": "Admin sign-in",
+      "signInHint": "Open your authenticator app and enter the current 6-digit code for DotSound.",
+      "signingIn": "Signing in…",
+      "signIn": "Sign in",
+      "confirm": "Confirm",
+      "confirming": "Confirming…"
+    },
+    "init": {
+      "title": "Set up admin authenticator",
+      "hint": "Scan the QR with Google Authenticator, Authy, 1Password or Bitwarden, then enter the 6-digit code to confirm.",
+      "showSecret": "Show secret",
+      "hideSecret": "Hide secret",
+      "deviceLabel": "Device label",
+      "deviceLabelPlaceholder": "e.g. macbook-work",
+      "backupCodes": "Backup codes",
+      "backupCodesHint": "Save these one-time recovery codes somewhere safe. They are shown only once.",
+      "continue": "Continue to dashboard"
+    },
+    "device": {
+      "title": "Approve new device",
+      "hint": "We sent a confirmation code to your email and an alert to the bound Telegram account. Enter both codes to trust this device.",
+      "emailCode": "Email code",
+      "totpLabel": "Authenticator code",
+      "deviceLabel": "Device label",
+      "deviceLabelPlaceholder": "e.g. desktop-firefox",
+      "approve": "Approve device",
+      "approving": "Approving…",
+      "noPending": "No pending device."
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "loading": "Loading dashboard…",
+      "loadFailed": "Failed",
+      "kpi": {
+        "onlineNow": "Online now",
+        "activeAccounts": "{{count}} active accounts",
+        "usersTotal": "Users (total)",
+        "newIn24h": "{{count}} new in 24h",
+        "tracks": "Tracks",
+        "storage": "Storage",
+        "openComplaints": "Open complaints",
+        "activeJobs": "Active jobs",
+        "noFailures": "no failures",
+        "failedIn1h": "{{count}} failed (1h)"
+      },
+      "containers": {
+        "title": "Containers",
+        "tracked": "{{count}} containers tracked",
+        "healthy": "healthy {{count}}",
+        "warning": "warning {{count}}",
+        "error": "error {{count}}",
+        "unknown": "unknown {{count}}"
+      }
+    },
+    "users": {
+      "title": "Users",
+      "searchPlaceholder": "Search by name/email…",
+      "filterAll": "All",
+      "filterActive": "Active",
+      "filterBanned": "Banned",
+      "active": "active",
+      "banned": "banned",
+      "admin": "admin"
+    },
+    "tracks": {
+      "title": "Tracks",
+      "searchPlaceholder": "Search by title/artist…",
+      "visible": "visible",
+      "hidden": "hidden"
+    },
+    "complaints": {
+      "title": "Complaints",
+      "unresolvedOnly": "Unresolved only",
+      "resolved": "resolved",
+      "open": "open"
+    },
+    "artists": {
+      "title": "Artists",
+      "searchPlaceholder": "Search by name…",
+      "enrich": "Enrich",
+      "enriching": "Enriching…",
+      "empty": "No artists yet",
+      "noEnrichment": "none"
+    },
+    "audioCompute": {
+      "title": "Compute",
+      "routingMode": "Routing mode",
+      "workers": "Workers",
+      "jobs": "Jobs",
+      "audit": "Audit",
+      "active": "active",
+      "inactive": "inactive"
+    },
+    "tasks": {
+      "title": "Tasks",
+      "queues": "Queues",
+      "lyricsJobs": "Lyrics jobs (last 50)"
+    },
+    "logs": {
+      "title": "Logs",
+      "switchHistory": "Switch to history search",
+      "switchLive": "Switch to live tail",
+      "containerPlaceholder": "container",
+      "anyLevel": "any level",
+      "containsPlaceholder": "contains…",
+      "refresh": "Refresh",
+      "pause": "Pause",
+      "resume": "Resume",
+      "empty": "No log entries"
+    },
+    "metrics": {
+      "title": "Metrics",
+      "available": "{{count}} metrics available",
+      "rps": "RPS (5m rate)",
+      "errorRate": "Error rate (5xx, 5m rate)",
+      "latency": "Latency p95"
+    },
+    "containers": {
+      "title": "Containers"
+    },
+    "audit": {
+      "title": "Audit log",
+      "actionPlaceholder": "action filter",
+      "userPlaceholder": "user_id",
+      "export": "Export CSV"
+    },
+    "security": {
+      "title": "Security",
+      "failedOnly": "Failed only",
+      "attempts": "Login attempts",
+      "lockedUsers": "Locked users",
+      "release": "Release",
+      "success": "success",
+      "fail": "fail"
+    },
+    "settings": {
+      "title": "Settings",
+      "trustedDevices": "Trusted devices",
+      "noDevices": "No active devices",
+      "featureFlags": "Feature flags",
+      "noFlags": "No flags yet",
+      "trusted": "trusted",
+      "pending": "pending",
+      "noLabel": "(no label)",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoke this device? It will be signed out.",
+      "on": "on",
+      "off": "off",
+      "enable": "Enable",
+      "disable": "Disable",
+      "backups": "Backups",
+      "remoteConfigured": "remote configured",
+      "remoteNotConfigured": "remote not configured",
+      "runFull": "Run full backup",
+      "runPg": "Run PG-only"
+    },
+    "common": {
+      "prev": "Prev",
+      "next": "Next",
+      "total": "{{count}} total",
+      "loading": "Loading…",
+      "save": "Save",
+      "cancel": "Cancel",
+      "confirm": "Confirm",
+      "retry": "Retry"
+    },
+    "status": {
+      "ok": "ok",
+      "warn": "warning",
+      "error": "error",
+      "unknown": "unknown"
+    }
+  },
   "artist": {
     "performer": "Artist",
     "age_one": "{{count}} year",
@@ -120,6 +304,12 @@
     "debug_stage": "Stage",
     "debug_run": "Run with logs",
     "debug_running": "Running…",
-    "debug_empty": "Press \"Run with logs\" to see pipeline stages"
+    "debug_empty": "Press \"Run with logs\" to see pipeline stages",
+    "discography_title": "Discography",
+    "sources_label": "Data source",
+    "source_open": "Open source",
+    "source_attribution": "Source",
+    "avatar_open": "Open photo",
+    "avatar_close": "Close photo"
   }
 }

@@ -1,25 +1,108 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { ArtistAvatarViewer } from '@/components/ArtistView/ArtistAvatarViewer'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { api } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
-import type { ArtistDetail, Track } from '@/types/api'
+import type {
+  ArtistDetail,
+  ArtistSourceProfile,
+  DiscographyItem,
+  Track,
+} from '@/types/api'
 
 interface Props {
   artistId: number
   onClose: () => void
 }
 
-function hasAnyInfo(artist: ArtistDetail): boolean {
+interface ArtistViewData {
+  source_id: string | null
+  source_name: string | null
+  source_page_url: string | null
+  bio: string | null
+  birth_date: string | null
+  birthplace: string | null
+  country: string | null
+  image_url: string | null
+  website_url: string | null
+  discography: DiscographyItem[]
+}
+
+function hasAnyInfo(view: ArtistViewData): boolean {
   return Boolean(
-    artist.bio ||
-      artist.birth_date ||
-      artist.birthplace ||
-      artist.country ||
-      artist.website_url,
+    view.bio ||
+      view.birth_date ||
+      view.birthplace ||
+      view.country ||
+      view.website_url ||
+      view.discography.length > 0,
   )
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === 'string' && value
+    ? value
+    : null
+}
+
+function buildMergedView(
+  artist: ArtistDetail,
+): ArtistViewData {
+  return {
+    source_id: artist.primary_source_id ?? null,
+    source_name: null,
+    source_page_url: null,
+    bio: artist.bio,
+    birth_date: artist.birth_date,
+    birthplace: artist.birthplace,
+    country: artist.country,
+    image_url: artist.image_url,
+    website_url: artist.website_url,
+    discography: Array.isArray(artist.discography)
+      ? (artist.discography as DiscographyItem[])
+      : [],
+  }
+}
+
+function buildProfileView(
+  profile: ArtistSourceProfile,
+  fallbackImage: string | null,
+): ArtistViewData {
+  return {
+    source_id: profile.source_id,
+    source_name: profile.source_name,
+    source_page_url: profile.source_page_url ?? null,
+    bio: asString(profile.bio),
+    birth_date: asString(profile.birth_date),
+    birthplace: asString(profile.birthplace),
+    country: asString(profile.country),
+    image_url:
+      asString(profile.image_url) || fallbackImage,
+    website_url: asString(profile.website_url),
+    discography: Array.isArray(profile.discography)
+      ? profile.discography
+      : [],
+  }
+}
+
+function computeAge(iso: string | null): number | null {
+  if (!iso) return null
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return null
+  const year = Number(m[1])
+  const month = Number(m[2])
+  const day = Number(m[3])
+  const now = new Date()
+  let age = now.getUTCFullYear() - year
+  const beforeBirthday =
+    now.getUTCMonth() + 1 < month ||
+    (now.getUTCMonth() + 1 === month &&
+      now.getUTCDate() < day)
+  if (beforeBirthday) age -= 1
+  return age >= 0 ? age : null
 }
 
 function cleanWikiText(s: string | null): string | null {
@@ -70,6 +153,9 @@ export function ArtistView({
   const [debugTaskId, setDebugTaskId] =
     useState<string | null>(null)
   const [elapsed, setElapsed] = useState(0)
+  const [selectedSourceId, setSelectedSourceId] =
+    useState<string | null>(null)
+  const [avatarOpen, setAvatarOpen] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
   const isAdmin = getIsAdmin()
 
@@ -96,6 +182,8 @@ export function ArtistView({
     setArtist(null)
     setTracks(null)
     setBioOpen(false)
+    setSelectedSourceId(null)
+    setAvatarOpen(false)
 
     api
       .getArtist(artistId)
@@ -186,7 +274,45 @@ export function ArtistView({
     setDebugRunning(false)
   }
 
-  if (!artist) {
+  const profiles = useMemo<ArtistSourceProfile[]>(
+    () =>
+      artist?.source_profiles?.filter(
+        (p): p is ArtistSourceProfile =>
+          Boolean(p && p.source_id && p.source_name),
+      ) ?? [],
+    [artist],
+  )
+
+  const view = useMemo<ArtistViewData | null>(() => {
+    if (!artist) return null
+    if (selectedSourceId) {
+      const found = profiles.find(
+        (p) => p.source_id === selectedSourceId,
+      )
+      if (found) {
+        return buildProfileView(
+          found,
+          artist.image_url,
+        )
+      }
+    }
+    return buildMergedView(artist)
+  }, [artist, profiles, selectedSourceId])
+
+  const primaryProfile = useMemo<
+    ArtistSourceProfile | null
+  >(() => {
+    if (!profiles.length) return null
+    if (artist?.primary_source_id) {
+      const exact = profiles.find(
+        (p) => p.source_id === artist.primary_source_id,
+      )
+      if (exact) return exact
+    }
+    return profiles[0]
+  }, [artist?.primary_source_id, profiles])
+
+  if (!artist || !view) {
     return (
       <div className="author-view">
         <div className="author-view-header">
@@ -216,22 +342,27 @@ export function ArtistView({
     )
   }
 
+  const computedAge =
+    selectedSourceId === null
+      ? artist.age
+      : view.birth_date
+        ? computeAge(view.birth_date)
+        : null
+
   const metaParts: string[] = []
-  if (artist.age !== null && artist.age !== undefined) {
-    metaParts.push(t('artist.age', { count: artist.age }))
+  if (computedAge !== null && computedAge !== undefined) {
+    metaParts.push(t('artist.age', { count: computedAge }))
   }
-  const cleanBirthplace = cleanWikiText(
-    artist.birthplace,
-  )
+  const cleanBirthplace = cleanWikiText(view.birthplace)
   if (cleanBirthplace) {
     metaParts.push(cleanBirthplace)
-  } else if (artist.country) {
-    metaParts.push(artist.country)
+  } else if (view.country) {
+    metaParts.push(view.country)
   }
   if (metaParts.length === 0) {
     metaParts.push(t('artist.performer'))
   }
-  const infoKnown = hasAnyInfo(artist)
+  const infoKnown = hasAnyInfo(view)
   const showPending =
     !infoKnown &&
     (artist.enrichment_status === 'pending' ||
@@ -245,6 +376,15 @@ export function ArtistView({
 
   const progressPct =
     stageProgress[debugStage ?? ''] ?? 5
+  const avatarSrc = view.image_url || artist.image_url
+  const sourceName =
+    view.source_name ??
+    primaryProfile?.source_name ??
+    null
+  const sourcePageUrl =
+    view.source_page_url ??
+    primaryProfile?.source_page_url ??
+    null
 
   return (
     <div className="author-view">
@@ -261,16 +401,22 @@ export function ArtistView({
       </div>
 
       <div className="author-hero">
-        <div className="profile-avatar">
-          {artist.image_url ? (
-            <img
-              src={artist.image_url}
-              alt={artist.name}
-            />
-          ) : (
-            artist.name.charAt(0).toUpperCase()
-          )}
-        </div>
+        {avatarSrc ? (
+          <button
+            type="button"
+            className="artist-avatar-button"
+            onClick={() => setAvatarOpen(true)}
+            aria-label={t('artist.avatar_open')}
+          >
+            <div className="profile-avatar">
+              <img src={avatarSrc} alt={artist.name} />
+            </div>
+          </button>
+        ) : (
+          <div className="profile-avatar">
+            {artist.name.charAt(0).toUpperCase()}
+          </div>
+        )}
         <div className="author-name">
           {artist.name}
         </div>
@@ -280,6 +426,67 @@ export function ArtistView({
         >
           {metaParts.join(' • ')}
         </p>
+
+        {profiles.length > 0 && (
+          <div
+            className="artist-source-switcher"
+            role="tablist"
+            aria-label={t('artist.sources_label')}
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedSourceId === null}
+              className={
+                selectedSourceId === null
+                  ? 'artist-source-chip active'
+                  : 'artist-source-chip'
+              }
+              onClick={() =>
+                setSelectedSourceId(null)
+              }
+            >
+              {t('artist.bio_title')}
+            </button>
+            {profiles.map((p) => (
+              <button
+                key={p.source_id}
+                type="button"
+                role="tab"
+                aria-selected={
+                  selectedSourceId === p.source_id
+                }
+                className={
+                  selectedSourceId === p.source_id
+                    ? 'artist-source-chip active'
+                    : 'artist-source-chip'
+                }
+                onClick={() =>
+                  setSelectedSourceId(p.source_id)
+                }
+              >
+                {p.source_name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {sourceName && (
+          <div className="artist-source-attribution">
+            {t('artist.source_attribution')}:{' '}
+            {sourcePageUrl ? (
+              <a
+                href={sourcePageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {sourceName}
+              </a>
+            ) : (
+              sourceName
+            )}
+          </div>
+        )}
 
         {isAdmin && (
           <div
@@ -542,7 +749,7 @@ export function ArtistView({
         )}
       </div>
 
-      {artist.bio && (
+      {view.bio && (
         <div className="artist-bio-section">
           <button
             className="section-header artist-bio-toggle"
@@ -562,7 +769,7 @@ export function ArtistView({
                 : 'artist-bio-text artist-bio-collapsed'
             }
           >
-            {artist.bio}
+            {view.bio}
           </div>
           {!bioOpen && (
             <button
@@ -583,14 +790,13 @@ export function ArtistView({
         </div>
       )}
 
-      {(artist.birth_date ||
+      {(view.birth_date ||
         cleanBirthplace ||
-        artist.website_url) && (
+        view.website_url) && (
         <div className="artist-meta-row">
-          {artist.birth_date && (
+          {view.birth_date && (
             <span>
-              {t('artist.born')}:{' '}
-              {artist.birth_date}
+              {t('artist.born')}: {view.birth_date}
             </span>
           )}
           {cleanBirthplace && (
@@ -599,9 +805,9 @@ export function ArtistView({
               {cleanBirthplace}
             </span>
           )}
-          {artist.website_url && (
+          {view.website_url && (
             <a
-              href={artist.website_url}
+              href={view.website_url}
               target="_blank"
               rel="noopener noreferrer"
               className="artist-website-link"
@@ -624,42 +830,47 @@ export function ArtistView({
         </div>
       )}
 
-      {/* Discography from external sources */}
-      {artist.discography &&
-        artist.discography.length > 0 && (
-          <div className="artist-discography">
-            <div className="section-header">
-              <span className="section-title">
-                {t('artist.discography_title', {
-                  defaultValue: 'Дискография',
-                })}{' '}
-                ({artist.discography.length})
-              </span>
-            </div>
-            {artist.discography.map(
-              (item, i) => (
-                <div
-                  key={i}
-                  className="discography-item"
-                >
-                  <span className="discography-title">
-                    {item.title}
-                  </span>
-                  {item.year && (
-                    <span className="discography-year">
-                      {item.year}
-                    </span>
-                  )}
-                  {item.type && (
-                    <span className="discography-type">
-                      {item.type}
-                    </span>
-                  )}
-                </div>
-              ),
-            )}
+      {view.discography.length > 0 && (
+        <div className="artist-discography">
+          <div className="section-header">
+            <span className="section-title">
+              {t('artist.discography_title')}{' '}
+              ({view.discography.length})
+            </span>
           </div>
-        )}
+          {view.discography.map((item, i) => (
+            <div
+              key={`${item.title}-${i}`}
+              className="discography-item"
+            >
+              {item.url ? (
+                <a
+                  className="discography-title"
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {item.title}
+                </a>
+              ) : (
+                <span className="discography-title">
+                  {item.title}
+                </span>
+              )}
+              {item.year && (
+                <span className="discography-year">
+                  {item.year}
+                </span>
+              )}
+              {item.type && (
+                <span className="discography-type">
+                  {item.type}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Platform tracks */}
       <div className="section-header">
@@ -675,6 +886,14 @@ export function ArtistView({
         tracks={tracks}
         emptyMessage={t('artist.tracks_empty')}
       />
+
+      {avatarOpen && avatarSrc && (
+        <ArtistAvatarViewer
+          src={avatarSrc}
+          alt={artist.name}
+          onClose={() => setAvatarOpen(false)}
+        />
+      )}
     </div>
   )
 }

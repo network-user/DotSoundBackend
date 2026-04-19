@@ -16,6 +16,7 @@ from app.schemas.artist import (
     ArtistListResponse,
     ArtistResolveResponse,
     ArtistResponse,
+    ArtistSourceProfileResponse,
 )
 from app.schemas.track import (
     TrackListResponse,
@@ -79,6 +80,10 @@ async def _build_artist_detail(
                 artist_id=artist_id,
             )
 
+    source_profiles = _build_source_profiles(
+        artist.source_profiles
+    )
+
     return ArtistDetailResponse(
         id=artist.id,
         name=artist.name,
@@ -96,7 +101,32 @@ async def _build_artist_detail(
         track_count=len(track_ids),
         age=_compute_age(artist.birth_date),
         discography=artist.discography,
+        source_profiles=source_profiles,
+        primary_source_id=artist.primary_source_id,
     )
+
+
+def _build_source_profiles(
+    raw: object,
+) -> list[ArtistSourceProfileResponse] | None:
+    if not isinstance(raw, list):
+        return None
+    out: list[ArtistSourceProfileResponse] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            out.append(
+                ArtistSourceProfileResponse.model_validate(
+                    entry
+                )
+            )
+        except Exception:
+            logger.info(
+                "artist_source_profile_skipped",
+                payload=entry,
+            )
+    return out or None
 
 
 @router.get("", response_model=ArtistListResponse)
