@@ -45,9 +45,7 @@ async def container_overview(
 
 @router.get("/timeseries")
 async def timeseries(
-    metric: str = Query(
-        ..., min_length=2, max_length=64
-    ),
+    metric: str = Query(..., min_length=2, max_length=64),
     minutes: int = Query(60, ge=1, le=10_080),
     step_seconds: int = Query(30, ge=5, le=3600),
     _admin: User = Depends(require_admin_session),
@@ -73,9 +71,7 @@ async def timeseries(
             step_seconds=step_seconds,
         )
     except PrometheusServiceError as exc:
-        raise HTTPException(
-            status_code=400, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/metrics-allowlist")

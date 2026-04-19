@@ -6,6 +6,7 @@ import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 import { useStepUp } from '../components/auth/StepUpDialog'
+import { useCapability } from '../hooks/useCapability'
 
 interface DeviceRow {
   id: number
@@ -26,6 +27,9 @@ interface FlagRow {
 
 export function SettingsRoute() {
   const stepUp = useStepUp()
+  const canManageFlags = useCapability(
+    'feature_flags.manage',
+  )
   const devices = useQuery({
     queryKey: ['admin', 'settings', 'devices'],
     queryFn: () => adminApi.listDevices(),
@@ -167,6 +171,7 @@ export function SettingsRoute() {
       header: '',
       id: 'actions',
       cell: (i) => {
+        if (!canManageFlags) return null
         const enabled = !!i.row.original.value
           ?.enabled
         return (
@@ -217,7 +222,130 @@ export function SettingsRoute() {
           emptyHint="No flags yet"
         />
       </section>
+      <BackupsSection />
     </div>
+  )
+}
+
+function BackupsSection() {
+  const stepUp = useStepUp()
+  const canRun = useCapability('backups.run')
+  const canView = useCapability('backups.view')
+  const [busy, setBusy] = useState(false)
+  const list = useQuery({
+    queryKey: ['admin', 'settings', 'backups'],
+    queryFn: () => adminApi.listBackups(),
+    enabled: canView,
+    refetchInterval: 30_000,
+  })
+
+  async function handleRun(kind: string) {
+    const ok = await stepUp.request(
+      'system.backups.run',
+    )
+    if (!ok) return
+    setBusy(true)
+    try {
+      const out = await adminApi.runBackup(kind)
+      alert(
+        `Backup queued: task ${out.task_id || '?'}`,
+      )
+      list.refetch()
+    } catch (err) {
+      alert((err as Error).message || 'failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!canView) return null
+
+  const sections: Array<[
+    string,
+    Array<Record<string, unknown>>,
+  ]> = [
+    [
+      'Daily',
+      (list.data?.daily as Array<
+        Record<string, unknown>
+      >) || [],
+    ],
+    [
+      'Weekly',
+      (list.data?.weekly as Array<
+        Record<string, unknown>
+      >) || [],
+    ],
+    [
+      'Monthly',
+      (list.data?.monthly as Array<
+        Record<string, unknown>
+      >) || [],
+    ],
+  ]
+
+  return (
+    <section className="admin-card">
+      <h2>Backups</h2>
+      <p className="admin-card__sub">
+        root: <code>{list.data?.root || '–'}</code>
+        {list.data?.remote_configured
+          ? ' · remote configured'
+          : ' · remote not configured'}
+      </p>
+      {canRun && (
+        <div className="admin-toolbar">
+          <Press
+            variant="ghost"
+            disabled={busy}
+            onClick={() => handleRun('full')}
+          >
+            Run full backup
+          </Press>
+          <Press
+            variant="ghost"
+            disabled={busy}
+            onClick={() => handleRun('pg')}
+          >
+            Run PG-only
+          </Press>
+        </div>
+      )}
+      {sections.map(([label, items]) => (
+        <div key={label}>
+          <h3 className="admin-card__sub">
+            {label} ({items.length})
+          </h3>
+          <DataTable
+            columns={[
+              {
+                header: 'Name',
+                accessorKey: 'name',
+                cell: (i) => (
+                  <span className="admin-mono">
+                    {i.getValue<string>()}
+                  </span>
+                ),
+              },
+              {
+                header: 'Size',
+                accessorKey: 'size_human',
+              },
+              {
+                header: 'Modified',
+                cell: (i) =>
+                  new Date(
+                    i.row.original
+                      .modified_at as string,
+                  ).toLocaleString(),
+              },
+            ]}
+            rows={items as never[]}
+            emptyHint="—"
+          />
+        </div>
+      ))}
+    </section>
   )
 }
 

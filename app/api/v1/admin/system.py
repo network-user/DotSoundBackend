@@ -125,9 +125,7 @@ async def known_capabilities(
 
 @router.get("/backups")
 async def backups(
-    _admin: User = Depends(
-        require_capability("backups.view")
-    ),
+    _admin: User = Depends(require_capability("backups.view")),
 ) -> dict[str, Any]:
     return await list_backups()
 
@@ -140,9 +138,7 @@ async def run_backup(
         min_length=2,
         max_length=16,
     ),
-    _admin: User = Depends(
-        require_step_up("system.backups.run")
-    ),
+    _admin: User = Depends(require_step_up("system.backups.run")),
 ) -> dict[str, Any]:
     if kind not in ALLOWED_KINDS:
         raise HTTPException(
@@ -152,9 +148,7 @@ async def run_backup(
     try:
         result = await enqueue_backup(kind=kind)
     except Exception as exc:
-        raise HTTPException(
-            status_code=500, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     logger.info(
         "admin_backup_run_requested",
         kind=kind,

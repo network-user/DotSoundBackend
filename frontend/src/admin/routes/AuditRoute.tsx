@@ -8,6 +8,7 @@ import { Press } from '@/components/ui/Press'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { JsonViewer } from '../components/widgets/JsonViewer'
+import { useCapability } from '../hooks/useCapability'
 
 interface AuditRow {
   id: number
@@ -61,6 +62,7 @@ const columns: ColumnDef<AuditRow>[] = [
 ]
 
 export function AuditRoute() {
+  const canExport = useCapability('audit.export')
   const [page, setPage] = useState(1)
   const [action, setAction] = useState('')
   const [userId, setUserId] = useState('')
@@ -113,14 +115,16 @@ export function AuditRoute() {
             setPage(1)
           }}
         />
-        <a
-          className="admin-link"
-          href="/api/v1/admin/audit/export.csv"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Export CSV (step-up required)
-        </a>
+        {canExport && (
+          <a
+            className="admin-link"
+            href="/api/v1/admin/audit/export.csv"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Export CSV (step-up required)
+          </a>
+        )}
       </div>
       <DataTable
         columns={columns}

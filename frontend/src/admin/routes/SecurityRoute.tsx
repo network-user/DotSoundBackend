@@ -6,6 +6,7 @@ import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 import { useStepUp } from '../components/auth/StepUpDialog'
+import { useCapability } from '../hooks/useCapability'
 
 interface AttemptRow {
   id: number
@@ -49,6 +50,9 @@ const attemptColumns: ColumnDef<AttemptRow>[] = [
 
 export function SecurityRoute() {
   const stepUp = useStepUp()
+  const canRelease = useCapability(
+    'security.release_lockout',
+  )
   const [failedOnly, setFailedOnly] =
     useState(true)
   const attempts = useQuery({
@@ -100,18 +104,19 @@ export function SecurityRoute() {
     {
       header: '',
       id: 'actions',
-      cell: (i) => (
-        <Press
-          variant="ghost"
-          onClick={() =>
-            handleRelease(
-              i.row.original.user_id,
-            )
-          }
-        >
-          Release
-        </Press>
-      ),
+      cell: (i) =>
+        canRelease ? (
+          <Press
+            variant="ghost"
+            onClick={() =>
+              handleRelease(
+                i.row.original.user_id,
+              )
+            }
+          >
+            Release
+          </Press>
+        ) : null,
     },
   ]
 
@@ -152,6 +157,74 @@ export function SecurityRoute() {
           }
         />
       </section>
+      <AntiAbuseSection />
     </div>
+  )
+}
+
+interface AntiAbuseEvent {
+  id: string
+  data: Record<string, string>
+}
+
+function AntiAbuseSection() {
+  const events = useQuery({
+    queryKey: ['admin', 'security', 'anti-abuse'],
+    queryFn: () =>
+      adminApi.antiAbuseEvents(150),
+    refetchInterval: 15_000,
+  })
+  const items =
+    (events.data?.items as AntiAbuseEvent[]) || []
+  return (
+    <section className="admin-card">
+      <h2>Anti-abuse events (Redis stream)</h2>
+      <p className="admin-card__sub">
+        Live feed of events recorded by
+        PrivateCore (Tor detection, disposable
+        email, content flagged, etc.)
+      </p>
+      {items.length === 0 ? (
+        <div className="admin-card__sub">
+          No recent events
+        </div>
+      ) : (
+        <DataTable
+          columns={[
+            {
+              header: 'ID',
+              accessorKey: 'id',
+              cell: (i) => (
+                <span className="admin-mono">
+                  {i.getValue<string>()}
+                </span>
+              ),
+            },
+            {
+              header: 'Type',
+              cell: (i) =>
+                i.row.original.data?.type ||
+                i.row.original.data?.event_type ||
+                '–',
+            },
+            {
+              header: 'Subject',
+              cell: (i) =>
+                i.row.original.data?.user_id ||
+                i.row.original.data?.ip ||
+                i.row.original.data?.email ||
+                '–',
+            },
+            {
+              header: 'Reason',
+              cell: (i) =>
+                i.row.original.data?.reason ||
+                '–',
+            },
+          ]}
+          rows={items as never[]}
+        />
+      )}
+    </section>
   )
 }

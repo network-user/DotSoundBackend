@@ -18,15 +18,11 @@ import structlog
 from app.config import settings
 from app.core.tkq import broker
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 BACKUPS_ROOT = pathlib.Path("/backups")
 LOCAL_FALLBACK_ROOT = pathlib.Path("./backups")
-ALLOWED_KINDS: frozenset[str] = frozenset(
-    {"full", "pg", "redis"}
-)
+ALLOWED_KINDS: frozenset[str] = frozenset({"full", "pg", "redis"})
 
 
 def _root() -> pathlib.Path:
@@ -62,18 +58,14 @@ def _scan_dir(
             continue
         if entry.is_dir():
             total = sum(
-                f.stat().st_size
-                for f in entry.rglob("*")
-                if f.is_file()
+                f.stat().st_size for f in entry.rglob("*") if f.is_file()
             )
             items.append(
                 {
                     "name": entry.name,
                     "kind": "dir",
                     "size_bytes": total,
-                    "size_human": _format_size(
-                        total
-                    ),
+                    "size_human": _format_size(total),
                     "modified_at": datetime.fromtimestamp(
                         stat.st_mtime, tz=UTC
                     ).isoformat(),
@@ -85,9 +77,7 @@ def _scan_dir(
                     "name": entry.name,
                     "kind": "file",
                     "size_bytes": stat.st_size,
-                    "size_human": _format_size(
-                        stat.st_size
-                    ),
+                    "size_human": _format_size(stat.st_size),
                     "modified_at": datetime.fromtimestamp(
                         stat.st_mtime, tz=UTC
                     ).isoformat(),
@@ -98,29 +88,17 @@ def _scan_dir(
 
 async def list_backups() -> dict[str, Any]:
     root = _root()
-    daily = await asyncio.to_thread(
-        _scan_dir, root / "daily"
-    )
-    weekly = await asyncio.to_thread(
-        _scan_dir, root / "weekly"
-    )
-    monthly = await asyncio.to_thread(
-        _scan_dir, root / "monthly"
-    )
+    daily = await asyncio.to_thread(_scan_dir, root / "daily")
+    weekly = await asyncio.to_thread(_scan_dir, root / "weekly")
+    monthly = await asyncio.to_thread(_scan_dir, root / "monthly")
     return {
         "root": str(root),
-        "remote_host": settings.bot_internal_url
-        and ""
-        or "",
-        "remote_configured": bool(
-            os.environ.get("BACKUP_REMOTE_HOST")
-        ),
+        "remote_host": settings.bot_internal_url and "" or "",
+        "remote_configured": bool(os.environ.get("BACKUP_REMOTE_HOST")),
         "daily": daily,
         "weekly": weekly,
         "monthly": monthly,
-        "scanned_at": datetime.now(
-            UTC
-        ).isoformat(),
+        "scanned_at": datetime.now(UTC).isoformat(),
     }
 
 
@@ -129,18 +107,14 @@ async def run_backup_task(
     kind: str = "full",
 ) -> dict[str, Any]:
     if kind not in ALLOWED_KINDS:
-        raise ValueError(
-            f"unknown backup kind: {kind!r}"
-        )
+        raise ValueError(f"unknown backup kind: {kind!r}")
     cmd = ["/scripts/backup.sh", kind]
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout_bytes, stderr_bytes = (
-        await proc.communicate()
-    )
+    stdout_bytes, stderr_bytes = await proc.communicate()
     code = proc.returncode or 0
     logger.info(
         "admin_backup_finished",
@@ -150,22 +124,14 @@ async def run_backup_task(
     return {
         "kind": kind,
         "exit_code": code,
-        "stdout": stdout_bytes.decode(
-            "utf-8", errors="replace"
-        )[-2000:],
-        "stderr": stderr_bytes.decode(
-            "utf-8", errors="replace"
-        )[-2000:],
+        "stdout": stdout_bytes.decode("utf-8", errors="replace")[-2000:],
+        "stderr": stderr_bytes.decode("utf-8", errors="replace")[-2000:],
     }
 
 
-async def enqueue_backup(
-    *, kind: str
-) -> dict[str, Any]:
+async def enqueue_backup(*, kind: str) -> dict[str, Any]:
     if kind not in ALLOWED_KINDS:
-        raise ValueError(
-            f"unknown backup kind: {kind!r}"
-        )
+        raise ValueError(f"unknown backup kind: {kind!r}")
     try:
         sent = await run_backup_task.kiq(kind)
     except Exception as exc:
@@ -174,8 +140,5 @@ async def enqueue_backup(
             kind=kind,
         )
         raise RuntimeError(str(exc)) from exc
-    task_id = (
-        getattr(sent, "task_id", None)
-        or getattr(sent, "id", None)
-    )
+    task_id = getattr(sent, "task_id", None) or getattr(sent, "id", None)
     return {"task_id": task_id, "kind": kind}

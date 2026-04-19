@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Press } from '@/components/ui/Press'
 import { adminApi } from '../lib/adminApi'
+import { LiveLogStream } from '../components/widgets/LiveLogStream'
 
 interface LogRow {
   ts_ns: number
@@ -25,6 +26,9 @@ function fmtTs(ns: number): string {
 }
 
 export function LogsRoute() {
+  const [mode, setMode] = useState<'live' | 'history'>(
+    'live',
+  )
   const [container, setContainer] = useState('')
   const [level, setLevel] = useState('')
   const [contains, setContains] = useState('')
@@ -52,9 +56,34 @@ export function LogsRoute() {
     })
   const items = (data?.items as LogRow[]) || []
 
+  if (mode === 'live') {
+    return (
+      <div>
+        <h1>Logs</h1>
+        <div className="admin-toolbar">
+          <Press
+            variant="ghost"
+            onClick={() => setMode('history')}
+          >
+            Switch to history search
+          </Press>
+        </div>
+        <LiveLogStream />
+      </div>
+    )
+  }
+
   return (
     <div>
       <h1>Logs</h1>
+      <div className="admin-toolbar">
+        <Press
+          variant="ghost"
+          onClick={() => setMode('live')}
+        >
+          Switch to live tail
+        </Press>
+      </div>
       <div className="admin-toolbar admin-toolbar--wrap">
         <input
           type="text"
