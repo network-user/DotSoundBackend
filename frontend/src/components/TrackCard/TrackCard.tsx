@@ -1,6 +1,7 @@
 import { useRef, useState, type MouseEvent } from 'react'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
+import { TrackInfoModal } from '@/components/TrackInfoModal/TrackInfoModal'
 import { useLikes } from '@/store/LikesContext'
 import {
   usePlayerActions,
@@ -41,6 +42,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
   const { track: currentTrack } = usePlayerMeta()
   const { playTrack } = usePlayerActions()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [infoOpen, setInfoOpen] = useState(false)
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const playing = currentTrack?.id === track.id
@@ -83,6 +85,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
   }
 
   return (
+    <>
     <div
       className={`track-card${playing ? ' playing' : ''}`}
       data-id={track.id}
@@ -152,6 +155,14 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
       </div>
       <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
         <button
+          className="track-card-info-btn"
+          title="Информация"
+          aria-label="Информация о треке"
+          onClick={(e) => { e.stopPropagation(); setInfoOpen(true) }}
+        >
+          <Icon name="info" size={16} />
+        </button>
+        <button
           className={`track-card-like${liked ? ' liked spring' : ''}`}
           title="Лайк"
           aria-label={liked ? 'Убрать лайк' : 'Поставить лайк'}
@@ -180,5 +191,15 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
         )}
       </div>
     </div>
+
+    {infoOpen && (
+      <TrackInfoModal
+        trackId={track.id}
+        title={track.title}
+        artist={track.artist}
+        onClose={() => setInfoOpen(false)}
+      />
+    )}
+    </>
   )
 }

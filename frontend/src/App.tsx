@@ -407,7 +407,6 @@ export function App() {
           <Route path="/legal/:docId" element={<LegalDocView />} />
           <Route path="/daily-mix" element={<DailyMixView />} />
           <Route path="/radio" element={<RadioView />} />
-          <Route path="/admin" element={<AdminApp />} />
           <Route path="/admin/*" element={<AdminApp />} />
         </Routes>
         </Suspense>

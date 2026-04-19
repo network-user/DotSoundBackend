@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
+import { LyricsJobDetail } from '../components/widgets/LyricsJobDetail'
 import { StatusPill } from '../components/widgets/StatusPill'
 
 interface QueueRow {
@@ -45,15 +47,26 @@ function jobKind(
   return 'unknown'
 }
 
-const jobColumns: ColumnDef<JobRow>[] = [
+function buildJobColumns(
+  onOpen: (id: string) => void,
+): ColumnDef<JobRow>[] {
+  return [
   {
     header: 'ID',
     accessorKey: 'id',
-    cell: (i) => (
-      <span className="admin-mono">
-        {String(i.getValue<string>()).slice(0, 8)}
-      </span>
-    ),
+    cell: (i) => {
+      const id = i.getValue<string>()
+      return (
+        <button
+          type="button"
+          className="admin-link admin-mono"
+          onClick={() => onOpen(id)}
+          title={id}
+        >
+          {String(id).slice(0, 8)}
+        </button>
+      )
+    },
   },
   {
     header: 'Track',
@@ -90,10 +103,14 @@ const jobColumns: ColumnDef<JobRow>[] = [
           ).toFixed(1)}s`
         : '–',
   },
-]
+  ]
+}
 
 export function TasksRoute() {
   const { t } = useTranslation()
+  const [activeJobId, setActiveJobId] = useState<
+    string | null
+  >(null)
   const queues = useQuery({
     queryKey: ['admin', 'tasks', 'queues'],
     queryFn: () => adminApi.listQueues(),
@@ -107,9 +124,12 @@ export function TasksRoute() {
         page: 1,
         size: 50,
       }),
-    refetchInterval: 15_000,
+    refetchInterval: activeJobId ? false : 15_000,
     refetchIntervalInBackground: false,
   })
+  const jobColumns = buildJobColumns((id) =>
+    setActiveJobId(id),
+  )
   return (
     <div>
       <h1>{t('admin.tasks.title')}</h1>
@@ -133,7 +153,16 @@ export function TasksRoute() {
               | undefined) || []
           }
         />
+        <p className="admin-card__sub">
+          {t('admin.tasks.detail.openHint')}
+        </p>
       </section>
+      {activeJobId && (
+        <LyricsJobDetail
+          jobId={activeJobId}
+          onClose={() => setActiveJobId(null)}
+        />
+      )}
     </div>
   )
 }

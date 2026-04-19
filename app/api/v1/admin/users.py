@@ -12,7 +12,10 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
-from app.dependencies import get_db, require_admin
+from app.dependencies import (
+    get_db,
+    require_admin_session,
+)
 from app.models.user import User
 from app.schemas.user import UserResponse
 from app.services.admin_service import AdminService
@@ -37,7 +40,7 @@ async def admin_list_users(
     is_admin: bool | None = Query(None),
     search: str | None = Query(None, max_length=128),
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> AdminUserListResponse:
     service = AdminService(session)
     users, total = await service.list_users(
@@ -66,7 +69,7 @@ async def admin_update_user(
     user_id: int,
     data: AdminUserUpdate,
     session: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_admin_session),
 ) -> UserResponse:
     service = AdminService(session)
     user = await service.update_user(

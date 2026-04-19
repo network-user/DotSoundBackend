@@ -60,6 +60,152 @@ async def list_queues(
     return {"items": queues}
 
 
+_TERMINAL_LYRICS_STATUSES: frozenset[str] = frozenset(
+    {"done", "error", "cancelled", "not_found"}
+)
+
+
+@router.get("/lyrics-jobs/{job_id}")
+async def get_lyrics_job(
+    job_id: str,
+    _admin: User = Depends(
+        require_capability("tasks.manage")
+    ),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Detail view of a single lyrics job.
+
+    Returns the persistent job row (status, profile, error,
+    timings, etc.) merged with the live Redis progress snapshot
+    (current stage, percent, recent log lines, terminal state).
+    The two sources are intentionally separate: the DB row is
+    authoritative once the worker finalises the job, while Redis
+    holds the live tail while the task is still running.
+    """
+    from app.services.lyrics_worker import (
+        get_lyrics_progress,
+    )
+
+    row = (
+        await session.execute(
+            select(LyricsJob).where(LyricsJob.id == job_id)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=404, detail="job not found"
+        )
+
+    progress: dict[str, Any] | None = None
+    progress_id = row.progress_id
+    if progress_id:
+        try:
+            progress = await get_lyrics_progress(
+                progress_id
+            )
+        except Exception:
+            logger.exception(
+                "admin_lyrics_progress_read_failed",
+                job_id=job_id,
+            )
+            progress = None
+
+    return {
+        "id": row.id,
+        "track_id": row.track_id,
+        "status": row.status,
+        "profile": row.profile,
+        "routed_to_worker": row.routed_to_worker,
+        "attempts": row.attempts,
+        "error": row.error,
+        "started_at": row.started_at,
+        "finished_at": row.finished_at,
+        "duration_ms": row.duration_ms,
+        "created_at": row.created_at,
+        "progress_id": progress_id,
+        "requested_by_user_id": row.requested_by_user_id,
+        "live": progress,
+    }
+
+
+@router.post("/lyrics-jobs/{job_id}/cancel")
+async def cancel_lyrics_job(
+    job_id: str,
+    _admin: User = Depends(
+        require_capability("tasks.manage")
+    ),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Set the CANCEL flag for a lyrics job's progress channel.
+
+    The worker polls this flag between stages and cleanly stops
+    on the next safe boundary, marking the job as cancelled in
+    both Redis (terminal_state) and DB. Cancelling a job that
+    has already terminated is a no-op (returns ``already_done``).
+    """
+    from app.services.lyrics_worker import (
+        CANCEL_KEY_PREFIX,
+        set_lyrics_progress,
+    )
+
+    row = (
+        await session.execute(
+            select(LyricsJob).where(LyricsJob.id == job_id)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=404, detail="job not found"
+        )
+
+    if row.status in _TERMINAL_LYRICS_STATUSES:
+        return {
+            "status": "already_done",
+            "job_status": row.status,
+        }
+
+    progress_id = row.progress_id
+    if not progress_id:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "job has no progress channel "
+                "(cannot signal cancel)"
+            ),
+        )
+
+    redis = get_redis_client()
+    try:
+        await redis.set(
+            f"{CANCEL_KEY_PREFIX}{progress_id}",
+            "1",
+            ex=600,
+        )
+        await set_lyrics_progress(
+            progress_id,
+            stage="cancelling",
+            log_line=(
+                "cancellation requested by admin"
+            ),
+        )
+    except Exception as exc:
+        logger.exception(
+            "admin_lyrics_cancel_failed",
+            job_id=job_id,
+            progress_id=progress_id,
+        )
+        raise HTTPException(
+            status_code=500, detail=str(exc)
+        ) from exc
+
+    logger.info(
+        "admin_lyrics_cancel_requested",
+        job_id=job_id,
+        progress_id=progress_id,
+    )
+    return {"status": "cancel_requested"}
+
+
 @router.get("/lyrics-jobs")
 async def list_lyrics_jobs(
     status: str | None = Query(None, max_length=24),

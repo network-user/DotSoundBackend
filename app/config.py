@@ -70,6 +70,9 @@ class AppSettings(BaseSettings):
     lyrics_partial_ttl_seconds: int = 3600
     lyrics_stream_maxlen: int = 500
 
+    track_info_ttl_days: int = 30
+    artist_supplemental_ttl_days: int = 30
+
     admin_jwt_secret: str = ""
     admin_csrf_secret: str = ""
     admin_telegram_alert_chat_id: str = ""

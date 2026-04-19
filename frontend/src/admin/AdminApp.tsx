@@ -61,8 +61,9 @@ function AuthGate({
   }, [])
 
   useEffect(() => {
-    let cancelled = false
     if (status !== 'loading') return
+
+    let active = true
 
     const csrfPromise = adminApi
       .ensureCsrf()
@@ -74,48 +75,46 @@ function AuthGate({
     Promise.allSettled([
       csrfPromise,
       metaPromise,
-    ])
-      .then(async ([_csrf, metaRes]) => {
-        if (cancelled) return
-        if (metaRes.status !== 'fulfilled') {
-          setStatus('unauth')
-          return
-        }
-        const meta = metaRes.value
-        if (!meta.is_admin) {
-          setStatus('unauth')
-          return
-        }
-        if (!meta.admin_init) {
-          setStatus('needs_init')
-          return
-        }
+    ]).then(async ([_csrf, metaRes]) => {
+      if (!active) return
+      if (metaRes.status !== 'fulfilled') {
+        setStatus('unauth')
+        return
+      }
+      const meta = metaRes.value
+      if (!meta.is_admin) {
+        setStatus('unauth')
+        return
+      }
+      if (!meta.admin_init) {
+        setStatus('needs_init')
+        return
+      }
+      try {
+        const refreshed = await adminApi.refresh()
+        if (!active) return
+        setSession(
+          refreshed.access_token,
+          refreshed.expires_in,
+        )
         try {
-          const refreshed =
-            await adminApi.refresh()
-          if (cancelled) return
-          setSession(
-            refreshed.access_token,
-            refreshed.expires_in,
-          )
-          try {
-            const manifest =
-              await api.getAdminManifest()
-            if (!cancelled) {
-              setCapabilities(
-                manifest.capabilities ?? [],
-              )
-            }
-          } catch {
-            /* manifest is optional for auth */
+          const manifest =
+            await api.getAdminManifest()
+          if (active) {
+            setCapabilities(
+              manifest.capabilities ?? [],
+            )
           }
         } catch {
-          if (!cancelled) setStatus('needs_login')
+          /* manifest is optional for auth */
         }
-      })
+      } catch {
+        if (active) setStatus('needs_login')
+      }
+    })
 
     return () => {
-      cancelled = true
+      active = false
     }
   }, [status, setStatus, setSession, setCapabilities])
 
@@ -168,57 +167,60 @@ export function AdminApp() {
       <AuthGate>
         <StepUpProvider>
           <AdminShell>
+            {/* Mounted under outer <Route path="/admin/*">,
+              * so all paths here are relative — the /admin
+              * prefix is consumed by the parent route. */}
             <Routes>
               <Route
-                path="/admin"
+                index
                 element={<DashboardRoute />}
               />
               <Route
-                path="/admin/users"
+                path="users"
                 element={<UsersRoute />}
               />
               <Route
-                path="/admin/tracks"
+                path="tracks"
                 element={<TracksRoute />}
               />
               <Route
-                path="/admin/complaints"
+                path="complaints"
                 element={<ComplaintsRoute />}
               />
               <Route
-                path="/admin/artists"
+                path="artists"
                 element={<ArtistsRoute />}
               />
               <Route
-                path="/admin/audio-compute"
+                path="audio-compute"
                 element={<AudioComputeRoute />}
               />
               <Route
-                path="/admin/tasks"
+                path="tasks"
                 element={<TasksRoute />}
               />
               <Route
-                path="/admin/logs"
+                path="logs"
                 element={<LogsRoute />}
               />
               <Route
-                path="/admin/metrics"
+                path="metrics"
                 element={<MetricsRoute />}
               />
               <Route
-                path="/admin/containers"
+                path="containers"
                 element={<ContainersRoute />}
               />
               <Route
-                path="/admin/audit"
+                path="audit"
                 element={<AuditRoute />}
               />
               <Route
-                path="/admin/security"
+                path="security"
                 element={<SecurityRoute />}
               />
               <Route
-                path="/admin/settings"
+                path="settings"
                 element={<SettingsRoute />}
               />
             </Routes>

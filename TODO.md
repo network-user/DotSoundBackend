@@ -560,3 +560,5 @@
 - [x] Frontend: refetchInterval поднят до 15-30 сек и `refetchIntervalInBackground: false` во всех админ-routes (Dashboard, Logs, Tasks, Metrics, Containers, Security, Settings, AudioCompute)
 - [x] Frontend: удалён orphan-файл `frontend/src/admin/AdminDashboardView.tsx`
 - [x] Frontend: `?nosw=1` в URL разрегистрирует service worker (отладка на ngrok)
+- [x] Frontend: убран дублирующий `<Route path="/admin">` без `*` в `App.tsx` — nested `<Routes>` в `AdminApp` теперь корректно рендерит `DashboardRoute`
+- [x] Frontend: `adminApi.refresh()` и `adminApi.logout()` больше не шлют `body: {}` — backend теперь читает refresh token из httpOnly-cookie без 422 от валидации `AdminRefreshRequest`
