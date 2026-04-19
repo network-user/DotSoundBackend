@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { setInternalUserId } from '@/lib/telegram'
+import { connectWS } from '@/lib/ws'
 
 type Step = 'welcome' | 'code' | 'success'
 
@@ -65,6 +66,20 @@ export function TelegramAuth({
         digits,
       )
       setInternalUserId(res.user_id)
+      if (res.access_token) {
+        try {
+          connectWS(res.access_token)
+        } catch {
+          /* ignore */
+        }
+        try {
+          window.dispatchEvent(
+            new Event('app-auth-ready'),
+          )
+        } catch {
+          /* ignore */
+        }
+      }
       setStep('success')
       successTimer.current = setTimeout(onAuth, 1500)
     } catch {

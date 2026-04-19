@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AdminProvider } from '@/components/Admin/AdminContext'
 import { LikesProvider } from '@/store/LikesContext'
 import { PlayerProvider } from '@/store/PlayerContext'
+import { api } from '@/lib/api'
 import { installViewportListener } from '@/lib/telegram'
 import { App } from './App'
 import './styles/tokens.css'
@@ -14,8 +15,13 @@ import './styles/components.css'
 
 installViewportListener()
 
+api.restoreSession()
+
+const params = new URLSearchParams(window.location.search)
+const forceUnregisterSw = params.get('nosw') === '1'
+
 if (
-  import.meta.env.DEV &&
+  (import.meta.env.DEV || forceUnregisterSw) &&
   'serviceWorker' in navigator
 ) {
   navigator.serviceWorker

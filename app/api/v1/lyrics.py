@@ -336,15 +336,40 @@ async def redefine_lyrics(
 ) -> LyricsAutoResponse:
     """Delete existing lyrics for a track and re-run detection.
 
-    Useful when auto-detection failed or produced incorrect
-    results.
+    The (artist, title) result cache is always invalidated here
+    so a real re-detection happens, not a silent re-load of the
+    previously cached provider answer.
+
+    ``bypass_cache`` additionally tells the worker to skip cache
+    reads on this run. Gated to admin users (or debug builds) so
+    regular owners can't bypass cost-saving behaviour.
     """
-    structlog.contextvars.bind_contextvars(track_id=track_id)
+    bypass_cache = body.bypass_cache
+    if bypass_cache and not (
+        current_user.is_admin or settings.debug
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="bypass_cache requires admin",
+        )
+
+    structlog.contextvars.bind_contextvars(
+        track_id=track_id,
+        bypass_cache=bypass_cache,
+    )
     service = LyricsService(session)
     progress_id = await service.redefine_lyrics(
         track_id=track_id,
         user_id=current_user.id,
         with_sync=body.with_sync,
+        bypass_cache=bypass_cache,
+    )
+    logger.info(
+        "lyrics_redefine_requested",
+        progress_id=progress_id,
+        with_sync=body.with_sync,
+        bypass_cache=bypass_cache,
+        admin=current_user.is_admin,
     )
     return LyricsAutoResponse(task_id=progress_id)
 

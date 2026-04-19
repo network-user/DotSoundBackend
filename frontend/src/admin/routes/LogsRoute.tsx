@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { Press } from '@/components/ui/Press'
 import { adminApi } from '../lib/adminApi'
@@ -26,6 +27,7 @@ function fmtTs(ns: number): string {
 }
 
 export function LogsRoute() {
+  const { t } = useTranslation()
   const [mode, setMode] = useState<'live' | 'history'>(
     'live',
   )
@@ -52,20 +54,21 @@ export function LogsRoute() {
           minutes,
           limit: 500,
         }),
-      refetchInterval: running ? 5000 : false,
+      refetchInterval: running ? 15_000 : false,
+      refetchIntervalInBackground: false,
     })
   const items = (data?.items as LogRow[]) || []
 
   if (mode === 'live') {
     return (
       <div>
-        <h1>Logs</h1>
+        <h1>{t('admin.logs.title')}</h1>
         <div className="admin-toolbar">
           <Press
             variant="ghost"
             onClick={() => setMode('history')}
           >
-            Switch to history search
+            {t('admin.logs.switchHistory')}
           </Press>
         </div>
         <LiveLogStream />
@@ -75,19 +78,21 @@ export function LogsRoute() {
 
   return (
     <div>
-      <h1>Logs</h1>
+      <h1>{t('admin.logs.title')}</h1>
       <div className="admin-toolbar">
         <Press
           variant="ghost"
           onClick={() => setMode('live')}
         >
-          Switch to live tail
+          {t('admin.logs.switchLive')}
         </Press>
       </div>
       <div className="admin-toolbar admin-toolbar--wrap">
         <input
           type="text"
-          placeholder="container"
+          placeholder={t(
+            'admin.logs.containerPlaceholder',
+          )}
           value={container}
           onChange={(e) =>
             setContainer(e.target.value)
@@ -101,13 +106,15 @@ export function LogsRoute() {
         >
           {LEVELS.map((l) => (
             <option key={l || 'any'} value={l}>
-              {l || 'any level'}
+              {l || t('admin.logs.anyLevel')}
             </option>
           ))}
         </select>
         <input
           type="text"
-          placeholder="contains…"
+          placeholder={t(
+            'admin.logs.containsPlaceholder',
+          )}
           value={contains}
           onChange={(e) =>
             setContains(e.target.value)
@@ -130,7 +137,7 @@ export function LogsRoute() {
           onClick={() => refetch()}
           disabled={isFetching}
         >
-          Refresh
+          {t('admin.logs.refresh')}
         </Press>
         <Press
           variant="ghost"
@@ -138,7 +145,9 @@ export function LogsRoute() {
             setRunning((v) => !v)
           }
         >
-          {running ? 'Pause' : 'Resume'}
+          {running
+            ? t('admin.logs.pause')
+            : t('admin.logs.resume')}
         </Press>
       </div>
       {error && (
@@ -149,7 +158,7 @@ export function LogsRoute() {
       <div className="admin-log-stream">
         {items.length === 0 && (
           <div className="admin-log-empty">
-            No log entries
+            {t('admin.logs.empty')}
           </div>
         )}
         {items.map((row, idx) => (

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   keepPreviousData,
   useQuery,
@@ -56,6 +57,7 @@ const columns: ColumnDef<ComplaintRow>[] = [
 ]
 
 export function ComplaintsRoute() {
+  const { t } = useTranslation()
   const [page, setPage] = useState(1)
   const [unresolvedOnly, setUnresolvedOnly] =
     useState(true)
@@ -81,7 +83,7 @@ export function ComplaintsRoute() {
   )
   return (
     <div>
-      <h1>Complaints</h1>
+      <h1>{t('admin.complaints.title')}</h1>
       <div className="admin-toolbar">
         <label className="admin-checkbox">
           <input
@@ -94,7 +96,7 @@ export function ComplaintsRoute() {
               setPage(1)
             }}
           />
-          Unresolved only
+          {t('admin.complaints.unresolvedOnly')}
         </label>
       </div>
       <DataTable
@@ -111,10 +113,11 @@ export function ComplaintsRoute() {
             setPage((p) => Math.max(1, p - 1))
           }
         >
-          Prev
+          {t('admin.common.prev')}
         </Press>
         <span>
-          {page} / {totalPages} · {total} total
+          {page} / {totalPages} ·{' '}
+          {t('admin.common.total', { count: total })}
         </span>
         <Press
           variant="ghost"
@@ -123,7 +126,7 @@ export function ComplaintsRoute() {
           }
           onClick={() => setPage((p) => p + 1)}
         >
-          Next
+          {t('admin.common.next')}
         </Press>
       </div>
     </div>

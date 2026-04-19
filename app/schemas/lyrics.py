@@ -59,6 +59,13 @@ class LyricsResponse(BaseModel):
 
 class LyricsAutoRequest(BaseModel):
     with_sync: bool = False
+    bypass_cache: bool = Field(
+        default=False,
+        description=(
+            "Skip the (artist,title) result cache for this run. "
+            "Admin/debug only — gated at the route layer."
+        ),
+    )
 
 
 class LyricsAutoResponse(BaseModel):

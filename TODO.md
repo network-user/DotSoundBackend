@@ -212,6 +212,8 @@
   - Taskiq-задача generate_lyrics_task
   - API: POST /lyrics/auto, GET /lyrics/auto/status
   - Frontend: кнопки автогенерации, toggle таймкодов, i18n
+  - [x] Re-define fix: админ-кнопки с `bypass_cache=true` + расширенные debug-логи в карточке (шестерёнка)
+  - [x] Search fallback fix: при miss по `(artist,title)` делаем retry по `title-only` и сохраняем cache alias
 - [ ] **Auto-lyrics: вынос тяжёлой обработки на внешний GPU-сервис (далёкое будущее)**
   - Отдельный сервер/сервис с GPU для обработки аудио
   - Backend отправляет аудиофайл во внутренний API PrivateCore,
@@ -229,6 +231,29 @@
 - [x] WebSocket: Redis pub/sub, presence, typing indicators
 - [x] Комментарии к трекам: CRUD, голосование, пин, скрытие
 - [~] Доработки чата (обсудить отдельно)
+
+## Карточка артиста (multi-source)
+
+- [x] Policy-exception для явного source attribution
+  (`source_name` + `source_page_url`) зафиксирован в
+  `docs/ai-boundary-policy.md` (Backend + PrivateCore)
+- [x] PrivateCore: расширен контракт `ArtistInfo` полями
+  `source_profiles`, `primary_source_id`, `discography`
+- [x] Backend: добавлены `artists.source_profiles` (JSON) и
+  `artists.primary_source_id` (миграция `0039`)
+- [x] Backend API: `ArtistDetailResponse` и `/api/v1/artists/{id}`
+  возвращают `source_profiles` и `primary_source_id`
+- [x] Frontend ArtistView: горизонтальный переключатель источников
+  под аватаром + рендер bio/meta/discography по выбранному источнику
+- [x] Frontend ArtistView: полноэкранный просмотр аватарки с
+  закрытием по overlay / кнопке / `Esc`
+- [x] Frontend ArtistView: отдельная строка
+  `Источник: <source_name>` с кликабельной ссылкой на страницу
+  источника
+- [x] Регрессионные тесты обновлены:
+  - PrivateCore `test_artist_info_provider.py`
+  - Backend `test_artist_enrichment_service.py`,
+    `test_artist_enrich.py`, `test_artist.py`
 
 ## Предзагрузка треков
 
@@ -517,4 +542,21 @@
 
 ---
 
-*Последнее обновление: 2026-04-18 агентом (Sprint 0..9 single-pass).*
+*Последнее обновление: 2026-04-19 агентом (admin i18n + auth race fix + admin refresh-on-boot).*
+
+## Sprint admin / auth (2026-04-19)
+
+- [x] Frontend: синхронный `api.restoreSession()` в `main.tsx` ДО рендера — убирает раннюю гонку токена с AdminProvider/PlayerProvider
+- [x] Frontend: `AdminContext.tsx` гейтит `getAdminManifest()` на наличие токена и подписан на `app-auth-ready` + `i18n.languageChanged`; убран orphan-импорт `adminBundleUrl`
+- [x] Frontend: `App.init()` пропускает `api.authTelegram('')` при пустом initData (убирает 422 + 500ms ретрай в ngrok-режиме)
+- [x] Frontend: `connectWS(...)` вызывается сразу в `verifyTelegramCode` / `verifyMagicLink` / `verify2FA`, плюс диспатч `app-auth-ready`
+- [x] Frontend: `restoreSession()` восстанавливает `auth-user-id` из JWT `sub`, если он потерян — убирает «при обновлении просит код»
+- [x] Frontend: Suspense fallback с timeout-ом и retry в `App.tsx` (`RouteFallback`) — убирает «чёрный экран» при зависших lazy-чанках
+- [x] Frontend: i18n RU/EN для всей админки (`admin.*` namespace в локалях, `useTranslation` в `AdminApp`, `AdminShell`, всех auth-формах и routes)
+- [x] Frontend: `AuthGate` запускает `ensureCsrf` и `bootstrapMetadata` параллельно через `Promise.allSettled` и пытается `adminApi.refresh()` на старте — admin-сессия переживает reload без TOTP
+- [x] Frontend: `useAdminAuth.capabilities` наполняется из манифеста после успешного refresh — `useCapability` теперь работает
+- [x] Frontend: proactive refresh за 30 сек до expiry в `adminFetch`; при фейле refresh статус `'needs_login'` вместо `'unauth'`
+- [x] Frontend: `AdminShell` — часы вынесены в изолированный `<Clock />`, остальная панель не перерисовывается каждую секунду
+- [x] Frontend: refetchInterval поднят до 15-30 сек и `refetchIntervalInBackground: false` во всех админ-routes (Dashboard, Logs, Tasks, Metrics, Containers, Security, Settings, AudioCompute)
+- [x] Frontend: удалён orphan-файл `frontend/src/admin/AdminDashboardView.tsx`
+- [x] Frontend: `?nosw=1` в URL разрегистрирует service worker (отладка на ngrok)

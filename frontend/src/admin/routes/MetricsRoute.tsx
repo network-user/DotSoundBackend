@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { adminApi } from '../lib/adminApi'
 import {
@@ -25,6 +26,7 @@ function flatten(raw: unknown): ChartPoint[] {
 }
 
 export function MetricsRoute() {
+  const { t } = useTranslation()
   const [minutes, setMinutes] = useState(60)
   const list = useQuery({
     queryKey: ['admin', 'metrics', 'list'],
@@ -34,7 +36,8 @@ export function MetricsRoute() {
     queryKey: ['admin', 'metrics', 'rps', minutes],
     queryFn: () =>
       adminApi.metricRange('rps_5m', minutes, 30),
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
   const errs = useQuery({
     queryKey: ['admin', 'metrics', 'err', minutes],
@@ -44,7 +47,8 @@ export function MetricsRoute() {
         minutes,
         30,
       ),
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
   const lat = useQuery({
     queryKey: ['admin', 'metrics', 'lat', minutes],
@@ -54,11 +58,12 @@ export function MetricsRoute() {
         minutes,
         30,
       ),
-    refetchInterval: 15_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
   return (
     <div>
-      <h1>Metrics</h1>
+      <h1>{t('admin.metrics.title')}</h1>
       <div className="admin-toolbar">
         <select
           value={String(minutes)}
@@ -72,26 +77,27 @@ export function MetricsRoute() {
           <option value="1440">24h</option>
         </select>
         <span className="admin-card__sub">
-          {list.data?.metrics.length ?? 0} metrics
-          available
+          {t('admin.metrics.available', {
+            count: list.data?.metrics.length ?? 0,
+          })}
         </span>
       </div>
       <section className="admin-card">
-        <h2>RPS (5m rate)</h2>
+        <h2>{t('admin.metrics.rps')}</h2>
         <LineChart
           data={flatten(rps.data)}
           ariaLabel="Requests per second"
         />
       </section>
       <section className="admin-card">
-        <h2>Error rate (5xx, 5m rate)</h2>
+        <h2>{t('admin.metrics.errorRate')}</h2>
         <LineChart
           data={flatten(errs.data)}
           ariaLabel="HTTP error rate"
         />
       </section>
       <section className="admin-card">
-        <h2>Latency p95</h2>
+        <h2>{t('admin.metrics.latency')}</h2>
         <LineChart
           data={flatten(lat.data)}
           ariaLabel="Latency p95"

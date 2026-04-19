@@ -361,13 +361,17 @@ export const api = {
   redefineLyrics(
     trackId: number,
     withSync: boolean = false,
+    bypassCache: boolean = false,
   ): Promise<LyricsAutoResponse> {
     return request(
       `/api/v1/tracks/${trackId}/lyrics/redefine`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ with_sync: withSync }),
+        body: JSON.stringify({
+          with_sync: withSync,
+          bypass_cache: bypassCache,
+        }),
       },
     )
   },
@@ -534,17 +538,24 @@ export const api = {
       return null
     }
     const userId = getTokenUserId(token)
+    if (userId === null) {
+      persistToken(null)
+      setInternalUserId(null)
+      return null
+    }
     const storedUserId = getInternalUserId()
     if (
-      userId === null ||
-      (storedUserId !== null && storedUserId !== userId)
+      storedUserId !== null &&
+      storedUserId !== userId
     ) {
       persistToken(null)
       setInternalUserId(null)
       return null
     }
     accessToken = token
-    setInternalUserId(userId)
+    if (storedUserId === null) {
+      setInternalUserId(userId)
+    }
     return { token, userId }
   },
 

@@ -99,6 +99,190 @@
       "techDetails": "Технические детали"
     }
   },
+  "admin": {
+    "shell": {
+      "title": "Админ-панель",
+      "brandTag": "admin",
+      "signOut": "Выйти"
+    },
+    "auth": {
+      "checking": "Проверка сессии…",
+      "adminOnly": "Только для админов",
+      "adminOnlyHint": "Эта зона доступна аккаунтам с флагом администратора. Сначала войдите в свой аккаунт, затем вернитесь сюда.",
+      "sessionExpired": "Сессия истекла, войдите заново",
+      "signInTitle": "Вход для администратора",
+      "signInHint": "Откройте приложение-аутентификатор и введите текущий 6-значный код для DotSound.",
+      "signingIn": "Вход…",
+      "signIn": "Войти",
+      "confirm": "Подтвердить",
+      "confirming": "Подтверждение…"
+    },
+    "init": {
+      "title": "Настройка аутентификатора",
+      "hint": "Отсканируйте QR в Google Authenticator, Authy, 1Password или Bitwarden, затем введите 6-значный код для подтверждения.",
+      "showSecret": "Показать секрет",
+      "hideSecret": "Скрыть секрет",
+      "deviceLabel": "Метка устройства",
+      "deviceLabelPlaceholder": "например, macbook-work",
+      "backupCodes": "Коды восстановления",
+      "backupCodesHint": "Сохраните эти одноразовые коды в надёжном месте. Они показываются только один раз.",
+      "continue": "Перейти к панели"
+    },
+    "device": {
+      "title": "Подтверждение устройства",
+      "hint": "Мы отправили код подтверждения на email и оповещение в привязанный Telegram. Введите оба кода, чтобы доверять этому устройству.",
+      "emailCode": "Код из email",
+      "totpLabel": "Код аутентификатора",
+      "deviceLabel": "Метка устройства",
+      "deviceLabelPlaceholder": "например, desktop-firefox",
+      "approve": "Одобрить устройство",
+      "approving": "Одобрение…",
+      "noPending": "Нет устройства, ожидающего одобрения."
+    },
+    "dashboard": {
+      "title": "Дашборд",
+      "loading": "Загрузка дашборда…",
+      "loadFailed": "Не удалось загрузить",
+      "kpi": {
+        "onlineNow": "Онлайн сейчас",
+        "activeAccounts": "{{count}} активных аккаунтов",
+        "usersTotal": "Пользователи (всего)",
+        "newIn24h": "{{count}} новых за 24 ч",
+        "tracks": "Треки",
+        "storage": "Хранилище",
+        "openComplaints": "Открытые жалобы",
+        "activeJobs": "Активные задачи",
+        "noFailures": "сбоев нет",
+        "failedIn1h": "{{count}} с ошибкой (1 ч)"
+      },
+      "containers": {
+        "title": "Контейнеры",
+        "tracked": "{{count}} контейнеров отслеживается",
+        "healthy": "здоровых {{count}}",
+        "warning": "предупреждений {{count}}",
+        "error": "ошибок {{count}}",
+        "unknown": "неизвестно {{count}}"
+      }
+    },
+    "users": {
+      "title": "Пользователи",
+      "searchPlaceholder": "Поиск по имени/email…",
+      "filterAll": "Все",
+      "filterActive": "Активные",
+      "filterBanned": "Заблокированные",
+      "active": "активный",
+      "banned": "заблокирован",
+      "admin": "админ"
+    },
+    "tracks": {
+      "title": "Треки",
+      "searchPlaceholder": "Поиск по названию/исполнителю…",
+      "visible": "виден",
+      "hidden": "скрыт"
+    },
+    "complaints": {
+      "title": "Жалобы",
+      "unresolvedOnly": "Только нерешённые",
+      "resolved": "решена",
+      "open": "открыта"
+    },
+    "artists": {
+      "title": "Артисты",
+      "searchPlaceholder": "Поиск по имени…",
+      "enrich": "Обогатить",
+      "enriching": "Обогащение…",
+      "empty": "Артистов пока нет",
+      "noEnrichment": "нет"
+    },
+    "audioCompute": {
+      "title": "Compute",
+      "routingMode": "Режим маршрутизации",
+      "workers": "Воркеры",
+      "jobs": "Задачи",
+      "audit": "Аудит",
+      "active": "активен",
+      "inactive": "неактивен"
+    },
+    "tasks": {
+      "title": "Задачи",
+      "queues": "Очереди",
+      "lyricsJobs": "Задачи lyrics (последние 50)"
+    },
+    "logs": {
+      "title": "Логи",
+      "switchHistory": "Переключить на поиск по истории",
+      "switchLive": "Переключить на live-tail",
+      "containerPlaceholder": "контейнер",
+      "anyLevel": "любой уровень",
+      "containsPlaceholder": "содержит…",
+      "refresh": "Обновить",
+      "pause": "Пауза",
+      "resume": "Продолжить",
+      "empty": "Нет записей лога"
+    },
+    "metrics": {
+      "title": "Метрики",
+      "available": "{{count}} метрик доступно",
+      "rps": "RPS (5-минутный rate)",
+      "errorRate": "Доля ошибок (5xx, 5-минутный rate)",
+      "latency": "Задержка p95"
+    },
+    "containers": {
+      "title": "Контейнеры"
+    },
+    "audit": {
+      "title": "Журнал аудита",
+      "actionPlaceholder": "фильтр по действию",
+      "userPlaceholder": "user_id",
+      "export": "Экспорт CSV"
+    },
+    "security": {
+      "title": "Безопасность",
+      "failedOnly": "Только неудачные",
+      "attempts": "Попытки входа",
+      "lockedUsers": "Заблокированные пользователи",
+      "release": "Снять блокировку",
+      "success": "успех",
+      "fail": "сбой"
+    },
+    "settings": {
+      "title": "Настройки",
+      "trustedDevices": "Доверенные устройства",
+      "noDevices": "Нет активных устройств",
+      "featureFlags": "Фич-флаги",
+      "noFlags": "Флагов пока нет",
+      "trusted": "доверено",
+      "pending": "ожидает",
+      "noLabel": "(без метки)",
+      "revoke": "Отозвать",
+      "revokeConfirm": "Отозвать это устройство? Сессия будет завершена.",
+      "on": "вкл",
+      "off": "выкл",
+      "enable": "Включить",
+      "disable": "Выключить",
+      "backups": "Бэкапы",
+      "remoteConfigured": "удалённое хранилище настроено",
+      "remoteNotConfigured": "удалённое хранилище не настроено",
+      "runFull": "Запустить полный бэкап",
+      "runPg": "Запустить только PG"
+    },
+    "common": {
+      "prev": "Назад",
+      "next": "Вперёд",
+      "total": "{{count}} всего",
+      "loading": "Загрузка…",
+      "save": "Сохранить",
+      "cancel": "Отмена",
+      "confirm": "Подтвердить",
+      "retry": "Попробовать снова"
+    },
+    "status": {
+      "ok": "ок",
+      "warn": "предупреждение",
+      "error": "ошибка",
+      "unknown": "неизвестно"
+    }
+  },
   "artist": {
     "performer": "Исполнитель",
     "age_one": "{{count}} год",
@@ -122,6 +306,12 @@
     "debug_stage": "Этап",
     "debug_run": "Запустить с логами",
     "debug_running": "Идёт определение…",
-    "debug_empty": "Нажмите «Запустить с логами», чтобы увидеть этапы работы"
+    "debug_empty": "Нажмите «Запустить с логами», чтобы увидеть этапы работы",
+    "discography_title": "Дискография",
+    "sources_label": "Источник данных",
+    "source_open": "Открыть источник",
+    "source_attribution": "Источник",
+    "avatar_open": "Открыть фото",
+    "avatar_close": "Закрыть фото"
   }
 }

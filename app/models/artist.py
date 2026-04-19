@@ -64,6 +64,12 @@ class Artist(Base, TimestampMixin):
     discography: Mapped[list | None] = mapped_column(
         JSON, nullable=True
     )
+    source_profiles: Mapped[list | None] = mapped_column(
+        JSON, nullable=True
+    )
+    primary_source_id: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
 
     track_links: Mapped[list[TrackArtist]] = relationship(
         back_populates="artist",

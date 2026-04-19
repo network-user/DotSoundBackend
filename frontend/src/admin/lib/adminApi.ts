@@ -96,36 +96,86 @@ async function rawRequest(
   })
 }
 
+const PROACTIVE_REFRESH_THRESHOLD_MS = 30_000
+let inflightRefresh: Promise<boolean> | null = null
+
+function loggedOutKeepAdmin(): void {
+  const store = useAdminAuth.getState()
+  store.setStatus('needs_login')
+  // wipe token state but keep status as 'needs_login'
+  // so user is not bumped to the unauth wall
+  useAdminAuth.setState({
+    accessToken: null,
+    expiresAt: null,
+    capabilities: [],
+  })
+}
+
+async function tryRefresh(): Promise<boolean> {
+  if (inflightRefresh) {
+    return inflightRefresh
+  }
+  inflightRefresh = (async () => {
+    try {
+      const refreshed = await rawRequest(
+        '/auth/refresh',
+        { method: 'POST', body: {} },
+      )
+      if (refreshed.status !== 200) {
+        loggedOutKeepAdmin()
+        return false
+      }
+      const data = (await refreshed.json()) as {
+        access_token: string
+        expires_in: number
+      }
+      useAdminAuth
+        .getState()
+        .setSession(
+          data.access_token,
+          data.expires_in,
+        )
+      return true
+    } catch {
+      loggedOutKeepAdmin()
+      return false
+    } finally {
+      inflightRefresh = null
+    }
+  })()
+  return inflightRefresh
+}
+
 async function withRefresh(
   doRequest: () => Promise<Response>,
+  opts: RequestOptions,
 ): Promise<Response> {
+  if (!opts.isUserToken) {
+    const state = useAdminAuth.getState()
+    if (
+      state.accessToken &&
+      state.expiresAt &&
+      state.expiresAt - Date.now() <
+        PROACTIVE_REFRESH_THRESHOLD_MS
+    ) {
+      await tryRefresh()
+    }
+  }
+
   const response = await doRequest()
   if (response.status !== 401) {
     return response
   }
   if (
+    !opts.isUserToken &&
     useAdminAuth.getState().accessToken === null
   ) {
     return response
   }
-  const refreshed = await rawRequest(
-    '/auth/refresh',
-    { method: 'POST', body: {} },
-  )
-  if (refreshed.status !== 200) {
-    useAdminAuth.getState().reset()
+  const ok = await tryRefresh()
+  if (!ok) {
     return response
   }
-  const data = (await refreshed.json()) as {
-    access_token: string
-    expires_in: number
-  }
-  useAdminAuth
-    .getState()
-    .setSession(
-      data.access_token,
-      data.expires_in,
-    )
   return doRequest()
 }
 
@@ -133,8 +183,9 @@ export async function adminFetch<T = unknown>(
   path: string,
   opts: RequestOptions = {},
 ): Promise<T> {
-  const response = await withRefresh(() =>
-    rawRequest(path, opts),
+  const response = await withRefresh(
+    () => rawRequest(path, opts),
+    opts,
   )
   if (response.status >= 400) {
     let detail = `HTTP ${response.status}`

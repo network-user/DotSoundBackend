@@ -57,6 +57,10 @@ function appendClientLog(trackId: number, line: string): void {
   notify()
 }
 
+function appendDebugLog(trackId: number, line: string): void {
+  appendClientLog(trackId, line)
+}
+
 function applyPayload(
   trackId: number,
   payload: {
@@ -231,7 +235,7 @@ async function startGeneration(
     percent: 0,
     startedAt: now,
     debugLog: [
-      `[client] started (${modeLabel})`,
+      `[client] started (${modeLabel}) track_id=${trackId}`,
       `[client] progress_id=${task_id}`,
     ],
   })
@@ -255,7 +259,16 @@ function clearDebugLog(trackId: number): void {
   notify()
 }
 
-function resumeTask(trackId: number, taskId: string): void {
+function resumeTask(
+  trackId: number,
+  taskId: string,
+  options?: {
+    withSync?: boolean
+    bypassCache?: boolean
+  },
+): void {
+  const withSync = options?.withSync ?? false
+  const bypassCache = options?.bypassCache ?? false
   tasks.set(trackId, {
     taskId,
     trackId,
@@ -265,8 +278,9 @@ function resumeTask(trackId: number, taskId: string): void {
     percent: 0,
     startedAt: Date.now(),
     debugLog: [
-      '[client] redefine: old lyrics deleted',
-      `[client] new task started, progress_id=${taskId}`,
+      '[client] redefine accepted by backend',
+      `[client] request: with_sync=${withSync} | bypass_cache=${bypassCache}`,
+      `[client] progress_id=${taskId}`,
     ],
   })
   notify()
@@ -332,8 +346,21 @@ export function useLyricsTask(trackId: number) {
   }, [trackId])
 
   const resume = useCallback(
-    (taskId: string) => {
-      resumeTask(trackId, taskId)
+    (
+      taskId: string,
+      options?: {
+        withSync?: boolean
+        bypassCache?: boolean
+      },
+    ) => {
+      resumeTask(trackId, taskId, options)
+    },
+    [trackId],
+  )
+
+  const appendLog = useCallback(
+    (line: string) => {
+      appendDebugLog(trackId, line)
     },
     [trackId],
   )
@@ -361,5 +388,6 @@ export function useLyricsTask(trackId: number) {
     clearDebugLog: clearLog,
     cancelGeneration: cancel,
     resumeTask: resume,
+    appendDebugLog: appendLog,
   }
 }

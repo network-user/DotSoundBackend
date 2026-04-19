@@ -3,6 +3,7 @@ import {
   useEffect,
   useState,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Press } from '@/components/ui/Press'
 import { adminApi } from '../../lib/adminApi'
@@ -13,17 +14,25 @@ interface Props {
   children: ReactNode
 }
 
-export function AdminShell({ children }: Props) {
-  const navigate = useNavigate()
-  const reset = useAdminAuth((s) => s.reset)
+function Clock() {
   const [now, setNow] = useState(() => Date.now())
-
   useEffect(() => {
     const id = window.setInterval(() => {
       setNow(Date.now())
     }, 1000)
     return () => window.clearInterval(id)
   }, [])
+  return (
+    <span className="admin-shell__topbar-time">
+      {new Date(now).toLocaleTimeString()}
+    </span>
+  )
+}
+
+export function AdminShell({ children }: Props) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const reset = useAdminAuth((s) => s.reset)
 
   async function handleLogout() {
     try {
@@ -41,7 +50,7 @@ export function AdminShell({ children }: Props) {
         <div className="admin-shell__brand">
           .sound{' '}
           <span className="admin-shell__brand-tag">
-            admin
+            {t('admin.shell.brandTag')}
           </span>
         </div>
         <AdminMenu />
@@ -50,18 +59,16 @@ export function AdminShell({ children }: Props) {
             variant="ghost"
             onClick={handleLogout}
           >
-            Sign out
+            {t('admin.shell.signOut')}
           </Press>
         </div>
       </aside>
       <div className="admin-shell__body">
         <header className="admin-shell__topbar">
           <span className="admin-shell__topbar-title">
-            Admin Panel
+            {t('admin.shell.title')}
           </span>
-          <span className="admin-shell__topbar-time">
-            {new Date(now).toLocaleTimeString()}
-          </span>
+          <Clock />
         </header>
         <main className="admin-shell__main">
           {children}

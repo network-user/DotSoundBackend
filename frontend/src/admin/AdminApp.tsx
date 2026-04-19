@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   QueryClient,
   QueryClientProvider,
@@ -43,9 +44,16 @@ function AuthGate({
 }: {
   children: React.ReactNode
 }) {
+  const { t } = useTranslation()
   const status = useAdminAuth((s) => s.status)
   const setStatus = useAdminAuth(
     (s) => s.setStatus,
+  )
+  const setSession = useAdminAuth(
+    (s) => s.setSession,
+  )
+  const setCapabilities = useAdminAuth(
+    (s) => s.setCapabilities,
   )
 
   useEffect(() => {
@@ -55,14 +63,25 @@ function AuthGate({
   useEffect(() => {
     let cancelled = false
     if (status !== 'loading') return
-    adminApi
+
+    const csrfPromise = adminApi
       .ensureCsrf()
       .catch(() => {
         // tolerate failure — we'll get one on next mutating call
       })
-      .then(() => adminApi.bootstrapMetadata())
-      .then((meta) => {
+    const metaPromise = adminApi.bootstrapMetadata()
+
+    Promise.allSettled([
+      csrfPromise,
+      metaPromise,
+    ])
+      .then(async ([_csrf, metaRes]) => {
         if (cancelled) return
+        if (metaRes.status !== 'fulfilled') {
+          setStatus('unauth')
+          return
+        }
+        const meta = metaRes.value
         if (!meta.is_admin) {
           setStatus('unauth')
           return
@@ -71,21 +90,40 @@ function AuthGate({
           setStatus('needs_init')
           return
         }
-        setStatus('needs_login')
+        try {
+          const refreshed =
+            await adminApi.refresh()
+          if (cancelled) return
+          setSession(
+            refreshed.access_token,
+            refreshed.expires_in,
+          )
+          try {
+            const manifest =
+              await api.getAdminManifest()
+            if (!cancelled) {
+              setCapabilities(
+                manifest.capabilities ?? [],
+              )
+            }
+          } catch {
+            /* manifest is optional for auth */
+          }
+        } catch {
+          if (!cancelled) setStatus('needs_login')
+        }
       })
-      .catch(() => {
-        if (!cancelled) setStatus('unauth')
-      })
+
     return () => {
       cancelled = true
     }
-  }, [status, setStatus])
+  }, [status, setStatus, setSession, setCapabilities])
 
   if (status === 'loading') {
     return (
       <div className="admin-auth-screen">
         <div className="admin-auth-card">
-          Checking session…
+          {t('admin.auth.checking')}
         </div>
       </div>
     )
@@ -94,12 +132,8 @@ function AuthGate({
     return (
       <div className="admin-auth-screen">
         <div className="admin-auth-card">
-          <h2>Admin only</h2>
-          <p>
-            This area is for accounts with the
-            admin flag. Sign in to your account
-            first, then return here.
-          </p>
+          <h2>{t('admin.auth.adminOnly')}</h2>
+          <p>{t('admin.auth.adminOnlyHint')}</p>
         </div>
       </div>
     )

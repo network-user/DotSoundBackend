@@ -82,6 +82,26 @@ The project follows the Telegram open-source model:
   frontend code.
 - Security-sensitive decisions must run on backend/private core.
 
+## Source Attribution Exception (artist enrichment)
+
+For the artist info card the Backend and Mini App MAY display the
+human-readable name of an external source and a direct attribution
+link to the page the data was fetched from. This is a deliberate,
+narrow exception to the general black-box rule for the artist
+enrichment cascade only.
+
+Constraints that still apply:
+
+1. Only the public-facing labels (`source_name`) and the
+   `source_page_url` returned by PrivateCore may be shown. Internal
+   stage names, scoring weights, fallback ordering and other pipeline
+   internals MUST NOT be leaked.
+2. The exception covers the artist card UI/API surface only. Other
+   PrivateCore cascades (lyrics, recommendations, anti-abuse, etc.)
+   keep the strict opaque rule.
+3. New external sources MUST not be added to the public attribution
+   list without an explicit policy review.
+
 ## Classification Guide
 
 ### Decision tree: where does this code belong?

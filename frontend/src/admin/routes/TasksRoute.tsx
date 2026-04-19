@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { adminApi } from '../lib/adminApi'
@@ -92,10 +93,12 @@ const jobColumns: ColumnDef<JobRow>[] = [
 ]
 
 export function TasksRoute() {
+  const { t } = useTranslation()
   const queues = useQuery({
     queryKey: ['admin', 'tasks', 'queues'],
     queryFn: () => adminApi.listQueues(),
-    refetchInterval: 5000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
   const jobs = useQuery({
     queryKey: ['admin', 'tasks', 'lyrics-jobs'],
@@ -104,13 +107,14 @@ export function TasksRoute() {
         page: 1,
         size: 50,
       }),
-    refetchInterval: 5000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
   return (
     <div>
-      <h1>Tasks</h1>
+      <h1>{t('admin.tasks.title')}</h1>
       <section className="admin-card">
-        <h2>Queues</h2>
+        <h2>{t('admin.tasks.queues')}</h2>
         <DataTable
           columns={queueColumns}
           rows={
@@ -120,7 +124,7 @@ export function TasksRoute() {
         />
       </section>
       <section className="admin-card">
-        <h2>Lyrics jobs (last 50)</h2>
+        <h2>{t('admin.tasks.lyricsJobs')}</h2>
         <DataTable
           columns={jobColumns}
           rows={

@@ -1,4 +1,4 @@
-.PHONY: dev infra migrate test test-cov test-fast lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop hooks admin-dev admin-build observability-up observability-down test-admin test-all
+.PHONY: dev infra migrate test test-cov test-fast lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop hooks admin-dev admin-build observability-up observability-down test-admin test-all bootstrap-admin bootstrap-admin-docker
 
 hooks: ## Install repo git hooks (boundary check before push)
 	git config core.hooksPath .githooks
@@ -98,3 +98,9 @@ test-admin: ## Run admin-specific tests only
 
 test-all: test ## Backend + frontend unit tests
 	cd frontend && npm run test
+
+bootstrap-admin: ## Grant full admin to user. USAGE: make bootstrap-admin USER="--email me@x.com"
+	poetry run python scripts/bootstrap_admin.py $(USER)
+
+bootstrap-admin-docker: ## Same as bootstrap-admin, but inside docker compose. USAGE: make bootstrap-admin-docker USER="--email me@x.com"
+	docker compose exec backend poetry run python scripts/bootstrap_admin.py $(USER)
