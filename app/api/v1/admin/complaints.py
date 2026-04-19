@@ -1,16 +1,25 @@
 """Admin endpoints for complaint management."""
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
 from app.dependencies import get_db, require_admin
-from app.models.complaint import Complaint
 from app.models.user import User
+from app.services.admin_service import AdminService
 
-from .schemas import AdminComplaintListResponse, AdminComplaintResponse
+from .schemas import (
+    AdminComplaintListResponse,
+    AdminComplaintResponse,
+)
 
 router = APIRouter()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -30,21 +39,12 @@ async def admin_list_complaints(
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin),
 ) -> AdminComplaintListResponse:
-    offset = (page - 1) * size
-    q = select(Complaint).order_by(Complaint.created_at.desc())
-    if unresolved_only:
-        q = q.where(Complaint.is_resolved.is_(False))
-    result = await session.execute(q.offset(offset).limit(size))
-    complaints = list(result.scalars().all())
-
-    count_q = select(func.count(Complaint.id))
-    if unresolved_only:
-        count_q = count_q.where(
-            Complaint.is_resolved.is_(False)
-        )
-    count_result = await session.execute(count_q)
-    total = count_result.scalar_one()
-
+    service = AdminService(session)
+    complaints, total = await service.list_complaints(
+        page=page,
+        size=size,
+        unresolved_only=unresolved_only,
+    )
     return AdminComplaintListResponse(
         items=[AdminComplaintResponse.model_validate(c) for c in complaints],
         total=total,
@@ -65,17 +65,17 @@ async def admin_resolve_complaint(
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin),
 ) -> AdminComplaintResponse:
-    result = await session.execute(
-        select(Complaint).where(Complaint.id == complaint_id)
-    )
-    complaint = result.scalar_one_or_none()
-    if not complaint:
+    service = AdminService(session)
+    complaint = await service.resolve_complaint(complaint_id)
+    if complaint is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Complaint not found",
         )
-    complaint.is_resolved = True
-    logger.info("admin_complaint_resolved", complaint_id=complaint_id)
+    logger.info(
+        "admin_complaint_resolved",
+        complaint_id=complaint_id,
+    )
     return AdminComplaintResponse.model_validate(complaint)
 
 
@@ -91,14 +91,14 @@ async def admin_delete_complaint(
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin),
 ) -> None:
-    result = await session.execute(
-        select(Complaint).where(Complaint.id == complaint_id)
-    )
-    complaint = result.scalar_one_or_none()
-    if not complaint:
+    service = AdminService(session)
+    deleted = await service.delete_complaint(complaint_id)
+    if not deleted:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Complaint not found",
         )
-    await session.delete(complaint)
-    logger.info("admin_complaint_deleted", complaint_id=complaint_id)
+    logger.info(
+        "admin_complaint_deleted",
+        complaint_id=complaint_id,
+    )

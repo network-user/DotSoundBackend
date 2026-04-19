@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import (
     HTTPAuthorizationCredentials,
     HTTPBearer,
@@ -8,7 +8,11 @@ from fastapi.security import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import AppSettings, settings
-from app.core.auth import AuthError, decode_access_token
+from app.core.auth import (
+    AuthError,
+    decode_access_token,
+    decode_admin_token,
+)
 from app.core.db import AsyncSessionLocal
 from app.models.user import User
 from app.repositories.user import UserRepository
@@ -119,9 +123,11 @@ async def require_admin(
 def require_capability(capability: str):
     """Return a FastAPI dependency that enforces a capability.
 
-    Superadmins (``is_admin`` True) bypass granular checks and
-    always succeed. Regular admins must have the capability row
-    in ``admin_capabilities``. Anyone else gets 403.
+    Caller must be an admin (``is_admin`` True) AND have a row in
+    ``admin_capabilities`` matching the requested capability. There
+    is no implicit super-admin bypass: every privileged action goes
+    through ``admin_capabilities`` so the audit log captures the
+    capability that authorized it. Anyone else gets 403.
     """
 
     async def _dep(
@@ -144,6 +150,136 @@ def require_capability(capability: str):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="capability required",
+            )
+        return user
+
+    return _dep
+
+
+async def get_admin_session(
+    request: Request,
+    credentials: (
+        HTTPAuthorizationCredentials | None
+    ) = Depends(_bearer),
+    session: AsyncSession = Depends(get_db),
+) -> tuple[User, dict[str, object]]:
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = decode_admin_token(
+            credentials.credentials
+        )
+    except AuthError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired admin token",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
+    if payload.get("scope") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin scope required",
+        )
+    jti = str(payload.get("jti", ""))
+    if not jti:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin token missing jti",
+        )
+
+    from app.repositories.admin_device import (
+        AdminDeviceRepository,
+    )
+    from app.repositories.admin_session import (
+        AdminSessionRepository,
+    )
+    from app.services.admin_auth_service import (
+        is_admin_session_valid,
+    )
+
+    sessions = AdminSessionRepository(session)
+    row = await sessions.get_by_jti(jti)
+    if not is_admin_session_valid(row=row):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin session expired or revoked",
+        )
+    assert row is not None
+
+    devices = AdminDeviceRepository(session)
+    device = await devices.get_by_id(row.device_id)
+    if (
+        device is None
+        or device.revoked_at is not None
+        or device.trusted_at is None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin device not trusted",
+        )
+
+    user_id = int(str(payload["sub"]))
+    repo = UserRepository(session)
+    user = await repo.get_by_id(user_id)
+    if (
+        not user
+        or not user.is_active
+        or not user.is_admin
+        or not user.admin_init
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin not active",
+        )
+
+    client_host = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    await sessions.touch(
+        row, ip=client_host, ua=user_agent
+    )
+    await devices.touch(device, ip=client_host)
+    return user, payload
+
+
+async def require_admin_session(
+    pair: tuple[User, dict[str, object]] = Depends(
+        get_admin_session
+    ),
+) -> User:
+    user, _payload = pair
+    return user
+
+
+def require_step_up(action: str):
+    """Require a fresh step-up TOTP marker for ``action``.
+
+    Frontend opens the StepUpDialog, the backend verifies a TOTP
+    code via ``/admin/auth/step-up`` and stores a Redis marker for
+    a few minutes (TTL from PrivateCore). Critical endpoints attach
+    this dependency so they only fire when the marker is present.
+    """
+
+    async def _dep(
+        user: User = Depends(require_admin_session),
+    ) -> User:
+        from app.services.admin_auth_service import (
+            consume_step_up,
+        )
+
+        ok = await consume_step_up(
+            user_id=user.id, action=action
+        )
+        if not ok:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Step-up authentication required"
+                ),
             )
         return user
 

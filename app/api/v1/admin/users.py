@@ -1,14 +1,21 @@
 """Admin endpoints for user management."""
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import func, select
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
 from app.dependencies import get_db, require_admin
 from app.models.user import User
 from app.schemas.user import UserResponse
+from app.services.admin_service import AdminService
 
 from .schemas import AdminUserListResponse, AdminUserUpdate
 
@@ -26,20 +33,20 @@ async def admin_list_users(
     request: Request,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    is_active: bool | None = Query(None),
+    is_admin: bool | None = Query(None),
+    search: str | None = Query(None, max_length=128),
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin),
 ) -> AdminUserListResponse:
-    offset = (page - 1) * size
-    result = await session.execute(
-        select(User).order_by(User.created_at.desc()).offset(offset).limit(size)
+    service = AdminService(session)
+    users, total = await service.list_users(
+        page=page,
+        size=size,
+        is_active=is_active,
+        is_admin=is_admin,
+        search=search,
     )
-    users = list(result.scalars().all())
-
-    count_result = await session.execute(
-        select(func.count(User.id))
-    )
-    total = count_result.scalar_one()
-
     return AdminUserListResponse(
         items=[UserResponse.model_validate(u) for u in users],
         total=total,
@@ -51,7 +58,7 @@ async def admin_list_users(
 @router.patch(
     "/users/{user_id}",
     response_model=UserResponse,
-    summary="[Admin] Update user (is_admin, is_active, display_name)",
+    summary=("[Admin] Update user " "(is_admin, is_active, display_name)"),
 )
 @limiter.limit("30/minute")
 async def admin_update_user(
@@ -61,21 +68,18 @@ async def admin_update_user(
     session: AsyncSession = Depends(get_db),
     admin: User = Depends(require_admin),
 ) -> UserResponse:
-    result = await session.execute(
-        select(User).where(User.id == user_id)
+    service = AdminService(session)
+    user = await service.update_user(
+        user_id,
+        display_name=data.display_name,
+        is_active=data.is_active,
+        is_admin=data.is_admin,
     )
-    user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    if data.display_name is not None:
-        user.display_name = data.display_name
-    if data.is_active is not None:
-        user.is_active = data.is_active
-    if data.is_admin is not None:
-        user.is_admin = data.is_admin
     logger.info(
         "admin_user_updated",
         target_user_id=user_id,

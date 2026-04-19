@@ -20,8 +20,12 @@ const BLOCKLIST = [
   'audio_compute.rotate_secret',
   'lyrics.routing',
   'settings.manage',
+  'feature_flags.manage',
+  'security.release_lockout',
   'admin_actions_log',
+  'admin_login_attempts',
   'worker_audit_log',
+  'admin_totp_secret_encrypted',
 ]
 
 function walk(dir) {

@@ -71,6 +71,18 @@ class User(Base, TimestampMixin):
     backup_codes_hash: Mapped[str | None] = (
         mapped_column(Text, nullable=True)
     )
+    admin_init: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
+    admin_totp_secret_encrypted: Mapped[str | None] = (
+        mapped_column(Text, nullable=True)
+    )
+    admin_totp_enabled: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
+    admin_backup_codes_hash: Mapped[str | None] = (
+        mapped_column(Text, nullable=True)
+    )
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

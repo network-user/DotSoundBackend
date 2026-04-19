@@ -1,0 +1,276 @@
+import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import type { ColumnDef } from '@tanstack/react-table'
+import { Press } from '@/components/ui/Press'
+import { adminApi } from '../lib/adminApi'
+import { DataTable } from '../components/widgets/DataTable'
+import { StatusPill } from '../components/widgets/StatusPill'
+import { useStepUp } from '../components/auth/StepUpDialog'
+
+interface DeviceRow {
+  id: number
+  label: string | null
+  fingerprint_hash_preview: string
+  ip_first: string | null
+  trusted_at: string | null
+  last_seen_at: string | null
+  created_at: string
+}
+
+interface FlagRow {
+  key: string
+  value: { enabled?: boolean }
+  updated_by: number | null
+  updated_at: string
+}
+
+export function SettingsRoute() {
+  const stepUp = useStepUp()
+  const devices = useQuery({
+    queryKey: ['admin', 'settings', 'devices'],
+    queryFn: () => adminApi.listDevices(),
+  })
+  const flags = useQuery({
+    queryKey: ['admin', 'settings', 'flags'],
+    queryFn: () => adminApi.featureFlags(),
+  })
+  const [busyFlag, setBusyFlag] = useState<
+    string | null
+  >(null)
+
+  async function toggleFlag(
+    name: string,
+    enabled: boolean,
+  ) {
+    const ok = await stepUp.request(
+      'system.feature_flags.set',
+    )
+    if (!ok) return
+    setBusyFlag(name)
+    try {
+      await adminApi.setFeatureFlag(
+        name,
+        enabled,
+      )
+      flags.refetch()
+    } catch (err) {
+      alert(
+        (err as Error).message || 'failed',
+      )
+    } finally {
+      setBusyFlag(null)
+    }
+  }
+
+  async function revokeDevice(id: number) {
+    if (
+      !window.confirm(
+        'Revoke this device? It will be signed out.',
+      )
+    )
+      return
+    try {
+      await adminApi.revokeDevice(id)
+      devices.refetch()
+    } catch (err) {
+      alert(
+        (err as Error).message || 'failed',
+      )
+    }
+  }
+
+  const deviceColumns: ColumnDef<DeviceRow>[] = [
+    {
+      header: 'Label',
+      accessorKey: 'label',
+      cell: (i) =>
+        i.row.original.label || '(no label)',
+    },
+    {
+      header: 'Fingerprint',
+      cell: (i) => (
+        <span className="admin-mono">
+          {
+            i.row.original
+              .fingerprint_hash_preview
+          }
+          …
+        </span>
+      ),
+    },
+    { header: 'IP', accessorKey: 'ip_first' },
+    {
+      header: 'Trusted',
+      cell: (i) =>
+        i.row.original.trusted_at ? (
+          <StatusPill kind="ok">
+            trusted
+          </StatusPill>
+        ) : (
+          <StatusPill kind="warn">
+            pending
+          </StatusPill>
+        ),
+    },
+    {
+      header: 'Last seen',
+      cell: (i) =>
+        i.row.original.last_seen_at
+          ? new Date(
+              i.row.original.last_seen_at,
+            ).toLocaleString()
+          : '–',
+    },
+    {
+      header: '',
+      id: 'actions',
+      cell: (i) => (
+        <Press
+          variant="ghost"
+          onClick={() =>
+            revokeDevice(i.row.original.id)
+          }
+        >
+          Revoke
+        </Press>
+      ),
+    },
+  ]
+
+  const flagColumns: ColumnDef<FlagRow>[] = [
+    {
+      header: 'Flag',
+      accessorKey: 'key',
+      cell: (i) => (
+        <span className="admin-mono">
+          {i.getValue<string>()}
+        </span>
+      ),
+    },
+    {
+      header: 'Enabled',
+      cell: (i) =>
+        i.row.original.value?.enabled ? (
+          <StatusPill kind="ok">on</StatusPill>
+        ) : (
+          <StatusPill kind="unknown">off</StatusPill>
+        ),
+    },
+    {
+      header: 'Updated',
+      cell: (i) =>
+        new Date(
+          i.row.original.updated_at,
+        ).toLocaleString(),
+    },
+    {
+      header: '',
+      id: 'actions',
+      cell: (i) => {
+        const enabled = !!i.row.original.value
+          ?.enabled
+        return (
+          <Press
+            variant="ghost"
+            disabled={
+              busyFlag === i.row.original.key
+            }
+            onClick={() =>
+              toggleFlag(
+                i.row.original.key,
+                !enabled,
+              )
+            }
+          >
+            {enabled ? 'Disable' : 'Enable'}
+          </Press>
+        )
+      },
+    },
+  ]
+
+  return (
+    <div>
+      <h1>Settings</h1>
+      <section className="admin-card">
+        <h2>Trusted devices</h2>
+        <DataTable
+          columns={deviceColumns}
+          rows={
+            (devices.data?.items ||
+              []) as DeviceRow[]
+          }
+          emptyHint="No active devices"
+        />
+      </section>
+      <section className="admin-card">
+        <h2>Feature flags</h2>
+        <FeatureFlagCreator
+          onCreated={() => flags.refetch()}
+          stepUp={stepUp}
+        />
+        <DataTable
+          columns={flagColumns}
+          rows={
+            (flags.data?.items || []) as FlagRow[]
+          }
+          emptyHint="No flags yet"
+        />
+      </section>
+    </div>
+  )
+}
+
+function FeatureFlagCreator({
+  onCreated,
+  stepUp,
+}: {
+  onCreated: () => void
+  stepUp: ReturnType<typeof useStepUp>
+}) {
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    setName(name.replace(/[^a-z0-9._-]/gi, ''))
+  }, [name])
+
+  async function handleCreate() {
+    if (!name) return
+    const ok = await stepUp.request(
+      'system.feature_flags.set',
+    )
+    if (!ok) return
+    setBusy(true)
+    try {
+      await adminApi.setFeatureFlag(name, false)
+      setName('')
+      onCreated()
+    } catch (err) {
+      alert(
+        (err as Error).message || 'failed',
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="admin-toolbar">
+      <input
+        type="text"
+        placeholder="new feature flag name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        maxLength={64}
+      />
+      <Press
+        variant="ghost"
+        onClick={handleCreate}
+        disabled={!name || busy}
+      >
+        {busy ? 'Creating…' : 'Create'}
+      </Press>
+    </div>
+  )
+}

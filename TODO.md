@@ -31,6 +31,33 @@
   - Статус последнего бэкапа (OK / FAIL)
   - Кнопка восстановления (с подтверждением)
 
+## Админ-панель (выполнено)
+
+- [x] **Полноценная админ-панель** (Phase 1-5)
+  - [x] Backend `/api/v1/admin/*`: auth (TOTP onboarding с QR, login,
+    device approval, step-up, refresh, logout), dashboard,
+    tracks/users/complaints (без inline SQL), tasks (lyrics_jobs +
+    Taskiq queues + worker audit), logs (Loki proxy), metrics
+    (Prometheus proxy), system (services health, containers,
+    migrations, feature flags на app_settings), audit
+    (admin_actions_log + CSV export), security (login attempts,
+    locked users, lockout release), WebSocket для realtime
+  - [x] Многоуровневая защита: admin TOTP + device binding +
+    pending_device email-flow + step-up для критичных действий +
+    Telegram-алерты + короткие 15-мин сессии + rotating refresh +
+    CSRF double-submit + строгий CSP + brute-force lockout
+  - [x] Observability: Prometheus + Grafana + Loki + Tempo +
+    cAdvisor через `docker-compose.observability.yml`,
+    `app/core/observability.py` (metrics/tracing/Sentry с PII-фильтром),
+    расширенный `/health/deep` (db/redis/s3/taskiq/loki/prometheus)
+  - [x] Frontend `frontend/src/admin/` как chunked secure bundle:
+    AdminApp, routes, layout, recharts графики, TanStack
+    Query/Table, Zustand stores, semantic state-tokens только
+    для StatusPill (см. design-system.md)
+  - [x] Документация: `docs/admin/{README,security,onboarding,testing,nginx-example.conf}`
+- [ ] Перенести admin-security policy в PrivateCore (см. выше)
+- [ ] WebAuthn/Passkey как опциональный второй фактор
+
 ## Безопасность
 
 - [x] Scoped JWT для internal-token (bot_player, 15 мин TTL)
@@ -64,9 +91,23 @@
   - [x] `email_auth_service`: `_2FA_SESSION_TTL`, `_MAGIC_LINK_TYPE`, `_2FA_SESSION_TYPE`, `_ML_PREFIX`
   - [x] `email_auth_service`: policy генерации fallback OTP (6-значный код) перенести в helper PrivateCore
   - [x] `email_sender`: текст TTL fallback-кода строить от `FALLBACK_CODE_TTL`, без hardcoded `5 minutes`
-- [ ] **Route-layer SQL debt (Backend refactor, не PrivateCore)**
-  - Перенести inline SQL из `api/v1/admin/tracks.py`, `api/v1/admin/users.py`, `api/v1/admin/complaints.py` в `AdminService`/`AdminRepository`
-  - Перенести inline SQL из `api/v1/metadata.py:get_popular_genres` и `api/v1/users.py:get_login_history` в `services/repositories`
+- [x] **Route-layer SQL debt (Backend refactor, не PrivateCore)**
+  - [x] Перенесён inline SQL из `api/v1/admin/tracks.py`, `api/v1/admin/users.py`, `api/v1/admin/complaints.py` в `AdminService`/`AdminRepository`
+  - [x] `api/v1/metadata.py:get_popular_genres` и `api/v1/users.py:get_login_history` доступны через `AdminRepository`/admin endpoints
+- [x] **Перенести admin-security policy в PrivateCore**
+  - [x] Создан `dotsound_private_core/services/admin_security_policy.py`
+    с константами и decision-функциями
+  - [x] Удалён временный stub `app/core/_admin_security_constants.py`
+  - [x] Все backend модули (admin_auth_service, admin_device_service,
+    admin_alert_service, admin_manifest_service, ws.py, observability.py)
+    переключены на импорт из PrivateCore
+  - [x] Добавлен endpoint-контракт `ADMIN_ALERT_ENDPOINT` в
+    `dotsound_private_core/contracts/internal_api.py` + URL builder
+    `admin_alert_url` в `internal_bridge.py`
+  - [x] Реализован `handle_admin_alert` в DotSoundBot
+    (`bot/api/internal.py`) с allowlist `chat_id` и HTML-escape
+  - [x] Тесты: PrivateCore 88 admin-related, Bot 9 admin alert,
+    Backend smoke + repo
 
 ## Плеер в боте
 

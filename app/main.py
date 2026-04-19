@@ -16,10 +16,16 @@ from app.api.router import api_router
 from app.config import settings
 from app.core.db import dispose_engine
 from app.core.logging import configure_logging
+from app.core.observability import (
+    setup_observability,
+)
 from app.core.rate_limit import limiter
 from app.core.redis import close_redis
 from app.core.s3 import ensure_bucket_exists
 from app.core.ws_manager import ws_manager
+from app.middlewares.admin_security import (
+    AdminSecurityMiddleware,
+)
 from app.middlewares.request_logging import RequestLoggingMiddleware
 from app.middlewares.secure_static import SecureStaticMiddleware
 from app.middlewares.security_headers import SecurityHeadersMiddleware
@@ -78,6 +84,7 @@ def create_app() -> FastAPI:
 
     application.add_middleware(SlowAPIMiddleware)
     application.add_middleware(SecureStaticMiddleware)
+    application.add_middleware(AdminSecurityMiddleware)
     application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(
@@ -104,6 +111,8 @@ def create_app() -> FastAPI:
         StaticFiles(directory="app/static/mini_app", html=True),
         name="mini_app",
     )
+
+    setup_observability(application)
 
     return application
 

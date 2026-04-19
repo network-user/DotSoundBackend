@@ -47,6 +47,14 @@
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.6);
   --shadow-glow: 0 0 20px rgba(255, 255, 255, 0.15);
+
+  /* Status semantics — used ONLY by StatusPill / status dots in
+   * the admin panel. The rest of the UI stays strictly monochrome.
+   * See docs/design-system.md "Status semantics" for the rule. */
+  --state-ok:      #34C759;
+  --state-warn:    #FFCC00;
+  --state-error:   #FF453A;
+  --state-unknown: #6E6E6E;
 }
 
 html, body { height: 100%; overflow: hidden; }
