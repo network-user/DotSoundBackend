@@ -1,0 +1,155 @@
+"""Service layer that backs the admin REST API.
+
+Wraps :class:`app.repositories.admin.AdminRepository` and adds the
+small bits of business logic that used to be inlined into the
+admin route handlers (S3 cleanup on track delete, structured logs,
+soft-validation on PATCHes).
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import structlog
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core import s3
+from app.models.complaint import Complaint
+from app.models.track import Track
+from app.models.user import User
+from app.repositories.admin import AdminRepository
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+class AdminServiceError(Exception):
+    pass
+
+
+class AdminService:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repo = AdminRepository(session)
+
+    async def list_tracks(
+        self,
+        *,
+        page: int,
+        size: int,
+        is_active: bool | None = None,
+        search: str | None = None,
+    ) -> tuple[list[Track], int]:
+        return await self._repo.list_tracks(
+            page=page,
+            size=size,
+            is_active=is_active,
+            search=search,
+        )
+
+    async def get_track(self, track_id: int) -> Track | None:
+        return await self._repo.get_track(track_id)
+
+    async def delete_track(self, track_id: int) -> bool:
+        track = await self._repo.get_track(track_id)
+        if track is None:
+            return False
+        if track.source == "internal" and track.file_key:
+            try:
+                await s3.delete_object(track.file_key)
+            except Exception:
+                logger.warning(
+                    "admin_s3_delete_failed",
+                    track_id=track_id,
+                    file_key=track.file_key,
+                )
+        if track.cover_key:
+            try:
+                await s3.delete_object(track.cover_key)
+            except Exception:
+                logger.warning(
+                    "admin_s3_cover_delete_failed",
+                    track_id=track_id,
+                    cover_key=track.cover_key,
+                )
+        await self._session.delete(track)
+        return True
+
+    async def set_track_visibility(
+        self, track_id: int, is_active: bool
+    ) -> Track | None:
+        track = await self._repo.get_track(track_id)
+        if track is None:
+            return None
+        track.is_active = is_active
+        await self._session.flush()
+        return track
+
+    async def list_users(
+        self,
+        *,
+        page: int,
+        size: int,
+        is_active: bool | None = None,
+        is_admin: bool | None = None,
+        search: str | None = None,
+    ) -> tuple[list[User], int]:
+        return await self._repo.list_users(
+            page=page,
+            size=size,
+            is_active=is_active,
+            is_admin=is_admin,
+            search=search,
+        )
+
+    async def update_user(
+        self,
+        user_id: int,
+        *,
+        display_name: str | None,
+        is_active: bool | None,
+        is_admin: bool | None,
+    ) -> User | None:
+        user = await self._repo.get_user(user_id)
+        if user is None:
+            return None
+        if display_name is not None:
+            user.display_name = display_name
+        if is_active is not None:
+            user.is_active = is_active
+        if is_admin is not None:
+            user.is_admin = is_admin
+        await self._session.flush()
+        return user
+
+    async def list_complaints(
+        self,
+        *,
+        page: int,
+        size: int,
+        unresolved_only: bool = False,
+    ) -> tuple[list[Complaint], int]:
+        return await self._repo.list_complaints(
+            page=page,
+            size=size,
+            unresolved_only=unresolved_only,
+        )
+
+    async def resolve_complaint(self, complaint_id: int) -> Complaint | None:
+        complaint = await self._repo.get_complaint(complaint_id)
+        if complaint is None:
+            return None
+        complaint.is_resolved = True
+        await self._session.flush()
+        return complaint
+
+    async def delete_complaint(self, complaint_id: int) -> bool:
+        complaint = await self._repo.get_complaint(complaint_id)
+        if complaint is None:
+            return False
+        await self._session.delete(complaint)
+        return True
+
+    async def get_popular_genres(
+        self, limit: int = 20
+    ) -> list[dict[str, Any]]:
+        return await self._repo.get_popular_genres(limit)

@@ -90,6 +90,12 @@ Backend (file_validator.py):
 - `services/import_rules.py` -- import limits
 - `services/upload_policy.py` -- upload security: MIME allowlists,
   dangerous extensions, size limits, decision functions
+- `services/admin_security_policy.py` -- TTL admin-сессии, окно
+  TOTP, lockout, step-up freshness, alert decisions, PII-redact
+  для audit-payload. Подключён по всему backend (admin_auth_service,
+  admin_device_service, admin_alert_service, admin_manifest_service,
+  ws.py, observability.py). Временный stub
+  `app/core/_admin_security_constants.py` удалён.
 - `contracts/` -- protocol constants
 
 ## Стек
@@ -149,11 +155,18 @@ api/v1/ → services/ → repositories/ → models/
 - `repositories/` — чистые SQL-запросы без бизнес-решений.
 
 ### Известные нарушения (tech debt)
-- `admin/tracks.py`, `admin/users.py`, `admin/complaints.py` —
- inline SQL в роутах (нужны AdminService + AdminRepository)
-- `metadata.py:get_popular_genres` — inline grouped query
-- `users.py:get_login_history` — inline select + hardcoded limit
 - `internal/audio_compute.py` — inline ORM в worker-роутах
+
+Закрыто:
+- `admin/tracks.py`, `admin/users.py`, `admin/complaints.py` —
+ inline SQL вынесен в `AdminService` + `AdminRepository`
+ (см. `app/services/admin_service.py`, `app/repositories/admin.py`)
+- `metadata.py:get_popular_genres` — реализован в
+ `AdminRepository.get_popular_genres` (доступен как admin
+ endpoint в Phase 3)
+- `users.py:get_login_history` — реализован через
+ `AdminActionLogRepository` + admin endpoint
+ `/api/v1/admin/users-ext/{user_id}/login-history`
 
 ## Правила DI
 - Сессии БД только через `dependencies.get_db()`

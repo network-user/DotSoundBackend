@@ -25,9 +25,7 @@ from app.services.admin_manifest_service import (
     build_manifest,
 )
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
@@ -39,17 +37,13 @@ async def get_admin_manifest(
     user: User = Depends(get_current_user),
 ) -> dict:
     if not user.is_admin:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     locale = (
         request.query_params.get("locale")
         or getattr(user, "locale", None)
         or "ru"
     )
-    manifest = await build_manifest(
-        session, user, locale=locale
-    )
+    manifest = await build_manifest(session, user, locale=locale)
     logger.info(
         "admin_manifest_built",
         user_id=user.id,

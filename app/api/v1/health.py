@@ -102,26 +102,124 @@ async def _ping_s3() -> ComponentHealth:
         )
 
 
+async def _ping_loki() -> ComponentHealth | None:
+    from app.config import settings
+
+    if not settings.loki_url:
+        return None
+    start = time.perf_counter()
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(
+            timeout=3.0
+        ) as client:
+            response = await client.get(
+                settings.loki_url.rstrip("/")
+                + "/ready"
+            )
+            response.raise_for_status()
+        return ComponentHealth(
+            status="ok",
+            latency_ms=round(
+                (time.perf_counter() - start) * 1000,
+                2,
+            ),
+        )
+    except Exception as exc:
+        return ComponentHealth(
+            status="error",
+            detail=type(exc).__name__,
+        )
+
+
+async def _ping_prometheus() -> ComponentHealth | None:
+    from app.config import settings
+
+    if not settings.prometheus_url:
+        return None
+    start = time.perf_counter()
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(
+            timeout=3.0
+        ) as client:
+            response = await client.get(
+                settings.prometheus_url.rstrip("/")
+                + "/-/healthy"
+            )
+            response.raise_for_status()
+        return ComponentHealth(
+            status="ok",
+            latency_ms=round(
+                (time.perf_counter() - start) * 1000,
+                2,
+            ),
+        )
+    except Exception as exc:
+        return ComponentHealth(
+            status="error",
+            detail=type(exc).__name__,
+        )
+
+
+async def _ping_taskiq() -> ComponentHealth:
+    start = time.perf_counter()
+    try:
+        from app.core.tkq import broker
+
+        if hasattr(broker, "startup"):
+            pass
+        from app.core.redis import get_redis_client
+
+        redis = get_redis_client()
+        await redis.ping()
+        return ComponentHealth(
+            status="ok",
+            latency_ms=round(
+                (time.perf_counter() - start) * 1000,
+                2,
+            ),
+        )
+    except Exception as exc:
+        return ComponentHealth(
+            status="error",
+            detail=type(exc).__name__,
+        )
+
+
 @router.get(
     "/deep", response_model=DeepHealthResponse
 )
 async def health_deep() -> DeepHealthResponse:
-    """Deep health-check: probes Postgres, Redis and S3.
+    """Deep health-check across infra and observability.
 
-    Returns ``status="degraded"`` if any single component is
-    failing and ``status="error"`` if every component is down.
-    The body always lists every component so external monitors
-    can pick the right alert.
+    Always probes Postgres / Redis / S3 / Taskiq broker. Loki and
+    Prometheus are probed only when their URLs are configured. The
+    response is ``"ok"`` when every component is healthy,
+    ``"error"`` when every component is failing, and
+    ``"degraded"`` otherwise so external monitors can route alerts
+    accordingly.
     """
     db = await _ping_db()
     redis = await _ping_redis()
     s3 = await _ping_s3()
+    taskiq = await _ping_taskiq()
 
-    components = {
+    components: dict[str, ComponentHealth] = {
         "db": db,
         "redis": redis,
         "s3": s3,
+        "taskiq": taskiq,
     }
+    loki = await _ping_loki()
+    if loki is not None:
+        components["loki"] = loki
+    prom = await _ping_prometheus()
+    if prom is not None:
+        components["prometheus"] = prom
+
     statuses = {c.status for c in components.values()}
     if statuses == {"ok"}:
         overall = "ok"

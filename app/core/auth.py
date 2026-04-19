@@ -128,6 +128,58 @@ def create_scoped_token(
     )
 
 
+def _admin_secret() -> str:
+    secret = settings.admin_jwt_secret or settings.jwt_secret
+    if not secret:
+        raise AuthError("ADMIN_JWT_SECRET is not set")
+    return secret
+
+
+def create_admin_token(
+    *,
+    user_id: int,
+    jti: str,
+    device_id: int,
+    ttl_seconds: int,
+    scope: str = "admin",
+    extra: dict[str, object] | None = None,
+) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(
+        seconds=ttl_seconds
+    )
+    payload: dict[str, object] = {
+        "sub": str(user_id),
+        "scope": scope,
+        "jti": jti,
+        "device_id": device_id,
+        "exp": expire,
+    }
+    if extra:
+        payload.update(extra)
+    return str(
+        jwt.encode(
+            payload,
+            _admin_secret(),
+            algorithm=_ALGORITHM,
+        )
+    )
+
+
+def decode_admin_token(
+    token: str,
+) -> dict[str, object]:
+    try:
+        return dict(  # type: ignore[arg-type]
+            jwt.decode(
+                token,
+                _admin_secret(),
+                algorithms=[_ALGORITHM],
+            )
+        )
+    except JWTError as exc:
+        raise AuthError(str(exc)) from exc
+
+
 def decode_access_token(
     token: str,
 ) -> dict[str, object]:

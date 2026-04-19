@@ -1,4 +1,4 @@
-.PHONY: dev infra migrate test test-cov test-fast lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop hooks
+.PHONY: dev infra migrate test test-cov test-fast lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop hooks admin-dev admin-build observability-up observability-down test-admin test-all
 
 hooks: ## Install repo git hooks (boundary check before push)
 	git config core.hooksPath .githooks
@@ -73,3 +73,28 @@ backup-start: ## Start automatic backup cron service
 
 backup-stop: ## Stop backup cron service
 	docker compose --profile backup stop backup
+
+admin-dev: ## Start backend + frontend dev for admin work
+	docker compose up -d postgres minio redis
+	timeout /t 4 /nobreak >nul 2>&1 || sleep 4
+	poetry run alembic upgrade head
+	@echo Backend on :8000, frontend on :5173
+	@echo Run separately: cd frontend && npm run dev
+	poetry run python main.py
+
+admin-build: ## Production build of frontend (admin chunk goes to assets/secure/)
+	cd frontend && npm run build
+
+observability-up: ## Start Prometheus + Grafana + Loki + Tempo + cAdvisor
+	docker compose -f docker-compose.observability.yml up -d
+	@echo Grafana on http://localhost:3001 (admin/admin)
+	@echo Prometheus on http://localhost:9091
+
+observability-down: ## Stop observability stack
+	docker compose -f docker-compose.observability.yml down
+
+test-admin: ## Run admin-specific tests only
+	poetry run pytest -v tests/admin/ tests/observability/
+
+test-all: test ## Backend + frontend unit tests
+	cd frontend && npm run test

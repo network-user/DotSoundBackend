@@ -1,0 +1,63 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "RPS",
+      "datasource": "Prometheus",
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Error rate (5xx)",
+      "datasource": "Prometheus",
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(rate(http_errors_total[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p95",
+      "datasource": "Prometheus",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Active websockets",
+      "datasource": "Prometheus",
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(active_websocket_connections)",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["dotsound"],
+  "timezone": "",
+  "title": "DotSound Backend Overview",
+  "uid": "dotsound-overview",
+  "version": 1
+}

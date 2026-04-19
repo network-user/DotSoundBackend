@@ -134,6 +134,50 @@ stroke-only, sharing the 24×24 view-box. Whenever a component is
 about to use a Unicode glyph or an emoji, replace it with an
 `<Icon name="…" />` call.
 
+## Status semantics (admin only)
+
+The strict monochrome rule has **one** documented exception: the
+status indicators in the admin panel. A monochrome status pill is
+indistinguishable at a glance, which is unsafe for an
+operations-facing surface.
+
+Three semantic tokens live in `global.css`:
+
+| Token              | Color           | Used for                                |
+| ------------------ | --------------- | --------------------------------------- |
+| `--state-ok`       | `#34C759` (green)  | healthy / running / success            |
+| `--state-warn`     | `#FFCC00` (amber)  | open complaints / pending devices      |
+| `--state-error`    | `#FF453A` (red)    | failed / unhealthy / locked-out        |
+| `--state-unknown`  | neutral grey       | unknown / not applicable               |
+
+These tokens are **only** consumed by `<StatusPill>` and
+`<KpiCard accent="warn"|"error">` inside `frontend/src/admin/`.
+The rest of the UI keeps the strict monochrome palette. Do not
+reach for these tokens from regular user-facing components.
+
+## Admin components
+
+The admin chunk under `frontend/src/admin/` ships its own narrow
+set of building blocks on top of the design system:
+
+- `StatusPill` — color-aware status badge (see above).
+- `KpiCard` — large numeric KPI with label/hint, used on the
+  dashboard.
+- `DataTable` — server-side pagination/sort wrapper around
+  `@tanstack/react-table`.
+- `LineChart` — `recharts` area chart pre-styled with
+  `currentColor` and the project surface tokens.
+- `JsonViewer` — read-only `<pre>`-based JSON dump for audit
+  payloads.
+- `LiveLogStream` — virtualized list rendered from the Loki
+  query endpoint.
+- `TotpInput` / `StepUpDialog` — TOTP UX primitives.
+
+These components live next to the admin routes, not under
+`frontend/src/components/ui/`, because they depend on
+`@tanstack/react-query` + `recharts` + `qrcode` which the public
+Mini App must not pay for.
+
 ## Telegram-native helpers
 
 `frontend/src/lib/telegram.ts` exposes:

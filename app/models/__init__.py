@@ -1,6 +1,11 @@
 from app.models.account_merge import AccountMerge
 from app.models.admin_action_log import AdminActionLog
 from app.models.admin_capability import AdminCapability
+from app.models.admin_device import AdminDevice
+from app.models.admin_login_attempt import (
+    AdminLoginAttempt,
+)
+from app.models.admin_session import AdminSession
 from app.models.album import Album
 from app.models.app_setting import AppSetting
 from app.models.artist import Artist, TrackArtist
@@ -44,6 +49,9 @@ __all__ = [
     "AccountMerge",
     "AdminActionLog",
     "AdminCapability",
+    "AdminDevice",
+    "AdminLoginAttempt",
+    "AdminSession",
     "Album",
     "AppSetting",
     "Artist",

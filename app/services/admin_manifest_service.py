@@ -12,9 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import json
 import time
-from typing import Iterable
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,11 +21,12 @@ from app.config import settings
 from app.models.admin_capability import AdminCapability
 from app.models.user import User
 
-
 KNOWN_CAPABILITIES: frozenset[str] = frozenset(
     {
         "users.manage",
         "users.grant_admin",
+        "users.ban",
+        "users.grant_capability",
         "tracks.manage",
         "tracks.delete",
         "complaints.moderate",
@@ -38,6 +37,17 @@ KNOWN_CAPABILITIES: frozenset[str] = frozenset(
         "lyrics.routing",
         "metrics.view",
         "settings.manage",
+        "logs.view",
+        "containers.view",
+        "tasks.manage",
+        "tasks.run",
+        "security.view",
+        "security.release_lockout",
+        "feature_flags.manage",
+        "backups.view",
+        "backups.run",
+        "audit.view",
+        "audit.export",
     }
 )
 
@@ -49,7 +59,12 @@ _LABELS_RU: dict[str, str] = {
     "menu.complaints": "Жалобы",
     "menu.artists": "Артисты",
     "menu.audio_compute": "Compute",
+    "menu.tasks": "Задачи",
+    "menu.logs": "Логи",
+    "menu.metrics": "Метрики",
+    "menu.containers": "Контейнеры",
     "menu.audit": "Аудит",
+    "menu.security": "Безопасность",
     "menu.settings": "Настройки",
     "slot.tracks.hide": "Скрыть",
     "slot.tracks.delete": "Удалить",
@@ -63,7 +78,12 @@ _LABELS_EN: dict[str, str] = {
     "menu.complaints": "Complaints",
     "menu.artists": "Artists",
     "menu.audio_compute": "Compute",
+    "menu.tasks": "Tasks",
+    "menu.logs": "Logs",
+    "menu.metrics": "Metrics",
+    "menu.containers": "Containers",
     "menu.audit": "Audit",
+    "menu.security": "Security",
     "menu.settings": "Settings",
     "slot.tracks.hide": "Hide",
     "slot.tracks.delete": "Delete",
@@ -84,22 +104,16 @@ async def _effective_capabilities(
     if not user.is_admin:
         return set()
     result = await session.execute(
-        select(AdminCapability).where(
-            AdminCapability.user_id == user.id
-        )
+        select(AdminCapability).where(AdminCapability.user_id == user.id)
     )
     rows = result.scalars().all()
     caps = {
-        row.capability
-        for row in rows
-        if row.capability in KNOWN_CAPABILITIES
+        row.capability for row in rows if row.capability in KNOWN_CAPABILITIES
     }
     return caps
 
 
-def _filter_menu(
-    caps: set[str], locale: str
-) -> list[dict]:
+def _filter_menu(caps: set[str], locale: str) -> list[dict]:
     labels = _labels(locale)
     raw: list[dict] = [
         {
@@ -145,11 +159,46 @@ def _filter_menu(
             "icon": "brain",
         },
         {
+            "id": "tasks",
+            "label": labels["menu.tasks"],
+            "route": "/admin/tasks",
+            "capability": "tasks.manage",
+            "icon": "queue",
+        },
+        {
+            "id": "logs",
+            "label": labels["menu.logs"],
+            "route": "/admin/logs",
+            "capability": "logs.view",
+            "icon": "list",
+        },
+        {
+            "id": "metrics",
+            "label": labels["menu.metrics"],
+            "route": "/admin/metrics",
+            "capability": "metrics.view",
+            "icon": "trending-up",
+        },
+        {
+            "id": "containers",
+            "label": labels["menu.containers"],
+            "route": "/admin/containers",
+            "capability": "containers.view",
+            "icon": "box",
+        },
+        {
             "id": "audit",
             "label": labels["menu.audit"],
             "route": "/admin/audit",
-            "capability": "audio_compute.view_audit",
+            "capability": "audit.view",
             "icon": "eye",
+        },
+        {
+            "id": "security",
+            "label": labels["menu.security"],
+            "route": "/admin/security",
+            "capability": "security.view",
+            "icon": "shield",
         },
         {
             "id": "settings",
@@ -160,15 +209,11 @@ def _filter_menu(
         },
     ]
     return [
-        m
-        for m in raw
-        if m["capability"] is None or m["capability"] in caps
+        m for m in raw if m["capability"] is None or m["capability"] in caps
     ]
 
 
-def _filter_slots(
-    caps: set[str], locale: str
-) -> dict[str, list[dict]]:
+def _filter_slots(caps: set[str], locale: str) -> dict[str, list[dict]]:
     labels = _labels(locale)
     raw: dict[str, list[dict]] = {
         "track.card": [
@@ -209,18 +254,21 @@ def _filter_slots(
     }
     filtered: dict[str, list[dict]] = {}
     for ctx, items in raw.items():
-        allowed = [
-            i for i in items if i["capability"] in caps
-        ]
+        allowed = [i for i in items if i["capability"] in caps]
         if allowed:
             filtered[ctx] = allowed
     return filtered
 
 
 def sign_bundle_token(
-    user_id: int, ttl_s: int = 3600
+    user_id: int, ttl_s: int | None = None
 ) -> tuple[str, int]:
-    exp = int(time.time()) + int(ttl_s)
+    from dotsound_private_core.services.admin_security_policy import (
+        ADMIN_BUNDLE_TTL_SECONDS,
+    )
+
+    effective_ttl = ttl_s if ttl_s is not None else ADMIN_BUNDLE_TTL_SECONDS
+    exp = int(time.time()) + int(effective_ttl)
     raw = f"admin:{user_id}:{exp}"
     sig = hmac.new(
         settings.jwt_secret.encode("utf-8"),
@@ -230,9 +278,7 @@ def sign_bundle_token(
     return f"{exp}.{sig}", exp
 
 
-def verify_bundle_token(
-    token: str, user_id: int
-) -> bool:
+def verify_bundle_token(token: str, user_id: int) -> bool:
     try:
         exp_str, sig = token.split(".", 1)
         exp = int(exp_str)
@@ -263,8 +309,7 @@ async def build_manifest(
 
     token, exp = sign_bundle_token(user.id)
     bundle_url = (
-        f"/mini_app/assets/secure/admin-bundle.js"
-        f"?t={token}&u={user.id}"
+        f"/mini_app/assets/secure/admin-bundle.js" f"?t={token}&u={user.id}"
     )
     issued_at = int(time.time())
 

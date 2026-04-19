@@ -13,20 +13,14 @@ from app.services.audio_compute_admin_service import (
     AudioComputeAdminService,
 )
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-router = APIRouter(
-    prefix="/audio-compute", tags=["admin"]
-)
+router = APIRouter(prefix="/audio-compute", tags=["admin"])
 
 
 class WorkerCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
-    profile: str = Field(
-        pattern=r"^(cpu_light|gpu_full)$"
-    )
+    profile: str = Field(pattern=r"^(cpu_light|gpu_full)$")
 
 
 class WorkerCreateResponse(BaseModel):
@@ -38,38 +32,27 @@ class WorkerCreateResponse(BaseModel):
 
 class RoutingModeRequest(BaseModel):
     mode: str = Field(
-        pattern=(
-            r"^(auto|force_local_cpu|force_remote_gpu"
-            r"|disabled)$"
-        )
+        pattern=(r"^(auto|force_local_cpu|force_remote_gpu" r"|disabled)$")
     )
 
 
 @router.get("/workers")
 async def list_workers(
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(
-        require_capability("audio_compute.manage")
-    ),
+    _admin: User = Depends(require_capability("audio_compute.manage")),
 ) -> list[dict]:
     svc = AudioComputeAdminService(session)
     return await svc.list_workers()
 
 
-@router.post(
-    "/workers", response_model=WorkerCreateResponse
-)
+@router.post("/workers", response_model=WorkerCreateResponse)
 async def create_worker(
     body: WorkerCreateRequest,
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(
-        require_capability("audio_compute.manage")
-    ),
+    _admin: User = Depends(require_capability("audio_compute.manage")),
 ) -> WorkerCreateResponse:
     svc = AudioComputeAdminService(session)
-    data = await svc.create_worker(
-        name=body.name, profile=body.profile
-    )
+    data = await svc.create_worker(name=body.name, profile=body.profile)
     return WorkerCreateResponse(**data)
 
 
@@ -77,9 +60,7 @@ async def create_worker(
 async def revoke_worker(
     worker_id: str,
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(
-        require_capability("audio_compute.manage")
-    ),
+    _admin: User = Depends(require_capability("audio_compute.manage")),
 ) -> dict:
     svc = AudioComputeAdminService(session)
     ok = await svc.revoke_worker(worker_id)
@@ -92,16 +73,10 @@ async def revoke_worker(
 async def rotate_worker_secret(
     worker_id: str,
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(
-        require_capability(
-            "audio_compute.rotate_secret"
-        )
-    ),
+    _admin: User = Depends(require_capability("audio_compute.rotate_secret")),
 ) -> dict:
     svc = AudioComputeAdminService(session)
-    new_secret = await svc.rotate_worker_secret(
-        worker_id
-    )
+    new_secret = await svc.rotate_worker_secret(worker_id)
     if new_secret is None:
         raise HTTPException(status_code=404)
     return {
@@ -114,25 +89,17 @@ async def rotate_worker_secret(
 async def list_jobs(
     session: AsyncSession = Depends(get_db),
     status_filter: str | None = None,
-    _admin: User = Depends(
-        require_capability("audio_compute.manage")
-    ),
+    _admin: User = Depends(require_capability("audio_compute.manage")),
 ) -> list[dict]:
     svc = AudioComputeAdminService(session)
-    return await svc.list_jobs(
-        status_filter=status_filter
-    )
+    return await svc.list_jobs(status_filter=status_filter)
 
 
 @router.get("/audit")
 async def list_audit(
     session: AsyncSession = Depends(get_db),
     limit: int = 200,
-    _admin: User = Depends(
-        require_capability(
-            "audio_compute.view_audit"
-        )
-    ),
+    _admin: User = Depends(require_capability("audio_compute.view_audit")),
 ) -> list[dict]:
     svc = AudioComputeAdminService(session)
     return await svc.list_audit(limit=limit)
@@ -141,9 +108,7 @@ async def list_audit(
 @router.get("/routing")
 async def get_routing(
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(
-        require_capability("lyrics.routing")
-    ),
+    _admin: User = Depends(require_capability("lyrics.routing")),
 ) -> dict:
     svc = AudioComputeAdminService(session)
     mode = await svc.get_routing_mode()
@@ -154,9 +119,7 @@ async def get_routing(
 async def set_routing(
     body: RoutingModeRequest,
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(
-        require_capability("lyrics.routing")
-    ),
+    _admin: User = Depends(require_capability("lyrics.routing")),
 ) -> dict:
     svc = AudioComputeAdminService(session)
     mode = await svc.set_routing_mode(body.mode)

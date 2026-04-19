@@ -40,6 +40,7 @@ export default defineConfig({
         globPatterns: [
           '**/*.{js,css,html,svg,woff2}',
         ],
+        globIgnores: ['**/secure/**'],
         runtimeCaching: [
           {
             urlPattern: /^https?:\/\/.*\/api\//,
@@ -55,6 +56,7 @@ export default defineConfig({
         ],
         navigateFallback: '/mini_app/index.html',
         navigateFallbackAllowlist: [/^\/mini_app/],
+        navigateFallbackDenylist: [/^\/admin/, /^\/mini_app\/admin/],
       },
     }),
   ],
@@ -66,13 +68,44 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: [
-            'react',
-            'react-dom',
-            '@twa-dev/sdk',
-          ],
-          hls: ['hls.js'],
+        manualChunks(id) {
+          if (id.includes('/src/admin/')) {
+            return 'admin-bundle'
+          }
+          if (id.includes('node_modules/hls.js')) {
+            return 'hls'
+          }
+          if (
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/@twa-dev/sdk')
+          ) {
+            return 'vendor'
+          }
+          if (
+            id.includes('node_modules/@tanstack/') ||
+            id.includes('node_modules/recharts/') ||
+            id.includes('node_modules/qrcode/') ||
+            id.includes(
+              'node_modules/@fingerprintjs/',
+            )
+          ) {
+            return 'admin-bundle'
+          }
+          return undefined
+        },
+        assetFileNames: (info) => {
+          const name = info.name || ''
+          if (name.includes('admin-bundle')) {
+            return 'assets/secure/[name][extname]'
+          }
+          return 'assets/[name]-[hash][extname]'
+        },
+        chunkFileNames: (info) => {
+          if (info.name === 'admin-bundle') {
+            return 'assets/secure/admin-bundle.js'
+          }
+          return 'assets/[name]-[hash].js'
         },
       },
     },

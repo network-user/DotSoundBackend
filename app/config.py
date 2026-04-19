@@ -64,6 +64,20 @@ class AppSettings(BaseSettings):
     lyrics_partial_ttl_seconds: int = 3600
     lyrics_stream_maxlen: int = 500
 
+    admin_jwt_secret: str = ""
+    admin_csrf_secret: str = ""
+    admin_telegram_alert_chat_id: str = ""
+    admin_bundle_ttl_seconds: int = 3600
+
+    prometheus_url: str = ""
+    loki_url: str = ""
+    tempo_url: str = ""
+    otel_exporter_otlp_endpoint: str = ""
+    sentry_dsn: str = ""
+    sentry_environment: str = "development"
+    sentry_traces_sample_rate: float = 0.1
+    docker_socket_path: str = "/var/run/docker.sock"
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [
