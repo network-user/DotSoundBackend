@@ -18,6 +18,7 @@ from app.schemas.artist import (
     ArtistResponse,
     ArtistSourceProfileResponse,
 )
+from app.schemas.artist_supplemental import ArtistSupplementalResponse
 from app.schemas.track import (
     TrackListResponse,
     TrackResponse,
@@ -301,6 +302,83 @@ async def get_artist_tracks(
         page=page,
         size=size,
     )
+
+
+@router.get(
+    "/{artist_id}/supplemental",
+    response_model=ArtistSupplementalResponse,
+    summary="Get supplemental AI-generated info about an artist.",
+)
+async def get_artist_supplemental(
+    artist_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ArtistSupplementalResponse:
+    from app.repositories.artist_supplemental_info import (
+        ArtistSupplementalInfoRepository,
+    )
+
+    svc = ArtistService(db)
+    artist = await svc.get_by_id(artist_id)
+    if not artist:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    repo = ArtistSupplementalInfoRepository(db)
+    info = await repo.get_by_artist_id(artist_id)
+    if info is None:
+        return ArtistSupplementalResponse(
+            status="pending", content=None, fetched_at=None
+        )
+    return ArtistSupplementalResponse.model_validate(info)
+
+
+@router.post(
+    "/{artist_id}/supplemental/refresh",
+    response_model=ArtistSupplementalResponse,
+    summary="[Admin] Force-refresh supplemental AI info for an artist.",
+)
+@limiter.limit("10/minute")
+async def refresh_artist_supplemental(
+    request: Request,
+    artist_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> ArtistSupplementalResponse:
+    from app.repositories.artist_supplemental_info import (
+        ArtistSupplementalInfoRepository,
+    )
+    from app.services.artist_supplemental_worker import (
+        enrich_artist_supplemental_task,
+    )
+
+    svc = ArtistService(db)
+    artist = await svc.get_by_id(artist_id)
+    if not artist:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    repo = ArtistSupplementalInfoRepository(db)
+    existing = await repo.get_by_artist_id(artist_id)
+    row = await repo.upsert(
+        artist_id,
+        status="fetching",
+        content=existing.content if existing else None,
+        fetched_at=existing.fetched_at if existing else None,
+    )
+    await db.commit()
+
+    try:
+        await enrich_artist_supplemental_task.kiq(
+            artist_id=artist_id, force=True
+        )
+    except Exception:
+        logger.exception(
+            "artist_supplemental_refresh_enqueue_failed",
+            artist_id=artist_id,
+        )
+        raise HTTPException(
+            status_code=503, detail="Worker unavailable; try again."
+        )
+
+    return ArtistSupplementalResponse.model_validate(row)
 
 
 @router.get(

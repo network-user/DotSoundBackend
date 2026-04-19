@@ -438,6 +438,24 @@ export interface ArtistDetail {
   primary_source_id?: string | null
 }
 
+// ── Track Info ────────────────────────────────────────────────────────────
+
+export type TrackInfoStatus = 'pending' | 'fetching' | 'done' | 'not_found' | 'failed'
+
+export interface TrackInfoResponse {
+  status: TrackInfoStatus
+  content: string | null
+  fetched_at: string | null
+}
+
+// ── Artist Supplemental ───────────────────────────────────────────────────
+
+export interface ArtistSupplementalResponse {
+  status: string
+  content: string | null
+  fetched_at: string | null
+}
+
 // ── Import ────────────────────────────────────────────────────────────────
 
 export interface ImportAudioInfo {

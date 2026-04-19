@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -16,6 +18,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.artist_supplemental_info import ArtistSupplementalInfo
 
 
 class Artist(Base, TimestampMixin):
@@ -70,9 +75,17 @@ class Artist(Base, TimestampMixin):
     primary_source_id: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )
+    enrichment_confidence: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
 
     track_links: Mapped[list[TrackArtist]] = relationship(
         back_populates="artist",
+        cascade="all, delete-orphan",
+    )
+    supplemental_info: Mapped[ArtistSupplementalInfo | None] = relationship(
+        back_populates="artist",
+        uselist=False,
         cascade="all, delete-orphan",
     )
 

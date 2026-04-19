@@ -1,4 +1,6 @@
 from app.models.account_merge import AccountMerge
+from app.models.artist_supplemental_info import ArtistSupplementalInfo
+from app.models.track_info import TrackInfo
 from app.models.admin_action_log import AdminActionLog
 from app.models.admin_capability import AdminCapability
 from app.models.admin_device import AdminDevice
@@ -47,6 +49,8 @@ from app.models.worker_audit import WorkerAuditLog
 
 __all__ = [
     "AccountMerge",
+    "ArtistSupplementalInfo",
+    "TrackInfo",
     "AdminActionLog",
     "AdminCapability",
     "AdminDevice",

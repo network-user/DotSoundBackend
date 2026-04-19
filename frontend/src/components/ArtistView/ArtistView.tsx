@@ -9,6 +9,7 @@ import { getIsAdmin } from '@/lib/telegram'
 import type {
   ArtistDetail,
   ArtistSourceProfile,
+  ArtistSupplementalResponse,
   DiscographyItem,
   Track,
 } from '@/types/api'
@@ -156,6 +157,12 @@ export function ArtistView({
   const [selectedSourceId, setSelectedSourceId] =
     useState<string | null>(null)
   const [avatarOpen, setAvatarOpen] = useState(false)
+  const [supplemental, setSupplemental] =
+    useState<ArtistSupplementalResponse | null>(null)
+  const [supplementalOpen, setSupplementalOpen] =
+    useState(false)
+  const [refreshingSupplemental, setRefreshingSupplemental] =
+    useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
   const isAdmin = getIsAdmin()
 
@@ -184,6 +191,8 @@ export function ArtistView({
     setBioOpen(false)
     setSelectedSourceId(null)
     setAvatarOpen(false)
+    setSupplemental(null)
+    setSupplementalOpen(false)
 
     api
       .getArtist(artistId)
@@ -201,11 +210,41 @@ export function ArtistView({
       .catch(() => {
         if (!cancelled) setTracks([])
       })
+    api
+      .getArtistSupplemental(artistId)
+      .then((data) => {
+        if (!cancelled) setSupplemental(data)
+      })
+      .catch(() => {
+        /* supplemental is optional, ignore errors */
+      })
 
     return () => {
       cancelled = true
     }
   }, [artistId])
+
+  const handleRefreshSupplemental = async () => {
+    setRefreshingSupplemental(true)
+    try {
+      const data = await api.refreshArtistSupplemental(artistId)
+      setSupplemental(data)
+      if (data.status === 'fetching' || data.status === 'pending') {
+        const poll = async () => {
+          try {
+            const updated = await api.getArtistSupplemental(artistId)
+            setSupplemental(updated)
+            if (updated.status === 'fetching' || updated.status === 'pending') {
+              setTimeout(poll, 2000)
+            }
+          } catch { /* ignore */ }
+        }
+        setTimeout(poll, 2000)
+      }
+    } catch { /* ignore */ } finally {
+      setRefreshingSupplemental(false)
+    }
+  }
 
   const handleEnrich = async () => {
     setEnriching(true)
@@ -869,6 +908,63 @@ export function ArtistView({
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Supplemental AI info */}
+      {supplemental && supplemental.status === 'done' && supplemental.content && (
+        <div className="artist-supplemental-section">
+          <button
+            className="section-header artist-bio-toggle"
+            onClick={() => setSupplementalOpen((v) => !v)}
+          >
+            <span className="section-title">
+              {t('artistSupplemental.title', { defaultValue: 'Дополнительная информация' })}
+            </span>
+            <span className="track-info-ai-badge">
+              {t('trackInfo.aiSource', { defaultValue: 'Источник: ИИ' })}
+            </span>
+            <span className="artist-bio-chevron">
+              <Icon name="chevron" size={14} />
+            </span>
+          </button>
+          {supplementalOpen && (
+            <div className="artist-supplemental-content">
+              {supplemental.content.split('\n').map((line, i) => (
+                <p key={i} className={line === '' ? 'track-info-spacer' : undefined}>
+                  {line}
+                </p>
+              ))}
+              {isAdmin && (
+                <button
+                  className="btn-secondary artist-supplemental-refresh"
+                  onClick={handleRefreshSupplemental}
+                  disabled={refreshingSupplemental}
+                >
+                  <Icon name="refresh" size={13} />
+                  {refreshingSupplemental
+                    ? t('trackInfo.loading', { defaultValue: 'Получение...' })
+                    : t('trackInfo.refresh', { defaultValue: 'Обновить' })}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Show refresh button for admin even when no supplemental yet */}
+      {isAdmin && (!supplemental || supplemental.status !== 'done') && (
+        <div style={{ padding: '0 16px 8px' }}>
+          <button
+            className="btn-secondary artist-supplemental-refresh"
+            onClick={handleRefreshSupplemental}
+            disabled={refreshingSupplemental || supplemental?.status === 'fetching'}
+          >
+            <Icon name="refresh" size={13} />
+            {supplemental?.status === 'fetching'
+              ? t('trackInfo.loading', { defaultValue: 'Получение...' })
+              : t('artistSupplemental.fetch', { defaultValue: 'Получить AI-информацию' })}
+          </button>
         </div>
       )}
 

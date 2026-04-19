@@ -8,6 +8,7 @@ import type {
   ArtistDetail,
   ArtistEnrichStatusResponse,
   ArtistEnrichWatchResponse,
+  ArtistSupplementalResponse,
   AuthorProfile,
   AvatarResponse,
   ChatListItem,
@@ -32,6 +33,7 @@ import type {
   Track,
   TrackCardResponse,
   TrackComment,
+  TrackInfoResponse,
   TrackListResponse,
   TrackUploadResponse,
   TwoFASetupResponse,
@@ -1318,5 +1320,25 @@ export const api = {
     } catch {
       return null
     }
+  },
+
+  // ── Track Info ───────────────────────────────
+
+  getTrackInfo(trackId: number): Promise<TrackInfoResponse> {
+    return request(`/api/v1/tracks/${trackId}/info`)
+  },
+
+  refreshTrackInfo(trackId: number): Promise<TrackInfoResponse> {
+    return request(`/api/v1/tracks/${trackId}/info/refresh`, { method: 'POST' })
+  },
+
+  // ── Artist Supplemental ──────────────────────
+
+  getArtistSupplemental(artistId: number): Promise<ArtistSupplementalResponse> {
+    return request(`/api/v1/artists/${artistId}/supplemental`)
+  },
+
+  refreshArtistSupplemental(artistId: number): Promise<ArtistSupplementalResponse> {
+    return request(`/api/v1/artists/${artistId}/supplemental/refresh`, { method: 'POST' })
   },
 }

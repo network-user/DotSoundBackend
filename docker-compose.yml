@@ -69,6 +69,11 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+      # PrivateCore-only configuration is kept in its own .env so the
+      # public Backend never has to list those variables by name.
+      # File is optional in dev: comment out the line if you don't
+      # have a sibling DotSoundPrivateCore checkout.
+      - ../DotSoundPrivateCore/.env
     environment:
       MINIO_ENDPOINT: minio:9000
       REDIS_URL: redis://redis:6379/0
@@ -96,6 +101,10 @@ services:
     command: taskiq worker app.core.tkq:broker app.services.transcoding app.services.import_worker app.services.cover_worker app.services.lyrics_worker app.services.artist_enrichment_worker
     env_file:
       - .env
+      # PrivateCore-only configuration (lyrics provider tokens, audio
+      # stage settings, etc.) is mounted from its own .env so the
+      # public Backend env stays free of internal-stage variables.
+      - ../DotSoundPrivateCore/.env
     environment:
       MINIO_ENDPOINT: minio:9000
       REDIS_URL: redis://redis:6379/0

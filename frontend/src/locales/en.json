@@ -19,7 +19,7 @@
     "empty": "No tracks yet. Upload the first one!"
   },
   "search": {
-    "placeholder": "Track or artist…",
+    "placeholder": "Track or artistвЂ¦",
     "startTyping": "Start typing a name",
     "onPlatform": "On platform",
     "notFound": "Nothing found"
@@ -56,7 +56,7 @@
   },
   "settings": {
     "language": "Language",
-    "languageRu": "Русский",
+    "languageRu": "Р СѓСЃСЃРєРёР№",
     "languageEn": "English"
   },
   "lyrics": {
@@ -91,7 +91,7 @@
       "hideDetails": "Hide details",
       "copyLogs": "Copy logs",
       "doneTitle": "Done",
-      "partialHint": "Found lyrics — aligning timecodes...",
+      "partialHint": "Found lyrics вЂ” aligning timecodes...",
       "notFoundTitle": "No lyrics",
       "retry": "Try again",
       "manualEntry": "Enter manually",
@@ -106,16 +106,16 @@
       "signOut": "Sign out"
     },
     "auth": {
-      "checking": "Checking session…",
+      "checking": "Checking sessionвЂ¦",
       "adminOnly": "Admin only",
       "adminOnlyHint": "This area is for accounts with the admin flag. Sign in to your account first, then return here.",
       "sessionExpired": "Session expired, please sign in again",
       "signInTitle": "Admin sign-in",
       "signInHint": "Open your authenticator app and enter the current 6-digit code for DotSound.",
-      "signingIn": "Signing in…",
+      "signingIn": "Signing inвЂ¦",
       "signIn": "Sign in",
       "confirm": "Confirm",
-      "confirming": "Confirming…"
+      "confirming": "ConfirmingвЂ¦"
     },
     "init": {
       "title": "Set up admin authenticator",
@@ -136,12 +136,12 @@
       "deviceLabel": "Device label",
       "deviceLabelPlaceholder": "e.g. desktop-firefox",
       "approve": "Approve device",
-      "approving": "Approving…",
+      "approving": "ApprovingвЂ¦",
       "noPending": "No pending device."
     },
     "dashboard": {
       "title": "Dashboard",
-      "loading": "Loading dashboard…",
+      "loading": "Loading dashboardвЂ¦",
       "loadFailed": "Failed",
       "kpi": {
         "onlineNow": "Online now",
@@ -166,7 +166,7 @@
     },
     "users": {
       "title": "Users",
-      "searchPlaceholder": "Search by name/email…",
+      "searchPlaceholder": "Search by name/emailвЂ¦",
       "filterAll": "All",
       "filterActive": "Active",
       "filterBanned": "Banned",
@@ -176,7 +176,7 @@
     },
     "tracks": {
       "title": "Tracks",
-      "searchPlaceholder": "Search by title/artist…",
+      "searchPlaceholder": "Search by title/artistвЂ¦",
       "visible": "visible",
       "hidden": "hidden"
     },
@@ -188,9 +188,9 @@
     },
     "artists": {
       "title": "Artists",
-      "searchPlaceholder": "Search by name…",
+      "searchPlaceholder": "Search by nameвЂ¦",
       "enrich": "Enrich",
-      "enriching": "Enriching…",
+      "enriching": "EnrichingвЂ¦",
       "empty": "No artists yet",
       "noEnrichment": "none"
     },
@@ -206,7 +206,31 @@
     "tasks": {
       "title": "Tasks",
       "queues": "Queues",
-      "lyricsJobs": "Lyrics jobs (last 50)"
+      "lyricsJobs": "Lyrics jobs (last 50)",
+      "detail": {
+        "eyebrow": "Lyrics job",
+        "openHint": "Click a job ID to open the detail view with live logs and a cancel button.",
+        "loading": "LoadingвЂ¦",
+        "loadFailed": "Failed to load job details",
+        "status": "Status",
+        "track": "Track",
+        "profile": "Profile",
+        "worker": "Worker",
+        "attempts": "Attempts",
+        "duration": "Duration",
+        "created": "Created",
+        "finished": "Finished",
+        "requestedBy": "Requested by",
+        "errorTitle": "Job error",
+        "liveStage": "Current stage",
+        "logsTitle": "Live logs",
+        "noLogs": "No logs yet вЂ” the job may have just started or the Redis progress TTL has expired.",
+        "close": "Close",
+        "cancel": "Cancel job",
+        "cancelling": "CancellingвЂ¦",
+        "confirmCancel": "Cancel this job? The worker will stop at the next safe checkpoint and mark it as cancelled.",
+        "cancelRequested": "Cancel signal sent"
+      }
     },
     "logs": {
       "title": "Logs",
@@ -214,7 +238,7 @@
       "switchLive": "Switch to live tail",
       "containerPlaceholder": "container",
       "anyLevel": "any level",
-      "containsPlaceholder": "contains…",
+      "containsPlaceholder": "containsвЂ¦",
       "refresh": "Refresh",
       "pause": "Pause",
       "resume": "Resume",
@@ -264,13 +288,17 @@
       "remoteConfigured": "remote configured",
       "remoteNotConfigured": "remote not configured",
       "runFull": "Run full backup",
-      "runPg": "Run PG-only"
+      "runPg": "Run PG-only",
+      "aiEnrichment": "AI Enrichment",
+      "aiEnrichmentDesc": "Configure cache TTL for AI-generated information. After expiry, next request triggers a fresh fetch.",
+      "trackInfoTtl": "Track info cache (days)",
+      "artistSupplementalTtl": "Artist supplemental cache (days)"
     },
     "common": {
       "prev": "Prev",
       "next": "Next",
       "total": "{{count}} total",
-      "loading": "Loading…",
+      "loading": "LoadingвЂ¦",
       "save": "Save",
       "cancel": "Cancel",
       "confirm": "Confirm",
@@ -297,13 +325,13 @@
     "tracks_title": "Tracks on the platform",
     "tracks_empty": "No tracks from this artist yet",
     "enrich_button": "Identify artist",
-    "enrich_loading": "Identifying…",
+    "enrich_loading": "IdentifyingвЂ¦",
     "enrich_failed": "Couldn't identify artist",
-    "enrichment_pending": "Loading data…",
+    "enrichment_pending": "Loading dataвЂ¦",
     "debug_toggle": "Debug",
     "debug_stage": "Stage",
     "debug_run": "Run with logs",
-    "debug_running": "Running…",
+    "debug_running": "RunningвЂ¦",
     "debug_empty": "Press \"Run with logs\" to see pipeline stages",
     "discography_title": "Discography",
     "sources_label": "Data source",
@@ -311,5 +339,19 @@
     "source_attribution": "Source",
     "avatar_open": "Open photo",
     "avatar_close": "Close photo"
+  },
+  "trackInfo": {
+    "button": "Info",
+    "loading": "Fetching information...",
+    "notFound": "No information found",
+    "refresh": "Refresh",
+    "aiSource": "AI-sourced",
+    "cachedAt": "Updated {{date}}",
+    "error": "Error loading information",
+    "failed": "Failed to fetch information"
+  },
+  "artistSupplemental": {
+    "title": "Additional Information",
+    "fetch": "Fetch AI info"
   }
 }

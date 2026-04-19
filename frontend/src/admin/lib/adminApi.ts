@@ -111,39 +111,64 @@ function loggedOutKeepAdmin(): void {
   })
 }
 
-async function tryRefresh(): Promise<boolean> {
-  if (inflightRefresh) {
-    return inflightRefresh
+interface RefreshResult {
+  access_token: string
+  refresh_token: string
+  expires_in: number
+}
+
+let inflightRefreshDetailed:
+  | Promise<RefreshResult | null>
+  | null = null
+
+async function tryRefreshDetailed(): Promise<
+  RefreshResult | null
+> {
+  if (inflightRefreshDetailed) {
+    return inflightRefreshDetailed
   }
-  inflightRefresh = (async () => {
+  inflightRefreshDetailed = (async () => {
     try {
       const refreshed = await rawRequest(
         '/auth/refresh',
-        { method: 'POST', body: {} },
+        { method: 'POST' },
       )
       if (refreshed.status !== 200) {
         loggedOutKeepAdmin()
-        return false
+        return null
       }
-      const data = (await refreshed.json()) as {
-        access_token: string
-        expires_in: number
-      }
+      const data =
+        (await refreshed.json()) as RefreshResult
       useAdminAuth
         .getState()
         .setSession(
           data.access_token,
           data.expires_in,
         )
-      return true
+      return data
     } catch {
       loggedOutKeepAdmin()
-      return false
+      return null
     } finally {
-      inflightRefresh = null
+      inflightRefreshDetailed = null
     }
   })()
-  return inflightRefresh
+  return inflightRefreshDetailed
+}
+
+async function tryRefresh(): Promise<boolean> {
+  if (inflightRefresh) {
+    return inflightRefresh
+  }
+  inflightRefresh = (async () => {
+    const result = await tryRefreshDetailed()
+    return result !== null
+  })()
+  try {
+    return await inflightRefresh
+  } finally {
+    inflightRefresh = null
+  }
 }
 
 async function withRefresh(
@@ -310,19 +335,19 @@ export const adminApi = {
       '/auth/step-up',
       { method: 'POST', body: payload },
     ),
-  refresh: () =>
-    adminFetch<{
-      access_token: string
-      refresh_token: string
-      expires_in: number
-    }>('/auth/refresh', {
-      method: 'POST',
-      body: {},
-    }),
+  refresh: async () => {
+    const result = await tryRefreshDetailed()
+    if (!result) {
+      throw new AdminApiError(
+        401,
+        'refresh failed',
+      )
+    }
+    return result
+  },
   logout: () =>
     adminFetch<{ detail: string }>('/auth/logout', {
       method: 'POST',
-      body: {},
     }),
   listDevices: () =>
     adminFetch<{
@@ -555,6 +580,36 @@ export const adminApi = {
       page: number
       size: number
     }>('/tasks/lyrics-jobs', { query: params }),
+  getLyricsJob: (jobId: string) =>
+    adminFetch<{
+      id: string
+      track_id: number
+      status: string
+      profile: string
+      routed_to_worker: string | null
+      attempts: number
+      error: string | null
+      started_at: string | null
+      finished_at: string | null
+      duration_ms: number | null
+      created_at: string
+      progress_id: string | null
+      requested_by_user_id: number | null
+      live: {
+        stage: string | null
+        percent: number | null
+        terminal_state: string | null
+        logs: string[]
+      } | null
+    }>(`/tasks/lyrics-jobs/${jobId}`),
+  cancelLyricsJob: (jobId: string) =>
+    adminFetch<{
+      status: string
+      job_status?: string
+    }>(`/tasks/lyrics-jobs/${jobId}/cancel`, {
+      method: 'POST',
+      body: {},
+    }),
   listQueues: () =>
     adminFetch<{
       items: Array<{
@@ -597,5 +652,23 @@ export const adminApi = {
     }>(`/security/lockout/${userId}/release`, {
       method: 'POST',
       body: {},
+    }),
+
+  getAiSettings: () =>
+    adminFetch<{
+      track_info_ttl_days: number
+      artist_supplemental_ttl_days: number
+    }>('/system/ai-settings'),
+
+  updateAiSettings: (data: {
+    track_info_ttl_days?: number
+    artist_supplemental_ttl_days?: number
+  }) =>
+    adminFetch<{
+      track_info_ttl_days: number
+      artist_supplemental_ttl_days: number
+    }>('/system/ai-settings', {
+      method: 'PUT',
+      body: data,
     }),
 }

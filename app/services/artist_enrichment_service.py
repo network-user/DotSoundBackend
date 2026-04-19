@@ -230,6 +230,7 @@ class ArtistEnrichmentService:
             )
             await _log("error", f"provider error: {exc}")
             await self._finalize(artist, "failed")
+            await self._schedule_supplemental(artist_id)
             return artist
 
         if info is None or info.confidence < settings.artist_enrichment_min_confidence:
@@ -243,7 +244,10 @@ class ArtistEnrichmentService:
                 "not_found",
                 f"no reliable match (confidence={conf})",
             )
+            if conf is not None:
+                artist.enrichment_confidence = float(conf)
             await self._finalize(artist, "not_found")
+            await self._schedule_supplemental(artist_id)
             return artist
 
         await _log(
@@ -318,6 +322,7 @@ class ArtistEnrichmentService:
                     "image not available (keeping text)",
                 )
 
+        artist.enrichment_confidence = float(info.confidence)
         await self._finalize(artist, "done")
         await _log("done", "saved to DB")
         logger.info(
@@ -328,6 +333,19 @@ class ArtistEnrichmentService:
             has_image=bool(artist.image_key),
         )
         return artist
+
+    async def _schedule_supplemental(self, artist_id: int) -> None:
+        try:
+            from app.services.artist_supplemental_worker import (
+                enrich_artist_supplemental_task,
+            )
+
+            await enrich_artist_supplemental_task.kiq(artist_id=artist_id)
+        except Exception:
+            logger.exception(
+                "artist_supplemental_schedule_failed",
+                artist_id=artist_id,
+            )
 
     async def schedule_enrich(self, artist_id: int) -> None:
         """Fire-and-forget enqueue of the enrichment task."""

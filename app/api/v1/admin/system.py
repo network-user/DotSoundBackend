@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 from fastapi import APIRouter, Body, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.dependencies import (
     get_db,
     require_capability,
@@ -29,6 +32,19 @@ from app.services.backup_service import (
 from app.services.container_health_service import (
     get_container_summary,
 )
+
+_AI_TRACK_INFO_TTL_KEY = "ai.track_info_ttl_days"
+_AI_ARTIST_SUPPLEMENTAL_TTL_KEY = "ai.artist_supplemental_ttl_days"
+
+
+class AiSettingsResponse(BaseModel):
+    track_info_ttl_days: int
+    artist_supplemental_ttl_days: int
+
+
+class AiSettingsUpdate(BaseModel):
+    track_info_ttl_days: int | None = None
+    artist_supplemental_ttl_days: int | None = None
 
 router = APIRouter(prefix="/system", tags=["admin-system"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -155,3 +171,68 @@ async def run_backup(
         task_id=result.get("task_id"),
     )
     return {"queued": True, **result}
+
+
+@router.get("/ai-settings", response_model=AiSettingsResponse)
+async def get_ai_settings(
+    _admin: User = Depends(require_capability("settings.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> AiSettingsResponse:
+    repo = AppSettingsRepository(session)
+
+    track_val = await repo.get_value(_AI_TRACK_INFO_TTL_KEY)
+    artist_val = await repo.get_value(_AI_ARTIST_SUPPLEMENTAL_TTL_KEY)
+
+    def _extract_days(val: Any, default: int) -> int:
+        if isinstance(val, dict) and "days" in val:
+            try:
+                days = int(val["days"])
+                if days > 0:
+                    return days
+            except (TypeError, ValueError):
+                pass
+        return default
+
+    return AiSettingsResponse(
+        track_info_ttl_days=_extract_days(
+            track_val, settings.track_info_ttl_days
+        ),
+        artist_supplemental_ttl_days=_extract_days(
+            artist_val, settings.artist_supplemental_ttl_days
+        ),
+    )
+
+
+@router.put("/ai-settings", response_model=AiSettingsResponse)
+async def update_ai_settings(
+    body: AiSettingsUpdate,
+    admin: User = Depends(require_capability("settings.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> AiSettingsResponse:
+    repo = AppSettingsRepository(session)
+
+    if body.track_info_ttl_days is not None:
+        if body.track_info_ttl_days < 1:
+            raise HTTPException(
+                status_code=400, detail="track_info_ttl_days must be >= 1"
+            )
+        await repo.upsert(
+            key=_AI_TRACK_INFO_TTL_KEY,
+            value={"days": body.track_info_ttl_days},
+            updated_by=admin.id,
+        )
+
+    if body.artist_supplemental_ttl_days is not None:
+        if body.artist_supplemental_ttl_days < 1:
+            raise HTTPException(
+                status_code=400,
+                detail="artist_supplemental_ttl_days must be >= 1",
+            )
+        await repo.upsert(
+            key=_AI_ARTIST_SUPPLEMENTAL_TTL_KEY,
+            value={"days": body.artist_supplemental_ttl_days},
+            updated_by=admin.id,
+        )
+
+    await session.commit()
+    return await get_ai_settings(_admin=admin, session=session)

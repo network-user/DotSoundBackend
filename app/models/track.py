@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from app.models.album import Album
     from app.models.complaint import Complaint
     from app.models.lyrics import TrackLyrics
+    from app.models.track_info import TrackInfo
 
 
 class Track(Base, TimestampMixin):
@@ -128,4 +129,9 @@ class Track(Base, TimestampMixin):
     )
     album: Mapped[Album | None] = relationship(
         back_populates="tracks",
+    )
+    info: Mapped[TrackInfo | None] = relationship(
+        back_populates="track",
+        uselist=False,
+        cascade="all, delete-orphan",
     )

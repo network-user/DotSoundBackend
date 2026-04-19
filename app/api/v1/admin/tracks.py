@@ -14,7 +14,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
-from app.dependencies import get_db, require_admin
+from app.dependencies import (
+    get_db,
+    require_admin_session,
+)
 from app.models.user import User
 from app.services.admin_service import AdminService
 from app.services.transcoding import transcode_hls_only
@@ -41,7 +44,7 @@ async def admin_list_tracks(
     is_active: bool | None = Query(None),
     search: str | None = Query(None, max_length=128),
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> AdminTrackListResponse:
     service = AdminService(session)
     tracks, total = await service.list_tracks(
@@ -68,7 +71,7 @@ async def admin_delete_track(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> None:
     service = AdminService(session)
     deleted = await service.delete_track(track_id)
@@ -91,7 +94,7 @@ async def admin_toggle_track_active(
     track_id: int,
     is_active: bool = Query(...),
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> AdminTrackResponse:
     service = AdminService(session)
     track = await service.set_track_visibility(track_id, is_active)
@@ -118,7 +121,7 @@ async def admin_transcode_track(
     track_id: int,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> dict:
     service = AdminService(session)
     track = await service.get_track(track_id)
@@ -148,7 +151,7 @@ async def admin_transcode_batch(
     request: Request,
     background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> dict:
     from app.models.track import Track
 
@@ -183,7 +186,7 @@ async def admin_get_upload_meta(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> dict:
     from app.models.upload_meta import TrackUploadMeta
 

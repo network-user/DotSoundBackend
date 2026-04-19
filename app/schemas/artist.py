@@ -37,6 +37,7 @@ class ArtistResponse(BaseModel):
     country: str | None = None
     website_url: str | None = None
     enrichment_status: str = "pending"
+    enrichment_confidence: float | None = None
     enriched_at: datetime | None = None
     created_at: datetime
 

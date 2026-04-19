@@ -123,22 +123,23 @@ async def require_admin(
 def require_capability(capability: str):
     """Return a FastAPI dependency that enforces a capability.
 
-    Caller must be an admin (``is_admin`` True) AND have a row in
-    ``admin_capabilities`` matching the requested capability. There
-    is no implicit super-admin bypass: every privileged action goes
-    through ``admin_capabilities`` so the audit log captures the
-    capability that authorized it. Anyone else gets 403.
+    Caller must hold a valid admin **session** token (issued via
+    the admin TOTP login flow) AND have a matching row in
+    ``admin_capabilities``. There is no implicit super-admin
+    bypass: every privileged action goes through
+    ``admin_capabilities`` so the audit log captures the
+    capability that authorized it. Anyone else gets 401/403.
+
+    Uses ``require_admin_session`` (admin JWT signed with
+    ``ADMIN_JWT_SECRET``), not the generic user JWT. Mixing the
+    two would let any admin user bypass device pinning, session
+    revocation and the short admin token TTL.
     """
 
     async def _dep(
-        user: User = Depends(get_current_user),
+        user: User = Depends(require_admin_session),
         session: AsyncSession = Depends(get_db),
     ) -> User:
-        if not user.is_admin:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Admin access required",
-            )
         from app.repositories.admin_capability import (
             AdminCapabilityRepository,
         )

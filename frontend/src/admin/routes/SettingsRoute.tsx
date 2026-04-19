@@ -233,8 +233,102 @@ export function SettingsRoute() {
           emptyHint={t('admin.settings.noFlags')}
         />
       </section>
+      <AiEnrichmentSettings />
       <BackupsSection />
     </div>
+  )
+}
+
+function AiEnrichmentSettings() {
+  const { t } = useTranslation()
+  const canManage = useCapability('settings.manage')
+  const [trackTtl, setTrackTtl] = useState<string>('')
+  const [artistTtl, setArtistTtl] = useState<string>('')
+  const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const aiSettings = useQuery({
+    queryKey: ['admin', 'settings', 'ai'],
+    queryFn: () => adminApi.getAiSettings(),
+    enabled: canManage,
+  })
+
+  useEffect(() => {
+    if (aiSettings.data) {
+      setTrackTtl(String(aiSettings.data.track_info_ttl_days))
+      setArtistTtl(String(aiSettings.data.artist_supplemental_ttl_days))
+    }
+  }, [aiSettings.data])
+
+  if (!canManage) return null
+
+  async function handleSave() {
+    const trackDays = parseInt(trackTtl, 10)
+    const artistDays = parseInt(artistTtl, 10)
+    if (!Number.isFinite(trackDays) || trackDays < 1) {
+      alert('Track TTL must be >= 1')
+      return
+    }
+    if (!Number.isFinite(artistDays) || artistDays < 1) {
+      alert('Artist TTL must be >= 1')
+      return
+    }
+    setBusy(true)
+    setSaved(false)
+    try {
+      await adminApi.updateAiSettings({
+        track_info_ttl_days: trackDays,
+        artist_supplemental_ttl_days: artistDays,
+      })
+      aiSettings.refetch()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      alert((err as Error).message || 'failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section className="admin-card">
+      <h2>{t('admin.settings.aiEnrichment', { defaultValue: 'AI Enrichment' })}</h2>
+      <p className="admin-card__sub">
+        {t('admin.settings.aiEnrichmentDesc', {
+          defaultValue: 'Configure cache TTL for AI-generated information. After expiry, next request triggers a fresh fetch.',
+        })}
+      </p>
+      <div className="admin-toolbar" style={{ alignItems: 'flex-end', gap: 16 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+          {t('admin.settings.trackInfoTtl', { defaultValue: 'Track info cache (days)' })}
+          <input
+            type="number"
+            min={1}
+            value={trackTtl}
+            onChange={(e) => setTrackTtl(e.target.value)}
+            style={{ width: 80 }}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+          {t('admin.settings.artistSupplementalTtl', { defaultValue: 'Artist supplemental cache (days)' })}
+          <input
+            type="number"
+            min={1}
+            value={artistTtl}
+            onChange={(e) => setArtistTtl(e.target.value)}
+            style={{ width: 80 }}
+          />
+        </label>
+        <Press variant="ghost" onClick={handleSave} disabled={busy}>
+          {busy ? t('common.saving', { defaultValue: 'Saving…' }) : t('common.save', { defaultValue: 'Save' })}
+        </Press>
+        {saved && (
+          <span style={{ color: '#4ade80', fontSize: 13 }}>
+            {t('common.saved', { defaultValue: 'Saved' })}
+          </span>
+        )}
+      </div>
+    </section>
   )
 }
 

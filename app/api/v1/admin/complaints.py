@@ -12,7 +12,10 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
-from app.dependencies import get_db, require_admin
+from app.dependencies import (
+    get_db,
+    require_admin_session,
+)
 from app.models.user import User
 from app.services.admin_service import AdminService
 
@@ -37,7 +40,7 @@ async def admin_list_complaints(
     size: int = Query(20, ge=1, le=100),
     unresolved_only: bool = Query(False),
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> AdminComplaintListResponse:
     service = AdminService(session)
     complaints, total = await service.list_complaints(
@@ -63,7 +66,7 @@ async def admin_resolve_complaint(
     request: Request,
     complaint_id: int,
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> AdminComplaintResponse:
     service = AdminService(session)
     complaint = await service.resolve_complaint(complaint_id)
@@ -89,7 +92,7 @@ async def admin_delete_complaint(
     request: Request,
     complaint_id: int,
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin),
+    _admin: User = Depends(require_admin_session),
 ) -> None:
     service = AdminService(session)
     deleted = await service.delete_complaint(complaint_id)
