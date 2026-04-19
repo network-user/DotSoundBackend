@@ -99,3 +99,58 @@ async def release(
         "user_id": user_id,
         "released": released,
     }
+
+
+_ANTI_ABUSE_STREAM = "anti_abuse:events"
+
+
+@router.get("/anti-abuse-events")
+async def anti_abuse_events(
+    limit: int = Query(100, ge=1, le=500),
+    _admin: User = Depends(
+        require_capability("security.view")
+    ),
+) -> dict[str, Any]:
+    """Read recent anti-abuse events from Redis stream.
+
+    PrivateCore writes events to ``anti_abuse:events`` stream
+    (Tor-detected, disposable email, content flagged, etc.).
+    Backend just reads them; algorithms stay in PrivateCore.
+    """
+    redis = get_redis_client()
+    items: list[dict[str, Any]] = []
+    try:
+        raw = await redis.xrevrange(
+            _ANTI_ABUSE_STREAM, count=limit
+        )
+    except Exception:
+        raw = []
+    for entry_id, fields in raw:
+        try:
+            entry_id_str = (
+                entry_id.decode()
+                if isinstance(entry_id, bytes)
+                else str(entry_id)
+            )
+            decoded: dict[str, Any] = {}
+            for key, value in fields.items():
+                k = (
+                    key.decode()
+                    if isinstance(key, bytes)
+                    else str(key)
+                )
+                v = (
+                    value.decode()
+                    if isinstance(value, bytes)
+                    else str(value)
+                )
+                decoded[k] = v
+            items.append(
+                {
+                    "id": entry_id_str,
+                    "data": decoded,
+                }
+            )
+        except Exception:
+            continue
+    return {"items": items, "count": len(items)}

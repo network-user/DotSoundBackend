@@ -10,7 +10,7 @@ Backend ↔ Bot contract::
 
     POST {bot_internal_url}/internal/admin-alert
     Headers:
-      X-Internal-Secret: {bot_internal_secret}
+      <internal-auth-header>: {bot_internal_secret}
       Content-Type: application/json
     Body:
       {
