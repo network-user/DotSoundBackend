@@ -550,7 +550,7 @@ async def _heartbeat_loop(
     progress_id: str,
     t0: float,
     stop_event: asyncio.Event,
-    interval: float = 15.0,
+    interval: float = 5.0,
     eta_ms: int | None = None,
 ) -> None:
     tick = 0
