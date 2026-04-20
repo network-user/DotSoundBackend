@@ -537,12 +537,23 @@ async def _fetch_audio_to_file(
     return None
 
 
+_HEARTBEAT_MSGS: tuple[str, ...] = (
+    "audio analysis running",
+    "still processing \u2014 audio-based alignment can take a few minutes",
+    "still running, provider is busy",
+    "audio analysis in progress, almost there",
+    "still going \u2014 longer tracks take more time",
+)
+
+
 async def _heartbeat_loop(
     progress_id: str,
     t0: float,
     stop_event: asyncio.Event,
-    interval: float = 5.0,
+    interval: float = 15.0,
+    eta_ms: int | None = None,
 ) -> None:
+    tick = 0
     try:
         while True:
             try:
@@ -552,11 +563,19 @@ async def _heartbeat_loop(
                 break
             except asyncio.TimeoutError:
                 pass
-            elapsed = f"{time.monotonic() - t0:.1f}s"
+            elapsed_s = time.monotonic() - t0
+            elapsed = f"{elapsed_s:.0f}s"
+            msg = _HEARTBEAT_MSGS[tick % len(_HEARTBEAT_MSGS)]
+            tick += 1
+
+            eta_suffix = ""
+            if eta_ms is not None:
+                remaining_s = eta_ms / 1000 - elapsed_s
+                if remaining_s > 10:
+                    eta_suffix = f" (~{remaining_s:.0f}s remaining)"
             await append_lyrics_log(
                 progress_id,
-                f"[{elapsed}] \u23f3 still processing... "
-                "(internal provider running)",
+                f"[{elapsed}] \u23f3 {msg}{eta_suffix}",
             )
     except asyncio.CancelledError:
         pass
@@ -689,7 +708,10 @@ async def generate_lyrics_task(
     progress_id: str = "",
     bypass_cache: bool = False,
 ) -> dict:
-    from app.services.lyrics_eta import record_stage_duration
+    from app.services.lyrics_eta import (
+        publish_initial_eta,
+        record_stage_duration,
+    )
 
     t0 = time.monotonic()
     stage_started: dict[str, float] = {}
@@ -704,6 +726,13 @@ async def generate_lyrics_task(
         with_sync=with_sync,
         bypass_cache=bypass_cache,
     )
+
+    try:
+        _eta_ms: int | None = await publish_initial_eta(
+            progress_id, profile
+        )
+    except Exception:
+        _eta_ms = None
 
     def _elapsed() -> str:
         return f"{time.monotonic() - t0:.1f}s"
@@ -1001,18 +1030,43 @@ async def generate_lyrics_task(
 
                 _stop_evt = asyncio.Event()
                 _hb_task = asyncio.create_task(
-                    _heartbeat_loop(progress_id, t0, _stop_evt)
+                    _heartbeat_loop(
+                        progress_id, t0, _stop_evt, eta_ms=_eta_ms
+                    )
                 )
                 try:
-                    current_result = await asyncio.to_thread(
-                        _call_provider,
-                        generate_lyrics,
-                        artist=attempt_artist,
-                        title=attempt_title,
-                        audio_path=audio_path,
-                        on_progress=on_progress,
-                        on_cancel=on_cancel,
+                    current_result = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            _call_provider,
+                            generate_lyrics,
+                            artist=attempt_artist,
+                            title=attempt_title,
+                            audio_path=audio_path,
+                            on_progress=on_progress,
+                            on_cancel=on_cancel,
+                        ),
+                        timeout=float(
+                            settings.lyrics_provider_timeout_seconds
+                        ),
                     )
+                except asyncio.TimeoutError:
+                    _stop_evt.set()
+                    _hb_task.cancel()
+                    redis = get_redis_client()
+                    await redis.set(
+                        f"{CANCEL_KEY_PREFIX}{progress_id}",
+                        "1",
+                        ex=120,
+                    )
+                    await _finalise(
+                        progress_id,
+                        "error",
+                        log_line=(
+                            f"[{_elapsed()}] ERROR: provider timed out "
+                            f"after {settings.lyrics_provider_timeout_seconds}s"
+                        ),
+                    )
+                    return {"status": "error", "detail": "timeout"}
                 finally:
                     _stop_evt.set()
                     _hb_task.cancel()

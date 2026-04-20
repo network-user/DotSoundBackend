@@ -69,6 +69,7 @@ class AppSettings(BaseSettings):
     lyrics_progress_ttl_seconds: int = 600
     lyrics_partial_ttl_seconds: int = 3600
     lyrics_stream_maxlen: int = 500
+    lyrics_provider_timeout_seconds: int = 300
 
     track_info_ttl_days: int = 30
     artist_supplemental_ttl_days: int = 30

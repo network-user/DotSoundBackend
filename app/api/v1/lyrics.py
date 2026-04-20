@@ -1,13 +1,12 @@
 """Lyrics endpoints — CRUD + synced timecodes + progress stream."""
 
-from __future__ import annotations
-
 import asyncio
 import json
 
 import structlog
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     HTTPException,
     Request,
@@ -158,11 +157,17 @@ async def delete_lyrics(
 async def trigger_auto_lyrics(
     request: Request,
     track_id: int,
-    body: LyricsAutoRequest = LyricsAutoRequest(),
+    body: LyricsAutoRequest = Body(default_factory=LyricsAutoRequest),
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> LyricsAutoResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
+    logger.info(
+        "lyrics_auto_requested",
+        track_id=track_id,
+        with_sync=body.with_sync,
+        bypass_cache=body.bypass_cache,
+    )
     service = LyricsService(session)
     task_id = await service.trigger_auto_generation(
         track_id=track_id,
@@ -330,7 +335,7 @@ async def stream_auto_lyrics_events(
 async def redefine_lyrics(
     request: Request,
     track_id: int,
-    body: LyricsAutoRequest = LyricsAutoRequest(),
+    body: LyricsAutoRequest = Body(default_factory=LyricsAutoRequest),
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> LyricsAutoResponse:
