@@ -70,10 +70,10 @@ async def estimate_total_ms(
     if stages is None:
         stages = DEFAULT_STAGES
     fallback = {
-        "searching": 4_000,
-        "downloading_audio": 6_000,
-        "processing": 30_000,
-        "saving": 500,
+        "searching": 8_000,
+        "downloading_audio": 10_000,
+        "processing": 180_000,
+        "saving": 1_000,
     }
     per_stage: dict[str, int] = {}
     for stage in stages:

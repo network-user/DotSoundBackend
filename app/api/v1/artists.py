@@ -348,6 +348,8 @@ async def get_artist_supplemental(
     artist_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> ArtistSupplementalResponse:
+    from datetime import UTC, datetime
+
     from app.repositories.artist_supplemental_info import (
         ArtistSupplementalInfoRepository,
     )
@@ -359,11 +361,59 @@ async def get_artist_supplemental(
 
     repo = ArtistSupplementalInfoRepository(db)
     info = await repo.get_by_artist_id(artist_id)
-    if info is None:
+    if info is not None:
+        # Let a fresh "fetching" row stay — the worker is still running.
+        # A stale "fetching" (>3 min) means the worker crashed; fall
+        # through to re-enqueue below.
+        if info.status != "fetching":
+            return ArtistSupplementalResponse.model_validate(info)
+        if info.fetched_at is not None:
+            age = (
+                datetime.now(UTC) - info.fetched_at
+            ).total_seconds()
+            if age < 180:
+                return ArtistSupplementalResponse.model_validate(info)
+
+    # Lazy-trigger a fetch only if primary enrichment has already
+    # completed (done / failed / not_found) — otherwise we wait for
+    # primary to chain into supplemental itself (see
+    # ArtistEnrichmentService._schedule_supplemental).
+    primary_terminal = artist.enrichment_status in (
+        "done",
+        "failed",
+        "not_found",
+    )
+    if not primary_terminal:
         return ArtistSupplementalResponse(
             status="pending", content=None, fetched_at=None
         )
-    return ArtistSupplementalResponse.model_validate(info)
+
+    # Seed a fetching row + enqueue the worker. Upsert is idempotent
+    # against races (two concurrent GETs race → one wins the task,
+    # the other just sees status=fetching).
+    row = await repo.upsert(
+        artist_id,
+        status="fetching",
+        content=None,
+        fetched_at=datetime.now(UTC),
+    )
+    await db.commit()
+
+    try:
+        from app.services.artist_supplemental_worker import (
+            enrich_artist_supplemental_task,
+        )
+
+        await enrich_artist_supplemental_task.kiq(
+            artist_id=artist_id, force=False
+        )
+    except Exception:
+        logger.exception(
+            "artist_supplemental_lazy_enqueue_failed",
+            artist_id=artist_id,
+        )
+
+    return ArtistSupplementalResponse.model_validate(row)
 
 
 @router.post(

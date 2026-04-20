@@ -42,7 +42,11 @@ async def _preload_track_info_provider(
 
 @broker.task
 async def fetch_track_info_task(track_id: int) -> dict:
+    import time
+
     structlog.contextvars.bind_contextvars(track_id=track_id)
+    logger.info("fetch_track_info_task_picked_up", track_id=track_id)
+    t_start = time.monotonic()
     async with AsyncSessionLocal() as session:
         repo = TrackInfoRepository(session)
 
@@ -127,5 +131,10 @@ async def fetch_track_info_task(track_id: int) -> dict:
             fetched_at=datetime.now(UTC),
         )
         await session.commit()
-        logger.info("track_info_done", track_id=track_id)
+        logger.info(
+            "track_info_done",
+            track_id=track_id,
+            elapsed_s=round(time.monotonic() - t_start, 2),
+            content_len=len(content),
+        )
         return {"status": "done"}

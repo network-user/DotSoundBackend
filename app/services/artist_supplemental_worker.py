@@ -48,7 +48,15 @@ async def enrich_artist_supplemental_task(
     artist_id: int,
     force: bool = False,
 ) -> dict:
+    import time
+
     structlog.contextvars.bind_contextvars(artist_id=artist_id)
+    logger.info(
+        "enrich_artist_supplemental_task_picked_up",
+        artist_id=artist_id,
+        force=force,
+    )
+    t_start = time.monotonic()
     async with AsyncSessionLocal() as session:
         repo = ArtistSupplementalInfoRepository(session)
 
@@ -120,7 +128,12 @@ async def enrich_artist_supplemental_task(
             fetched_at=datetime.now(UTC),
         )
         await session.commit()
-        logger.info("artist_supplemental_done", artist_id=artist_id)
+        logger.info(
+            "artist_supplemental_done",
+            artist_id=artist_id,
+            elapsed_s=round(time.monotonic() - t_start, 2),
+            content_len=len(content),
+        )
         return {"status": "done"}
 
 

@@ -14,6 +14,7 @@ import { useLikes } from '@/store/LikesContext'
 import { usePlayer } from '@/store/PlayerContext'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
+import { TrackInfoContent } from '@/components/TrackInfoContent/TrackInfoContent'
 import type {
   Track,
   TrackCardResponse,
@@ -968,18 +969,46 @@ export function TrackCardSheet({
               <h3 className="tcs-info-section-title">
                 О треке
               </h3>
-              {isAdmin && (
+            </div>
+            {isAdmin && (
+              <div className="tcs-info-debug-panel">
                 <button
-                  className="tcs-info-refresh icon-btn"
+                  className="tcs-info-debug-btn"
                   onClick={handleRefreshTrackInfo}
                   disabled={trackInfoRefreshing}
-                  title="Обновить информацию (DEBUG)"
-                  aria-label="Обновить информацию"
                 >
-                  <Icon name="refresh" size={14} />
+                  <Icon
+                    name={trackInfoRefreshing ? 'settings' : 'refresh'}
+                    size={14}
+                    className={trackInfoRefreshing ? 'tcs-spin' : undefined}
+                  />
+                  {trackInfoRefreshing
+                    ? 'Запрос в работе…'
+                    : 'DEBUG: перезапросить (bypass cache)'}
                 </button>
-              )}
-            </div>
+                <div className="tcs-info-debug-meta">
+                  <span>
+                    статус:{' '}
+                    <b>
+                      {trackInfo?.status ?? '—'}
+                    </b>
+                  </span>
+                  {trackInfo?.fetched_at && (
+                    <span>
+                      обновлено:{' '}
+                      {new Date(
+                        trackInfo.fetched_at,
+                      ).toLocaleString()}
+                    </span>
+                  )}
+                  {trackInfo?.content && (
+                    <span>
+                      символов: {trackInfo.content.length}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             {(trackInfo?.status === 'fetching' ||
               trackInfo?.status === 'pending' ||
               trackInfoRefreshing) && (
@@ -988,16 +1017,16 @@ export function TrackCardSheet({
               </p>
             )}
             {trackInfo?.status === 'done' && trackInfo.content && (
-              <div className="tcs-info-content">
-                {trackInfo.content.split('\n').map((line, i) => (
-                  <p
-                    key={i}
-                    className={line === '' ? 'tcs-info-spacer' : undefined}
-                  >
-                    {line}
-                  </p>
-                ))}
-              </div>
+              <TrackInfoContent
+                content={trackInfo.content}
+                trackArtist={track.artist ?? null}
+                onOpenArtist={(name) => {
+                  if (onOpenArtist) {
+                    closeCard()
+                    onOpenArtist(name)
+                  }
+                }}
+              />
             )}
             {trackInfo?.status === 'not_found' && (
               <p className="tcs-info-placeholder">

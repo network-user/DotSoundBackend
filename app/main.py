@@ -16,6 +16,7 @@ from app.api.router import api_router
 from app.config import settings
 from app.core.db import dispose_engine
 from app.core.logging import configure_logging
+from app.core import log_setup  # noqa: F401 — installs debug file logs on import
 from app.core.observability import (
     setup_observability,
 )
