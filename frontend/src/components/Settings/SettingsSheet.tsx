@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
-import { getInternalUserId } from '@/lib/telegram'
+import {
+  getInternalUserId,
+  setBackButton,
+} from '@/lib/telegram'
 import { Icon } from '@/components/Icon/Icon'
 import { LinkedAccounts } from './LinkedAccounts'
 import { TwoFASettings } from './TwoFASettings'
@@ -50,6 +53,21 @@ export function SettingsSheet({
       })
       .catch(() => {})
   }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const cleanup = setBackButton(true, onClose)
+    return cleanup
+  }, [open, onClose])
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [open, onClose])
 
   if (!open) return null
 
@@ -107,19 +125,29 @@ export function SettingsSheet({
         <div className="settings-handle" />
         <div className="settings-header">
           <button
-            className="icon-btn"
+            className="settings-back"
             onClick={onClose}
+            aria-label={t('common.back', { defaultValue: 'Назад' })}
           >
             <Icon
               name="chevron"
               size={20}
               className="back-chevron"
             />
+            <span className="settings-back-label">
+              {t('common.back', { defaultValue: 'Назад' })}
+            </span>
           </button>
           <span className="settings-title">
-            Настройки
+            {t('settings.title', { defaultValue: 'Настройки' })}
           </span>
-          <div style={{ width: 20 }} />
+          <button
+            className="icon-btn settings-close"
+            onClick={onClose}
+            aria-label={t('common.close', { defaultValue: 'Закрыть' })}
+          >
+            <Icon name="x" size={18} />
+          </button>
         </div>
 
         <div className="settings-list">

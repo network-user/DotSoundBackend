@@ -201,6 +201,41 @@ async def enrich_artist(
     return await _build_artist_detail(db, artist_id)
 
 
+@router.delete(
+    "/{artist_id}",
+    status_code=204,
+    summary="[Admin] Delete an artist (cascade to track_artist links).",
+)
+@limiter.limit("30/minute")
+async def delete_artist(
+    request: Request,
+    artist_id: int,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> None:
+    from sqlalchemy import delete, select
+
+    from app.models.artist import Artist, TrackArtist
+
+    existing = await db.execute(
+        select(Artist).where(Artist.id == artist_id)
+    )
+    artist = existing.scalar_one_or_none()
+    if not artist:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    await db.execute(
+        delete(TrackArtist).where(TrackArtist.artist_id == artist_id)
+    )
+    await db.delete(artist)
+    await db.commit()
+    logger.info(
+        "admin_artist_deleted",
+        artist_id=artist_id,
+        name=artist.name,
+    )
+
+
 @router.post(
     "/{artist_id}/enrich/watch",
     response_model=ArtistEnrichWatchResponse,

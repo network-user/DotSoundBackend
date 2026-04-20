@@ -787,12 +787,33 @@ async def generate_lyrics_task(
                         and isinstance(cached, dict)
                         and cached.get("text")
                     ):
+                        # Pre-save the cached text so the user sees
+                        # lyrics immediately while sync runs. Break
+                        # out of the cache loop to proceed with the
+                        # audio-based sync upgrade.
+                        try:
+                            repo_early = LyricsRepository(session)
+                            await repo_early.create_or_update(
+                                track_id=track_id,
+                                plain_text=cached["text"],
+                                source="auto",
+                                synced_lines=None,
+                                sync_quality=None,
+                                sync_profile=None,
+                            )
+                            await session.commit()
+                        except Exception:
+                            logger.debug(
+                                "lyrics_early_text_save_failed",
+                                track_id=track_id,
+                            )
                         await _log(
                             "searching",
-                            "cache holds text without timecodes "
-                            "\u2014 ignoring cache for sync run",
-                            percent=10,
+                            "cache text pre-saved; running sync "
+                            "stage from audio",
+                            percent=12,
                         )
+                        break
                     continue
 
                 cached_synced_raw = cached.get("synced_lines")

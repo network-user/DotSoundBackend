@@ -40,6 +40,7 @@ class ArtistResponse(BaseModel):
     enrichment_confidence: float | None = None
     enriched_at: datetime | None = None
     created_at: datetime
+    updated_at: datetime | None = None
 
 
 class ArtistListResponse(BaseModel):

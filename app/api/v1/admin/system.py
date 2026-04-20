@@ -60,6 +60,41 @@ async def services_health(
     return response.model_dump()
 
 
+@router.get("/observability")
+async def observability_status(
+    _admin: User = Depends(require_capability("metrics.view")),
+) -> dict[str, Any]:
+    """Report availability of observability backends (Loki / Prometheus)."""
+    import httpx
+
+    result: dict[str, Any] = {
+        "loki": {"configured": bool(settings.loki_url), "reachable": False},
+        "prometheus": {
+            "configured": bool(settings.prometheus_url),
+            "reachable": False,
+        },
+    }
+    if settings.loki_url:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(
+                    settings.loki_url.rstrip("/") + "/ready"
+                )
+                result["loki"]["reachable"] = resp.status_code < 500
+        except Exception:
+            result["loki"]["reachable"] = False
+    if settings.prometheus_url:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(
+                    settings.prometheus_url.rstrip("/") + "/-/ready"
+                )
+                result["prometheus"]["reachable"] = resp.status_code < 500
+        except Exception:
+            result["prometheus"]["reachable"] = False
+    return result
+
+
 @router.get("/containers")
 async def containers(
     _admin: User = Depends(require_capability("containers.view")),

@@ -23,6 +23,7 @@ logger = structlog.get_logger(__name__)
 
 _AI_TRACK_INFO_TTL_KEY = "ai.track_info_ttl_days"
 _MAX_CONTENT_CHARS = 12_000
+_FETCHING_STALE_SECONDS = 180
 
 
 class TrackInfoService:
@@ -42,14 +43,18 @@ class TrackInfoService:
             if age < ttl:
                 return row
 
-        if row and row.status == "fetching":
-            return row
+        if not force and row and row.status == "fetching":
+            if row.fetched_at is not None:
+                elapsed = (datetime.now(UTC) - row.fetched_at).total_seconds()
+                if elapsed < _FETCHING_STALE_SECONDS:
+                    return row
+            # stale fetching — treat as abandoned, re-enqueue
 
         row = await repo.upsert(
             track_id,
             status="fetching",
             content=row.content if row else None,
-            fetched_at=row.fetched_at if row else None,
+            fetched_at=datetime.now(UTC),
         )
         await self._session.commit()
 
@@ -59,7 +64,12 @@ class TrackInfoService:
             await fetch_track_info_task.kiq(track_id=track_id)
         except Exception:
             logger.exception("track_info_enqueue_failed", track_id=track_id)
-            await repo.set_status(track_id, "failed")
+            await repo.upsert(
+                track_id,
+                status="failed",
+                content=row.content,
+                fetched_at=datetime.now(UTC),
+            )
             await self._session.commit()
 
         return row

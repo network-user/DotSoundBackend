@@ -82,25 +82,47 @@ The project follows the Telegram open-source model:
   frontend code.
 - Security-sensitive decisions must run on backend/private core.
 
-## Source Attribution Exception (artist enrichment)
+## Source Attribution Exception (artist enrichment, lyrics, track-info)
 
-For the artist info card the Backend and Mini App MAY display the
-human-readable name of an external source and a direct attribution
-link to the page the data was fetched from. This is a deliberate,
-narrow exception to the general black-box rule for the artist
-enrichment cascade only.
+For the artist info card, the lyrics panel, and the track-info panel
+the Backend and Mini App MAY display the human-readable name of an
+external source and (where applicable) a direct attribution link.
+These are deliberate, narrow exceptions to the general black-box rule
+for three specific cascades only.
 
-Constraints that still apply:
+### Covered cascades
 
-1. Only the public-facing labels (`source_name`) and the
-   `source_page_url` returned by PrivateCore may be shown. Internal
-   stage names, scoring weights, fallback ordering and other pipeline
+1. **Artist enrichment** — `source_profiles[].source_name`,
+   `source_page_url`. Returned by PrivateCore.
+2. **Lyrics provider attribution** — `source_name` on the lyrics
+   response payload (if PrivateCore chooses to return one). Plus a
+   feature-flag env-var name (e.g. `LYRICS_PROVIDER_NAME`) that the
+   Backend adapter reads only to forward as a selector into
+   PrivateCore. No URL attribution required.
+3. **Track-info provider attribution** — same shape as (2) for the
+   track-info response.
+
+### Constraints that still apply
+
+1. Only public-facing labels (`source_name`) and (for artist
+   enrichment) the `source_page_url` returned by PrivateCore may be
+   shown. Internal stage names, scoring weights, fallback ordering,
+   rate limits, prompts, model identifiers, and any other pipeline
    internals MUST NOT be leaked.
-2. The exception covers the artist card UI/API surface only. Other
-   PrivateCore cascades (lyrics, recommendations, anti-abuse, etc.)
-   keep the strict opaque rule.
-3. New external sources MUST not be added to the public attribution
+2. Env-var values (provider keys, secrets) live only in
+   PrivateCore's own `.env` / `.env.example`. The Backend env-flag
+   name is the one exception — and it must only carry the public
+   selector name (e.g. `yandex`, `generic`), never credentials.
+3. Other PrivateCore cascades (recommendations, anti-abuse, scoring,
+   moderation, etc.) keep the strict opaque rule.
+4. New external sources MUST not be added to the public attribution
    list without an explicit policy review.
+5. Log lines, commit messages, and TODO entries for the three
+   covered cascades MAY name the external provider only when the
+   mention is about **integration wiring** (env-flag, feature toggle,
+   user-visible label). Algorithmic details — how the provider is
+   called, how results are post-processed, how confidence is scored —
+   remain inside PrivateCore and must not surface here.
 
 ## Classification Guide
 

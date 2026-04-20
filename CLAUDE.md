@@ -29,6 +29,25 @@ boundary must be opaque.
 
 If you see a leak while working on something else, fix it.
 
+### Source attribution exceptions (narrow)
+
+See `docs/ai-boundary-policy.md` → "Source Attribution Exception".
+Three explicitly authorized exceptions permit naming an external
+provider:
+
+1. Artist enrichment — `source_profiles[].source_name`, `source_page_url`.
+2. Lyrics provider attribution — user-facing `source_name` in the
+   lyrics panel, and a feature-flag env-var name (e.g.
+   `LYRICS_PROVIDER_NAME`) read by the backend adapter only to
+   forward to PrivateCore as a selector.
+3. Track-info provider attribution — same pattern as (2) for the
+   track-info panel.
+
+These exceptions permit **public labels and env-flag names only**.
+Internal stage names, scoring weights, fallback ordering, rate
+limits, prompts, and any other pipeline internals remain strictly
+opaque and live inside PrivateCore.
+
 ## Secrets & .env (HARD RULE)
 
 `.env` and other secret files (see

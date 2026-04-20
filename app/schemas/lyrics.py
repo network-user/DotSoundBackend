@@ -51,6 +51,14 @@ class LyricsResponse(BaseModel):
     plain_text: str
     synced_lines: list[SyncedLine] | None = None
     source: str = "manual"
+    source_name: str | None = Field(
+        default=None,
+        description=(
+            "Human-readable provider label for user-facing "
+            "attribution. Only populated when the underlying "
+            "provider publishes a stable public name."
+        ),
+    )
     sync_quality: str | None = None
     sync_profile: str | None = None
     created_at: datetime

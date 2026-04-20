@@ -19,7 +19,8 @@ interface ArtistRow {
   enrichment_status: string | null
   enrichment_confidence: number | null
   cover_url: string | null
-  updated_at: string
+  updated_at: string | null
+  created_at: string | null
 }
 
 interface ArtistListResponse {
@@ -69,6 +70,27 @@ async function enrichArtist(
   return res.json()
 }
 
+async function deleteArtist(artistId: number): Promise<void> {
+  const token = api.getToken()
+  const res = await fetch(`/api/v1/artists/${artistId}`, {
+    method: 'DELETE',
+    headers: token
+      ? { Authorization: `Bearer ${token}` }
+      : undefined,
+  })
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`HTTP ${res.status}`)
+  }
+}
+
+function fmtArtistUpdated(row: ArtistRow): string {
+  const iso = row.updated_at || row.created_at
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString()
+}
+
 export function ArtistsRoute() {
   const { t } = useTranslation()
   const qc = useQueryClient()
@@ -95,9 +117,34 @@ export function ArtistsRoute() {
     },
   })
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteArtist(id),
+    onSettled: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'artists'],
+      })
+      setBusyId(null)
+    },
+  })
+
   function handleEnrich(id: number) {
     setBusyId(id)
     enrichMutation.mutate(id)
+  }
+
+  function handleDelete(id: number, name: string) {
+    if (
+      !window.confirm(
+        `Удалить артиста «${name}» (id=${id})? Связи track_artist будут удалены.`,
+      )
+    )
+      return
+    setBusyId(id)
+    deleteMutation.mutate(id)
+  }
+
+  function handleOpenArtist(id: number) {
+    window.open(`/mini_app/artist/${id}`, '_blank')
   }
 
   const columns: ColumnDef<ArtistRow>[] = [
@@ -112,7 +159,17 @@ export function ArtistsRoute() {
     },
     {
       header: 'Name',
-      accessorKey: 'name',
+      cell: (info) => (
+        <button
+          type="button"
+          className="admin-link"
+          onClick={() =>
+            handleOpenArtist(info.row.original.id)
+          }
+        >
+          {info.row.original.name}
+        </button>
+      ),
     },
     {
       header: 'Country',
@@ -159,29 +216,43 @@ export function ArtistsRoute() {
     },
     {
       header: 'Updated',
-      cell: (info) =>
-        new Date(
-          info.row.original.updated_at,
-        ).toLocaleDateString(),
+      cell: (info) => fmtArtistUpdated(info.row.original),
     },
     {
       header: '',
       id: 'actions',
-      cell: (info) => (
-        <Press
-          variant="ghost"
-          disabled={
-            busyId === info.row.original.id
-          }
-          onClick={() =>
-            handleEnrich(info.row.original.id)
-          }
-        >
-          {busyId === info.row.original.id
-            ? t('admin.artists.enriching')
-            : t('admin.artists.enrich')}
-        </Press>
-      ),
+      cell: (info) => {
+        const { id, name } = info.row.original
+        const busy = busyId === id
+        return (
+          <div
+            style={{
+              display: 'flex',
+              gap: 6,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Press
+              variant="ghost"
+              disabled={busy}
+              onClick={() => handleEnrich(id)}
+            >
+              {busy && enrichMutation.isPending
+                ? t('admin.artists.enriching')
+                : t('admin.artists.enrich')}
+            </Press>
+            <Press
+              variant="ghost"
+              disabled={busy}
+              onClick={() =>
+                handleDelete(id, name)
+              }
+            >
+              Удалить
+            </Press>
+          </div>
+        )
+      },
     },
   ]
 

@@ -61,6 +61,15 @@ export function MetricsRoute() {
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   })
+  const srcStatus =
+    (rps.data as any)?.source_status ??
+    (errs.data as any)?.source_status ??
+    (lat.data as any)?.source_status
+  const srcReason =
+    (rps.data as any)?.source_reason ??
+    (errs.data as any)?.source_reason ??
+    (lat.data as any)?.source_reason
+
   return (
     <div>
       <h1>{t('admin.metrics.title')}</h1>
@@ -82,6 +91,22 @@ export function MetricsRoute() {
           })}
         </span>
       </div>
+      {srcStatus === 'disabled' && (
+        <div className="admin-warning">
+          {t('admin.metrics.sourceDisabled', {
+            defaultValue:
+              'Prometheus не настроен или observability-стек не поднят. Запустите docker compose -f docker-compose.observability.yml up -d.',
+          })}
+        </div>
+      )}
+      {srcStatus === 'error' && (
+        <div className="admin-error">
+          {t('admin.metrics.sourceError', {
+            defaultValue: 'Prometheus недоступен: {{reason}}',
+            reason: String(srcReason ?? ''),
+          })}
+        </div>
+      )}
       <section className="admin-card">
         <h2>{t('admin.metrics.rps')}</h2>
         <LineChart
