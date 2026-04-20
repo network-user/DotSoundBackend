@@ -155,6 +155,22 @@ export function LogsRoute() {
           {(error as Error).message}
         </div>
       )}
+      {(data as any)?.source_status === 'disabled' && (
+        <div className="admin-warning">
+          {t('admin.logs.sourceDisabled', {
+            defaultValue:
+              'Loki не настроен или observability-стек не поднят. Запустите docker compose -f docker-compose.observability.yml up -d.',
+          })}
+        </div>
+      )}
+      {(data as any)?.source_status === 'error' && (
+        <div className="admin-error">
+          {t('admin.logs.sourceError', {
+            defaultValue: 'Loki недоступен: {{reason}}',
+            reason: String((data as any)?.source_reason ?? ''),
+          })}
+        </div>
+      )}
       <div className="admin-log-stream">
         {items.length === 0 && (
           <div className="admin-log-empty">

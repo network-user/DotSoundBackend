@@ -73,6 +73,15 @@ class AppSettings(BaseSettings):
     track_info_ttl_days: int = 30
     artist_supplemental_ttl_days: int = 30
 
+    # Public selector forwarded into PrivateCore to pick the
+    # lyrics provider. Internals of each provider remain opaque
+    # inside PrivateCore; only the selector value (e.g. "yandex",
+    # "generic") and an optional user-facing source label cross
+    # the boundary — see docs/ai-boundary-policy.md, "Source
+    # Attribution Exception".
+    lyrics_provider_name: str = ""
+    track_info_provider_name: str = ""
+
     admin_jwt_secret: str = ""
     admin_csrf_secret: str = ""
     admin_telegram_alert_chat_id: str = ""

@@ -33,6 +33,7 @@ from dotsound_private_core.services.admin_security_policy import (
 from fastapi import APIRouter, Query, WebSocket
 from fastapi import status as ws_status
 from sqlalchemy import desc, select
+from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 from app.core.auth import (
     AuthError,
@@ -252,6 +253,13 @@ def _parse_log_subscribe(
     return selectors, contains_clean
 
 
+def _is_ws_open(websocket: WebSocket) -> bool:
+    return (
+        websocket.client_state == WebSocketState.CONNECTED
+        and websocket.application_state == WebSocketState.CONNECTED
+    )
+
+
 async def _broadcast_loop(
     websocket: WebSocket,
     subscriptions: set[str],
@@ -260,6 +268,8 @@ async def _broadcast_loop(
     last_task_seen = [""]
     log_since = [int(time.time() * 1_000_000_000)]
     while True:
+        if not _is_ws_open(websocket):
+            return
         try:
             if "overview" in subscriptions:
                 await _push_overview(websocket)
@@ -280,8 +290,13 @@ async def _broadcast_loop(
                     contains=state.get("logs_contains"),
                     since_ns=log_since,
                 )
+        except (WebSocketDisconnect, RuntimeError):
+            # client gone / close already sent — exit quietly
+            return
         except Exception:
             logger.exception("admin_ws_push_failed")
+            if not _is_ws_open(websocket):
+                return
         await asyncio.sleep(3)
 
 

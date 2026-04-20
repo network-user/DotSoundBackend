@@ -7,13 +7,18 @@ import {
 import { api } from '@/lib/api'
 import {
   getInternalUserId,
+  getIsAdmin,
   tg,
 } from '@/lib/telegram'
 import { useLikes } from '@/store/LikesContext'
 import { usePlayer } from '@/store/PlayerContext'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
-import type { Track, TrackCardResponse } from '@/types/api'
+import type {
+  Track,
+  TrackCardResponse,
+  TrackInfoResponse,
+} from '@/types/api'
 import { LyricsPanel } from './LyricsPanel'
 
 interface Props {
@@ -77,6 +82,14 @@ export function TrackCardSheet({
   const [authorAvatarUrl, setAuthorAvatarUrl] =
     useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [trackInfo, setTrackInfo] =
+    useState<TrackInfoResponse | null>(null)
+  const [trackInfoRefreshing, setTrackInfoRefreshing] =
+    useState(false)
+  const trackInfoPollRef = useRef<
+    ReturnType<typeof setTimeout> | null
+  >(null)
+  const isAdmin = getIsAdmin()
 
   const [coverKey, setCoverKey] = useState<
     string | null
@@ -107,6 +120,12 @@ export function TrackCardSheet({
       setCoverKey(null)
       setCoverBusy(false)
       setVideoReady(false)
+      setTrackInfo(null)
+      setTrackInfoRefreshing(false)
+      if (trackInfoPollRef.current) {
+        clearTimeout(trackInfoPollRef.current)
+        trackInfoPollRef.current = null
+      }
       return
     }
     setCoverKey(track.cover_key)
@@ -135,7 +154,66 @@ export function TrackCardSheet({
     api.getSimilarTracks(track.id)
       .then((r) => setSimilarTracks(r.tracks))
       .catch(() => {})
+
+    setTrackInfo(null)
+    let cancelled = false
+    let attempts = 0
+    const pollInfo = async () => {
+      try {
+        const data = await api.getTrackInfo(track.id)
+        if (cancelled) return
+        setTrackInfo(data)
+        if (
+          (data.status === 'fetching' || data.status === 'pending') &&
+          attempts < 30
+        ) {
+          attempts += 1
+          trackInfoPollRef.current = setTimeout(pollInfo, 3000)
+        }
+      } catch {
+        // silent — info block hidden if not loadable
+      }
+    }
+    pollInfo()
+
+    return () => {
+      cancelled = true
+      if (trackInfoPollRef.current) {
+        clearTimeout(trackInfoPollRef.current)
+        trackInfoPollRef.current = null
+      }
+    }
   }, [isCardOpen, track?.id])
+
+  const handleRefreshTrackInfo = useCallback(async () => {
+    if (!track || trackInfoRefreshing) return
+    setTrackInfoRefreshing(true)
+    try {
+      const data = await api.refreshTrackInfo(track.id)
+      setTrackInfo(data)
+      if (data.status === 'fetching' || data.status === 'pending') {
+        let attempts = 0
+        const poll = async () => {
+          try {
+            const upd = await api.getTrackInfo(track.id)
+            setTrackInfo(upd)
+            if (
+              (upd.status === 'fetching' || upd.status === 'pending') &&
+              attempts < 30
+            ) {
+              attempts += 1
+              trackInfoPollRef.current = setTimeout(poll, 3000)
+            }
+          } catch {}
+        }
+        poll()
+      }
+    } catch {
+      // noop
+    } finally {
+      setTrackInfoRefreshing(false)
+    }
+  }, [track, trackInfoRefreshing])
 
   useEffect(() => {
     if (genCooldown <= 0) return
@@ -165,6 +243,18 @@ export function TrackCardSheet({
   }
 
   const handleAuthor = () => {
+    if (track?.artist && onOpenArtist) {
+      closeCard()
+      onOpenArtist(track.artist)
+      return
+    }
+    if (card?.author?.id) {
+      closeCard()
+      onOpenAuthor(card.author.id)
+    }
+  }
+
+  const handleUploader = () => {
     if (card?.author?.id) {
       closeCard()
       onOpenAuthor(card.author.id)
@@ -330,10 +420,11 @@ export function TrackCardSheet({
       >
         <div className="tcs-handle" />
         <button
-          className="tcs-close icon-btn"
+          className="tcs-close"
           onClick={closeCard}
+          aria-label="Закрыть"
         >
-          <Icon name="x" size={18} />
+          <Icon name="x" size={22} />
         </button>
 
         <div
@@ -545,7 +636,8 @@ export function TrackCardSheet({
           {card?.author && (
             <div
               className="tcs-author-row"
-              onClick={handleAuthor}
+              onClick={handleUploader}
+              title="Перейти к загрузчику"
             >
               <div className="tcs-author-avatar">
                 {authorAvatarUrl ? (
@@ -563,7 +655,7 @@ export function TrackCardSheet({
               <span className="tcs-author-name">
                 {card.author.display_name ||
                   card.author.username ||
-                  'Автор'}
+                  'Загрузчик'}
               </span>
               <Icon
                 name="chevron"
@@ -587,6 +679,7 @@ export function TrackCardSheet({
               onChange={(e) =>
                 seek(Number(e.target.value))
               }
+              style={{ ['--progress' as string]: `${pct}%` }}
             />
             <div className="tcs-time">
               <span>{fmt(currentTime)}</span>
@@ -678,7 +771,7 @@ export function TrackCardSheet({
           <button
             className="tcs-action-btn"
             onClick={handleAuthor}
-            disabled={!card?.author}
+            disabled={!track?.artist && !card?.author}
           >
             <Icon name="user" size={20} />
             <span className="tcs-action-label">
@@ -863,6 +956,59 @@ export function TrackCardSheet({
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {(trackInfo?.status === 'done' ||
+          trackInfo?.status === 'fetching' ||
+          trackInfo?.status === 'pending' ||
+          isAdmin) && (
+          <div className="tcs-info-section">
+            <div className="tcs-info-section-header">
+              <h3 className="tcs-info-section-title">
+                О треке
+              </h3>
+              {isAdmin && (
+                <button
+                  className="tcs-info-refresh icon-btn"
+                  onClick={handleRefreshTrackInfo}
+                  disabled={trackInfoRefreshing}
+                  title="Обновить информацию (DEBUG)"
+                  aria-label="Обновить информацию"
+                >
+                  <Icon name="refresh" size={14} />
+                </button>
+              )}
+            </div>
+            {(trackInfo?.status === 'fetching' ||
+              trackInfo?.status === 'pending' ||
+              trackInfoRefreshing) && (
+              <p className="tcs-info-placeholder">
+                Готовим информацию о треке…
+              </p>
+            )}
+            {trackInfo?.status === 'done' && trackInfo.content && (
+              <div className="tcs-info-content">
+                {trackInfo.content.split('\n').map((line, i) => (
+                  <p
+                    key={i}
+                    className={line === '' ? 'tcs-info-spacer' : undefined}
+                  >
+                    {line}
+                  </p>
+                ))}
+              </div>
+            )}
+            {trackInfo?.status === 'not_found' && (
+              <p className="tcs-info-placeholder">
+                Информация не найдена.
+              </p>
+            )}
+            {trackInfo?.status === 'failed' && (
+              <p className="tcs-info-placeholder">
+                Не удалось получить информацию.
+              </p>
+            )}
           </div>
         )}
 

@@ -45,6 +45,8 @@ async def query_logs(
     limit: int = Query(200, ge=1, le=1000),
     _admin: User = Depends(require_capability("logs.view")),
 ) -> dict[str, Any]:
+    from app.config import settings
+
     selectors: dict[str, str] = {}
     if container:
         selectors["container"] = container
@@ -54,6 +56,16 @@ async def query_logs(
         selectors["level"] = level
     if not selectors:
         selectors["service"] = "dotsound-backend"
+
+    if not settings.loki_url:
+        return {
+            "items": [],
+            "selectors": selectors,
+            "minutes": minutes,
+            "count": 0,
+            "source_status": "disabled",
+            "source_reason": "loki_not_configured",
+        }
 
     end_ns = int(time.time() * 1_000_000_000)
     start_ns = end_ns - minutes * 60 * 1_000_000_000
@@ -66,11 +78,33 @@ async def query_logs(
             limit=limit,
         )
     except LokiServiceError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        msg = str(exc)
+        if "not configured" in msg:
+            return {
+                "items": [],
+                "selectors": selectors,
+                "minutes": minutes,
+                "count": 0,
+                "source_status": "disabled",
+                "source_reason": "loki_not_configured",
+            }
+        # selector validation / LogQL errors stay user-visible
+        if "disallowed" in msg or "not allowed" in msg:
+            raise HTTPException(status_code=400, detail=msg) from exc
+        logger.warning("loki_query_unreachable", error=msg)
+        return {
+            "items": [],
+            "selectors": selectors,
+            "minutes": minutes,
+            "count": 0,
+            "source_status": "error",
+            "source_reason": msg,
+        }
 
     return {
         "items": rows,
         "selectors": selectors,
         "minutes": minutes,
         "count": len(rows),
+        "source_status": "available",
     }

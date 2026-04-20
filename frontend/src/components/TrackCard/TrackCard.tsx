@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, type MouseEvent } from 'react'
+import { useRef, useState, type MouseEvent } from 'react'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
@@ -8,7 +8,7 @@ import {
 } from '@/store/PlayerContext'
 import { getInternalUserId } from '@/lib/telegram'
 import { api } from '@/lib/api'
-import type { Track, TrackInfoResponse } from '@/types/api'
+import type { Track } from '@/types/api'
 
 interface Props {
   track: Track
@@ -35,44 +35,13 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
   const { track: currentTrack } = usePlayerMeta()
   const { playTrack } = usePlayerActions()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
-  const [infoOpen, setInfoOpen] = useState(false)
-  const [trackInfo, setTrackInfo] = useState<TrackInfoResponse | null>(null)
-  const [infoLoading, setInfoLoading] = useState(false)
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const playing = currentTrack?.id === track.id
   const liked = isLiked(track.id)
   const internalId = getInternalUserId()
   const isOwner = internalId !== null && track.uploaded_by_id === internalId
   const catalogLabel = getCatalogLabel(track)
-
-  useEffect(() => {
-    return () => { if (pollRef.current) clearTimeout(pollRef.current) }
-  }, [])
-
-  async function handleInfoClick(e: MouseEvent) {
-    e.stopPropagation()
-    if (infoOpen) { setInfoOpen(false); return }
-    setInfoOpen(true)
-    if (trackInfo?.status === 'done') return
-    await loadInfo()
-  }
-
-  async function loadInfo(attempt = 0) {
-    setInfoLoading(true)
-    try {
-      const info = await api.getTrackInfo(track.id)
-      setTrackInfo(info)
-      if ((info.status === 'fetching' || info.status === 'pending') && attempt < 20) {
-        pollRef.current = setTimeout(() => loadInfo(attempt + 1), 3000)
-      } else {
-        setInfoLoading(false)
-      }
-    } catch {
-      setInfoLoading(false)
-    }
-  }
 
   const handleLike = async (e: MouseEvent) => {
     e.stopPropagation()
@@ -189,34 +158,6 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
         </div>
       </div>
 
-      <div className="track-card-footer" onClick={(e) => e.stopPropagation()}>
-        <button
-          className={`track-card-info-row-btn${infoOpen ? ' active' : ''}`}
-          onClick={handleInfoClick}
-        >
-          <Icon name="info" size={13} />
-          {infoLoading && (!trackInfo || trackInfo.status !== 'done')
-            ? 'Загрузка…'
-            : infoOpen ? 'Скрыть' : 'Информация'}
-        </button>
-      </div>
-
-      {infoOpen && (
-        <div className="track-card-ai-body" onClick={(e) => e.stopPropagation()}>
-          {infoLoading && (!trackInfo || trackInfo.status !== 'done') && (
-            <p className="track-card-ai-info-loading">Запрашиваем информацию о треке…</p>
-          )}
-          {trackInfo?.status === 'done' && trackInfo.content && (
-            <p className="track-card-ai-text">{trackInfo.content}</p>
-          )}
-          {trackInfo?.status === 'not_found' && (
-            <p className="track-card-ai-info-loading">Информация не найдена</p>
-          )}
-          {trackInfo?.status === 'failed' && (
-            <p className="track-card-ai-info-loading">Ошибка загрузки</p>
-          )}
-        </div>
-      )}
     </div>
   )
 }

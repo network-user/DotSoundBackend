@@ -136,13 +136,16 @@ async def cancel_lyrics_job(
     ),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Set the CANCEL flag for a lyrics job's progress channel.
+    """Cancel a lyrics job.
 
-    The worker polls this flag between stages and cleanly stops
-    on the next safe boundary, marking the job as cancelled in
-    both Redis (terminal_state) and DB. Cancelling a job that
-    has already terminated is a no-op (returns ``already_done``).
+    For a currently-running job the CANCEL flag is set on the
+    progress channel; the worker picks it up between stages and
+    exits at the next safe boundary. For a job still in ``queued``
+    state (worker never picked it up) the DB row is marked
+    ``cancelled`` immediately so it disappears from the admin list.
     """
+    from datetime import UTC, datetime
+
     from app.services.lyrics_worker import (
         CANCEL_KEY_PREFIX,
         set_lyrics_progress,
@@ -165,38 +168,43 @@ async def cancel_lyrics_job(
         }
 
     progress_id = row.progress_id
-    if not progress_id:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "job has no progress channel "
-                "(cannot signal cancel)"
-            ),
-        )
 
+    # Set cancel flag for running worker (if any).
     redis = get_redis_client()
-    try:
-        await redis.set(
-            f"{CANCEL_KEY_PREFIX}{progress_id}",
-            "1",
-            ex=600,
-        )
-        await set_lyrics_progress(
-            progress_id,
-            stage="cancelling",
-            log_line=(
-                "cancellation requested by admin"
-            ),
-        )
-    except Exception as exc:
-        logger.exception(
-            "admin_lyrics_cancel_failed",
+    if progress_id:
+        try:
+            await redis.set(
+                f"{CANCEL_KEY_PREFIX}{progress_id}",
+                "1",
+                ex=600,
+            )
+            await set_lyrics_progress(
+                progress_id,
+                stage="cancelling",
+                log_line=(
+                    "cancellation requested by admin"
+                ),
+            )
+        except Exception:
+            logger.exception(
+                "admin_lyrics_cancel_signal_failed",
+                job_id=job_id,
+                progress_id=progress_id,
+            )
+
+    # Immediately mark queued jobs as cancelled in DB so they
+    # disappear from the admin list even if no worker is alive.
+    if row.status == "queued":
+        row.status = "cancelled"
+        row.finished_at = datetime.now(UTC)
+        row.error = "cancelled_by_admin"
+        await session.commit()
+        logger.info(
+            "admin_lyrics_cancel_queued_direct",
             job_id=job_id,
             progress_id=progress_id,
         )
-        raise HTTPException(
-            status_code=500, detail=str(exc)
-        ) from exc
+        return {"status": "cancelled", "job_status": "cancelled"}
 
     logger.info(
         "admin_lyrics_cancel_requested",
@@ -204,6 +212,60 @@ async def cancel_lyrics_job(
         progress_id=progress_id,
     )
     return {"status": "cancel_requested"}
+
+
+@router.post("/lyrics-jobs/cancel-queued")
+async def cancel_all_queued_lyrics_jobs(
+    _admin: User = Depends(
+        require_capability("tasks.manage")
+    ),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Bulk-cancel every lyrics job currently in ``queued`` state.
+
+    Also signals cancel on their progress channels so a worker that
+    picks one up right after this call will exit immediately.
+    """
+    from datetime import UTC, datetime
+
+    from app.services.lyrics_worker import CANCEL_KEY_PREFIX
+
+    queued_rows = (
+        await session.execute(
+            select(LyricsJob).where(LyricsJob.status == "queued")
+        )
+    ).scalars().all()
+
+    if not queued_rows:
+        return {"cancelled": 0, "items": []}
+
+    redis = get_redis_client()
+    now = datetime.now(UTC)
+    ids: list[str] = []
+    for row in queued_rows:
+        if row.progress_id:
+            try:
+                await redis.set(
+                    f"{CANCEL_KEY_PREFIX}{row.progress_id}",
+                    "1",
+                    ex=600,
+                )
+            except Exception:
+                logger.debug(
+                    "admin_bulk_cancel_signal_failed",
+                    job_id=row.id,
+                )
+        row.status = "cancelled"
+        row.finished_at = now
+        row.error = "cancelled_by_admin_bulk"
+        ids.append(row.id)
+
+    await session.commit()
+    logger.info(
+        "admin_lyrics_bulk_cancel",
+        count=len(ids),
+    )
+    return {"cancelled": len(ids), "items": ids}
 
 
 @router.get("/lyrics-jobs")

@@ -18,6 +18,8 @@ from app.repositories.track_info import TrackInfoRepository
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
+_PROVIDER_TIMEOUT_SECONDS = 90.0
+
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
 async def _preload_track_info_provider(
@@ -76,14 +78,36 @@ async def fetch_track_info_task(track_id: int) -> dict:
                 fetch_track_info,
             )
 
-            info = await asyncio.to_thread(
-                fetch_track_info,
-                title=track.title,
-                artist=artist_name,
+            info = await asyncio.wait_for(
+                asyncio.to_thread(
+                    fetch_track_info,
+                    title=track.title,
+                    artist=artist_name,
+                ),
+                timeout=_PROVIDER_TIMEOUT_SECONDS,
             )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "track_info_provider_timeout",
+                track_id=track_id,
+                timeout=_PROVIDER_TIMEOUT_SECONDS,
+            )
+            await repo.upsert(
+                track_id,
+                status="failed",
+                content=None,
+                fetched_at=datetime.now(UTC),
+            )
+            await session.commit()
+            return {"status": "timeout"}
         except Exception:
             logger.exception("track_info_provider_error", track_id=track_id)
-            await repo.upsert(track_id, status="failed", content=None, fetched_at=None)
+            await repo.upsert(
+                track_id,
+                status="failed",
+                content=None,
+                fetched_at=datetime.now(UTC),
+            )
             await session.commit()
             return {"status": "error"}
 

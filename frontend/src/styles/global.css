@@ -1249,20 +1249,25 @@ textarea.form-input { resize: none; }
 
 .tcs-close {
   position: absolute;
-  top: 10px;
-  right: max(14px, env(safe-area-inset-right, 0px));
+  top: max(12px, calc(env(safe-area-inset-top, 0px) + 12px));
+  right: max(12px, calc(env(safe-area-inset-right, 0px) + 12px));
   font-size: 16px;
   color: var(--text);
   z-index: 10;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.5);
   border-radius: 50%;
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  border: none;
+  cursor: pointer;
+  padding: 0;
 }
 
 /* Cover — large square */
@@ -1577,16 +1582,47 @@ textarea.form-input { resize: none; }
   height: 3px;
   -webkit-appearance: none;
   appearance: none;
-  background: var(--surface-2);
+  background: linear-gradient(
+    to right,
+    var(--text, #fff) 0%,
+    var(--text, #fff) var(--progress, 0%),
+    var(--surface-2) var(--progress, 0%),
+    var(--surface-2) 100%
+  );
   border-radius: 2px;
   outline: none;
+  cursor: pointer;
+}
+.tcs-seek::-webkit-slider-runnable-track {
+  height: 3px;
+  background: transparent;
+  border-radius: 2px;
+}
+.tcs-seek::-moz-range-track {
+  height: 3px;
+  background: transparent;
+  border-radius: 2px;
+}
+.tcs-seek::-moz-range-progress {
+  height: 3px;
+  background: var(--text, #fff);
+  border-radius: 2px;
 }
 .tcs-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 12px;
   height: 12px;
+  margin-top: -4.5px;
   border-radius: 50%;
-  background: var(--text);
+  background: var(--text, #fff);
+  cursor: pointer;
+}
+.tcs-seek::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  background: var(--text, #fff);
   cursor: pointer;
 }
 .tcs-time {
@@ -3063,10 +3099,36 @@ textarea.form-input { resize: none; }
   align-items: center;
   justify-content: space-between;
   padding: 0 16px 12px;
+  gap: 8px;
 }
 .settings-title {
   font-size: 18px;
   font-weight: 700;
+  flex: 1;
+  text-align: center;
+}
+.settings-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 6px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.settings-back:active {
+  background: var(--bg-secondary);
+}
+.settings-back-label {
+  font-size: 14px;
+}
+.settings-close {
+  min-width: 44px;
+  min-height: 44px;
 }
 .settings-list {
   display: flex;
@@ -3481,6 +3543,60 @@ textarea.form-input { resize: none; }
 .tcs-similar-track-artist {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+/* ── TrackCardSheet: Info (О треке) ─────────── */
+
+.tcs-info-section {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
+.tcs-info-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.tcs-info-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.tcs-info-refresh {
+  width: 28px;
+  height: 28px;
+  opacity: 0.7;
+}
+
+.tcs-info-refresh:hover {
+  opacity: 1;
+}
+
+.tcs-info-content {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tcs-info-content p {
+  margin: 0;
+}
+
+.tcs-info-spacer {
+  height: 6px;
+}
+
+.tcs-info-placeholder {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  font-style: italic;
 }
 
 /* ── Legal View ─────────────────────────────── */

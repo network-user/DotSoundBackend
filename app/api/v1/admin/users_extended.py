@@ -185,6 +185,136 @@ async def unban_user(
     return {"id": user.id, "is_active": user.is_active}
 
 
+@router.post("/{user_id}/force-logout")
+async def force_logout(
+    user_id: int,
+    _admin: User = Depends(require_step_up("users.force_logout")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Revoke every admin session for ``user_id`` and record a
+    user-level revoke marker in Redis that auth middleware can
+    check on refresh.
+    """
+    from app.core.redis import get_redis_client
+
+    target = await session.get(User, user_id)
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        )
+
+    now = datetime.now(UTC)
+    revoked = 0
+    result = await session.execute(
+        select(AdminSession).where(
+            AdminSession.user_id == user_id,
+            AdminSession.revoked_at.is_(None),
+        )
+    )
+    for row in result.scalars().all():
+        row.revoked_at = now
+        revoked += 1
+    await session.flush()
+
+    try:
+        redis = get_redis_client()
+        await redis.set(
+            f"user:force_logout:{user_id}",
+            str(int(now.timestamp())),
+            ex=60 * 60 * 24 * 30,
+        )
+    except Exception:
+        logger.debug(
+            "force_logout_redis_marker_failed",
+            user_id=user_id,
+        )
+
+    await dispatch_alert(
+        event_type="user_force_logout",
+        severity="info",
+        title="User sessions revoked",
+        details=(
+            f"target_user_id={user_id}, "
+            f"admin_sessions_revoked={revoked}"
+        ),
+        user_id=_admin.id,
+    )
+    return {
+        "user_id": user_id,
+        "admin_sessions_revoked": revoked,
+    }
+
+
+@router.post("/{user_id}/message")
+async def send_admin_message(
+    user_id: int,
+    text: str = Body(..., embed=True, min_length=1, max_length=4000),
+    admin: User = Depends(require_step_up("users.message")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Open a DM between the admin and the target user (if not
+    already present) and post ``text`` to it. Delivery is best-
+    effort — if the chat stack is unavailable the call still fails
+    explicitly with 503.
+    """
+    from app.services.chat_service import ChatService
+    from app.services.message_service import MessageService
+
+    target = await session.get(User, user_id)
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        )
+
+    chat_svc = ChatService(session)
+    msg_svc = MessageService(session)
+    try:
+        chat = await chat_svc.create_dm(
+            owner_id=admin.id, peer_id=user_id
+        )
+        conv_id = (
+            chat.get("id") if isinstance(chat, dict) else chat.id
+        )
+    except Exception as exc:
+        logger.exception(
+            "admin_message_create_dm_failed",
+            target_user_id=user_id,
+        )
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    try:
+        msg = await msg_svc.send_message(
+            conversation_id=int(conv_id),
+            sender_id=admin.id,
+            content=text,
+            msg_type="text",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(
+            "admin_message_send_failed",
+            target_user_id=user_id,
+        )
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    await session.commit()
+    logger.info(
+        "admin_message_sent",
+        target_user_id=user_id,
+        admin_id=admin.id,
+        chars=len(text),
+    )
+    return {
+        "conversation_id": conv_id,
+        "message_id": (
+            msg.get("id") if isinstance(msg, dict) else getattr(msg, "id", None)
+        ),
+    }
+
+
 @router.post("/{user_id}/grant-admin")
 async def grant_admin(
     user_id: int,

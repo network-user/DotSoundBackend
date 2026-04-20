@@ -204,6 +204,7 @@ export interface LyricsResponse {
   plain_text: string
   synced_lines: SyncedLine[] | null
   source: string
+  source_name?: string | null
   sync_quality?: string | null
   sync_profile?: string | null
   created_at: string

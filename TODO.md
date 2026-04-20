@@ -542,7 +542,7 @@
 
 ---
 
-*Последнее обновление: 2026-04-19 агентом (admin i18n + auth race fix + admin refresh-on-boot).*
+*Последнее обновление: 2026-04-20 агентом (sprint bugfix: 14 задач добавлены).*
 
 ## Sprint admin / auth (2026-04-19)
 
@@ -562,3 +562,21 @@
 - [x] Frontend: `?nosw=1` в URL разрегистрирует service worker (отладка на ngrok)
 - [x] Frontend: убран дублирующий `<Route path="/admin">` без `*` в `App.tsx` — nested `<Routes>` в `AdminApp` теперь корректно рендерит `DashboardRoute`
 - [x] Frontend: `adminApi.refresh()` и `adminApi.logout()` больше не шлют `body: {}` — backend теперь читает refresh token из httpOnly-cookie без 422 от валидации `AdminRefreshRequest`
+
+## Sprint bugfix (2026-04-20)
+
+- [x] **(0)** Policy amendment: расширить "Source Attribution Exception" на lyrics / track-info провайдеров (`CLAUDE.md` + `docs/ai-boundary-policy.md`)
+- [x] **(1)** Track info: перенос из внешней кнопки внутрь `TrackCardSheet` (после блока «похожие треки»), DEBUG-refresh (admin), автозагрузка и polling
+- [x] **(2)** Track info worker: `/api/v1/tracks/{id}/info` зависает в `fetching` — stale-retry в сервисе, `asyncio.wait_for` timeout 90s в воркере, `fetched_at` отражает последнее состояние
+- [x] **(3)** `TrackCardSheet`: белая заливка прогресс-бара — CSS gradient с `--progress` + inline style на seek-input
+- [x] **(4)** `SettingsSheet`: кнопка «Назад» с label + Telegram BackButton + Esc
+- [x] **(5)** `TrackCardSheet`: крестик 44×44, safe-area-inset-top/right, не выходит за рамки
+- [x] **(6)** `TrackCardSheet`: «Перейти к автору» использует `track.artist` через `onOpenArtist`; ряд загрузчика переименован
+- [x] **(7)** Admin: `/logs/query` и `/metrics/range` возвращают `source_status` + `/system/observability` endpoint, banner в `LogsRoute` / `MetricsRoute`
+- [x] **(8)** Admin lyrics-jobs: индивидуальный cancel (inline-кнопка) + bulk `POST /tasks/lyrics-jobs/cancel-queued`; `queued` сразу переводится в `cancelled` в БД
+- [x] **(9)** Admin Artists: `DELETE /artists/{id}`, клик по имени → `/mini_app/artist/:id` (новая вкладка), fix даты через fallback на `created_at`, `updated_at` добавлен в `ArtistResponse`
+- [x] **(10)** Admin Tracks: existing `DELETE` + visibility-toggle + inline `<audio>` + открытие `/mini_app/track/:id`
+- [x] **(11)** Admin Users: ban/unban + `POST /users-ext/{id}/force-logout` (revoke admin sessions + Redis marker) + `POST /users-ext/{id}/message` (DM через `ChatService`/`MessageService`)
+- [x] **(12)** Lyrics: cache-hit с text-only при `with_sync=true` пре-сохраняет текст в БД и продолжает в audio-based sync flow
+- [x] **(13)** WS: `_is_ws_open()` guard + `try/except (WebSocketDisconnect, RuntimeError)` → ранний выход из `_broadcast_loop`
+- [x] **(14)** Lyrics: `LyricsResponse.source_name` (optional) для UI-attribution + `lyrics_provider_name` / `track_info_provider_name` env-flag selectors; алгоритмика остаётся в PrivateCore

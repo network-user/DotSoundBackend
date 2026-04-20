@@ -545,6 +545,32 @@ export const adminApi = {
       page: number
       size: number
     }>('/users', { query: params }),
+  banUser: (userId: number) =>
+    adminFetch<{ id: number; is_active: boolean }>(
+      `/users-ext/${userId}/ban`,
+      { method: 'POST', body: {} },
+    ),
+  unbanUser: (userId: number) =>
+    adminFetch<{ id: number; is_active: boolean }>(
+      `/users-ext/${userId}/unban`,
+      { method: 'POST', body: {} },
+    ),
+  forceLogoutUser: (userId: number) =>
+    adminFetch<{
+      user_id: number
+      admin_sessions_revoked: number
+    }>(`/users-ext/${userId}/force-logout`, {
+      method: 'POST',
+      body: {},
+    }),
+  sendAdminMessage: (userId: number, text: string) =>
+    adminFetch<{
+      conversation_id: number
+      message_id: number | null
+    }>(`/users-ext/${userId}/message`, {
+      method: 'POST',
+      body: { text },
+    }),
   listTracks: (params: {
     page?: number
     size?: number
@@ -557,6 +583,21 @@ export const adminApi = {
       page: number
       size: number
     }>('/tracks', { query: params }),
+  deleteTrack: (trackId: number) =>
+    adminFetch<void>(`/tracks/${trackId}`, {
+      method: 'DELETE',
+    }),
+  setTrackVisibility: (
+    trackId: number,
+    isActive: boolean,
+  ) =>
+    adminFetch<Record<string, unknown>>(
+      `/tracks/${trackId}/visibility`,
+      {
+        method: 'PATCH',
+        query: { is_active: isActive },
+      },
+    ),
   listComplaints: (params: {
     page?: number
     size?: number
@@ -607,6 +648,14 @@ export const adminApi = {
       status: string
       job_status?: string
     }>(`/tasks/lyrics-jobs/${jobId}/cancel`, {
+      method: 'POST',
+      body: {},
+    }),
+  cancelAllQueuedLyricsJobs: () =>
+    adminFetch<{
+      cancelled: number
+      items: string[]
+    }>(`/tasks/lyrics-jobs/cancel-queued`, {
       method: 'POST',
       body: {},
     }),
