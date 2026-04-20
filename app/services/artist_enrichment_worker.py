@@ -48,9 +48,18 @@ async def enrich_artist_task(
     progress_id: str = "",
     bypass_cache: bool = False,
 ) -> dict:
+    import time
+
     structlog.contextvars.bind_contextvars(
         artist_id=artist_id, progress_id=progress_id
     )
+    logger.info(
+        "enrich_artist_task_picked_up",
+        artist_id=artist_id,
+        progress_id=progress_id,
+        bypass_cache=bypass_cache,
+    )
+    t_start = time.monotonic()
     async with AsyncSessionLocal() as session:
         svc = ArtistEnrichmentService(session)
         try:
@@ -59,10 +68,18 @@ async def enrich_artist_task(
                 bypass_cache=bypass_cache,
                 progress_id=progress_id or None,
             )
+            logger.info(
+                "enrich_artist_task_done",
+                artist_id=artist_id,
+                elapsed_s=round(time.monotonic() - t_start, 2),
+            )
             return {"status": "ok"}
         except ArtistNotFound:
             logger.info("artist_enrichment_missing_artist")
             return {"status": "not_found"}
         except Exception:
-            logger.exception("artist_enrichment_task_error")
+            logger.exception(
+                "artist_enrichment_task_error",
+                elapsed_s=round(time.monotonic() - t_start, 2),
+            )
             return {"status": "error"}
