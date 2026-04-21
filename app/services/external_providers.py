@@ -1,4 +1,10 @@
+import asyncio
 from typing import Any
+
+from dotsound_private_core.services import (
+    PlaylistScanResult,
+    fetch_external_playlist,
+)
 
 
 class ProviderError(Exception):
@@ -41,10 +47,33 @@ async def scan_playlist_url(
             ],
         }
 
-    Delegates to the internal provider adapter, wired in a follow-up
-    change. Tests monkey-patch this function.
+    Raises :class:`ProviderError` on non-``ok`` status. The actual
+    upstream call lives in the private core; this adapter only
+    normalizes shapes and maps opaque status codes to exceptions.
     """
-    raise NotImplementedError(
-        "scan_playlist_url is not yet wired to the internal provider "
-        "adapter"
+    result: PlaylistScanResult = await asyncio.to_thread(
+        fetch_external_playlist, source, url
+    )
+
+    if result.status == "ok":
+        return {
+            "kind": result.kind,
+            "tracks": [
+                {
+                    "title": t.title,
+                    "artist": t.artist,
+                    "duration_seconds": t.duration_seconds,
+                }
+                for t in result.tracks
+            ],
+        }
+
+    code = (
+        result.status
+        if result.status in ALLOWED_ERROR_CODES
+        else "provider_unavailable"
+    )
+    raise ProviderError(
+        code=code,
+        message=result.error_message or code,
     )
