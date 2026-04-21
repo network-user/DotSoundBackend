@@ -1,7 +1,12 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { api } from '@/lib/api'
-import type { ImportAudioInfo, ImportJobResponse } from '@/types/api'
+import type {
+  ImportAudioInfo,
+  ImportExternalTrackInfo,
+  ImportJobResponse,
+} from '@/types/api'
 import { ImportSourcePicker } from './ImportSourcePicker'
+import { YandexMusicUrlModal } from './YandexMusicUrlModal'
 
 type AudioInfo = ImportAudioInfo
 type ImportJobData = ImportJobResponse
@@ -9,6 +14,12 @@ type ImportJobData = ImportJobResponse
 type Phase = 'pick' | 'scanning' | 'select' | 'importing' | 'done'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
+
+const EXTERNAL_SOURCES = new Set([
+  'yandex_music',
+  'spotify',
+  'soundcloud_playlist',
+])
 
 function fmtDuration(sec: number | null): string {
   if (!sec) return ''
@@ -23,12 +34,39 @@ function fmtSize(bytes: number | null): string {
   return `${mb.toFixed(1)} МБ`
 }
 
+function normalizeJobTracks(job: ImportJobData): AudioInfo[] {
+  const data = job.tracks_data
+  if (!data) return []
+  if (EXTERNAL_SOURCES.has(job.source)) {
+    const tracks: ImportExternalTrackInfo[] = data.tracks || []
+    return tracks.map((t, i) => ({
+      file_id: `${job.source}:${i}`,
+      title: t.title,
+      performer: t.artist,
+      duration: t.duration_seconds,
+      file_size: null,
+    }))
+  }
+  return data.audios || []
+}
+
+function scanningLabel(source: string | undefined): string {
+  if (source === 'yandex_music') {
+    return 'Сканируем плейлист Яндекс Музыки...'
+  }
+  if (EXTERNAL_SOURCES.has(source || '')) {
+    return 'Сканируем плейлист...'
+  }
+  return 'Ищем треки в вашем профиле Telegram...'
+}
+
 export function ImportView({ active }: { active: boolean }) {
   const [phase, setPhase] = useState<Phase>('pick')
   const [job, setJob] = useState<ImportJobData | null>(null)
   const [audios, setAudios] = useState<AudioInfo[]>([])
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
+  const [yandexModalOpen, setYandexModalOpen] = useState(false)
   const pollCountRef = useRef(0)
   const MAX_POLLS = 150
 
@@ -40,12 +78,13 @@ export function ImportView({ active }: { active: boolean }) {
         setPhase('importing')
       } else if (j && j.status === 'ready') {
         setJob(j)
-        setAudios(j.tracks_data?.audios || [])
+        const list = normalizeJobTracks(j)
+        setAudios(list)
         const all = new Set<number>(
-          (j.tracks_data?.audios || [])
-            .map((_: AudioInfo, i: number) => i)
-            .filter((i: number) => {
-              const a = (j.tracks_data?.audios || [])[i]
+          list
+            .map((_, i) => i)
+            .filter((i) => {
+              const a = list[i]
               return !a.file_size || a.file_size <= MAX_FILE_SIZE
             })
         )
@@ -78,31 +117,68 @@ export function ImportView({ active }: { active: boolean }) {
     return () => clearInterval(interval)
   }, [phase, job?.id])
 
+  const applyScanResult = useCallback((j: ImportJobData): boolean => {
+    setJob(j)
+    if (j.status === 'failed') {
+      return false
+    }
+    const list = normalizeJobTracks(j)
+    setAudios(list)
+    const all = new Set<number>(
+      list
+        .map((_, i) => i)
+        .filter((i) => !list[i].file_size || list[i].file_size! <= MAX_FILE_SIZE)
+    )
+    setSelected(all)
+    setPhase('select')
+    return true
+  }, [])
+
   const handleSourceSelect = useCallback(async (sourceId: string) => {
+    setError(null)
+    if (sourceId === 'yandex') {
+      setYandexModalOpen(true)
+      return
+    }
     if (sourceId !== 'telegram') return
     setPhase('scanning')
-    setError(null)
     try {
       const j = await api.startTelegramImport()
-      setJob(j)
-      if (j.status === 'failed') {
+      if (!applyScanResult(j)) {
         setError('Не удалось получить треки из профиля')
         setPhase('pick')
-        return
       }
-      const list = j.tracks_data?.audios || []
-      setAudios(list)
-      const all = new Set<number>(
-        list.map((_: AudioInfo, i: number) => i)
-          .filter((i: number) => !list[i].file_size || list[i].file_size! <= MAX_FILE_SIZE)
-      )
-      setSelected(all)
-      setPhase('select')
     } catch {
       setError('Ошибка подключения к боту')
       setPhase('pick')
     }
-  }, [])
+  }, [applyScanResult])
+
+  const handleYandexScan = useCallback(async (url: string) => {
+    setError(null)
+    setPhase('scanning')
+    try {
+      const j = await api.startYandexMusicImport(url)
+      if (j.status === 'failed') {
+        const code = j.tracks_data?.error_code
+        const msg =
+          code === 'not_found'
+            ? 'Плейлист или альбом не найден'
+            : code === 'private'
+              ? 'Плейлист закрыт или требует авторизации'
+              : code === 'invalid_url'
+                ? 'Ссылка не распознана как плейлист Яндекс Музыки'
+                : 'Не удалось получить список треков. Попробуйте позже.'
+        setPhase('pick')
+        throw new Error(msg)
+      }
+      applyScanResult(j)
+      setYandexModalOpen(false)
+    } catch (e) {
+      setPhase('pick')
+      throw e
+    }
+  }, [applyScanResult])
 
   const toggleTrack = (idx: number) => {
     setSelected((prev) => {
@@ -158,7 +234,7 @@ export function ImportView({ active }: { active: boolean }) {
       {phase === 'scanning' && (
         <div className="import-scanning">
           <div className="loader" />
-          <p className="empty-hint">Ищем треки в вашем профиле Telegram...</p>
+          <p className="empty-hint">{scanningLabel(job?.source)}</p>
         </div>
       )}
 
@@ -259,6 +335,12 @@ export function ImportView({ active }: { active: boolean }) {
           </div>
         </div>
       )}
+
+      <YandexMusicUrlModal
+        open={yandexModalOpen}
+        onClose={() => setYandexModalOpen(false)}
+        onScan={handleYandexScan}
+      />
     </div>
   )
 }
