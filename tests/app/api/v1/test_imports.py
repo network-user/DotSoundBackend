@@ -48,3 +48,28 @@ async def test_cancel_import_requires_auth(
         "/api/v1/import/1/cancel",
     )
     assert r.status_code == 401
+
+
+async def test_scan_yandex_music_requires_auth(
+    client: AsyncClient,
+) -> None:
+    r = await client.post(
+        "/api/v1/import/yandex_music",
+        json={
+            "url": "https://music.yandex.ru/album/1",
+        },
+    )
+    assert r.status_code == 401
+
+
+async def test_scan_yandex_music_rejects_non_yandex_url(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 90002)
+    headers = await auth_headers(client, user["id"])
+    r = await client.post(
+        "/api/v1/import/yandex_music",
+        headers=headers,
+        json={"url": "https://example.com/playlist/1"},
+    )
+    assert r.status_code == 400

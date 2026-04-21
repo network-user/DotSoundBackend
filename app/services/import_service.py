@@ -12,12 +12,20 @@ from app.config import settings
 from app.models.import_job import ImportJob
 from app.models.user import User
 from app.repositories.user import UserRepository
+from app.services.external_providers import (
+    ProviderError,
+    scan_playlist_url,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__
 )
 
 _BOT_TIMEOUT = 30.0
+
+EXTERNAL_IMPORT_SOURCES: frozenset[str] = frozenset(
+    {"yandex_music", "spotify", "soundcloud_playlist"}
+)
 
 
 class ImportService:
@@ -105,6 +113,76 @@ class ImportService:
         )
         return job
 
+    async def scan_external_playlist(
+        self, user_id: int, source: str, url: str
+    ) -> ImportJob:
+        if source not in EXTERNAL_IMPORT_SOURCES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported external source: {source}",
+            )
+
+        user = await self._resolve_user(user_id)
+
+        active = await self._get_active_job(user.id)
+        if active:
+            return active
+
+        job = ImportJob(
+            user_id=user.id,
+            source=source,
+            status="scanning",
+        )
+        self._session.add(job)
+        await self._session.flush()
+        await self._session.refresh(job)
+
+        try:
+            result = await scan_playlist_url(source, url)
+        except ProviderError as exc:
+            job.status = "failed"
+            job.tracks_data = {
+                "error_code": exc.code,
+                "error_message": exc.message,
+            }
+            logger.info(
+                "external_scan_provider_error",
+                job_id=job.id,
+                source=source,
+                code=exc.code,
+            )
+            return job
+        except Exception as exc:
+            job.status = "failed"
+            job.tracks_data = {
+                "error_code": "provider_unavailable",
+                "error_message": str(exc),
+            }
+            logger.error(
+                "external_scan_error",
+                job_id=job.id,
+                source=source,
+                error=str(exc),
+            )
+            return job
+
+        tracks = result.get("tracks", [])
+        job.status = "ready"
+        job.total_tracks = len(tracks)
+        job.tracks_data = {
+            "kind": result.get("kind"),
+            "source_url": url,
+            "tracks": tracks,
+        }
+
+        logger.info(
+            "external_scan_complete",
+            job_id=job.id,
+            source=source,
+            total=len(tracks),
+        )
+        return job
+
     async def start_import(
         self,
         job_id: int,
@@ -120,17 +198,18 @@ class ImportService:
                 detail=f"Job status is {job.status}",
             )
 
-        audios = (job.tracks_data or {}).get(
-            "audios", []
-        )
+        is_external = job.source in EXTERNAL_IMPORT_SOURCES
+        items_key = "tracks" if is_external else "audios"
+        items = (job.tracks_data or {}).get(items_key, [])
         selected = [
-            audios[i]
+            items[i]
             for i in track_indices
-            if 0 <= i < len(audios)
+            if 0 <= i < len(items)
         ]
 
         job.tracks_data = {
-            "audios": audios,
+            **(job.tracks_data or {}),
+            items_key: items,
             "selected": selected,
         }
         job.total_tracks = len(selected)
@@ -138,15 +217,23 @@ class ImportService:
         job.failed_tracks = 0
         job.status = "importing"
 
-        from app.services.import_worker import (
-            process_import_job,
-        )
+        if is_external:
+            from app.services.external_import_worker import (
+                process_external_import_job,
+            )
 
-        await process_import_job.kiq(job.id)
+            await process_external_import_job.kiq(job.id)
+        else:
+            from app.services.import_worker import (
+                process_import_job,
+            )
+
+            await process_import_job.kiq(job.id)
 
         logger.info(
             "import_started",
             job_id=job.id,
+            source=job.source,
             selected=len(selected),
         )
         return job
