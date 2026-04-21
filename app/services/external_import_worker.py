@@ -1,0 +1,163 @@
+import structlog
+
+from app.config import settings
+from app.core.db import AsyncSessionLocal
+from app.core.tkq import broker
+from app.models.import_job import ImportJob
+from app.services.soundcloud_service import SoundCloudService
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(
+    __name__
+)
+
+
+def _build_query(title: str, artist: str) -> str:
+    parts = [p.strip() for p in (artist, title) if p and p.strip()]
+    return " ".join(parts)
+
+
+@broker.task
+async def process_external_import_job(job_id: int) -> None:
+    async with AsyncSessionLocal() as session:
+        job = await session.get(ImportJob, job_id)
+        if not job or job.status != "importing":
+            logger.warning(
+                "external_import_skip",
+                job_id=job_id,
+                reason="not_found_or_wrong_status",
+            )
+            return
+
+        selected = (job.tracks_data or {}).get(
+            "selected", []
+        )
+        if not selected:
+            job.status = "done"
+            await session.commit()
+            return
+
+        sc_service = SoundCloudService(
+            settings.sc_client_id, session
+        )
+        imported: list[dict] = []
+        not_matched: list[dict] = []
+
+        for item in selected:
+            await session.refresh(job)
+            if job.status == "cancelled":
+                break
+
+            title = (item.get("title") or "").strip()
+            artist = (item.get("artist") or "").strip()
+            query = _build_query(title, artist)
+
+            if not query:
+                job.failed_tracks += 1
+                not_matched.append(
+                    {
+                        "title": title or "Unknown",
+                        "artist": artist or None,
+                        "reason": "no_query",
+                    }
+                )
+                await session.commit()
+                continue
+
+            try:
+                results = await sc_service.search(
+                    query, limit=1
+                )
+            except Exception as exc:
+                logger.error(
+                    "external_import_search_failed",
+                    job_id=job_id,
+                    query=query,
+                    error=str(exc),
+                )
+                await session.refresh(job)
+                job.failed_tracks += 1
+                not_matched.append(
+                    {
+                        "title": title,
+                        "artist": artist or None,
+                        "reason": "search_error",
+                    }
+                )
+                await session.commit()
+                continue
+
+            if not results:
+                job.failed_tracks += 1
+                not_matched.append(
+                    {
+                        "title": title,
+                        "artist": artist or None,
+                        "reason": "no_soundcloud_match",
+                    }
+                )
+                await session.commit()
+                continue
+
+            try:
+                track = await sc_service.import_or_get_track(
+                    sc_data=results[0],
+                    uploader_id=job.user_id,
+                    is_public=True,
+                )
+                if track.imported_from != job.source:
+                    track.imported_from = job.source
+                    await session.commit()
+
+                await session.refresh(job)
+                job.completed_tracks += 1
+                imported.append(
+                    {
+                        "title": track.title,
+                        "artist": track.artist,
+                        "track_id": track.id,
+                        "sc_url": track.sc_url,
+                        "status": "done",
+                    }
+                )
+                await session.commit()
+                logger.info(
+                    "external_import_track_done",
+                    job_id=job_id,
+                    track_id=track.id,
+                    source=job.source,
+                )
+            except Exception as exc:
+                logger.error(
+                    "external_import_track_failed",
+                    job_id=job_id,
+                    query=query,
+                    error=str(exc),
+                )
+                await session.refresh(job)
+                job.failed_tracks += 1
+                not_matched.append(
+                    {
+                        "title": title,
+                        "artist": artist or None,
+                        "reason": f"import_error: {exc}",
+                    }
+                )
+                await session.commit()
+
+        await session.refresh(job)
+        if job.status != "cancelled":
+            job.status = "done"
+
+        tracks_data = job.tracks_data or {}
+        tracks_data["imported"] = imported
+        tracks_data["not_matched"] = not_matched
+        job.tracks_data = tracks_data
+        await session.commit()
+
+        logger.info(
+            "external_import_finished",
+            job_id=job_id,
+            source=job.source,
+            completed=job.completed_tracks,
+            failed=job.failed_tracks,
+        )

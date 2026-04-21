@@ -120,6 +120,7 @@ async def process_import_job(job_id: int) -> None:
                     catalog_type="ugc",
                     access_mode="internal_stream",
                     source_platform="telegram",
+                    imported_from="telegram",
                     file_key=file_key,
                     file_size_bytes=len(audio_bytes),
                     uploaded_by_id=job.user_id,

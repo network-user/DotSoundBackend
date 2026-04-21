@@ -77,6 +77,9 @@ class Track(Base, TimestampMixin):
     source_platform: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )
+    imported_from: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
     video_key: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )

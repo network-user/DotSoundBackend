@@ -27,6 +27,7 @@ class TrackResponse(BaseModel):
     catalog_type: str = "ugc"
     access_mode: str = "internal_stream"
     source_platform: str | None = None
+    imported_from: str | None = None
     sc_url: str | None = None
     sc_uri: str | None = None
     source_url: str | None = None

@@ -1,8 +1,8 @@
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
@@ -18,6 +18,10 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(
 
 class ImportStartRequest(BaseModel):
     track_indices: list[int]
+
+
+class YandexMusicImportRequest(BaseModel):
+    url: str = Field(..., min_length=1)
 
 
 class ImportJobResponse(BaseModel):
@@ -46,6 +50,36 @@ async def scan_telegram_profile(
     service = ImportService(session)
     job = await service.scan_telegram_profile(
         current_user.id
+    )
+    return ImportJobResponse.model_validate(job)
+
+
+@router.post(
+    "/yandex_music",
+    response_model=ImportJobResponse,
+)
+@limiter.limit("5/minute")
+async def scan_yandex_music(
+    request: Request,
+    body: YandexMusicImportRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ImportJobResponse:
+    if not body.url.startswith(
+        ("https://music.yandex.ru/", "http://music.yandex.ru/")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "URL must be a music.yandex.ru playlist or "
+                "album link"
+            ),
+        )
+    service = ImportService(session)
+    job = await service.scan_external_playlist(
+        user_id=current_user.id,
+        source="yandex_music",
+        url=body.url,
     )
     return ImportJobResponse.model_validate(job)
 
