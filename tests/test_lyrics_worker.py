@@ -35,6 +35,7 @@ class _FakeTrack:
     artist: str | None = "test artist"
     file_key: str | None = "tracks/1/audio.mp3"
     is_active: bool = True
+    external_id: str | None = None
 
 
 @dataclass

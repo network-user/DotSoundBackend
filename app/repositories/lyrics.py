@@ -30,6 +30,7 @@ class LyricsRepository:
         synced_lines: list[dict] | None = None,
         sync_quality: str | None = None,
         sync_profile: str | None = None,
+        source_name: str | None = None,
     ) -> TrackLyrics:
         from datetime import datetime, timezone
 
@@ -37,6 +38,7 @@ class LyricsRepository:
         update_values: dict = {
             "plain_text": plain_text,
             "source": source,
+            "source_name": source_name,
             "updated_at": now,
         }
         if synced_lines is not None:
@@ -57,6 +59,7 @@ class LyricsRepository:
                 track_id=track_id,
                 plain_text=plain_text,
                 source=source,
+                source_name=source_name,
                 synced_lines=synced_lines,
                 sync_quality=sync_quality,
                 sync_profile=sync_profile,

@@ -255,7 +255,7 @@ class ImportService:
     ) -> ImportJob:
         user = await self._resolve_user(user_id)
         job = await self._get_job(job_id, user.id)
-        if job.status in ("importing", "scanning"):
+        if job.status in ("importing", "scanning", "ready"):
             job.status = "cancelled"
         return job
 

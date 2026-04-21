@@ -29,7 +29,7 @@ qrcode = {extras = ["pil"], version = "^8.0"}
 pydantic = {extras = ["email"], version = "^2.0"}
 python-magic = "^0.4"
 python-magic-bin = {version = "^0.4", markers = "sys_platform == 'win32'"}
-dotsound-private-core = { path = "../DotSoundPrivateCore", develop = true }
+dotsound-private-core = { path = "../DotSoundPrivateCore", develop = true, extras = ["scanners", "proxies"] }
 prometheus-client = "^0.20"
 sentry-sdk = {extras = ["fastapi"], version = "^2.13"}
 docker = "^7.1"

@@ -63,6 +63,7 @@ async def scan_playlist_url(
                     "title": t.title,
                     "artist": t.artist,
                     "duration_seconds": t.duration_seconds,
+                    "external_id": t.external_id,
                 }
                 for t in result.tracks
             ],
