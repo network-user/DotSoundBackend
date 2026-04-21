@@ -22,6 +22,9 @@ class TrackLyrics(Base, TimestampMixin):
     source: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="manual"
     )
+    source_name: Mapped[str | None] = mapped_column(
+        String(50), nullable=True
+    )
     sync_quality: Mapped[str | None] = mapped_column(
         String(16), nullable=True
     )

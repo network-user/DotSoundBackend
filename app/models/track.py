@@ -77,6 +77,9 @@ class Track(Base, TimestampMixin):
     source_platform: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )
+    external_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
     imported_from: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )

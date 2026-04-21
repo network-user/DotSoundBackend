@@ -67,6 +67,8 @@ export function ImportView({ active }: { active: boolean }) {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [yandexModalOpen, setYandexModalOpen] = useState(false)
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const pollCountRef = useRef(0)
   const MAX_POLLS = 150
 
@@ -219,6 +221,21 @@ export function ImportView({ active }: { active: boolean }) {
     pollCountRef.current = 0
   }
 
+  const handleCancelConfirm = async () => {
+    if (!job || cancelling) return
+    setCancelling(true)
+    try {
+      await api.cancelImport(job.id)
+      setCancelConfirmOpen(false)
+      handleReset()
+    } catch {
+      setError('Не удалось отменить импорт')
+      setCancelConfirmOpen(false)
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   if (!active) return null
 
   return (
@@ -248,6 +265,13 @@ export function ImportView({ active }: { active: boolean }) {
           <div className="import-select-actions">
             <button className="btn-secondary" onClick={selectAll}>Выбрать все</button>
             <button className="btn-secondary" onClick={deselectAll}>Снять все</button>
+            <button
+              className="btn-secondary"
+              onClick={() => setCancelConfirmOpen(true)}
+              style={{ marginLeft: 'auto' }}
+            >
+              Отменить
+            </button>
           </div>
 
           <div className="import-track-list">
@@ -300,15 +324,32 @@ export function ImportView({ active }: { active: boolean }) {
               {job.completed_tracks + job.failed_tracks} / {job.total_tracks}
             </span>
           </div>
-          <div className="progress-bar-wrap" style={{ margin: '0 16px' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              margin: '0 16px',
+            }}
+          >
             <div
-              className="progress-bar-fill"
-              style={{
-                width: job.total_tracks
-                  ? `${((job.completed_tracks + job.failed_tracks) / job.total_tracks) * 100}%`
-                  : '0%',
-              }}
+              className="loader"
+              aria-hidden="true"
+              style={{ margin: 0, flexShrink: 0 }}
             />
+            <div
+              className="progress-bar-wrap"
+              style={{ flex: 1 }}
+            >
+              <div
+                className="progress-bar-fill"
+                style={{
+                  width: job.total_tracks
+                    ? `${((job.completed_tracks + job.failed_tracks) / job.total_tracks) * 100}%`
+                    : '0%',
+                }}
+              />
+            </div>
           </div>
           <p className="progress-label">
             Загружено: {job.completed_tracks} · Ошибок: {job.failed_tracks}
@@ -316,6 +357,16 @@ export function ImportView({ active }: { active: boolean }) {
           <p className="empty-hint">
             Можно закрыть окно — импорт продолжится в фоне
           </p>
+          <div style={{ padding: '0 16px 16px' }}>
+            <button
+              className="btn-secondary"
+              onClick={() => setCancelConfirmOpen(true)}
+              disabled={cancelling}
+              style={{ width: '100%' }}
+            >
+              Отменить импорт
+            </button>
+          </div>
         </div>
       )}
 
@@ -341,6 +392,52 @@ export function ImportView({ active }: { active: boolean }) {
         onClose={() => setYandexModalOpen(false)}
         onScan={handleYandexScan}
       />
+
+      {cancelConfirmOpen && (
+        <div
+          className="modal"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !cancelling) {
+              setCancelConfirmOpen(false)
+            }
+          }}
+        >
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Отменить импорт?</h3>
+            </div>
+            <p className="modal-hint">
+              Найденные треки будут отброшены. Это действие
+              нельзя отменить, но вы сможете запустить импорт
+              заново.
+            </p>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                flexWrap: 'wrap',
+              }}
+            >
+              <button
+                className="btn-secondary"
+                onClick={() => setCancelConfirmOpen(false)}
+                disabled={cancelling}
+                style={{ flex: 1 }}
+              >
+                Продолжить импорт
+              </button>
+              <button
+                className="btn-primary"
+                onClick={handleCancelConfirm}
+                disabled={cancelling}
+                style={{ flex: 1 }}
+              >
+                {cancelling ? 'Отмена...' : 'Да, отменить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

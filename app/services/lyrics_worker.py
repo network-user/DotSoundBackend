@@ -607,11 +607,13 @@ def _call_provider(
     on_progress,
     on_cancel,
     tier: int | None = None,
+    external_id: str | None = None,
 ) -> object:
     """Invoke a lyrics provider entry point with graceful kw fallback.
 
-    Older provider versions may not accept ``on_cancel``; we try the
-    richer call first and fall back to the minimal signature.
+    Older provider versions may not accept ``on_cancel`` or
+    ``external_id``; we try the richest call first and degrade
+    gracefully.
     """
     kwargs = {
         "artist": artist,
@@ -621,6 +623,14 @@ def _call_provider(
     }
     if tier is not None:
         kwargs["tier"] = tier
+    extra = {"on_cancel": on_cancel}
+    if external_id is not None:
+        extra["external_id"] = external_id
+    try:
+        return func(**kwargs, **extra)
+    except TypeError:
+        pass
+    # Drop external_id and retry (older provider without that kwarg).
     try:
         return func(**kwargs, on_cancel=on_cancel)
     except TypeError:
@@ -682,11 +692,16 @@ def _result_to_payload(gen_result) -> dict:
     if sync_profile not in _ALLOWED_SYNC_PROFILE:
         sync_profile = None
 
+    source_name = getattr(gen_result, "source_name", None)
+    if not isinstance(source_name, str) or not source_name.strip():
+        source_name = None
+
     return {
         "text": gen_result.text,
         "synced_lines": synced,
         "sync_quality": sync_quality,
         "sync_profile": sync_profile,
+        "source_name": source_name,
     }
 
 
@@ -1044,6 +1059,7 @@ async def generate_lyrics_task(
                             audio_path=audio_path,
                             on_progress=on_progress,
                             on_cancel=on_cancel,
+                            external_id=track.external_id,
                         ),
                         timeout=float(
                             settings.lyrics_provider_timeout_seconds
@@ -1149,6 +1165,7 @@ async def generate_lyrics_task(
                 synced_lines=synced_dicts,
                 sync_quality=payload.get("sync_quality"),
                 sync_profile=payload.get("sync_profile"),
+                source_name=payload.get("source_name"),
             )
             await session.commit()
 

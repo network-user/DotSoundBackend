@@ -20,6 +20,7 @@ if __name__ == "__main__":
             "app.core.tkq:broker",
             "app.services.transcoding",
             "app.services.import_worker",
+            "app.services.external_import_worker",
             "app.services.cover_worker",
             "app.services.lyrics_worker",
             "app.services.artist_enrichment_worker",
