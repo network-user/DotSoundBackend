@@ -467,6 +467,12 @@ export interface ImportAudioInfo {
   file_size: number | null
 }
 
+export interface ImportExternalTrackInfo {
+  title: string
+  artist: string | null
+  duration_seconds: number | null
+}
+
 export interface ImportJobResponse {
   id: number
   source: string
@@ -476,6 +482,11 @@ export interface ImportJobResponse {
   failed_tracks: number
   tracks_data: {
     audios?: ImportAudioInfo[]
+    tracks?: ImportExternalTrackInfo[]
+    kind?: string
+    source_url?: string
+    error_code?: string
+    error_message?: string
     imported?: {
       title: string
       status: string

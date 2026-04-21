@@ -110,6 +110,16 @@ const PATHS: Record<string, string> = {
     'M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0114.85-3.36L23 10 M20.49 15a9 9 0 01-14.85 3.36L1 14',
   star:
     'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
+  'source-telegram':
+    'M22 2L2 10l9 3 3 9 8-20z M11 13L22 2',
+  'source-yandex':
+    'M12 22a10 10 0 110-20 10 10 0 010 20z M8 8l4 5 4-5 M12 13v4',
+  'source-vk':
+    'M6 3h12a3 3 0 013 3v12a3 3 0 01-3 3H6a3 3 0 01-3-3V6a3 3 0 013-3z M7.5 9l2 6 2-6 M14.5 9v6 M17.5 9l-3 3 3 3',
+  'source-spotify':
+    'M12 22a10 10 0 110-20 10 10 0 010 20z M6 9q6-3 12 0 M7 12q5-2.5 10 0 M8 15q4-2 8 0',
+  'source-soundcloud':
+    'M13 18h6a3 3 0 010-6 4 4 0 00-6-2v8 M4 13v5 M7 11v7 M10 9v9',
 }
 
 const FILLED_ICONS = new Set([
