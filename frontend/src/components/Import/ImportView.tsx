@@ -11,7 +11,13 @@ import { YandexMusicUrlModal } from './YandexMusicUrlModal'
 type AudioInfo = ImportAudioInfo
 type ImportJobData = ImportJobResponse
 
-type Phase = 'pick' | 'scanning' | 'select' | 'importing' | 'done'
+type Phase =
+  | 'pick'
+  | 'scanning'
+  | 'select'
+  | 'queued'
+  | 'importing'
+  | 'done'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
 
@@ -78,6 +84,9 @@ export function ImportView({ active }: { active: boolean }) {
       if (j && j.status === 'importing') {
         setJob(j)
         setPhase('importing')
+      } else if (j && j.status === 'queued') {
+        setJob(j)
+        setPhase('queued')
       } else if (j && j.status === 'ready') {
         setJob(j)
         const list = normalizeJobTracks(j)
@@ -97,7 +106,8 @@ export function ImportView({ active }: { active: boolean }) {
   }, [active])
 
   useEffect(() => {
-    if (phase !== 'importing' || !job) return
+    if ((phase !== 'importing' && phase !== 'queued') || !job)
+      return
     pollCountRef.current = 0
     const interval = setInterval(async () => {
       pollCountRef.current++
@@ -113,6 +123,10 @@ export function ImportView({ active }: { active: boolean }) {
         if (updated.status === 'done' || updated.status === 'cancelled') {
           setPhase('done')
           clearInterval(interval)
+        } else if (updated.status === 'importing' && phase === 'queued') {
+          setPhase('importing')
+        } else if (updated.status === 'queued' && phase === 'importing') {
+          setPhase('queued')
         }
       } catch {}
     }, 2000)
@@ -206,7 +220,7 @@ export function ImportView({ active }: { active: boolean }) {
     try {
       const updated = await api.startImportJob(job.id, Array.from(selected))
       setJob(updated)
-      setPhase('importing')
+      setPhase(updated.status === 'queued' ? 'queued' : 'importing')
     } catch {
       setError('Не удалось запустить импорт')
     }
@@ -311,6 +325,49 @@ export function ImportView({ active }: { active: boolean }) {
               onClick={handleStartImport}
             >
               Импортировать ({selected.size})
+            </button>
+          </div>
+        </div>
+      )}
+
+      {phase === 'queued' && job && (
+        <div className="import-queued">
+          <div className="view-header">
+            <h2>В очереди</h2>
+            <span className="hint">
+              {job.queue_position
+                ? `Позиция: ${job.queue_position}`
+                : 'Ожидание свободного слота...'}
+            </span>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              margin: '0 16px',
+            }}
+          >
+            <div
+              className="loader"
+              aria-hidden="true"
+              style={{ margin: 0, flexShrink: 0 }}
+            />
+            <p
+              className="empty-hint"
+              style={{ margin: 0 }}
+            >
+              Импорт начнётся автоматически. Можно закрыть окно.
+            </p>
+          </div>
+          <div style={{ padding: '16px' }}>
+            <button
+              className="btn-secondary"
+              onClick={() => setCancelConfirmOpen(true)}
+              disabled={cancelling}
+              style={{ width: '100%' }}
+            >
+              Отменить
             </button>
           </div>
         </div>

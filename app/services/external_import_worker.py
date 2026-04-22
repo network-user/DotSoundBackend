@@ -1,16 +1,17 @@
 import difflib
 
 import structlog
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.models.import_job import ImportJob
+from app.models.track import Track
 from app.services.soundcloud_service import SoundCloudService
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _DURATION_TOLERANCE = 0.20
 _MIN_TITLE_SCORE = 0.55
@@ -25,9 +26,7 @@ def _build_query(title: str, artist: str) -> str:
 def _title_similarity(a: str, b: str) -> float:
     if not a or not b:
         return 0.0
-    return difflib.SequenceMatcher(
-        None, a.casefold(), b.casefold()
-    ).ratio()
+    return difflib.SequenceMatcher(None, a.casefold(), b.casefold()).ratio()
 
 
 def _pick_best_sc_match(
@@ -55,9 +54,7 @@ def _pick_best_sc_match(
             )
             if delta > _DURATION_TOLERANCE:
                 continue
-        score = _title_similarity(
-            target_title, cand.get("title") or ""
-        )
+        score = _title_similarity(target_title, cand.get("title") or "")
         if score > best_score:
             best_score = score
             best = cand
@@ -78,17 +75,13 @@ async def process_external_import_job(job_id: int) -> None:
             )
             return
 
-        selected = (job.tracks_data or {}).get(
-            "selected", []
-        )
+        selected = (job.tracks_data or {}).get("selected", [])
         if not selected:
             job.status = "done"
             await session.commit()
             return
 
-        sc_service = SoundCloudService(
-            settings.sc_client_id, session
-        )
+        sc_service = SoundCloudService(settings.sc_client_id, session)
         imported: list[dict] = []
         not_matched: list[dict] = []
 
@@ -115,9 +108,7 @@ async def process_external_import_job(job_id: int) -> None:
                 continue
 
             try:
-                results = await sc_service.search(
-                    query, limit=_SEARCH_LIMIT
-                )
+                results = await sc_service.search(query, limit=_SEARCH_LIMIT)
             except Exception as exc:
                 logger.error(
                     "external_import_search_failed",
@@ -152,19 +143,15 @@ async def process_external_import_job(job_id: int) -> None:
             # combined query miss.
             if best_match is None and artist and results:
                 try:
-                    results_title_only = (
-                        await sc_service.search(
-                            title, limit=_SEARCH_LIMIT
-                        )
+                    results_title_only = await sc_service.search(
+                        title, limit=_SEARCH_LIMIT
                     )
                     best_match = _pick_best_sc_match(
                         results_title_only,
                         target_title=title,
                         target_duration_s=(
                             int(target_duration)
-                            if isinstance(
-                                target_duration, (int, float)
-                            )
+                            if isinstance(target_duration, (int, float))
                             else None
                         ),
                     )
@@ -187,24 +174,48 @@ async def process_external_import_job(job_id: int) -> None:
                 continue
 
             try:
-                track = await sc_service.import_or_get_track(
-                    sc_data=best_match,
-                    uploader_id=job.user_id,
-                    is_public=True,
-                )
+                try:
+                    track = await sc_service.import_or_get_track(
+                        sc_data=best_match,
+                        uploader_id=job.user_id,
+                        is_public=True,
+                    )
+                except IntegrityError as exc:
+                    await session.rollback()
+                    logger.warning(
+                        "external_import_dedup_race",
+                        job_id=job_id,
+                        error=str(exc),
+                    )
+                    fallback_url = best_match.get("permalink_url")
+                    if not fallback_url:
+                        raise
+                    fallback_result = await session.execute(
+                        select(Track).where(Track.sc_url == fallback_url)
+                    )
+                    fallback_track = fallback_result.scalar_one_or_none()
+                    if fallback_track is None:
+                        raise
+                    track = fallback_track
                 dirty = False
                 if track.imported_from != job.source:
                     track.imported_from = job.source
                     dirty = True
                 incoming_external_id = item.get("external_id")
-                if (
-                    incoming_external_id
-                    and not track.external_id
-                ):
+                if incoming_external_id and not track.external_id:
                     track.external_id = str(incoming_external_id)
                     dirty = True
                 if dirty:
-                    await session.commit()
+                    try:
+                        await session.commit()
+                    except IntegrityError as exc:
+                        await session.rollback()
+                        logger.warning(
+                            "external_import_external_id_race",
+                            job_id=job_id,
+                            track_id=track.id,
+                            error=str(exc),
+                        )
 
                 await session.refresh(job)
                 job.completed_tracks += 1
@@ -246,10 +257,11 @@ async def process_external_import_job(job_id: int) -> None:
         if job.status != "cancelled":
             job.status = "done"
 
-        tracks_data = job.tracks_data or {}
-        tracks_data["imported"] = imported
-        tracks_data["not_matched"] = not_matched
-        job.tracks_data = tracks_data
+        job.tracks_data = {
+            **(job.tracks_data or {}),
+            "imported": imported,
+            "not_matched": not_matched,
+        }
         await session.commit()
 
         logger.info(

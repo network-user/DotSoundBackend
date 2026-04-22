@@ -12,6 +12,7 @@ only enqueues the existing ``generate_lyrics_task``, which
 handles caching, DB persistence and the actual lyrics cascade.
 This keeps ASR out of this file's hot path completely.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -26,9 +27,7 @@ from app.models.import_job import ImportJob
 from app.repositories.lyrics import LyricsRepository
 from app.services.lyrics_worker import generate_lyrics_task
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 # Consecutive block signals tolerated before the orchestrator
@@ -81,6 +80,46 @@ def _cooldown() -> float:
     return float(settings.yandex_music_import_lyrics_cooldown_seconds)
 
 
+async def _enqueue_to_global_queue(
+    *,
+    imported_items: list,
+    repo: LyricsRepository,
+    job_id: int,
+) -> None:
+    """Hand off all imported track ids to the shared lyrics
+    queue. Skips tracks that already have lyrics in the DB so we
+    don't re-fetch.
+    """
+    from app.services.lyrics_global_orchestrator import enqueue
+
+    enqueued_total = 0
+    skipped_total = 0
+    for item in imported_items:
+        track_id = item.get("track_id") if isinstance(item, dict) else None
+        if not isinstance(track_id, int):
+            continue
+        existing = await repo.get_by_track_id(track_id)
+        if existing is not None:
+            skipped_total += 1
+            continue
+        try:
+            await enqueue(track_id, with_sync=True)
+            enqueued_total += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "import_lyrics_global_enqueue_failed",
+                job_id=job_id,
+                track_id=track_id,
+                error=str(exc),
+            )
+    logger.info(
+        "import_lyrics_handed_to_global_queue",
+        job_id=job_id,
+        enqueued=enqueued_total,
+        skipped=skipped_total,
+    )
+
+
 @broker.task
 async def process_import_lyrics_task(job_id: int) -> None:
     """Orchestrate paced lyrics generation for an import job.
@@ -93,20 +132,21 @@ async def process_import_lyrics_task(job_id: int) -> None:
 
     Never raises; all failures are logged and the loop moves on
     to the next track unless the circuit-breaker trips.
+
+    When ``settings.lyrics_global_orchestrator_enabled`` is True,
+    pushes every imported track id onto the shared Redis queue
+    and exits. The shared :func:`lyrics_global_orchestrator
+    ._orchestrator_loop` then paces them across all jobs.
     """
     async with AsyncSessionLocal() as session:
         job = await session.get(ImportJob, job_id)
         if job is None:
-            logger.warning(
-                "import_lyrics_skip_missing_job", job_id=job_id
-            )
+            logger.warning("import_lyrics_skip_missing_job", job_id=job_id)
             return
         tracks_data = job.tracks_data or {}
         imported = tracks_data.get("imported") or []
         if not imported:
-            logger.info(
-                "import_lyrics_nothing_to_do", job_id=job_id
-            )
+            logger.info("import_lyrics_nothing_to_do", job_id=job_id)
             return
 
         repo = LyricsRepository(session)
@@ -116,14 +156,20 @@ async def process_import_lyrics_task(job_id: int) -> None:
             tracks=len(imported),
         )
 
+        if settings.lyrics_global_orchestrator_enabled:
+            await _enqueue_to_global_queue(
+                imported_items=imported,
+                repo=repo,
+                job_id=job_id,
+            )
+            return
+
         consecutive_blocks = 0
         enqueued_total = 0
         skipped_total = 0
 
         for idx, item in enumerate(imported):
-            track_id = item.get("track_id") if isinstance(
-                item, dict
-            ) else None
+            track_id = item.get("track_id") if isinstance(item, dict) else None
             if not isinstance(track_id, int):
                 continue
 
@@ -186,9 +232,7 @@ async def process_import_lyrics_task(job_id: int) -> None:
             # Don't sleep after the very last track — nothing to
             # pace against. Sleep happens BEFORE the next iteration.
             if idx < len(imported) - 1:
-                delay = (
-                    _cooldown() if blocked else _pick_delay()
-                )
+                delay = _cooldown() if blocked else _pick_delay()
                 await asyncio.sleep(delay)
 
         logger.info(

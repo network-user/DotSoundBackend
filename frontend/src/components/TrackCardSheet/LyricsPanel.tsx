@@ -967,6 +967,27 @@ export function LyricsPanel({
             )}
       </div>
 
+      {isAdmin && (
+        <div className="lyrics-debug-attribution">
+          <div className="lyrics-debug-row">
+            <span className="lyrics-debug-label">
+              Источник текста:
+            </span>
+            <span className="lyrics-debug-value">
+              {lyrics.source_name || '—'}
+            </span>
+          </div>
+          <div className="lyrics-debug-row">
+            <span className="lyrics-debug-label">
+              Синхронизовал:
+            </span>
+            <span className="lyrics-debug-value">
+              {lyrics.sync_source_name || '—'}
+            </span>
+          </div>
+        </div>
+      )}
+
       {isOwner && (
         <div className="lyrics-actions">
           <button

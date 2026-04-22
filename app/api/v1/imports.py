@@ -11,9 +11,7 @@ from app.models.user import User
 from app.services.import_service import ImportService
 
 router = APIRouter(prefix="/import", tags=["import"])
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 class ImportStartRequest(BaseModel):
@@ -32,6 +30,7 @@ class ImportJobResponse(BaseModel):
     completed_tracks: int
     failed_tracks: int
     tracks_data: dict[str, Any] | None = None
+    queue_position: int | None = None
 
     class Config:
         from_attributes = True
@@ -48,9 +47,7 @@ async def scan_telegram_profile(
     current_user: User = Depends(get_current_user),
 ) -> ImportJobResponse:
     service = ImportService(session)
-    job = await service.scan_telegram_profile(
-        current_user.id
-    )
+    job = await service.scan_telegram_profile(current_user.id)
     return ImportJobResponse.model_validate(job)
 
 
@@ -70,10 +67,7 @@ async def scan_yandex_music(
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "URL must be a music.yandex.ru playlist or "
-                "album link"
-            ),
+            detail=("URL must be a music.yandex.ru playlist or " "album link"),
         )
     service = ImportService(session)
     job = await service.scan_external_playlist(
@@ -115,10 +109,13 @@ async def get_import_status(
     current_user: User = Depends(get_current_user),
 ) -> ImportJobResponse:
     service = ImportService(session)
-    job = await service.get_job_status(
-        job_id, current_user.id
-    )
-    return ImportJobResponse.model_validate(job)
+    job = await service.get_job_status(job_id, current_user.id)
+    response = ImportJobResponse.model_validate(job)
+    if job.status == "queued":
+        response.queue_position = await service.get_queue_position(
+            job_id, current_user.id
+        )
+    return response
 
 
 @router.get(
@@ -132,12 +129,15 @@ async def get_active_import(
     current_user: User = Depends(get_current_user),
 ) -> ImportJobResponse | None:
     service = ImportService(session)
-    job = await service.get_active_job(
-        current_user.id
-    )
+    job = await service.get_active_job(current_user.id)
     if not job:
         return None
-    return ImportJobResponse.model_validate(job)
+    response = ImportJobResponse.model_validate(job)
+    if job.status == "queued":
+        response.queue_position = await service.get_queue_position(
+            job.id, current_user.id
+        )
+    return response
 
 
 @router.post(
@@ -152,7 +152,5 @@ async def cancel_import(
     current_user: User = Depends(get_current_user),
 ) -> ImportJobResponse:
     service = ImportService(session)
-    job = await service.cancel_job(
-        job_id, current_user.id
-    )
+    job = await service.cancel_job(job_id, current_user.id)
     return ImportJobResponse.model_validate(job)

@@ -549,6 +549,70 @@ bounded-transport exception
 
 *Последнее обновление: 2026-04-22 агентом (настроены Claude+Cursor guardrails).*
 
+## Sprint concurrency hardening (2026-04-22)
+
+- Backend: миграция `0045_dedupe_unique_constraints` — partial UNIQUE
+  на `tracks.sc_url WHERE sc_url IS NOT NULL` и на
+  `(imported_from, external_id) WHERE external_id IS NOT NULL`,
+  `Index` объявлены в `app/models/track.py:Track.__table_args__`
+  (создаются и для тестовой SQLite-схемы)
+- Backend: `scripts/dedupe_tracks.py` — pre-migration helper, dry-run
+  по умолчанию, мерджит дубли по `sc_url` и `(imported_from, external_id)`
+  с union-find и FK-redirect для likes/dislikes/playlists/track_artists/
+  track_lyrics/track_info/track_upload_meta/complaints/listen_events/
+  comments/lyrics_jobs/search_events/messages
+- Backend: `SoundCloudService.import_or_get_track` переписан на
+  `INSERT ... ON CONFLICT (sc_url) WHERE sc_url IS NOT NULL DO NOTHING
+  RETURNING` + fallback `SELECT`; `external_import_worker` обёрнут в
+  `try/except IntegrityError` на случай rolldown-сценария
+- Backend: миграция `0046_add_lyrics_sync_source_name` —
+  `track_lyrics.sync_source_name VARCHAR(50) NULL`, проброс через
+  `LyricsRepository.create_or_update`, `LyricsResponse` schema,
+  `_result_to_payload(getattr(gen_result, "sync_source_name", None))`
+- Backend: `app/services/sc_semaphore.py` — Redis-based counting
+  semaphore (sorted-set + Lua acquire) вокруг SoundCloud `search`/
+  `resolve_url`/`get_stream_info`, env `SOUNDCLOUD_GLOBAL_CONCURRENCY=4`
+- Backend: per-track Redis lock в `lyrics_worker.generate_lyrics_task`
+  (рефакторинг через outer wrapper + `_generate_lyrics_task_impl`),
+  env `LYRICS_PER_TRACK_LOCK_TTL_SECONDS=300`; race-protected
+  через `SET NX EX` + Lua-release-on-match
+- Backend: `app/services/import_queue_dispatcher.py` — backpressure
+  через статус `"queued"`, env `IMPORT_MAX_CONCURRENT_JOBS=10`,
+  `IMPORT_PER_USER_MAX_CONCURRENT=2`, dispatcher loop запускается
+  в WORKER_STARTUP. `ImportService.start_import` возвращает job
+  с `status="queued"` если глобальный или per-user cap занят;
+  `get_queue_position` для UI; `cancel_job` и `_get_active_job`
+  понимают `"queued"`
+- Backend: `app/services/lyrics_global_orchestrator.py` —
+  единый pacer через `BLPOP lyrics:queue:default`, фичефлаг
+  `LYRICS_GLOBAL_ORCHESTRATOR_ENABLED=true`, заменяет per-job
+  пейсинг в `import_lyrics_worker.process_import_lyrics_task`
+  (legacy mode сохранён, активируется выключением флага). Global
+  circuit-breaker на 5 подряд `captcha|pool_exhaust|exhausted`
+  сигналов из proxy_pool
+- Backend: API `GET /import/{id}/status` и `/import/active`
+  возвращают `queue_position` для queued джобов
+- Backend: `main.py` зарегистрировал воркеры
+  `app.services.import_queue_dispatcher` и
+  `app.services.lyrics_global_orchestrator`
+- Frontend: `ImportView.tsx` — новая фаза `"queued"` с
+  отображением `queue_position`, polling переключается между
+  `queued <-> importing` без пересоздания интервала
+- Frontend: `LyricsPanel.tsx` и `FullscreenLyrics.tsx` — admin-only
+  debug-блок «Источник текста» / «Синхронизовал» в самом конце
+  отображённого текста, гейтится через `getIsAdmin()`; CSS
+  `.lyrics-debug-attribution` (минимализм, монохром, monospace)
+- Docs: `docs/private-core-dependency-policy.md` пополнен таблицей
+  опциональных полей `GenerateResult` (включая новый
+  `sync_source_name` — PrivateCore-side требуется добавить поле,
+  Backend уже forward-compatible через `getattr`)
+- Tests: `test_soundcloud_service::test_import_or_get_track_dedup_via_unique_index`,
+  `test_lyrics_worker::test_sync_source_name_propagates_to_repo`,
+  `test_lyrics_global_orchestrator.py` (новый файл, 7 тестов на
+  serialize/deserialize/process_one), `test_import_service` (3 новых
+  теста на backpressure + queue_position + cancel queued),
+  `test_import_lyrics_worker` autouse-фикстура форсит legacy режим
+
 ## Sprint admin / auth (2026-04-19)
 
 - Frontend: синхронный `api.restoreSession()` в `main.tsx` ДО рендера — убирает раннюю гонку токена с AdminProvider/PlayerProvider

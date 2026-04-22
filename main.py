@@ -5,9 +5,7 @@ import sys
 import uvicorn
 
 if sys.platform == "win32":
-    asyncio.set_event_loop_policy(
-        asyncio.WindowsProactorEventLoopPolicy()
-    )
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 
 if __name__ == "__main__":
@@ -22,6 +20,8 @@ if __name__ == "__main__":
             "app.services.import_worker",
             "app.services.external_import_worker",
             "app.services.import_lyrics_worker",
+            "app.services.import_queue_dispatcher",
+            "app.services.lyrics_global_orchestrator",
             "app.services.cover_worker",
             "app.services.lyrics_worker",
             "app.services.artist_enrichment_worker",

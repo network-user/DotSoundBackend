@@ -23,6 +23,15 @@ pytestmark = pytest.mark.anyio
 _MOD = "app.services.import_lyrics_worker"
 
 
+@pytest.fixture(autouse=True)
+def _force_legacy_per_job_orchestrator(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(
+        settings, "lyrics_global_orchestrator_enabled", False
+    )
+
+
 async def _make_user(
     session: AsyncSession, telegram_id: int = 9100
 ) -> User:
