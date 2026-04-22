@@ -115,11 +115,17 @@ async def test_worker_ignores_non_importing_job(
     assert job.status == "cancelled"
 
 
+@patch(
+    "app.services.import_lyrics_worker"
+    ".process_import_lyrics_task.kiq",
+    new_callable=AsyncMock,
+)
 @patch(f"{_MOD}.SoundCloudService")
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_worker_match_creates_track(
     mock_session_local: MagicMock,
     mock_sc_cls: MagicMock,
+    mock_lyrics_kiq: AsyncMock,
     session: AsyncSession,
 ) -> None:
     user = await _make_user(session, telegram_id=3203)
@@ -177,12 +183,23 @@ async def test_worker_match_creates_track(
     await session.refresh(existing_track)
     assert existing_track.imported_from == "yandex_music"
 
+    # Successful import enqueues the post-import lyrics
+    # orchestrator for the same job id. Regression guard against
+    # the trigger getting silently lost.
+    mock_lyrics_kiq.assert_awaited_once_with(job.id)
 
+
+@patch(
+    "app.services.import_lyrics_worker"
+    ".process_import_lyrics_task.kiq",
+    new_callable=AsyncMock,
+)
 @patch(f"{_MOD}.SoundCloudService")
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_worker_no_match_goes_to_not_matched(
     mock_session_local: MagicMock,
     mock_sc_cls: MagicMock,
+    mock_lyrics_kiq: AsyncMock,
     session: AsyncSession,
 ) -> None:
     user = await _make_user(session, telegram_id=3204)
@@ -213,6 +230,11 @@ async def test_worker_no_match_goes_to_not_matched(
     assert (
         not_matched[0]["reason"] == "no_soundcloud_match"
     )
+
+    # Zero imported tracks → orchestrator is NOT enqueued.
+    # (Nothing for it to do, and an empty rollout would just
+    # waste a broker message.)
+    mock_lyrics_kiq.assert_not_awaited()
 
 
 @patch(f"{_MOD}.SoundCloudService")
