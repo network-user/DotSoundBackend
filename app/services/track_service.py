@@ -5,6 +5,9 @@ from app.models.track import Track
 from app.models.user import User
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
+from app.repositories.user_track_library import (
+    UserTrackLibraryRepository,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -13,14 +16,16 @@ class TrackService:
     def __init__(self, session: AsyncSession) -> None:
         self._repo = TrackRepository(session)
         self._user_repo = UserRepository(session)
+        self._library_repo = UserTrackLibraryRepository(session)
 
     async def _resolve_user(self, user_id: int) -> User:
         user = await self._user_repo.get_by_id(user_id)
         if not user:
             user = await self._user_repo.get_by_telegram_id(user_id)
-        
+
         if not user:
             from fastapi import HTTPException, status
+
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found",
@@ -84,6 +89,22 @@ class TrackService:
         offset = (page - 1) * size
         return await self._repo.list_by_user(
             user_id=user_id,
+            offset=offset,
+            limit=size,
+            playable_only=playable_only,
+        )
+
+    async def list_library(
+        self,
+        user_id: int,
+        page: int = 1,
+        size: int = 50,
+        playable_only: bool = False,
+    ) -> tuple[list[Track], int]:
+        user = await self._resolve_user(user_id)
+        offset = (page - 1) * size
+        return await self._library_repo.list_by_user(
+            user_id=user.id,
             offset=offset,
             limit=size,
             playable_only=playable_only,

@@ -212,11 +212,38 @@ body.monochrome #app {
   font-size: 20px;
   overflow: hidden;
   border: 1px solid var(--border);
+  position: relative;
+}
+.track-card-cover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(0, 0, 0, 0.06)
+  );
+  pointer-events: none;
+  z-index: 0;
 }
 .track-card-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  position: relative;
+  z-index: 1;
+  opacity: 0;
+  filter: blur(12px) saturate(120%);
+  transform: scale(1.04);
+  transition:
+    opacity var(--dur-med) var(--ease-standard),
+    filter var(--dur-med) var(--ease-standard),
+    transform var(--dur-med) var(--ease-standard);
+}
+.track-card-cover.loaded img {
+  opacity: 1;
+  filter: blur(0) saturate(100%);
+  transform: scale(1);
 }
 
 .track-card-info {
@@ -689,7 +716,7 @@ body.monochrome #app {
   text-align: center;
 }
 
-/* ── Player bar (glassmorphism) ── */
+/* ── Player bar (Liquid Glass) ── */
 #player-bar {
   position: fixed;
   bottom: calc(
@@ -697,12 +724,33 @@ body.monochrome #app {
   );
   left: 0;
   right: 0;
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border-top: 1px solid var(--glass-border);
+  background: var(--glass-tint-liquid);
+  backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate) brightness(1.04);
+  -webkit-backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate) brightness(1.04);
+  border-top: 1px solid var(--glass-edge);
   z-index: 100;
   padding: 0;
+  isolation: isolate;
+}
+
+#player-bar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.06),
+    transparent 24%
+  );
+}
+
+#player-bar > * {
+  position: relative;
+  z-index: 1;
 }
 
 #pb-seek-wrap { padding: 0; }
@@ -873,7 +921,7 @@ body.monochrome #app {
   font-variant-numeric: tabular-nums;
 }
 
-/* ── Bottom nav (glassmorphism) ── */
+/* ── Bottom nav (Liquid Glass) ── */
 #nav {
   position: fixed;
   bottom: 0;
@@ -883,12 +931,28 @@ body.monochrome #app {
     var(--nav-h) + env(safe-area-inset-bottom, 0px)
   );
   padding-bottom: env(safe-area-inset-bottom, 0px);
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border-top: 1px solid var(--glass-border);
+  background: var(--glass-tint-3);
+  backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  -webkit-backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  border-top: 1px solid var(--glass-edge);
   display: flex;
   z-index: 101;
+  isolation: isolate;
+}
+
+#nav::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.05),
+    transparent 30%
+  );
 }
 
 .nav-btn {
@@ -906,7 +970,23 @@ body.monochrome #app {
   position: relative;
   padding: 0;
 }
+.nav-btn { z-index: 1; }
 .nav-btn.active { color: var(--text); }
+.nav-btn.active::before {
+  content: '';
+  position: absolute;
+  inset: 6px 12px 6px 12px;
+  border-radius: 14px;
+  background: radial-gradient(
+    60% 80% at 50% 50%,
+    rgba(255, 255, 255, 0.10),
+    rgba(255, 255, 255, 0) 70%
+  );
+  pointer-events: none;
+  z-index: -1;
+  animation: nav-glow var(--dur-med)
+    var(--ease-spring);
+}
 .nav-btn.active::after {
   content: '';
   position: absolute;
@@ -917,11 +997,42 @@ body.monochrome #app {
   height: 2px;
   background: var(--accent);
   border-radius: 2px 2px 0 0;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.45);
 }
 .nav-btn:active { opacity: 0.6; }
+.nav-btn:active .nav-icon {
+  transform: scale(0.92);
+  transition: transform var(--dur-fast)
+    var(--ease-standard);
+}
 
-.nav-icon { font-size: 22px; line-height: 1; }
-.nav-label { font-size: 10px; font-weight: 500; letter-spacing: 0.2px; }
+@keyframes nav-glow {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-btn.active::before {
+    animation: none;
+  }
+}
+
+.nav-icon {
+  font-size: 22px;
+  line-height: 1;
+  transition: transform var(--dur-fast)
+    var(--ease-standard);
+}
+.nav-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
 
 /* ── Playlists view ── */
 .playlist-list { padding: 0 16px; }
@@ -1098,18 +1209,34 @@ body.monochrome #app {
   position: fixed;
   inset: 0;
   z-index: 200;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-end;
+  animation: fade-in var(--dur-med) var(--ease-standard);
+}
+.modal.is-closing {
+  animation: fade-out var(--dur-med) var(--ease-standard)
+    forwards;
 }
 
 .modal-content {
   width: 100%;
-  background: var(--bg-elevated);
+  background: var(--glass-tint-3);
+  -webkit-backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--glass-edge);
   padding: 20px 16px 32px;
   animation: slideUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
+}
+.modal.is-closing .modal-content {
+  animation: sheet-exit-tcs var(--dur-med)
+    var(--ease-standard) forwards;
 }
 
 @keyframes slideUp {
@@ -1207,23 +1334,45 @@ textarea.form-input { resize: none; }
   position: fixed;
   inset: 0;
   z-index: 150;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-end;
+  animation: fade-in var(--dur-med) var(--ease-standard);
+}
+.tcs-backdrop.is-closing {
+  animation: fade-out var(--dur-med) var(--ease-standard)
+    forwards;
 }
 
 .tcs-sheet {
   position: relative;
   width: 100%;
   max-height: 95dvh;
-  background: var(--bg-elevated);
+  background: var(--glass-tint-3);
+  -webkit-backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--glass-edge);
   padding: 0 0 calc(var(--nav-h) + 8px);
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
   animation: slideUp 0.3s cubic-bezier(0.34, 1.2, 0.64, 1);
+  box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
+}
+.tcs-sheet.is-closing {
+  animation: sheet-exit-tcs var(--dur-med)
+    var(--ease-standard) forwards;
+}
+@keyframes sheet-exit-tcs {
+  to {
+    transform: translateY(100%);
+    opacity: 0.2;
+  }
 }
 .tcs-sheet > .tcs-handle,
 .tcs-sheet > .tcs-close,
@@ -1301,6 +1450,34 @@ textarea.form-input { resize: none; }
   object-fit: cover;
   z-index: 0;
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+}
+.tcs-pip-btn {
+  position: absolute;
+  top: max(56px, calc(env(safe-area-inset-top, 0px) + 56px));
+  right: max(12px, calc(env(safe-area-inset-right, 0px) + 12px));
+  z-index: 5;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-tint-3);
+  -webkit-backdrop-filter: var(--glass-blur-medium)
+    var(--glass-saturate);
+  backdrop-filter: var(--glass-blur-medium)
+    var(--glass-saturate);
+  border: 1px solid var(--glass-edge);
+  border-radius: 50%;
+  color: var(--text);
+  cursor: pointer;
+}
+.tcs-pip-btn:hover {
+  background: var(--glass-tint-2);
+}
+.tcs-waveform {
+  margin: 0 16px var(--space-2);
+  height: 48px;
+  opacity: 0.85;
 }
 .tcs-video-mode {
   max-height: 100dvh;
@@ -2852,17 +3029,33 @@ textarea.form-input { resize: none; }
   position: fixed;
   inset: 0;
   z-index: 180;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-end;
+  animation: fade-in var(--dur-med) var(--ease-standard);
+}
+.eq-backdrop.is-closing {
+  animation: fade-out var(--dur-med) var(--ease-standard)
+    forwards;
 }
 .eq-sheet {
   width: 100%;
-  background: var(--bg-elevated);
+  background: var(--glass-tint-3);
+  -webkit-backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--glass-edge);
   padding: 0 16px calc(var(--nav-h) + var(--player-h) + 16px);
   animation: slideUp 0.25s cubic-bezier(0.34, 1.2, 0.64, 1);
+  box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
+}
+.eq-sheet.is-closing {
+  animation: sheet-exit-tcs var(--dur-med)
+    var(--ease-standard) forwards;
 }
 .eq-handle {
   width: 40px;
@@ -3108,17 +3301,33 @@ textarea.form-input { resize: none; }
   position: fixed;
   inset: 0;
   z-index: 190;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-end;
+  animation: fade-in var(--dur-med) var(--ease-standard);
+}
+.settings-backdrop.is-closing {
+  animation: fade-out var(--dur-med) var(--ease-standard)
+    forwards;
 }
 .settings-sheet {
   width: 100%;
-  background: var(--bg-elevated);
+  background: var(--glass-tint-3);
+  -webkit-backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--glass-edge);
   padding: 0 0 calc(var(--nav-h) + 16px);
   animation: slideUp 0.25s cubic-bezier(0.34, 1.2, 0.64, 1);
+  box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
+}
+.settings-sheet.is-closing {
+  animation: sheet-exit-tcs var(--dur-med)
+    var(--ease-standard) forwards;
 }
 .settings-handle {
   width: 40px;

@@ -62,12 +62,8 @@ def _mock_sc_service(
     if search_raises is not None:
         sc.search = AsyncMock(side_effect=search_raises)
     else:
-        sc.search = AsyncMock(
-            return_value=search_result or []
-        )
-    sc.import_or_get_track = AsyncMock(
-        return_value=imported_track
-    )
+        sc.search = AsyncMock(return_value=search_result or [])
+    sc.import_or_get_track = AsyncMock(return_value=imported_track)
     return sc
 
 
@@ -116,8 +112,7 @@ async def test_worker_ignores_non_importing_job(
 
 
 @patch(
-    "app.services.import_lyrics_worker"
-    ".process_import_lyrics_task.kiq",
+    "app.services.import_lyrics_worker" ".process_import_lyrics_task.kiq",
     new_callable=AsyncMock,
 )
 @patch(f"{_MOD}.SoundCloudService")
@@ -183,6 +178,17 @@ async def test_worker_match_creates_track(
     await session.refresh(existing_track)
     assert existing_track.imported_from == "yandex_music"
 
+    # Successful import also links the track to the importing
+    # user's library (auto-link in Stage B of the multi-importer
+    # plan). Idempotent via ON CONFLICT — second import by the
+    # same user wouldn't add another row.
+    from app.repositories.user_track_library import (
+        UserTrackLibraryRepository,
+    )
+
+    library_repo = UserTrackLibraryRepository(session)
+    assert await library_repo.has(user.id, existing_track.id) is True
+
     # Successful import enqueues the post-import lyrics
     # orchestrator for the same job id. Regression guard against
     # the trigger getting silently lost.
@@ -190,8 +196,78 @@ async def test_worker_match_creates_track(
 
 
 @patch(
-    "app.services.import_lyrics_worker"
-    ".process_import_lyrics_task.kiq",
+    "app.services.import_lyrics_worker" ".process_import_lyrics_task.kiq",
+    new_callable=AsyncMock,
+)
+@patch(f"{_MOD}.SoundCloudService")
+@patch(f"{_MOD}.AsyncSessionLocal")
+async def test_two_users_share_track_with_two_library_links(
+    mock_session_local: MagicMock,
+    mock_sc_cls: MagicMock,
+    _mock_lyrics_kiq: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    # Same playlist imported by two different users: the dedup
+    # path returns the same Track row, and BOTH users end up
+    # with an entry in user_track_library so the second user
+    # also sees the track in their library.
+    user_a = await _make_user(session, telegram_id=3300)
+    user_b = await _make_user(session, telegram_id=3301)
+    selected = [
+        {
+            "title": "Same Song",
+            "artist": "Same Artist",
+            "duration_seconds": 200,
+        }
+    ]
+    job_a = await _make_job(session, user_a.id, selected)
+    job_b = await _make_job(session, user_b.id, selected)
+    mock_session_local.return_value = _session_ctx(session)
+
+    shared_track = Track(
+        title="Same Song",
+        artist="Same Artist",
+        source="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+        source_platform="soundcloud",
+        sc_url="https://soundcloud.com/x/same",
+        source_name="SoundCloud",
+        is_public=True,
+        uploaded_by_id=user_a.id,
+    )
+    session.add(shared_track)
+    await session.flush()
+    await session.refresh(shared_track)
+
+    mock_sc_cls.return_value = _mock_sc_service(
+        search_result=[
+            {
+                "id": 1,
+                "title": "Same Song",
+                "permalink_url": "https://soundcloud.com/x/same",
+            }
+        ],
+        imported_track=shared_track,
+    )
+
+    from app.repositories.user_track_library import (
+        UserTrackLibraryRepository,
+    )
+    from app.services.external_import_worker import (
+        process_external_import_job,
+    )
+
+    await process_external_import_job(job_a.id)
+    await process_external_import_job(job_b.id)
+
+    library_repo = UserTrackLibraryRepository(session)
+    assert await library_repo.has(user_a.id, shared_track.id) is True
+    assert await library_repo.has(user_b.id, shared_track.id) is True
+
+
+@patch(
+    "app.services.import_lyrics_worker" ".process_import_lyrics_task.kiq",
     new_callable=AsyncMock,
 )
 @patch(f"{_MOD}.SoundCloudService")
@@ -203,15 +279,11 @@ async def test_worker_no_match_goes_to_not_matched(
     session: AsyncSession,
 ) -> None:
     user = await _make_user(session, telegram_id=3204)
-    selected = [
-        {"title": "Obscure", "artist": "Nobody"}
-    ]
+    selected = [{"title": "Obscure", "artist": "Nobody"}]
     job = await _make_job(session, user.id, selected)
     mock_session_local.return_value = _session_ctx(session)
 
-    mock_sc_cls.return_value = _mock_sc_service(
-        search_result=[]
-    )
+    mock_sc_cls.return_value = _mock_sc_service(search_result=[])
 
     from app.services.external_import_worker import (
         process_external_import_job,
@@ -223,13 +295,9 @@ async def test_worker_no_match_goes_to_not_matched(
     assert job.status == "done"
     assert job.completed_tracks == 0
     assert job.failed_tracks == 1
-    not_matched = (job.tracks_data or {}).get(
-        "not_matched", []
-    )
+    not_matched = (job.tracks_data or {}).get("not_matched", [])
     assert len(not_matched) == 1
-    assert (
-        not_matched[0]["reason"] == "no_soundcloud_match"
-    )
+    assert not_matched[0]["reason"] == "no_soundcloud_match"
 
     # Zero imported tracks → orchestrator is NOT enqueued.
     # (Nothing for it to do, and an empty rollout would just
@@ -261,9 +329,7 @@ async def test_worker_empty_query_skipped(
     await session.refresh(job)
     assert job.failed_tracks == 1
     assert sc.search.await_count == 0
-    not_matched = (job.tracks_data or {}).get(
-        "not_matched", []
-    )
+    not_matched = (job.tracks_data or {}).get("not_matched", [])
     assert not_matched[0]["reason"] == "no_query"
 
 
@@ -332,9 +398,7 @@ async def test_worker_handles_search_error(
 
     await session.refresh(job)
     assert job.failed_tracks == 1
-    not_matched = (job.tracks_data or {}).get(
-        "not_matched", []
-    )
+    not_matched = (job.tracks_data or {}).get("not_matched", [])
     assert not_matched[0]["reason"] == "search_error"
 
     result = await session.execute(select(Track))

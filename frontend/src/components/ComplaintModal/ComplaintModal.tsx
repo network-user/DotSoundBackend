@@ -3,6 +3,9 @@ import { api } from '@/lib/api'
 import { tg } from '@/lib/telegram'
 import { usePlayer } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { useExitTransition } from '@/hooks/useExitTransition'
+import { useToast } from '@/components/ui/Toast'
+import { hapticNotification } from '@/lib/telegram'
 
 type ReasonType =
   | 'other'
@@ -36,7 +39,11 @@ export function ComplaintModal() {
       window.removeEventListener('keydown', onKey)
   }, [isComplaintOpen, closeComplaint])
 
-  if (!isComplaintOpen || !track) return null
+  const exit = useExitTransition(
+    Boolean(isComplaintOpen && track),
+  )
+  const toast = useToast()
+  if (!exit.mounted || !track) return null
 
   const isRightsholderNotice = mode === 'rightsholder'
 
@@ -92,7 +99,12 @@ export function ComplaintModal() {
       const msg = res.track_hidden
         ? 'Жалоба принята. Доступ к треку ограничен.'
         : 'Жалоба принята и будет рассмотрена.'
-      tg.showAlert(msg)
+      hapticNotification('success')
+      try {
+        toast.success(msg)
+      } catch {
+        tg.showAlert(msg)
+      }
       if (res.track_hidden) stop()
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : ''
@@ -115,7 +127,10 @@ export function ComplaintModal() {
   }
 
   return (
-    <div className="modal" onClick={handleBackdrop}>
+    <div
+      className={`modal${exit.cls}`}
+      onClick={handleBackdrop}
+    >
       <div className="modal-content">
         <div className="modal-header">
           <h3>

@@ -1,15 +1,17 @@
 import mimetypes
 
 import structlog
-from fastapi import HTTPException, UploadFile, status
+from fastapi import BackgroundTasks, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.models.track import Track
 from app.repositories.track import TrackRepository
+from app.repositories.user_track_library import (
+    UserTrackLibraryRepository,
+)
 from app.services.cover_worker import generate_and_upload_cover
 from app.services.transcoding import transcode_and_upload
-from fastapi import BackgroundTasks
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -25,13 +27,10 @@ _ALLOWED_AUDIO_MIMES = frozenset(
         "audio/aac",
     }
 )
-_ALLOWED_COVER_MIMES = frozenset(
-    {"image/jpeg", "image/png", "image/webp"}
-)
+_ALLOWED_COVER_MIMES = frozenset({"image/jpeg", "image/png", "image/webp"})
 _MAX_AUDIO_BYTES = 100 * 1024 * 1024  # Increased to 100MB for raw WAV files
 _MAX_COVER_BYTES = 5 * 1024 * 1024
 _MAX_STORAGE_QUOTA = 3 * 1024 * 1024 * 1024  # 3 GB
-
 
 
 def _resolve_mime(file: UploadFile) -> str:
@@ -59,6 +58,7 @@ def _audio_extension(mime: str) -> str:
 class UploadService:
     def __init__(self, session: AsyncSession) -> None:
         self._repo = TrackRepository(session)
+        self._library_repo = UserTrackLibraryRepository(session)
 
     async def upload_track(
         self,
@@ -88,15 +88,14 @@ class UploadService:
 
         data = await file.read()
         if len(data) > _MAX_AUDIO_BYTES:
-            logger.warning(
-                "upload_rejected_size", size_bytes=len(data)
-            )
+            logger.warning("upload_rejected_size", size_bytes=len(data))
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail="Audio file exceeds 100 MB limit",
             )
 
         from app.services.file_validator import validate_audio
+
         validate_audio(data, file.filename)
 
         if uploader_id is not None:
@@ -112,9 +111,7 @@ class UploadService:
 
         cover_key: str | None = None
         if cover and cover.filename:
-            cover_key = await self._upload_cover(
-                cover, uploader_id
-            )
+            cover_key = await self._upload_cover(cover, uploader_id)
 
         track = await self._repo.create(
             title=title,
@@ -130,6 +127,12 @@ class UploadService:
             processing_status="processing",
             file_size_bytes=len(data),
         )
+        if uploader_id is not None:
+            await self._library_repo.add(
+                user_id=uploader_id,
+                track_id=track.id,
+                source="upload",
+            )
         logger.info(
             "upload_track_record_created",
             track_id=track.id,
@@ -140,9 +143,7 @@ class UploadService:
         # Это позволяет передать задачу в другой контейнер без передачи огромных байтов в памяти
         import re
 
-        safe_name = re.sub(
-            r"[^\w.\-]", "_", file.filename or "track"
-        )[:100]
+        safe_name = re.sub(r"[^\w.\-]", "_", file.filename or "track")[:100]
         raw_key = f"temp/raw/{track.id}_{safe_name}"
         await s3.upload_object(
             key=raw_key,
@@ -168,19 +169,16 @@ class UploadService:
     ) -> str | None:
         mime = _resolve_mime(cover)
         if mime not in _ALLOWED_COVER_MIMES:
-            logger.warning(
-                "cover_rejected_mime", mime=mime
-            )
+            logger.warning("cover_rejected_mime", mime=mime)
             return None
 
         data = await cover.read()
         if len(data) > _MAX_COVER_BYTES:
-            logger.warning(
-                "cover_rejected_size", size_bytes=len(data)
-            )
+            logger.warning("cover_rejected_size", size_bytes=len(data))
             return None
 
         from app.services.file_validator import validate_image
+
         try:
             validate_image(data, cover.filename)
         except Exception:

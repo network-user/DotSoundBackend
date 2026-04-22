@@ -45,6 +45,7 @@ from app.models.track import Track
 from app.models.upload_meta import TrackUploadMeta
 from app.models.user import User
 from app.models.user_preference import UserPreference
+from app.models.user_track_library import UserTrackLibrary
 from app.models.worker_audit import WorkerAuditLog
 
 __all__ = [
@@ -89,5 +90,6 @@ __all__ = [
     "UserEqSettings",
     "UserFollow",
     "UserPreference",
+    "UserTrackLibrary",
     "WorkerAuditLog",
 ]

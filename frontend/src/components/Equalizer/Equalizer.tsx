@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { useExitTransition } from '@/hooks/useExitTransition'
 import type { Track } from '@/types/api'
 
 const BANDS = [
@@ -104,17 +105,18 @@ export function Equalizer() {
     setPreviewSource(null)
   }
 
-  if (!isEqOpen) return null
+  const exit = useExitTransition(isEqOpen)
+  if (!exit.mounted) return null
 
   return (
     <div
-      className="eq-backdrop"
+      className={`eq-backdrop${exit.cls}`}
       onClick={(e) => {
         if (e.target === e.currentTarget)
           closeEq()
       }}
     >
-      <div className="eq-sheet">
+      <div className={`eq-sheet${exit.cls}`}>
         <div className="eq-handle" />
 
         <div className="eq-header">

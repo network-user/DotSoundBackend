@@ -1,8 +1,11 @@
 import {
   forwardRef,
+  useImperativeHandle,
+  useRef,
   type ButtonHTMLAttributes,
   type ReactNode,
 } from 'react'
+import { useRipple } from './Ripple'
 
 type Variant = 'default' | 'primary' | 'ghost' | 'icon'
 
@@ -10,6 +13,7 @@ interface Props
   extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant
   iconOnly?: boolean
+  ripple?: boolean
   children?: ReactNode
 }
 
@@ -22,8 +26,8 @@ const variantClass: Record<Variant, string> = {
 
 /**
  * Accessible monochrome button with built-in tap target,
- * focus ring and pressed-state animation. Defaults respect
- * `prefers-reduced-motion`.
+ * focus ring, pressed-state animation and (optional) ripple.
+ * Defaults respect `prefers-reduced-motion`.
  */
 export const Press = forwardRef<
   HTMLButtonElement,
@@ -32,6 +36,7 @@ export const Press = forwardRef<
   {
     variant = 'default',
     iconOnly = false,
+    ripple = true,
     className,
     type,
     children,
@@ -39,6 +44,13 @@ export const Press = forwardRef<
   },
   ref,
 ) {
+  const innerRef = useRef<HTMLButtonElement>(null)
+  useImperativeHandle(
+    ref,
+    () => innerRef.current as HTMLButtonElement,
+  )
+  useRipple(innerRef, { disabled: !ripple })
+
   const classes = [
     'press',
     iconOnly ? 'press--icon' : '',
@@ -50,7 +62,7 @@ export const Press = forwardRef<
 
   return (
     <button
-      ref={ref}
+      ref={innerRef}
       type={type ?? 'button'}
       className={classes}
       {...rest}

@@ -13,13 +13,14 @@ from app.core.s3 import upload_audio
 from app.core.tkq import broker
 from app.models.import_job import ImportJob
 from app.models.track import Track
+from app.repositories.user_track_library import (
+    UserTrackLibraryRepository,
+)
 from app.services.cover_worker import (
     generate_and_upload_cover,
 )
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _BOT_DOWNLOAD_TIMEOUT = 60.0
 
@@ -36,17 +37,14 @@ async def process_import_job(job_id: int) -> None:
             )
             return
 
-        selected = (job.tracks_data or {}).get(
-            "selected", []
-        )
+        selected = (job.tracks_data or {}).get("selected", [])
         if not selected:
             job.status = "done"
             await session.commit()
             return
 
-        headers = build_internal_headers(
-            settings.bot_internal_secret
-        )
+        headers = build_internal_headers(settings.bot_internal_secret)
+        library_repo = UserTrackLibraryRepository(session)
 
         imported_tracks: list[dict] = []
 
@@ -67,10 +65,7 @@ async def process_import_job(job_id: int) -> None:
                 title=title,
             )
 
-            if (
-                file_size
-                and file_size > MAX_IMPORT_FILE_SIZE_BYTES
-            ):
+            if file_size and file_size > MAX_IMPORT_FILE_SIZE_BYTES:
                 job.failed_tracks += 1
                 imported_tracks.append(
                     {
@@ -87,22 +82,17 @@ async def process_import_job(job_id: int) -> None:
                     timeout=_BOT_DOWNLOAD_TIMEOUT
                 ) as client:
                     resp = await client.post(
-                        download_audio_url(
-                            settings.bot_internal_url
-                        ),
+                        download_audio_url(settings.bot_internal_url),
                         headers=headers,
                         json={"file_id": file_id},
                     )
                     if resp.status_code != 200:
                         raise Exception(
-                            f"download failed: "
-                            f"{resp.status_code}"
+                            f"download failed: " f"{resp.status_code}"
                         )
                     audio_bytes = resp.content
 
-                mime = audio_info.get(
-                    "mime_type", "audio/mpeg"
-                )
+                mime = audio_info.get("mime_type", "audio/mpeg")
                 ext = resolve_audio_extension(mime)
 
                 file_key = await upload_audio(
@@ -129,9 +119,21 @@ async def process_import_job(job_id: int) -> None:
                 session.add(track)
                 await session.flush()
 
-                await generate_and_upload_cover.kiq(
-                    track.id
-                )
+                try:
+                    await library_repo.add(
+                        user_id=job.user_id,
+                        track_id=track.id,
+                        source="telegram",
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "import_library_add_failed",
+                        job_id=job_id,
+                        track_id=track.id,
+                        error=str(exc),
+                    )
+
+                await generate_and_upload_cover.kiq(track.id)
 
                 job.completed_tracks += 1
                 imported_tracks.append(

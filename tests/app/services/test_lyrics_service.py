@@ -16,9 +16,7 @@ async def _make_user(
     telegram_id: int = 1400,
 ) -> int:
     repo = UserRepository(session)
-    user, _ = await repo.upsert(
-        telegram_id, "u", "Test", None
-    )
+    user, _ = await repo.upsert(telegram_id, "u", "Test", None)
     return user.id
 
 
@@ -28,7 +26,8 @@ async def _make_track(
 ) -> int:
     repo = TrackRepository(session)
     track = await repo.create(
-        title="T", file_key="k",
+        title="T",
+        file_key="k",
         uploaded_by_id=owner_id,
     )
     return track.id
@@ -41,9 +40,7 @@ async def test_create_or_update_lyrics(
     tid = await _make_track(session, uid)
 
     svc = LyricsService(session)
-    lyrics = await svc.create_or_update(
-        tid, uid, "Line 1\nLine 2"
-    )
+    lyrics = await svc.create_or_update(tid, uid, "Line 1\nLine 2")
 
     assert lyrics.plain_text == "Line 1\nLine 2"
     assert lyrics.track_id == tid
@@ -56,9 +53,7 @@ async def test_get_lyrics(
     tid = await _make_track(session, uid)
 
     svc = LyricsService(session)
-    await svc.create_or_update(
-        tid, uid, "Hello World"
-    )
+    await svc.create_or_update(tid, uid, "Hello World")
 
     result = await svc.get_lyrics(tid, uid)
 
@@ -87,11 +82,71 @@ async def test_create_lyrics_not_owner(
     svc = LyricsService(session)
 
     with pytest.raises(HTTPException) as exc:
-        await svc.create_or_update(
-            tid, uid2, "text"
-        )
+        await svc.create_or_update(tid, uid2, "text")
 
     assert exc.value.status_code == 403
+
+
+async def _make_external_track(session: AsyncSession, owner_id: int) -> int:
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="External",
+        sc_url="https://soundcloud.com/x/y",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+        source="soundcloud",
+        uploaded_by_id=owner_id,
+    )
+    return track.id
+
+
+async def test_external_reference_blocks_owner_edits(
+    session: AsyncSession,
+) -> None:
+    owner_id = await _make_user(session, telegram_id=1410)
+    tid = await _make_external_track(session, owner_id)
+
+    svc = LyricsService(session)
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.create_or_update(tid, owner_id, "text")
+
+    assert exc.value.status_code == 403
+
+
+async def test_external_reference_allows_admin_edits(
+    session: AsyncSession,
+) -> None:
+    from app.repositories.user import UserRepository
+
+    owner_id = await _make_user(session, telegram_id=1411)
+    tid = await _make_external_track(session, owner_id)
+    user_repo = UserRepository(session)
+    admin, _ = await user_repo.upsert(
+        telegram_id=1412,
+        username="admin",
+        first_name="Admin",
+        last_name=None,
+    )
+    admin.is_admin = True
+    await session.flush()
+
+    svc = LyricsService(session)
+    lyrics = await svc.create_or_update(tid, admin.id, "Admin-edited")
+
+    assert lyrics.plain_text == "Admin-edited"
+
+
+async def test_ugc_owner_can_still_edit(
+    session: AsyncSession,
+) -> None:
+    owner_id = await _make_user(session, telegram_id=1413)
+    tid = await _make_track(session, owner_id)
+
+    svc = LyricsService(session)
+    lyrics = await svc.create_or_update(tid, owner_id, "ugc-text")
+
+    assert lyrics.plain_text == "ugc-text"
 
 
 async def test_delete_lyrics(
@@ -101,9 +156,7 @@ async def test_delete_lyrics(
     tid = await _make_track(session, uid)
 
     svc = LyricsService(session)
-    await svc.create_or_update(
-        tid, uid, "text"
-    )
+    await svc.create_or_update(tid, uid, "text")
 
     removed = await svc.delete_lyrics(tid, uid)
 
@@ -129,14 +182,10 @@ async def test_update_sync(
     tid = await _make_track(session, uid)
 
     svc = LyricsService(session)
-    await svc.create_or_update(
-        tid, uid, "Line 1"
-    )
+    await svc.create_or_update(tid, uid, "Line 1")
 
     synced = [{"time": 0, "text": "Line 1"}]
-    lyrics = await svc.update_sync(
-        tid, uid, synced
-    )
+    lyrics = await svc.update_sync(tid, uid, synced)
 
     assert lyrics.synced_lines == synced
 
@@ -150,8 +199,6 @@ async def test_update_sync_no_lyrics(
     svc = LyricsService(session)
 
     with pytest.raises(HTTPException) as exc:
-        await svc.update_sync(
-            tid, uid, [{"time": 0, "text": "X"}]
-        )
+        await svc.update_sync(tid, uid, [{"time": 0, "text": "X"}])
 
     assert exc.value.status_code == 404

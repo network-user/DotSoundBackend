@@ -86,13 +86,49 @@ export function setBackButton(
   return () => undefined
 }
 
+export function isTelegram(): boolean {
+  try {
+    return Boolean(
+      (WebApp as any)?.initDataUnsafe?.user
+        ?? (WebApp as any)?.platform,
+    )
+      && Boolean(window.Telegram?.WebApp)
+  } catch {
+    return false
+  }
+}
+
+const VIBRATE_MAP: Record<HapticImpact, number> = {
+  light: 10,
+  medium: 18,
+  heavy: 28,
+}
+
+const VIBRATE_NOTIF: Record<
+  'success' | 'warning' | 'error',
+  number | number[]
+> = {
+  success: [10, 30, 10],
+  warning: [20, 40, 20],
+  error: [40, 30, 40],
+}
+
 export function haptic(
   kind: HapticImpact = 'light',
 ): void {
   try {
-    ;(
-      WebApp as any
-    ).HapticFeedback?.impactOccurred?.(kind)
+    const tgHaptic = (WebApp as any).HapticFeedback
+    if (tgHaptic?.impactOccurred) {
+      tgHaptic.impactOccurred(kind)
+      return
+    }
+  } catch {
+    /* fall through to navigator.vibrate */
+  }
+  try {
+    if ('vibrate' in navigator) {
+      navigator.vibrate(VIBRATE_MAP[kind])
+    }
   } catch {
     /* ignore */
   }
@@ -102,9 +138,37 @@ export function hapticNotification(
   kind: 'success' | 'warning' | 'error',
 ): void {
   try {
-    ;(
-      WebApp as any
-    ).HapticFeedback?.notificationOccurred?.(kind)
+    const tgHaptic = (WebApp as any).HapticFeedback
+    if (tgHaptic?.notificationOccurred) {
+      tgHaptic.notificationOccurred(kind)
+      return
+    }
+  } catch {
+    /* fall through to navigator.vibrate */
+  }
+  try {
+    if ('vibrate' in navigator) {
+      navigator.vibrate(VIBRATE_NOTIF[kind])
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+export function hapticSelection(): void {
+  try {
+    const tgHaptic = (WebApp as any).HapticFeedback
+    if (tgHaptic?.selectionChanged) {
+      tgHaptic.selectionChanged()
+      return
+    }
+  } catch {
+    /* fall through */
+  }
+  try {
+    if ('vibrate' in navigator) {
+      navigator.vibrate(5)
+    }
   } catch {
     /* ignore */
   }

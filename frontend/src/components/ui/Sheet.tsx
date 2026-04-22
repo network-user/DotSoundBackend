@@ -1,6 +1,7 @@
 import {
   useEffect,
   useRef,
+  useState,
   type PointerEvent,
   type ReactNode,
 } from 'react'
@@ -14,9 +15,12 @@ interface Props {
   swipeThreshold?: number
 }
 
+const EXIT_DURATION_MS = 220
+
 /**
- * Bottom sheet with swipe-down dismissal, Escape support and
- * a visible drag handle. Pure transitions — no Framer dep.
+ * Bottom sheet with swipe-down dismissal, Escape support, exit
+ * animation and a visible drag handle. Pure transitions — no
+ * Framer dep.
  */
 export function Sheet({
   open,
@@ -28,6 +32,34 @@ export function Sheet({
   const innerRef = useRef<HTMLDivElement>(null)
   const startY = useRef<number | null>(null)
   const offsetY = useRef(0)
+  const [mounted, setMounted] = useState(open)
+  const [closing, setClosing] = useState(false)
+  const closingTimer = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      setClosing(false)
+      if (closingTimer.current) {
+        window.clearTimeout(closingTimer.current)
+        closingTimer.current = null
+      }
+      return
+    }
+    if (!mounted) return
+    setClosing(true)
+    closingTimer.current = window.setTimeout(() => {
+      setMounted(false)
+      setClosing(false)
+      closingTimer.current = null
+    }, EXIT_DURATION_MS)
+    return () => {
+      if (closingTimer.current) {
+        window.clearTimeout(closingTimer.current)
+        closingTimer.current = null
+      }
+    }
+  }, [open, mounted])
 
   useEffect(() => {
     if (!open) return
@@ -39,7 +71,7 @@ export function Sheet({
       window.removeEventListener('keydown', onKey)
   }, [open, onClose])
 
-  if (!open) return null
+  if (!mounted) return null
 
   const onPointerDown = (
     e: PointerEvent<HTMLDivElement>,
@@ -72,7 +104,7 @@ export function Sheet({
 
   return (
     <div
-      className="sheet-backdrop"
+      className={`sheet-backdrop${closing ? ' is-closing' : ''}`}
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
@@ -80,7 +112,7 @@ export function Sheet({
     >
       <div
         ref={innerRef}
-        className="sheet-inner"
+        className={`sheet-inner${closing ? ' is-closing' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
         <div

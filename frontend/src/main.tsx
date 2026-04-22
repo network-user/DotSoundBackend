@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AdminProvider } from '@/components/Admin/AdminContext'
 import { LikesProvider } from '@/store/LikesContext'
 import { PlayerProvider } from '@/store/PlayerContext'
+import { ToastProvider } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
 import { installViewportListener } from '@/lib/telegram'
 import { App } from './App'
@@ -34,13 +35,15 @@ if (
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter basename="/mini_app">
-      <AdminProvider>
-        <PlayerProvider>
-          <LikesProvider>
-            <App />
-          </LikesProvider>
-        </PlayerProvider>
-      </AdminProvider>
+      <ToastProvider>
+        <AdminProvider>
+          <PlayerProvider>
+            <LikesProvider>
+              <App />
+            </LikesProvider>
+          </PlayerProvider>
+        </AdminProvider>
+      </ToastProvider>
     </BrowserRouter>
   </StrictMode>,
 )

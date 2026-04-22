@@ -3,6 +3,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lyrics import TrackLyrics
+from app.models.track import Track
 from app.repositories.lyrics import LyricsRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
@@ -27,14 +28,47 @@ class LyricsService:
             )
         return user.id
 
-    async def _get_owned_track(self, track_id: int, user_id: int):
+    async def _get_owned_track(self, track_id: int, user_id: int) -> Track:
+        return await self._get_editable_track(track_id, user_id)
+
+    async def _get_editable_track(self, track_id: int, user_id: int) -> Track:
+        """Resolve a track and verify the caller is allowed to
+        edit its lyrics.
+
+        For ``catalog_type == 'external_reference'`` (imported
+        tracks like Yandex Music) edits are admin-only — the
+        catalog is shared across every importer's library and
+        per-user edits would create attribution chaos plus a
+        legal-content-modification surface.
+
+        For UGC and licensed catalog the original uploader keeps
+        full edit rights as before.
+        """
         track = await self._track_repo.get_by_id(track_id)
         if not track or not track.is_active:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Track not found"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Track not found",
             )
-        resolved_id = await self._resolve_user_id(user_id)
-        if track.uploaded_by_id != resolved_id:
+        user = await self._user_repo.get_by_id(user_id)
+        if not user:
+            user = await self._user_repo.get_by_telegram_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+        if track.catalog_type == "external_reference":
+            if not user.is_admin:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "Lyrics for imported tracks can "
+                        "only be edited by admins"
+                    ),
+                )
+            return track
+        if track.uploaded_by_id != user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not the track owner",
@@ -52,10 +86,7 @@ class LyricsService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Track not found",
             )
-        is_owner = (
-            requester_id
-            and track.uploaded_by_id == requester_id
-        )
+        is_owner = requester_id and track.uploaded_by_id == requester_id
         if not track.is_public and not is_owner:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -86,13 +117,9 @@ class LyricsService:
         logger.info("lyrics_sync_updated", track_id=track_id)
         return lyrics
 
-    async def delete_lyrics(
-        self, track_id: int, user_id: int
-    ) -> bool:
+    async def delete_lyrics(self, track_id: int, user_id: int) -> bool:
         await self._get_owned_track(track_id, user_id)
-        removed = await self._repo.delete_by_track_id(
-            track_id
-        )
+        removed = await self._repo.delete_by_track_id(track_id)
         if removed:
             await self._session.commit()
         return removed
@@ -162,9 +189,7 @@ class LyricsService:
                 publish_initial_eta,
             )
 
-            await publish_initial_eta(
-                progress_id, job.profile
-            )
+            await publish_initial_eta(progress_id, job.profile)
         except Exception:
             logger.debug(
                 "lyrics_eta_seed_failed",
@@ -220,9 +245,7 @@ class LyricsService:
         )
 
         try:
-            await invalidate_cached_lyrics_for_track(
-                artist, title
-            )
+            await invalidate_cached_lyrics_for_track(artist, title)
             logger.info(
                 "lyrics_redefine_cache_invalidated",
                 track_id=track_id,
@@ -267,9 +290,7 @@ class LyricsService:
         )
 
         redis = get_redis_client()
-        await redis.set(
-            f"{CANCEL_KEY_PREFIX}{progress_id}", "1", ex=600
-        )
+        await redis.set(f"{CANCEL_KEY_PREFIX}{progress_id}", "1", ex=600)
         await set_lyrics_progress(
             progress_id,
             stage="cancelling",

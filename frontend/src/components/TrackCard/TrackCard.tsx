@@ -6,8 +6,9 @@ import {
   usePlayerActions,
   usePlayerMeta,
 } from '@/store/PlayerContext'
-import { getInternalUserId } from '@/lib/telegram'
+import { getInternalUserId, haptic } from '@/lib/telegram'
 import { api } from '@/lib/api'
+import { useToast } from '@/components/ui/Toast'
 import type { Track } from '@/types/api'
 
 interface Props {
@@ -33,9 +34,34 @@ function getCatalogLabel(track: Track): string | null {
 export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
   const { isLiked, toggleLike } = useLikes()
   const { track: currentTrack } = usePlayerMeta()
-  const { playTrack } = usePlayerActions()
+  const { playTrack, addToQueue } = usePlayerActions()
+  const toast = useToast()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressFiredRef = useRef(false)
+
+  const handlePointerDown = () => {
+    longPressFiredRef.current = false
+    longPressTimerRef.current = setTimeout(() => {
+      longPressFiredRef.current = true
+      haptic('medium')
+      addToQueue(track)
+      toast.success('Добавлено в очередь')
+    }, 550)
+  }
+
+  const handlePointerUp = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+  }
+
+  const handleClick = () => {
+    if (longPressFiredRef.current) return
+    playTrack(track)
+  }
 
   const playing = currentTrack?.id === track.id
   const liked = isLiked(track.id)
@@ -77,7 +103,11 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
     <div
       className={`track-card${playing ? ' playing' : ''}`}
       data-id={track.id}
-      onClick={() => playTrack(track)}
+      onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     >
       <div className="track-card-main-row">
         <CoverImage coverKey={track.cover_key} />

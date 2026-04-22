@@ -9,6 +9,9 @@ from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.models.import_job import ImportJob
 from app.models.track import Track
+from app.repositories.user_track_library import (
+    UserTrackLibraryRepository,
+)
 from app.services.soundcloud_service import SoundCloudService
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -82,6 +85,7 @@ async def process_external_import_job(job_id: int) -> None:
             return
 
         sc_service = SoundCloudService(settings.sc_client_id, session)
+        library_repo = UserTrackLibraryRepository(session)
         imported: list[dict] = []
         not_matched: list[dict] = []
 
@@ -216,6 +220,22 @@ async def process_external_import_job(job_id: int) -> None:
                             track_id=track.id,
                             error=str(exc),
                         )
+
+                try:
+                    await library_repo.add(
+                        user_id=job.user_id,
+                        track_id=track.id,
+                        source=job.source,
+                    )
+                    await session.commit()
+                except Exception as exc:
+                    await session.rollback()
+                    logger.warning(
+                        "external_import_library_add_failed",
+                        job_id=job_id,
+                        track_id=track.id,
+                        error=str(exc),
+                    )
 
                 await session.refresh(job)
                 job.completed_tracks += 1

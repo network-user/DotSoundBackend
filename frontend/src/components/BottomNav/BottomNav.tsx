@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
+import { hapticSelection } from '@/lib/telegram'
 
 interface NavItem {
   path: string
@@ -26,6 +27,11 @@ export function BottomNav() {
     return location.pathname.startsWith(path)
   }
 
+  const handleNavigate = (path: string) => {
+    if (location.pathname !== path) hapticSelection()
+    navigate(path)
+  }
+
   return (
     <nav id="nav" aria-label="Основная навигация">
       {NAV_ITEMS.map(({ path, icon, labelKey }) => {
@@ -35,7 +41,7 @@ export function BottomNav() {
           <button
             key={path}
             className={`nav-btn${active ? ' active' : ''}`}
-            onClick={() => navigate(path)}
+            onClick={() => handleNavigate(path)}
             aria-label={label}
             aria-current={
               active ? 'page' : undefined

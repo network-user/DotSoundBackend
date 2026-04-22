@@ -129,14 +129,26 @@ def _peek_last_error() -> str | None:
 
 async def _process_one(item: _QueueItem) -> str:
     """Submit one track's lyrics generation. Returns a tag for
-    pacing decisions: ``"normal"``, ``"skipped"`` (lock held),
-    ``"blocked"`` (block signal seen after the kiq), or
-    ``"error"`` (kiq failed).
+    pacing decisions: ``"normal"``, ``"skipped"`` (lock held or
+    lyrics already in DB), ``"blocked"`` (block signal seen after
+    the kiq), or ``"error"`` (kiq failed).
     """
+    from app.core.db import AsyncSessionLocal
+    from app.repositories.lyrics import LyricsRepository
     from app.services.lyrics_worker import (
         TRACK_LOCK_KEY_PREFIX,
         generate_lyrics_task,
     )
+
+    async with AsyncSessionLocal() as session:
+        repo = LyricsRepository(session)
+        existing = await repo.get_by_track_id(item.track_id)
+    if existing is not None:
+        logger.debug(
+            "lyrics_global_skip_already_in_db",
+            track_id=item.track_id,
+        )
+        return "skipped"
 
     redis = get_redis_client()
     lock_held = await redis.exists(f"{TRACK_LOCK_KEY_PREFIX}{item.track_id}")
