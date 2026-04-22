@@ -613,6 +613,51 @@ bounded-transport exception
   теста на backpressure + queue_position + cancel queued),
   `test_import_lyrics_worker` autouse-фикстура форсит legacy режим
 
+## Sprint multi-importer library (2026-04-22)
+
+- Backend: миграция `0047_add_user_track_library` — many-to-many
+  таблица `user_track_library (user_id, track_id, source,
+  imported_at)` с composite PK + индекс `(user_id, imported_at)`.
+  Backfill из `tracks.uploaded_by_id` чтобы существующие треки
+  попали в библиотеку владельца
+- Backend: `app/models/user_track_library.py` (модель) +
+  `app/repositories/user_track_library.py` (`add` идемпотентен
+  через `INSERT ... ON CONFLICT DO NOTHING`, `list_by_user`,
+  `count_by_user`, `has`, `remove`)
+- Backend: auto-link во всех flow создания трека —
+  `external_import_worker.py` (после `import_or_get_track`,
+  включая dedup-resolved случай), `import_worker.py` (telegram),
+  `upload_service.py` (UGC). Идемпотентно — повторный импорт
+  одной песни одним юзером не дублирует
+- Backend: `GET /api/v1/users/me/library` — paginated, ORDER BY
+  `imported_at DESC`, `playable_only` filter; `TrackService.list_library`,
+  `UserTrackLibraryRepository.list_by_user` с JOIN
+- Backend: `LyricsService._get_editable_track` — для
+  `catalog_type='external_reference'` редактирование лирики только
+  админом, для UGC оригинальный uploader (как раньше). Все методы
+  `create_or_update`/`update_sync`/`delete_lyrics`/`redefine`/
+  `trigger_auto_generation`/`cancel_auto_generation` переведены
+  на новую проверку
+- Backend: defensive `LyricsRepository.get_by_track_id` skip в
+  `lyrics_global_orchestrator._process_one` — закрывает race
+  window между `_enqueue_to_global_queue` и моментом обработки
+  (другой воркер мог уже сохранить лирику)
+- Frontend: `api.getMyLibrary(page, size, playableOnly)` метод;
+  `ProfileView` переключён с `getMyTracks` на `getMyLibrary`,
+  пользователь видит и свои аплоады, и импортированные треки
+- Frontend: `LyricsPanel` принимает `catalogType` prop, кнопки
+  редактирования гейтятся через `canEdit = isExternalRef ?
+  isAdmin : isOwner`. Все 4 точки ownership-gating обновлены.
+  `TrackCardSheet` пробрасывает `catalog_type`, edit-pane lyrics-toggle
+  кнопка скрыта для non-admin на external_reference
+- Frontend: `ImportView` фаза `done` показывает «Треки добавлены
+  в вашу библиотеку (профиль)»
+- Tests: `test_user_track_library.py` (7 кейсов: idempotency,
+  shared-by-two-users, ordering, remove, count, has),
+  `test_external_import_worker::test_two_users_share_track_with_two_library_links`,
+  `test_lyrics_service` (3 новых: external blocks owner, allows admin,
+  ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyrics_already_in_db`
+
 ## Sprint admin / auth (2026-04-19)
 
 - Frontend: синхронный `api.restoreSession()` в `main.tsx` ДО рендера — убирает раннюю гонку токена с AdminProvider/PlayerProvider

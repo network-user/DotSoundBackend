@@ -8,16 +8,27 @@ interface Props {
   className?: string
 }
 
-export function CoverImage({ coverKey, externalUrl, size = 50, className }: Props) {
+export function CoverImage({
+  coverKey,
+  externalUrl,
+  size = 50,
+  className,
+}: Props) {
   const [failed, setFailed] = useState(false)
-  const style = size ? { width: size, height: size } : undefined
+  const [loaded, setLoaded] = useState(false)
+  const style = size
+    ? { width: size, height: size }
+    : undefined
 
   const src = coverKey
     ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(coverKey)}`
     : externalUrl ?? null
 
   return (
-    <div className={`track-card-cover${className ? ` ${className}` : ''}`} style={style}>
+    <div
+      className={`track-card-cover${className ? ` ${className}` : ''}${loaded ? ' loaded' : ''}`}
+      style={style}
+    >
       {src && !failed ? (
         <img
           src={src}
@@ -27,9 +38,13 @@ export function CoverImage({ coverKey, externalUrl, size = 50, className }: Prop
           loading="lazy"
           decoding="async"
           onError={() => setFailed(true)}
+          onLoad={() => setLoaded(true)}
         />
       ) : (
-        <Icon name="music" size={size ? Math.round(size * 0.5) : 24} />
+        <Icon
+          name="music"
+          size={size ? Math.round(size * 0.5) : 24}
+        />
       )}
     </div>
   )

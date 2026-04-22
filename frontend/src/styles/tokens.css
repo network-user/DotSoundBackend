@@ -44,11 +44,36 @@
   --lh-loose: 1.7;
 
   /* Motion */
+  --dur-xfast: 80ms;
   --dur-fast: 120ms;
   --dur-med: 220ms;
   --dur-slow: 360ms;
+  --dur-xslow: 480ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-emph: cubic-bezier(0.3, 0, 0, 1.2);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --press-scale: 0.96;
+
+  /* Liquid Glass system (iOS 16+ frosted base + iOS 26 accents).
+   * Use via GlassSurface primitive or apply tokens directly. */
+  --glass-blur-soft:    blur(12px);
+  --glass-blur-medium:  blur(20px);
+  --glass-blur-strong:  blur(32px);
+  --glass-saturate:     saturate(180%);
+  --glass-tint-1:       rgba(20, 20, 20, 0.55);
+  --glass-tint-2:       rgba(20, 20, 20, 0.72);
+  --glass-tint-3:       rgba(16, 16, 16, 0.82);
+  --glass-tint-liquid:  rgba(24, 24, 24, 0.4);
+  --glass-edge:         rgba(255, 255, 255, 0.10);
+  --glass-edge-bright:  rgba(255, 255, 255, 0.22);
+  --glass-highlight:    linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.10) 0%,
+    rgba(255, 255, 255, 0.02) 22%,
+    rgba(255, 255, 255, 0) 60%
+  );
+  --glass-noise-opacity: 0.045;
 
   /* Tap target & layout helpers */
   --tap: 44px;
@@ -63,6 +88,7 @@
   --z-sheet: 110;
   --z-modal: 130;
   --z-toast: 200;
+  --z-install: 150;
 }
 
 /* Palette: strictly monochrome. The colour tokens defined in
@@ -73,8 +99,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   :root {
+    --dur-xfast: 0ms;
     --dur-fast: 0ms;
     --dur-med: 0ms;
     --dur-slow: 0ms;
+    --dur-xslow: 0ms;
+    --press-scale: 1;
   }
 }

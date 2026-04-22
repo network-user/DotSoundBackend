@@ -41,9 +41,7 @@ from app.services.user_service import UserService
 router = APIRouter(prefix="/users", tags=["users"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-_ALLOWED_AVATAR_MIMES = frozenset(
-    {"image/jpeg", "image/png", "image/webp"}
-)
+_ALLOWED_AVATAR_MIMES = frozenset({"image/jpeg", "image/png", "image/webp"})
 _MAX_AVATAR_BYTES = 2 * 1024 * 1024
 
 
@@ -59,14 +57,10 @@ async def register_or_update_user(
     data: UserCreate,
     session: AsyncSession = Depends(get_db),
 ) -> UserResponse:
-    structlog.contextvars.bind_contextvars(
-        telegram_id=data.telegram_id
-    )
+    structlog.contextvars.bind_contextvars(telegram_id=data.telegram_id)
     service = UserService(session)
     user, created = await service.register_or_update(data)
-    status_code = (
-        status.HTTP_201_CREATED if created else status.HTTP_200_OK
-    )
+    status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
     logger.info(
         "user_endpoint_response",
         user_id=user.id,
@@ -154,9 +148,7 @@ async def delete_me(
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
     service = UserService(session)
-    ok = await service.request_deletion(
-        current_user.id, data.confirmation
-    )
+    ok = await service.request_deletion(current_user.id, data.confirmation)
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -177,9 +169,7 @@ async def restore_me(
     current_user: User = Depends(get_current_user),
 ) -> UserResponse:
     service = UserService(session)
-    ok = await service.cancel_deletion(
-        current_user.id
-    )
+    ok = await service.cancel_deletion(current_user.id)
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -250,13 +240,13 @@ async def get_avatar(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    
+
     if user.avatar_key:
         avatar_url = await s3.get_presigned_url(user.avatar_key)
     else:
         seed = user.avatar_seed or str(user.telegram_id)
         avatar_url = f"https://api.dicebear.com/9.x/identicon/svg?seed={seed}"
-        
+
     return AvatarResponse(avatar_url=avatar_url)
 
 
@@ -276,6 +266,35 @@ async def get_feed(
     structlog.contextvars.bind_contextvars(user_id=current_user.id)
     service = FollowService(session)
     tracks, total = await service.get_feed(current_user.id, page, size)
+    items = [TrackResponse.model_validate(t) for t in tracks]
+    return TrackListResponse(items=items, total=total, page=page, size=size)
+
+
+@router.get(
+    "/me/library",
+    response_model=TrackListResponse,
+    summary=(
+        "Tracks in current user's library "
+        "(uploaded by them and/or imported)"
+    ),
+)
+@limiter.limit("60/minute")
+async def get_my_library(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=100),
+    playable_only: bool = Query(False),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TrackListResponse:
+    structlog.contextvars.bind_contextvars(user_id=current_user.id)
+    service = TrackService(session)
+    tracks, total = await service.list_library(
+        user_id=current_user.id,
+        page=page,
+        size=size,
+        playable_only=playable_only,
+    )
     items = [TrackResponse.model_validate(t) for t in tracks]
     return TrackListResponse(items=items, total=total, page=page, size=size)
 
@@ -373,9 +392,7 @@ async def get_login_history(
             "ip": r.ip,
             "device": r.device,
             "login_type": r.login_type,
-            "created_at": r.created_at.isoformat()
-            if r.created_at
-            else None,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
         }
         for r in rows
     ]
@@ -392,9 +409,7 @@ async def get_eq_settings(
     current_user: User = Depends(get_current_user),
 ) -> EqSettingsResponse:
     service = EqService(session)
-    return await service.get_settings(
-        current_user.id
-    )
+    return await service.get_settings(current_user.id)
 
 
 @router.put(

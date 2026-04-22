@@ -436,6 +436,12 @@ export function ImportView({ active }: { active: boolean }) {
               {job.failed_tracks > 0 && ` (ошибок: ${job.failed_tracks})`}
             </span>
           </div>
+          <p
+            className="empty-hint"
+            style={{ margin: '0 16px 12px' }}
+          >
+            Треки добавлены в вашу библиотеку (профиль).
+          </p>
           <div style={{ padding: '0 16px' }}>
             <button className="btn-primary" onClick={handleReset}>
               Импортировать ещё

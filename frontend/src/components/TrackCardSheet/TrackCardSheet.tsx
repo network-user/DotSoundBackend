@@ -15,12 +15,33 @@ import { usePlayer } from '@/store/PlayerContext'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackInfoContent } from '@/components/TrackInfoContent/TrackInfoContent'
+import { Waveform } from '@/components/Waveform/Waveform'
+import { useExitTransition } from '@/hooks/useExitTransition'
+import { useToast } from '@/components/ui/Toast'
 import type {
   Track,
   TrackCardResponse,
   TrackInfoResponse,
 } from '@/types/api'
 import { LyricsPanel } from './LyricsPanel'
+
+const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5]
+
+function hasPipSupport(): boolean {
+  try {
+    return (
+      typeof document !== 'undefined' &&
+      'pictureInPictureEnabled' in document &&
+      Boolean(
+        (document as Document & {
+          pictureInPictureEnabled?: boolean
+        }).pictureInPictureEnabled,
+      )
+    )
+  } catch {
+    return false
+  }
+}
 
 interface Props {
   onOpenAuthor: (authorId: number) => void
@@ -61,9 +82,16 @@ export function TrackCardSheet({
     playPrev,
     openLyrics,
     openComplaint,
+    openQueue,
     updateTrack,
     playTrack,
+    skipForward,
+    skipBackward,
+    setPlaybackRate,
+    playbackRate,
   } = usePlayer()
+  const toast = useToast()
+  const videoRef = useRef<HTMLVideoElement>(null)
   const {
     isLiked,
     toggleLike,
@@ -387,7 +415,10 @@ export function TrackCardSheet({
     } catch {}
   }, [track, updateTrack])
 
-  if (!isCardOpen || !track) return null
+  const exit = useExitTransition(
+    Boolean(isCardOpen && track),
+  )
+  if (!exit.mounted || !track) return null
 
   const coverSrc = coverKey
     ? coverUrl(coverKey, coverVer)
@@ -412,11 +443,11 @@ export function TrackCardSheet({
 
   return (
     <div
-      className="tcs-backdrop"
+      className={`tcs-backdrop${exit.cls}`}
       onClick={handleBackdrop}
     >
       <div
-        className={`tcs-sheet${hasActiveVideo ? ' tcs-video-mode' : ''}`}
+        className={`tcs-sheet${hasActiveVideo ? ' tcs-video-mode' : ''}${exit.cls}`}
         ref={sheetRef}
       >
         <div className="tcs-handle" />
@@ -435,6 +466,7 @@ export function TrackCardSheet({
         {hasActiveVideo && (
           <>
             <video
+              ref={videoRef}
               className="tcs-video-bg"
               src={videoSrc}
               autoPlay
@@ -449,6 +481,33 @@ export function TrackCardSheet({
               }
             />
             <div className="tcs-video-gradient" />
+            {hasPipSupport() && (
+              <button
+                type="button"
+                className="tcs-pip-btn"
+                onClick={async () => {
+                  const v = videoRef.current
+                  if (!v) return
+                  try {
+                    if (
+                      document.pictureInPictureElement
+                    ) {
+                      await document.exitPictureInPicture()
+                    } else {
+                      await v.requestPictureInPicture()
+                    }
+                  } catch {
+                    toast.warning(
+                      'PiP недоступен в этом браузере',
+                    )
+                  }
+                }}
+                aria-label="Картинка-в-картинке"
+                title="Картинка-в-картинке"
+              >
+                <Icon name="pip" size={16} />
+              </button>
+            )}
           </>
         )}
 
@@ -512,6 +571,7 @@ export function TrackCardSheet({
               <LyricsPanel
                 trackId={track.id}
                 isOwner={isOwner}
+                catalogType={track.catalog_type}
                 hasLyrics={
                   card?.has_lyrics ?? false
                 }
@@ -539,6 +599,7 @@ export function TrackCardSheet({
               <LyricsPanel
                 trackId={track.id}
                 isOwner={isOwner}
+                catalogType={track.catalog_type}
                 hasLyrics={
                   card?.has_lyrics ?? false
                 }
@@ -669,6 +730,13 @@ export function TrackCardSheet({
         </div>
 
         <div className="tcs-player-controls">
+          {!hasActiveVideo && !showLyrics && (
+            <Waveform
+              height={48}
+              bars={48}
+              className="tcs-waveform"
+            />
+          )}
           <div className="tcs-seek-wrap">
             <input
               type="range"
@@ -688,6 +756,17 @@ export function TrackCardSheet({
             </div>
           </div>
           <div className="tcs-play-row">
+            <button
+              className="ctrl-btn"
+              onClick={() => skipBackward(15)}
+              aria-label="Назад 15 секунд"
+              title="−15 с"
+            >
+              <Icon
+                name="rewind-5"
+                size={22}
+              />
+            </button>
             <button
               className="ctrl-btn"
               onClick={playPrev}
@@ -717,6 +796,41 @@ export function TrackCardSheet({
                 size={22}
               />
             </button>
+            <button
+              className="ctrl-btn"
+              onClick={() => skipForward(15)}
+              aria-label="Вперёд 15 секунд"
+              title="+15 с"
+            >
+              <Icon
+                name="forward-5"
+                size={22}
+              />
+            </button>
+          </div>
+          <div className="pb-extras">
+            <button
+              className="pb-extras-btn"
+              onClick={openQueue}
+              aria-label="Очередь"
+            >
+              <Icon name="queue" size={14} />
+              Очередь
+            </button>
+            {SPEED_OPTIONS.map((rate) => (
+              <button
+                key={rate}
+                className={`pb-extras-btn${playbackRate === rate ? ' active' : ''}`}
+                onClick={() =>
+                  setPlaybackRate(rate)
+                }
+                aria-pressed={
+                  playbackRate === rate
+                }
+              >
+                {rate}×
+              </button>
+            ))}
           </div>
         </div>
 
@@ -855,6 +969,8 @@ export function TrackCardSheet({
                   Восстановить обложку
                 </button>
               )}
+              {(track.catalog_type !== 'external_reference' ||
+                isAdmin) && (
               <button
                 className={`tcs-edit-btn${editingLyrics ? ' active' : ''}`}
                 onClick={() => {
@@ -867,6 +983,7 @@ export function TrackCardSheet({
                 />
                 Текст
               </button>
+              )}
               <button
                 className="tcs-edit-btn"
                 onClick={handleVideoUpload}
@@ -893,11 +1010,15 @@ export function TrackCardSheet({
           </div>
         )}
 
-        {editingLyrics && isOwner && (
+        {editingLyrics &&
+          (isOwner ||
+            (track.catalog_type === 'external_reference' &&
+              isAdmin)) && (
           <div className="tcs-lyrics-edit-inline">
             <LyricsPanel
               trackId={track.id}
               isOwner={isOwner}
+              catalogType={track.catalog_type}
               hasLyrics={
                 card?.has_lyrics ?? false
               }

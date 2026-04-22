@@ -18,6 +18,7 @@ interface Props {
   hasLyrics: boolean
   hasAudio?: boolean
   forceEdit?: boolean
+  catalogType?: string | null
 }
 
 export function LyricsPanel({
@@ -26,6 +27,7 @@ export function LyricsPanel({
   hasLyrics,
   hasAudio = true,
   forceEdit,
+  catalogType,
 }: Props) {
   const { t } = useTranslation()
   const { currentTime, duration, seek } =
@@ -68,6 +70,8 @@ export function LyricsPanel({
     bypassCache: boolean
   } | null>(null)
   const isAdmin = getIsAdmin()
+  const isExternalRef = catalogType === 'external_reference'
+  const canEdit = isExternalRef ? isAdmin : isOwner
 
   const {
     generating,
@@ -299,7 +303,7 @@ export function LyricsPanel({
         <div className="loader" />
       </div>
     )
-  if (error && !(isOwner && !lyrics))
+  if (error && !(canEdit && !lyrics))
     return (
       <div className="lyrics-panel lyrics-error">
         {error}
@@ -553,7 +557,7 @@ export function LyricsPanel({
       </div>
     )
 
-  if (!lyrics && isOwner) {
+  if (!lyrics && canEdit) {
     const wasNotFound =
       genStatus === 'not_found' ||
       genStatus === 'error'
@@ -742,7 +746,7 @@ export function LyricsPanel({
   }
 
   // Redefine chooser — shown over existing lyrics
-  if (isOwner && lyricsChoiceStep === 'redefine') {
+  if (canEdit && lyricsChoiceStep === 'redefine') {
     return (
       <div className="lyrics-panel">
         <div className="lyrics-empty-state">
@@ -988,7 +992,7 @@ export function LyricsPanel({
         </div>
       )}
 
-      {isOwner && (
+      {canEdit && (
         <div className="lyrics-actions">
           <button
             className="lyrics-action-btn"

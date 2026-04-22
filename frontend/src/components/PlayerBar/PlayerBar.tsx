@@ -9,6 +9,7 @@ import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
 import { usePlayer } from '@/store/PlayerContext'
 import { haptic } from '@/lib/telegram'
+import { useRipple } from '@/components/ui/Ripple'
 
 function fmt(sec: number) {
   if (!sec || isNaN(sec)) return '0:00'
@@ -31,6 +32,7 @@ export function PlayerBar() {
     playPrev,
     openCard,
     openEq,
+    openQueue,
     stop,
     repeatMode,
     shuffleOn,
@@ -43,6 +45,14 @@ export function PlayerBar() {
   const [overflowOpen, setOverflowOpen] =
     useState(false)
   const overflowRef = useRef<HTMLDivElement>(null)
+  const playRef = useRef<HTMLButtonElement>(null)
+  const prevRef = useRef<HTMLButtonElement>(null)
+  const nextRef = useRef<HTMLButtonElement>(null)
+  const likeRef = useRef<HTMLButtonElement>(null)
+  useRipple(playRef)
+  useRipple(prevRef)
+  useRipple(nextRef)
+  useRipple(likeRef)
 
   useEffect(() => {
     if (!overflowOpen) return
@@ -172,6 +182,7 @@ export function PlayerBar() {
 
         <div id="pb-controls" className="pb-ctl-v2">
           <button
+            ref={prevRef}
             className="ctrl-btn pb-prev"
             onClick={handlePrev}
             aria-label="Предыдущий"
@@ -179,6 +190,7 @@ export function PlayerBar() {
             <Icon name="skip-back" size={18} />
           </button>
           <button
+            ref={playRef}
             className="play-btn"
             onClick={handlePlay}
             aria-label={
@@ -191,6 +203,7 @@ export function PlayerBar() {
             />
           </button>
           <button
+            ref={nextRef}
             className="ctrl-btn"
             onClick={handleNext}
             aria-label="Следующий"
@@ -198,6 +211,7 @@ export function PlayerBar() {
             <Icon name="skip-forward" size={18} />
           </button>
           <button
+            ref={likeRef}
             className={`icon-btn pb-like ${liked ? 'liked' : ''}`}
             onClick={handleLike}
             aria-label={
@@ -236,6 +250,17 @@ export function PlayerBar() {
                 className="pb-overflow-menu"
                 role="menu"
               >
+                <button
+                  role="menuitem"
+                  className="pb-menu-item"
+                  onClick={() => {
+                    setOverflowOpen(false)
+                    openQueue()
+                  }}
+                >
+                  <Icon name="queue" size={16} />
+                  Очередь
+                </button>
                 <button
                   role="menuitem"
                   className="pb-menu-item"

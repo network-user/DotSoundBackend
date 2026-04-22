@@ -11,6 +11,8 @@ import {
 import Hls from 'hls.js'
 import { api } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
+import { useToast } from '@/components/ui/Toast'
+import { getCachedAudioUrl } from '@/lib/offlineCache'
 import type { Track } from '@/types/api'
 
 const EQ_FREQUENCIES = [
@@ -102,12 +104,16 @@ interface PlayerContextValue {
   isCardOpen: boolean
   isLyricsOpen: boolean
   isEqOpen: boolean
+  isQueueOpen: boolean
   eqBands: number[]
   eqPreset: string | null
   eqBypassed: boolean
   repeatMode: 'none' | 'one' | 'all'
   shuffleOn: boolean
   hlsError: string | null
+  playbackRate: number
+  queue: Track[]
+  history: Track[]
   toggleRepeat: () => void
   toggleShuffle: () => void
   clearHlsError: () => void
@@ -117,7 +123,11 @@ interface PlayerContextValue {
   ) => Promise<void>
   togglePlay: () => void
   seek: (pct: number) => void
-  playNext: () => Promise<void>
+  seekToSeconds: (sec: number) => void
+  skipForward: (s?: number) => void
+  skipBackward: (s?: number) => void
+  setPlaybackRate: (rate: number) => void
+  playNext: () => Promise<boolean>
   playPrev: () => Promise<void>
   setEqBand: (idx: number, gain: number) => void
   setEqPreset: (preset: string | null) => void
@@ -131,7 +141,14 @@ interface PlayerContextValue {
   closeLyrics: () => void
   openEq: () => void
   closeEq: () => void
+  openQueue: () => void
+  closeQueue: () => void
+  addToQueue: (t: Track) => void
+  removeFromQueue: (idx: number) => void
+  clearQueue: () => void
+  reorderQueue: (from: number, to: number) => void
   stop: () => void
+  getAnalyser: () => AnalyserNode | null
   updateTrack: (updated: Partial<Track> & { id: number }) => void
 }
 
@@ -145,7 +162,11 @@ interface PlayerActionsValue {
   playTrack: (t: Track, url?: string) => Promise<void>
   togglePlay: () => void
   seek: (pct: number) => void
-  playNext: () => Promise<void>
+  seekToSeconds: (sec: number) => void
+  skipForward: (s?: number) => void
+  skipBackward: (s?: number) => void
+  setPlaybackRate: (rate: number) => void
+  playNext: () => Promise<boolean>
   playPrev: () => Promise<void>
   setVolume: (v: number) => void
   stop: () => void
@@ -164,6 +185,13 @@ interface PlayerActionsValue {
   closeLyrics: () => void
   openEq: () => void
   closeEq: () => void
+  openQueue: () => void
+  closeQueue: () => void
+  addToQueue: (t: Track) => void
+  removeFromQueue: (idx: number) => void
+  clearQueue: () => void
+  reorderQueue: (from: number, to: number) => void
+  getAnalyser: () => AnalyserNode | null
   updateTrack: (updated: Partial<Track> & { id: number }) => void
 }
 
@@ -174,12 +202,16 @@ interface PlayerMetaValue {
   isCardOpen: boolean
   isLyricsOpen: boolean
   isEqOpen: boolean
+  isQueueOpen: boolean
   eqBands: number[]
   eqPreset: string | null
   eqBypassed: boolean
   repeatMode: 'none' | 'one' | 'all'
   shuffleOn: boolean
   hlsError: string | null
+  playbackRate: number
+  queue: Track[]
+  history: Track[]
 }
 
 const PlayerStateCtx = createContext<PlayerStateValue | null>(null)
@@ -301,6 +333,7 @@ export function PlayerProvider({
 }: {
   children: ReactNode
 }) {
+  const toast = useToast()
   const initialEqRef = useRef(_loadEqState())
   const audioRef = useRef<HTMLAudioElement>(null)
   const hlsRef = useRef<Hls | null>(null)
@@ -311,6 +344,11 @@ export function PlayerProvider({
   const historyRef = useRef<Track[]>([])
   const prefetchAudioRef =
     useRef<HTMLAudioElement | null>(null)
+  const manualQueueRef = useRef<Track[]>([])
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const streamExpiresAtRef = useRef<number | null>(null)
+  const lastStreamUrlRef = useRef<string | null>(null)
+  const lastTrackIdRef = useRef<number | null>(null)
   const audioCtxRef =
     useRef<AudioContext | null>(null)
   const filtersRef = useRef<BiquadFilterNode[]>([])
@@ -357,6 +395,11 @@ export function PlayerProvider({
   const [isLyricsOpen, setIsLyricsOpen] =
     useState(false)
   const [isEqOpen, setIsEqOpen] = useState(false)
+  const [isQueueOpen, setIsQueueOpen] = useState(false)
+  const [playbackRate, setPlaybackRateState] =
+    useState(1)
+  const [queue, setQueue] = useState<Track[]>([])
+  const [history, setHistory] = useState<Track[]>([])
   const [eqBands, setEqBands] =
     useState<number[]>(
       initialEqRef.current.bands,
@@ -496,13 +539,19 @@ export function PlayerProvider({
     const out = ctx.createGain()
     postEqGainRef.current = out
 
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 256
+    analyser.smoothingTimeConstant = 0.82
+    analyserRef.current = analyser
+
     let prev: AudioNode = src
     for (const f of filters) {
       prev.connect(f)
       prev = f
     }
     prev.connect(out)
-    out.connect(ctx.destination)
+    out.connect(analyser)
+    analyser.connect(ctx.destination)
     applyEqBands()
   }, [applyEqBands])
 
@@ -683,8 +732,67 @@ export function PlayerProvider({
       if (repeatModeRef.current === 'one' && audio) {
         audio.currentTime = 0
         audio.play().catch(() => {})
-      } else {
-        playNext()
+        return
+      }
+      playNext().then((played) => {
+        if (
+          !played &&
+          repeatModeRef.current === 'all' &&
+          audioRef.current &&
+          track
+        ) {
+          audioRef.current.currentTime = 0
+          audioRef.current.play().catch(() => {})
+        }
+      })
+    }
+    const onError = () => {
+      const a = audioRef.current
+      if (!a || !track) return
+      const code = a.error?.code
+      if (
+        code === MediaError.MEDIA_ERR_NETWORK ||
+        code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
+      ) {
+        const expires = streamExpiresAtRef.current
+        if (
+          expires &&
+          Date.now() > expires - 30_000 &&
+          !track.is_public
+        ) {
+          api
+            .getStream(track.id)
+            .then((stream) => {
+              if (a && stream?.url) {
+                const t = a.currentTime
+                a.src = stream.url
+                a.currentTime = t
+                a.play().catch(() => {})
+                streamExpiresAtRef.current =
+                  stream.expires_in
+                    ? Date.now() +
+                      stream.expires_in * 1000
+                    : null
+                lastStreamUrlRef.current = stream.url
+              }
+            })
+            .catch(() =>
+              toast.error(
+                'Не удалось обновить ссылку на трек',
+              ),
+            )
+          return
+        }
+      }
+      toast.error('Ошибка воспроизведения трека')
+    }
+    const onStalled = () => {
+      try {
+        toast.warning('Буферизация…', {
+          duration: 1800,
+        })
+      } catch {
+        /* ignore */
       }
     }
     const onTime = () => {
@@ -702,6 +810,8 @@ export function PlayerProvider({
       'durationchange',
       onDur,
     )
+    audio.addEventListener('error', onError)
+    audio.addEventListener('stalled', onStalled)
 
     if (track) {
       _updateMediaSession(
@@ -724,6 +834,8 @@ export function PlayerProvider({
         'durationchange',
         onDur,
       )
+      audio.removeEventListener('error', onError)
+      audio.removeEventListener('stalled', onStalled)
     }
   }, [track])
 
@@ -836,10 +948,14 @@ export function PlayerProvider({
         ) {
           h.push(prev)
           if (h.length > 50) h.shift()
+          setHistory([...h])
         }
       }
       return newTrack
     })
+    streamExpiresAtRef.current = null
+    lastStreamUrlRef.current = null
+    lastTrackIdRef.current = newTrack.id
     await loadEqSettings()
     _initAudioCtx()
     if (hlsRef.current) {
@@ -852,14 +968,33 @@ export function PlayerProvider({
     setCurrentTime(0)
     setDuration(0)
     _saveState(newTrack, 0)
+    if (audio) audio.playbackRate = playbackRate
 
     try {
       audio.crossOrigin = 'anonymous'
+
+      const cachedUrl = await getCachedAudioUrl(
+        newTrack.id,
+      )
+      if (cachedUrl) {
+        await startDirectPlayback(audio, cachedUrl)
+        _updateMediaSession(
+          newTrack,
+          audio,
+          () => playNext(),
+          () => playPrev(),
+        )
+        return
+      }
 
       if (newTrack.access_mode === 'third_party_stream') {
         const stream = await api.getStream(
           newTrack.id,
         )
+        lastStreamUrlRef.current = stream.url
+        streamExpiresAtRef.current = stream.expires_in
+          ? Date.now() + stream.expires_in * 1000
+          : null
         if (
           stream.stream_type === 'hls' &&
           Hls.isSupported()
@@ -886,6 +1021,10 @@ export function PlayerProvider({
 
       if (!newTrack.is_public) {
         const stream = await api.getStream(newTrack.id)
+        lastStreamUrlRef.current = stream.url
+        streamExpiresAtRef.current = stream.expires_in
+          ? Date.now() + stream.expires_in * 1000
+          : null
         await startDirectPlayback(audio, stream.url)
         _updateMediaSession(newTrack, audio, () => playNext(), () => playPrev())
         return
@@ -920,9 +1059,15 @@ export function PlayerProvider({
     }
   }
 
-  const playNext = async () => {
-    if (!track) return
+  const playNext = async (): Promise<boolean> => {
+    if (!track) return false
     try {
+      if (manualQueueRef.current.length > 0) {
+        const next = manualQueueRef.current.shift()!
+        setQueue([...manualQueueRef.current])
+        await playTrack(next)
+        return true
+      }
       const cache = prefetchCacheRef.current
       if (
         cache &&
@@ -945,7 +1090,7 @@ export function PlayerProvider({
           }
         }
         await playTrack(next)
-        return
+        return true
       }
       const adj = await api.getAdjacentTracks(
         track.id,
@@ -953,8 +1098,12 @@ export function PlayerProvider({
       if (adj.next_id) {
         const t = await api.getTrack(adj.next_id)
         await playTrack(t)
+        return true
       }
-    } catch {}
+      return false
+    } catch {
+      return false
+    }
   }
 
   useEffect(() => {
@@ -1061,6 +1210,87 @@ export function PlayerProvider({
     _clearState()
   }
 
+  const seekToSeconds = useCallback((sec: number) => {
+    const a = audioRef.current
+    if (!a || !a.duration) return
+    a.currentTime = Math.max(
+      0,
+      Math.min(a.duration, sec),
+    )
+  }, [])
+
+  const skipForward = useCallback((s = 15) => {
+    const a = audioRef.current
+    if (!a) return
+    a.currentTime = Math.min(
+      a.duration || 0,
+      a.currentTime + s,
+    )
+  }, [])
+
+  const skipBackward = useCallback((s = 15) => {
+    const a = audioRef.current
+    if (!a) return
+    a.currentTime = Math.max(0, a.currentTime - s)
+  }, [])
+
+  const setPlaybackRate = useCallback(
+    (rate: number) => {
+      const r = Math.max(0.25, Math.min(2, rate))
+      setPlaybackRateState(r)
+      const a = audioRef.current
+      if (a) a.playbackRate = r
+    },
+    [],
+  )
+
+  const addToQueue = useCallback((t: Track) => {
+    manualQueueRef.current = [
+      ...manualQueueRef.current,
+      t,
+    ]
+    setQueue([...manualQueueRef.current])
+  }, [])
+
+  const removeFromQueue = useCallback(
+    (idx: number) => {
+      manualQueueRef.current =
+        manualQueueRef.current.filter(
+          (_, i) => i !== idx,
+        )
+      setQueue([...manualQueueRef.current])
+    },
+    [],
+  )
+
+  const clearQueue = useCallback(() => {
+    manualQueueRef.current = []
+    setQueue([])
+  }, [])
+
+  const reorderQueue = useCallback(
+    (from: number, to: number) => {
+      const arr = [...manualQueueRef.current]
+      if (
+        from < 0 ||
+        from >= arr.length ||
+        to < 0 ||
+        to >= arr.length
+      )
+        return
+      const [item] = arr.splice(from, 1)
+      arr.splice(to, 0, item)
+      manualQueueRef.current = arr
+      setQueue(arr)
+    },
+    [],
+  )
+
+  const getAnalyser = useCallback(
+    () => analyserRef.current,
+    [],
+  )
+
   const updateTrack = useCallback(
     (updated: Partial<Track> & { id: number }) => {
       setTrack((prev) => {
@@ -1103,10 +1333,17 @@ export function PlayerProvider({
   const closeEq = useCallback(
     () => setIsEqOpen(false), [],
   )
+  const openQueue = useCallback(
+    () => setIsQueueOpen(true), [],
+  )
+  const closeQueue = useCallback(
+    () => setIsQueueOpen(false), [],
+  )
 
   const actionsValue = useMemo<PlayerActionsValue>(
     () => ({
-      playTrack, togglePlay, seek,
+      playTrack, togglePlay, seek, seekToSeconds,
+      skipForward, skipBackward, setPlaybackRate,
       playNext, playPrev, setVolume, stop,
       setEqBand, setEqPreset, toggleEqBypass, resetEq,
       toggleRepeat, toggleShuffle, clearHlsError,
@@ -1114,10 +1351,14 @@ export function PlayerProvider({
       openCard, closeCard,
       openLyrics, closeLyrics,
       openEq, closeEq,
+      openQueue, closeQueue,
+      addToQueue, removeFromQueue, clearQueue, reorderQueue,
+      getAnalyser,
       updateTrack,
     }),
     [
-      playTrack, togglePlay, seek,
+      playTrack, togglePlay, seek, seekToSeconds,
+      skipForward, skipBackward, setPlaybackRate,
       playNext, playPrev, setVolume, stop,
       setEqBand, setEqPreset, toggleEqBypass, resetEq,
       toggleRepeat, toggleShuffle, clearHlsError,
@@ -1125,6 +1366,9 @@ export function PlayerProvider({
       openCard, closeCard,
       openLyrics, closeLyrics,
       openEq, closeEq,
+      openQueue, closeQueue,
+      addToQueue, removeFromQueue, clearQueue, reorderQueue,
+      getAnalyser,
       updateTrack,
     ],
   )
@@ -1133,16 +1377,18 @@ export function PlayerProvider({
     () => ({
       track, volume,
       isComplaintOpen, isCardOpen,
-      isLyricsOpen, isEqOpen,
+      isLyricsOpen, isEqOpen, isQueueOpen,
       eqBands, eqPreset, eqBypassed,
       repeatMode, shuffleOn, hlsError,
+      playbackRate, queue, history,
     }),
     [
       track, volume,
       isComplaintOpen, isCardOpen,
-      isLyricsOpen, isEqOpen,
+      isLyricsOpen, isEqOpen, isQueueOpen,
       eqBands, eqPreset, eqBypassed,
       repeatMode, shuffleOn, hlsError,
+      playbackRate, queue, history,
     ],
   )
 

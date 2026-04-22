@@ -78,7 +78,12 @@ async def test_process_one_returns_skipped_when_lock_held(
     redis.exists = AsyncMock(return_value=1)
     mock_redis_client.return_value = redis
 
-    tag = await _process_one(_QueueItem(track_id=7, with_sync=True))
+    with patch(
+        "app.repositories.lyrics.LyricsRepository.get_by_track_id",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        tag = await _process_one(_QueueItem(track_id=7, with_sync=True))
 
     assert tag == "skipped"
     mock_kiq.assert_not_awaited()
@@ -90,10 +95,47 @@ async def test_process_one_returns_skipped_when_lock_held(
     new_callable=AsyncMock,
 )
 @patch(f"{_MOD}.get_redis_client")
+async def test_process_one_skips_when_lyrics_already_in_db(
+    mock_redis_client: MagicMock,
+    mock_kiq: AsyncMock,
+    _mock_err: MagicMock,
+) -> None:
+    # Defensive race-window guard: between enqueue and process,
+    # another worker may have already written lyrics. Don't kick
+    # generate_lyrics_task again - orchestrator should bail out
+    # cheaply.
+    redis = AsyncMock()
+    redis.exists = AsyncMock(return_value=0)
+    mock_redis_client.return_value = redis
+
+    fake_existing = MagicMock(track_id=11)
+    with patch(
+        "app.repositories.lyrics.LyricsRepository.get_by_track_id",
+        new_callable=AsyncMock,
+        return_value=fake_existing,
+    ):
+        tag = await _process_one(_QueueItem(track_id=11, with_sync=True))
+
+    assert tag == "skipped"
+    mock_kiq.assert_not_awaited()
+
+
+@patch(
+    "app.repositories.lyrics.LyricsRepository.get_by_track_id",
+    new_callable=AsyncMock,
+    return_value=None,
+)
+@patch(f"{_MOD}._peek_last_error", return_value=None)
+@patch(
+    "app.services.lyrics_worker.generate_lyrics_task.kiq",
+    new_callable=AsyncMock,
+)
+@patch(f"{_MOD}.get_redis_client")
 async def test_process_one_returns_normal_after_kiq(
     mock_redis_client: MagicMock,
     mock_kiq: AsyncMock,
     _mock_err: MagicMock,
+    _mock_repo: AsyncMock,
 ) -> None:
     redis = AsyncMock()
     redis.exists = AsyncMock(return_value=0)
@@ -105,6 +147,11 @@ async def test_process_one_returns_normal_after_kiq(
     mock_kiq.assert_awaited_once_with(11, with_sync=False, progress_id="")
 
 
+@patch(
+    "app.repositories.lyrics.LyricsRepository.get_by_track_id",
+    new_callable=AsyncMock,
+    return_value=None,
+)
 @patch(
     f"{_MOD}._peek_last_error",
     return_value="captcha challenged",
@@ -118,6 +165,7 @@ async def test_process_one_flags_block_signal(
     mock_redis_client: MagicMock,
     mock_kiq: AsyncMock,
     _mock_err: MagicMock,
+    _mock_repo: AsyncMock,
 ) -> None:
     redis = AsyncMock()
     redis.exists = AsyncMock(return_value=0)
@@ -129,6 +177,11 @@ async def test_process_one_flags_block_signal(
     mock_kiq.assert_awaited_once()
 
 
+@patch(
+    "app.repositories.lyrics.LyricsRepository.get_by_track_id",
+    new_callable=AsyncMock,
+    return_value=None,
+)
 @patch(f"{_MOD}._peek_last_error", return_value=None)
 @patch(
     "app.services.lyrics_worker.generate_lyrics_task.kiq",
@@ -140,6 +193,7 @@ async def test_process_one_returns_error_on_kiq_failure(
     mock_redis_client: MagicMock,
     mock_kiq: AsyncMock,
     _mock_err: MagicMock,
+    _mock_repo: AsyncMock,
 ) -> None:
     redis = AsyncMock()
     redis.exists = AsyncMock(return_value=0)

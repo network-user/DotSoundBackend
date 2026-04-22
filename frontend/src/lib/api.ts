@@ -174,6 +174,23 @@ export const api = {
     return request(`/api/v1/tracks/my?page=${page}&size=${size}`)
   },
 
+  getMyLibrary(
+    page = 1,
+    size = 50,
+    playableOnly = false,
+  ): Promise<TrackListResponse> {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    })
+    if (playableOnly) {
+      params.set('playable_only', 'true')
+    }
+    return request(
+      `/api/v1/users/me/library?${params.toString()}`,
+    )
+  },
+
   getTrack(id: number): Promise<Track> {
     return request(`/api/v1/tracks/${id}`)
   },

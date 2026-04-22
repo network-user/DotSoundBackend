@@ -56,7 +56,12 @@ function RouteFallback({
   }
   return <div className="loader" />
 }
-import { Routes, Route, useNavigate } from 'react-router-dom'
+import {
+  Routes,
+  Route,
+  useLocation,
+  useNavigate,
+} from 'react-router-dom'
 import { api } from '@/lib/api'
 import { tg, getInitData } from '@/lib/telegram'
 import { AuthScreen } from '@/components/Auth/AuthScreen'
@@ -70,6 +75,8 @@ import { Equalizer } from '@/components/Equalizer/Equalizer'
 import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics'
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
 import { OfflineBanner } from '@/components/ui/OfflineBanner'
+import { InstallPrompt } from '@/components/PwaInstall/InstallPrompt'
+import { QueueSheet } from '@/components/QueueSheet/QueueSheet'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
 import { useTrackDeepLink } from '@/hooks/useDeepLink'
 import { HomeView } from '@/views/HomeView'
@@ -100,6 +107,44 @@ const AdminApp = lazy(() =>
 function TrackDeepLinkRoute() {
   useTrackDeepLink()
   return null
+}
+
+declare global {
+  interface Document {
+    startViewTransition?: (
+      cb: () => void | Promise<void>,
+    ) => { finished: Promise<void> }
+  }
+}
+
+function AnimatedRoutes({
+  children,
+}: {
+  children: ReactNode
+}) {
+  const location = useLocation()
+  const [displayed, setDisplayed] = useState(location)
+  const lastKey = useRef(location.pathname)
+
+  useEffect(() => {
+    if (lastKey.current === location.pathname) return
+    lastKey.current = location.pathname
+
+    if (
+      typeof document !== 'undefined' &&
+      typeof document.startViewTransition === 'function'
+    ) {
+      document.startViewTransition(() => {
+        setDisplayed(location)
+      })
+    } else {
+      setDisplayed(location)
+    }
+  }, [location])
+
+  return (
+    <Routes location={displayed}>{children}</Routes>
+  )
 }
 
 export function App() {
@@ -377,7 +422,7 @@ export function App() {
       <main id="main">
         <ErrorBoundary>
         <Suspense fallback={<RouteFallback />}>
-        <Routes>
+        <AnimatedRoutes>
           <Route path="/" element={<HomeView />} />
           <Route path="/search" element={<SearchView />} />
           <Route path="/upload" element={<UploadView />} />
@@ -408,13 +453,15 @@ export function App() {
           <Route path="/daily-mix" element={<DailyMixView />} />
           <Route path="/radio" element={<RadioView />} />
           <Route path="/admin/*" element={<AdminApp />} />
-        </Routes>
+        </AnimatedRoutes>
         </Suspense>
         </ErrorBoundary>
       </main>
       <PlayerBar />
       <FullscreenLyrics />
       <Equalizer />
+      <QueueSheet />
+      <InstallPrompt />
       <SettingsSheet
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

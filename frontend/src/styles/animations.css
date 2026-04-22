@@ -118,6 +118,27 @@
   40% { transform: translateY(-6px); }
 }
 
+/* ── Global reduced-motion guard for loops ───────────────────────
+ * Browsers that honour prefers-reduced-motion: reduce should not
+ * see any infinite loops. Token-driven durations already collapse
+ * to 0ms in tokens.css; this block additionally stops loops that
+ * encode motion in the keyframes themselves (transforms/opacity).
+ */
+@media (prefers-reduced-motion: reduce) {
+  .pulse,
+  .shimmer,
+  .slide-in,
+  .slide-out,
+  .slide-up,
+  .fade-in,
+  .fade-in-stagger,
+  .scale-in,
+  .bounce-in,
+  .msg-appear {
+    animation: none !important;
+  }
+}
+
 /* ── Chat styles ───────────────────────────── */
 
 .chat-view {

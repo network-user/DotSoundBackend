@@ -13,14 +13,21 @@ export default defineConfig({
         'icon-512.svg',
       ],
       manifest: {
-        name: '.sound',
+        name: '.sound — музыка',
         short_name: '.sound',
-        description: 'Music platform',
+        description:
+          'DotSound — музыка без рекламы, плейлисты, скачивание для офлайн.',
+        lang: 'ru',
+        dir: 'ltr',
+        categories: ['music', 'entertainment'],
         theme_color: '#000000',
         background_color: '#000000',
         display: 'standalone',
+        display_override: ['standalone', 'minimal-ui'],
+        orientation: 'portrait',
         start_url: '/mini_app/',
         scope: '/mini_app/',
+        prefer_related_applications: false,
         icons: [
           {
             src: 'icon-192.svg',
@@ -35,6 +42,23 @@ export default defineConfig({
             purpose: 'any maskable',
           },
         ],
+        shortcuts: [
+          {
+            name: 'Поиск',
+            short_name: 'Поиск',
+            url: '/mini_app/search',
+          },
+          {
+            name: 'Любимое',
+            short_name: 'Любимое',
+            url: '/mini_app/liked',
+          },
+          {
+            name: 'Загрузить трек',
+            short_name: 'Загрузить',
+            url: '/mini_app/upload',
+          },
+        ],
       },
       workbox: {
         globPatterns: [
@@ -42,6 +66,17 @@ export default defineConfig({
         ],
         globIgnores: ['**/secure/**'],
         runtimeCaching: [
+          {
+            urlPattern: /^https?:\/\/.*\/api\/v1\/tracks\/cover_proxy/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'covers-cache',
+              expiration: {
+                maxEntries: 200,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
+              },
+            },
+          },
           {
             urlPattern: /^https?:\/\/.*\/api\//,
             handler: 'NetworkFirst',

@@ -7,6 +7,7 @@ import {
   setBackButton,
 } from '@/lib/telegram'
 import { Icon } from '@/components/Icon/Icon'
+import { useExitTransition } from '@/hooks/useExitTransition'
 import { LinkedAccounts } from './LinkedAccounts'
 import { TwoFASettings } from './TwoFASettings'
 
@@ -69,7 +70,8 @@ export function SettingsSheet({
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
-  if (!open) return null
+  const exit = useExitTransition(open)
+  if (!exit.mounted) return null
 
   const handleEq = () => {
     onClose()
@@ -115,13 +117,13 @@ export function SettingsSheet({
 
   return (
     <div
-      className="settings-backdrop"
+      className={`settings-backdrop${exit.cls}`}
       onClick={(e) => {
         if (e.target === e.currentTarget)
           onClose()
       }}
     >
-      <div className="settings-sheet">
+      <div className={`settings-sheet${exit.cls}`}>
         <div className="settings-handle" />
         <div className="settings-header">
           <button
