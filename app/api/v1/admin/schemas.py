@@ -1,6 +1,7 @@
 """Pydantic schemas shared across admin sub-modules."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,6 +27,11 @@ class AdminComplaintResponse(BaseModel):
     proof_url: str | None
     is_resolved: bool
     created_at: datetime
+
+
+class AdminComplaintUpdateRequest(BaseModel):
+    action: Literal["accept", "dismiss", "in_progress"]
+    note: str | None = Field(None, max_length=500)
 
 
 class AdminUserUpdate(BaseModel):

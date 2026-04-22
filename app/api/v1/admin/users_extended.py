@@ -290,6 +290,7 @@ async def send_admin_message(
             sender_id=admin.id,
             content=text,
             msg_type="text",
+            sender_role="admin",
         )
     except HTTPException:
         raise

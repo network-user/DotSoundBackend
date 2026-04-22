@@ -9,6 +9,7 @@
   "nav": {
     "home": "Home",
     "search": "Search",
+    "library": "Library",
     "chats": "Chats",
     "upload": "Upload",
     "profile": "Profile"

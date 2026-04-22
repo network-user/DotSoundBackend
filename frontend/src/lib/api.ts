@@ -143,21 +143,26 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
       ...opts,
       headers,
     })
+    const accountStatus = res.headers.get(
+      'X-Account-Status',
+    )
+    const isBanned =
+      accountStatus === 'banned' ||
+      accountStatus === 'blocked'
     if (res.status === 401 && sentWithAuth) {
       console.error(
         `[API] 401 Unauthorized: ${path}`,
       )
       accessToken = null
       persistToken(null)
-      onUnauthorized?.()
-    }
-    const accountStatus = res.headers.get(
-      'X-Account-Status',
-    )
-    if (
-      accountStatus === 'banned' ||
-      accountStatus === 'blocked'
-    ) {
+      if (isBanned) {
+        onAccountBlocked?.(
+          res.headers.get('X-Account-Reason'),
+        )
+      } else {
+        onUnauthorized?.()
+      }
+    } else if (isBanned) {
       onAccountBlocked?.(
         res.headers.get('X-Account-Reason'),
       )

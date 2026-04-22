@@ -41,6 +41,7 @@ class MessageService:
         reply_to_id: int | None = None,
         shared_track_id: int | None = None,
         broadcast: bool = True,
+        sender_role: str | None = None,
     ) -> dict[str, Any]:
         member = await self._chat_repo.get_member(
             conversation_id, sender_id
@@ -95,6 +96,11 @@ class MessageService:
             "attachments": [],
             "reactions": [],
         }
+        if sender_role:
+            result["sender_role"] = sender_role
+            result["is_system"] = (
+                sender_role in ("admin", "system")
+            )
         if broadcast:
             await ws_manager.send_to_conversation(
                 members,

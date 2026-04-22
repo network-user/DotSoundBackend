@@ -142,6 +142,56 @@ class AdminService:
         await self._session.flush()
         return complaint
 
+    async def apply_complaint_action(
+        self,
+        complaint_id: int,
+        action: str,
+        note: str | None = None,
+    ) -> tuple[Complaint, bool] | None:
+        """Apply admin action to a complaint.
+
+        Returns (complaint, track_hidden) on success, None when
+        the complaint does not exist. Side effects:
+
+        - 'accept' -> hides the track + marks complaint resolved
+        - 'dismiss' -> marks complaint resolved
+        - 'in_progress' -> leaves status unchanged
+
+        The note (if provided) is appended to the reason as a
+        moderator comment so it survives in the existing
+        complaint row without a schema migration.
+        """
+        complaint = await self._repo.get_complaint(complaint_id)
+        if complaint is None:
+            return None
+        track_hidden = False
+        if action == "accept":
+            complaint.is_resolved = True
+            track = await self._repo.get_track(
+                complaint.track_id
+            )
+            if track is not None and track.is_active:
+                track.is_active = False
+                track_hidden = True
+        elif action == "dismiss":
+            complaint.is_resolved = True
+        elif action == "in_progress":
+            pass
+        else:
+            raise AdminServiceError(
+                f"unknown action: {action}"
+            )
+        if note:
+            comment = (
+                f"\n\n[moderator note "
+                f"({action})]: {note}"
+            )
+            complaint.reason = (
+                complaint.reason + comment
+            )[:6000]
+        await self._session.flush()
+        return complaint, track_hidden
+
     async def delete_complaint(self, complaint_id: int) -> bool:
         complaint = await self._repo.get_complaint(complaint_id)
         if complaint is None:

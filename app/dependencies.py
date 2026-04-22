@@ -76,11 +76,15 @@ async def get_current_user(
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Account deleted",
+                headers={
+                    "X-Account-Status": "deleted",
+                },
             )
     elif not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found or inactive",
+            headers={"X-Account-Status": "banned"},
         )
     return user
 

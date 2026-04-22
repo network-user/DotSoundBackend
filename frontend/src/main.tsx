@@ -8,6 +8,7 @@ import { PlayerProvider } from '@/store/PlayerContext'
 import { ToastProvider } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
 import { installViewportListener } from '@/lib/telegram'
+import { installOnlineFlush } from '@/lib/pendingEvents'
 import { App } from './App'
 import './styles/tokens.css'
 import './styles/global.css'
@@ -15,6 +16,7 @@ import './styles/animations.css'
 import './styles/components.css'
 
 installViewportListener()
+installOnlineFlush()
 
 api.restoreSession()
 

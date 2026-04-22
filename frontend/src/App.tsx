@@ -80,6 +80,7 @@ import { QueueSheet } from '@/components/QueueSheet/QueueSheet'
 import { BannedScreen } from '@/components/BannedScreen/BannedScreen'
 import { SystemEventListener } from '@/components/Notifications/SystemEventListener'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
+import { UploadFab } from '@/components/UploadFab/UploadFab'
 import { useTrackDeepLink } from '@/hooks/useDeepLink'
 import { HomeView } from '@/views/HomeView'
 import {
@@ -93,6 +94,7 @@ const SearchView = lazy(() => import('@/views/SearchView').then(m => ({ default:
 const UploadView = lazy(() => import('@/views/UploadView').then(m => ({ default: m.UploadView })))
 const LikedView = lazy(() => import('@/views/LikedView').then(m => ({ default: m.LikedView })))
 const PlaylistsView = lazy(() => import('@/views/PlaylistsView').then(m => ({ default: m.PlaylistsView })))
+const LibraryView = lazy(() => import('@/views/LibraryView').then(m => ({ default: m.LibraryView })))
 const ChatsView = lazy(() => import('@/views/ChatsView').then(m => ({ default: m.ChatsView })))
 const ChatView = lazy(() => import('@/views/ChatView').then(m => ({ default: m.ChatView })))
 const ProfileView = lazy(() => import('@/views/ProfileView').then(m => ({ default: m.ProfileView })))
@@ -443,6 +445,7 @@ export function App() {
           <Route path="/" element={<HomeView />} />
           <Route path="/search" element={<SearchView />} />
           <Route path="/upload" element={<UploadView />} />
+          <Route path="/library" element={<LibraryView />} />
           <Route path="/liked" element={<LikedView />} />
           <Route path="/playlists" element={<PlaylistsView />} />
           <Route
@@ -479,6 +482,7 @@ export function App() {
       <Equalizer />
       <QueueSheet />
       <InstallPrompt />
+      <UploadFab />
       <SystemEventListener />
       <SettingsSheet
         open={settingsOpen}
