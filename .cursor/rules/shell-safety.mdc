@@ -1,0 +1,37 @@
+---
+description: Block dangerous shell patterns and enforce safer alternatives
+alwaysApply: true
+---
+
+# Shell Safety Guardrails
+
+Use shell conservatively. Prefer purpose-specific tools over raw shell when
+available.
+
+## Hard-block commands
+
+Never run these unless the user explicitly asks and confirms intent:
+
+- `git reset --hard`
+- `git checkout -- <path>`
+- `rm -rf`
+- `del /s` or `del /f` targeting project files
+- force-push patterns on protected branches
+
+If such a command seems required, stop and ask for explicit confirmation.
+
+## Preferred alternatives
+
+- Use `rg` instead of `grep`
+- Use `rg --files` or file-glob tooling instead of `find -name`
+- Use non-destructive git inspection first (`git status`, `git diff`,
+  `git log`)
+
+## Safety workflow
+
+Before shell actions that modify files or git history:
+
+1. State what will be changed.
+2. Run the minimum command set.
+3. Verify result with non-destructive checks.
+4. Report outcome clearly.

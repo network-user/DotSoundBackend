@@ -1,0 +1,26 @@
+---
+description: Required startup context for each Cursor agent session
+alwaysApply: true
+---
+
+# Session Start Context
+
+At the start of each session, the agent must align with project constraints
+before making edits.
+
+## Required reads
+
+Read these files early in the session:
+
+- `AGENTS.md`
+- `TODO.md`
+- `.cursor/rules/secrets-and-env.mdc`
+- `.cursor/rules/public-private-boundary.mdc`
+- `.cursor/rules/legal-readiness.mdc` when touching legal-sensitive flows
+
+## Required behavior
+
+- Respect the public/private boundary policy.
+- Do not read or modify secret files without explicit user approval.
+- If boundary classification is unclear, stop and ask.
+- After completing substantial tasks, update `TODO.md`.
