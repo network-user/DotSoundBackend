@@ -42,6 +42,7 @@ class _FakeTrack:
 class _FakeLyricsResult:
     text: str = "Line one\nLine two"
     synced_lines: list | None = None
+    source_name: str | None = None
 
 
 @dataclass
@@ -481,6 +482,57 @@ class TestGenerateLyricsTask:
         assert result["has_sync"] is False
         assert result.get("cache") is True
         mock_generate.assert_not_called()
+
+    @pytest.mark.anyio
+    @patch(
+        "app.services.lyrics_worker.s3.download_object",
+        new_callable=AsyncMock,
+        return_value=b"fake-audio-bytes",
+    )
+    @patch(
+        "dotsound_private_core.services"
+        ".lyrics_provider.generate_lyrics"
+    )
+    async def test_source_name_propagates_to_repo(
+        self,
+        mock_generate: MagicMock,
+        _mock_s3: AsyncMock,
+        mock_db_session: AsyncMock,
+    ) -> None:
+        # Integration check: when PrivateCore returns a result with
+        # source_name="Yandex Music" (the priority provider path),
+        # the worker must pass it through to LyricsRepository so
+        # the DB row ends up tagged with the upstream attribution.
+        track = _FakeTrack(external_id="149187390")
+        _setup_track_query(mock_db_session, track)
+        result = _make_lyrics_result(with_sync=True)
+        result.source_name = "Yandex Music"
+        mock_generate.return_value = result
+
+        with patch(
+            "app.services.lyrics_worker"
+            ".LyricsRepository"
+        ) as mock_repo_cls:
+            mock_repo = AsyncMock()
+            mock_repo_cls.return_value = mock_repo
+
+            await generate_lyrics_task(
+                track_id=1, with_sync=True
+            )
+
+        # external_id from Track is forwarded to the provider so
+        # the priority probe can skip its own search step.
+        mock_generate.assert_called_once()
+        call_kwargs = mock_generate.call_args[1]
+        assert call_kwargs["external_id"] == "149187390"
+
+        # DB upsert receives the source_name verbatim.
+        mock_repo.create_or_update.assert_awaited_once()
+        repo_kwargs = mock_repo.create_or_update.await_args.kwargs
+        assert repo_kwargs["source_name"] == "Yandex Music"
+        # And the sync lines survive the round-trip.
+        assert repo_kwargs["synced_lines"] is not None
+        assert len(repo_kwargs["synced_lines"]) == 2
 
 
 class TestCacheHelpers:

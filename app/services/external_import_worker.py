@@ -259,3 +259,21 @@ async def process_external_import_job(job_id: int) -> None:
             completed=job.completed_tracks,
             failed=job.failed_tracks,
         )
+
+        if imported and job.status == "done":
+            # Local import keeps the module-load graph simple and
+            # prevents a theoretical circular import on backend
+            # startup. Fire-and-forget: the lyrics orchestrator
+            # reads the job row itself and paces per-track work.
+            from app.services.import_lyrics_worker import (
+                process_import_lyrics_task,
+            )
+
+            try:
+                await process_import_lyrics_task.kiq(job_id)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "import_lyrics_enqueue_failed",
+                    job_id=job_id,
+                    error=str(exc),
+                )

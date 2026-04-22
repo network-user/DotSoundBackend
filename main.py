@@ -21,6 +21,7 @@ if __name__ == "__main__":
             "app.services.transcoding",
             "app.services.import_worker",
             "app.services.external_import_worker",
+            "app.services.import_lyrics_worker",
             "app.services.cover_worker",
             "app.services.lyrics_worker",
             "app.services.artist_enrichment_worker",
