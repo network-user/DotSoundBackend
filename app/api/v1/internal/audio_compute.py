@@ -1,9 +1,10 @@
 """Internal endpoints for audio-compute workers.
 
 These are never exposed to end users. Every request is verified
-via HMAC + nonce replay protection (see compute_worker_service).
-Worker provisioning happens offline via admin UI; there is no
-public self-registration endpoint here by design.
+via HMAC + nonce replay protection (see compute_worker_service)
+and the path is gated by `InternalApiAllowlistMiddleware`. Worker
+provisioning happens offline via admin UI; there is no public
+self-registration endpoint here by design.
 """
 
 from __future__ import annotations
@@ -12,15 +13,18 @@ import json
 from datetime import datetime, timezone
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import s3
 from app.dependencies import get_db
-from app.models.lyrics_job import LyricsJob
+from app.repositories.audio_compute import (
+    AudioComputeRepository,
+)
 from app.repositories.lyrics import LyricsRepository
 from app.services import compute_worker_service as cws
+from app.services import worker_rate_limit as rl
 from app.services.lyrics_worker import (
     set_lyrics_progress,
     store_partial_synced,
@@ -35,6 +39,31 @@ router = APIRouter(
     prefix="/internal/audio-compute",
     tags=["audio-compute"],
 )
+
+
+def _client_ip(request: Request) -> str | None:
+    return (
+        request.client.host if request.client else None
+    )
+
+
+async def _enforce_rate_limit(
+    request: Request,
+    session: AsyncSession,
+    *,
+    worker_id: str,
+    action: str,
+) -> None:
+    """Wrap rate-limit check with HTTP 429 mapping."""
+    try:
+        await rl.check_and_consume(
+            session,
+            worker_id=worker_id,
+            action=action,
+            audit_ip=_client_ip(request),
+        )
+    except rl.WorkerRateLimitExceeded:
+        raise HTTPException(status_code=429)
 
 
 async def _verify(
@@ -57,17 +86,16 @@ async def _verify(
             method=request.method,
             path=request.url.path,
             body=body,
-            client_ip=request.client.host
-            if request.client
-            else None,
+            client_ip=_client_ip(request),
+            signature_version=request.headers.get(
+                "X-Worker-Signature-Version"
+            ),
         )
     except cws.WorkerNotFoundError:
         await cws._log_audit(
             session,
             worker_id=request.headers.get("X-Worker-Id"),
-            ip=request.client.host
-            if request.client
-            else None,
+            ip=_client_ip(request),
             action="auth_fail",
             status_code=404,
         )
@@ -77,9 +105,7 @@ async def _verify(
         await cws._log_audit(
             session,
             worker_id=request.headers.get("X-Worker-Id"),
-            ip=request.client.host
-            if request.client
-            else None,
+            ip=_client_ip(request),
             action="auth_fail",
             status_code=401,
             meta={"reason": str(exc)},
@@ -96,10 +122,16 @@ async def heartbeat(
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     worker, _ = await _verify(request, session)
+    await _enforce_rate_limit(
+        request,
+        session,
+        worker_id=worker.id,
+        action="heartbeat",
+    )
     await cws._log_audit(
         session,
         worker_id=worker.id,
-        ip=request.client.host if request.client else None,
+        ip=_client_ip(request),
         action="heartbeat",
         status_code=200,
     )
@@ -118,14 +150,18 @@ async def claim(
     session: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     worker, _ = await _verify(request, session)
+    await _enforce_rate_limit(
+        request,
+        session,
+        worker_id=worker.id,
+        action="claim",
+    )
     job = await cws.claim_next_job(session, worker=worker)
     if job is None:
         await cws._log_audit(
             session,
             worker_id=worker.id,
-            ip=request.client.host
-            if request.client
-            else None,
+            ip=_client_ip(request),
             action="claim_empty",
             status_code=204,
         )
@@ -141,6 +177,8 @@ async def claim(
         "profile": job.profile,
         "progress_id": job.progress_id,
         "audio_sha256": job.audio_sha256,
+        "correlation_id": job.id,
+        "current_tier": job.current_tier,
         "deadline_at": job.deadline_at.isoformat()
         if job.deadline_at
         else None,
@@ -152,13 +190,17 @@ async def claim(
     await cws._log_audit(
         session,
         worker_id=worker.id,
-        ip=request.client.host if request.client else None,
+        ip=_client_ip(request),
         action="claim_ok",
         job_id=job.id,
         status_code=200,
     )
     await session.commit()
-    return JSONResponse(status_code=200, content=payload)
+    return JSONResponse(
+        status_code=200,
+        content=payload,
+        headers={"X-Correlation-Id": job.id},
+    )
 
 
 @router.post("/jobs/{job_id}/progress")
@@ -168,16 +210,20 @@ async def job_progress(
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     worker, body = await _verify(request, session)
+    await _enforce_rate_limit(
+        request,
+        session,
+        worker_id=worker.id,
+        action="progress",
+    )
     try:
         event = json.loads(body or b"{}")
     except (TypeError, ValueError):
         raise HTTPException(status_code=400)
 
-    result = await session.execute(
-        select(LyricsJob).where(LyricsJob.id == job_id)
-    )
-    job = result.scalar_one_or_none()
-    if not job or job.routed_to_worker != worker.id:
+    repo = AudioComputeRepository(session)
+    job = await repo.get_job_for_worker(job_id, worker.id)
+    if job is None:
         raise HTTPException(status_code=404)
 
     stage = event.get("stage")
@@ -206,7 +252,7 @@ async def job_progress(
     await cws._log_audit(
         session,
         worker_id=worker.id,
-        ip=request.client.host if request.client else None,
+        ip=_client_ip(request),
         action="progress",
         job_id=job.id,
         status_code=200,
@@ -222,16 +268,20 @@ async def job_result(
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     worker, body = await _verify(request, session)
+    await _enforce_rate_limit(
+        request,
+        session,
+        worker_id=worker.id,
+        action="result",
+    )
     try:
         payload = json.loads(body or b"{}")
     except (TypeError, ValueError):
         raise HTTPException(status_code=400)
 
-    result_q = await session.execute(
-        select(LyricsJob).where(LyricsJob.id == job_id)
-    )
-    job = result_q.scalar_one_or_none()
-    if not job or job.routed_to_worker != worker.id:
+    repo = AudioComputeRepository(session)
+    job = await repo.get_job_for_worker(job_id, worker.id)
+    if job is None:
         raise HTTPException(status_code=404)
     if job.status not in {"running", "queued"}:
         raise HTTPException(status_code=409)
@@ -241,9 +291,7 @@ async def job_result(
             await cws._log_audit(
                 session,
                 worker_id=worker.id,
-                ip=request.client.host
-                if request.client
-                else None,
+                ip=_client_ip(request),
                 action="audio_sha_mismatch",
                 job_id=job.id,
                 status_code=400,
@@ -257,9 +305,7 @@ async def job_result(
         await cws._log_audit(
             session,
             worker_id=worker.id,
-            ip=request.client.host
-            if request.client
-            else None,
+            ip=_client_ip(request),
             action="result_invalid",
             job_id=job.id,
             status_code=422,
@@ -268,8 +314,8 @@ async def job_result(
         await session.commit()
         raise HTTPException(status_code=422)
 
-    repo = LyricsRepository(session)
-    await repo.create_or_update(
+    lyrics_repo = LyricsRepository(session)
+    await lyrics_repo.create_or_update(
         track_id=job.track_id,
         plain_text=clean["plain_text"],
         source="auto",
@@ -288,13 +334,39 @@ async def job_result(
             )
         duration_ms = int(
             (
-                datetime.now(timezone.utc) - started_aware
+                datetime.now(timezone.utc)
+                - started_aware
             ).total_seconds()
             * 1000
         )
     await cws.mark_job_result(
         session, job=job, duration_ms=duration_ms
     )
+
+    audio_seconds = float(
+        payload.get("audio_seconds") or 0
+    )
+    try:
+        from app.services.compute_anomaly_service import (
+            record_remote_result,
+        )
+
+        await record_remote_result(
+            session,
+            worker_id=worker.id,
+            job_id=job.id,
+            audio_seconds=audio_seconds,
+            processing_seconds=(
+                duration_ms / 1000.0
+            ),
+            plain_text=clean["plain_text"],
+        )
+    except Exception:
+        logger.exception(
+            "anomaly_check_failed",
+            job_id=job.id,
+            worker_id=worker.id,
+        )
 
     await set_lyrics_progress(
         job.progress_id,
@@ -306,7 +378,7 @@ async def job_result(
     await cws._log_audit(
         session,
         worker_id=worker.id,
-        ip=request.client.host if request.client else None,
+        ip=_client_ip(request),
         action="result_ok",
         job_id=job.id,
         status_code=200,
@@ -322,39 +394,61 @@ async def job_fail(
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     worker, body = await _verify(request, session)
+    await _enforce_rate_limit(
+        request,
+        session,
+        worker_id=worker.id,
+        action="fail",
+    )
     try:
         payload = json.loads(body or b"{}")
     except (TypeError, ValueError):
         payload = {}
     reason = str(payload.get("reason") or "worker_failure")[:256]
 
-    result = await session.execute(
-        select(LyricsJob).where(LyricsJob.id == job_id)
-    )
-    job = result.scalar_one_or_none()
-    if not job or job.routed_to_worker != worker.id:
+    repo = AudioComputeRepository(session)
+    job = await repo.get_job_for_worker(job_id, worker.id)
+    if job is None:
         raise HTTPException(status_code=404)
 
-    await cws.mark_job_failed(
-        session, job=job, reason=reason
-    )
-    await set_lyrics_progress(
-        job.progress_id,
-        stage="error",
-        terminal_state="error",
-        log_line=f"remote worker failed: {reason}",
-    )
+    try:
+        from app.services.lyrics_cascade import (
+            handle_tier_failure,
+        )
+
+        will_fallback = await handle_tier_failure(
+            session, job=job, reason=reason
+        )
+    except ImportError:
+        will_fallback = False
+
+    if not will_fallback:
+        await cws.mark_job_failed(
+            session, job=job, reason=reason
+        )
+        await set_lyrics_progress(
+            job.progress_id,
+            stage="error",
+            terminal_state="error",
+            log_line=f"remote worker failed: {reason}",
+        )
     await cws._log_audit(
         session,
         worker_id=worker.id,
-        ip=request.client.host if request.client else None,
+        ip=_client_ip(request),
         action="result_fail",
         job_id=job.id,
         status_code=200,
-        meta={"reason": reason},
+        meta={
+            "reason": reason,
+            "fallback": bool(will_fallback),
+        },
     )
     await session.commit()
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "fallback": bool(will_fallback),
+    }
 
 
 @router.get("/audio/{job_id}")
@@ -368,30 +462,56 @@ async def download_audio(
     if not worker_id or not ott:
         raise HTTPException(status_code=404)
 
-    result = await session.execute(
-        select(LyricsJob).where(LyricsJob.id == job_id)
-    )
-    job = result.scalar_one_or_none()
+    try:
+        await rl.check_and_consume(
+            session,
+            worker_id=worker_id,
+            action="audio",
+            audit_ip=_client_ip(request),
+        )
+    except rl.WorkerRateLimitExceeded:
+        raise HTTPException(status_code=429)
+
+    repo = AudioComputeRepository(session)
+    job = await repo.get_job_for_worker(job_id, worker_id)
     if (
-        not job
-        or job.routed_to_worker != worker_id
+        job is None
         or job.status != "running"
     ):
         raise HTTPException(status_code=404)
 
-    if not cws.verify_single_use_token(
-        ott, job.id, worker_id
-    ):
+    expected_ip = job.routed_to_worker and (
+        await repo.get_worker(job.routed_to_worker)
+    )
+    pinned_ip = (
+        expected_ip.last_ip if expected_ip else None
+    )
+    ok = await cws.verify_and_consume_ott(
+        ott,
+        job.id,
+        worker_id,
+        client_ip=_client_ip(request),
+        expected_ip=pinned_ip,
+    )
+    if not ok:
+        await cws._log_audit(
+            session,
+            worker_id=worker_id,
+            ip=_client_ip(request),
+            action="ott_fail",
+            job_id=job.id,
+            status_code=404,
+        )
+        await session.commit()
         raise HTTPException(status_code=404)
 
-    from app.core import s3
-    from app.models.track import Track
-
-    track = await session.get(Track, job.track_id)
-    if track is None or not track.file_key:
+    file_key = await repo.get_track_file_key(
+        job.track_id
+    )
+    if not file_key:
         raise HTTPException(status_code=404)
 
-    presigned = await s3.get_presigned_url(track.file_key)
+    presigned = await s3.get_presigned_url(file_key)
     return JSONResponse(
         status_code=200,
         content={"url": presigned},

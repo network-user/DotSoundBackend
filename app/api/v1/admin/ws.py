@@ -72,6 +72,8 @@ ALLOWED_CHANNELS: frozenset[str] = frozenset(
         "logs",
         "tasks_progress",
         "alerts",
+        "worker_logs",
+        "job_trace",
     }
 )
 
@@ -253,6 +255,112 @@ def _parse_log_subscribe(
     return selectors, contains_clean
 
 
+async def _push_worker_logs(
+    websocket: WebSocket,
+    *,
+    worker_id: str,
+    last_id: list[str],
+) -> None:
+    from app.services.worker_event_stream import tail
+
+    new_last, events = await tail(
+        worker_id,
+        last_id=last_id[0] or "$",
+        count=100,
+        block_ms=200,
+    )
+    if not events:
+        return
+    last_id[0] = new_last
+    await websocket.send_text(
+        json.dumps(
+            {
+                "channel": "worker_logs",
+                "data": {
+                    "worker_id": worker_id,
+                    "items": events,
+                },
+            }
+        )
+    )
+
+
+async def _push_job_trace(
+    websocket: WebSocket,
+    *,
+    job_id: str,
+) -> None:
+    from app.repositories.audio_compute import (
+        AudioComputeRepository,
+    )
+
+    async with AsyncSessionLocal() as session:
+        repo = AudioComputeRepository(session)
+        job = await repo.get_job(job_id)
+        if job is None:
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "channel": "job_trace",
+                        "data": {
+                            "job_id": job_id,
+                            "error": "not_found",
+                        },
+                    }
+                )
+            )
+            return
+        audit = await repo.list_audit(
+            limit=200,
+        )
+    job_audit = [
+        {
+            "id": row.id,
+            "worker_id": row.worker_id,
+            "action": row.action,
+            "status_code": row.status_code,
+            "meta": row.meta,
+            "created_at": (
+                row.created_at.isoformat()
+                if row.created_at
+                else None
+            ),
+        }
+        for row in audit
+        if row.job_id == job_id
+    ]
+    payload = {
+        "job_id": job.id,
+        "track_id": job.track_id,
+        "status": job.status,
+        "current_tier": job.current_tier,
+        "tiers_planned": job.tiers_planned or [],
+        "tier_attempts": job.tier_attempts or [],
+        "routed_to_worker": job.routed_to_worker,
+        "attempts": job.attempts,
+        "error": job.error,
+        "audit": job_audit,
+        "created_at": (
+            job.created_at.isoformat()
+            if job.created_at
+            else None
+        ),
+        "finished_at": (
+            job.finished_at.isoformat()
+            if job.finished_at
+            else None
+        ),
+    }
+    await websocket.send_text(
+        json.dumps(
+            {
+                "channel": "job_trace",
+                "data": payload,
+            }
+        )
+    )
+
+
 def _is_ws_open(websocket: WebSocket) -> bool:
     return (
         websocket.client_state == WebSocketState.CONNECTED
@@ -267,6 +375,9 @@ async def _broadcast_loop(
 ) -> None:
     last_task_seen = [""]
     log_since = [int(time.time() * 1_000_000_000)]
+    worker_log_cursor = [
+        state.get("worker_logs_last_id", "$"),
+    ]
     while True:
         if not _is_ws_open(websocket):
             return
@@ -279,6 +390,23 @@ async def _broadcast_loop(
                 await _push_tasks_progress(
                     websocket,
                     last_seen_id=last_task_seen,
+                )
+            if (
+                "worker_logs" in subscriptions
+                and state.get("worker_logs_id")
+            ):
+                await _push_worker_logs(
+                    websocket,
+                    worker_id=state["worker_logs_id"],
+                    last_id=worker_log_cursor,
+                )
+            if (
+                "job_trace" in subscriptions
+                and state.get("job_trace_id")
+            ):
+                await _push_job_trace(
+                    websocket,
+                    job_id=state["job_trace_id"],
                 )
             if "logs" in subscriptions:
                 await _push_logs(
@@ -370,8 +498,27 @@ async def admin_ws(
                             state["logs_selectors"],
                             state["logs_contains"],
                         ) = _parse_log_subscribe(msg)
+                    if channel == "worker_logs":
+                        wid = msg.get("worker_id")
+                        if (
+                            isinstance(wid, str)
+                            and wid.startswith("w_")
+                        ):
+                            state["worker_logs_id"] = wid
+                            state["worker_logs_last_id"] = "$"
+                    if channel == "job_trace":
+                        jid = msg.get("job_id")
+                        if (
+                            isinstance(jid, str)
+                            and jid.startswith("lj_")
+                        ):
+                            state["job_trace_id"] = jid
             elif cmd == "unsubscribe":
                 subscriptions.discard(channel)
+                if channel == "worker_logs":
+                    state.pop("worker_logs_id", None)
+                if channel == "job_trace":
+                    state.pop("job_trace_id", None)
             elif cmd == "logs.update_filter" and "logs" in subscriptions:
                 (
                     state["logs_selectors"],

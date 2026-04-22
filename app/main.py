@@ -27,6 +27,9 @@ from app.core.ws_manager import ws_manager
 from app.middlewares.admin_security import (
     AdminSecurityMiddleware,
 )
+from app.middlewares.internal_api_allowlist import (
+    InternalApiAllowlistMiddleware,
+)
 from app.middlewares.request_logging import RequestLoggingMiddleware
 from app.middlewares.secure_static import SecureStaticMiddleware
 from app.middlewares.security_headers import SecurityHeadersMiddleware
@@ -87,6 +90,9 @@ def create_app() -> FastAPI:
     application.add_middleware(SecureStaticMiddleware)
     application.add_middleware(AdminSecurityMiddleware)
     application.add_middleware(SecurityHeadersMiddleware)
+    application.add_middleware(
+        InternalApiAllowlistMiddleware
+    )
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(
         CORSMiddleware,

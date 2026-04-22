@@ -9,6 +9,7 @@ import shutil
 import tempfile
 import time
 import unicodedata
+import uuid
 
 import structlog
 from sqlalchemy import select
@@ -47,6 +48,15 @@ CANCEL_KEY_PREFIX = "lyrics:cancel:"
 EVENTS_CHANNEL_PREFIX = "lyrics:events:"
 SEARCH_CACHE_PREFIX = "lyrics:search:"
 PARTIAL_KEY_PREFIX = "lyrics:partial:"
+TRACK_LOCK_KEY_PREFIX = "lyrics:track_lock:"
+
+_RELEASE_TRACK_LOCK_LUA = """
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+else
+    return 0
+end
+"""
 
 
 _PUBLIC_STAGES: frozenset[str] = frozenset(
@@ -94,17 +104,12 @@ def _normalise_for_cache(value: str) -> str:
 
 
 def _search_cache_key(artist: str, title: str) -> str:
-    raw = (
-        f"{_normalise_for_cache(artist)}|"
-        f"{_normalise_for_cache(title)}"
-    )
+    raw = f"{_normalise_for_cache(artist)}|" f"{_normalise_for_cache(title)}"
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
     return f"{SEARCH_CACHE_PREFIX}{digest[:32]}"
 
 
-async def get_cached_lyrics_result(
-    artist: str, title: str
-) -> dict | None:
+async def get_cached_lyrics_result(artist: str, title: str) -> dict | None:
     redis = get_redis_client()
     key = _search_cache_key(artist, title)
     raw = await redis.get(key)
@@ -129,16 +134,12 @@ async def set_cached_lyrics_result(
     )
 
 
-async def invalidate_cached_lyrics_result(
-    artist: str, title: str
-) -> None:
+async def invalidate_cached_lyrics_result(artist: str, title: str) -> None:
     redis = get_redis_client()
     await redis.delete(_search_cache_key(artist, title))
 
 
-def _cache_keys_for_track(
-    artist: str, title: str
-) -> list[str]:
+def _cache_keys_for_track(artist: str, title: str) -> list[str]:
     """Cache keys covering every search attempt for this track.
 
     Mirrors :func:`_lyrics_search_attempts` so callers can wipe the
@@ -158,9 +159,7 @@ def _cache_keys_for_track(
     return keys
 
 
-async def invalidate_cached_lyrics_for_track(
-    artist: str, title: str
-) -> None:
+async def invalidate_cached_lyrics_for_track(artist: str, title: str) -> None:
     """Wipe every cache key associated with ``(artist, title)``.
 
     Unlike :func:`invalidate_cached_lyrics_result`, this also drops
@@ -174,9 +173,7 @@ async def invalidate_cached_lyrics_for_track(
     await redis.delete(*keys)
 
 
-def _cached_satisfies_request(
-    cached: dict | None, with_sync: bool
-) -> bool:
+def _cached_satisfies_request(cached: dict | None, with_sync: bool) -> bool:
     """Whether a cached payload covers the current request.
 
     Text-only requests are happy with anything that has ``text``.
@@ -212,9 +209,7 @@ async def _publish_event(progress_id: str, payload: dict) -> None:
         )
 
 
-async def store_partial_text(
-    progress_id: str, plain_text: str
-) -> None:
+async def store_partial_text(progress_id: str, plain_text: str) -> None:
     if not plain_text:
         return
     redis = get_redis_client()
@@ -326,9 +321,7 @@ async def set_lyrics_progress(
     await _publish_event(progress_id, event)
 
 
-async def append_lyrics_log(
-    progress_id: str, log_line: str
-) -> None:
+async def append_lyrics_log(progress_id: str, log_line: str) -> None:
     await set_lyrics_progress(progress_id, log_line=log_line)
 
 
@@ -347,14 +340,44 @@ async def get_lyrics_progress(
 
 async def _should_cancel(progress_id: str) -> bool:
     redis = get_redis_client()
-    return (
-        await redis.exists(f"{CANCEL_KEY_PREFIX}{progress_id}")
-    ) > 0
+    return (await redis.exists(f"{CANCEL_KEY_PREFIX}{progress_id}")) > 0
 
 
 async def _clear_cancel(progress_id: str) -> None:
     redis = get_redis_client()
     await redis.delete(f"{CANCEL_KEY_PREFIX}{progress_id}")
+
+
+async def _try_acquire_track_lock(
+    track_id: int, owner_token: str, ttl_seconds: int
+) -> bool:
+    """Atomic SET NX EX. Returns True when this caller now owns the
+    per-track lock for ``track_id``; False when another worker holds
+    it. Auto-expires after ``ttl_seconds`` so a crashed worker
+    doesn't permanently block re-runs.
+    """
+    redis = get_redis_client()
+    key = f"{TRACK_LOCK_KEY_PREFIX}{track_id}"
+    result = await redis.set(
+        key,
+        owner_token,
+        nx=True,
+        ex=int(ttl_seconds),
+    )
+    return bool(result)
+
+
+async def _release_track_lock(track_id: int, owner_token: str) -> None:
+    """Release the per-track lock only if this caller still owns
+    it. If the TTL already expired and another caller picked it up,
+    we leave their lock alone.
+    """
+    try:
+        redis = get_redis_client()
+        key = f"{TRACK_LOCK_KEY_PREFIX}{track_id}"
+        await redis.eval(_RELEASE_TRACK_LOCK_LUA, 1, key, owner_token)
+    except Exception:
+        logger.debug("lyrics_track_lock_release_failed", track_id=track_id)
 
 
 async def _finalise(
@@ -438,9 +461,7 @@ async def _hls_to_file(m3u8_url: str, path: str) -> bool:
         logger.warning(
             "lyrics_ffmpeg_failed",
             rc=proc.returncode,
-            stderr=(stderr or b"")[-512:].decode(
-                "utf-8", errors="replace"
-            ),
+            stderr=(stderr or b"")[-512:].decode("utf-8", errors="replace"),
         )
         return False
     try:
@@ -498,9 +519,7 @@ async def _fetch_audio_to_file(
             )
 
             sc = SoundCloudService(settings.sc_client_id, session)
-            stream_url, protocol = await sc.get_stream_info(
-                track.sc_url
-            )
+            stream_url, protocol = await sc.get_stream_info(track.sc_url)
 
             if protocol == "progressive":
                 path = os.path.join(tmp_dir, "audio.mp3")
@@ -529,9 +548,7 @@ async def _fetch_audio_to_file(
                 return None
             return path
         except Exception:
-            logger.exception(
-                "sc_audio_download_failed", track_id=track.id
-            )
+            logger.exception("sc_audio_download_failed", track_id=track.id)
             return None
 
     return None
@@ -557,9 +574,7 @@ async def _heartbeat_loop(
     try:
         while True:
             try:
-                await asyncio.wait_for(
-                    stop_event.wait(), timeout=interval
-                )
+                await asyncio.wait_for(stop_event.wait(), timeout=interval)
                 break
             except asyncio.TimeoutError:
                 pass
@@ -676,9 +691,9 @@ def _result_to_payload(gen_result) -> dict:
             line: dict = {
                 "time_ms": int(sl.time_ms),
                 "text": sl.text,
-                "confidence": float(sl.confidence)
-                if sl.confidence is not None
-                else 0.0,
+                "confidence": (
+                    float(sl.confidence) if sl.confidence is not None else 0.0
+                ),
             }
             wts = _word_times_from(sl)
             if wts is not None:
@@ -696,21 +711,24 @@ def _result_to_payload(gen_result) -> dict:
     if not isinstance(source_name, str) or not source_name.strip():
         source_name = None
 
+    sync_source_name = getattr(gen_result, "sync_source_name", None)
+    if not isinstance(sync_source_name, str) or not sync_source_name.strip():
+        sync_source_name = None
+
     return {
         "text": gen_result.text,
         "synced_lines": synced,
         "sync_quality": sync_quality,
         "sync_profile": sync_profile,
         "source_name": source_name,
+        "sync_source_name": sync_source_name,
     }
 
 
 def _lyrics_search_attempts(
     artist: str, title: str
 ) -> list[tuple[str, str, str]]:
-    attempts: list[tuple[str, str, str]] = [
-        (artist, title, "artist_title")
-    ]
+    attempts: list[tuple[str, str, str]] = [(artist, title, "artist_title")]
     if artist.strip():
         attempts.append(("", title, "title_only"))
     return attempts
@@ -722,6 +740,46 @@ async def generate_lyrics_task(
     with_sync: bool = False,
     progress_id: str = "",
     bypass_cache: bool = False,
+) -> dict:
+    """Outer Taskiq entry point.
+
+    Owns the per-track Redis lock so two concurrent imports for
+    the same track_id collapse to a single provider call. The real
+    work lives in :func:`_generate_lyrics_task_impl` so we can
+    wrap it in try/finally without indenting the whole body.
+    """
+    lock_owner_token = progress_id or uuid.uuid4().hex
+    lock_acquired = await _try_acquire_track_lock(
+        track_id,
+        lock_owner_token,
+        settings.lyrics_per_track_lock_ttl_seconds,
+    )
+    if not lock_acquired:
+        logger.info(
+            "lyrics_task_skipped_lock_held",
+            track_id=track_id,
+        )
+        return {
+            "status": "skipped",
+            "reason": "already_running",
+        }
+    try:
+        return await _generate_lyrics_task_impl(
+            track_id=track_id,
+            with_sync=with_sync,
+            progress_id=progress_id,
+            bypass_cache=bypass_cache,
+        )
+    finally:
+        await _release_track_lock(track_id, lock_owner_token)
+
+
+async def _generate_lyrics_task_impl(
+    *,
+    track_id: int,
+    with_sync: bool,
+    progress_id: str,
+    bypass_cache: bool,
 ) -> dict:
     from app.services.lyrics_eta import (
         publish_initial_eta,
@@ -743,9 +801,7 @@ async def generate_lyrics_task(
     )
 
     try:
-        _eta_ms: int | None = await publish_initial_eta(
-            progress_id, profile
-        )
+        _eta_ms: int | None = await publish_initial_eta(progress_id, profile)
     except Exception:
         _eta_ms = None
 
@@ -764,9 +820,7 @@ async def generate_lyrics_task(
         if stage != last_stage:
             now = time.monotonic()
             if last_stage and last_stage in stage_started:
-                duration_ms = int(
-                    (now - stage_started[last_stage]) * 1000
-                )
+                duration_ms = int((now - stage_started[last_stage]) * 1000)
                 try:
                     await record_stage_duration(
                         profile, last_stage, duration_ms
@@ -823,9 +877,7 @@ async def generate_lyrics_task(
                 cached = await get_cached_lyrics_result(
                     cache_artist, cache_title
                 )
-                if not _cached_satisfies_request(
-                    cached, with_sync
-                ):
+                if not _cached_satisfies_request(cached, with_sync):
                     if (
                         with_sync
                         and isinstance(cached, dict)
@@ -870,14 +922,10 @@ async def generate_lyrics_task(
                     cached_synced = list(cached_synced_raw)
 
                 if cache_mode == "artist_title":
-                    cache_log = (
-                        "cache hit: reusing previous lyrics "
-                        "result"
-                    )
+                    cache_log = "cache hit: reusing previous lyrics " "result"
                 else:
                     cache_log = (
-                        "cache hit: reusing title-only "
-                        "fallback result"
+                        "cache hit: reusing title-only " "fallback result"
                     )
                 if cached_synced is not None:
                     cache_log += " (with timecodes)"
@@ -894,22 +942,20 @@ async def generate_lyrics_task(
                     synced_lines=cached_synced,
                     sync_quality=cached.get("sync_quality"),
                     sync_profile=cached.get("sync_profile"),
+                    source_name=cached.get("source_name"),
+                    sync_source_name=cached.get("sync_source_name"),
                 )
                 await session.commit()
 
                 if cached_synced is not None:
                     try:
-                        await store_partial_synced(
-                            progress_id, cached_synced
-                        )
+                        await store_partial_synced(progress_id, cached_synced)
                     except Exception:
                         pass
 
                 if cache_mode != "artist_title":
                     try:
-                        await set_cached_lyrics_result(
-                            artist, title, cached
-                        )
+                        await set_cached_lyrics_result(artist, title, cached)
                     except Exception:
                         logger.debug(
                             "lyrics_cache_alias_write_failed",
@@ -938,16 +984,13 @@ async def generate_lyrics_task(
                 await _finalise(
                     progress_id,
                     "cancelled",
-                    log_line=(
-                        f"[{_elapsed()}] task cancelled by user"
-                    ),
+                    log_line=(f"[{_elapsed()}] task cancelled by user"),
                 )
                 await _clear_cancel(progress_id)
                 return {"status": "cancelled"}
 
             if with_sync and (
-                track.file_key
-                or getattr(track, "sc_url", None)
+                track.file_key or getattr(track, "sc_url", None)
             ):
                 await _log(
                     "downloading_audio",
@@ -968,8 +1011,7 @@ async def generate_lyrics_task(
                 else:
                     await _log(
                         "downloading_audio",
-                        "audio unavailable, skipping audio-based "
-                        "fallback",
+                        "audio unavailable, skipping audio-based " "fallback",
                         percent=25,
                     )
 
@@ -1027,8 +1069,7 @@ async def generate_lyrics_task(
                 if attempt_idx > 0:
                     await _log(
                         "searching",
-                        "retrying lyrics search with title-only "
-                        "fallback",
+                        "retrying lyrics search with title-only " "fallback",
                         percent=38,
                     )
 
@@ -1045,9 +1086,7 @@ async def generate_lyrics_task(
 
                 _stop_evt = asyncio.Event()
                 _hb_task = asyncio.create_task(
-                    _heartbeat_loop(
-                        progress_id, t0, _stop_evt, eta_ms=_eta_ms
-                    )
+                    _heartbeat_loop(progress_id, t0, _stop_evt, eta_ms=_eta_ms)
                 )
                 try:
                     current_result = await asyncio.wait_for(
@@ -1098,9 +1137,7 @@ async def generate_lyrics_task(
                 await _finalise(
                     progress_id,
                     "not_found",
-                    log_line=(
-                        f"[{_elapsed()}] lyrics not found"
-                    ),
+                    log_line=(f"[{_elapsed()}] lyrics not found"),
                 )
                 return {"status": "not_found"}
 
@@ -1134,9 +1171,7 @@ async def generate_lyrics_task(
                     )
 
             try:
-                await store_partial_text(
-                    progress_id, payload["text"]
-                )
+                await store_partial_text(progress_id, payload["text"])
             except Exception:
                 pass
 
@@ -1144,9 +1179,7 @@ async def generate_lyrics_task(
             if with_sync and payload["synced_lines"]:
                 synced_dicts = payload["synced_lines"]
                 try:
-                    await store_partial_synced(
-                        progress_id, synced_dicts
-                    )
+                    await store_partial_synced(progress_id, synced_dicts)
                 except Exception:
                     pass
             elif with_sync:
@@ -1166,6 +1199,7 @@ async def generate_lyrics_task(
                 sync_quality=payload.get("sync_quality"),
                 sync_profile=payload.get("sync_profile"),
                 source_name=payload.get("source_name"),
+                sync_source_name=payload.get("sync_source_name"),
             )
             await session.commit()
 
@@ -1174,8 +1208,7 @@ async def generate_lyrics_task(
                 progress_id,
                 "found",
                 log_line=(
-                    f"[{_elapsed()}] saved to DB "
-                    f"(has_sync={has_sync})"
+                    f"[{_elapsed()}] saved to DB " f"(has_sync={has_sync})"
                 ),
             )
             return {
@@ -1251,8 +1284,7 @@ async def generate_lyrics_debug_task(
 
         await _log(
             "searching",
-            f"[DEBUG] searching lyrics: artist={artist!r} "
-            f"title={title!r}",
+            f"[DEBUG] searching lyrics: artist={artist!r} " f"title={title!r}",
             percent=5,
         )
 
@@ -1260,9 +1292,7 @@ async def generate_lyrics_debug_task(
             await _finalise(
                 progress_id,
                 "cancelled",
-                log_line=(
-                    f"[{_elapsed()}] task cancelled by user"
-                ),
+                log_line=(f"[{_elapsed()}] task cancelled by user"),
             )
             await _clear_cancel(progress_id)
             return {"status": "cancelled"}
@@ -1272,8 +1302,7 @@ async def generate_lyrics_debug_task(
 
         try:
             if stage_id == 3 and (
-                track.file_key
-                or getattr(track, "sc_url", None)
+                track.file_key or getattr(track, "sc_url", None)
             ):
                 await _log(
                     "downloading_audio",
@@ -1330,9 +1359,7 @@ async def generate_lyrics_debug_task(
             import logging
 
             class _LogCapture(logging.Handler):
-                def emit(
-                    self, record: logging.LogRecord
-                ) -> None:
+                def emit(self, record: logging.LogRecord) -> None:
                     msg = self.format(record)
                     asyncio.run_coroutine_threadsafe(
                         append_lyrics_log(
@@ -1392,9 +1419,7 @@ async def generate_lyrics_debug_task(
                 await _finalise(
                     progress_id,
                     "not_found",
-                    log_line=(
-                        f"[{_elapsed()}] lyrics not found"
-                    ),
+                    log_line=(f"[{_elapsed()}] lyrics not found"),
                 )
                 return {"status": "not_found"}
 
@@ -1438,3 +1463,546 @@ async def generate_lyrics_debug_task(
         finally:
             if tmp_dir and os.path.isdir(tmp_dir):
                 shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+def _close_job_attempt(job, *, status: str, error: str | None = None) -> None:
+    """Mutate the last entry in ``job.tier_attempts`` in place.
+
+    Mirrors the equivalent helper in ``lyrics_cascade.py`` to
+    avoid a circular import; both must agree on the entry shape.
+    """
+    raw = list(job.tier_attempts or [])
+    if not raw:
+        return
+    last = dict(raw[-1])
+    if last.get("status") in {"queued", "running"}:
+        from datetime import datetime, timezone
+
+        last["finished_at"] = datetime.now(timezone.utc).isoformat()
+        last["status"] = status
+        if error is not None:
+            last["error"] = (error or "")[:512]
+        raw[-1] = last
+        job.tier_attempts = raw
+
+
+async def _save_catalog_result_and_close(
+    session,
+    *,
+    job,
+    payload: dict,
+    progress_id: str,
+    with_sync: bool,
+) -> None:
+    from datetime import datetime, timezone
+
+    from app.core.observability import lyrics_job_observed
+
+    synced_dicts: list[dict] | None = None
+    if with_sync and payload.get("synced_lines"):
+        synced_dicts = payload["synced_lines"]
+    repo = LyricsRepository(session)
+    await repo.create_or_update(
+        track_id=job.track_id,
+        plain_text=payload["text"],
+        source="auto",
+        synced_lines=synced_dicts,
+        sync_quality=payload.get("sync_quality"),
+        sync_profile=payload.get("sync_profile"),
+        source_name=payload.get("source_name"),
+    )
+    _close_job_attempt(job, status="success")
+    job.status = "done"
+    job.finished_at = datetime.now(timezone.utc)
+    started = job.started_at or job.created_at
+    duration_seconds = 0.0
+    if started:
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        duration_seconds = (
+            datetime.now(timezone.utc) - started
+        ).total_seconds()
+        job.duration_ms = int(duration_seconds * 1000)
+    try:
+        lyrics_job_observed(
+            tier=job.current_tier or "catalog_only",
+            status="success",
+            duration_seconds=duration_seconds,
+        )
+    except Exception:
+        pass
+
+
+@broker.task
+async def catalog_only_lyrics_task(
+    track_id: int,
+    with_sync: bool = False,
+    progress_id: str = "",
+    bypass_cache: bool = False,
+    job_id: str = "",
+) -> dict:
+    """Tier 1: catalog-only lyrics fetch (no local ASR).
+
+    Calls PrivateCore's ``generate_lyrics`` with
+    ``disable_local_asr=True`` so faster-whisper is never imported
+    on the Backend. On a hit the lyrics + LyricsJob are saved and
+    the job goes to ``status="done"``. On a miss the cascade is
+    asked for the next tier (handled in
+    ``lyrics_cascade.handle_tier_miss``).
+
+    The dev escape hatch ``LYRICS_ALLOW_LOCAL_ASR=true`` is
+    honoured only when ``DEBUG=true`` (config validator enforces
+    this) — when both flags are on the task downloads audio and
+    runs ASR in-process for fast local iteration.
+    """
+    from dotsound_private_core.services.lyrics_provider import (
+        generate_lyrics,
+    )
+
+    structlog.contextvars.bind_contextvars(
+        track_id=track_id,
+        progress_id=progress_id,
+        correlation_id=job_id or progress_id,
+        tier="catalog_only",
+    )
+    logger.info(
+        "catalog_only_started",
+        with_sync=with_sync,
+        bypass_cache=bypass_cache,
+        job_id=job_id,
+    )
+
+    use_local_asr = bool(settings.debug and settings.lyrics_allow_local_asr)
+    t0 = time.monotonic()
+
+    async with AsyncSessionLocal() as session:
+        track = await session.get(Track, track_id)
+        if not track or not track.is_active:
+            await _finalise(
+                progress_id,
+                "error",
+                log_line=("[catalog_only] ERROR: track not found"),
+            )
+            return {
+                "status": "error",
+                "detail": "track_not_found",
+            }
+
+        job = None
+        if job_id:
+            from app.repositories.audio_compute import (
+                AudioComputeRepository,
+            )
+
+            repo = AudioComputeRepository(session)
+            job = await repo.get_job(job_id)
+
+        artist = track.artist or ""
+        title = track.title or ""
+
+        if not bypass_cache:
+            for cache_artist, cache_title, _mode in _lyrics_search_attempts(
+                artist, title
+            ):
+                cached = await get_cached_lyrics_result(
+                    cache_artist, cache_title
+                )
+                if _cached_satisfies_request(cached, with_sync):
+                    if job is not None:
+                        await _save_catalog_result_and_close(
+                            session,
+                            job=job,
+                            payload=cached,
+                            progress_id=progress_id,
+                            with_sync=with_sync,
+                        )
+                        await session.commit()
+                    else:
+                        repo_l = LyricsRepository(session)
+                        await repo_l.create_or_update(
+                            track_id=track_id,
+                            plain_text=cached["text"],
+                            source="auto",
+                            synced_lines=(
+                                cached.get("synced_lines")
+                                if with_sync
+                                else None
+                            ),
+                            sync_quality=cached.get("sync_quality"),
+                            sync_profile=cached.get("sync_profile"),
+                            source_name=cached.get("source_name"),
+                        )
+                        await session.commit()
+                    await _finalise(
+                        progress_id,
+                        "found",
+                        log_line=("[catalog_only] cache hit"),
+                    )
+                    return {
+                        "status": "found",
+                        "from": "cache",
+                    }
+
+        audio_path: str | None = None
+        tmp_dir: str | None = None
+        try:
+            if use_local_asr and (
+                track.file_key or getattr(track, "sc_url", None)
+            ):
+                tmp_dir = tempfile.mkdtemp()
+                audio_path = await _fetch_audio_to_file(
+                    track, tmp_dir, session
+                )
+                logger.warning(
+                    "lyrics_local_asr_dev_escape",
+                    track_id=track_id,
+                )
+
+            try:
+                gen_result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        generate_lyrics,
+                        artist,
+                        title,
+                        audio_path,
+                        None,
+                        None,
+                        external_id=track.external_id,
+                        disable_local_asr=(not use_local_asr),
+                    ),
+                    timeout=float(settings.lyrics_provider_timeout_seconds),
+                )
+            except asyncio.TimeoutError:
+                gen_result = None
+                logger.warning(
+                    "catalog_only_timeout",
+                    track_id=track_id,
+                )
+            except TypeError:
+                gen_result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        _call_provider,
+                        generate_lyrics,
+                        artist=artist,
+                        title=title,
+                        audio_path=audio_path,
+                        on_progress=None,
+                        on_cancel=None,
+                        external_id=track.external_id,
+                    ),
+                    timeout=float(settings.lyrics_provider_timeout_seconds),
+                )
+
+            elapsed_ms = int((time.monotonic() - t0) * 1000)
+
+            if gen_result is None:
+                if job is not None:
+                    from app.services.lyrics_cascade import (
+                        handle_tier_miss,
+                    )
+
+                    will_fallback = await handle_tier_miss(
+                        session,
+                        job=job,
+                        reason="catalog_miss",
+                        with_sync=with_sync,
+                        bypass_cache=bypass_cache,
+                    )
+                    await session.commit()
+                    if will_fallback:
+                        logger.info(
+                            "catalog_only_miss_fallback",
+                            job_id=job.id,
+                            elapsed_ms=elapsed_ms,
+                        )
+                        return {
+                            "status": "fallback",
+                        }
+                await _finalise(
+                    progress_id,
+                    "not_found",
+                    log_line=("[catalog_only] no lyrics found"),
+                )
+                return {"status": "not_found"}
+
+            payload = _result_to_payload(gen_result)
+            try:
+                await set_cached_lyrics_result(artist, title, payload)
+            except Exception:
+                logger.debug(
+                    "catalog_only_cache_write_failed",
+                    track_id=track_id,
+                )
+
+            if job is not None:
+                await _save_catalog_result_and_close(
+                    session,
+                    job=job,
+                    payload=payload,
+                    progress_id=progress_id,
+                    with_sync=with_sync,
+                )
+                await session.commit()
+            else:
+                repo_l = LyricsRepository(session)
+                await repo_l.create_or_update(
+                    track_id=track_id,
+                    plain_text=payload["text"],
+                    source="auto",
+                    synced_lines=(
+                        payload["synced_lines"] if with_sync else None
+                    ),
+                    sync_quality=payload.get("sync_quality"),
+                    sync_profile=payload.get("sync_profile"),
+                    source_name=payload.get("source_name"),
+                )
+                await session.commit()
+            await _finalise(
+                progress_id,
+                "found",
+                log_line=(
+                    f"[catalog_only] saved (chars="
+                    f"{len(payload['text'])},"
+                    f" sync={payload['synced_lines'] is not None})"
+                ),
+            )
+            return {
+                "status": "found",
+                "from": "catalog",
+            }
+        except Exception as exc:
+            logger.exception(
+                "catalog_only_failed",
+                track_id=track_id,
+            )
+            if job is not None:
+                from app.services.lyrics_cascade import (
+                    handle_tier_failure,
+                )
+
+                will_fallback = await handle_tier_failure(
+                    session,
+                    job=job,
+                    reason=f"catalog_only_exception:{exc}",
+                    with_sync=with_sync,
+                    bypass_cache=bypass_cache,
+                )
+                await session.commit()
+                if will_fallback:
+                    return {"status": "fallback"}
+            await _finalise(
+                progress_id,
+                "error",
+                log_line=(f"[catalog_only] ERROR: {exc}"),
+            )
+            return {"status": "error"}
+        finally:
+            if tmp_dir and os.path.isdir(tmp_dir):
+                shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+@broker.task
+async def speechkit_lyrics_task(
+    track_id: int,
+    with_sync: bool = False,
+    progress_id: str = "",
+    bypass_cache: bool = False,
+    job_id: str = "",
+) -> dict:
+    """Tier 3: paid Yandex SpeechKit fallback.
+
+    Hands the track audio to Yandex Cloud SpeechKit Async
+    Recognition. Budget guard, cost accounting, and disabled-flag
+    handling all live in the adapter module.
+    """
+    from app.services.asr_speechkit_adapter import (
+        SpeechKitBudgetExhausted,
+        SpeechKitDisabled,
+        SpeechKitError,
+        transcribe as speechkit_transcribe,
+    )
+
+    structlog.contextvars.bind_contextvars(
+        track_id=track_id,
+        progress_id=progress_id,
+        correlation_id=job_id or progress_id,
+        tier="speechkit_paid",
+    )
+    logger.info(
+        "speechkit_task_started",
+        track_id=track_id,
+        job_id=job_id,
+    )
+
+    async with AsyncSessionLocal() as session:
+        track = await session.get(Track, track_id)
+        if not track or not track.is_active:
+            await _finalise(
+                progress_id,
+                "error",
+                log_line="[speechkit] track not found",
+            )
+            return {
+                "status": "error",
+                "detail": "track_not_found",
+            }
+        if not track.file_key:
+            await _finalise(
+                progress_id,
+                "error",
+                log_line="[speechkit] track has no audio",
+            )
+            return {
+                "status": "error",
+                "detail": "no_audio",
+            }
+
+        job = None
+        if job_id:
+            from app.repositories.audio_compute import (
+                AudioComputeRepository,
+            )
+
+            repo = AudioComputeRepository(session)
+            job = await repo.get_job(job_id)
+
+        try:
+            presigned = await s3.get_presigned_url(
+                track.file_key
+            )
+        except Exception as exc:
+            await _finalise(
+                progress_id,
+                "error",
+                log_line=(
+                    f"[speechkit] presign failed: {exc}"
+                ),
+            )
+            return {"status": "error"}
+
+        try:
+            audio_seconds = float(
+                getattr(track, "duration_seconds", 0) or 0
+            )
+        except Exception:
+            audio_seconds = 0.0
+
+        try:
+            result = await speechkit_transcribe(
+                presigned,
+                audio_seconds=audio_seconds,
+                correlation_id=job_id or progress_id,
+            )
+        except (
+            SpeechKitDisabled,
+            SpeechKitBudgetExhausted,
+        ) as exc:
+            if job is not None:
+                from app.services.lyrics_cascade import (
+                    handle_tier_failure,
+                )
+
+                will_fallback = await handle_tier_failure(
+                    session,
+                    job=job,
+                    reason=str(exc),
+                    with_sync=with_sync,
+                    bypass_cache=bypass_cache,
+                )
+                await session.commit()
+                if will_fallback:
+                    return {"status": "fallback"}
+            await _finalise(
+                progress_id,
+                "error",
+                log_line=(
+                    f"[speechkit] gated: {exc}"
+                ),
+            )
+            return {
+                "status": "error",
+                "detail": str(exc),
+            }
+        except SpeechKitError as exc:
+            logger.exception(
+                "speechkit_transcribe_failed",
+                job_id=job_id,
+            )
+            if job is not None:
+                from app.services.lyrics_cascade import (
+                    handle_tier_failure,
+                )
+
+                will_fallback = await handle_tier_failure(
+                    session,
+                    job=job,
+                    reason=f"speechkit_error:{exc}",
+                    with_sync=with_sync,
+                    bypass_cache=bypass_cache,
+                )
+                await session.commit()
+                if will_fallback:
+                    return {"status": "fallback"}
+            await _finalise(
+                progress_id,
+                "error",
+                log_line=(
+                    f"[speechkit] error: {exc}"
+                ),
+            )
+            return {"status": "error"}
+
+        synced_dicts: list[dict] | None = None
+        if with_sync and result.get("synced_lines"):
+            synced_dicts = result["synced_lines"]
+
+        repo_l = LyricsRepository(session)
+        await repo_l.create_or_update(
+            track_id=track_id,
+            plain_text=result["plain_text"],
+            source="auto",
+            synced_lines=synced_dicts,
+            sync_quality=result.get("sync_quality"),
+            sync_profile=result.get("sync_profile"),
+        )
+        if job is not None:
+            from datetime import datetime, timezone
+
+            _close_job_attempt(job, status="success")
+            job.status = "done"
+            job.finished_at = datetime.now(timezone.utc)
+            started = job.started_at or job.created_at
+            if started:
+                if started.tzinfo is None:
+                    started = started.replace(
+                        tzinfo=timezone.utc
+                    )
+                duration = (
+                    datetime.now(timezone.utc) - started
+                ).total_seconds()
+                job.duration_ms = int(duration * 1000)
+                try:
+                    from app.core.observability import (
+                        lyrics_job_observed,
+                    )
+
+                    lyrics_job_observed(
+                        tier="speechkit_paid",
+                        status="success",
+                        duration_seconds=duration,
+                    )
+                except Exception:
+                    pass
+        await session.commit()
+        await _finalise(
+            progress_id,
+            "found",
+            log_line=(
+                "[speechkit] lyrics saved "
+                f"(cost={result.get('cost_rub')}rub)"
+            ),
+        )
+        return {
+            "status": "found",
+            "cost_rub": result.get("cost_rub"),
+        }

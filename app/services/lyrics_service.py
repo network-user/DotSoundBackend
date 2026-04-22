@@ -6,9 +6,6 @@ from app.models.lyrics import TrackLyrics
 from app.repositories.lyrics import LyricsRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
-from app.services.lyrics_worker import (
-    generate_lyrics_task,
-)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -110,53 +107,54 @@ class LyricsService:
         import uuid
 
         from app.models.lyrics_job import LyricsJob
-        from app.services.compute_router import select_profile
+        from app.services.compute_router import (
+            get_routing_mode,
+        )
+        from app.services.lyrics_cascade import (
+            start_cascade,
+        )
         from app.services.lyrics_worker import (
             set_lyrics_progress,
         )
 
         await self._get_owned_track(track_id, user_id)
         progress_id = uuid.uuid4().hex
-        profile = (
-            await select_profile(self._session)
-            or "cpu_light"
-        )
+
+        mode = await get_routing_mode(self._session)
+        if mode == "disabled":
+            raise HTTPException(
+                status_code=503,
+                detail="lyrics_routing_disabled",
+            )
 
         job = LyricsJob(
             id=f"lj_{uuid.uuid4().hex[:16]}",
             track_id=track_id,
             progress_id=progress_id,
             requested_by_user_id=user_id,
-            profile=profile,
+            profile="catalog_only",
             status="queued",
         )
         self._session.add(job)
         await self._session.flush()
 
-        taskiq_id = None
-        if profile == "cpu_light":
-            task = await generate_lyrics_task.kiq(
-                track_id=track_id,
-                with_sync=with_sync,
-                progress_id=progress_id,
-                bypass_cache=bypass_cache,
-            )
-            taskiq_id = task.task_id
-            job.status = "queued"
-
+        active_tier = await start_cascade(
+            self._session,
+            job=job,
+            with_sync=with_sync,
+            bypass_cache=bypass_cache,
+        )
         await self._session.commit()
 
-        queued_log_parts = [
-            f"task queued: taskiq_id={taskiq_id}"
-            if taskiq_id
-            else f"task queued for profile={profile}",
-            f"with_sync={with_sync}",
-            f"bypass_cache={bypass_cache}",
-        ]
         await set_lyrics_progress(
             progress_id,
             stage="queued",
-            log_line=" | ".join(queued_log_parts),
+            log_line=(
+                "cascade started, active tier="
+                f"{active_tier}"
+                f" (with_sync={with_sync},"
+                f" bypass_cache={bypass_cache})"
+            ),
             percent=2,
         )
         try:
@@ -165,7 +163,7 @@ class LyricsService:
             )
 
             await publish_initial_eta(
-                progress_id, profile
+                progress_id, job.profile
             )
         except Exception:
             logger.debug(
@@ -175,8 +173,9 @@ class LyricsService:
         logger.info(
             "lyrics_auto_triggered",
             track_id=track_id,
-            task_id=taskiq_id,
-            profile=profile,
+            job_id=job.id,
+            active_tier=active_tier,
+            profile=job.profile,
             progress_id=progress_id,
             with_sync=with_sync,
             bypass_cache=bypass_cache,

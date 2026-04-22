@@ -1,5 +1,6 @@
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,9 +22,7 @@ class AppSettings(BaseSettings):
     complaint_threshold: int = 3
     sc_client_id: str = ""
     telegram_bot_token: str = ""
-    jwt_secret: str = (
-        "changeme-set-a-strong-secret-in-production"
-    )
+    jwt_secret: str = "changeme-set-a-strong-secret-in-production"
     jwt_expire_days: int = 7
     mini_app_url: str = ""
     telegram_bot_username: str = ""
@@ -50,17 +49,14 @@ class AppSettings(BaseSettings):
     voice_bitrate: str = "64k"
     voice_max_duration: int = 300
 
-    upload_malware_scan_mode: Literal[
-        "none", "lightweight", "clamav"
-    ] = "none"
+    upload_malware_scan_mode: Literal["none", "lightweight", "clamav"] = "none"
 
     artist_enrichment_timeout_seconds: float = 25.0
     artist_image_max_bytes: int = 5 * 1024 * 1024
     artist_enrichment_min_confidence: float = 0.3
 
     outbound_user_agent: str = (
-        "metadata-fetcher/1.0 "
-        "(+mailto:webmaster@example.invalid)"
+        "metadata-fetcher/1.0 " "(+mailto:webmaster@example.invalid)"
     )
     outbound_contact_email: str = ""
 
@@ -79,6 +75,38 @@ class AppSettings(BaseSettings):
     yandex_music_import_lyrics_delay_min_seconds: float = 15.0
     yandex_music_import_lyrics_delay_max_seconds: float = 45.0
     yandex_music_import_lyrics_cooldown_seconds: float = 600.0
+
+    # Stage 2 concurrency caps. SoundCloud public API is shared
+    # across the whole backend; a parallel-import storm without a
+    # global cap eats the SC_CLIENT_ID quota fast. The lyrics
+    # per-track lock prevents two workers from running the same
+    # generate_lyrics_task for the same track_id at the same time.
+    soundcloud_global_concurrency: int = 4
+    soundcloud_slot_acquire_timeout_seconds: float = 30.0
+    lyrics_per_track_lock_ttl_seconds: int = 300
+
+    # Stage 4 backpressure on ImportJob. New jobs above
+    # ``import_max_concurrent_jobs`` enter the ``queued`` status;
+    # the dispatcher loop promotes them to ``importing`` as soon
+    # as a global slot frees up. ``import_per_user_max_concurrent``
+    # caps how many slots one user can occupy at the same time, so
+    # a single power-user cannot starve the queue.
+    import_max_concurrent_jobs: int = 10
+    import_per_user_max_concurrent: int = 2
+    import_queue_dispatch_interval_seconds: float = 30.0
+
+    # Stage 3 global post-import lyrics orchestrator. When the
+    # feature flag is True, every external-import job pushes its
+    # imported track ids into a shared Redis list and the global
+    # orchestrator paces them through generate_lyrics_task using
+    # the ``yandex_music_import_lyrics_*`` knobs. This way 100
+    # parallel imports apply the SAME pacing budget to the lyrics
+    # provider instead of multiplying it 100x. Disable to fall
+    # back to per-job orchestrator (legacy).
+    lyrics_global_orchestrator_enabled: bool = True
+    lyrics_global_queue_key: str = "lyrics:queue:default"
+    lyrics_global_block_cooldown_seconds: float = 600.0
+    lyrics_global_max_consecutive_blocks: int = 5
 
     track_info_ttl_days: int = 30
     artist_supplemental_ttl_days: int = 30
@@ -106,22 +134,63 @@ class AppSettings(BaseSettings):
     sentry_traces_sample_rate: float = 0.1
     docker_socket_path: str = "/var/run/docker.sock"
 
+    # Compute-worker pull API protection. Comma-separated list of
+    # CIDRs allowed to hit /api/v1/internal/*. Empty in prod is a
+    # configuration error: the model validator below raises so the
+    # service refuses to start. In dev the defaults below cover
+    # localhost and Docker internal networks.
+    internal_api_allowed_cidrs: str = ""
+    yandex_speechkit_api_key: str = ""
+    yandex_speechkit_folder_id: str = ""
+    yandex_speechkit_enabled: bool = False
+    yandex_speechkit_monthly_budget_rub: float = 500.0
+    yandex_speechkit_rate_rub_per_minute: float = 16.0
+    yandex_speechkit_soft_per_job_limit_rub: float = 10.0
+    lyrics_allow_local_asr: bool = False
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [
-            o.strip()
-            for o in self.allowed_origins.split(",")
-            if o.strip()
+            o.strip() for o in self.allowed_origins.split(",") if o.strip()
         ]
 
     @property
     def allowed_hosts_list(self) -> list[str]:
-        items = [
-            h.strip()
-            for h in self.allowed_hosts.split(",")
-            if h.strip()
-        ]
+        items = [h.strip() for h in self.allowed_hosts.split(",") if h.strip()]
         return items or ["*"]
+
+    @property
+    def internal_api_allowed_cidrs_list(self) -> list[str]:
+        raw = (self.internal_api_allowed_cidrs or "").strip()
+        if not raw:
+            if self.debug:
+                return [
+                    "127.0.0.1/32",
+                    "::1/128",
+                    "10.0.0.0/8",
+                    "172.16.0.0/12",
+                    "192.168.0.0/16",
+                ]
+            return []
+        return [piece.strip() for piece in raw.split(",") if piece.strip()]
+
+    @model_validator(mode="after")
+    def _validate_dev_only_flags(self) -> "AppSettings":
+        if not self.debug and self.lyrics_allow_local_asr:
+            raise ValueError(
+                "LYRICS_ALLOW_LOCAL_ASR must be False in "
+                "production (DEBUG=false). Local Whisper is "
+                "an in-process dev escape hatch only — run a "
+                "DotSoundComputeWorker instance instead."
+            )
+        if not self.debug and not self.internal_api_allowed_cidrs_list:
+            raise ValueError(
+                "INTERNAL_API_ALLOWED_CIDRS must list at "
+                "least one CIDR in production (DEBUG=false). "
+                "Pull-worker endpoints are otherwise reachable "
+                "by anyone who can speak HTTP to the host."
+            )
+        return self
 
 
 settings = AppSettings()

@@ -42,3 +42,25 @@
 player DotSound поверх stream URL стороннего сервиса считается
 высокорисковой моделью и требует отдельного legal review перед
 публичным запуском.
+
+## Cross-border data transfer (Yandex SpeechKit)
+
+Tier `speechkit_paid` в каскаде распознавания лирики передаёт
+аудиофайл пользователя в Yandex Cloud (Россия). Это материальное
+изменение для пользователя, поэтому tier по умолчанию **выключен**
+(`YANDEX_SPEECHKIT_ENABLED=false`).
+
+Перед включением в продакшн обязательно:
+
+1. Раскрыть факт передачи в `docs/legal/PRIVACY_POLICY.md` и
+   обновить пользовательское соглашение (`USER_AGREEMENT.md`).
+2. Проверить, что для UGC-загрузок есть согласие на обработку
+   третьими сторонами (см. чек-лист в `UPLOAD_RULES.md`).
+3. Зафиксировать договор с Yandex Cloud (DPA + ToS) в архиве
+   `docs/legal/`.
+4. Включить kill-switch и месячный бюджет в админ-панели
+   (`/admin/audio-compute/speechkit`); по умолчанию бюджет 500 ₽.
+
+Каскад логирует `speechkit_billed` для каждой оплаченной операции;
+WorkerAuditLog хранит этот след 90 дней (см.
+`app/tasks/audit_log_pruner.py`).

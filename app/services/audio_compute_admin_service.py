@@ -5,6 +5,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from dotsound_private_core.services.network_policy import (
+    is_open_allowlist,
+    normalize_cidrs,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.app_setting import AppSetting
@@ -29,6 +33,19 @@ def _serialize_worker(w: ComputeWorker) -> dict[str, Any]:
         "profile": w.profile,
         "active": w.active,
         "suspended_reason": w.suspended_reason,
+        "suspended_until": (
+            w.suspended_until.isoformat()
+            if w.suspended_until
+            else None
+        ),
+        "revoked_at": (
+            w.revoked_at.isoformat()
+            if w.revoked_at
+            else None
+        ),
+        "allowed_ip_cidrs": w.allowed_ip_cidrs or [],
+        "allowed_profiles": w.allowed_profiles or [],
+        "max_concurrent_jobs": w.max_concurrent_jobs,
         "last_seen_at": (
             w.last_seen_at.isoformat()
             if w.last_seen_at
@@ -49,9 +66,13 @@ def _serialize_job(j: LyricsJob) -> dict[str, Any]:
         "track_id": j.track_id,
         "status": j.status,
         "profile": j.profile,
+        "current_tier": j.current_tier,
+        "tiers_planned": j.tiers_planned or [],
+        "tier_attempts": j.tier_attempts or [],
         "routed_to_worker": j.routed_to_worker,
         "attempts": j.attempts,
         "duration_ms": j.duration_ms,
+        "error": j.error,
         "created_at": (
             j.created_at.isoformat()
             if j.created_at
@@ -94,23 +115,98 @@ class AudioComputeAdminService:
         return [_serialize_worker(w) for w in rows]
 
     async def create_worker(
-        self, name: str, profile: str
+        self,
+        name: str,
+        profile: str,
+        allowed_ip_cidrs: list[str] | None = None,
+        allowed_profiles: list[str] | None = None,
+        max_concurrent_jobs: int = 1,
+        accept_open_allowlist: bool = False,
     ) -> dict[str, Any]:
+        normalized_cidrs = (
+            normalize_cidrs(allowed_ip_cidrs)
+            if allowed_ip_cidrs
+            else []
+        )
+        if (
+            normalized_cidrs
+            and is_open_allowlist(normalized_cidrs)
+            and not accept_open_allowlist
+        ):
+            raise ValueError("open_allowlist_requires_accept")
+        normalized_profiles = (
+            [p for p in allowed_profiles if p]
+            if allowed_profiles
+            else None
+        )
         worker, secret = await cws.register_worker(
-            self._session, name=name, profile=profile
+            self._session,
+            name=name,
+            profile=profile,
+            allowed_ip_cidrs=normalized_cidrs or None,
+            allowed_profiles=normalized_profiles,
+            max_concurrent_jobs=max_concurrent_jobs,
         )
         await self._session.commit()
         logger.info(
             "compute_worker_created",
             worker_id=worker.id,
             profile=worker.profile,
+            allowed_cidrs_count=len(normalized_cidrs),
+            open_allowlist=is_open_allowlist(
+                normalized_cidrs
+            ),
         )
         return {
             "id": worker.id,
             "name": worker.name,
             "profile": worker.profile,
             "secret": secret,
+            "allowed_ip_cidrs": normalized_cidrs,
+            "allowed_profiles": normalized_profiles or [],
+            "max_concurrent_jobs": worker.max_concurrent_jobs,
         }
+
+    async def update_worker_allowlist(
+        self,
+        worker_id: str,
+        allowed_ip_cidrs: list[str] | None,
+        allowed_profiles: list[str] | None = None,
+        max_concurrent_jobs: int | None = None,
+        accept_open_allowlist: bool = False,
+    ) -> bool:
+        normalized_cidrs = (
+            normalize_cidrs(allowed_ip_cidrs)
+            if allowed_ip_cidrs
+            else None
+        )
+        if (
+            normalized_cidrs
+            and is_open_allowlist(normalized_cidrs)
+            and not accept_open_allowlist
+        ):
+            raise ValueError("open_allowlist_requires_accept")
+        affected = (
+            await self._repo.update_worker_allowlist(
+                worker_id,
+                normalized_cidrs,
+                allowed_profiles,
+                max_concurrent_jobs,
+            )
+        )
+        if affected == 0:
+            return False
+        await self._session.commit()
+        logger.info(
+            "compute_worker_allowlist_updated",
+            worker_id=worker_id,
+            allowed_cidrs_count=(
+                len(normalized_cidrs)
+                if normalized_cidrs
+                else 0
+            ),
+        )
+        return True
 
     async def revoke_worker(
         self, worker_id: str
@@ -121,6 +217,21 @@ class AudioComputeAdminService:
         if affected == 0:
             return False
         await self._session.commit()
+        await cws.invalidate_worker_nonces(worker_id)
+        try:
+            from app.services.lyrics_cascade import (
+                fallback_jobs_for_revoked_worker,
+            )
+
+            await fallback_jobs_for_revoked_worker(
+                self._session, worker_id=worker_id
+            )
+        except ImportError:
+            pass
+        logger.info(
+            "compute_worker_revoked",
+            worker_id=worker_id,
+        )
         return True
 
     async def rotate_worker_secret(
@@ -133,6 +244,11 @@ class AudioComputeAdminService:
         if affected == 0:
             return None
         await self._session.commit()
+        await cws.invalidate_worker_nonces(worker_id)
+        logger.info(
+            "compute_worker_secret_rotated",
+            worker_id=worker_id,
+        )
         return new_secret
 
     async def list_jobs(
@@ -145,11 +261,14 @@ class AudioComputeAdminService:
         return [_serialize_job(j) for j in rows]
 
     async def list_audit(
-        self, limit: int = 200
+        self,
+        limit: int = 200,
+        action_filter: str | None = None,
     ) -> list[dict[str, Any]]:
         clamped = max(1, min(500, limit))
         rows = await self._repo.list_audit(
-            limit=clamped
+            limit=clamped,
+            action_filter=action_filter,
         )
         return [_serialize_audit(r) for r in rows]
 
@@ -179,3 +298,81 @@ class AudioComputeAdminService:
         await compute_router.invalidate_settings_cache()
         logger.info("routing_mode_set", mode=mode)
         return mode
+
+    async def get_cascade_order(self) -> list[str]:
+        cascade = (
+            await compute_router.get_cascade_order(
+                self._session
+            )
+        )
+        return list(cascade)
+
+    async def set_cascade_order(
+        self, cascade: list[str]
+    ) -> list[str]:
+        from dotsound_private_core.services.asr_policy import (
+            normalize_cascade,
+        )
+
+        normalized = list(normalize_cascade(cascade))
+        now = datetime.now(UTC)
+        entry = await self._repo.get_routing_setting(
+            compute_router.SETTING_CASCADE_ORDER
+        )
+        if entry is None:
+            entry = AppSetting(
+                key=(
+                    compute_router.SETTING_CASCADE_ORDER
+                ),
+                value={"value": normalized},
+                updated_at=now,
+            )
+            self._repo.add(entry)
+        else:
+            entry.value = {"value": normalized}
+            entry.updated_at = now
+        await self._session.commit()
+        await compute_router.invalidate_settings_cache()
+        logger.info(
+            "cascade_order_set", cascade=normalized
+        )
+        return normalized
+
+    async def get_speechkit_status(self) -> dict[str, Any]:
+        from app.config import settings as app_settings
+        from app.services.asr_speechkit_adapter import (
+            get_monthly_spent_rub,
+        )
+
+        spent = await get_monthly_spent_rub()
+        budget = float(
+            app_settings.yandex_speechkit_monthly_budget_rub
+        )
+        return {
+            "enabled": bool(
+                app_settings.yandex_speechkit_enabled
+            ),
+            "monthly_budget_rub": budget,
+            "monthly_spent_rub": float(spent),
+            "remaining_rub": max(0.0, budget - spent),
+            "rate_rub_per_minute": float(
+                app_settings.yandex_speechkit_rate_rub_per_minute
+            ),
+            "soft_per_job_limit_rub": float(
+                app_settings.yandex_speechkit_soft_per_job_limit_rub
+            ),
+            "api_key_set": bool(
+                app_settings.yandex_speechkit_api_key
+            ),
+        }
+
+    async def reset_speechkit_spent(self) -> dict[str, Any]:
+        from app.services.asr_speechkit_adapter import (
+            reset_monthly_spent,
+        )
+
+        await reset_monthly_spent()
+        logger.warning(
+            "speechkit_spent_reset_by_admin"
+        )
+        return await self.get_speechkit_status()
