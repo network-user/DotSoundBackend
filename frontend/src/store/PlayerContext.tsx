@@ -13,6 +13,7 @@ import { api } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { useToast } from '@/components/ui/Toast'
 import { getCachedAudioUrl } from '@/lib/offlineCache'
+import { queueOrSend } from '@/lib/pendingEvents'
 import type { Track } from '@/types/api'
 
 const EQ_FREQUENCIES = [
@@ -114,6 +115,7 @@ interface PlayerContextValue {
   playbackRate: number
   queue: Track[]
   history: Track[]
+  abLoop: { a: number | null; b: number | null }
   toggleRepeat: () => void
   toggleShuffle: () => void
   clearHlsError: () => void
@@ -147,6 +149,9 @@ interface PlayerContextValue {
   removeFromQueue: (idx: number) => void
   clearQueue: () => void
   reorderQueue: (from: number, to: number) => void
+  setAbA: (sec?: number) => void
+  setAbB: (sec?: number) => void
+  clearAbLoop: () => void
   stop: () => void
   getAnalyser: () => AnalyserNode | null
   updateTrack: (updated: Partial<Track> & { id: number }) => void
@@ -191,6 +196,9 @@ interface PlayerActionsValue {
   removeFromQueue: (idx: number) => void
   clearQueue: () => void
   reorderQueue: (from: number, to: number) => void
+  setAbA: (sec?: number) => void
+  setAbB: (sec?: number) => void
+  clearAbLoop: () => void
   getAnalyser: () => AnalyserNode | null
   updateTrack: (updated: Partial<Track> & { id: number }) => void
 }
@@ -212,6 +220,7 @@ interface PlayerMetaValue {
   playbackRate: number
   queue: Track[]
   history: Track[]
+  abLoop: { a: number | null; b: number | null }
 }
 
 const PlayerStateCtx = createContext<PlayerStateValue | null>(null)
@@ -349,6 +358,10 @@ export function PlayerProvider({
   const streamExpiresAtRef = useRef<number | null>(null)
   const lastStreamUrlRef = useRef<string | null>(null)
   const lastTrackIdRef = useRef<number | null>(null)
+  const preloadHlsRef = useRef<Hls | null>(null)
+  const preloadHlsTrackIdRef = useRef<number | null>(
+    null,
+  )
   const audioCtxRef =
     useRef<AudioContext | null>(null)
   const filtersRef = useRef<BiquadFilterNode[]>([])
@@ -400,6 +413,14 @@ export function PlayerProvider({
     useState(1)
   const [queue, setQueue] = useState<Track[]>([])
   const [history, setHistory] = useState<Track[]>([])
+  const [abLoop, setAbLoop] = useState<{
+    a: number | null
+    b: number | null
+  }>({ a: null, b: null })
+  const abLoopRef = useRef<{
+    a: number | null
+    b: number | null
+  }>({ a: null, b: null })
   const [eqBands, setEqBands] =
     useState<number[]>(
       initialEqRef.current.bands,
@@ -691,14 +712,16 @@ export function PlayerProvider({
       )
       if (listened <= 0) return
       listenSignalSentRef.current = true
-      api
-        .recordListen({
+      void queueOrSend(
+        'record-listen',
+        '/api/v1/signals/listen',
+        {
           track_id: track.id,
           duration_listened: listened,
           total_duration: track.duration_seconds,
           source_context: 'player',
-        })
-        .catch(() => {})
+        },
+      )
     }
 
     const onPlay = () => {
@@ -713,7 +736,11 @@ export function PlayerProvider({
         track.id > 0
       ) {
         playCountSentRef.current = true
-        api.postPlay(track.id).catch(() => {})
+        void queueOrSend(
+          'post-play',
+          `/api/v1/tracks/${track.id}/play`,
+          {},
+        )
       }
       listenStartTimeRef.current =
         audio.currentTime
@@ -796,6 +823,15 @@ export function PlayerProvider({
       }
     }
     const onTime = () => {
+      const ab = abLoopRef.current
+      if (
+        ab.a !== null &&
+        ab.b !== null &&
+        ab.b > ab.a &&
+        audio.currentTime >= ab.b
+      ) {
+        audio.currentTime = ab.a
+      }
       setCurrentTime(audio.currentTime)
       _updatePositionState(audio)
     }
@@ -1036,11 +1072,35 @@ export function PlayerProvider({
         `/api/v1/tracks/${newTrack.id}/audio`
 
       if (Hls.isSupported()) {
-        await startHlsPlayback(
-          audio,
-          hlsUrl,
-          fallback,
-        )
+        const preloaded =
+          preloadHlsRef.current &&
+          preloadHlsTrackIdRef.current ===
+            newTrack.id
+            ? preloadHlsRef.current
+            : null
+        if (preloaded) {
+          try {
+            preloaded.detachMedia()
+            preloaded.attachMedia(audio)
+            audio.volume = volume
+            await audio.play().catch(() => {})
+            hlsRef.current = preloaded
+            preloadHlsRef.current = null
+            preloadHlsTrackIdRef.current = null
+          } catch {
+            await startHlsPlayback(
+              audio,
+              hlsUrl,
+              fallback,
+            )
+          }
+        } else {
+          await startHlsPlayback(
+            audio,
+            hlsUrl,
+            fallback,
+          )
+        }
       } else {
         await startDirectPlayback(
           audio,
@@ -1110,17 +1170,60 @@ export function PlayerProvider({
     if (!track) return
     let cancelled = false
 
+    const teardownPreloadHls = () => {
+      if (preloadHlsRef.current) {
+        try {
+          preloadHlsRef.current.destroy()
+        } catch {
+          /* ignore */
+        }
+        preloadHlsRef.current = null
+      }
+      preloadHlsTrackIdRef.current = null
+    }
+
     const preloadFirst = (tracks: Track[]) => {
       if (cancelled || !tracks.length) return
-      const nextId = tracks[0].id
+      const next = tracks[0]
       if (prefetchAudioRef.current) {
         prefetchAudioRef.current.src = ''
         prefetchAudioRef.current = null
       }
+      teardownPreloadHls()
+
       const pa = new Audio()
       pa.preload = 'auto'
-      pa.src = `/api/v1/tracks/${nextId}/audio`
+      pa.src = `/api/v1/tracks/${next.id}/audio`
       prefetchAudioRef.current = pa
+
+      const canHls =
+        next.is_public &&
+        next.access_mode !== 'third_party_stream' &&
+        Hls.isSupported()
+      if (!canHls) return
+
+      try {
+        const hls = new Hls({
+          enableWorker: true,
+          startLevel: -1,
+          autoStartLoad: true,
+          maxBufferLength: 12,
+        })
+        hls.loadSource(
+          `/api/v1/tracks/${next.id}/hls/master.m3u8`,
+        )
+        const sink = document.createElement('audio')
+        sink.muted = true
+        sink.preload = 'auto'
+        hls.attachMedia(sink)
+        preloadHlsRef.current = hls
+        preloadHlsTrackIdRef.current = next.id
+        hls.on(Hls.Events.ERROR, (_e, d) => {
+          if (d.fatal) teardownPreloadHls()
+        })
+      } catch {
+        teardownPreloadHls()
+      }
     }
 
     api.getRadio(track.id, 5)
@@ -1151,6 +1254,7 @@ export function PlayerProvider({
         prefetchAudioRef.current.src = ''
         prefetchAudioRef.current = null
       }
+      teardownPreloadHls()
     }
   }, [track?.id])
 
@@ -1286,6 +1390,36 @@ export function PlayerProvider({
     [],
   )
 
+  const setAbA = useCallback((sec?: number) => {
+    const a = audioRef.current
+    const value =
+      sec ?? (a ? a.currentTime : 0)
+    setAbLoop((prev) => {
+      const next = { a: value, b: prev.b }
+      abLoopRef.current = next
+      return next
+    })
+  }, [])
+
+  const setAbB = useCallback((sec?: number) => {
+    const a = audioRef.current
+    const value =
+      sec ?? (a ? a.currentTime : 0)
+    setAbLoop((prev) => {
+      const next = { a: prev.a, b: value }
+      abLoopRef.current = next
+      return next
+    })
+  }, [])
+
+  const clearAbLoop = useCallback(() => {
+    setAbLoop(() => {
+      const next = { a: null, b: null }
+      abLoopRef.current = next
+      return next
+    })
+  }, [])
+
   const getAnalyser = useCallback(
     () => analyserRef.current,
     [],
@@ -1353,6 +1487,7 @@ export function PlayerProvider({
       openEq, closeEq,
       openQueue, closeQueue,
       addToQueue, removeFromQueue, clearQueue, reorderQueue,
+      setAbA, setAbB, clearAbLoop,
       getAnalyser,
       updateTrack,
     }),
@@ -1368,6 +1503,7 @@ export function PlayerProvider({
       openEq, closeEq,
       openQueue, closeQueue,
       addToQueue, removeFromQueue, clearQueue, reorderQueue,
+      setAbA, setAbB, clearAbLoop,
       getAnalyser,
       updateTrack,
     ],
@@ -1381,6 +1517,7 @@ export function PlayerProvider({
       eqBands, eqPreset, eqBypassed,
       repeatMode, shuffleOn, hlsError,
       playbackRate, queue, history,
+      abLoop,
     }),
     [
       track, volume,
@@ -1389,6 +1526,7 @@ export function PlayerProvider({
       eqBands, eqPreset, eqBypassed,
       repeatMode, shuffleOn, hlsError,
       playbackRate, queue, history,
+      abLoop,
     ],
   )
 

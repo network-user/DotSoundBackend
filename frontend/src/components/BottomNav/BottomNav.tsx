@@ -12,8 +12,8 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { path: '/', icon: 'home', labelKey: 'nav.home' },
   { path: '/search', icon: 'search', labelKey: 'nav.search' },
+  { path: '/library', icon: 'layers', labelKey: 'nav.library' },
   { path: '/chats', icon: 'message-circle', labelKey: 'nav.chats' },
-  { path: '/upload', icon: 'upload', labelKey: 'nav.upload' },
   { path: '/profile', icon: 'user', labelKey: 'nav.profile' },
 ]
 

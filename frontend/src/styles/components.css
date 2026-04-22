@@ -1069,6 +1069,110 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+/* ---------- Library tabs ---------- */
+
+.library-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  background: var(--glass-tint-1);
+  -webkit-backdrop-filter: var(--glass-blur-medium)
+    var(--glass-saturate);
+  backdrop-filter: var(--glass-blur-medium)
+    var(--glass-saturate);
+  border-bottom: 1px solid var(--glass-edge);
+}
+
+.library-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.library-tab {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  border-radius: var(--r-pill);
+  padding: 6px 14px;
+  font-size: var(--fs-13);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+  min-height: 32px;
+}
+
+.library-tab:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.library-tab.active {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.library-content > .view {
+  padding-top: 0;
+}
+
+/* ---------- Upload FAB ---------- */
+
+.upload-fab {
+  position: fixed;
+  right: max(
+    var(--space-4),
+    calc(env(safe-area-inset-right, 0px) + var(--space-4))
+  );
+  bottom: calc(
+    var(--nav-h, 60px) + var(--player-h, 80px) +
+      var(--safe-bottom) + var(--space-3)
+  );
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-edge-bright);
+  background: var(--accent);
+  color: var(--bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 95;
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  transition: transform var(--dur-fast)
+      var(--ease-spring),
+    background var(--dur-fast) var(--ease-standard);
+}
+
+.upload-fab:hover {
+  background: var(--accent-hover);
+  transform: scale(1.04);
+}
+
+.upload-fab:active {
+  transform: scale(var(--press-scale));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upload-fab {
+    transition: none;
+  }
+}
+
 /* ---------- Banned screen ---------- */
 
 .banned-screen {

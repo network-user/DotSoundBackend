@@ -60,3 +60,16 @@ class ComplaintRepository:
             )
         )
         return result.scalar_one_or_none() is not None
+
+    async def list_by_user(
+        self, user_id: int, limit: int = 50
+    ) -> list[Complaint]:
+        result = await self._db.execute(
+            select(Complaint)
+            .where(
+                Complaint.reported_by_user_id == user_id
+            )
+            .order_by(Complaint.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())

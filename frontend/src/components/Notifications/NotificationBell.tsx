@@ -9,7 +9,10 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
-    api.getUnreadCount().then((r) => setCount(r.count)).catch(() => {})
+    api
+      .getUnreadCount()
+      .then((r) => setCount(r.count))
+      .catch(() => {})
     const off = onWS('notification', () => {
       setCount((p) => p + 1)
     })
@@ -17,21 +20,38 @@ export function NotificationBell() {
   }, [])
 
   const handleOpen = () => {
-    setOpen(!open)
-    if (!open && count > 0) {
-      api.markAllNotificationsRead().then(() => setCount(0))
+    const next = !open
+    setOpen(next)
+    if (next && count > 0) {
+      api
+        .markAllNotificationsRead()
+        .then(() => setCount(0))
+        .catch(() => {})
     }
   }
 
   return (
     <div className="notification-bell-wrapper">
-      <button className="notification-bell-btn" onClick={handleOpen}>
+      <button
+        className="notification-bell-btn"
+        onClick={handleOpen}
+        aria-label={
+          count > 0
+            ? `Уведомления (${count})`
+            : 'Уведомления'
+        }
+      >
         <Icon name="bell" size={20} />
         {count > 0 && (
-          <span className="notification-badge pulse">{count > 99 ? '99+' : count}</span>
+          <span className="notification-badge pulse">
+            {count > 99 ? '99+' : count}
+          </span>
         )}
       </button>
-      {open && <NotificationList onClose={() => setOpen(false)} />}
+      <NotificationList
+        open={open}
+        onClose={() => setOpen(false)}
+      />
     </div>
   )
 }

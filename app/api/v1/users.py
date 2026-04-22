@@ -11,13 +11,18 @@ from fastapi import (
     UploadFile,
     status,
 )
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
+from app.repositories.complaint import (
+    ComplaintRepository,
+)
 from app.schemas.album import AlbumResponse
+from app.schemas.complaint import ComplaintResponse
 from app.schemas.eq import (
     EqSettingsRequest,
     EqSettingsResponse,
@@ -270,6 +275,33 @@ async def get_feed(
     return TrackListResponse(items=items, total=total, page=page, size=size)
 
 
+class _MyComplaintsResponse(BaseModel):
+    items: list[ComplaintResponse]
+
+
+@router.get(
+    "/me/complaints",
+    response_model=_MyComplaintsResponse,
+    summary="Complaints submitted by the current user",
+)
+@limiter.limit("60/minute")
+async def get_my_complaints(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> _MyComplaintsResponse:
+    repo = ComplaintRepository(session)
+    items = await repo.list_by_user(
+        current_user.id, limit=100
+    )
+    return _MyComplaintsResponse(
+        items=[
+            ComplaintResponse.model_validate(c)
+            for c in items
+        ],
+    )
+
+
 @router.get(
     "/me/library",
     response_model=TrackListResponse,
@@ -377,6 +409,7 @@ async def get_login_history(
             detail="Access denied",
         )
     from sqlalchemy import select
+
     from app.models.login_history import LoginHistory
 
     result = await session.execute(

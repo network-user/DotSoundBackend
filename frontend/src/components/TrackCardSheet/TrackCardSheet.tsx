@@ -95,6 +95,10 @@ export function TrackCardSheet({
     skipBackward,
     setPlaybackRate,
     playbackRate,
+    abLoop,
+    setAbA,
+    setAbB,
+    clearAbLoop,
   } = usePlayer()
   const toast = useToast()
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -882,6 +886,37 @@ export function TrackCardSheet({
                 {rate}×
               </button>
             ))}
+            <button
+              className={`pb-extras-btn${abLoop.a !== null ? ' active' : ''}`}
+              onClick={() => setAbA()}
+              title="Точка A"
+            >
+              <Icon name="loop" size={14} />A
+              {abLoop.a !== null
+                ? ` ${fmt(abLoop.a)}`
+                : ''}
+            </button>
+            <button
+              className={`pb-extras-btn${abLoop.b !== null ? ' active' : ''}`}
+              onClick={() => setAbB()}
+              title="Точка B"
+              disabled={abLoop.a === null}
+            >
+              <Icon name="loop" size={14} />B
+              {abLoop.b !== null
+                ? ` ${fmt(abLoop.b)}`
+                : ''}
+            </button>
+            {(abLoop.a !== null ||
+              abLoop.b !== null) && (
+              <button
+                className="pb-extras-btn"
+                onClick={clearAbLoop}
+                title="Сбросить AB-цикл"
+              >
+                ×
+              </button>
+            )}
           </div>
         </div>
 
