@@ -161,6 +161,26 @@ async def rotate_worker_secret(
     }
 
 
+@router.get("/workers/{worker_id}/events")
+async def list_worker_events(
+    worker_id: str,
+    limit: int = 100,
+    _admin: User = Depends(
+        require_capability("audio_compute.view_audit")
+    ),
+) -> dict:
+    """Snapshot of last N events from the worker's Redis Stream."""
+    from app.services.worker_event_stream import (
+        fetch_recent,
+    )
+
+    clamped = max(1, min(500, int(limit)))
+    events = await fetch_recent(
+        worker_id, count=clamped
+    )
+    return {"worker_id": worker_id, "events": events}
+
+
 @router.get("/jobs")
 async def list_jobs(
     session: AsyncSession = Depends(get_db),
