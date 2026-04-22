@@ -10,6 +10,8 @@ import { Press } from '@/components/ui/Press'
 import { adminFetch } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
+import { WorkerDetailDrawer } from '../components/widgets/WorkerDetailDrawer'
+import { WorkerOnboarding } from '../components/widgets/WorkerOnboarding'
 
 interface WorkerRow {
   id: string
@@ -89,6 +91,34 @@ const ALL_TIERS = [
   'catalog_only',
   'remote_whisper',
   'speechkit_paid',
+]
+
+const CIDR_PRESETS: {
+  label: string
+  value: string
+  hint: string
+}[] = [
+  {
+    label: 'Localhost only',
+    value: '127.0.0.1/32, ::1/128',
+    hint: 'Worker runs on the same host as Backend.',
+  },
+  {
+    label: 'Private LAN',
+    value:
+      '10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16',
+    hint: 'Worker is anywhere inside your VPC / home LAN.',
+  },
+  {
+    label: 'Single VPS IP',
+    value: '203.0.113.10/32',
+    hint: 'Tightest scope: one specific public IP.',
+  },
+  {
+    label: 'Allow any (RISKY)',
+    value: '0.0.0.0/0',
+    hint: 'Anyone on the internet with the secret can claim. Use only when you cannot control egress.',
+  },
 ]
 
 const AUDIT_ACTION_FILTERS = [
@@ -285,6 +315,29 @@ export function AudioComputeRoute() {
   const [pendingCascade, setPendingCascade] = useState<
     string[] | null
   >(null)
+  const [drawerWorkerId, setDrawerWorkerId] = useState<
+    string | null
+  >(null)
+  const workersList = useMemo(
+    () =>
+      (workers.data as WorkerRow[] | undefined) || [],
+    [workers.data],
+  )
+  const drawerWorker = useMemo(
+    () =>
+      drawerWorkerId
+        ? workersList.find(
+            (w) => w.id === drawerWorkerId,
+          ) || null
+        : null,
+    [drawerWorkerId, workersList],
+  )
+  const backendBaseUrl = useMemo(() => {
+    if (typeof window === 'undefined')
+      return 'http://localhost:8000'
+    const { protocol, host } = window.location
+    return `${protocol}//${host}`
+  }, [])
 
   const cidrParsed = useMemo(
     () => parseCidrInput(newCidrs),
@@ -365,51 +418,6 @@ export function AudioComputeRoute() {
     onSettled: () =>
       qc.invalidateQueries({
         queryKey: ['admin', 'compute', 'speechkit'],
-      }),
-  })
-
-  const revokeWorker = useMutation({
-    mutationFn: (id: string) =>
-      adminFetch(
-        `/audio-compute/workers/${id}/revoke`,
-        { method: 'POST', body: {} },
-      ),
-    onSettled: () =>
-      qc.invalidateQueries({
-        queryKey: ['admin', 'compute', 'workers'],
-      }),
-  })
-
-  const rotateSecret = useMutation({
-    mutationFn: (id: string) =>
-      adminFetch<{ secret: string }>(
-        `/audio-compute/workers/${id}/rotate_secret`,
-        { method: 'POST', body: {} },
-      ),
-    onSuccess: (data) => setShowSecret(data.secret),
-  })
-
-  const updateAllowlist = useMutation({
-    mutationFn: (payload: {
-      id: string
-      allowed_ip_cidrs: string[]
-      accept_open_allowlist: boolean
-    }) =>
-      adminFetch(
-        `/audio-compute/workers/${payload.id}/allowlist`,
-        {
-          method: 'PATCH',
-          body: {
-            allowed_ip_cidrs:
-              payload.allowed_ip_cidrs,
-            accept_open_allowlist:
-              payload.accept_open_allowlist,
-          },
-        },
-      ),
-    onSettled: () =>
-      qc.invalidateQueries({
-        queryKey: ['admin', 'compute', 'workers'],
       }),
   })
 
@@ -588,6 +596,10 @@ export function AudioComputeRoute() {
   return (
     <div>
       <h1>{t('admin.audioCompute.title')}</h1>
+
+      <WorkerOnboarding
+        hasWorkers={workersList.length > 0}
+      />
 
       <section className="admin-card">
         <h2>Routing mode</h2>
@@ -836,6 +848,37 @@ export function AudioComputeRoute() {
               }
             />
           </label>
+          <div
+            className="admin-toolbar"
+            style={{
+              flexWrap: 'wrap',
+              gap: 6,
+              marginTop: 4,
+            }}
+          >
+            <span className="admin-card__sub">
+              Presets:
+            </span>
+            {CIDR_PRESETS.map((preset) => (
+              <Press
+                key={preset.label}
+                variant="ghost"
+                title={preset.hint}
+                onClick={() =>
+                  setNewCidrs(preset.value)
+                }
+              >
+                {preset.label}
+              </Press>
+            ))}
+          </div>
+          {cidrParsed.length > 0 && (
+            <p className="admin-card__sub">
+              Parsed: {cidrParsed.length} CIDR
+              {cidrParsed.length === 1 ? '' : 's'}
+              {cidrIsOpen && ' · WILDCARD detected'}
+            </p>
+          )}
           {cidrIsOpen && (
             <div className="admin-card admin-card--inline">
               <p>
@@ -914,77 +957,21 @@ export function AudioComputeRoute() {
               header: '',
               id: 'actions',
               cell: (i) => (
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: 8,
-                  }}
+                <Press
+                  variant="ghost"
+                  onClick={() =>
+                    setDrawerWorkerId(
+                      i.row.original.id,
+                    )
+                  }
                 >
-                  <Press
-                    variant="ghost"
-                    onClick={() =>
-                      rotateSecret.mutate(
-                        i.row.original.id,
-                      )
-                    }
-                  >
-                    Rotate
-                  </Press>
-                  <Press
-                    variant="ghost"
-                    onClick={() => {
-                      const next = window.prompt(
-                        'New allowed CIDRs (comma-separated)',
-                        (
-                          i.row.original
-                            .allowed_ip_cidrs ||
-                          []
-                        ).join(', '),
-                      )
-                      if (next === null) return
-                      const list =
-                        parseCidrInput(next)
-                      const open =
-                        list.includes(
-                          '0.0.0.0/0',
-                        ) ||
-                        list.includes('::/0')
-                      const accept = open
-                        ? window.confirm(
-                            'Wildcard CIDR detected. Confirm to accept the risk.',
-                          )
-                        : true
-                      if (open && !accept) return
-                      updateAllowlist.mutate({
-                        id: i.row.original.id,
-                        allowed_ip_cidrs: list,
-                        accept_open_allowlist:
-                          open && accept,
-                      })
-                    }}
-                  >
-                    Edit IPs
-                  </Press>
-                  <Press
-                    variant="ghost"
-                    onClick={() =>
-                      revokeWorker.mutate(
-                        i.row.original.id,
-                      )
-                    }
-                  >
-                    Revoke
-                  </Press>
-                </div>
+                  Open
+                </Press>
               ),
             },
           ]}
-          rows={
-            (workers.data as
-              | WorkerRow[]
-              | undefined) || []
-          }
-          emptyHint="No workers registered"
+          rows={workersList}
+          emptyHint="No workers registered. Use the onboarding section above to add your first one."
         />
       </section>
 
@@ -1090,6 +1077,17 @@ export function AudioComputeRoute() {
           }
         />
       </section>
+
+      {drawerWorker && (
+        <WorkerDetailDrawer
+          worker={drawerWorker}
+          backendBaseUrl={backendBaseUrl}
+          onClose={() => setDrawerWorkerId(null)}
+          onSecretShown={(secret) =>
+            setShowSecret(secret)
+          }
+        />
+      )}
     </div>
   )
 }
