@@ -440,7 +440,7 @@
 
 - Базовый legal package в репозитории
   - `LEGAL.md`
-  - `LEGAL_AUDIT_RU.md`
+  - `docs/legal/archive/LEGAL_AUDIT_RU.md`
   - `docs/legal/USER_AGREEMENT.md`
   - `docs/legal/PRIVACY_POLICY.md`
   - `docs/legal/COPYRIGHT_POLICY.md`

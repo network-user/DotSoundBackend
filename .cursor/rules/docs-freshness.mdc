@@ -1,0 +1,42 @@
+---
+description: Remind agent to update relevant docs when touching mapped code areas
+alwaysApply: true
+---
+
+# Docs freshness
+
+When editing code in the mapped areas below, also review and (if needed)
+update the listed docs in the same change. Do not update docs
+proactively when no corresponding code changes.
+
+## Code area → docs map (Backend)
+
+- `app/core/auth*.py`, `app/core/rate_limit.py`, `app/middlewares/admin_security.py`,
+  anything importing `dotsound_private_core` policy functions →
+  `docs/ai-boundary-policy.md`, `docs/private-boundary-inventory.md`,
+  `docs/private-core-dependency-policy.md`.
+- `app/services/upload_service.py`, `app/services/file_validator.py`,
+  import workers, `app/api/v1/complaints.py`, playback, recommendation
+  services → `LEGAL.md`, `docs/legal/*`.
+- `frontend/src/components/Icon/Icon.tsx`, `frontend/src/styles/*.css` →
+  `docs/design-system.md`.
+- `app/` top-level reshuffle, new services, new routers, new stack
+  additions in `pyproject.toml` → `docs/project_context.md`.
+- Anything that removes or renames a symbol imported from
+  `dotsound_private_core` → `docs/private-core-dependency-policy.md`.
+
+## Cross-repo variants
+
+Files with the same name in Bot and PrivateCore
+(`docs/ai-boundary-policy.md`, `docs/private-boundary-inventory.md`,
+`docs/private-core-dependency-policy.md`, `docs/public-release-cut.md`)
+are **per-repo variants**, not byte-copies. When editing one of
+these in Backend, check whether the change affects the scope claims
+in the peer repos and update their variants if it does. Run
+`python scripts/check_docs_sync.py` before commit — it exits green
+as long as no truly-identical doc drifted.
+
+## Hard rule
+
+Never put PrivateCore internals (provider names, model names, pipeline
+stages, scoring weights) into any Backend doc. Use opaque language.
