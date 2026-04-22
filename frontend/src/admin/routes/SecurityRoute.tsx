@@ -157,7 +157,7 @@ export function SecurityRoute() {
           columns={attemptColumns}
           rows={
             (attempts.data?.items ||
-              []) as AttemptRow[]
+              []) as unknown as AttemptRow[]
           }
         />
       </section>
@@ -193,7 +193,7 @@ function AntiAbuseSection() {
           No recent events
         </div>
       ) : (
-        <DataTable
+        <DataTable<AntiAbuseEvent>
           columns={[
             {
               header: 'ID',
@@ -226,7 +226,7 @@ function AntiAbuseSection() {
                 '–',
             },
           ]}
-          rows={items as never[]}
+          rows={items}
         />
       )}
     </section>

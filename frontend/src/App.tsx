@@ -77,6 +77,8 @@ import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
 import { OfflineBanner } from '@/components/ui/OfflineBanner'
 import { InstallPrompt } from '@/components/PwaInstall/InstallPrompt'
 import { QueueSheet } from '@/components/QueueSheet/QueueSheet'
+import { BannedScreen } from '@/components/BannedScreen/BannedScreen'
+import { SystemEventListener } from '@/components/Notifications/SystemEventListener'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
 import { useTrackDeepLink } from '@/hooks/useDeepLink'
 import { HomeView } from '@/views/HomeView'
@@ -109,14 +111,6 @@ function TrackDeepLinkRoute() {
   return null
 }
 
-declare global {
-  interface Document {
-    startViewTransition?: (
-      cb: () => void | Promise<void>,
-    ) => { finished: Promise<void> }
-  }
-}
-
 function AnimatedRoutes({
   children,
 }: {
@@ -130,11 +124,13 @@ function AnimatedRoutes({
     if (lastKey.current === location.pathname) return
     lastKey.current = location.pathname
 
-    if (
-      typeof document !== 'undefined' &&
-      typeof document.startViewTransition === 'function'
-    ) {
-      document.startViewTransition(() => {
+    const doc = document as Document & {
+      startViewTransition?: (
+        cb: () => void,
+      ) => unknown
+    }
+    if (typeof doc.startViewTransition === 'function') {
+      doc.startViewTransition(() => {
         setDisplayed(location)
       })
     } else {
@@ -170,6 +166,9 @@ export function App() {
   >({})
   const [needsOnboarding, setNeedsOnboarding] =
     useState(false)
+  const [bannedReason, setBannedReason] = useState<
+    string | null
+  >(null)
   const initCalled = useRef(false)
 
   useEffect(() => {
@@ -335,6 +334,9 @@ export function App() {
         disconnectWS()
         setNeedsAuth(true)
       })
+      api.setOnAccountBlocked((reason) => {
+        setBannedReason(reason || 'не указана')
+      })
       setIsInitialized(true)
     }
     init()
@@ -376,6 +378,21 @@ export function App() {
     setSettingsOpen(false)
     setNeedsAuth(true)
     navigate('/')
+  }
+
+  if (bannedReason) {
+    return (
+      <BannedScreen
+        reason={bannedReason}
+        onContact={() => {
+          window.open(
+            'mailto:support@dotsound.app',
+            '_blank',
+          )
+        }}
+        onLogout={handleLogout}
+      />
+    )
   }
 
   if (!isInitialized) {
@@ -462,6 +479,7 @@ export function App() {
       <Equalizer />
       <QueueSheet />
       <InstallPrompt />
+      <SystemEventListener />
       <SettingsSheet
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

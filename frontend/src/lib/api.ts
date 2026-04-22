@@ -44,6 +44,9 @@ import type {
 
 let accessToken: string | null = null
 let onUnauthorized: (() => void) | null = null
+let onAccountBlocked:
+  | ((reason?: string | null) => void)
+  | null = null
 const AUTH_TOKEN_KEY = 'auth-token'
 
 function decodeJwtPayload(
@@ -147,6 +150,17 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
       accessToken = null
       persistToken(null)
       onUnauthorized?.()
+    }
+    const accountStatus = res.headers.get(
+      'X-Account-Status',
+    )
+    if (
+      accountStatus === 'banned' ||
+      accountStatus === 'blocked'
+    ) {
+      onAccountBlocked?.(
+        res.headers.get('X-Account-Reason'),
+      )
     }
     if (!res.ok) throw new Error(`${res.status}`)
     if (res.status === 204) return null as T
@@ -587,6 +601,46 @@ export const api = {
 
   setOnUnauthorized(cb: (() => void) | null) {
     onUnauthorized = cb
+  },
+
+  setOnAccountBlocked(
+    cb: ((reason?: string | null) => void) | null,
+  ) {
+    onAccountBlocked = cb
+  },
+
+  getMyComplaints(): Promise<{
+    items: Array<{
+      id: number
+      track_id: number
+      reason: string
+      reason_type: string
+      is_resolved: boolean
+      track_hidden?: boolean
+      created_at: string
+      resolution_note?: string | null
+    }>
+  }> {
+    return request('/api/v1/users/me/complaints')
+  },
+
+  updateComplaintStatus(
+    id: number,
+    body: {
+      action: 'accept' | 'dismiss' | 'in_progress'
+      note?: string
+    },
+  ): Promise<{ ok: boolean }> {
+    return request(
+      `/api/v1/admin/complaints/${id}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+    )
   },
 
   getAuthConfig(): Promise<{

@@ -263,7 +263,7 @@ export function UsersRoute() {
       </div>
       <DataTable
         columns={columns}
-        rows={(data?.items || []) as UserRow[]}
+        rows={(data?.items || []) as unknown as UserRow[]}
       />
       <div className="admin-pagination">
         <Press
@@ -306,6 +306,21 @@ export function UsersRoute() {
                 messageTarget.email ??
                 `#${messageTarget.id}`}
             </h3>
+            <div className="admin-dm-templates">
+              {DM_TEMPLATES.map((tpl) => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  className="admin-dm-template-btn"
+                  onClick={() =>
+                    setMessageText(tpl.text)
+                  }
+                  title={tpl.text}
+                >
+                  {tpl.label}
+                </button>
+              ))}
+            </div>
             <textarea
               rows={5}
               maxLength={4000}
@@ -316,6 +331,13 @@ export function UsersRoute() {
               placeholder="Текст сообщения…"
               style={{ width: '100%', resize: 'vertical' }}
             />
+            {messageText.trim() && (
+              <div className="admin-dm-preview">
+                <strong>Команда .sound:</strong>
+                <br />
+                {messageText}
+              </div>
+            )}
             <div
               style={{
                 display: 'flex',
@@ -339,7 +361,15 @@ export function UsersRoute() {
                   !messageText.trim() ||
                   busyId === messageTarget.id
                 }
-                onClick={handleSendMessage}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      'Отправить сообщение пользователю как «Команда .sound»?',
+                    )
+                  )
+                    return
+                  handleSendMessage()
+                }}
               >
                 Отправить
               </Press>
@@ -350,3 +380,40 @@ export function UsersRoute() {
     </div>
   )
 }
+
+const DM_TEMPLATES: Array<{
+  id: string
+  label: string
+  text: string
+}> = [
+  {
+    id: 'welcome',
+    label: 'Приветствие',
+    text:
+      'Здравствуйте! Спасибо, что пользуетесь .sound. ' +
+      'Если возникнут вопросы — напишите в этот чат.',
+  },
+  {
+    id: 'warning',
+    label: 'Предупреждение',
+    text:
+      'Здравствуйте. Просим обратить внимание на правила платформы: ' +
+      'https://dotsound.app/legal/terms. Повторное нарушение может ' +
+      'привести к ограничению доступа.',
+  },
+  {
+    id: 'rights',
+    label: 'Жалоба правообладателя',
+    text:
+      'На один из ваших треков поступила жалоба правообладателя. ' +
+      'Мы временно ограничили доступ. Подробнее: ' +
+      'https://dotsound.app/legal/copyright',
+  },
+  {
+    id: 'restored',
+    label: 'Восстановление',
+    text:
+      'Доступ к вашему аккаунту восстановлен. ' +
+      'Спасибо за терпение.',
+  },
+]

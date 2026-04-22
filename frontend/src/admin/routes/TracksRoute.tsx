@@ -211,7 +211,7 @@ export function TracksRoute() {
       </div>
       <DataTable
         columns={columns}
-        rows={(data?.items || []) as TrackRow[]}
+        rows={(data?.items || []) as unknown as TrackRow[]}
       />
       <div className="admin-pagination">
         <Press

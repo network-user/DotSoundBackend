@@ -4,7 +4,11 @@ import { VoicePlayer } from '@/components/Chat/VoicePlayer'
 import type { ChatMessage } from '@/types/api'
 
 interface Props {
-  message: ChatMessage & { _uploading?: boolean }
+  message: ChatMessage & {
+    _uploading?: boolean
+    is_system?: boolean
+    sender_role?: 'admin' | 'user' | 'system'
+  }
   isMine: boolean
   onDelete: (id: number) => void
   onReaction: (id: number, type: string) => void
@@ -60,6 +64,29 @@ export function ChatBubble({
     )
       return
     onViewPhoto?.(photoSrc)
+  }
+
+  const isSystem =
+    message.is_system === true ||
+    message.sender_role === 'admin' ||
+    message.sender_role === 'system'
+
+  if (isSystem) {
+    return (
+      <div className="chat-msg system">
+        <div className="chat-msg-system-card">
+          <span className="chat-msg-system-icon">
+            <Icon name="shield" size={16} />
+          </span>
+          <div className="chat-msg-system-body">
+            <span className="chat-msg-system-label">
+              Команда .sound
+            </span>
+            {message.content}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

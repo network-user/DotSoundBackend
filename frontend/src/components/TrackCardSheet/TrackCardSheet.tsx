@@ -18,6 +18,12 @@ import { TrackInfoContent } from '@/components/TrackInfoContent/TrackInfoContent
 import { Waveform } from '@/components/Waveform/Waveform'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { useToast } from '@/components/ui/Toast'
+import {
+  downloadTrack,
+  isCached,
+  removeTrack,
+} from '@/lib/offlineCache'
+import { hapticNotification } from '@/lib/telegram'
 import type {
   Track,
   TrackCardResponse,
@@ -418,6 +424,51 @@ export function TrackCardSheet({
   const exit = useExitTransition(
     Boolean(isCardOpen && track),
   )
+
+  const [downloadState, setDownloadState] = useState<
+    'idle' | 'downloading' | 'cached'
+  >('idle')
+  const [downloadPct, setDownloadPct] = useState(0)
+
+  useEffect(() => {
+    if (!track) return
+    isCached(track.id).then((c) =>
+      setDownloadState(c ? 'cached' : 'idle'),
+    )
+  }, [track?.id])
+
+  const handleDownload = async () => {
+    if (!track) return
+    if (downloadState === 'cached') {
+      await removeTrack(track.id)
+      setDownloadState('idle')
+      setDownloadPct(0)
+      toast.info('Удалено из скачанных')
+      return
+    }
+    setDownloadState('downloading')
+    setDownloadPct(0)
+    try {
+      await downloadTrack(track, (loaded, total) => {
+        if (total) {
+          setDownloadPct(
+            Math.round((loaded / total) * 100),
+          )
+        }
+      })
+      setDownloadState('cached')
+      hapticNotification('success')
+      toast.success('Трек доступен офлайн')
+    } catch (e) {
+      setDownloadState('idle')
+      const msg =
+        e instanceof Error
+          ? e.message
+          : 'Ошибка скачивания'
+      toast.error(msg)
+    }
+  }
+
   if (!exit.mounted || !track) return null
 
   const coverSrc = coverKey
@@ -880,6 +931,28 @@ export function TrackCardSheet({
             <Icon name="text" size={20} />
             <span className="tcs-action-label">
               Текст
+            </span>
+          </button>
+
+          <button
+            className={`tcs-action-btn${downloadState === 'cached' ? ' active' : ''}`}
+            onClick={handleDownload}
+            disabled={downloadState === 'downloading'}
+          >
+            <Icon
+              name={
+                downloadState === 'cached'
+                  ? 'check'
+                  : 'cloud-download'
+              }
+              size={20}
+            />
+            <span className="tcs-action-label">
+              {downloadState === 'cached'
+                ? 'Скачано'
+                : downloadState === 'downloading'
+                  ? `${downloadPct}%`
+                  : 'Скачать'}
             </span>
           </button>
 

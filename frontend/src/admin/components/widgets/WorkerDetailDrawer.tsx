@@ -468,22 +468,22 @@ WORKER_ASR_DEVICE=auto`,
                   ip={ev.ip}{' '}
                 </span>
               )}
-              {ev.meta &&
-                Object.keys(
-                  (ev.meta as Record<
-                    string,
-                    unknown
-                  >) || {},
-                ).length > 0 && (
-                  <span
-                    className="admin-mono"
-                    title={JSON.stringify(
-                      ev.meta,
-                    )}
-                  >
-                    [meta]
-                  </span>
-                )}
+              {Boolean(
+                ev.meta &&
+                  Object.keys(
+                    (ev.meta as Record<
+                      string,
+                      unknown
+                    >) || {},
+                  ).length > 0,
+              ) && (
+                <span
+                  className="admin-mono"
+                  title={JSON.stringify(ev.meta)}
+                >
+                  [meta]
+                </span>
+              )}
             </li>
           ))}
         </ul>

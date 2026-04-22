@@ -100,16 +100,20 @@ export async function downloadTrack(
     res.headers.get('content-length') || 0,
   )
   const reader = res.body.getReader()
-  const chunks: Uint8Array[] = []
+  const parts: BlobPart[] = []
   let loaded = 0
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
-    chunks.push(value)
+    const buf = value.buffer.slice(
+      value.byteOffset,
+      value.byteOffset + value.byteLength,
+    ) as ArrayBuffer
+    parts.push(buf)
     loaded += value.byteLength
     onProgress?.(loaded, total)
   }
-  const blob = new Blob(chunks, {
+  const blob = new Blob(parts, {
     type: res.headers.get('content-type') || 'audio/mpeg',
   })
   const cache = await caches.open(CACHE_NAME)
