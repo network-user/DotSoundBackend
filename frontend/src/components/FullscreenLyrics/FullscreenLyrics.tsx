@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
+import { getIsAdmin } from '@/lib/telegram'
 import { usePlayer } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import type { LyricsResponse, SyncedLine } from '@/types/api'
@@ -137,6 +138,7 @@ export function FullscreenLyrics() {
   )
   const karaokeActive =
     karaoke && hasWordTimes && lyrics?.sync_quality === 'word'
+  const isAdmin = getIsAdmin()
 
   return (
     <div className="fl-overlay">
@@ -236,6 +238,27 @@ export function FullscreenLyrics() {
           <p className="fl-no-lyrics">
             {t('lyrics.notFound', 'Текст не найден')}
           </p>
+        )}
+
+        {!loading && lyrics && isAdmin && (
+          <div className="lyrics-debug-attribution">
+            <div className="lyrics-debug-row">
+              <span className="lyrics-debug-label">
+                Источник текста:
+              </span>
+              <span className="lyrics-debug-value">
+                {lyrics.source_name || '—'}
+              </span>
+            </div>
+            <div className="lyrics-debug-row">
+              <span className="lyrics-debug-label">
+                Синхронизовал:
+              </span>
+              <span className="lyrics-debug-value">
+                {lyrics.sync_source_name || '—'}
+              </span>
+            </div>
+          </div>
         )}
       </div>
 

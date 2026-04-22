@@ -361,3 +361,26 @@ async def test_import_or_get_track_sets_provenance(
     assert track.source_url == sc_url
     assert track.canonical_source_url == sc_url
     assert track.source_name == "SoundCloud"
+
+
+async def test_import_or_get_track_dedup_via_unique_index(
+    session: AsyncSession,
+) -> None:
+    # Importing the same SC URL twice in a row must return the
+    # first row, not create a duplicate (the partial unique index
+    # on tracks.sc_url + ON CONFLICT DO NOTHING handle the race).
+    svc = SoundCloudService("test_id", session)
+    sc_url = "https://soundcloud.com/dedup/case"
+    sc_data = {
+        "permalink_url": sc_url,
+        "title": "Same Song",
+        "user": {"username": "Artist"},
+        "duration": 90000,
+        "uri": "sc:dedup",
+    }
+
+    first = await svc.import_or_get_track(sc_data, uploader_id=1)
+    second = await svc.import_or_get_track(sc_data, uploader_id=2)
+
+    assert first.id == second.id
+    assert first.uploaded_by_id == 1

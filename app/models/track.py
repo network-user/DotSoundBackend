@@ -6,9 +6,11 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
+    text,
     true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -24,6 +26,23 @@ if TYPE_CHECKING:
 
 class Track(Base, TimestampMixin):
     __tablename__ = "tracks"
+    __table_args__ = (
+        Index(
+            "uq_tracks_sc_url",
+            "sc_url",
+            unique=True,
+            postgresql_where=text("sc_url IS NOT NULL"),
+            sqlite_where=text("sc_url IS NOT NULL"),
+        ),
+        Index(
+            "uq_tracks_imported_from_external_id",
+            "imported_from",
+            "external_id",
+            unique=True,
+            postgresql_where=text("external_id IS NOT NULL"),
+            sqlite_where=text("external_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     title: Mapped[str] = mapped_column(

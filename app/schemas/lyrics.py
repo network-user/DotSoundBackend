@@ -11,9 +11,7 @@ class WordTime(BaseModel):
 
 
 class SyncedLine(BaseModel):
-    time_ms: int = Field(
-        ge=0, description="Timestamp in milliseconds"
-    )
+    time_ms: int = Field(ge=0, description="Timestamp in milliseconds")
     text: str
     confidence: float = Field(
         default=0.0,
@@ -33,14 +31,10 @@ class LyricsSyncRequest(BaseModel):
 
     @field_validator("synced_lines")
     @classmethod
-    def lines_sorted(
-        cls, v: list[SyncedLine]
-    ) -> list[SyncedLine]:
+    def lines_sorted(cls, v: list[SyncedLine]) -> list[SyncedLine]:
         for i in range(1, len(v)):
             if v[i].time_ms < v[i - 1].time_ms:
-                raise ValueError(
-                    "synced_lines must be sorted by time_ms"
-                )
+                raise ValueError("synced_lines must be sorted by time_ms")
         return v
 
 
@@ -57,6 +51,15 @@ class LyricsResponse(BaseModel):
             "Human-readable provider label for user-facing "
             "attribution. Only populated when the underlying "
             "provider publishes a stable public name."
+        ),
+    )
+    sync_source_name: str | None = Field(
+        default=None,
+        description=(
+            "Provider that supplied the timecodes. May differ "
+            "from source_name when sync is built locally "
+            "(e.g. text from one provider, sync built "
+            "audio-based)."
         ),
     )
     sync_quality: str | None = None

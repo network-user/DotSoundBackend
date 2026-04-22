@@ -205,11 +205,14 @@ export interface LyricsResponse {
   synced_lines: SyncedLine[] | null
   source: string
   source_name?: string | null
+  sync_source_name?: string | null
   sync_quality?: string | null
   sync_profile?: string | null
   created_at: string
   updated_at: string
 }
+
+
 
 export interface LyricsAutoResponse {
   task_id: string
@@ -494,4 +497,5 @@ export interface ImportJobResponse {
       reason?: string
     }[]
   } | null
+  queue_position?: number | null
 }

@@ -5,7 +5,7 @@ from dotsound_private_core.services import (
     profile_audios_url,
 )
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -17,9 +17,7 @@ from app.services.external_providers import (
     scan_playlist_url,
 )
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _BOT_TIMEOUT = 30.0
 
@@ -33,16 +31,10 @@ class ImportService:
         self._session = session
         self._user_repo = UserRepository(session)
 
-    async def _resolve_user(
-        self, user_id: int
-    ) -> User:
+    async def _resolve_user(self, user_id: int) -> User:
         user = await self._user_repo.get_by_id(user_id)
         if not user:
-            user = (
-                await self._user_repo.get_by_telegram_id(
-                    user_id
-                )
-            )
+            user = await self._user_repo.get_by_telegram_id(user_id)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -50,9 +42,7 @@ class ImportService:
             )
         return user
 
-    async def scan_telegram_profile(
-        self, user_id: int
-    ) -> ImportJob:
+    async def scan_telegram_profile(self, user_id: int) -> ImportJob:
         user = await self._resolve_user(user_id)
 
         active = await self._get_active_job(user.id)
@@ -69,9 +59,7 @@ class ImportService:
         await self._session.refresh(job)
 
         try:
-            async with httpx.AsyncClient(
-                timeout=_BOT_TIMEOUT
-            ) as client:
+            async with httpx.AsyncClient(timeout=_BOT_TIMEOUT) as client:
                 resp = await client.get(
                     profile_audios_url(
                         settings.bot_internal_url,
@@ -83,9 +71,7 @@ class ImportService:
                 )
                 if resp.status_code != 200:
                     job.status = "failed"
-                    job.tracks_data = {
-                        "error": resp.text
-                    }
+                    job.tracks_data = {"error": resp.text}
                     logger.error(
                         "telegram_scan_failed",
                         status=resp.status_code,
@@ -96,9 +82,7 @@ class ImportService:
         except Exception as exc:
             job.status = "failed"
             job.tracks_data = {"error": str(exc)}
-            logger.error(
-                "telegram_scan_error", error=str(exc)
-            )
+            logger.error("telegram_scan_error", error=str(exc))
             return job
 
         audios = data.get("audios", [])
@@ -192,7 +176,7 @@ class ImportService:
         user = await self._resolve_user(user_id)
         job = await self._get_job(job_id, user.id)
 
-        if job.status not in ("ready", "importing"):
+        if job.status not in ("ready", "importing", "queued"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Job status is {job.status}",
@@ -201,11 +185,7 @@ class ImportService:
         is_external = job.source in EXTERNAL_IMPORT_SOURCES
         items_key = "tracks" if is_external else "audios"
         items = (job.tracks_data or {}).get(items_key, [])
-        selected = [
-            items[i]
-            for i in track_indices
-            if 0 <= i < len(items)
-        ]
+        selected = [items[i] for i in track_indices if 0 <= i < len(items)]
 
         job.tracks_data = {
             **(job.tracks_data or {}),
@@ -215,6 +195,27 @@ class ImportService:
         job.total_tracks = len(selected)
         job.completed_tracks = 0
         job.failed_tracks = 0
+
+        global_active = await self._count_importing_jobs()
+        per_user_active = await self._count_importing_jobs(user_id=user.id)
+        global_full = global_active >= settings.import_max_concurrent_jobs
+        per_user_full = (
+            per_user_active >= settings.import_per_user_max_concurrent
+        )
+        if global_full or per_user_full:
+            job.status = "queued"
+            await self._session.flush()
+            logger.info(
+                "import_queued",
+                job_id=job.id,
+                source=job.source,
+                selected=len(selected),
+                global_active=global_active,
+                per_user_active=per_user_active,
+                reason=("global_cap" if global_full else "per_user_cap"),
+            )
+            return job
+
         job.status = "importing"
 
         if is_external:
@@ -238,30 +239,57 @@ class ImportService:
         )
         return job
 
-    async def get_job_status(
+    async def get_queue_position(
         self, job_id: int, user_id: int
-    ) -> ImportJob:
+    ) -> int | None:
+        user = await self._resolve_user(user_id)
+        job = await self._get_job(job_id, user.id)
+        if job.status != "queued":
+            return None
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(ImportJob)
+            .where(
+                ImportJob.status == "queued",
+                ImportJob.created_at <= job.created_at,
+                ImportJob.id != job.id,
+            )
+        )
+        ahead = int(result.scalar() or 0)
+        return ahead + 1
+
+    async def _count_importing_jobs(self, user_id: int | None = None) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(ImportJob)
+            .where(ImportJob.status == "importing")
+        )
+        if user_id is not None:
+            stmt = stmt.where(ImportJob.user_id == user_id)
+        result = await self._session.execute(stmt)
+        return int(result.scalar() or 0)
+
+    async def get_job_status(self, job_id: int, user_id: int) -> ImportJob:
         user = await self._resolve_user(user_id)
         return await self._get_job(job_id, user.id)
 
-    async def get_active_job(
-        self, user_id: int
-    ) -> ImportJob | None:
+    async def get_active_job(self, user_id: int) -> ImportJob | None:
         user = await self._resolve_user(user_id)
         return await self._get_active_job(user.id)
 
-    async def cancel_job(
-        self, job_id: int, user_id: int
-    ) -> ImportJob:
+    async def cancel_job(self, job_id: int, user_id: int) -> ImportJob:
         user = await self._resolve_user(user_id)
         job = await self._get_job(job_id, user.id)
-        if job.status in ("importing", "scanning", "ready"):
+        if job.status in (
+            "importing",
+            "scanning",
+            "ready",
+            "queued",
+        ):
             job.status = "cancelled"
         return job
 
-    async def _get_job(
-        self, job_id: int, internal_user_id: int
-    ) -> ImportJob:
+    async def _get_job(self, job_id: int, internal_user_id: int) -> ImportJob:
         result = await self._session.execute(
             select(ImportJob).where(
                 ImportJob.id == job_id,
@@ -276,9 +304,7 @@ class ImportService:
             )
         return job
 
-    async def _get_active_job(
-        self, internal_user_id: int
-    ) -> ImportJob | None:
+    async def _get_active_job(self, internal_user_id: int) -> ImportJob | None:
         result = await self._session.execute(
             select(ImportJob)
             .where(
@@ -288,6 +314,7 @@ class ImportService:
                         "scanning",
                         "ready",
                         "importing",
+                        "queued",
                     ]
                 ),
             )

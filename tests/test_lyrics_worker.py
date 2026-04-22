@@ -16,14 +16,17 @@ from app.services.lyrics_worker import (
 
 @pytest.fixture(autouse=True)
 def _reset_lyrics_cache():
-    with patch(
-        "app.services.lyrics_worker.get_cached_lyrics_result",
-        new_callable=AsyncMock,
-        return_value=None,
-    ), patch(
-        "app.services.lyrics_worker.set_cached_lyrics_result",
-        new_callable=AsyncMock,
-        return_value=None,
+    with (
+        patch(
+            "app.services.lyrics_worker.get_cached_lyrics_result",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+        patch(
+            "app.services.lyrics_worker.set_cached_lyrics_result",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
     ):
         yield
 
@@ -43,6 +46,7 @@ class _FakeLyricsResult:
     text: str = "Line one\nLine two"
     synced_lines: list | None = None
     source_name: str | None = None
+    sync_source_name: str | None = None
 
 
 @dataclass
@@ -58,12 +62,8 @@ def _make_lyrics_result(
     result = _FakeLyricsResult()
     if with_sync:
         result.synced_lines = [
-            _FakeSyncedLine(
-                time_ms=1000, text="Line one"
-            ),
-            _FakeSyncedLine(
-                time_ms=3000, text="Line two"
-            ),
+            _FakeSyncedLine(time_ms=1000, text="Line one"),
+            _FakeSyncedLine(time_ms=3000, text="Line two"),
         ]
     return result
 
@@ -77,9 +77,7 @@ def mock_session():
 @pytest.fixture
 def mock_db_session(mock_session):
     ctx = AsyncMock()
-    ctx.__aenter__ = AsyncMock(
-        return_value=mock_session
-    )
+    ctx.__aenter__ = AsyncMock(return_value=mock_session)
     ctx.__aexit__ = AsyncMock(return_value=False)
     with patch(
         "app.services.lyrics_worker.AsyncSessionLocal",
@@ -93,12 +91,8 @@ def _setup_track_query(
     track: _FakeTrack | None,
 ) -> None:
     result_mock = MagicMock()
-    result_mock.scalar_one_or_none.return_value = (
-        track
-    )
-    mock_session.execute = AsyncMock(
-        return_value=result_mock
-    )
+    result_mock.scalar_one_or_none.return_value = track
+    mock_session.execute = AsyncMock(return_value=result_mock)
 
 
 class TestGenerateLyricsTask:
@@ -108,10 +102,7 @@ class TestGenerateLyricsTask:
         new_callable=AsyncMock,
         return_value=b"fake-audio-bytes",
     )
-    @patch(
-        "dotsound_private_core.services"
-        ".lyrics_provider.generate_lyrics"
-    )
+    @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_with_sync_downloads_audio(
         self,
         mock_generate: MagicMock,
@@ -120,35 +111,25 @@ class TestGenerateLyricsTask:
     ) -> None:
         track = _FakeTrack()
         _setup_track_query(mock_db_session, track)
-        mock_generate.return_value = (
-            _make_lyrics_result(with_sync=True)
-        )
+        mock_generate.return_value = _make_lyrics_result(with_sync=True)
 
         with patch(
-            "app.services.lyrics_worker"
-            ".LyricsRepository"
+            "app.services.lyrics_worker" ".LyricsRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo
 
-            result = await generate_lyrics_task(
-                track_id=1, with_sync=True
-            )
+            result = await generate_lyrics_task(track_id=1, with_sync=True)
 
         assert result["status"] == "found"
         assert result["has_sync"] is True
-        mock_s3.assert_called_once_with(
-            "tracks/1/audio.mp3"
-        )
+        mock_s3.assert_called_once_with("tracks/1/audio.mp3")
         mock_generate.assert_called_once()
         call_kwargs = mock_generate.call_args[1]
         assert call_kwargs["audio_path"] is not None
 
     @pytest.mark.anyio
-    @patch(
-        "dotsound_private_core.services"
-        ".lyrics_provider.generate_lyrics"
-    )
+    @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_title_only_fallback_when_artist_mismatch(
         self,
         mock_generate: MagicMock,
@@ -166,15 +147,12 @@ class TestGenerateLyricsTask:
         ]
 
         with patch(
-            "app.services.lyrics_worker"
-            ".LyricsRepository"
+            "app.services.lyrics_worker" ".LyricsRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo
 
-            result = await generate_lyrics_task(
-                track_id=1, with_sync=True
-            )
+            result = await generate_lyrics_task(track_id=1, with_sync=True)
 
         assert result["status"] == "found"
         assert result["has_sync"] is False
@@ -187,10 +165,7 @@ class TestGenerateLyricsTask:
         assert second_call["title"] == "correct title"
 
     @pytest.mark.anyio
-    @patch(
-        "dotsound_private_core.services"
-        ".lyrics_provider.generate_lyrics"
-    )
+    @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_bypass_cache_skips_cache_read(
         self,
         mock_generate: MagicMock,
@@ -200,13 +175,15 @@ class TestGenerateLyricsTask:
         _setup_track_query(mock_db_session, track)
         mock_generate.return_value = _make_lyrics_result()
 
-        with patch(
-            "app.services.lyrics_worker.get_cached_lyrics_result",
-            new_callable=AsyncMock,
-        ) as mock_get_cached, patch(
-            "app.services.lyrics_worker"
-            ".LyricsRepository"
-        ) as mock_repo_cls:
+        with (
+            patch(
+                "app.services.lyrics_worker.get_cached_lyrics_result",
+                new_callable=AsyncMock,
+            ) as mock_get_cached,
+            patch(
+                "app.services.lyrics_worker" ".LyricsRepository"
+            ) as mock_repo_cls,
+        ):
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo
             mock_get_cached.return_value = {
@@ -224,10 +201,7 @@ class TestGenerateLyricsTask:
         mock_generate.assert_called_once()
 
     @pytest.mark.anyio
-    @patch(
-        "dotsound_private_core.services"
-        ".lyrics_provider.generate_lyrics"
-    )
+    @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_without_sync_no_audio(
         self,
         mock_generate: MagicMock,
@@ -235,20 +209,15 @@ class TestGenerateLyricsTask:
     ) -> None:
         track = _FakeTrack()
         _setup_track_query(mock_db_session, track)
-        mock_generate.return_value = (
-            _make_lyrics_result(with_sync=False)
-        )
+        mock_generate.return_value = _make_lyrics_result(with_sync=False)
 
         with patch(
-            "app.services.lyrics_worker"
-            ".LyricsRepository"
+            "app.services.lyrics_worker" ".LyricsRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo
 
-            result = await generate_lyrics_task(
-                track_id=1, with_sync=False
-            )
+            result = await generate_lyrics_task(track_id=1, with_sync=False)
 
         assert result["status"] == "found"
         assert result["has_sync"] is False
@@ -257,10 +226,7 @@ class TestGenerateLyricsTask:
         assert call_kwargs["audio_path"] is None
 
     @pytest.mark.anyio
-    @patch(
-        "dotsound_private_core.services"
-        ".lyrics_provider.generate_lyrics"
-    )
+    @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_external_track_no_file_key(
         self,
         mock_generate: MagicMock,
@@ -268,20 +234,15 @@ class TestGenerateLyricsTask:
     ) -> None:
         track = _FakeTrack(file_key=None)
         _setup_track_query(mock_db_session, track)
-        mock_generate.return_value = (
-            _make_lyrics_result()
-        )
+        mock_generate.return_value = _make_lyrics_result()
 
         with patch(
-            "app.services.lyrics_worker"
-            ".LyricsRepository"
+            "app.services.lyrics_worker" ".LyricsRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo
 
-            result = await generate_lyrics_task(
-                track_id=1, with_sync=True
-            )
+            result = await generate_lyrics_task(track_id=1, with_sync=True)
 
         assert result["status"] == "found"
         call_kwargs = mock_generate.call_args[1]
@@ -289,8 +250,7 @@ class TestGenerateLyricsTask:
 
     @pytest.mark.anyio
     @patch(
-        "dotsound_private_core.services"
-        ".lyrics_provider.generate_lyrics",
+        "dotsound_private_core.services" ".lyrics_provider.generate_lyrics",
         return_value=None,
     )
     async def test_not_found(
@@ -301,9 +261,7 @@ class TestGenerateLyricsTask:
         track = _FakeTrack()
         _setup_track_query(mock_db_session, track)
 
-        result = await generate_lyrics_task(
-            track_id=1
-        )
+        result = await generate_lyrics_task(track_id=1)
 
         assert result["status"] == "not_found"
 
@@ -314,19 +272,14 @@ class TestGenerateLyricsTask:
     ) -> None:
         _setup_track_query(mock_db_session, None)
 
-        result = await generate_lyrics_task(
-            track_id=999
-        )
+        result = await generate_lyrics_task(track_id=999)
 
         assert result["status"] == "error"
-        assert "track_not_found" in result.get(
-            "detail", ""
-        )
+        assert "track_not_found" in result.get("detail", "")
 
     @pytest.mark.anyio
     @patch(
-        "dotsound_private_core.services"
-        ".lyrics_provider.generate_lyrics",
+        "dotsound_private_core.services" ".lyrics_provider.generate_lyrics",
         side_effect=RuntimeError("boom"),
     )
     async def test_exception_returns_error(
@@ -337,17 +290,12 @@ class TestGenerateLyricsTask:
         track = _FakeTrack()
         _setup_track_query(mock_db_session, track)
 
-        result = await generate_lyrics_task(
-            track_id=1
-        )
+        result = await generate_lyrics_task(track_id=1)
 
         assert result["status"] == "error"
 
     @pytest.mark.anyio
-    @patch(
-        "dotsound_private_core.services"
-        ".lyrics_provider.generate_lyrics"
-    )
+    @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_with_sync_skips_text_only_cache(
         self,
         mock_generate: MagicMock,
@@ -355,17 +303,17 @@ class TestGenerateLyricsTask:
     ) -> None:
         track = _FakeTrack(file_key=None)
         _setup_track_query(mock_db_session, track)
-        mock_generate.return_value = (
-            _make_lyrics_result(with_sync=True)
-        )
+        mock_generate.return_value = _make_lyrics_result(with_sync=True)
 
-        with patch(
-            "app.services.lyrics_worker.get_cached_lyrics_result",
-            new_callable=AsyncMock,
-        ) as mock_get_cached, patch(
-            "app.services.lyrics_worker"
-            ".LyricsRepository"
-        ) as mock_repo_cls:
+        with (
+            patch(
+                "app.services.lyrics_worker.get_cached_lyrics_result",
+                new_callable=AsyncMock,
+            ) as mock_get_cached,
+            patch(
+                "app.services.lyrics_worker" ".LyricsRepository"
+            ) as mock_repo_cls,
+        ):
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo
             mock_get_cached.return_value = {
@@ -384,16 +332,10 @@ class TestGenerateLyricsTask:
         repo_call = mock_repo.create_or_update.await_args
         assert repo_call is not None
         assert repo_call.kwargs["synced_lines"] is not None
-        assert (
-            repo_call.kwargs["synced_lines"][0]["time_ms"]
-            == 1000
-        )
+        assert repo_call.kwargs["synced_lines"][0]["time_ms"] == 1000
 
     @pytest.mark.anyio
-    @patch(
-        "dotsound_private_core.services"
-        ".lyrics_provider.generate_lyrics"
-    )
+    @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_with_sync_reuses_cached_synced_lines(
         self,
         mock_generate: MagicMock,
@@ -415,17 +357,19 @@ class TestGenerateLyricsTask:
             "sync_profile": "cpu_light",
         }
 
-        with patch(
-            "app.services.lyrics_worker.get_cached_lyrics_result",
-            new_callable=AsyncMock,
-        ) as mock_get_cached, patch(
-            "app.services.lyrics_worker"
-            ".LyricsRepository"
-        ) as mock_repo_cls, patch(
-            "app.services.lyrics_worker"
-            ".store_partial_synced",
-            new_callable=AsyncMock,
-        ) as mock_store_partial:
+        with (
+            patch(
+                "app.services.lyrics_worker.get_cached_lyrics_result",
+                new_callable=AsyncMock,
+            ) as mock_get_cached,
+            patch(
+                "app.services.lyrics_worker" ".LyricsRepository"
+            ) as mock_repo_cls,
+            patch(
+                "app.services.lyrics_worker" ".store_partial_synced",
+                new_callable=AsyncMock,
+            ) as mock_store_partial,
+        ):
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo
             mock_get_cached.return_value = cached_payload
@@ -442,16 +386,12 @@ class TestGenerateLyricsTask:
         repo_call = mock_repo.create_or_update.await_args
         assert repo_call is not None
         assert (
-            repo_call.kwargs["synced_lines"]
-            == cached_payload["synced_lines"]
+            repo_call.kwargs["synced_lines"] == cached_payload["synced_lines"]
         )
         mock_store_partial.assert_awaited_once()
 
     @pytest.mark.anyio
-    @patch(
-        "dotsound_private_core.services"
-        ".lyrics_provider.generate_lyrics"
-    )
+    @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_text_only_cache_serves_text_only_request(
         self,
         mock_generate: MagicMock,
@@ -460,13 +400,15 @@ class TestGenerateLyricsTask:
         track = _FakeTrack()
         _setup_track_query(mock_db_session, track)
 
-        with patch(
-            "app.services.lyrics_worker.get_cached_lyrics_result",
-            new_callable=AsyncMock,
-        ) as mock_get_cached, patch(
-            "app.services.lyrics_worker"
-            ".LyricsRepository"
-        ) as mock_repo_cls:
+        with (
+            patch(
+                "app.services.lyrics_worker.get_cached_lyrics_result",
+                new_callable=AsyncMock,
+            ) as mock_get_cached,
+            patch(
+                "app.services.lyrics_worker" ".LyricsRepository"
+            ) as mock_repo_cls,
+        ):
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo
             mock_get_cached.return_value = {
@@ -489,10 +431,7 @@ class TestGenerateLyricsTask:
         new_callable=AsyncMock,
         return_value=b"fake-audio-bytes",
     )
-    @patch(
-        "dotsound_private_core.services"
-        ".lyrics_provider.generate_lyrics"
-    )
+    @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
     async def test_source_name_propagates_to_repo(
         self,
         mock_generate: MagicMock,
@@ -510,15 +449,12 @@ class TestGenerateLyricsTask:
         mock_generate.return_value = result
 
         with patch(
-            "app.services.lyrics_worker"
-            ".LyricsRepository"
+            "app.services.lyrics_worker" ".LyricsRepository"
         ) as mock_repo_cls:
             mock_repo = AsyncMock()
             mock_repo_cls.return_value = mock_repo
 
-            await generate_lyrics_task(
-                track_id=1, with_sync=True
-            )
+            await generate_lyrics_task(track_id=1, with_sync=True)
 
         # external_id from Track is forwarded to the provider so
         # the priority probe can skip its own search step.
@@ -534,6 +470,43 @@ class TestGenerateLyricsTask:
         assert repo_kwargs["synced_lines"] is not None
         assert len(repo_kwargs["synced_lines"]) == 2
 
+    @pytest.mark.anyio
+    @patch(
+        "app.services.lyrics_worker.s3.download_object",
+        new_callable=AsyncMock,
+        return_value=b"fake-audio-bytes",
+    )
+    @patch("dotsound_private_core.services" ".lyrics_provider.generate_lyrics")
+    async def test_sync_source_name_propagates_to_repo(
+        self,
+        mock_generate: MagicMock,
+        _mock_s3: AsyncMock,
+        mock_db_session: AsyncMock,
+    ) -> None:
+        # When PrivateCore returns BOTH a text source ("Yandex
+        # Music") and a separate sync source ("Audio Alignment",
+        # i.e. timecodes built locally from audio), the worker
+        # must pass each label through to its own column so the
+        # admin debug UI can show them apart.
+        track = _FakeTrack(external_id="55048328")
+        _setup_track_query(mock_db_session, track)
+        result = _make_lyrics_result(with_sync=True)
+        result.source_name = "Yandex Music"
+        result.sync_source_name = "Audio Alignment"
+        mock_generate.return_value = result
+
+        with patch(
+            "app.services.lyrics_worker.LyricsRepository"
+        ) as mock_repo_cls:
+            mock_repo = AsyncMock()
+            mock_repo_cls.return_value = mock_repo
+
+            await generate_lyrics_task(track_id=1, with_sync=True)
+
+        repo_kwargs = mock_repo.create_or_update.await_args.kwargs
+        assert repo_kwargs["source_name"] == "Yandex Music"
+        assert repo_kwargs["sync_source_name"] == "Audio Alignment"
+
 
 class TestCacheHelpers:
     def test_cached_satisfies_request_text_only(self) -> None:
@@ -544,9 +517,7 @@ class TestCacheHelpers:
     def test_cached_satisfies_request_with_sync(self) -> None:
         cached = {
             "text": "hello",
-            "synced_lines": [
-                {"time_ms": 0, "text": "hello"}
-            ],
+            "synced_lines": [{"time_ms": 0, "text": "hello"}],
         }
         assert _cached_satisfies_request(cached, True) is True
 
@@ -557,22 +528,14 @@ class TestCacheHelpers:
         assert _cached_satisfies_request(cached, True) is False
 
     def test_cached_satisfies_request_none(self) -> None:
-        assert (
-            _cached_satisfies_request(None, False) is False
-        )
-        assert (
-            _cached_satisfies_request(None, True) is False
-        )
+        assert _cached_satisfies_request(None, False) is False
+        assert _cached_satisfies_request(None, True) is False
 
     def test_cache_keys_for_track_includes_title_only(
         self,
     ) -> None:
-        keys = _cache_keys_for_track(
-            "Big Baby Tape", "STOMP"
-        )
-        assert _search_cache_key(
-            "Big Baby Tape", "STOMP"
-        ) in keys
+        keys = _cache_keys_for_track("Big Baby Tape", "STOMP")
+        assert _search_cache_key("Big Baby Tape", "STOMP") in keys
         assert _search_cache_key("", "STOMP") in keys
         assert len(keys) == 2
 
@@ -591,15 +554,11 @@ class TestInvalidateCachedLyricsForTrack:
             "app.services.lyrics_worker.get_redis_client",
             return_value=redis_client,
         ):
-            await invalidate_cached_lyrics_for_track(
-                "Big Baby Tape", "STOMP"
-            )
+            await invalidate_cached_lyrics_for_track("Big Baby Tape", "STOMP")
 
         redis_client.delete.assert_awaited_once()
         deleted = redis_client.delete.await_args.args
-        assert _search_cache_key(
-            "Big Baby Tape", "STOMP"
-        ) in deleted
+        assert _search_cache_key("Big Baby Tape", "STOMP") in deleted
         assert _search_cache_key("", "STOMP") in deleted
 
     @pytest.mark.anyio
@@ -609,12 +568,8 @@ class TestInvalidateCachedLyricsForTrack:
             "app.services.lyrics_worker.get_redis_client",
             return_value=redis_client,
         ):
-            await invalidate_cached_lyrics_for_track(
-                "", "Just A Title"
-            )
+            await invalidate_cached_lyrics_for_track("", "Just A Title")
 
         redis_client.delete.assert_awaited_once()
         deleted = redis_client.delete.await_args.args
-        assert deleted == (
-            _search_cache_key("", "Just A Title"),
-        )
+        assert deleted == (_search_cache_key("", "Just A Title"),)
