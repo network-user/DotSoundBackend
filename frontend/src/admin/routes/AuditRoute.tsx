@@ -134,7 +134,7 @@ export function AuditRoute() {
       </div>
       <DataTable
         columns={columns}
-        rows={(data?.items || []) as AuditRow[]}
+        rows={(data?.items || []) as unknown as AuditRow[]}
       />
       <div className="admin-pagination">
         <Press

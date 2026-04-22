@@ -101,6 +101,13 @@ export default defineConfig({
   build: {
     outDir: '../app/static/mini_app',
     emptyOutDir: true,
+    modulePreload: {
+      polyfill: true,
+      resolveDependencies: (_filename, deps) =>
+        deps.filter(
+          (d) => !d.includes('admin-bundle'),
+        ),
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {

@@ -117,6 +117,14 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
             {!track.is_public && (
               <span className="track-badge track-badge-private"><Icon name="lock" size={12} /></span>
             )}
+            {isOwner && !track.is_active && (
+              <span
+                className="track-badge track-badge-hidden"
+                title="Скрыто модератором"
+              >
+                MOD
+              </span>
+            )}
             {track.source === 'soundcloud' && <span className="track-badge track-badge-sc">SC</span>}
             {track.source === 'telegram' && <span className="track-badge track-badge-tg">TG</span>}
             {catalogLabel && <span className="track-badge">{catalogLabel}</span>}

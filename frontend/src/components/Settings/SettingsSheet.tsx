@@ -8,6 +8,8 @@ import {
 } from '@/lib/telegram'
 import { Icon } from '@/components/Icon/Icon'
 import { useExitTransition } from '@/hooks/useExitTransition'
+import { canInstallPwa } from '@/components/PwaInstall/InstallPrompt'
+import { useToast } from '@/components/ui/Toast'
 import { LinkedAccounts } from './LinkedAccounts'
 import { TwoFASettings } from './TwoFASettings'
 
@@ -115,6 +117,15 @@ export function SettingsSheet({
     )
   }
 
+  const toast = useToast()
+  const installable = canInstallPwa()
+  const handleInstallHint = () => {
+    toast.info(
+      'Откройте меню браузера и выберите «Установить приложение». Если кнопки нет — приложение уже установлено.',
+      { duration: 7000 },
+    )
+  }
+
   return (
     <div
       className={`settings-backdrop${exit.cls}`}
@@ -217,6 +228,21 @@ export function SettingsSheet({
               className="settings-chevron"
             />
           </button>
+
+          {installable && (
+            <button
+              className="settings-item"
+              onClick={handleInstallHint}
+            >
+              <Icon name="install" size={20} />
+              <span>Установить как приложение</span>
+              <Icon
+                name="chevron"
+                size={16}
+                className="settings-chevron"
+              />
+            </button>
+          )}
 
           <div className="settings-hint">
             Для управления музыкой с экрана

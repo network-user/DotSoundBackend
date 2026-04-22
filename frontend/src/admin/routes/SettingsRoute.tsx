@@ -427,7 +427,7 @@ function BackupsSection() {
           <h3 className="admin-card__sub">
             {label} ({items.length})
           </h3>
-          <DataTable
+          <DataTable<Record<string, unknown>>
             columns={[
               {
                 header: 'Name',
@@ -451,7 +451,7 @@ function BackupsSection() {
                   ).toLocaleString(),
               },
             ]}
-            rows={items as never[]}
+            rows={items}
             emptyHint="—"
           />
         </div>

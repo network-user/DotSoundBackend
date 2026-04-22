@@ -17,8 +17,14 @@ import { ProfileTrackList } from '@/components/Profile/ProfileTrackList'
 import { ImportView } from '@/components/Import/ImportView'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { ProfileAdminButton } from '@/components/Admin/ProfileAdminButton'
+import { OfflineList } from '@/components/Profile/OfflineList'
+import { MyComplaintsList } from '@/components/Profile/MyComplaintsList'
 
-type ProfileTab = 'profile' | 'import'
+type ProfileTab =
+  | 'profile'
+  | 'import'
+  | 'offline'
+  | 'complaints'
 
 interface Props {
   onOpenSettings?: () => void
@@ -187,6 +193,18 @@ export function ProfileView({
           >
             Импорт
           </button>
+          <button
+            className={`profile-tab${tab === 'offline' ? ' active' : ''}`}
+            onClick={() => setTab('offline')}
+          >
+            Скачанные
+          </button>
+          <button
+            className={`profile-tab${tab === 'complaints' ? ' active' : ''}`}
+            onClick={() => setTab('complaints')}
+          >
+            Жалобы
+          </button>
         </div>
         <div className="profile-header-actions">
           <NotificationBell />
@@ -232,6 +250,10 @@ export function ProfileView({
       {tab === 'import' && (
         <ImportView active={tab === 'import'} />
       )}
+
+      {tab === 'offline' && <OfflineList />}
+
+      {tab === 'complaints' && <MyComplaintsList />}
     </section>
   )
 }
