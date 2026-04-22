@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     DateTime,
     ForeignKey,
@@ -61,4 +62,13 @@ class LyricsJob(Base, TimestampMixin):
     )
     duration_ms: Mapped[int | None] = mapped_column(
         Integer, nullable=True
+    )
+    tiers_planned: Mapped[list[str] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    tier_attempts: Mapped[list[dict] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    current_tier: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
     )

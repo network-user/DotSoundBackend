@@ -1,6 +1,8 @@
+import hashlib
 import logging
 import sys
 from typing import Any
+from urllib.parse import urlparse
 
 import structlog
 
@@ -27,6 +29,34 @@ _SENSITIVE_KEYS = frozenset({
     "backup_code",
     "secret",
     "totp_secret",
+    "worker_secret",
+    "x-worker-signature",
+    "x_worker_signature",
+    "signature",
+    "signature_hex",
+    "cookie",
+    "set-cookie",
+    "authorization",
+})
+
+_FULL_REDACT_KEYS = frozenset({
+    "worker_secret",
+    "x-worker-signature",
+    "x_worker_signature",
+    "signature",
+    "signature_hex",
+    "cookie",
+    "set-cookie",
+    "authorization",
+})
+
+_HASH_AND_LEN_KEYS = frozenset({
+    "lyrics_text",
+    "plain_text",
+})
+
+_COUNT_KEYS = frozenset({
+    "synced_lines",
 })
 
 _REDACT_ENABLED = False
@@ -37,11 +67,31 @@ def _mask_value(key: str, value: Any) -> Any:
         return value
     if key not in _SENSITIVE_KEYS:
         return value
+    if key.lower() in _FULL_REDACT_KEYS:
+        return "***REDACTED***"
     s = str(value)
     if len(s) <= 4:
         return "***"
     visible = max(2, len(s) // 5)
     return s[:visible] + "***" + s[-visible:]
+
+
+def _hash_text(value: str) -> str:
+    return hashlib.sha256(
+        value.encode("utf-8", errors="ignore")
+    ).hexdigest()
+
+
+def _redact_url(value: str) -> str:
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return "***URL***"
+    if not parsed.scheme:
+        return value
+    if not parsed.query and len(value) <= 200:
+        return value
+    return f"{parsed.scheme}://{parsed.netloc}/<redacted>"
 
 
 def _redact_processor(
@@ -51,9 +101,25 @@ def _redact_processor(
 ) -> dict[str, Any]:
     if not _REDACT_ENABLED:
         return event_dict
-    return {
-        k: _mask_value(k, v) for k, v in event_dict.items()
-    }
+    out: dict[str, Any] = {}
+    for key, value in event_dict.items():
+        lkey = key.lower()
+        if lkey in _HASH_AND_LEN_KEYS and isinstance(
+            value, str
+        ):
+            out[key + "_sha256"] = _hash_text(value)
+            out[key + "_len"] = len(value)
+            continue
+        if lkey in _COUNT_KEYS and isinstance(value, list):
+            out[key + "_count"] = len(value)
+            continue
+        if isinstance(value, str) and value.startswith(
+            ("http://", "https://")
+        ) and ("?" in value or len(value) > 200):
+            out[key] = _redact_url(value)
+            continue
+        out[key] = _mask_value(key, value)
+    return out
 
 
 def configure_logging(

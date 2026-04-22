@@ -1,0 +1,22 @@
+services:
+  worker:
+    image: dotsound-compute-worker:cpu
+    build:
+      context: ../DotSoundComputeWorker
+      dockerfile: docker/Dockerfile.cpu
+    env_file:
+      - ../DotSoundComputeWorker/.env
+    environment:
+      WORKER_BACKEND_BASE_URL: http://host.docker.internal:8000
+      WORKER_DEBUG: "true"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    read_only: true
+    tmpfs:
+      - /tmp:size=2g
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "5"
+    restart: unless-stopped

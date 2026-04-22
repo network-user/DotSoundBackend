@@ -11,14 +11,18 @@
 
 ---
 
-## Два репозитория
+## Четыре репозитория
 
 | Репо | Путь | Роль |
 |------|------|------|
-| **DotSoundBackend** | `C:\Users\User\PycharmProjects\DotSoundBackend` | FastAPI + React + PostgreSQL + Redis + MinIO |
-| **DotSoundPrivateCore** | `C:\Users\User\PycharmProjects\DotSoundPrivateCore` | Чистый Python, без фреймворков. Алгоритмы, константы, политики |
+| **DotSoundBackend** | `C:\Users\User\PycharmProjects\DotSoundBackend` | FastAPI + React + PostgreSQL + Redis + MinIO. Hub: оркестрация, БД, очередь jobs. |
+| **DotSoundBot** | `C:\Users\User\PycharmProjects\DotSoundBot` | Telegram-бот (aiogram 3). Только UI. |
+| **DotSoundPrivateCore** | `C:\Users\User\PycharmProjects\DotSoundPrivateCore` | Чистый Python, без фреймворков. Алгоритмы, константы, политики. |
+| **DotSoundComputeWorker** | `C:\Users\User\PycharmProjects\DotSoundComputeWorker` | Pull-based ASR-воркер (faster-whisper + опциональный Demucs). Дёргает Backend по HMAC, делает тяжёлый compute, отдаёт результат. |
 
-**Правило:** Backend импортирует из PrivateCore. PrivateCore ничего не знает о FastAPI/SQLAlchemy.
+**Правила:**
+- Backend импортирует из PrivateCore. PrivateCore ничего не знает о FastAPI/SQLAlchemy.
+- Worker импортирует из PrivateCore. Backend никогда не загружает faster-whisper в свой процесс — `disable_local_asr=True` плюс отсутствие `ml`-extra гарантируют это.
 
 ---
 
@@ -75,20 +79,80 @@ src/dotsound_private_core/
 
 ---
 
-## Lyrics — как работает (со стороны Backend)
+## Lyrics — каскадная модель (после rev 0044)
 
-1. Пользователь нажимает "Авто-генерация"
-2. Backend ставит задачу в Taskiq → `generate_lyrics_task`
-3. При необходимости Backend скачивает аудио трека во временный файл
-   (источник: S3 или внешний URL, зависит от трека)
-4. Воркер вызывает `PrivateCore.generate_lyrics(artist, title, audio_path)`
-   и получает обратно текст + опциональные синхронизированные строки
-5. Результат → PostgreSQL (`track_lyrics.synced_lines` JSONB)
-6. Фронтенд поллит `/lyrics/auto/status/{track_id}` каждые 2 сек
+Backend = чистый hub. Каждая задача попадает в `LyricsJob` с
+полем `tiers_planned` (по умолчанию: `catalog_only`,
+`remote_whisper`, `speechkit_paid`) и `current_tier`.
+`tier_attempts` JSONB хранит лог каждой попытки с
+`{tier, started_at, status, error, finished_at}`.
+
+1. Пользователь нажимает "Авто-генерация" → `LyricsService.trigger_auto_generation`
+2. `lyrics_cascade.start_cascade` создаёт job, ставит первый tier:
+   - **`catalog_only`** — Backend Taskiq, вызывает
+     `generate_lyrics(disable_local_asr=True)` (только каталоги:
+     Genius, Yandex Music LRC, ...). Не загружает Whisper.
+   - **`remote_whisper`** — Backend оставляет job со статусом
+     `queued, profile=gpu_full`. Удалённый
+     `DotSoundComputeWorker` забирает через HMAC pull API
+     (`/api/v1/internal/audio-compute/jobs/claim`).
+   - **`speechkit_paid`** — Backend дёргает Yandex Cloud
+     SpeechKit Async через `asr_speechkit_adapter.transcribe`.
+     Tier выключен по умолчанию + жёсткий бюджет-гард
+     (`asr_policy.should_use_paid_asr`).
+3. Tier-успех → `LyricsRepository.create_or_update`, job → `done`.
+4. Tier-фейл / lease expired (lease reaper) →
+   `lyrics_cascade.handle_tier_failure` → следующий tier.
+5. Cascade exhausted → `status="failed"`, причина в `error`.
+
+Whisper (faster-whisper / Demucs) **никогда** не выполняется в
+Backend-процессе. Если хочется быстрый dev-loop без поднятия
+отдельного Worker'а — флаг `LYRICS_ALLOW_LOCAL_ASR=true` в `.env`
+(валидатор в `app/config.py` запрещает его в проде).
+
+См. также:
+
+- `app/services/lyrics_cascade.py` — единственный авторитет на
+  переходы между tier'ами.
+- `app/services/lyrics_worker.py` — `catalog_only_lyrics_task`
+  и `speechkit_lyrics_task`.
+- `app/api/v1/internal/audio_compute.py` — HMAC API для
+  удалённого воркера.
+- `app/middlewares/internal_api_allowlist.py` — IP allowlist
+  для `/api/v1/internal/*`.
+- `docs/compute-worker-protocol.md` — публичный контракт
+  HMAC + claim/result для воркера.
 
 Всё, что относится к источникам текста, распознаванию и
 сопоставлению — внутренняя реализация PrivateCore и в этом
 документе не описывается.
+
+### Observability
+
+- Все события воркера дублируются в Redis Stream
+  `worker_events:{worker_id}` (MAXLEN ~ 1000); админ-WS канал
+  `worker_logs:{worker_id}` стримит их в реальном времени.
+- Полный таймлайн job'а доступен по WS-каналу `job_trace:{job_id}`
+  (источник: `LyricsJob.tier_attempts` + `WorkerAuditLog`).
+- Prometheus-метрики: `lyrics_jobs_total`, `lyrics_job_duration_seconds`,
+  `tier_fallback_total`, `worker_anomaly_total`,
+  `hmac_auth_failures_total`, `speechkit_spent_rub_total`,
+  `speechkit_budget_remaining_rub`, `worker_heartbeat_lag_seconds`.
+
+### Security (compute pipeline)
+
+- HMAC-SHA256 по канону `METHOD\nPATH\nTS\nNONCE\nSHA256(BODY)`,
+  ключ = `sha256(raw_secret)`. Skew ±60s, nonce dedup в Redis 5
+  min.
+- Per-worker IP allowlist (`ComputeWorker.allowed_ip_cidrs`,
+  `dotsound_private_core.services.network_policy`).
+- Per-action rate limit (slowapi-style через Redis), 3 нарушения
+  в 10 min → auto-suspend на 5 min.
+- Anomaly detector: `processing_too_fast`, `duplicate_result`,
+  `suspicious_failure_rate`, `stale_after_claim`. 3 флага в час
+  → auto-suspend на 30 min + admin alert.
+- OTT для скачивания аудио: TTL 5 min, привязан к
+  `worker.last_ip`, single-use через Redis `SET NX EX`.
 
 ---
 

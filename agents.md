@@ -6,6 +6,7 @@ DotSound — музыкальная платформа в Telegram (SoundCloud-s
 Связанные репозитории:
 - `DotSoundBot` (Telegram-бот, aiogram 3)
 - `DotSoundPrivateCore` (приватная бизнес-логика: алгоритмы, рекомендации, ML, scoring, anti-abuse)
+- `DotSoundComputeWorker` (pull-based ASR-воркер: faster-whisper + опциональный Demucs; импортирует PrivateCore через path develop=true)
 
 ## TODO-трекер
 - Файл `TODO.md` в корне — единый источник задач проекта.
@@ -133,6 +134,19 @@ Backend (file_validator.py):
   admin_device_service, admin_alert_service, admin_manifest_service,
   ws.py, observability.py). Временный stub
   `app/core/_admin_security_constants.py` удалён.
+- `services/asr_policy.py` -- cascade-ASR tier order, SpeechKit
+  budget gate, per-job cost estimate. Используется в
+  `app/services/lyrics_cascade.py`,
+  `app/services/lyrics_worker.py`,
+  `app/services/asr_speechkit_adapter.py`.
+- `services/network_policy.py` -- CIDR validation + IP-in-CIDR
+  helper. Питает `app/middlewares/internal_api_allowlist.py` и
+  per-worker IP allowlist в
+  `app/services/compute_worker_service.verify_worker_request`.
+- `services/compute_anomaly_policy.py` -- пороги детектора
+  аномалий воркеров (processing_too_fast, duplicate_result,
+  failure_rate, stale_after_claim) + `should_auto_suspend`.
+  Используется в `app/services/compute_anomaly_service.py`.
 - `contracts/` -- protocol constants
 
 ## Стек
@@ -192,9 +206,12 @@ api/v1/ → services/ → repositories/ → models/
 - `repositories/` — чистые SQL-запросы без бизнес-решений.
 
 ### Известные нарушения (tech debt)
-- `internal/audio_compute.py` — inline ORM в worker-роутах
+- (нет открытых на данный момент)
 
 Закрыто:
+- `internal/audio_compute.py` — inline ORM перенесён в
+  `AudioComputeRepository`/`compute_worker_service`. Routes
+  делают только верификацию + dispatch.
 - `admin/tracks.py`, `admin/users.py`, `admin/complaints.py` —
  inline SQL вынесен в `AdminService` + `AdminRepository`
  (см. `app/services/admin_service.py`, `app/repositories/admin.py`)

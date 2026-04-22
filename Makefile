@@ -1,4 +1,4 @@
-.PHONY: dev infra migrate test test-cov test-fast lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop hooks admin-dev admin-build observability-up observability-down test-admin test-all bootstrap-admin bootstrap-admin-docker
+.PHONY: dev dev-full seed-dev-worker reaper-dev infra migrate test test-cov test-fast lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop hooks admin-dev admin-build observability-up observability-down test-admin test-all bootstrap-admin bootstrap-admin-docker
 
 hooks: ## Install repo git hooks (boundary check before push)
 	git config core.hooksPath .githooks
@@ -8,6 +8,22 @@ dev: ## Start infra, run migrations, start backend
 	timeout /t 4 /nobreak >nul 2>&1 || sleep 4
 	poetry run alembic upgrade head
 	poetry run python main.py
+
+dev-full: ## Same as dev + seed local compute worker credentials
+	docker compose up -d postgres minio redis
+	timeout /t 4 /nobreak >nul 2>&1 || sleep 4
+	poetry run alembic upgrade head
+	poetry run python scripts/seed_dev_worker.py
+	@echo .
+	@echo Now in another terminal: cd ../DotSoundComputeWorker ^&^& make dev
+	@echo .
+	poetry run python main.py
+
+seed-dev-worker: ## Create or rotate the local-dev compute worker
+	poetry run python scripts/seed_dev_worker.py
+
+reaper-dev: ## Run the lease reaper in a tight loop (dev only)
+	poetry run python -c "import asyncio; from app.tasks.audio_compute_reaper import run_forever; asyncio.run(run_forever())"
 
 infra: ## Start all Docker services (core only)
 	docker compose up -d postgres minio redis

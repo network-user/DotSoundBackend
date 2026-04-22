@@ -22,6 +22,16 @@ _PROM_HTTP_DURATION = None
 _PROM_HTTP_ERRORS = None
 _PROM_WS_GAUGE = None
 
+_PROM_LYRICS_JOBS_TOTAL = None
+_PROM_LYRICS_JOB_DURATION = None
+_PROM_WORKER_HEARTBEAT_LAG = None
+_PROM_WORKER_JOBS_IN_FLIGHT = None
+_PROM_SPEECHKIT_SPENT = None
+_PROM_SPEECHKIT_BUDGET_REMAINING = None
+_PROM_TIER_FALLBACK_TOTAL = None
+_PROM_HMAC_AUTH_FAILURES = None
+_PROM_WORKER_ANOMALY_TOTAL = None
+
 
 def _is_internal_ip(client_host: str | None) -> bool:
     if not client_host:
@@ -79,6 +89,72 @@ def setup_metrics(application: object) -> None:
     _PROM_WS_GAUGE = Gauge(
         "active_websocket_connections",
         "Currently open WebSocket connections.",
+        registry=registry,
+    )
+
+    global _PROM_LYRICS_JOBS_TOTAL
+    global _PROM_LYRICS_JOB_DURATION
+    global _PROM_WORKER_HEARTBEAT_LAG
+    global _PROM_WORKER_JOBS_IN_FLIGHT
+    global _PROM_SPEECHKIT_SPENT
+    global _PROM_SPEECHKIT_BUDGET_REMAINING
+    global _PROM_TIER_FALLBACK_TOTAL
+    global _PROM_HMAC_AUTH_FAILURES
+    global _PROM_WORKER_ANOMALY_TOTAL
+
+    _PROM_LYRICS_JOBS_TOTAL = Counter(
+        "lyrics_jobs_total",
+        "Total LyricsJob outcomes by tier and status.",
+        ["tier", "status"],
+        registry=registry,
+    )
+    _PROM_LYRICS_JOB_DURATION = Histogram(
+        "lyrics_job_duration_seconds",
+        "End-to-end LyricsJob duration by tier.",
+        ["tier"],
+        buckets=(
+            1, 5, 15, 30, 60, 120, 300, 600,
+        ),
+        registry=registry,
+    )
+    _PROM_WORKER_HEARTBEAT_LAG = Gauge(
+        "worker_heartbeat_lag_seconds",
+        "Seconds since last heartbeat per worker.",
+        ["worker_id"],
+        registry=registry,
+    )
+    _PROM_WORKER_JOBS_IN_FLIGHT = Gauge(
+        "worker_jobs_in_flight",
+        "Number of running jobs per worker.",
+        ["worker_id"],
+        registry=registry,
+    )
+    _PROM_SPEECHKIT_SPENT = Counter(
+        "speechkit_spent_rub_total",
+        "Cumulative SpeechKit spend in roubles.",
+        registry=registry,
+    )
+    _PROM_SPEECHKIT_BUDGET_REMAINING = Gauge(
+        "speechkit_budget_remaining_rub",
+        "Roubles left in the current month's budget.",
+        registry=registry,
+    )
+    _PROM_TIER_FALLBACK_TOTAL = Counter(
+        "tier_fallback_total",
+        "Cascade tier transitions, by from/to/reason.",
+        ["from_tier", "to_tier", "reason"],
+        registry=registry,
+    )
+    _PROM_HMAC_AUTH_FAILURES = Counter(
+        "hmac_auth_failures_total",
+        "Worker HMAC verification failures, by reason.",
+        ["reason"],
+        registry=registry,
+    )
+    _PROM_WORKER_ANOMALY_TOTAL = Counter(
+        "worker_anomaly_total",
+        "Anomaly detector flags raised per type.",
+        ["anomaly_type"],
         registry=registry,
     )
 
@@ -280,3 +356,71 @@ def ws_gauge_inc() -> None:
 def ws_gauge_dec() -> None:
     if _PROM_WS_GAUGE is not None:
         _PROM_WS_GAUGE.dec()
+
+
+def lyrics_job_observed(
+    *, tier: str, status: str, duration_seconds: float
+) -> None:
+    if _PROM_LYRICS_JOBS_TOTAL is not None:
+        _PROM_LYRICS_JOBS_TOTAL.labels(
+            tier=tier, status=status
+        ).inc()
+    if _PROM_LYRICS_JOB_DURATION is not None:
+        _PROM_LYRICS_JOB_DURATION.labels(
+            tier=tier
+        ).observe(max(0.0, duration_seconds))
+
+
+def tier_fallback_observed(
+    *, from_tier: str, to_tier: str, reason: str
+) -> None:
+    if _PROM_TIER_FALLBACK_TOTAL is not None:
+        _PROM_TIER_FALLBACK_TOTAL.labels(
+            from_tier=from_tier,
+            to_tier=to_tier,
+            reason=reason,
+        ).inc()
+
+
+def hmac_auth_failure_observed(*, reason: str) -> None:
+    if _PROM_HMAC_AUTH_FAILURES is not None:
+        _PROM_HMAC_AUTH_FAILURES.labels(
+            reason=reason
+        ).inc()
+
+
+def worker_anomaly_observed(*, anomaly_type: str) -> None:
+    if _PROM_WORKER_ANOMALY_TOTAL is not None:
+        _PROM_WORKER_ANOMALY_TOTAL.labels(
+            anomaly_type=anomaly_type
+        ).inc()
+
+
+def worker_heartbeat_lag_observed(
+    *, worker_id: str, lag_seconds: float
+) -> None:
+    if _PROM_WORKER_HEARTBEAT_LAG is not None:
+        _PROM_WORKER_HEARTBEAT_LAG.labels(
+            worker_id=worker_id
+        ).set(max(0.0, lag_seconds))
+
+
+def worker_jobs_in_flight_set(
+    *, worker_id: str, count: int
+) -> None:
+    if _PROM_WORKER_JOBS_IN_FLIGHT is not None:
+        _PROM_WORKER_JOBS_IN_FLIGHT.labels(
+            worker_id=worker_id
+        ).set(int(count))
+
+
+def speechkit_spent_inc(rub: float) -> None:
+    if _PROM_SPEECHKIT_SPENT is not None:
+        _PROM_SPEECHKIT_SPENT.inc(max(0.0, float(rub)))
+
+
+def speechkit_budget_remaining_set(rub: float) -> None:
+    if _PROM_SPEECHKIT_BUDGET_REMAINING is not None:
+        _PROM_SPEECHKIT_BUDGET_REMAINING.set(
+            max(0.0, float(rub))
+        )
