@@ -71,6 +71,15 @@ class AppSettings(BaseSettings):
     lyrics_stream_maxlen: int = 500
     lyrics_provider_timeout_seconds: int = 300
 
+    # Post-import background lyrics orchestrator. Enqueue pacing
+    # (random uniform between MIN and MAX seconds) keeps request
+    # rate below the upstream's captcha threshold. COOLDOWN is the
+    # pause applied after a proxy-level block signal, before the
+    # next track is kicked off.
+    yandex_music_import_lyrics_delay_min_seconds: float = 15.0
+    yandex_music_import_lyrics_delay_max_seconds: float = 45.0
+    yandex_music_import_lyrics_cooldown_seconds: float = 600.0
+
     track_info_ttl_days: int = 30
     artist_supplemental_ttl_days: int = 30
 
