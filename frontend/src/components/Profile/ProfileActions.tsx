@@ -18,7 +18,7 @@ export function ProfileActions() {
       <button
         id="profile-action-playlists"
         className="profile-action-btn"
-        onClick={() => navigate('/playlists')}
+        onClick={() => navigate('/library?tab=playlists')}
       >
         <span className="profile-action-icon">▤</span>
         <span className="profile-action-label">Мои плейлисты</span>
@@ -28,7 +28,7 @@ export function ProfileActions() {
       <button
         id="profile-action-liked"
         className="profile-action-btn"
-        onClick={() => navigate('/liked')}
+        onClick={() => navigate('/library?tab=liked')}
       >
         <span className="profile-action-icon">♥</span>
         <span className="profile-action-label">Понравившееся</span>

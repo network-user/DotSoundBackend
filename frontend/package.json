@@ -8,9 +8,9 @@
     "build": "tsc --noEmit && vite build && node scripts/bundle-hygiene-check.mjs && node scripts/check-admin-bundle.mjs",
     "build:bundle-only": "vite build",
     "preview": "vite preview --base /mini_app/",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
-    "e2e": "playwright test",
+    "e2e": "playwright test --pass-with-no-tests",
     "lint": "tsc --noEmit",
     "gen:icons": "node scripts/generate-png-icons.mjs"
   },

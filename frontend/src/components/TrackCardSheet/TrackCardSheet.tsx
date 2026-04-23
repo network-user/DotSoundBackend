@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import type { CSSProperties } from 'react'
 import { api } from '@/lib/api'
 import {
   getInternalUserId,
@@ -594,10 +595,15 @@ export function TrackCardSheet({
             )}
             {coverSrc && !coverFailed ? (
               <img
-                className="tcs-cover"
+                className="tcs-cover tcs-cover-vt"
                 src={coverSrc}
                 alt=""
                 onError={() => setCoverFailed(true)}
+                style={
+                  {
+                    viewTransitionName: `cover-t-${track.id}`,
+                  } as CSSProperties
+                }
               />
             ) : (
               <div className="tcs-cover-placeholder">

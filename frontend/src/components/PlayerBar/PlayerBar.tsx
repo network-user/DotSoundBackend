@@ -42,6 +42,8 @@ export function PlayerBar() {
     clearHlsError,
   } = usePlayer()
   const { isLiked, toggleLike } = useLikes()
+  const [likeBurst, setLikeBurst] =
+    useState(false)
   const [overflowOpen, setOverflowOpen] =
     useState(false)
   const overflowRef = useRef<HTMLDivElement>(null)
@@ -102,6 +104,10 @@ export function PlayerBar() {
 
   const handleLike = async (e: MouseEvent) => {
     e.stopPropagation()
+    if (!liked) {
+      setLikeBurst(true)
+      window.setTimeout(() => setLikeBurst(false), 520)
+    }
     haptic(liked ? 'light' : 'medium')
     await toggleLike(track.id)
   }
@@ -163,6 +169,12 @@ export function PlayerBar() {
               src={coverSrc}
               alt=""
               loading="lazy"
+              className="pb-cover-vt"
+              style={
+                {
+                  viewTransitionName: `cover-t-${track.id}`,
+                } as CSSProperties
+              }
             />
           ) : (
             <Icon name="music" size={18} />
@@ -212,7 +224,9 @@ export function PlayerBar() {
           </button>
           <button
             ref={likeRef}
-            className={`icon-btn pb-like ${liked ? 'liked' : ''}`}
+            className={`icon-btn pb-like${liked ? ' liked' : ''}${
+              likeBurst ? ' pb-like-burst' : ''
+            }`}
             onClick={handleLike}
             aria-label={
               liked ? 'Убрать лайк' : 'Лайк'

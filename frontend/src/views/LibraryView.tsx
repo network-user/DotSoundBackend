@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { LikedView } from '@/views/LikedView'
 import { PlaylistsView } from '@/views/PlaylistsView'
 import { OfflineList } from '@/components/Profile/OfflineList'
@@ -16,30 +17,65 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'history', label: 'История' },
 ]
 
+function isTab(s: string | null): s is Tab {
+  return (
+    s === 'liked' ||
+    s === 'playlists' ||
+    s === 'offline' ||
+    s === 'history'
+  )
+}
+
+function tabFromStorageDefault(): Tab {
+  try {
+    const v = localStorage.getItem(
+      STORAGE_KEY,
+    ) as string | null
+    if (v && isTab(v)) return v
+  } catch {
+    /* ignore */
+  }
+  return 'liked'
+}
+
 export function LibraryView() {
-  const [tab, setTab] = useState<Tab>(() => {
-    try {
-      const v = localStorage.getItem(
-        STORAGE_KEY,
-      ) as Tab | null
-      return v || 'liked'
-    } catch {
-      return 'liked'
-    }
-  })
+  const [searchParams, setSearchParams] =
+    useSearchParams()
+  const didSync = useRef(false)
+  const urlTab = searchParams.get('tab')
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, tab)
-    } catch {
-      /* ignore */
+    if (didSync.current) return
+    if (isTab(urlTab)) {
+      didSync.current = true
+      return
     }
-  }, [tab])
+    const t =
+      urlTab === null
+        ? tabFromStorageDefault()
+        : 'liked'
+    setSearchParams({ tab: t }, { replace: true })
+    didSync.current = true
+  }, [setSearchParams, urlTab])
 
-  const handleTab = (next: Tab) => {
-    if (next !== tab) hapticSelection()
-    setTab(next)
-  }
+  const tab: Tab = isTab(urlTab)
+    ? urlTab
+    : urlTab === null
+      ? tabFromStorageDefault()
+      : 'liked'
+
+  const handleTab = useCallback(
+    (next: Tab) => {
+      if (next !== tab) hapticSelection()
+      setSearchParams({ tab: next }, { replace: true })
+      try {
+        localStorage.setItem(STORAGE_KEY, next)
+      } catch {
+        /* ignore */
+      }
+    },
+    [setSearchParams, tab],
+  )
 
   return (
     <section
@@ -50,6 +86,7 @@ export function LibraryView() {
         {TABS.map((t) => (
           <button
             key={t.id}
+            type="button"
             className={`library-tab${tab === t.id ? ' active' : ''}`}
             onClick={() => handleTab(t.id)}
           >
@@ -58,8 +95,10 @@ export function LibraryView() {
         ))}
       </div>
       <div className="library-content">
-        {tab === 'liked' && <LikedView />}
-        {tab === 'playlists' && <PlaylistsView />}
+        {tab === 'liked' && <LikedView embedded />}
+        {tab === 'playlists' && (
+          <PlaylistsView embedded />
+        )}
         {tab === 'offline' && <OfflineList />}
         {tab === 'history' && <HistoryList />}
       </div>

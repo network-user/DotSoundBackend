@@ -8,9 +8,14 @@ import type { Playlist, PlaylistWithTracks } from '@/types/api'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { Icon } from '@/components/Icon/Icon'
 
+interface PlaylistsViewProps {
+  /** Вложено в Library — компактный заголовок */
+  embedded?: boolean
+}
+
 type Screen = 'list' | 'detail'
 
-export function PlaylistsView() {
+export function PlaylistsView({ embedded = false }: PlaylistsViewProps) {
   const [screen, setScreen] = useState<Screen>('list')
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null)
   const [selected, setSelected] = useState<PlaylistWithTracks | null>(null)
@@ -90,10 +95,12 @@ export function PlaylistsView() {
 
   return (
     <section id="view-playlists" className="view active">
-      <div className="view-header">
-        <h2>Плейлисты</h2>
-        <span className="hint">Твои подборки</span>
-      </div>
+      {!embedded && (
+        <div className="view-header">
+          <h2>Плейлисты</h2>
+          <span className="hint">Твои подборки</span>
+        </div>
+      )}
 
       <button
         className="create-playlist-btn"

@@ -2,12 +2,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { haptic } from '@/lib/telegram'
 
-const SHOW_ON_PATHS = new Set([
-  '/',
-  '/search',
-  '/library',
-  '/liked',
-])
+/** FAB только на лентах открытия, не на библиотеке/чатах (как SoundCloud / YT Music) */
+const SHOW_ON_PATHS = new Set(['/', '/search'])
 
 export function UploadFab() {
   const location = useLocation()
