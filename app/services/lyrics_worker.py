@@ -683,6 +683,12 @@ def _word_times_from(sl) -> list[dict] | None:
     return parsed or None
 
 
+def _payload_has_non_empty_synced(payload: dict) -> bool:
+    """True when ``synced_lines`` is a non-empty list of line dicts."""
+    sl = payload.get("synced_lines")
+    return isinstance(sl, list) and len(sl) > 0
+
+
 def _result_to_payload(gen_result) -> dict:
     synced: list[dict] | None = None
     if gen_result.synced_lines:
@@ -1545,10 +1551,15 @@ async def catalog_only_lyrics_task(
 
     Calls PrivateCore's ``generate_lyrics`` with
     ``disable_local_asr=True`` so faster-whisper is never imported
-    on the Backend. On a hit the lyrics + LyricsJob are saved and
-    the job goes to ``status="done"``. On a miss the cascade is
-    asked for the next tier (handled in
-    ``lyrics_cascade.handle_tier_miss``).
+    on the Backend. On a full hit the lyrics + LyricsJob are
+    saved and the job goes to ``status="done"``. If
+    ``with_sync=True`` but the catalog only returned plain text
+    (no ``synced_lines``), the job is *not* closed: we
+    :func:`handle_tier_miss` so the cascade can hand audio work to
+    the next tier (e.g. remote ASR) for time-aligned output. A pure
+    miss (``gen_result is None``) is handled the same way. On a miss
+    the cascade is asked for the next tier
+    (``lyrics_cascade.handle_tier_miss``).
 
     The dev escape hatch ``LYRICS_ALLOW_LOCAL_ASR=true`` is
     honoured only when ``DEBUG=true`` (config validator enforces
@@ -1726,6 +1737,54 @@ async def catalog_only_lyrics_task(
                 return {"status": "not_found"}
 
             payload = _result_to_payload(gen_result)
+            if with_sync and not _payload_has_non_empty_synced(
+                payload
+            ):
+                if job is not None:
+                    from app.services.lyrics_cascade import (
+                        handle_tier_miss,
+                    )
+
+                    will_fallback = await handle_tier_miss(
+                        session,
+                        job=job,
+                        reason=(
+                            "catalog_plain_text_no_synced_lines"
+                        ),
+                        with_sync=with_sync,
+                        bypass_cache=bypass_cache,
+                    )
+                    await session.commit()
+                    if will_fallback:
+                        logger.info(
+                            "catalog_only_sync_unsatisfied_fallback",
+                            job_id=job.id,
+                        )
+                        return {
+                            "status": "fallback",
+                        }
+                    await _finalise(
+                        progress_id,
+                        "not_found",
+                        log_line=(
+                            "[catalog_only] with_sync: no timed lines "
+                            "and cascade has no further tier"
+                        ),
+                    )
+                    return {
+                        "status": "not_found",
+                    }
+                await _finalise(
+                    progress_id,
+                    "not_found",
+                    log_line=(
+                        "[catalog_only] with_sync needs timed lines; "
+                        "catalog has plain text only"
+                    ),
+                )
+                return {
+                    "status": "not_found",
+                }
             try:
                 await set_cached_lyrics_result(artist, title, payload)
             except Exception:
