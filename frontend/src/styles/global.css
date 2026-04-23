@@ -1201,6 +1201,12 @@ body.monochrome #app {
   border-color: var(--border-hover);
 }
 .profile-action-icon { font-size: 20px; flex-shrink: 0; }
+.profile-action-icon-svg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text, #e8e8e8);
+}
 .profile-action-label { flex: 1; }
 .profile-action-chevron { color: var(--text-muted); font-size: 18px; }
 

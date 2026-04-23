@@ -1,15 +1,79 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Icon } from '@/components/Icon/Icon'
+import { api } from '@/lib/api'
 import {
   usePlayerActions,
   usePlayerMeta,
 } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
 
-export function HistoryList() {
-  const { history } = usePlayerMeta()
-  const { playTrack } = usePlayerActions()
+function mergeSessionAndApi(
+  current: Track | null,
+  sessionHistory: Track[],
+  apiItems: Track[],
+): Track[] {
+  const out: Track[] = []
+  const seen = new Set<number>()
 
-  if (history.length === 0) {
+  if (current) {
+    out.push(current)
+    seen.add(current.id)
+  }
+  for (const t of [...sessionHistory].reverse()) {
+    if (seen.has(t.id)) continue
+    out.push(t)
+    seen.add(t.id)
+  }
+  for (const t of apiItems) {
+    if (seen.has(t.id)) continue
+    out.push(t)
+    seen.add(t.id)
+  }
+  return out
+}
+
+export function HistoryList() {
+  const { track, history: sessionHistory } =
+    usePlayerMeta()
+  const { playTrack } = usePlayerActions()
+  const [apiTracks, setApiTracks] = useState<
+    Track[] | null
+  >(null)
+  const [loadError, setLoadError] = useState(false)
+
+  const load = useCallback(() => {
+    setLoadError(false)
+    api
+      .getListenHistory(80)
+      .then((res) => setApiTracks(res.items))
+      .catch(() => {
+        setLoadError(true)
+        setApiTracks([])
+      })
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const rows = useMemo(() => {
+    if (apiTracks === null) return null
+    return mergeSessionAndApi(
+      track,
+      sessionHistory,
+      apiTracks,
+    )
+  }, [apiTracks, sessionHistory, track])
+
+  if (rows === null) {
+    return (
+      <div className="offline-list">
+        <div className="loader" style={{ margin: 24 }} />
+      </div>
+    )
+  }
+
+  if (rows.length === 0) {
     return (
       <div className="my-complaints-empty">
         <Icon
@@ -18,12 +82,25 @@ export function HistoryList() {
           className="offline-list-empty-icon"
         />
         <div className="offline-list-empty-title">
-          История пуста
+          {loadError
+            ? 'Не удалось загрузить историю'
+            : 'Пока нет прослушиваний'}
         </div>
         <div className="offline-list-empty-hint">
-          Тут появятся треки, которые ты слушал в
-          этой сессии.
+          {loadError
+            ? 'Проверь соединение и обнови раздел.'
+            : 'Включи треки — история строится из твоих прослушиваний в аккаунте. Текущий плейлист в плеере тоже отображается выше, когда играет музыка.'}
         </div>
+        {loadError && (
+          <button
+            type="button"
+            className="empty-cta"
+            style={{ marginTop: 12 }}
+            onClick={load}
+          >
+            Повторить
+          </button>
+        )}
       </div>
     )
   }
@@ -32,17 +109,17 @@ export function HistoryList() {
     <div className="offline-list">
       <div className="offline-list-header">
         <div>
-          <strong>{history.length}</strong> в
-          истории
+          <strong>{rows.length}</strong> в истории
         </div>
       </div>
       <div className="offline-list-rows">
-        {[...history].reverse().map((t: Track, i) => (
+        {rows.map((t, i) => (
           <div
             key={`h-${t.id}-${i}`}
             className="offline-list-row"
           >
             <button
+              type="button"
               className="offline-list-main"
               onClick={() => playTrack(t)}
             >

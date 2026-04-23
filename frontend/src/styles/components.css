@@ -1236,52 +1236,6 @@ button.empty-cta:focus-visible {
   padding-top: 0;
 }
 
-/* ---------- Upload FAB ---------- */
-
-.upload-fab {
-  position: fixed;
-  right: max(
-    var(--space-4),
-    calc(env(safe-area-inset-right, 0px) + var(--space-4))
-  );
-  bottom: calc(
-    var(--nav-h, 60px) + var(--player-h, 80px) +
-      var(--safe-bottom) + var(--space-3)
-  );
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: 1px solid var(--glass-edge-bright);
-  background: var(--accent);
-  color: var(--bg);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 95;
-  box-shadow:
-    0 12px 30px rgba(0, 0, 0, 0.45),
-    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
-  transition: transform var(--dur-fast)
-      var(--ease-spring),
-    background var(--dur-fast) var(--ease-standard);
-}
-
-.upload-fab:hover {
-  background: var(--accent-hover);
-  transform: scale(1.04);
-}
-
-.upload-fab:active {
-  transform: scale(var(--press-scale));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .upload-fab {
-    transition: none;
-  }
-}
-
 /* ---------- Banned screen ---------- */
 
 .banned-screen {
