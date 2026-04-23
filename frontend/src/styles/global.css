@@ -1352,6 +1352,28 @@ textarea.form-input { resize: none; }
     forwards;
 }
 
+@media (min-width: 900px) {
+  .tcs-backdrop {
+    align-items: center;
+    justify-content: center;
+    padding: 24px 20px;
+    box-sizing: border-box;
+  }
+  .tcs-backdrop .tcs-sheet {
+    max-width: 512px;
+    width: 100%;
+    max-height: min(92dvh, 880px);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--glass-edge);
+    box-shadow:
+      0 24px 56px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  }
+  .tcs-backdrop .tcs-cover-wrap {
+    max-width: 400px;
+  }
+}
+
 .tcs-sheet {
   position: relative;
   width: 100%;
@@ -1381,7 +1403,6 @@ textarea.form-input { resize: none; }
   }
 }
 .tcs-sheet > .tcs-handle,
-.tcs-sheet > .tcs-close,
 .tcs-sheet > .tcs-cover-wrap,
 .tcs-sheet > .tcs-info,
 .tcs-sheet > .tcs-player-controls,
@@ -1405,7 +1426,7 @@ textarea.form-input { resize: none; }
 .tcs-close {
   position: absolute;
   top: max(12px, calc(env(safe-area-inset-top, 0px) + 12px));
-  right: max(12px, calc(env(safe-area-inset-right, 0px) + 12px));
+  right: max(16px, calc(env(safe-area-inset-right, 0px) + 16px));
   font-size: 16px;
   color: var(--text);
   z-index: 10;
@@ -1427,6 +1448,7 @@ textarea.form-input { resize: none; }
 
 /* Cover — large square */
 .tcs-cover-wrap {
+  position: relative;
   width: calc(100% - 48px);
   max-width: 320px;
   aspect-ratio: 1;
@@ -1440,12 +1462,61 @@ textarea.form-input { resize: none; }
   border: 1px solid var(--border);
 }
 .tcs-cover {
+  position: relative;
+  z-index: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
+.tcs-cover-wave-area {
+  position: absolute;
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 44%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.tcs-cover-wave-gradient {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    rgba(8, 8, 8, 0.92) 0%,
+    rgba(8, 8, 8, 0.45) 45%,
+    rgba(8, 8, 8, 0) 100%
+  );
+  pointer-events: none;
+}
+.tcs-cover-waveform {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-height: 72px;
+  margin: 0;
+  padding: 0 8px 10px;
+  box-sizing: border-box;
+  opacity: 0.9;
+  mix-blend-mode: screen;
+  z-index: 1;
+}
+.tcs-cover-waveform canvas {
+  position: relative;
+  z-index: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tcs-cover-waveform {
+    mix-blend-mode: normal;
+    opacity: 0.65;
+  }
+}
 .tcs-cover-placeholder {
+  position: relative;
+  z-index: 0;
   font-size: 72px;
 }
 .tcs-video-bg {
@@ -1479,11 +1550,6 @@ textarea.form-input { resize: none; }
 }
 .tcs-pip-btn:hover {
   background: var(--glass-tint-2);
-}
-.tcs-waveform {
-  margin: 0 16px var(--space-2);
-  height: 48px;
-  opacity: 0.85;
 }
 .tcs-video-mode {
   max-height: 100dvh;
@@ -1553,7 +1619,7 @@ textarea.form-input { resize: none; }
   align-items: center;
   justify-content: center;
   background: rgba(10, 10, 10, 0.7);
-  z-index: 2;
+  z-index: 3;
   border-radius: var(--radius-lg);
 }
 .tcs-lyrics-section {
@@ -1758,6 +1824,97 @@ textarea.form-input { resize: none; }
 
 .tcs-player-controls {
   padding: 16px 20px 0;
+  position: relative;
+}
+.tcs-extras-wrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding: 0 0 4px;
+  z-index: 3;
+}
+.tcs-extras-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-edge);
+  border-radius: 100px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+.tcs-extras-trigger:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--glass-edge-bright);
+}
+.tcs-extras-trigger[aria-expanded='true'] {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.08);
+}
+.tcs-extras-popover {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  bottom: auto;
+  transform: translateX(-50%);
+  min-width: min(100% - 8px, 320px);
+  max-width: 360px;
+  max-height: min(50dvh, 340px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: rgba(16, 16, 16, 0.92);
+  -webkit-backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
+  padding: 10px;
+  z-index: 20;
+  animation: tcsExtrasIn 0.2s
+    var(--ease-standard, cubic-bezier(0.2, 0.8, 0.2, 1));
+}
+@keyframes tcsExtrasIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%)
+      translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%)
+      translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tcs-extras-popover {
+    animation: none;
+  }
+}
+.tcs-extras-popover .pb-extras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0;
+  justify-content: center;
+  margin: 0;
+}
+.tcs-extras-popover .pb-extras-btn {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 .tcs-seek-wrap { margin-bottom: 4px; }
 .tcs-seek {
@@ -2352,8 +2509,16 @@ textarea.form-input { resize: none; }
   background: var(--bg);
   overflow-y: auto;
   scrollbar-width: none;
+  box-sizing: border-box;
+  min-height: 100dvh;
+  /* safe-area: fixed + slideInRight иначе «уезжает» под вырез / соседние слои */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
   animation: slideInRight 0.25s cubic-bezier(0.34, 1.1, 0.64, 1);
-  padding-bottom: calc(var(--nav-h) + 16px);
+  padding-bottom: calc(
+    var(--nav-h) + 16px + env(safe-area-inset-bottom, 0px)
+  );
 }
 .author-view::-webkit-scrollbar { display: none; }
 

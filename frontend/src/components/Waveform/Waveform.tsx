@@ -5,6 +5,8 @@ interface Props {
   height?: number
   bars?: number
   className?: string
+  /** Softer colors when drawn over the cover art. */
+  overlay?: boolean
 }
 
 const REDUCED_MOTION_QUERY =
@@ -20,6 +22,7 @@ export function Waveform({
   height = 64,
   bars = 56,
   className,
+  overlay = false,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef = useRef<number | null>(null)
@@ -45,11 +48,18 @@ export function Waveform({
     const ro = new ResizeObserver(resize)
     ro.observe(canvas)
 
+    const idleColor = overlay
+      ? 'rgba(255,255,255,0.12)'
+      : 'rgba(255,255,255,0.15)'
+    const playColor = overlay
+      ? 'rgba(255,255,255,0.5)'
+      : 'rgba(255,255,255,0.85)'
+
     const drawIdle = () => {
       const w = canvas.width
       const h = canvas.height
       ctx.clearRect(0, 0, w, h)
-      ctx.fillStyle = 'rgba(255,255,255,0.15)'
+      ctx.fillStyle = idleColor
       const barW = (w / bars) * 0.6
       const gap = (w / bars) * 0.4
       for (let i = 0; i < bars; i++) {
@@ -76,7 +86,7 @@ export function Waveform({
       const barW = (w / bars) * 0.6
       const gap = (w / bars) * 0.4
       const step = Math.floor(data.length / bars)
-      ctx.fillStyle = 'rgba(255,255,255,0.85)'
+      ctx.fillStyle = playColor
       for (let i = 0; i < bars; i++) {
         let sum = 0
         for (let j = 0; j < step; j++) {
@@ -108,7 +118,7 @@ export function Waveform({
         rafRef.current = null
       }
     }
-  }, [getAnalyser, isPlaying, bars])
+  }, [getAnalyser, isPlaying, bars, overlay])
 
   return (
     <canvas

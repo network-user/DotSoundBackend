@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import Hls from 'hls.js'
-import { api } from '@/lib/api'
+import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { useToast } from '@/components/ui/Toast'
 import { getCachedAudioUrl } from '@/lib/offlineCache'
@@ -362,6 +362,7 @@ export function PlayerProvider({
     tracks: Track[]
   } | null>(null)
   const historyRef = useRef<Track[]>([])
+  const wantResumeAfterCardCloseRef = useRef(false)
   const prefetchAudioRef =
     useRef<HTMLAudioElement | null>(null)
   const manualQueueRef = useRef<Track[]>([])
@@ -710,184 +711,6 @@ export function PlayerProvider({
 
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio) return
-    const sendListenSignal = () => {
-      if (
-        listenSignalSentRef.current ||
-        !track ||
-        track.id <= 0
-      )
-        return
-      const listened = Math.floor(
-        audio.currentTime - listenStartTimeRef.current,
-      )
-      if (listened <= 0) return
-      listenSignalSentRef.current = true
-      void queueOrSend(
-        'record-listen',
-        '/api/v1/signals/listen',
-        {
-          track_id: track.id,
-          duration_listened: listened,
-          total_duration: track.duration_seconds,
-          source_context: 'player',
-        },
-      )
-    }
-
-    const onPlay = () => {
-      setIsPlaying(true)
-      if ('mediaSession' in navigator)
-        navigator.mediaSession.playbackState = 'playing'
-      if (audioCtxRef.current?.state === 'suspended')
-        audioCtxRef.current.resume()
-      if (
-        !playCountSentRef.current &&
-        track &&
-        track.id > 0
-      ) {
-        playCountSentRef.current = true
-        void queueOrSend(
-          'post-play',
-          `/api/v1/tracks/${track.id}/play`,
-          {},
-        )
-      }
-      listenStartTimeRef.current =
-        audio.currentTime
-    }
-    const onPause = () => {
-      setIsPlaying(false)
-      if ('mediaSession' in navigator)
-        navigator.mediaSession.playbackState = 'paused'
-      sendListenSignal()
-    }
-    const onEnded = () => {
-      setIsPlaying(false)
-      setCurrentTime(0)
-      sendListenSignal()
-      const audio = audioRef.current
-      if (repeatModeRef.current === 'one' && audio) {
-        audio.currentTime = 0
-        audio.play().catch(() => {})
-        return
-      }
-      playNext().then((played) => {
-        if (
-          !played &&
-          repeatModeRef.current === 'all' &&
-          audioRef.current &&
-          track
-        ) {
-          audioRef.current.currentTime = 0
-          audioRef.current.play().catch(() => {})
-        }
-      })
-    }
-    const onError = () => {
-      const a = audioRef.current
-      if (!a || !track) return
-      const code = a.error?.code
-      if (
-        code === MediaError.MEDIA_ERR_NETWORK ||
-        code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
-      ) {
-        const expires = streamExpiresAtRef.current
-        if (
-          expires &&
-          Date.now() > expires - 30_000 &&
-          !track.is_public
-        ) {
-          api
-            .getStream(track.id)
-            .then((stream) => {
-              if (a && stream?.url) {
-                const t = a.currentTime
-                a.src = stream.url
-                a.currentTime = t
-                a.play().catch(() => {})
-                streamExpiresAtRef.current =
-                  stream.expires_in
-                    ? Date.now() +
-                      stream.expires_in * 1000
-                    : null
-                lastStreamUrlRef.current = stream.url
-              }
-            })
-            .catch(() =>
-              toast.error(
-                'Не удалось обновить ссылку на трек',
-              ),
-            )
-          return
-        }
-      }
-      toast.error('Ошибка воспроизведения трека')
-    }
-    const onStalled = () => {
-      try {
-        toast.warning('Буферизация…', {
-          duration: 1800,
-        })
-      } catch {
-        /* ignore */
-      }
-    }
-    const onTime = () => {
-      const ab = abLoopRef.current
-      if (
-        ab.a !== null &&
-        ab.b !== null &&
-        ab.b > ab.a &&
-        audio.currentTime >= ab.b
-      ) {
-        audio.currentTime = ab.a
-      }
-      setCurrentTime(audio.currentTime)
-      _updatePositionState(audio)
-    }
-    const onDur = () =>
-      setDuration(audio.duration || 0)
-
-    audio.addEventListener('play', onPlay)
-    audio.addEventListener('pause', onPause)
-    audio.addEventListener('ended', onEnded)
-    audio.addEventListener('timeupdate', onTime)
-    audio.addEventListener(
-      'durationchange',
-      onDur,
-    )
-    audio.addEventListener('error', onError)
-    audio.addEventListener('stalled', onStalled)
-
-    if (track) {
-      _updateMediaSession(
-        track,
-        audio,
-        () => playNext(),
-        () => playPrev(),
-      )
-    }
-
-    return () => {
-      audio.removeEventListener('play', onPlay)
-      audio.removeEventListener('pause', onPause)
-      audio.removeEventListener('ended', onEnded)
-      audio.removeEventListener(
-        'timeupdate',
-        onTime,
-      )
-      audio.removeEventListener(
-        'durationchange',
-        onDur,
-      )
-      audio.removeEventListener('error', onError)
-      audio.removeEventListener('stalled', onStalled)
-    }
-  }, [track])
-
-  useEffect(() => {
-    const audio = audioRef.current
     if (audio) audio.volume = volume
     localStorage.setItem(
       'player-volume',
@@ -979,6 +802,300 @@ export function PlayerProvider({
       }),
     [volume],
   )
+
+  const rebindThirdPartyStream = useCallback(
+    async (
+      tr: Track,
+      audio: HTMLAudioElement,
+      atSec: number,
+    ) => {
+      if (tr.access_mode !== 'third_party_stream') return
+      if (hlsRef.current) {
+        try {
+          hlsRef.current.destroy()
+        } catch {
+          /* */
+        }
+        hlsRef.current = null
+      }
+      const stream = await api.getStream(tr.id)
+      if (!stream?.url) return
+      lastStreamUrlRef.current = stream.url
+      streamExpiresAtRef.current = stream.expires_in
+        ? Date.now() + stream.expires_in * 1000
+        : null
+      if (
+        stream.stream_type === 'hls' &&
+        Hls.isSupported()
+      ) {
+        await startHlsPlayback(
+          audio,
+          stream.url,
+          undefined,
+          false,
+        )
+        const afterReady = () => {
+          if (atSec > 0.25) {
+            try {
+              audio.currentTime = atSec
+            } catch {
+              /* */
+            }
+          }
+          void audio.play().catch(() => {})
+        }
+        if (audio.readyState >= 2) {
+          afterReady()
+        } else {
+          audio.addEventListener('canplay', afterReady, {
+            once: true,
+          })
+        }
+      } else {
+        audio.crossOrigin = 'anonymous'
+        audio.src = stream.url
+        audio.volume = volume
+        const onReady = () => {
+          if (atSec > 0.25) {
+            try {
+              audio.currentTime = atSec
+            } catch {
+              /* */
+            }
+          }
+          void audio.play().catch(() => {})
+        }
+        if (audio.readyState >= 2) {
+          onReady()
+        } else {
+          audio.addEventListener('canplay', onReady, {
+            once: true,
+          })
+        }
+      }
+    },
+    [startHlsPlayback, volume],
+  )
+
+  useEffect(() => {
+    const audio = audioRef.current
+    if (!audio) return
+    const sendListenSignal = () => {
+      if (
+        listenSignalSentRef.current ||
+        !track ||
+        track.id <= 0
+      )
+        return
+      const listened = Math.floor(
+        audio.currentTime - listenStartTimeRef.current,
+      )
+      if (listened <= 0) return
+      listenSignalSentRef.current = true
+      void queueOrSend(
+        'record-listen',
+        '/api/v1/signals/listen',
+        {
+          track_id: track.id,
+          duration_listened: listened,
+          total_duration: track.duration_seconds,
+          source_context: 'player',
+        },
+      )
+    }
+
+    const onPlay = () => {
+      setIsPlaying(true)
+      if ('mediaSession' in navigator)
+        navigator.mediaSession.playbackState = 'playing'
+      if (audioCtxRef.current?.state === 'suspended')
+        audioCtxRef.current.resume()
+      if (
+        !playCountSentRef.current &&
+        track &&
+        track.id > 0
+      ) {
+        playCountSentRef.current = true
+        void queueOrSend(
+          'post-play',
+          `/api/v1/tracks/${track.id}/play`,
+          {},
+        )
+      }
+      listenStartTimeRef.current =
+        audio.currentTime
+    }
+    const onPause = () => {
+      setIsPlaying(false)
+      if ('mediaSession' in navigator)
+        navigator.mediaSession.playbackState = 'paused'
+      sendListenSignal()
+    }
+    const onEnded = () => {
+      setIsPlaying(false)
+      setCurrentTime(0)
+      sendListenSignal()
+      const audio = audioRef.current
+      if (repeatModeRef.current === 'one' && audio) {
+        audio.currentTime = 0
+        audio.play().catch(() => {})
+        return
+      }
+      playNext().then((played) => {
+        if (
+          !played &&
+          repeatModeRef.current === 'all' &&
+          audioRef.current &&
+          track
+        ) {
+          audioRef.current.currentTime = 0
+          audioRef.current.play().catch(() => {})
+        }
+      })
+    }
+    const onError = () => {
+      const a = audioRef.current
+      if (!a || !track) return
+      const code = a.error?.code
+      if (
+        (code === MediaError.MEDIA_ERR_NETWORK ||
+          code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) &&
+        track.access_mode === 'third_party_stream'
+      ) {
+        const t = a.currentTime
+        void rebindThirdPartyStream(
+          track,
+          a,
+          t,
+        ).catch((err) =>
+          toast.error(
+            getApiErrorMessage(
+              err,
+              'Ошибка воспроизведения трека',
+            ),
+          ),
+        )
+        return
+      }
+      if (
+        code === MediaError.MEDIA_ERR_NETWORK ||
+        code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
+      ) {
+        const expires = streamExpiresAtRef.current
+        if (
+          expires &&
+          Date.now() > expires - 30_000 &&
+          !track.is_public
+        ) {
+          api
+            .getStream(track.id)
+            .then((stream) => {
+              if (a && stream?.url) {
+                const t = a.currentTime
+                a.src = stream.url
+                a.currentTime = t
+                a.play().catch(() => {})
+                streamExpiresAtRef.current =
+                  stream.expires_in
+                    ? Date.now() +
+                      stream.expires_in * 1000
+                    : null
+                lastStreamUrlRef.current = stream.url
+              }
+            })
+            .catch((err) =>
+              toast.error(
+                getApiErrorMessage(
+                  err,
+                  'Не удалось обновить ссылку на трек',
+                ),
+              ),
+            )
+          return
+        }
+      }
+      toast.error('Ошибка воспроизведения трека')
+    }
+    const onStalled = () => {
+      try {
+        toast.warning('Буферизация…', {
+          duration: 1800,
+        })
+      } catch {
+        /* ignore */
+      }
+    }
+    const onTime = () => {
+      const ab = abLoopRef.current
+      if (
+        ab.a !== null &&
+        ab.b !== null &&
+        ab.b > ab.a &&
+        audio.currentTime >= ab.b
+      ) {
+        audio.currentTime = ab.a
+      }
+      setCurrentTime(audio.currentTime)
+      _updatePositionState(audio)
+    }
+    const onDur = () =>
+      setDuration(audio.duration || 0)
+
+    audio.addEventListener('play', onPlay)
+    audio.addEventListener('pause', onPause)
+    audio.addEventListener('ended', onEnded)
+    audio.addEventListener('timeupdate', onTime)
+    audio.addEventListener(
+      'durationchange',
+      onDur,
+    )
+    audio.addEventListener('error', onError)
+    audio.addEventListener('stalled', onStalled)
+
+    if (track) {
+      _updateMediaSession(
+        track,
+        audio,
+        () => playNext(),
+        () => playPrev(),
+      )
+    }
+
+    return () => {
+      audio.removeEventListener('play', onPlay)
+      audio.removeEventListener('pause', onPause)
+      audio.removeEventListener('ended', onEnded)
+      audio.removeEventListener(
+        'timeupdate',
+        onTime,
+      )
+      audio.removeEventListener(
+        'durationchange',
+        onDur,
+      )
+      audio.removeEventListener('error', onError)
+      audio.removeEventListener('stalled', onStalled)
+    }
+  }, [track, rebindThirdPartyStream])
+
+  useEffect(() => {
+    if (isCardOpen) return
+    if (!wantResumeAfterCardCloseRef.current) return
+    wantResumeAfterCardCloseRef.current = false
+    const a = audioRef.current
+    if (!a || !track) return
+    if (!a.paused) return
+    if (track.access_mode === 'third_party_stream') {
+      const sec = a.currentTime
+      void rebindThirdPartyStream(
+        track,
+        a,
+        sec,
+      ).catch(() => {})
+      return
+    }
+    void a.play().catch(() => {})
+  }, [isCardOpen, track, rebindThirdPartyStream])
 
   const playTrack = async (
     newTrack: Track,
@@ -1127,6 +1244,12 @@ export function PlayerProvider({
       )
     } catch (e) {
       console.error('playTrack error', e)
+      toast.error(
+        getApiErrorMessage(
+          e,
+          'Ошибка воспроизведения трека',
+        ),
+      )
     }
   }
 
@@ -1464,10 +1587,16 @@ export function PlayerProvider({
     () => withViewTransition(() => setIsCardOpen(true)),
     [],
   )
-  const closeCard = useCallback(
-    () => withViewTransition(() => setIsCardOpen(false)),
-    [],
-  )
+  /* closeCard без View Transitions: иначе во время анимации
+   * у предка остаётся transform и ломается position:fixed у
+   * ArtistView/AuthorView; в ряде браузеров страдает и <audio>. */
+  const closeCard = useCallback(() => {
+    const a = audioRef.current
+    wantResumeAfterCardCloseRef.current = Boolean(
+      a && !a.paused,
+    )
+    setIsCardOpen(false)
+  }, [])
   const openLyrics = useCallback(
     () => setIsLyricsOpen(true), [],
   )
