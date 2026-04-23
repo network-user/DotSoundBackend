@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import secrets as pysecrets
 from datetime import UTC, datetime
 from typing import Any
@@ -86,6 +87,27 @@ def _serialize_job(j: LyricsJob) -> dict[str, Any]:
     }
 
 
+def _open_allowlist_includes_ipv6(
+    cidrs: list[str],
+) -> list[str]:
+    """``0.0.0.0/0`` only matches **IPv4**; IPv6 clients (common with
+    ngrok / some egress paths) need ``::/0`` as well. When the admin
+    preset is "any IP" we only store the v4 default route — append
+    ``::/0`` so :func:`is_ip_in_cidrs` can match v6 source addresses
+    in :func:`verify_worker_request`.
+    """
+    if not cidrs or not is_open_allowlist(cidrs):
+        return cidrs
+    if "::/0" in cidrs or "0.0.0.0/0" not in cidrs:
+        return cidrs
+    return normalize_cidrs(
+        [
+            *cidrs,
+            "::/0",
+        ]
+    )
+
+
 def _serialize_audit(r: WorkerAuditLog) -> dict[str, Any]:
     return {
         "id": r.id,
@@ -127,6 +149,11 @@ class AudioComputeAdminService:
             normalize_cidrs(allowed_ip_cidrs)
             if allowed_ip_cidrs
             else []
+        )
+        normalized_cidrs = (
+            _open_allowlist_includes_ipv6(
+                normalized_cidrs
+            )
         )
         if (
             normalized_cidrs
@@ -180,6 +207,12 @@ class AudioComputeAdminService:
             if allowed_ip_cidrs
             else None
         )
+        if normalized_cidrs is not None:
+            normalized_cidrs = (
+                _open_allowlist_includes_ipv6(
+                    normalized_cidrs
+                )
+            )
         if (
             normalized_cidrs
             and is_open_allowlist(normalized_cidrs)
@@ -251,6 +284,31 @@ class AudioComputeAdminService:
         )
         return new_secret
 
+    async def delete_revoked_worker_row(
+        self, worker_id: str
+    ) -> str:
+        w = await self._repo.get_worker(
+            worker_id
+        )
+        if w is None:
+            return "not_found"
+        if w.revoked_at is None:
+            return "not_revoked"
+        await cws.invalidate_worker_nonces(
+            worker_id
+        )
+        n = await self._repo.delete_revoked_worker(
+            worker_id
+        )
+        if n == 0:
+            return "not_found"
+        await self._session.commit()
+        logger.info(
+            "compute_worker_row_deleted",
+            worker_id=worker_id,
+        )
+        return "deleted"
+
     async def list_jobs(
         self,
         status_filter: str | None = None,
@@ -259,6 +317,49 @@ class AudioComputeAdminService:
             status_filter=status_filter, limit=200
         )
         return [_serialize_job(j) for j in rows]
+
+    async def list_worker_jobs(
+        self,
+        worker_id: str,
+        limit: int = 40,
+    ) -> list[dict[str, Any]] | None:
+        w = await self._repo.get_worker(
+            worker_id
+        )
+        if w is None:
+            return None
+        from app.services.lyrics_worker import (
+            get_lyrics_progress,
+        )
+
+        sm = max(1, min(200, int(limit)))
+        rows = await self._repo.list_jobs_for_worker(
+            worker_id, limit=sm
+        )
+        in_flight: frozenset[str] = frozenset(
+            ("queued", "running")
+        )
+
+        async def with_progress(
+            j: LyricsJob,
+        ) -> dict[str, Any]:
+            d = _serialize_job(j)
+            d["progress_id"] = j.progress_id
+            if j.status in in_flight:
+                d["lyrics_progress"] = (
+                    await get_lyrics_progress(
+                        j.progress_id
+                    )
+                )
+            else:
+                d["lyrics_progress"] = None
+            return d
+
+        if not rows:
+            return []
+        return await asyncio.gather(
+            *(with_progress(j) for j in rows)
+        )
 
     async def list_audit(
         self,

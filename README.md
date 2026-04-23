@@ -93,6 +93,19 @@ poetry run python scripts/sc_id_refresher.py
 # Режим отладки
 poetry run python scripts/sc_id_refresher.py --now --log-level DEBUG
 ```
+
+**Docker Compose (по желанию):** тот же демон как отдельный контейнер. Поднимается
+с профилем `sc-refresh` и пишет в смонтированный `.env` (после смены ключа
+перезапустите `backend` вручную, как и при локальном демоне).
+
+```bash
+# Вместе со стеком
+docker compose --profile sc-refresh up -d
+
+# Только контейнер-обновляльщик (когда остальное уже поднято)
+docker compose --profile sc-refresh up -d sc_id_refresher
+```
+
 Сервер запустится на `http://localhost:8000` с автоперезагрузкой (`reload=True`).
 
 > **Swagger UI:** `http://localhost:8000/docs`

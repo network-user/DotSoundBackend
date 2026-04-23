@@ -122,6 +122,30 @@ services:
     networks:
       - dotsound
 
+  # Периодически парсит актуальный client_id с SoundCloud и пишет в
+  # .env (раз в неделю; см. scripts/sc_id_refresher.py). Профиль sc-refresh
+  # не подключается при обычном `docker compose up` — контейнер включай явно.
+  sc_id_refresher:
+    build:
+      context: ..
+      dockerfile: DotSoundBackend/Dockerfile
+    restart: unless-stopped
+    command:
+      - poetry
+      - run
+      - python
+      - scripts/sc_id_refresher.py
+    profiles:
+      - sc-refresh
+    env_file:
+      - .env
+    working_dir: /app
+    volumes:
+      - .:/app
+    logging: *default-logging
+    networks:
+      - dotsound
+
   frontend:
     build:
       context: ./frontend

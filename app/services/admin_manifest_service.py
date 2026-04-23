@@ -63,7 +63,7 @@ _LABELS_RU: dict[str, str] = {
     "menu.tracks": "Треки",
     "menu.complaints": "Жалобы",
     "menu.artists": "Артисты",
-    "menu.audio_compute": "Compute",
+    "menu.audio_compute": "Вычисления",
     "menu.tasks": "Задачи",
     "menu.logs": "Логи",
     "menu.metrics": "Метрики",

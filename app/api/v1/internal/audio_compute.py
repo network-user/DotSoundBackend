@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
@@ -148,7 +148,7 @@ async def heartbeat(
 async def claim(
     request: Request,
     session: AsyncSession = Depends(get_db),
-) -> JSONResponse:
+) -> JSONResponse | Response:
     worker, _ = await _verify(request, session)
     await _enforce_rate_limit(
         request,
@@ -166,8 +166,10 @@ async def claim(
             status_code=204,
         )
         await session.commit()
-        return JSONResponse(
-            status_code=204, content=None
+        # 204 must have no body; ``JSONResponse(..., content=None)``
+        # can confuse Content-Length under uvicorn (ASGI).
+        return Response(
+            status_code=204
         )
 
     token = cws.generate_single_use_token(job.id, worker.id)

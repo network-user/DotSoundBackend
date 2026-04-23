@@ -145,6 +145,29 @@ async def revoke_worker(
     return {"status": "revoked"}
 
 
+@router.delete("/workers/{worker_id}")
+async def delete_revoked_worker(
+    worker_id: str,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_capability("audio_compute.manage")),
+) -> dict:
+    """Permanently remove a **revoked** worker row (UI housekeeping)."""
+    svc = AudioComputeAdminService(session)
+    result = await svc.delete_revoked_worker_row(
+        worker_id
+    )
+    if result == "not_found":
+        raise HTTPException(
+            status_code=404, detail="worker not found"
+        )
+    if result == "not_revoked":
+        raise HTTPException(
+            status_code=400,
+            detail="only_revoked_workers_can_be_removed",
+        )
+    return {"status": "deleted"}
+
+
 @router.post("/workers/{worker_id}/rotate_secret")
 async def rotate_worker_secret(
     worker_id: str,
@@ -179,6 +202,29 @@ async def list_worker_events(
         worker_id, count=clamped
     )
     return {"worker_id": worker_id, "events": events}
+
+
+@router.get("/workers/{worker_id}/jobs")
+async def list_worker_jobs(
+    worker_id: str,
+    limit: int = 40,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(
+        require_capability("audio_compute.manage")
+    ),
+) -> list[dict]:
+    """Lyrics jobs assigned to this worker, with Redis progress
+    for queued / running work.
+    """
+    svc = AudioComputeAdminService(session)
+    data = await svc.list_worker_jobs(
+        worker_id, limit=limit
+    )
+    if data is None:
+        raise HTTPException(
+            status_code=404, detail="worker not found"
+        )
+    return data
 
 
 @router.get("/jobs")
