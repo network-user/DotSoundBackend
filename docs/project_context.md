@@ -90,8 +90,6 @@ Backend = чистый hub. Каждая задача попадает в `Lyric
 1. Пользователь нажимает "Авто-генерация" → `LyricsService.trigger_auto_generation`
 2. `lyrics_cascade.start_cascade` создаёт job, ставит первый tier:
    - **`catalog_only`** — Backend Taskiq, вызывает
-     `generate_lyrics(disable_local_asr=True)` (только каталоги:
-     Genius, Yandex Music LRC, ...). Не загружает Whisper.
    - **`remote_whisper`** — Backend оставляет job со статусом
      `queued, profile=gpu_full`. Удалённый
      `DotSoundComputeWorker` забирает через HMAC pull API
