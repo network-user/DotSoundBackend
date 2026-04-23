@@ -144,11 +144,14 @@ async def heartbeat(
     }
 
 
-@router.post("/jobs/claim")
+@router.post(
+    "/jobs/claim",
+    response_model=None,
+)
 async def claim(
     request: Request,
     session: AsyncSession = Depends(get_db),
-) -> JSONResponse | Response:
+) -> Response:
     worker, _ = await _verify(request, session)
     await _enforce_rate_limit(
         request,
