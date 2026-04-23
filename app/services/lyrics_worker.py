@@ -1742,7 +1742,7 @@ async def catalog_only_lyrics_task(
             ):
                 if job is not None:
                     # Pre-save catalog text so ``remote_whisper`` can
-                    # align ASR word timings to Genius/etc. in
+                    # align ASR word timings to etc. in
                     # :func:`job_result` (PrivateCore opcode aligner).
                     if (payload.get("text") or "").strip():
                         try:

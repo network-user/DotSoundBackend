@@ -270,7 +270,6 @@ Request body (all fields optional):
 Optional **`asr_timed_words`**: flat list of ASR words with times in
 **seconds** (`t`) and token text (`w`), in playback order — typically
 derived from faster-whisper `word_timestamps`. When the cascade
-pre-saved **catalog** lyrics (Genius, …) to `track_lyrics` before
 `remote_whisper`, the Backend runs the same **PrivateCore opcode
 alignment** as the in-process path: catalog text plus
 `asr_timed_words` produce line timecodes tied to the **reference**

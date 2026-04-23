@@ -219,6 +219,17 @@
   - Backend отправляет аудиофайл во внутренний API PrivateCore,
   а PrivateCore уже сам решает, обрабатывать локально или вызывать внешний GPU-сервис
   - Интеграция через существующий `lyrics_provider` в PrivateCore (внешние детали — внутри чёрного ящика)
+- [ ] **Karaoke после catalog + remote ASR align (пока не делаем):**
+  UI показывает режим «Караоке» только при `word_times` на строках
+  **и** `sync_quality === "word"` (`LyricsPanel.tsx`, `FullscreenLyrics.tsx`).
+  Ветка `POST .../audio-compute/.../result` с
+  `align_text_to_precomputed_asr_timed_words` сейчас пишет в БД
+  **только** line-level строки + `sync_quality=line` — словесные
+  таймкоды с воркера в сохранённый JSON не переносятся. На будущее:
+  после align приклеить/распределить `word_times` к выровненным
+  строкам каталога (из `asr_timed_words` или исходных
+  `synced_lines` воркера) и при успехе выставлять `word`, чтобы
+  караоке снова работал при эталонном тексте.
 - Теги (`tags`, JSONB или отдельная таблица)
 - BPM auto-detection (background task, `librosa` / `essentia`)
   - Извлечение фич/пороги confidence и decision rules в PrivateCore, Taskiq orchestration и запись результата — в Backend
@@ -547,7 +558,7 @@ bounded-transport exception
 
 ---
 
-*Последнее обновление: 2026-04-22 агентом (настроены Claude+Cursor guardrails).*
+*Последнее обновление: 2026-04-23 (план: karaoke + catalog align).*
 
 ## Sprint concurrency hardening (2026-04-22)
 
