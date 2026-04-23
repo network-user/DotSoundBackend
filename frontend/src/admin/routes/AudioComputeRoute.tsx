@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   useMutation,
   useQuery,
@@ -7,6 +8,11 @@ import {
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Press } from '@/components/ui/Press'
+import {
+  computeWorkerPillKind,
+  computeWorkerPillLabel,
+  WORKER_ONLINE_MAX_AGE_SEC,
+} from '../lib/computeWorkerLiveness'
 import { adminFetch } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
@@ -94,34 +100,6 @@ const ALL_TIERS = [
   'speechkit_paid',
 ]
 
-const CIDR_PRESETS: {
-  label: string
-  value: string
-  hint: string
-}[] = [
-  {
-    label: 'Localhost only',
-    value: '127.0.0.1/32, ::1/128',
-    hint: 'Worker runs on the same host as Backend.',
-  },
-  {
-    label: 'Private LAN',
-    value:
-      '10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16',
-    hint: 'Worker is anywhere inside your VPC / home LAN.',
-  },
-  {
-    label: 'Single VPS IP',
-    value: '203.0.113.10/32',
-    hint: 'Tightest scope: one specific public IP.',
-  },
-  {
-    label: 'Allow any (RISKY)',
-    value: '0.0.0.0/0',
-    hint: 'Anyone on the internet with the secret can claim. Use only when you cannot control egress.',
-  },
-]
-
 const AUDIT_ACTION_FILTERS = [
   '',
   'auth_fail',
@@ -145,28 +123,17 @@ function jobKind(
   return 'unknown'
 }
 
-function workerKind(
-  row: WorkerRow,
-): 'ok' | 'warn' | 'error' | 'unknown' {
-  if (row.revoked_at) return 'error'
-  if (row.suspended_until) return 'warn'
-  if (!row.active) return 'error'
-  return 'ok'
-}
-
-function workerLabel(row: WorkerRow): string {
-  if (row.revoked_at) return 'revoked'
-  if (row.suspended_until)
-    return `suspended ${row.suspended_reason || ''}`.trim()
-  if (!row.active)
-    return row.suspended_reason || 'inactive'
-  return 'active'
-}
-
-function fmtCidrs(values: string[]): string {
-  if (!values || values.length === 0) return '–'
-  if (values.includes('0.0.0.0/0')) return 'ANY ⚠'
-  return `${values.length}`
+function fmtCidrs(
+  values: string[],
+  t: TFunction,
+): string {
+  if (!values || values.length === 0) {
+    return '–'
+  }
+  if (values.includes('0.0.0.0/0')) {
+    return t('admin.audioCompute.workerState.anyCidr')
+  }
+  return String(values.length)
 }
 
 function parseCidrInput(input: string): string[] {
@@ -187,55 +154,6 @@ function tierBadgeKind(
   if (status === 'miss') return 'warn'
   return 'unknown'
 }
-
-const workerColumns: ColumnDef<WorkerRow>[] = [
-  {
-    header: 'ID',
-    accessorKey: 'id',
-    cell: (i) => (
-      <span className="admin-mono">
-        {i.getValue<string>().slice(0, 12)}
-      </span>
-    ),
-  },
-  { header: 'Name', accessorKey: 'name' },
-  { header: 'Profile', accessorKey: 'profile' },
-  {
-    header: 'Status',
-    cell: (i) => (
-      <StatusPill kind={workerKind(i.row.original)}>
-        {workerLabel(i.row.original)}
-      </StatusPill>
-    ),
-  },
-  {
-    header: 'Allow IPs',
-    cell: (i) => (
-      <span
-        className="admin-mono"
-        title={(
-          i.row.original.allowed_ip_cidrs || []
-        ).join('\n')}
-      >
-        {fmtCidrs(i.row.original.allowed_ip_cidrs)}
-      </span>
-    ),
-  },
-  {
-    header: 'Concurrency',
-    accessorKey: 'max_concurrent_jobs',
-  },
-  {
-    header: 'Last seen',
-    cell: (i) =>
-      i.row.original.last_seen_at
-        ? new Date(
-            i.row.original.last_seen_at,
-          ).toLocaleString()
-        : '–',
-  },
-  { header: 'IP', accessorKey: 'last_ip' },
-]
 
 export function AudioComputeRoute() {
   const { t } = useTranslation()
@@ -381,6 +299,24 @@ export function AudioComputeRoute() {
     },
   })
 
+  const deleteRevokedWorker = useMutation({
+    mutationFn: (workerId: string) =>
+      adminFetch(
+        `/audio-compute/workers/${encodeURIComponent(
+          workerId,
+        )}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: (_d, workerId) => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'compute', 'workers'],
+      })
+      setDrawerWorkerId((cur) =>
+        cur === workerId ? null : cur,
+      )
+    },
+  })
+
   const setMode = useMutation({
     mutationFn: (mode: string) =>
       adminFetch<{ mode: string }>(
@@ -454,145 +390,355 @@ export function AudioComputeRoute() {
     setPendingCascade(current)
   }
 
-  const jobColumns: ColumnDef<JobRow>[] = [
-    {
-      header: 'ID',
-      accessorKey: 'id',
-      cell: (i) => (
-        <span className="admin-mono">
-          {String(i.getValue<string>()).slice(0, 8)}
-        </span>
-      ),
-    },
-    { header: 'Track', accessorKey: 'track_id' },
-    {
-      header: 'Status',
-      cell: (i) => (
-        <StatusPill kind={jobKind(i.row.original.status)}>
-          {i.row.original.status}
-        </StatusPill>
-      ),
-    },
-    {
-      header: 'Tier',
-      cell: (i) => (
-        <span className="admin-mono">
-          {i.row.original.current_tier || '–'}
-        </span>
-      ),
-    },
-    {
-      header: 'Attempts',
-      cell: (i) => (
-        <span title={(
-          i.row.original.tier_attempts || []
-        )
-          .map(
-            (a) =>
-              `${a.tier}: ${a.status}${
-                a.error ? ` (${a.error})` : ''
-              }`,
-          )
-          .join('\n')}>
-          {(
-            i.row.original.tier_attempts || []
-          ).length}
-        </span>
-      ),
-    },
-    {
-      header: 'Worker',
-      cell: (i) => (
-        <span className="admin-mono">
-          {(i.row.original.routed_to_worker || '–').slice(
-            0,
-            10,
-          )}
-        </span>
-      ),
-    },
-    {
-      header: 'Duration',
-      cell: (i) =>
-        i.row.original.duration_ms
-          ? `${(
-              i.row.original.duration_ms / 1000
-            ).toFixed(1)}s`
-          : '–',
-    },
-    {
-      header: '',
-      id: 'trace',
-      cell: (i) => (
-        <Press
-          variant="ghost"
-          onClick={() =>
-            setTraceJobId(i.row.original.id)
-          }
-        >
-          Trace
-        </Press>
-      ),
-    },
-  ]
-
-  const auditColumns: ColumnDef<AuditRow>[] = [
-    {
-      header: 'When',
-      cell: (i) =>
-        new Date(
-          i.row.original.created_at,
-        ).toLocaleString(),
-    },
-    {
-      header: 'Worker',
-      accessorKey: 'worker_id',
-      cell: (i) => (
-        <span className="admin-mono">
-          {(i.getValue<string | null>() || '')
-            .toString()
-            .slice(0, 8) || '–'}
-        </span>
-      ),
-    },
-    { header: 'Action', accessorKey: 'action' },
-    {
-      header: 'Job',
-      accessorKey: 'job_id',
-      cell: (i) => (
-        <span className="admin-mono">
-          {(i.getValue<string | null>() || '')
-            .toString()
-            .slice(0, 8) || '–'}
-        </span>
-      ),
-    },
-    { header: 'Status', accessorKey: 'status_code' },
-    { header: 'IP', accessorKey: 'ip' },
-    {
-      header: 'Meta',
-      cell: (i) => {
-        const meta = i.row.original.meta
-        if (!meta) return '–'
-        const json = JSON.stringify(meta)
-        return (
-          <span
-            className="admin-mono"
-            title={json}
-            style={{
-              maxWidth: 240,
-              display: 'inline-block',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {json}
-          </span>
-        )
+  const cidrPresets = useMemo(
+    () => [
+      {
+        label: t('admin.audioCompute.cidr.localhostLabel'),
+        value: '127.0.0.1/32, ::1/128',
+        hint: t('admin.audioCompute.cidr.localhostHint'),
       },
-    },
-  ]
+      {
+        label: t('admin.audioCompute.cidr.privateLabel'),
+        value:
+          '10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16',
+        hint: t('admin.audioCompute.cidr.privateHint'),
+      },
+      {
+        label: t('admin.audioCompute.cidr.vpsLabel'),
+        value: '203.0.113.10/32',
+        hint: t('admin.audioCompute.cidr.vpsHint'),
+      },
+      {
+        label: t('admin.audioCompute.cidr.anyLabel'),
+        value: '0.0.0.0/0',
+        hint: t('admin.audioCompute.cidr.anyHint'),
+      },
+    ],
+    [t],
+  )
+
+  const workerColumns: ColumnDef<WorkerRow>[] =
+    useMemo(
+      () => [
+        {
+          header: t('admin.audioCompute.table.id'),
+          accessorKey: 'id',
+          cell: (i) => {
+            const id = i.getValue<string>()
+            return (
+              <span
+                className="admin-mono"
+                title={id}
+                style={{
+                  wordBreak: 'break-all',
+                  maxWidth: 220,
+                  display: 'inline-block',
+                }}
+              >
+                {id}
+              </span>
+            )
+          },
+        },
+        {
+          header: t('admin.audioCompute.table.name'),
+          accessorKey: 'name',
+        },
+        {
+          header: t('admin.audioCompute.table.profile'),
+          accessorKey: 'profile',
+        },
+        {
+          header: t('admin.audioCompute.table.status'),
+          cell: (i) => (
+            <StatusPill
+              kind={computeWorkerPillKind(
+                i.row.original,
+              )}
+              title={
+                i.row.original
+                  .last_seen_at
+                  ? new Date(
+                      i.row.original
+                        .last_seen_at,
+                    ).toLocaleString()
+                  : undefined
+              }
+            >
+              {computeWorkerPillLabel(
+                i.row.original,
+                t,
+              )}
+            </StatusPill>
+          ),
+        },
+        {
+          header: t('admin.audioCompute.table.allowIps'),
+          cell: (i) => (
+            <span
+              className="admin-mono"
+              title={(
+                i.row.original
+                  .allowed_ip_cidrs || []
+              ).join('\n')}
+            >
+              {fmtCidrs(
+                i.row.original
+                  .allowed_ip_cidrs,
+                t,
+              )}
+            </span>
+          ),
+        },
+        {
+          header: t(
+            'admin.audioCompute.table.concurrency',
+          ),
+          accessorKey: 'max_concurrent_jobs',
+        },
+        {
+          header: t(
+            'admin.audioCompute.table.lastSeen',
+          ),
+          cell: (i) =>
+            i.row.original
+              .last_seen_at
+              ? new Date(
+                  i.row.original
+                    .last_seen_at,
+                ).toLocaleString()
+              : '–',
+        },
+        {
+          header: t('admin.audioCompute.table.ip'),
+          accessorKey: 'last_ip',
+        },
+      ],
+      [t],
+    )
+
+  const jobColumns: ColumnDef<JobRow>[] = useMemo(
+    () => [
+      {
+        header: t('admin.audioCompute.table.id'),
+        accessorKey: 'id',
+        cell: (i) => (
+          <span className="admin-mono">
+            {String(
+              i.getValue<string>(),
+            ).slice(0, 8)}
+          </span>
+        ),
+      },
+      {
+        header: t('admin.audioCompute.table.track'),
+        accessorKey: 'track_id',
+      },
+      {
+        header: t(
+          'admin.audioCompute.table.status',
+        ),
+        cell: (i) => (
+          <StatusPill
+            kind={jobKind(
+              i.row.original
+                .status,
+            )}
+          >
+            {i.row.original
+              .status}
+          </StatusPill>
+        ),
+      },
+      {
+        header: t('admin.audioCompute.table.tier'),
+        cell: (i) => (
+          <span className="admin-mono">
+            {i.row.original
+              .current_tier || '–'}
+          </span>
+        ),
+      },
+      {
+        header: t(
+          'admin.audioCompute.table.attempts',
+        ),
+        cell: (i) => (
+          <span
+            title={(
+              i.row.original
+                .tier_attempts || []
+            )
+              .map(
+                (a) =>
+                  `${a.tier}: ${a.status}${
+                    a.error
+                      ? ` (${a.error})`
+                      : ''
+                  }`,
+              )
+              .join('\n')}
+          >
+            {(
+              i.row.original
+                .tier_attempts || []
+            ).length}
+          </span>
+        ),
+      },
+        {
+          header: t(
+            'admin.audioCompute.table.worker',
+          ),
+          cell: (i) => {
+            const w =
+              i.row.original.routed_to_worker
+            if (!w) {
+              return '–'
+            }
+            return (
+              <span
+                className="admin-mono"
+                title={w}
+                style={{
+                  wordBreak: 'break-all',
+                  maxWidth: 160,
+                  display: 'inline-block',
+                }}
+              >
+                {w}
+              </span>
+            )
+          },
+        },
+      {
+        header: t(
+          'admin.audioCompute.table.duration',
+        ),
+        cell: (i) =>
+          i.row.original
+            .duration_ms
+            ? `${(
+                i.row.original
+                  .duration_ms / 1000
+              ).toFixed(1)}s`
+            : '–',
+      },
+      {
+        header: '',
+        id: 'trace',
+        cell: (i) => (
+          <Press
+            variant="ghost"
+            onClick={() =>
+              setTraceJobId(
+                i.row.original.id,
+              )
+            }
+          >
+            {t(
+              'admin.audioCompute.jobTable.trace',
+            )}
+          </Press>
+        ),
+      },
+    ],
+    [t],
+  )
+
+  const auditColumns: ColumnDef<AuditRow>[] =
+    useMemo(
+      () => [
+        {
+          header: t(
+            'admin.audioCompute.table.when',
+          ),
+          cell: (i) =>
+            new Date(
+              i.row.original
+                .created_at,
+            ).toLocaleString(),
+        },
+        {
+          header: t(
+            'admin.audioCompute.table.worker',
+          ),
+          accessorKey: 'worker_id',
+          cell: (i) => (
+            <span className="admin-mono">
+              {(i
+                .getValue<string | null>() ||
+                '')
+                .toString()
+                .slice(0, 8) || '–'}
+            </span>
+          ),
+        },
+        {
+          header: t(
+            'admin.audioCompute.table.action',
+          ),
+          accessorKey: 'action',
+        },
+        {
+          header: t('admin.audioCompute.table.job'),
+          accessorKey: 'job_id',
+          cell: (i) => (
+            <span className="admin-mono">
+              {(i
+                .getValue<string | null>() ||
+                '')
+                .toString()
+                .slice(0, 8) || '–'}
+            </span>
+          ),
+        },
+        {
+          header: t(
+            'admin.audioCompute.table.status',
+          ),
+          accessorKey: 'status_code',
+        },
+        {
+          header: t('admin.audioCompute.table.ip'),
+          accessorKey: 'ip',
+        },
+        {
+          header: t('admin.audioCompute.table.meta'),
+          cell: (i) => {
+            const meta = i
+              .row.original
+              .meta
+            if (!meta) {
+              return '–'
+            }
+            const json = JSON.stringify(
+              meta,
+            )
+            return (
+              <span
+                className="admin-mono"
+                title={json}
+                style={{
+                  maxWidth: 240,
+                  display:
+                    'inline-block',
+                  overflow:
+                    'hidden',
+                  textOverflow:
+                    'ellipsis',
+                  whiteSpace:
+                    'nowrap',
+                }}
+              >
+                {json}
+              </span>
+            )
+          },
+        },
+      ],
+      [t],
+    )
 
   return (
     <div>
@@ -603,7 +749,9 @@ export function AudioComputeRoute() {
       />
 
       <section className="admin-card">
-        <h2>Routing mode</h2>
+        <h2>
+          {t('admin.audioCompute.routing.title')}
+        </h2>
         <div className="admin-toolbar">
           <select
             value={routing.data?.mode || 'auto'}
@@ -618,7 +766,8 @@ export function AudioComputeRoute() {
             ))}
           </select>
           <span className="admin-card__sub">
-            current:{' '}
+            {t('admin.audioCompute.routing.current')}
+            {': '}
             <code>
               {routing.data?.mode || '…'}
             </code>
@@ -627,11 +776,11 @@ export function AudioComputeRoute() {
       </section>
 
       <section className="admin-card">
-        <h2>Cascade order</h2>
+        <h2>
+          {t('admin.audioCompute.cascade.title')}
+        </h2>
         <p className="admin-card__sub">
-          Drag tiers up/down to change the order
-          jobs try them. Toggle to add/remove a tier
-          from the cascade.
+          {t('admin.audioCompute.cascade.hint')}
         </p>
         <ol style={{ paddingLeft: 20 }}>
           {liveCascade.map((tier, idx) => (
@@ -657,14 +806,16 @@ export function AudioComputeRoute() {
                 variant="ghost"
                 onClick={() => toggleTier(tier)}
               >
-                Remove
+                {t(
+                  'admin.audioCompute.cascade.remove',
+                )}
               </Press>
             </li>
           ))}
         </ol>
         <div className="admin-toolbar">
           {ALL_TIERS.filter(
-            (t) => !liveCascade.includes(t),
+            (x) => !liveCascade.includes(x),
           ).map((tier) => (
             <Press
               key={tier}
@@ -685,7 +836,7 @@ export function AudioComputeRoute() {
               setCascade.mutate(pendingCascade)
             }
           >
-            Save cascade
+            {t('admin.audioCompute.cascade.save')}
           </Press>
           {pendingCascade && (
             <Press
@@ -694,20 +845,26 @@ export function AudioComputeRoute() {
                 setPendingCascade(null)
               }
             >
-              Discard
+              {t(
+                'admin.audioCompute.cascade.discard',
+              )}
             </Press>
           )}
         </div>
       </section>
 
       <section className="admin-card">
-        <h2>SpeechKit (paid tier)</h2>
+        <h2>
+          {t('admin.audioCompute.speechkit.title')}
+        </h2>
         {speechkit.isLoading || !speechkit.data ? (
-          <p>Loading…</p>
+          <p>
+            {t('admin.audioCompute.speechkit.loading')}
+          </p>
         ) : (
           <div>
             <p>
-              Status:{' '}
+              {t('admin.audioCompute.speechkit.status')}:{' '}
               <StatusPill
                 kind={
                   speechkit.data.enabled
@@ -716,17 +873,23 @@ export function AudioComputeRoute() {
                 }
               >
                 {speechkit.data.enabled
-                  ? 'enabled'
-                  : 'disabled'}
+                  ? t(
+                      'admin.audioCompute.speechkit.enabled',
+                    )
+                  : t(
+                      'admin.audioCompute.speechkit.disabled',
+                    )}
               </StatusPill>{' '}
               {!speechkit.data.api_key_set && (
                 <StatusPill kind="warn">
-                  api key missing
+                  {t(
+                    'admin.audioCompute.speechkit.apiKeyMissing',
+                  )}
                 </StatusPill>
               )}
             </p>
             <p>
-              Budget this month:{' '}
+              {t('admin.audioCompute.speechkit.budget')}:{' '}
               <code>
                 {speechkit.data.monthly_spent_rub.toFixed(
                   2,
@@ -737,7 +900,7 @@ export function AudioComputeRoute() {
                 )}{' '}
                 ₽
               </code>{' '}
-              (remaining{' '}
+              ({t('admin.audioCompute.speechkit.remaining')}{' '}
               <code>
                 {speechkit.data.remaining_rub.toFixed(
                   2,
@@ -747,14 +910,14 @@ export function AudioComputeRoute() {
               )
             </p>
             <p>
-              Rate:{' '}
+              {t('admin.audioCompute.speechkit.rate')}:{' '}
               <code>
                 {speechkit.data.rate_rub_per_minute.toFixed(
                   2,
                 )}{' '}
-                ₽/min
+                {t('admin.audioCompute.speechkit.perMin')}
               </code>
-              , per-job soft limit{' '}
+              , {t('admin.audioCompute.speechkit.softLimit')}{' '}
               <code>
                 {speechkit.data.soft_per_job_limit_rub.toFixed(
                   2,
@@ -767,14 +930,26 @@ export function AudioComputeRoute() {
               onClick={() => resetSpend.mutate()}
               disabled={resetSpend.isPending}
             >
-              Reset month spent counter
+              {t(
+                'admin.audioCompute.speechkit.resetSpend',
+              )}
             </Press>
           </div>
         )}
       </section>
 
       <section className="admin-card">
-        <h2>Workers</h2>
+        <h2>
+          {t('admin.audioCompute.workers')}
+        </h2>
+        <p className="admin-card__sub">
+          {t(
+            'admin.audioCompute.workersSectionHint',
+            {
+              sec: WORKER_ONLINE_MAX_AGE_SEC,
+            },
+          )}
+        </p>
         <div
           className="admin-toolbar"
           style={{
@@ -784,7 +959,9 @@ export function AudioComputeRoute() {
         >
           <input
             type="text"
-            placeholder="worker name"
+            placeholder={t(
+              'admin.audioCompute.workerForm.namePlaceholder',
+            )}
             value={newName}
             onChange={(e) =>
               setNewName(e.target.value)
@@ -817,11 +994,15 @@ export function AudioComputeRoute() {
               )
             }
             style={{ width: 80 }}
-            title="max_concurrent_jobs"
+            title={t(
+              'admin.audioCompute.workerForm.concurrencyTitle',
+            )}
           />
           <input
             type="text"
-            placeholder="allowed_profiles (comma)"
+            placeholder={t(
+              'admin.audioCompute.workerForm.allowedProfilesPlaceholder',
+            )}
             value={newAllowedProfiles}
             onChange={(e) =>
               setNewAllowedProfiles(
@@ -834,8 +1015,9 @@ export function AudioComputeRoute() {
         <div style={{ marginTop: 8 }}>
           <label>
             <div>
-              Allowed IP CIDRs (one per line, or
-              comma-separated):
+              {t(
+                'admin.audioCompute.workerForm.cidrLabel',
+              )}
             </div>
             <textarea
               value={newCidrs}
@@ -844,9 +1026,9 @@ export function AudioComputeRoute() {
               }
               rows={3}
               cols={48}
-              placeholder={
-                '127.0.0.1/32\n10.0.0.0/8'
-              }
+              placeholder={t(
+                'admin.audioCompute.workerForm.cidrPlaceholder',
+              )}
             />
           </label>
           <div
@@ -858,9 +1040,11 @@ export function AudioComputeRoute() {
             }}
           >
             <span className="admin-card__sub">
-              Presets:
+              {t(
+                'admin.audioCompute.workerForm.presets',
+              )}
             </span>
-            {CIDR_PRESETS.map((preset) => (
+            {cidrPresets.map((preset) => (
               <Press
                 key={preset.label}
                 variant="ghost"
@@ -875,21 +1059,36 @@ export function AudioComputeRoute() {
           </div>
           {cidrParsed.length > 0 && (
             <p className="admin-card__sub">
-              Parsed: {cidrParsed.length} CIDR
-              {cidrParsed.length === 1 ? '' : 's'}
-              {cidrIsOpen && ' · WILDCARD detected'}
+              {cidrParsed.length === 1
+                ? t(
+                    'admin.audioCompute.workerForm.parsedOne',
+                    {
+                      count: cidrParsed.length,
+                    },
+                  )
+                : t(
+                    'admin.audioCompute.workerForm.parsedMany',
+                    {
+                      count: cidrParsed.length,
+                    },
+                  )}
+              {cidrIsOpen &&
+                t(
+                  'admin.audioCompute.workerForm.wildcardDetected',
+                )}
             </p>
           )}
           {cidrIsOpen && (
             <div className="admin-card admin-card--inline">
               <p>
                 <StatusPill kind="error">
-                  Wildcard
+                  {t(
+                    'admin.audioCompute.workerForm.wildcardPill',
+                  )}
                 </StatusPill>{' '}
-                You are about to allow ALL IPs.
-                A leaked secret will let anyone on
-                the internet impersonate this
-                worker.
+                {t(
+                  'admin.audioCompute.workerForm.wildcardBody',
+                )}
               </p>
               <label>
                 <input
@@ -901,7 +1100,9 @@ export function AudioComputeRoute() {
                     )
                   }
                 />{' '}
-                I accept the risk
+                {t(
+                  'admin.audioCompute.workerForm.acceptRisk',
+                )}
               </label>
             </div>
           )}
@@ -929,14 +1130,15 @@ export function AudioComputeRoute() {
               })
             }
           >
-            Create worker
+            {t('admin.audioCompute.workerForm.create')}
           </Press>
         </div>
         {showSecret && (
           <div className="admin-card admin-card--inline">
             <p>
-              Save this secret — it will not be
-              shown again:
+              {t(
+                'admin.audioCompute.workerForm.secretOnce',
+              )}
             </p>
             <code className="admin-mono">
               {showSecret}
@@ -947,7 +1149,9 @@ export function AudioComputeRoute() {
                 setShowSecret(null)
               }
             >
-              Dismiss
+              {t(
+                'admin.audioCompute.workerForm.dismiss',
+              )}
             </Press>
           </div>
         )}
@@ -957,61 +1161,116 @@ export function AudioComputeRoute() {
             {
               header: '',
               id: 'actions',
-              cell: (i) => (
-                <Press
-                  variant="ghost"
-                  onClick={() =>
-                    setDrawerWorkerId(
-                      i.row.original.id,
-                    )
-                  }
-                >
-                  Open
-                </Press>
-              ),
+              cell: (i) => {
+                const row = i.row.original
+                return (
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 4,
+                    }}
+                  >
+                    <Press
+                      variant="ghost"
+                      onClick={() =>
+                        setDrawerWorkerId(row.id)
+                      }
+                    >
+                      {t(
+                        'admin.audioCompute.workerForm.open',
+                      )}
+                    </Press>
+                    {row.revoked_at && (
+                      <Press
+                        variant="ghost"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              t(
+                                'admin.audioCompute.workerForm.deleteFromListConfirm',
+                                {
+                                  name: row.name,
+                                },
+                              ),
+                            )
+                          ) {
+                            deleteRevokedWorker.mutate(
+                              row.id,
+                            )
+                          }
+                        }}
+                        disabled={
+                          deleteRevokedWorker.isPending
+                        }
+                        style={{ color: 'var(--admin-dim)' }}
+                      >
+                        {t(
+                          'admin.audioCompute.workerForm.deleteFromList',
+                        )}
+                      </Press>
+                    )}
+                  </div>
+                )
+              },
             },
           ]}
           rows={workersList}
-          emptyHint="No workers registered. Use the onboarding section above to add your first one."
+          emptyHint={t(
+            'admin.audioCompute.workerForm.tableEmpty',
+          )}
         />
       </section>
 
       <section className="admin-card">
-        <h2>Jobs</h2>
+        <h2>
+          {t('admin.audioCompute.jobs')}
+        </h2>
         <DataTable
           columns={jobColumns}
           rows={
             (jobs.data as JobRow[] | undefined) ||
             []
           }
-          emptyHint="No jobs in flight"
+          emptyHint={t(
+            'admin.audioCompute.jobTable.empty',
+          )}
         />
       </section>
 
       {traceJob && (
         <section className="admin-card">
           <h2>
-            Trace · <code>{traceJob.id}</code>{' '}
+            {t('admin.audioCompute.jobTable.trace')} ·{' '}
+            <code>{traceJob.id}</code>{' '}
             <Press
               variant="ghost"
               onClick={() => setTraceJobId(null)}
             >
-              Close
+              {t(
+                'admin.audioCompute.jobTable.close',
+              )}
             </Press>
           </h2>
           <p>
-            Status:{' '}
+            {t(
+              'admin.audioCompute.jobTable.status',
+            )}
+            :{' '}
             <StatusPill kind={jobKind(traceJob.status)}>
               {traceJob.status}
             </StatusPill>{' '}
-            current tier:{' '}
+            {t('admin.audioCompute.jobTable.currentTier')}:{' '}
             <code>
               {traceJob.current_tier || '–'}
             </code>
           </p>
           {traceJob.error && (
             <p>
-              <strong>Error:</strong>{' '}
+              <strong>
+                {t('admin.audioCompute.jobTable.error')}
+                :
+              </strong>{' '}
               <code>{traceJob.error}</code>
             </p>
           )}
@@ -1053,9 +1312,13 @@ export function AudioComputeRoute() {
       )}
 
       <section className="admin-card">
-        <h2>Worker audit (last 200)</h2>
+        <h2>
+          {t('admin.audioCompute.auditSection.title')}
+        </h2>
         <div className="admin-toolbar">
-          <label>Filter:</label>
+          <label>
+            {t('admin.audioCompute.auditSection.filter')}:{' '}
+          </label>
           <select
             value={auditFilter}
             onChange={(e) =>
@@ -1064,7 +1327,10 @@ export function AudioComputeRoute() {
           >
             {AUDIT_ACTION_FILTERS.map((a) => (
               <option key={a} value={a}>
-                {a || '(all)'}
+                {a ||
+                  t(
+                    'admin.audioCompute.auditSection.all',
+                  )}
               </option>
             ))}
           </select>
@@ -1086,6 +1352,14 @@ export function AudioComputeRoute() {
           onClose={() => setDrawerWorkerId(null)}
           onSecretShown={(secret) =>
             setShowSecret(secret)
+          }
+          onRequestDeleteRevoked={() =>
+            deleteRevokedWorker.mutate(
+              drawerWorker.id,
+            )
+          }
+          deleteFromListPending={
+            deleteRevokedWorker.isPending
           }
         />
       )}

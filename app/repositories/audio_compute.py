@@ -51,6 +51,20 @@ class AudioComputeRepository:
         )
         return int(result.rowcount or 0)
 
+    async def delete_revoked_worker(
+        self, worker_id: str
+    ) -> int:
+        """Remove a **revoked** row from ``compute_workers`` only
+        (housekeeping; jobs keep ``routed_to_worker`` as history).
+        """
+        result = await self._session.execute(
+            delete(ComputeWorker).where(
+                ComputeWorker.id == worker_id,
+                ComputeWorker.revoked_at.isnot(None),
+            )
+        )
+        return int(result.rowcount or 0)
+
     async def update_worker_secret(
         self, worker_id: str, token_hash: str
     ) -> int:
@@ -129,6 +143,28 @@ class AudioComputeRepository:
                 LyricsJob.status == status_filter
             )
         result = await self._session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_jobs_for_worker(
+        self,
+        worker_id: str,
+        limit: int = 40,
+    ) -> list[LyricsJob]:
+        """Jobs this worker is / was working on
+        (``routed_to_worker``), newest first.
+        """
+        sm = max(1, min(200, int(limit)))
+        result = await self._session.execute(
+            select(LyricsJob)
+            .where(
+                LyricsJob.routed_to_worker
+                == worker_id
+            )
+            .order_by(
+                LyricsJob.updated_at.desc()
+            )
+            .limit(sm)
+        )
         return list(result.scalars().all())
 
     async def get_job(

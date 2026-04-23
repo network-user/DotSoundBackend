@@ -97,9 +97,23 @@ class SoundCloudService:
                     },
                 )
                 if r.status_code == 404:
+                    logger.warning(
+                        "sc_resolve_404",
+                        sc_url_len=len(sc_url),
+                        sc_url_host=(
+                            (sc_url.split("://", 1)[-1].split("/", 1)[0])
+                            if "://" in sc_url
+                            else "?"
+                        ),
+                    )
                     raise HTTPException(
                         status_code=status.HTTP_404_NOT_FOUND,
-                        detail=("SoundCloud track not found or private"),
+                        detail=(
+                            "SoundCloud: трек не найден по ссылке "
+                            "(удалён, приватный или в базе устарел URL). "
+                            "Проверьте трек на soundcloud.com или "
+                            "импортируйте снова."
+                        ),
                     )
                 if r.status_code == 401:
                     raise HTTPException(

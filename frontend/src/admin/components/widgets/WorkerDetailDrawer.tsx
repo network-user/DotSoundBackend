@@ -1,12 +1,20 @@
 import { useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
 import { Press } from '@/components/ui/Press'
+import {
+  computeWorkerPillKind,
+  computeWorkerPillLabel,
+} from '../../lib/computeWorkerLiveness'
 import { adminFetch } from '../../lib/adminApi'
 import { StatusPill } from './StatusPill'
+
+const WD = 'admin.audioCompute.workerDrawer' as const
+const AC = 'admin.audioCompute' as const
 
 interface WorkerRow {
   id: string
@@ -34,11 +42,26 @@ interface WorkerEvent {
   meta?: unknown
 }
 
+interface WorkerJobRow {
+  id: string
+  track_id: number
+  status: string
+  current_tier: string | null
+  progress_id: string
+  lyrics_progress: {
+    stage?: string
+    percent?: number
+    logs?: string[]
+  } | null
+}
+
 interface Props {
   worker: WorkerRow
   backendBaseUrl: string
   onClose: () => void
   onSecretShown: (secret: string) => void
+  onRequestDeleteRevoked?: () => void
+  deleteFromListPending?: boolean
 }
 
 function fmtDate(iso: string | null | undefined) {
@@ -83,16 +106,43 @@ function actionKind(
   return 'unknown'
 }
 
+function progressSummary(
+  p: WorkerJobRow['lyrics_progress'],
+): {
+  stage: string
+  percent: string
+  logs: string[] | undefined
+} {
+  if (!p) {
+    return { stage: '—', percent: '—', logs: undefined }
+  }
+  const st =
+    typeof p.stage === 'string' && p.stage
+      ? p.stage
+      : '—'
+  const pct =
+    typeof p.percent === 'number' &&
+    Number.isFinite(p.percent)
+      ? String(p.percent)
+      : '—'
+  return { stage: st, percent: pct, logs: p.logs }
+}
+
 export function WorkerDetailDrawer({
   worker,
   backendBaseUrl,
   onClose,
   onSecretShown,
+  onRequestDeleteRevoked,
+  deleteFromListPending = false,
 }: Props) {
+  const { t } = useTranslation()
   const qc = useQueryClient()
   const [confirmRevoke, setConfirmRevoke] =
     useState(false)
   const [confirmRotate, setConfirmRotate] =
+    useState(false)
+  const [confirmDeleteFromList, setConfirmDeleteFromList] =
     useState(false)
   const [editCidrs, setEditCidrs] = useState<
     string | null
@@ -115,6 +165,21 @@ export function WorkerDetailDrawer({
     refetchIntervalInBackground: false,
   })
 
+  const workerJobs = useQuery({
+    queryKey: [
+      'admin',
+      'compute',
+      'worker_jobs',
+      worker.id,
+    ],
+    queryFn: () =>
+      adminFetch<WorkerJobRow[]>(
+        `/audio-compute/workers/${worker.id}/jobs?limit=40`,
+      ),
+    refetchInterval: 3_000,
+    refetchIntervalInBackground: false,
+  })
+
   const revokeWorker = useMutation({
     mutationFn: () =>
       adminFetch(
@@ -124,6 +189,14 @@ export function WorkerDetailDrawer({
     onSettled: () => {
       qc.invalidateQueries({
         queryKey: ['admin', 'compute', 'workers'],
+      })
+      qc.invalidateQueries({
+        queryKey: [
+          'admin',
+          'compute',
+          'worker_jobs',
+          worker.id,
+        ],
       })
       setConfirmRevoke(false)
     },
@@ -188,13 +261,14 @@ WORKER_ASR_DEVICE=auto`,
     }
   }
 
-  const status: 'ok' | 'warn' | 'error' = worker.revoked_at
-    ? 'error'
-    : worker.suspended_until
-      ? 'warn'
-      : worker.active
-        ? 'ok'
-        : 'error'
+  const livenessLabel = computeWorkerPillLabel(
+    worker,
+    t,
+    fmtDate,
+  )
+  const livenessKind = computeWorkerPillKind(
+    worker,
+  )
 
   const editParsed =
     editCidrs === null
@@ -208,7 +282,9 @@ WORKER_ASR_DEVICE=auto`,
   return (
     <div
       role="dialog"
-      aria-label={`Worker ${worker.name}`}
+      aria-label={t(`${WD}.aria`, {
+        name: worker.name,
+      })}
       style={{
         position: 'fixed',
         top: 0,
@@ -234,25 +310,26 @@ WORKER_ASR_DEVICE=auto`,
         }}
       >
         <h2 style={{ margin: 0 }}>
-          Worker · <code>{worker.name}</code>
+          {t(`${WD}.headingPrefix`)} ·{' '}
+          <code>{worker.name}</code>
         </h2>
         <Press variant="ghost" onClick={onClose}>
-          Close
+          {t(`${WD}.close`)}
         </Press>
       </div>
 
       <p>
-        <StatusPill kind={status}>
-          {worker.revoked_at
-            ? 'revoked'
-            : worker.suspended_until
-              ? `suspended until ${fmtDate(
-                  worker.suspended_until,
+        <StatusPill
+          kind={livenessKind}
+          title={
+            worker.last_seen_at
+              ? `${t(`${WD}.lastSeen`)}: ${fmtDate(
+                  worker.last_seen_at,
                 )}`
-              : worker.active
-                ? 'active'
-                : worker.suspended_reason ||
-                  'inactive'}
+              : undefined
+          }
+        >
+          {livenessLabel}
         </StatusPill>
       </p>
 
@@ -262,19 +339,19 @@ WORKER_ASR_DEVICE=auto`,
       >
         <tbody>
           <tr>
-            <th>ID</th>
+            <th>{t(`${WD}.id`)}</th>
             <td className="admin-mono">
               {worker.id}
             </td>
           </tr>
           <tr>
-            <th>Profile</th>
+            <th>{t(`${WD}.profile`)}</th>
             <td>
               <code>{worker.profile}</code>
             </td>
           </tr>
           <tr>
-            <th>Allowed profiles</th>
+            <th>{t(`${WD}.allowedProfiles`)}</th>
             <td>
               {(
                 worker.allowed_profiles || []
@@ -282,15 +359,15 @@ WORKER_ASR_DEVICE=auto`,
             </td>
           </tr>
           <tr>
-            <th>Concurrency</th>
+            <th>{t(`${WD}.concurrency`)}</th>
             <td>{worker.max_concurrent_jobs}</td>
           </tr>
           <tr>
-            <th>Allowed IPs</th>
+            <th>{t(`${WD}.allowedIps`)}</th>
             <td className="admin-mono">
               {(
                 worker.allowed_ip_cidrs || []
-              ).join(', ') || '(none)'}
+              ).join(', ') || t(`${WD}.noneCidr`)}
               <Press
                 variant="ghost"
                 onClick={() =>
@@ -303,22 +380,22 @@ WORKER_ASR_DEVICE=auto`,
                 }
                 style={{ marginLeft: 8 }}
               >
-                Edit
+                {t(`${WD}.editCidr`)}
               </Press>
             </td>
           </tr>
           <tr>
-            <th>Last seen</th>
+            <th>{t(`${WD}.lastSeen`)}</th>
             <td>{fmtDate(worker.last_seen_at)}</td>
           </tr>
           <tr>
-            <th>Last IP</th>
+            <th>{t(`${WD}.lastIp`)}</th>
             <td className="admin-mono">
               {worker.last_ip || '–'}
             </td>
           </tr>
           <tr>
-            <th>Created</th>
+            <th>{t(`${WD}.created`)}</th>
             <td>{fmtDate(worker.created_at)}</td>
           </tr>
         </tbody>
@@ -327,7 +404,7 @@ WORKER_ASR_DEVICE=auto`,
       {editCidrs !== null && (
         <div className="admin-card admin-card--inline">
           <label>
-            <div>Edit allowed CIDRs:</div>
+            <div>{t(`${WD}.editCidrLabel`)}</div>
             <textarea
               rows={4}
               value={editCidrs}
@@ -340,7 +417,7 @@ WORKER_ASR_DEVICE=auto`,
           {editIsOpen && (
             <p>
               <StatusPill kind="error">
-                wildcard
+                {t(`${WD}.wildcardPill`)}
               </StatusPill>{' '}
               <label>
                 <input
@@ -352,8 +429,7 @@ WORKER_ASR_DEVICE=auto`,
                     )
                   }
                 />{' '}
-                I accept the risk of allowing all
-                IPs
+                {t(`${WD}.wildcardLabel`)}
               </label>
             </p>
           )}
@@ -375,7 +451,7 @@ WORKER_ASR_DEVICE=auto`,
                 })
               }
             >
-              Save
+              {t(`${WD}.save`)}
             </Press>
             <Press
               variant="ghost"
@@ -384,13 +460,13 @@ WORKER_ASR_DEVICE=auto`,
                 setAcceptOpen(false)
               }}
             >
-              Cancel
+              {t(`${WD}.cancel`)}
             </Press>
           </div>
         </div>
       )}
 
-      <h3>.env snippet (paste into worker)</h3>
+      <h3>{t(`${WD}.envTitle`)}</h3>
       <pre
         className="admin-mono"
         style={{
@@ -405,13 +481,102 @@ WORKER_ASR_DEVICE=auto`,
         {envSnippet}
       </pre>
       <Press variant="ghost" onClick={copy}>
-        {copied ? 'Copied!' : 'Copy'}
+        {copied
+          ? t(`${AC}.copied`)
+          : t(`${AC}.copy`)}
       </Press>
 
       <h3 style={{ marginTop: 20 }}>
-        Recent events (auto-refreshes every 5s)
+        {t(`${WD}.jobsTitle`)}
       </h3>
-      {events.isLoading && <p>Loading…</p>}
+      <p className="admin-card__sub" style={{ margin: '0 0 8px' }}>
+        {t(`${WD}.jobsHint`)}
+      </p>
+      {workerJobs.isLoading && (
+        <p>{t(`${WD}.loading`)}</p>
+      )}
+      {workerJobs.isError && (
+        <p className="admin-card__sub">
+          {String(workerJobs.error)}
+        </p>
+      )}
+      {workerJobs.data && (
+        <div style={{ marginBottom: 12 }}>
+          {workerJobs.data.length === 0 ? (
+            <p className="admin-card__sub">
+              {t(`${WD}.jobsEmpty`)}
+            </p>
+          ) : (
+            <table
+              className="admin-table"
+              style={{ width: '100%', fontSize: 12 }}
+            >
+              <thead>
+                <tr>
+                  <th>{t(`${WD}.tableJob`)}</th>
+                  <th>{t(`${WD}.tableTrack`)}</th>
+                  <th>{t(`${WD}.tableStatus`)}</th>
+                  <th>{t(`${WD}.tableTier`)}</th>
+                  <th>{t(`${WD}.tableStage`)}</th>
+                  <th>{t(`${WD}.tableProgress`)}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {workerJobs.data.map((row) => {
+                  const ps = progressSummary(
+                    row.lyrics_progress,
+                  )
+                  return (
+                    <tr key={row.id}>
+                      <td
+                        className="admin-mono"
+                        style={{ maxWidth: 100 }}
+                        title={row.id}
+                      >
+                        {row.id.slice(0, 10)}…
+                      </td>
+                      <td>{row.track_id}</td>
+                      <td>{row.status}</td>
+                      <td>
+                        {row.current_tier || '—'}
+                      </td>
+                      <td
+                        className="admin-mono"
+                        style={{ maxWidth: 140 }}
+                        title={
+                          ps.logs
+                            ? ps.logs.join('\n')
+                            : ps.stage
+                        }
+                      >
+                        {ps.stage}
+                        {ps.logs &&
+                        ps.logs.length > 0
+                          ? ` · ${ps.logs[ps.logs.length - 1]?.slice(0, 64)}${(ps.logs[ps.logs.length - 1]?.length || 0) > 64 ? '…' : ''}`
+                          : null}
+                      </td>
+                      <td>{ps.percent}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      <h3 style={{ marginTop: 8 }}>
+        {t(`${WD}.eventsTitle`)}
+      </h3>
+      <p
+        className="admin-card__sub"
+        style={{ margin: '0 0 8px' }}
+      >
+        {t(`${WD}.eventsHint`)}
+      </p>
+      {events.isLoading && (
+        <p>{t(`${WD}.loading`)}</p>
+      )}
       {events.data && (
         <ul
           style={{
@@ -427,9 +592,7 @@ WORKER_ASR_DEVICE=auto`,
         >
           {events.data.events.length === 0 && (
             <li className="admin-card__sub">
-              No events yet. The worker hasn't
-              talked to Backend or it talked
-              before this stream started.
+              {t(`${WD}.eventsEmpty`)}
             </li>
           )}
           {events.data.events.map((ev) => (
@@ -490,7 +653,7 @@ WORKER_ASR_DEVICE=auto`,
       )}
 
       <h3 style={{ marginTop: 20 }}>
-        Dangerous actions
+        {t(`${WD}.danger`)}
       </h3>
       <div style={{ display: 'flex', gap: 8 }}>
         {!confirmRotate ? (
@@ -498,20 +661,19 @@ WORKER_ASR_DEVICE=auto`,
             variant="ghost"
             onClick={() => setConfirmRotate(true)}
           >
-            Rotate secret
+            {t(`${WD}.rotate`)}
           </Press>
         ) : (
           <>
             <span className="admin-card__sub">
-              This invalidates the current secret
-              and shows you a new one once.
+              {t(`${WD}.rotateHelp`)}
             </span>
             <Press
               variant="ghost"
               onClick={() => rotateSecret.mutate()}
               disabled={rotateSecret.isPending}
             >
-              Confirm rotate
+              {t(`${WD}.confirmRotate`)}
             </Press>
             <Press
               variant="ghost"
@@ -519,7 +681,7 @@ WORKER_ASR_DEVICE=auto`,
                 setConfirmRotate(false)
               }
             >
-              Cancel
+              {t(`${WD}.cancel`)}
             </Press>
           </>
         )}
@@ -528,21 +690,19 @@ WORKER_ASR_DEVICE=auto`,
             variant="ghost"
             onClick={() => setConfirmRevoke(true)}
           >
-            Revoke worker
+            {t(`${WD}.revoke`)}
           </Press>
         ) : (
           <>
             <span className="admin-card__sub">
-              This revokes the worker permanently
-              and cascades any in-flight jobs to
-              the next tier.
+              {t(`${WD}.revokeHelp`)}
             </span>
             <Press
               variant="ghost"
               onClick={() => revokeWorker.mutate()}
               disabled={revokeWorker.isPending}
             >
-              Confirm revoke
+              {t(`${WD}.confirmRevoke`)}
             </Press>
             <Press
               variant="ghost"
@@ -550,11 +710,60 @@ WORKER_ASR_DEVICE=auto`,
                 setConfirmRevoke(false)
               }
             >
-              Cancel
+              {t(`${WD}.cancel`)}
             </Press>
           </>
         )}
       </div>
+
+      {worker.revoked_at && onRequestDeleteRevoked && (
+        <>
+          <h3 style={{ marginTop: 20 }}>
+            {t(`${WD}.removeFromListTitle`)}
+          </h3>
+          <p
+            className="admin-card__sub"
+            style={{ margin: '0 0 8px' }}
+          >
+            {t(`${WD}.removeFromListBody`)}
+          </p>
+          <div
+            style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}
+          >
+            {!confirmDeleteFromList ? (
+              <Press
+                variant="ghost"
+                onClick={() => setConfirmDeleteFromList(true)}
+                disabled={deleteFromListPending}
+              >
+                {t(`${WD}.removeFromList`)}
+              </Press>
+            ) : (
+              <>
+                <span className="admin-card__sub">
+                  {t(`${WD}.removeFromListHelp`)}
+                </span>
+                <Press
+                  variant="ghost"
+                  onClick={() => {
+                    onRequestDeleteRevoked()
+                    setConfirmDeleteFromList(false)
+                  }}
+                  disabled={deleteFromListPending}
+                >
+                  {t(`${WD}.confirmRemoveFromList`)}
+                </Press>
+                <Press
+                  variant="ghost"
+                  onClick={() => setConfirmDeleteFromList(false)}
+                >
+                  {t(`${WD}.cancel`)}
+                </Press>
+              </>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
