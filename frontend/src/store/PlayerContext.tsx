@@ -21,6 +21,17 @@ const EQ_FREQUENCIES = [
 ]
 const EQ_DEFAULT = [0, 0, 0, 0, 0, 0, 0, 0]
 
+function withViewTransition(cb: () => void): void {
+  const d = document as Document & {
+    startViewTransition?: (inner: () => void) => unknown
+  }
+  if (typeof d.startViewTransition === 'function') {
+    d.startViewTransition(cb)
+  } else {
+    cb()
+  }
+}
+
 function _dbToLinear(db: number) {
   return 10 ** (db / 20)
 }
@@ -1450,10 +1461,12 @@ export function PlayerProvider({
     () => setIsComplaintOpen(false), [],
   )
   const openCard = useCallback(
-    () => setIsCardOpen(true), [],
+    () => withViewTransition(() => setIsCardOpen(true)),
+    [],
   )
   const closeCard = useCallback(
-    () => setIsCardOpen(false), [],
+    () => withViewTransition(() => setIsCardOpen(false)),
+    [],
   )
   const openLyrics = useCallback(
     () => setIsLyricsOpen(true), [],

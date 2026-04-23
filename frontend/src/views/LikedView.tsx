@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { api } from '@/lib/api'
 import { getUserId } from '@/lib/telegram'
 import type { Track } from '@/types/api'
 
+interface LikedViewProps {
+  /** Внутри LibraryView — без дублирующего заголовка */
+  embedded?: boolean
+}
+
 const PAGE_SIZE = 20
 
-export function LikedView() {
+export function LikedView({ embedded = false }: LikedViewProps) {
+  const navigate = useNavigate()
   const [tracks, setTracks] = useState<
     Track[] | null
   >(null)
@@ -54,17 +61,19 @@ export function LikedView() {
     }
   }, [loading, hasMore])
 
-  return (
-    <section
-      id="view-liked"
-      className="view active"
-    >
-      <div className="view-header">
-        <h2>Мне нравится</h2>
-      </div>
+  const list = (
+    <>
       <TrackList
         tracks={tracks}
         emptyMessage="Ты ещё ничего не лайкал"
+        emptyCta={
+          embedded
+            ? {
+                label: 'Найти треки',
+                onClick: () => navigate('/search'),
+              }
+            : undefined
+        }
       />
       {hasMore && (
         <button
@@ -75,6 +84,22 @@ export function LikedView() {
           {loading ? 'Загрузка...' : 'Показать ещё'}
         </button>
       )}
+    </>
+  )
+
+  if (embedded) {
+    return <div className="library-embed liked-embed">{list}</div>
+  }
+
+  return (
+    <section
+      id="view-liked"
+      className="view active"
+    >
+      <div className="view-header">
+        <h2>Мне нравится</h2>
+      </div>
+      {list}
     </section>
   )
 }

@@ -73,7 +73,7 @@ export default defineConfig({
           {
             name: 'Любимое',
             short_name: 'Любимое',
-            url: '/mini_app/liked',
+            url: '/mini_app/library?tab=liked',
           },
           {
             name: 'Загрузить трек',
