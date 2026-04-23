@@ -60,11 +60,6 @@ async def list_queues(
     return {"items": queues}
 
 
-_TERMINAL_LYRICS_STATUSES: frozenset[str] = frozenset(
-    {"done", "error", "cancelled", "not_found"}
-)
-
-
 @router.get("/lyrics-jobs/{job_id}")
 async def get_lyrics_job(
     job_id: str,
@@ -136,82 +131,17 @@ async def cancel_lyrics_job(
     ),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Cancel a lyrics job.
-
-    For a currently-running job the CANCEL flag is set on the
-    progress channel; the worker picks it up between stages and
-    exits at the next safe boundary. For a job still in ``queued``
-    state (worker never picked it up) the DB row is marked
-    ``cancelled`` immediately so it disappears from the admin list.
-    """
-    from datetime import UTC, datetime
-
-    from app.services.lyrics_worker import (
-        CANCEL_KEY_PREFIX,
-        set_lyrics_progress,
+    """Cancel a lyrics / compute job (see ``lyrics_job_cancel``)."""
+    from app.services.lyrics_job_cancel import (
+        cancel_lyrics_job_for_admin,
     )
 
-    row = (
-        await session.execute(
-            select(LyricsJob).where(LyricsJob.id == job_id)
-        )
-    ).scalar_one_or_none()
-    if row is None:
+    out = await cancel_lyrics_job_for_admin(session, job_id)
+    if out is None:
         raise HTTPException(
             status_code=404, detail="job not found"
         )
-
-    if row.status in _TERMINAL_LYRICS_STATUSES:
-        return {
-            "status": "already_done",
-            "job_status": row.status,
-        }
-
-    progress_id = row.progress_id
-
-    # Set cancel flag for running worker (if any).
-    redis = get_redis_client()
-    if progress_id:
-        try:
-            await redis.set(
-                f"{CANCEL_KEY_PREFIX}{progress_id}",
-                "1",
-                ex=600,
-            )
-            await set_lyrics_progress(
-                progress_id,
-                stage="cancelling",
-                log_line=(
-                    "cancellation requested by admin"
-                ),
-            )
-        except Exception:
-            logger.exception(
-                "admin_lyrics_cancel_signal_failed",
-                job_id=job_id,
-                progress_id=progress_id,
-            )
-
-    # Immediately mark queued jobs as cancelled in DB so they
-    # disappear from the admin list even if no worker is alive.
-    if row.status == "queued":
-        row.status = "cancelled"
-        row.finished_at = datetime.now(UTC)
-        row.error = "cancelled_by_admin"
-        await session.commit()
-        logger.info(
-            "admin_lyrics_cancel_queued_direct",
-            job_id=job_id,
-            progress_id=progress_id,
-        )
-        return {"status": "cancelled", "job_status": "cancelled"}
-
-    logger.info(
-        "admin_lyrics_cancel_requested",
-        job_id=job_id,
-        progress_id=progress_id,
-    )
-    return {"status": "cancel_requested"}
+    return out
 
 
 @router.post("/lyrics-jobs/cancel-queued")

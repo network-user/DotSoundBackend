@@ -237,6 +237,33 @@ async def list_jobs(
     return await svc.list_jobs(status_filter=status_filter)
 
 
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_lyrics_compute_job(
+    job_id: str,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(
+        require_capability("audio_compute.manage")
+    ),
+) -> dict:
+    """Cancel a lyrics job (same as ``/tasks/lyrics-jobs/.../cancel``).
+
+    Exposed here so **audio_compute.manage** operators can kill
+    stuck ``running`` remote_whisper rows without **tasks.manage**.
+    """
+    from app.services.lyrics_job_cancel import (
+        cancel_lyrics_job_for_admin,
+    )
+
+    out = await cancel_lyrics_job_for_admin(
+        session, job_id
+    )
+    if out is None:
+        raise HTTPException(
+            status_code=404, detail="job not found"
+        )
+    return out
+
+
 @router.get("/audit")
 async def list_audit(
     session: AsyncSession = Depends(get_db),

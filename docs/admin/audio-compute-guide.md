@@ -207,6 +207,28 @@ Tier выключен по умолчанию. Что нужно для вклю
 сгенерировалась" — за 5 секунд видно на каком tier'е и почему
 застряла.
 
+### Расшифровка: `cascade exhausted: …` в прогрессе (Lyrics / DevTools)
+
+Сообщение в UI — это
+`"cascade exhausted: " + последняя_ошибка_тирa` (см.
+`app/services/lyrics_cascade.py`, `_advance_to_next_tier`). Последняя
+ошибка — это причина **последнего** отклонения тира (`_dispatch_to_tier`
+или шаг `handle_tier_failure` перед сменой тира), пока `select_next_tier`
+ещё не вернул `null`.
+
+| Хвост в лог-лайне | Что значит |
+|-------------------|------------|
+| `no_track_audio` | Для `remote_whisper` / `speechkit_paid` на треке **нет** ни S3-`file_key`, ни `sc_url` (для ASR в каскаде нужен хотя бы один источник; SoundCloud-импорт обычно даёт `sc_url`). |
+| `speechkit_disabled` | Дошли до `speechkit_paid`, но `should_use_paid_asr` вернул отказ (Yandex SpeechKit выключен в настройках, нет ключа, и т.п.). **Не путать** с «нет аудио»: сначала проходит гейт наличия аудио, потом бюджет/включение. |
+| `speechkit_no_budget` / `…budget_exhausted` | Аналогично, бюджет/лимит. |
+
+**Почему в логах бывает `no_track_audio`, а в UI в другом прогоне —
+`speechkit_disabled`:** в одном прогоне последний отклонённый тир
+закончился на «нет аудио», в другом — ветка дошла до проверки SpeechKit
+(например после деплоя с `sc_url` / с другим `track_id`). Смотрите
+**Trace** в админке по `job_id` и `scripts/inspect_track.py
+<track_id>` (репо Backend) для строки `tracks` в БД.
+
 ---
 
 ## 7. Аудит и расследования

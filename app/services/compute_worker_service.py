@@ -484,6 +484,61 @@ def generate_single_use_token(
     return f"{exp}.{sig}"
 
 
+async def validate_ott_token(
+    token: str,
+    job_id: str,
+    worker_id: str,
+    client_ip: str | None,
+    expected_ip: str | None,
+) -> int | None:
+    """Check OTT signature, expiry, and IP. Returns ``exp`` or None.
+
+    Does **not** consume the token. Call :func:`consume_ott_by_exp`
+    only after a download URL is ready, so a failed S3/SC resolution
+    does not burn a one-shot OTT.
+    """
+    try:
+        exp_str, sig = token.split(".", 1)
+        exp = int(exp_str)
+    except (ValueError, AttributeError):
+        return None
+    now_unix = int(time.time())
+    if exp < now_unix:
+        return None
+    raw = f"{job_id}:{worker_id}:{exp}"
+    expected = hmac.new(
+        settings.jwt_secret.encode("utf-8"),
+        raw.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected, sig):
+        return None
+
+    if expected_ip and client_ip and (
+        client_ip != expected_ip
+    ):
+        return None
+    return exp
+
+
+async def consume_ott_by_exp(
+    exp: int,
+    job_id: str,
+    worker_id: str,
+) -> bool:
+    """Record single-use OTT in Redis. Same key layout as before."""
+    now_unix = int(time.time())
+    if exp < now_unix:
+        return False
+    redis = get_redis_client()
+    key = f"{OTT_KEY_PREFIX}{job_id}:{worker_id}:{exp}"
+    ttl = max(1, exp - now_unix)
+    claimed = await redis.set(
+        key, "1", ex=ttl, nx=True
+    )
+    return bool(claimed)
+
+
 async def verify_and_consume_ott(
     token: str,
     job_id: str,
@@ -498,35 +553,12 @@ async def verify_and_consume_ott(
     last seen IP at claim time. False on any failure (caller maps
     to 404 for opacity).
     """
-    try:
-        exp_str, sig = token.split(".", 1)
-        exp = int(exp_str)
-    except (ValueError, AttributeError):
-        return False
-    now_unix = int(time.time())
-    if exp < now_unix:
-        return False
-    raw = f"{job_id}:{worker_id}:{exp}"
-    expected = hmac.new(
-        settings.jwt_secret.encode("utf-8"),
-        raw.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-    if not hmac.compare_digest(expected, sig):
-        return False
-
-    if expected_ip and client_ip and (
-        client_ip != expected_ip
-    ):
-        return False
-
-    redis = get_redis_client()
-    key = f"{OTT_KEY_PREFIX}{job_id}:{worker_id}:{exp}"
-    ttl = max(1, exp - now_unix)
-    claimed = await redis.set(
-        key, "1", ex=ttl, nx=True
+    exp = await validate_ott_token(
+        token, job_id, worker_id, client_ip, expected_ip
     )
-    return bool(claimed)
+    if exp is None:
+        return False
+    return await consume_ott_by_exp(exp, job_id, worker_id)
 
 
 def verify_single_use_token(
@@ -644,13 +676,57 @@ def validate_lyrics_result(payload: dict) -> dict:
     if sync_profile not in {None, "cpu_light", "gpu_full"}:
         sync_profile = None
 
+    asr_parsed: list[dict[str, object]] | None = None
+    raw_asr = payload.get("asr_timed_words")
+    if raw_asr is not None:
+        if not isinstance(raw_asr, list) or len(raw_asr) > 80_000:
+            raise ValueError("asr_timed_words_invalid")
+        asr_parsed = []
+        for item in raw_asr:
+            if not isinstance(item, dict):
+                continue
+            try:
+                t = float(item.get("t", 0))
+            except (TypeError, ValueError):
+                continue
+            w = str(item.get("w", "")).strip()[:200]
+            if t < 0.0 or not w:
+                continue
+            asr_parsed.append({"t": t, "w": w})
+        asr_parsed = asr_parsed or None
+
     return {
         "plain_text": plain_text,
         "synced_lines": synced,
         "sync_quality": sync_quality,
         "sync_profile": sync_profile,
         "audio_sha256": payload.get("audio_sha256"),
+        "asr_timed_words": asr_parsed,
     }
+
+
+def attribution_for_remote_worker_result(
+    *,
+    current_tier: str | None,
+    synced_lines: list[dict] | None,
+    sync_profile: str | None,
+) -> tuple[str | None, str | None]:
+    """Labels for :class:`TrackLyrics` ``source_name`` and
+    ``sync_source_name`` when a compute worker returns ASR text
+    (same pipeline as in-app ``faster-whisper``).
+    """
+    t = (current_tier or "").strip()
+    if t in ("", "remote_whisper"):
+        base = "faster-whisper"
+    else:
+        base = f"ASR ({t})"
+    if not synced_lines:
+        return base, None
+    if sync_profile == "gpu_full":
+        return base, f"{base} (GPU)"
+    if sync_profile == "cpu_light":
+        return base, f"{base} (CPU)"
+    return base, base
 
 
 __all__ = [
@@ -663,7 +739,10 @@ __all__ = [
     "mark_job_failed",
     "mark_job_result",
     "register_worker",
+    "attribution_for_remote_worker_result",
     "validate_lyrics_result",
+    "validate_ott_token",
+    "consume_ott_by_exp",
     "verify_and_consume_ott",
     "verify_single_use_token",
     "verify_worker_request",

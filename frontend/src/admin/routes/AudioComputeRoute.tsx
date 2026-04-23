@@ -13,7 +13,7 @@ import {
   computeWorkerPillLabel,
   WORKER_ONLINE_MAX_AGE_SEC,
 } from '../lib/computeWorkerLiveness'
-import { adminFetch } from '../lib/adminApi'
+import { adminApi, adminFetch } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 import { WorkerDetailDrawer } from '../components/widgets/WorkerDetailDrawer'
@@ -116,7 +116,11 @@ function jobKind(
   status: string,
 ): 'ok' | 'warn' | 'error' | 'unknown' {
   if (status === 'done') return 'ok'
-  if (status === 'failed' || status === 'error')
+  if (
+    status === 'failed' ||
+    status === 'error' ||
+    status === 'cancelled'
+  )
     return 'error'
   if (status === 'queued' || status === 'running')
     return 'warn'
@@ -174,6 +178,15 @@ export function AudioComputeRoute() {
       adminFetch<JobRow[]>('/audio-compute/jobs'),
     refetchInterval: 15_000,
     refetchIntervalInBackground: false,
+  })
+  const cancelJobMutation = useMutation({
+    mutationFn: (id: string) =>
+      adminApi.cancelComputeJob(id),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'compute', 'jobs'],
+      })
+    },
   })
   const [auditFilter, setAuditFilter] = useState('')
   const audit = useQuery({
@@ -626,6 +639,40 @@ export function AudioComputeRoute() {
       },
       {
         header: '',
+        id: 'cancel',
+        cell: (i) => {
+          const st = i.row.original.status
+          if (st !== 'queued' && st !== 'running') {
+            return null
+          }
+          return (
+            <Press
+              variant="ghost"
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    t(
+                      'admin.audioCompute.jobTable.cancelConfirm',
+                    ),
+                  )
+                ) {
+                  return
+                }
+                cancelJobMutation.mutate(
+                  i.row.original.id,
+                )
+              }}
+              disabled={cancelJobMutation.isPending}
+            >
+              {t(
+                'admin.audioCompute.jobTable.cancel',
+              )}
+            </Press>
+          )
+        },
+      },
+      {
+        header: '',
         id: 'trace',
         cell: (i) => (
           <Press
@@ -643,7 +690,7 @@ export function AudioComputeRoute() {
         ),
       },
     ],
-    [t],
+    [t, cancelJobMutation],
   )
 
   const auditColumns: ColumnDef<AuditRow>[] =

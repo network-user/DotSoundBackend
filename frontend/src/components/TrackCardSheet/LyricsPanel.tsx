@@ -971,7 +971,7 @@ export function LyricsPanel({
             )}
       </div>
 
-      {isAdmin && (
+      {(isAdmin || isOwner) && (
         <div className="lyrics-debug-attribution">
           <div className="lyrics-debug-row">
             <span className="lyrics-debug-label">

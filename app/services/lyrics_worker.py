@@ -1741,6 +1741,28 @@ async def catalog_only_lyrics_task(
                 payload
             ):
                 if job is not None:
+                    # Pre-save catalog text so ``remote_whisper`` can
+                    # align ASR word timings to Genius/etc. in
+                    # :func:`job_result` (PrivateCore opcode aligner).
+                    if (payload.get("text") or "").strip():
+                        try:
+                            repo_pre = LyricsRepository(session)
+                            await repo_pre.create_or_update(
+                                track_id=track_id,
+                                plain_text=payload["text"],
+                                source="auto",
+                                synced_lines=None,
+                                sync_quality=None,
+                                sync_profile=None,
+                                source_name=payload.get(
+                                    "source_name"
+                                ),
+                            )
+                        except Exception:
+                            logger.debug(
+                                "lyrics_pre_save_before_remote_failed",
+                                track_id=track_id,
+                            )
                     from app.services.lyrics_cascade import (
                         handle_tier_miss,
                     )
@@ -1905,7 +1927,9 @@ async def speechkit_lyrics_task(
                 "status": "error",
                 "detail": "track_not_found",
             }
-        if not track.file_key:
+        if not track.file_key and not getattr(
+            track, "sc_url", None
+        ):
             await _finalise(
                 progress_id,
                 "error",
@@ -1925,19 +1949,53 @@ async def speechkit_lyrics_task(
             repo = AudioComputeRepository(session)
             job = await repo.get_job(job_id)
 
-        try:
-            presigned = await s3.get_presigned_url(
-                track.file_key
+        presigned: str | None = None
+        if track.file_key:
+            try:
+                presigned = await s3.get_presigned_url(
+                    track.file_key
+                )
+            except Exception as exc:
+                await _finalise(
+                    progress_id,
+                    "error",
+                    log_line=(
+                        f"[speechkit] presign failed: {exc}"
+                    ),
+                )
+                return {"status": "error"}
+        else:
+            from app.config import settings
+            from app.services.soundcloud_service import (
+                SoundCloudService,
             )
-        except Exception as exc:
-            await _finalise(
-                progress_id,
-                "error",
-                log_line=(
-                    f"[speechkit] presign failed: {exc}"
-                ),
-            )
-            return {"status": "error"}
+
+            if not settings.sc_client_id:
+                await _finalise(
+                    progress_id,
+                    "error",
+                    log_line=(
+                        "[speechkit] SoundCloud is not "
+                        "configured (no SC_CLIENT_ID)"
+                    ),
+                )
+                return {"status": "error", "detail": "no_sc"}
+            try:
+                sc = SoundCloudService(
+                    settings.sc_client_id, session
+                )
+                presigned, _ = await sc.get_stream_info(
+                    track.sc_url
+                )
+            except Exception as exc:
+                await _finalise(
+                    progress_id,
+                    "error",
+                    log_line=(
+                        f"[speechkit] SC stream URL failed: {exc}"
+                    ),
+                )
+                return {"status": "error"}
 
         try:
             audio_seconds = float(
