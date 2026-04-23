@@ -55,8 +55,8 @@ class SoundCloudService:
                     raise HTTPException(
                         status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
                         detail=(
-                            "SoundCloud client_id expired, "
-                            "update SC_CLIENT_ID"
+                            "SoundCloud: неверный или устаревший "
+                            "SC_CLIENT_ID. Обновите в .env и перезапустите."
                         ),
                     )
                 r.raise_for_status()
@@ -105,8 +105,8 @@ class SoundCloudService:
                     raise HTTPException(
                         status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
                         detail=(
-                            "SoundCloud client_id expired, "
-                            "update SC_CLIENT_ID"
+                            "SoundCloud: неверный или устаревший "
+                            "SC_CLIENT_ID. Обновите в .env и перезапустите."
                         ),
                     )
                 r.raise_for_status()
@@ -169,8 +169,8 @@ class SoundCloudService:
                     raise HTTPException(
                         status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
                         detail=(
-                            "SoundCloud client_id expired, "
-                            "update SC_CLIENT_ID"
+                            "SoundCloud: неверный или устаревший "
+                            "SC_CLIENT_ID. Обновите в .env и перезапустите."
                         ),
                     )
                 r.raise_for_status()

@@ -149,9 +149,12 @@ export function TrackCardSheet({
     useRef<HTMLInputElement>(null)
   const videoInputRef =
     useRef<HTMLInputElement>(null)
+  const extrasWrapRef = useRef<HTMLDivElement>(null)
+  const [extrasOpen, setExtrasOpen] = useState(false)
 
   useEffect(() => {
     if (!isCardOpen || !track) {
+      setExtrasOpen(false)
       setCard(null)
       setShowLyrics(false)
       setEditingLyrics(false)
@@ -225,6 +228,25 @@ export function TrackCardSheet({
     }
   }, [isCardOpen, track?.id])
 
+  useEffect(() => {
+    if (!extrasOpen) return
+    const onDoc = (e: globalThis.PointerEvent) => {
+      const el = extrasWrapRef.current
+      if (el && !el.contains(e.target as Node)) {
+        setExtrasOpen(false)
+      }
+    }
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') setExtrasOpen(false)
+    }
+    document.addEventListener('pointerdown', onDoc)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onDoc)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [extrasOpen])
+
   const handleRefreshTrackInfo = useCallback(async () => {
     if (!track || trackInfoRefreshing) return
     setTrackInfoRefreshing(true)
@@ -265,6 +287,23 @@ export function TrackCardSheet({
     return () => clearInterval(t)
   }, [genCooldown])
 
+  const goToArtist = useCallback(
+    (name: string) => {
+      if (!onOpenArtist) return
+      closeCard()
+      requestAnimationFrame(() => onOpenArtist(name))
+    },
+    [closeCard, onOpenArtist],
+  )
+
+  const goToAuthor = useCallback(
+    (authorId: number) => {
+      closeCard()
+      requestAnimationFrame(() => onOpenAuthor(authorId))
+    },
+    [closeCard, onOpenAuthor],
+  )
+
   const handleBackdrop = (
     e: React.MouseEvent,
   ) => {
@@ -284,20 +323,17 @@ export function TrackCardSheet({
 
   const handleAuthor = () => {
     if (track?.artist && onOpenArtist) {
-      closeCard()
-      onOpenArtist(track.artist)
+      goToArtist(track.artist)
       return
     }
     if (card?.author?.id) {
-      closeCard()
-      onOpenAuthor(card.author.id)
+      goToAuthor(card.author.id)
     }
   }
 
   const handleUploader = () => {
     if (card?.author?.id) {
-      closeCard()
-      onOpenAuthor(card.author.id)
+      goToAuthor(card.author.id)
     }
   }
 
@@ -584,10 +620,7 @@ export function TrackCardSheet({
           )}
 
         {!hasActiveVideo && !showLyrics && (
-          <div
-            className="tcs-cover-wrap"
-            style={{ position: 'relative' }}
-          >
+          <div className="tcs-cover-wrap">
             {coverBusy && (
               <div className="tcs-cover-loading">
                 <div className="loader" />
@@ -610,6 +643,15 @@ export function TrackCardSheet({
                 <Icon name="music" size={72} />
               </div>
             )}
+            <div className="tcs-cover-wave-area" aria-hidden>
+              <div className="tcs-cover-wave-gradient" />
+              <Waveform
+                overlay
+                height={64}
+                bars={48}
+                className="tcs-cover-waveform"
+              />
+            </div>
           </div>
         )}
 
@@ -686,12 +728,8 @@ export function TrackCardSheet({
                 <p
                   className="tcs-artist"
                   onClick={() => {
-                    if (
-                      track.artist &&
-                      onOpenArtist
-                    ) {
-                      closeCard()
-                      onOpenArtist(track.artist)
+                    if (track.artist && onOpenArtist) {
+                      goToArtist(track.artist)
                     }
                   }}
                   style={
@@ -729,12 +767,8 @@ export function TrackCardSheet({
               <p
                 className="tcs-artist"
                 onClick={() => {
-                  if (
-                    track.artist &&
-                    onOpenArtist
-                  ) {
-                    closeCard()
-                    onOpenArtist(track.artist)
+                  if (track.artist && onOpenArtist) {
+                    goToArtist(track.artist)
                   }
                 }}
                 style={
@@ -791,13 +825,6 @@ export function TrackCardSheet({
         </div>
 
         <div className="tcs-player-controls">
-          {!hasActiveVideo && !showLyrics && (
-            <Waveform
-              height={48}
-              bars={48}
-              className="tcs-waveform"
-            />
-          )}
           <div className="tcs-seek-wrap">
             <input
               type="range"
@@ -869,59 +896,104 @@ export function TrackCardSheet({
               />
             </button>
           </div>
-          <div className="pb-extras">
+          <div
+            className="tcs-extras-wrap"
+            ref={extrasWrapRef}
+          >
             <button
-              className="pb-extras-btn"
-              onClick={openQueue}
-              aria-label="Очередь"
+              type="button"
+              className="tcs-extras-trigger"
+              onClick={() =>
+                setExtrasOpen((v) => !v)
+              }
+              aria-expanded={extrasOpen}
+              aria-haspopup="true"
+              aria-controls={
+                extrasOpen ? 'tcs-extras-menu' : undefined
+              }
+              aria-label="Скорость, очередь, AB-цикл"
             >
-              <Icon name="queue" size={14} />
-              Очередь
+              <Icon name="settings" size={18} />
+              Ещё
             </button>
-            {SPEED_OPTIONS.map((rate) => (
-              <button
-                key={rate}
-                className={`pb-extras-btn${playbackRate === rate ? ' active' : ''}`}
-                onClick={() =>
-                  setPlaybackRate(rate)
-                }
-                aria-pressed={
-                  playbackRate === rate
-                }
+            {extrasOpen && (
+              <div
+                className="tcs-extras-popover"
+                id="tcs-extras-menu"
+                role="menu"
               >
-                {rate}×
-              </button>
-            ))}
-            <button
-              className={`pb-extras-btn${abLoop.a !== null ? ' active' : ''}`}
-              onClick={() => setAbA()}
-              title="Точка A"
-            >
-              <Icon name="loop" size={14} />A
-              {abLoop.a !== null
-                ? ` ${fmt(abLoop.a)}`
-                : ''}
-            </button>
-            <button
-              className={`pb-extras-btn${abLoop.b !== null ? ' active' : ''}`}
-              onClick={() => setAbB()}
-              title="Точка B"
-              disabled={abLoop.a === null}
-            >
-              <Icon name="loop" size={14} />B
-              {abLoop.b !== null
-                ? ` ${fmt(abLoop.b)}`
-                : ''}
-            </button>
-            {(abLoop.a !== null ||
-              abLoop.b !== null) && (
-              <button
-                className="pb-extras-btn"
-                onClick={clearAbLoop}
-                title="Сбросить AB-цикл"
-              >
-                ×
-              </button>
+                <div className="pb-extras">
+                  <button
+                    type="button"
+                    className="pb-extras-btn"
+                    role="menuitem"
+                    onClick={() => {
+                      setExtrasOpen(false)
+                      openQueue()
+                    }}
+                    aria-label="Очередь"
+                  >
+                    <Icon
+                      name="queue"
+                      size={14}
+                    />
+                    Очередь
+                  </button>
+                  {SPEED_OPTIONS.map((rate) => (
+                    <button
+                      type="button"
+                      key={rate}
+                      className={`pb-extras-btn${playbackRate === rate ? ' active' : ''}`}
+                      role="menuitem"
+                      onClick={() =>
+                        setPlaybackRate(rate)
+                      }
+                      aria-pressed={
+                        playbackRate === rate
+                      }
+                    >
+                      {rate}×
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={`pb-extras-btn${abLoop.a !== null ? ' active' : ''}`}
+                    role="menuitem"
+                    onClick={() => setAbA()}
+                    title="Точка A"
+                  >
+                    <Icon name="loop" size={14} />A
+                    {abLoop.a !== null
+                      ? ` ${fmt(abLoop.a)}`
+                      : ''}
+                  </button>
+                  <button
+                    type="button"
+                    className={`pb-extras-btn${abLoop.b !== null ? ' active' : ''}`}
+                    role="menuitem"
+                    onClick={() => setAbB()}
+                    title="Точка B"
+                    disabled={abLoop.a === null}
+                  >
+                    <Icon name="loop" size={14} />B
+                    {abLoop.b !== null
+                      ? ` ${fmt(abLoop.b)}`
+                      : ''}
+                  </button>
+                  {(abLoop.a !== null ||
+                    abLoop.b !== null) && (
+                    <button
+                      type="button"
+                      className="pb-extras-btn"
+                      role="menuitem"
+                      onClick={clearAbLoop}
+                      title="Сбросить AB-цикл"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -1181,7 +1253,9 @@ export function TrackCardSheet({
                   className="tcs-similar-item"
                   onClick={() => {
                     closeCard()
-                    playTrack(st)
+                    requestAnimationFrame(() =>
+                      playTrack(st),
+                    )
                   }}
                 >
                   <CoverImage coverKey={st.cover_key} />
@@ -1256,10 +1330,7 @@ export function TrackCardSheet({
                 content={trackInfo.content}
                 trackArtist={track.artist ?? null}
                 onOpenArtist={(name) => {
-                  if (onOpenArtist) {
-                    closeCard()
-                    onOpenArtist(name)
-                  }
+                  if (onOpenArtist) goToArtist(name)
                 }}
               />
             )}

@@ -126,6 +126,58 @@ function loadStoredToken():
   }
 }
 
+async function readApiErrorMessage(
+  res: Response,
+): Promise<string> {
+  const ct = res.headers.get('content-type') || ''
+  if (!ct.includes('application/json')) {
+    return String(res.status)
+  }
+  try {
+    const body = (await res.json()) as {
+      detail?: unknown
+    }
+    if (typeof body?.detail === 'string') {
+      return body.detail
+    }
+    if (Array.isArray(body?.detail)) {
+      const parts: string[] = []
+      for (const d of body.detail) {
+        if (
+          d &&
+          typeof d === 'object' &&
+          'msg' in d &&
+          typeof (d as { msg: string }).msg === 'string'
+        ) {
+          parts.push((d as { msg: string }).msg)
+        }
+      }
+      if (parts.length) return parts.join('; ')
+    }
+  } catch {
+    /* not JSON or partial body */
+  }
+  return String(res.status)
+}
+
+/** API errors from `request` carry server `detail` in `message` when available. */
+export function getApiErrorMessage(
+  err: unknown,
+  fallback: string,
+): string {
+  if (!(err instanceof Error) || !err.message?.trim()) {
+    return fallback
+  }
+  const m = err.message.trim()
+  if (
+    m.length <= 3 &&
+    /^[1-5]\d{2}$/.test(m)
+  ) {
+    return fallback
+  }
+  return m
+}
+
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers = new Headers(opts.headers)
   const sentWithAuth =
@@ -167,7 +219,10 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
         res.headers.get('X-Account-Reason'),
       )
     }
-    if (!res.ok) throw new Error(`${res.status}`)
+    if (!res.ok) {
+      const message = await readApiErrorMessage(res)
+      throw new Error(message)
+    }
     if (res.status === 204) return null as T
     return res.json() as Promise<T>
   } catch (err) {

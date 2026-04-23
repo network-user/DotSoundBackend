@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
@@ -106,6 +106,16 @@ export function Equalizer() {
   }
 
   const exit = useExitTransition(isEqOpen)
+
+  useEffect(() => {
+    if (!isEqOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeEq()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isEqOpen, closeEq])
+
   if (!exit.mounted) return null
 
   return (
@@ -153,6 +163,14 @@ export function Equalizer() {
                 ? <span style={{ fontSize: 12, fontWeight: 600 }}>Сбросить?</span>
                 : <Icon name="undo" size={18} />
               }
+            </button>
+            <button
+              className="icon-btn"
+              type="button"
+              onClick={closeEq}
+              aria-label="Закрыть"
+            >
+              <Icon name="x" size={18} />
             </button>
           </div>
         </div>
