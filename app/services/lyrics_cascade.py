@@ -124,6 +124,27 @@ async def _dispatch_to_tier(
     job.tier_attempts = attempts
     await session.flush()
 
+    if tier in (TIER_REMOTE_WHISPER, TIER_SPEECHKIT_PAID):
+        from app.models.track import Track
+
+        t = await session.get(Track, job.track_id)
+        if not t or not t.is_active:
+            logger.warning(
+                "tier_gated",
+                tier=tier,
+                job_id=job.id,
+                reason="track_not_found",
+            )
+            return False, "track_not_found"
+        if not (t.file_key or getattr(t, "sc_url", None)):
+            logger.warning(
+                "tier_gated",
+                tier=tier,
+                job_id=job.id,
+                reason="no_track_audio",
+            )
+            return False, "no_track_audio"
+
     if tier == TIER_CATALOG_ONLY:
         from app.services.lyrics_worker import (
             catalog_only_lyrics_task,

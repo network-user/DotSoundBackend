@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
-import { getIsAdmin } from '@/lib/telegram'
+import { getIsAdmin, getUserId } from '@/lib/telegram'
 import { usePlayer } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import type { LyricsResponse, SyncedLine } from '@/types/api'
@@ -139,6 +139,11 @@ export function FullscreenLyrics() {
   const karaokeActive =
     karaoke && hasWordTimes && lyrics?.sync_quality === 'word'
   const isAdmin = getIsAdmin()
+  const uid = getUserId()
+  const isOwner =
+    track.uploaded_by_id != null &&
+    uid != null &&
+    track.uploaded_by_id === uid
 
   return (
     <div className="fl-overlay">
@@ -240,7 +245,7 @@ export function FullscreenLyrics() {
           </p>
         )}
 
-        {!loading && lyrics && isAdmin && (
+        {!loading && lyrics && (isAdmin || isOwner) && (
           <div className="lyrics-debug-attribution">
             <div className="lyrics-debug-row">
               <span className="lyrics-debug-label">

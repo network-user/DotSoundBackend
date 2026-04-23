@@ -304,7 +304,13 @@ function _updateMediaSession(
       })
     navigator.mediaSession.setActionHandler(
       'play',
-      () => audio.play(),
+      () => {
+        void audio
+          .play()
+          .catch(() => {
+            /* interrupted by pause() or new load — benign */
+          })
+      },
     )
     navigator.mediaSession.setActionHandler(
       'pause',
@@ -1420,8 +1426,13 @@ export function PlayerProvider({
     if (!a || !track) return
     await loadEqSettings()
     _initAudioCtx()
-    if (a.paused) a.play()
-    else a.pause()
+    if (a.paused) {
+      void a
+        .play()
+        .catch(() => {
+          /* play() aborted by a quick pause / track switch */
+        })
+    } else a.pause()
   }
 
   const seek = (pct: number) => {

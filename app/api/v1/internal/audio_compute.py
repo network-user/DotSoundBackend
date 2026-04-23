@@ -9,6 +9,7 @@ self-registration endpoint here by design.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
 
@@ -18,7 +19,9 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
+from app.config import settings
 from app.dependencies import get_db
+from app.models.track import Track
 from app.repositories.audio_compute import (
     AudioComputeRepository,
 )
@@ -188,7 +191,7 @@ async def claim(
         if job.deadline_at
         else None,
         "audio_url": (
-            f"/internal/audio-compute/audio/{job.id}"
+            f"/api/v1/internal/audio-compute/audio/{job.id}"
             f"?ott={token}"
         ),
     }
@@ -320,13 +323,88 @@ async def job_result(
         raise HTTPException(status_code=422)
 
     lyrics_repo = LyricsRepository(session)
+    existing = await lyrics_repo.get_by_track_id(
+        job.track_id
+    )
+
+    plain_out = clean["plain_text"]
+    synced_out = clean["synced_lines"]
+    sq_out = clean["sync_quality"]
+    sp_out = clean["sync_profile"]
+    sn_out: str | None
+    ssn_out: str | None
+
+    use_catalog = (
+        existing is not None
+        and existing.source == "auto"
+        and (existing.plain_text or "").strip()
+        and clean.get("asr_timed_words")
+    )
+    aligned: list | None = None
+    if use_catalog:
+        try:
+            from dotsound_private_core.services.lyrics_provider import (
+                SyncedLine,
+                align_text_to_precomputed_asr_timed_words,
+            )
+
+            tw_list = clean["asr_timed_words"] or []
+            tw_pairs: list[tuple[float, str]] = [
+                (float(x["t"]), str(x["w"]))
+                for x in tw_list
+            ]
+
+            def _align() -> list[SyncedLine] | None:
+                return align_text_to_precomputed_asr_timed_words(
+                    existing.plain_text,  # type: ignore[arg-type]
+                    tw_pairs,
+                    audio_duration_ms=0,
+                )
+
+            aligned = await asyncio.to_thread(_align)
+        except Exception:
+            logger.exception(
+                "remote_lyrics_catalog_align_failed",
+                job_id=job.id,
+            )
+            aligned = None
+
+    if aligned:
+        assert existing is not None
+        plain_out = existing.plain_text
+        synced_out = [
+            {
+                "time_ms": int(sl.time_ms),
+                "text": sl.text,
+                "confidence": float(
+                    getattr(sl, "confidence", 0.0) or 0.0
+                ),
+            }
+            for sl in aligned
+            if (sl.text or "").strip()
+        ] or None
+        sq_out = "line"
+        sp_out = clean.get("sync_profile")
+        base = (existing.source_name or "").strip() or "Catalog"
+        sn_out = base
+        sp_lbl = sp_out or "asr"
+        ssn_out = f"faster-whisper (aligned, {sp_lbl})"
+    else:
+        sn_out, ssn_out = cws.attribution_for_remote_worker_result(
+            current_tier=job.current_tier,
+            synced_lines=synced_out,
+            sync_profile=sp_out,
+        )
+
     await lyrics_repo.create_or_update(
         track_id=job.track_id,
-        plain_text=clean["plain_text"],
+        plain_text=plain_out,
         source="auto",
-        synced_lines=clean["synced_lines"],
-        sync_quality=clean["sync_quality"],
-        sync_profile=clean["sync_profile"],
+        synced_lines=synced_out,
+        sync_quality=sq_out,
+        sync_profile=sp_out,
+        source_name=sn_out,
+        sync_source_name=ssn_out,
     )
 
     started = job.started_at or job.created_at
@@ -364,7 +442,7 @@ async def job_result(
             processing_seconds=(
                 duration_ms / 1000.0
             ),
-            plain_text=clean["plain_text"],
+            plain_text=plain_out,
         )
     except Exception:
         logger.exception(
@@ -491,14 +569,14 @@ async def download_audio(
     pinned_ip = (
         expected_ip.last_ip if expected_ip else None
     )
-    ok = await cws.verify_and_consume_ott(
+    exp = await cws.validate_ott_token(
         ott,
         job.id,
         worker_id,
         client_ip=_client_ip(request),
         expected_ip=pinned_ip,
     )
-    if not ok:
+    if exp is None:
         await cws._log_audit(
             session,
             worker_id=worker_id,
@@ -513,11 +591,92 @@ async def download_audio(
     file_key = await repo.get_track_file_key(
         job.track_id
     )
-    if not file_key:
+    payload: dict
+    if file_key:
+        try:
+            presigned = await s3.get_presigned_url(
+                file_key
+            )
+        except Exception as exc:
+            logger.warning(
+                "audio_presign_failed",
+                job_id=job_id,
+                track_id=job.track_id,
+                err=str(exc),
+            )
+            await session.commit()
+            raise HTTPException(
+                status_code=503
+            ) from exc
+        payload = {"url": presigned}
+    else:
+        track = await session.get(Track, job.track_id)
+        if not track or not getattr(
+            track, "sc_url", None
+        ):
+            logger.warning(
+                "audio_download_no_file_key",
+                job_id=job_id,
+                track_id=job.track_id,
+            )
+            await session.commit()
+            raise HTTPException(status_code=404)
+        if not settings.sc_client_id:
+            logger.warning(
+                "audio_download_sc_no_client_id",
+                job_id=job_id,
+                track_id=job.track_id,
+            )
+            await session.commit()
+            raise HTTPException(
+                status_code=503,
+                detail="SoundCloud is not configured",
+            )
+        from app.services.soundcloud_service import (
+            SoundCloudService,
+        )
+
+        sc = SoundCloudService(
+            settings.sc_client_id, session
+        )
+        try:
+            stream_url, protocol = await sc.get_stream_info(
+                track.sc_url
+            )
+        except HTTPException:
+            await session.commit()
+            raise
+        except Exception as exc:
+            logger.warning(
+                "audio_download_sc_failed",
+                job_id=job_id,
+                track_id=job.track_id,
+                err=str(exc),
+            )
+            await session.commit()
+            raise HTTPException(
+                status_code=503
+            ) from exc
+        payload = {
+            "url": stream_url,
+            "stream_protocol": protocol,
+        }
+
+    if not await cws.consume_ott_by_exp(
+        exp, job.id, worker_id
+    ):
+        await cws._log_audit(
+            session,
+            worker_id=worker_id,
+            ip=_client_ip(request),
+            action="ott_fail",
+            job_id=job.id,
+            status_code=404,
+        )
+        await session.commit()
         raise HTTPException(status_code=404)
 
-    presigned = await s3.get_presigned_url(file_key)
     return JSONResponse(
         status_code=200,
-        content={"url": presigned},
+        content=payload,
     )

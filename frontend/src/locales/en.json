@@ -289,6 +289,8 @@
       "jobTable": {
         "empty": "No jobs in flight",
         "trace": "Trace",
+        "cancel": "Cancel",
+        "cancelConfirm": "Stop this job? A running remote_whisper job will be marked cancelled in the database; the worker may still log locally.",
         "close": "Close",
         "error": "Error",
         "currentTier": "current tier",

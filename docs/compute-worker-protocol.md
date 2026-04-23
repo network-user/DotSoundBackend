@@ -52,7 +52,7 @@ either layer.
 | POST | `/jobs/{job_id}/progress` | Stream stage updates / partial text |
 | POST | `/jobs/{job_id}/result` | Final lyrics, marks job done |
 | POST | `/jobs/{job_id}/fail` | Worker abandons the job; cascade may retry |
-| GET | `/audio/{job_id}?ott=...` | Resolve OTT into a presigned S3 URL |
+| GET | `/audio/{job_id}?ott=...` | Resolve OTT into a download `url` (S3 or SoundCloud stream) |
 
 ### Per-action rate limits (default)
 
@@ -157,6 +157,13 @@ Response 200:
 { "status": "ok", "server_time": 1761234567 }
 ```
 
+The reference client (`DotSoundComputeWorker`, `BackendClient.heartbeat`)
+uses **POST** only. If you see **GET** to this path in Backend access
+logs with **405 Method Not Allowed** (e.g. browser probes, uptime
+crawlers, an old or misconfigured tool), that is not the official
+worker — the daemon must not use GET. Only **POST** is part of the
+HMAC contract here.
+
 ### `POST /jobs/claim`
 
 Request body: empty.
@@ -191,9 +198,28 @@ this endpoint from a different IP returns 404.
 
 Response 200:
 
+**Internal storage (S3/MinIO):**
 ```json
 { "url": "https://minio.example/dotsound/...?X-Amz-Signature=..." }
 ```
+
+**SoundCloud (no `file_key` on the track):** the server resolves
+the stream via the public SoundCloud API and returns a short-lived
+CDN URL (and metadata for the worker, if it supports it):
+
+```json
+{
+  "url": "https://cf-hls-.../...",
+  "stream_protocol": "progressive"
+}
+```
+
+`stream_protocol` is `progressive` (direct MP3/M4A) or `hls`. If the
+worker only supports a direct `GET` on `url`, ensure ffmpeg can
+read HLS (`.m3u8`) when `stream_protocol` is `hls`.
+
+The OTT is **consumed only after** a resolvable `url` is ready, so a
+transient S3/SC error does not burn a one-use token on retry.
 
 ### `POST /jobs/{job_id}/progress`
 
@@ -233,9 +259,23 @@ Request body (all fields optional):
   ],
   "sync_quality": "word",
   "sync_profile": "gpu_full",
-  "audio_sha256": "abcd..."
+  "audio_sha256": "abcd...",
+  "asr_timed_words": [
+    { "t": 0.0, "w": "Hello" },
+    { "t": 0.41, "w": "world" }
+  ]
 }
 ```
+
+Optional **`asr_timed_words`**: flat list of ASR words with times in
+**seconds** (`t`) and token text (`w`), in playback order — typically
+derived from faster-whisper `word_timestamps`. When the cascade
+pre-saved **catalog** lyrics (Genius, …) to `track_lyrics` before
+`remote_whisper`, the Backend runs the same **PrivateCore opcode
+alignment** as the in-process path: catalog text plus
+`asr_timed_words` produce line timecodes tied to the **reference**
+lyrics, not the raw ASR transcript. If omitted or empty, only the
+`plain_text` / `synced_lines` from the worker are stored.
 
 `audio_sha256` (if the job carried one) is cross-checked with the
 Backend's stored value; a mismatch is rejected as

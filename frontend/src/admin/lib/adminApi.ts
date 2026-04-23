@@ -651,6 +651,15 @@ export const adminApi = {
       method: 'POST',
       body: {},
     }),
+  // Same body as /tasks/lyrics-jobs/.../cancel; path uses audio_compute.manage.
+  cancelComputeJob: (jobId: string) =>
+    adminFetch<{
+      status: string
+      job_status?: string
+    }>(`/audio-compute/jobs/${jobId}/cancel`, {
+      method: 'POST',
+      body: {},
+    }),
   cancelAllQueuedLyricsJobs: () =>
     adminFetch<{
       cancelled: number
