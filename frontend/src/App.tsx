@@ -81,7 +81,6 @@ import { QueueSheet } from '@/components/QueueSheet/QueueSheet'
 import { BannedScreen } from '@/components/BannedScreen/BannedScreen'
 import { SystemEventListener } from '@/components/Notifications/SystemEventListener'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
-import { UploadFab } from '@/components/UploadFab/UploadFab'
 import { useTrackDeepLink } from '@/hooks/useDeepLink'
 import { HomeView } from '@/views/HomeView'
 import {
@@ -497,7 +496,6 @@ export function App() {
       <Equalizer />
       <QueueSheet />
       <InstallPrompt />
-      <UploadFab />
       <SystemEventListener />
       <SettingsSheet
         open={settingsOpen}

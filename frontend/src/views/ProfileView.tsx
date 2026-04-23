@@ -224,7 +224,9 @@ export function ProfileView({
             onDisplayNameChange={setDisplayName}
           />
           <ProfileStats stats={stats} />
-          <ProfileActions />
+          <ProfileActions
+            onOpenImport={() => setTab('import')}
+          />
           <ProfileTrackList
             tracks={myTracks}
             onPlay={playTrack}

@@ -1,6 +1,11 @@
 import { useNavigate } from 'react-router-dom'
+import { Icon } from '@/components/Icon/Icon'
 
-export function ProfileActions() {
+interface ProfileActionsProps {
+  onOpenImport: () => void
+}
+
+export function ProfileActions({ onOpenImport }: ProfileActionsProps) {
   const navigate = useNavigate()
 
   return (
@@ -12,6 +17,23 @@ export function ProfileActions() {
       >
         <span className="profile-action-icon">↑</span>
         <span className="profile-action-label">Загрузить трек</span>
+        <span className="profile-action-chevron">›</span>
+      </button>
+
+      <button
+        type="button"
+        id="profile-action-import"
+        className="profile-action-btn"
+        onClick={onOpenImport}
+      >
+        <span
+          className="profile-action-icon profile-action-icon-svg"
+        >
+          <Icon name="download" size={18} />
+        </span>
+        <span className="profile-action-label">
+          Импортировать песни
+        </span>
         <span className="profile-action-chevron">›</span>
       </button>
 

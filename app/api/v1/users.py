@@ -12,11 +12,13 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
+from app.models.track import Track
 from app.models.user import User
 from app.repositories.complaint import (
     ComplaintRepository,
@@ -39,6 +41,9 @@ from app.schemas.user import (
 from app.services.album_service import AlbumService
 from app.services.eq_service import EqService
 from app.services.follow_service import FollowService
+from app.services.signal_service import (
+    SignalService,
+)
 from app.services.stats_service import StatsService
 from app.services.track_service import TrackService
 from app.services.user_service import UserService
@@ -273,6 +278,58 @@ async def get_feed(
     tracks, total = await service.get_feed(current_user.id, page, size)
     items = [TrackResponse.model_validate(t) for t in tracks]
     return TrackListResponse(items=items, total=total, page=page, size=size)
+
+
+@router.get(
+    "/me/listen-history",
+    response_model=TrackListResponse,
+    summary=(
+        "Tracks the user has listened to "
+        "(listen events, newest first)"
+    ),
+)
+@limiter.limit("60/minute")
+async def get_my_listen_history(
+    request: Request,
+    limit: int = Query(50, ge=1, le=100),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TrackListResponse:
+    structlog.contextvars.bind_contextvars(
+        user_id=current_user.id
+    )
+    signal_svc = SignalService(session)
+    events = await signal_svc.get_recent_listens(
+        current_user.id, limit=500
+    )
+    track_ids: list[int] = []
+    seen: set[int] = set()
+    for ev in events:
+        if ev.track_id in seen:
+            continue
+        seen.add(ev.track_id)
+        track_ids.append(ev.track_id)
+        if len(track_ids) >= limit:
+            break
+    if not track_ids:
+        return TrackListResponse(
+            items=[], total=0, page=1, size=1
+        )
+    result = await session.execute(
+        select(Track).where(
+            Track.id.in_(track_ids),
+            Track.is_active.is_(True),
+        )
+    )
+    by_id = {t.id: t for t in result.scalars().all()}
+    items: list[TrackResponse] = []
+    for tid in track_ids:
+        t = by_id.get(tid)
+        if t:
+            items.append(TrackResponse.model_validate(t))
+    return TrackListResponse(
+        items=items, total=len(items), page=1, size=len(items)
+    )
 
 
 class _MyComplaintsResponse(BaseModel):

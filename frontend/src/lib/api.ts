@@ -210,6 +210,14 @@ export const api = {
     )
   },
 
+  getListenHistory(
+    limit: number = 50,
+  ): Promise<TrackListResponse> {
+    return request(
+      `/api/v1/users/me/listen-history?limit=${limit}`,
+    )
+  },
+
   getTrack(id: number): Promise<Track> {
     return request(`/api/v1/tracks/${id}`)
   },
