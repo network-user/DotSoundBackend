@@ -27,6 +27,7 @@ if __name__ == "__main__":
             "app.services.artist_enrichment_worker",
             "app.services.track_info_worker",
             "app.services.artist_supplemental_worker",
+            "app.services.search_index_worker",
         ],
         stdout=sys.stdout,
         stderr=sys.stderr,

@@ -258,6 +258,11 @@ async def process_external_import_job(job_id: int) -> None:
                     }
                 )
                 await session.commit()
+                from app.services.search_index_notify import (
+                    schedule_reindex_track,
+                )
+
+                await schedule_reindex_track(track.id)
                 logger.info(
                     "external_import_track_done",
                     job_id=job_id,

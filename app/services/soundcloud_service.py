@@ -283,6 +283,11 @@ class SoundCloudService:
                     sc_url=sc_url,
                     track_id=existing.id,
                 )
+                from app.services.search_index_notify import (
+                    schedule_reindex_track,
+                )
+
+                await schedule_reindex_track(existing.id)
                 return existing
             await self._session.refresh(track)
             logger.info(
@@ -290,6 +295,11 @@ class SoundCloudService:
                 sc_url=sc_url,
                 track_id=track.id,
             )
+            from app.services.search_index_notify import (
+                schedule_reindex_track,
+            )
+
+            await schedule_reindex_track(track.id)
             return track
 
         track = Track(**new_values)
@@ -301,6 +311,11 @@ class SoundCloudService:
             sc_url=sc_url,
             track_id=track.id,
         )
+        from app.services.search_index_notify import (
+            schedule_reindex_track,
+        )
+
+        await schedule_reindex_track(track.id)
         return track
 
     async def _fetch_by_sc_url(self, sc_url: str) -> Track | None:

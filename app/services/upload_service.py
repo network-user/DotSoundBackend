@@ -160,6 +160,12 @@ class UploadService:
         if not cover_key:
             await generate_and_upload_cover.kiq(track.id)
 
+        from app.services.search_index_notify import (
+            schedule_reindex_track,
+        )
+
+        await schedule_reindex_track(track.id)
+
         return track
 
     async def _upload_cover(

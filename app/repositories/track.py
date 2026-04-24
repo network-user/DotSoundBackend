@@ -141,9 +141,10 @@ class TrackRepository(BaseRepository[Track]):
         query: str,
         offset: int = 0,
         limit: int = 20,
+        playable_only: bool = False,
     ) -> tuple[list[Track], int]:
         pattern = f"%{query}%"
-        condition = (
+        base = (
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
             & (
@@ -151,6 +152,10 @@ class TrackRepository(BaseRepository[Track]):
                 | Track.artist.ilike(pattern)
             )
         )
+        if playable_only:
+            condition = base & self._playable_filter()
+        else:
+            condition = base
         logger.debug("db_search_tracks", query=query, offset=offset)
         total_result = await self._session.execute(
             select(func.count()).where(condition)

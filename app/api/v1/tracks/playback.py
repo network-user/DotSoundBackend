@@ -22,6 +22,9 @@ from app.schemas.track import (
     TrackResponse,
 )
 from app.services.card_service import CardService
+from app.services.search_playcount_drain import (
+    mark_playcount_dirty_async,
+)
 from app.services.track_service import TrackService
 
 router = APIRouter()
@@ -125,6 +128,7 @@ async def play_track(
             detail="Track not found",
         )
     play_count = (track.play_count or 0) + 1
+    await mark_playcount_dirty_async(track_id)
     logger.info(
         "play_count_updated",
         track_id=track_id,

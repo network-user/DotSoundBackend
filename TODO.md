@@ -361,6 +361,10 @@
 
 ## Backend API
 
+- [x] **Elasticsearch (поиск + suggest)**: индексы треков/артистов,
+  Taskiq reindex/backfill, `GET /api/v1/search/suggest`, поиск треков
+  с `q` через ES + PG fallback, counter `elasticsearch_query_total`
+  (op/outcome) в `observability`
 - playable_only фильтр в track listing endpoints
 - internal-token endpoint с полной защитой
 - WebSocket: событие player.state для синхронизации

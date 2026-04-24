@@ -22,6 +22,17 @@ class ArtistRepository(BaseRepository[Artist]):
         )
         return result.scalar_one_or_none()
 
+    async def get_by_ids_preserve_order(
+        self, artist_ids: list[int]
+    ) -> list[Artist]:
+        if not artist_ids:
+            return []
+        result = await self._session.execute(
+            select(Artist).where(Artist.id.in_(artist_ids))
+        )
+        by_id = {a.id: a for a in result.scalars().all()}
+        return [by_id[i] for i in artist_ids if i in by_id]
+
     async def search(
         self,
         query: str,

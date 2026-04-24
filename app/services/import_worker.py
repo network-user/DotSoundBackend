@@ -158,6 +158,11 @@ async def process_import_job(job_id: int) -> None:
                     track_id=track.id,
                     title=title,
                 )
+                from app.services.search_index_notify import (
+                    schedule_reindex_track,
+                )
+
+                await schedule_reindex_track(track.id)
             except Exception as exc:
                 job.failed_tracks += 1
                 imported_tracks.append(

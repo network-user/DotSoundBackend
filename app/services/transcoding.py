@@ -251,6 +251,12 @@ async def _update_track_status(
                     track.hls_manifest_key = hls_manifest_key
                 await session.commit()
                 logger.info("track_status_updated", status=status)
+                from app.services.search_index_notify import (
+                    schedule_reindex_track,
+                )
+
+                if track_id:
+                    await schedule_reindex_track(track_id)
         except Exception:
             logger.exception("failed_to_update_track_status")
             await session.rollback()

@@ -34,6 +34,17 @@ export interface TrackListResponse {
   size: number
 }
 
+export interface SearchSuggestItem {
+  kind: 'track' | 'artist'
+  id: number
+  title: string | null
+  name: string | null
+}
+
+export interface SearchSuggestResponse {
+  items: SearchSuggestItem[]
+}
+
 export interface TrackUploadResponse {
   id: number
   title: string
