@@ -150,3 +150,32 @@ async def test_scan_external_returns_active_job(
 
     assert first.id == second.id
     assert mock_scan.call_count == 1
+
+
+@patch(
+    f"{_MOD}.scan_playlist_url",
+    new_callable=AsyncMock,
+)
+async def test_scan_external_vk_music_stores_kind(
+    mock_scan: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=3105)
+    mock_scan.return_value = {
+        "kind": "album",
+        "tracks": [{"title": "A", "artist": "X"}],
+    }
+
+    svc = ImportService(session)
+    u = "https://vk.com/music/album/x"
+    job = await svc.scan_external_playlist(
+        user.id,
+        "vk_music",
+        u,
+    )
+
+    assert job.status == "ready"
+    assert job.source == "vk_music"
+    assert job.tracks_data is not None
+    assert job.tracks_data["kind"] == "album"
+    assert job.tracks_data["source_url"] == u

@@ -14,12 +14,14 @@ logger = structlog.get_logger(__name__)
 _SOURCE_RU: dict[str, str] = {
     "telegram": "Telegram",
     "yandex_music": "Яндекс.Музыка",
+    "vk_music": "VK Музыка",
     "spotify": "Spotify",
     "soundcloud_playlist": "SoundCloud",
 }
 _SOURCE_EN: dict[str, str] = {
     "telegram": "Telegram",
     "yandex_music": "Yandex Music",
+    "vk_music": "VK Music",
     "spotify": "Spotify",
     "soundcloud_playlist": "SoundCloud",
 }

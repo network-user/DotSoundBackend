@@ -1003,6 +1003,14 @@ export const api = {
     })
   },
 
+  startVkMusicImport(url: string): Promise<ImportJobResponse> {
+    return request('/api/v1/import/vk_music', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })
+  },
+
   startImportJob(
     jobId: number,
     trackIndices: number[],

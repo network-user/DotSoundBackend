@@ -22,7 +22,12 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _BOT_TIMEOUT = 30.0
 
 EXTERNAL_IMPORT_SOURCES: frozenset[str] = frozenset(
-    {"yandex_music", "spotify", "soundcloud_playlist"}
+    {
+        "yandex_music",
+        "spotify",
+        "soundcloud_playlist",
+        "vk_music",
+    }
 )
 
 

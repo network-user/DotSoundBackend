@@ -53,22 +53,41 @@ export function SystemEventListener() {
         data.type ||
         (data.data?.type as string | undefined) ||
         ''
-      const message =
-        data.body ||
-        data.message ||
-        data.title ||
-        (data.data?.body as string | undefined) ||
-        (data.data?.title as string | undefined) ||
-        ''
+      const t = (data.title || '').trim()
+      const b = (data.body || data.message || '').trim()
+      let message = b
+      if (!message)
+        message =
+          t ||
+          (data.data?.body as string | undefined) ||
+          (data.data?.title as string | undefined) ||
+          ''
+      else if (
+        t &&
+        (type === 'import_completed' || type === 'import_failed')
+      ) {
+        message = `${t}. ${b}`
+      }
       if (!type && !message) return
       const kind = TOAST_BY_TYPE[type] || 'info'
+      const importToastOpts =
+        type === 'import_completed' || type === 'import_failed'
+          ? { duration: 10_000 }
+          : undefined
       if (kind === 'success')
-        toast.success(message || 'Успех')
+        toast.success(message || 'Успех', importToastOpts)
       else if (kind === 'warning')
-        toast.warning(message || 'Предупреждение')
+        toast.warning(
+          message || 'Предупреждение',
+          importToastOpts,
+        )
       else if (kind === 'error')
-        toast.error(message || 'Ошибка')
-      else toast.info(message || 'Уведомление')
+        toast.error(message || 'Ошибка', importToastOpts)
+      else
+        toast.info(
+          message || 'Уведомление',
+          importToastOpts,
+        )
       const haptic = HAPTIC_BY_TYPE[type]
       if (haptic) hapticNotification(haptic)
     }
