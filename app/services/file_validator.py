@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import magic
 import structlog
 from fastapi import HTTPException, status
 
@@ -19,7 +18,9 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(
 def _detect_mime(data: bytes) -> str:
     if len(data) < 4:
         return "application/octet-stream"
-    return magic.from_buffer(data, mime=True)
+    import magic as _magic
+
+    return _magic.from_buffer(data, mime=True)
 
 
 def validate_audio(

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
 from tests.conftest import (
+    admin_bearer_for_user,
     auth_headers,
     create_test_user,
 )
@@ -49,8 +50,9 @@ async def test_admin_bearer_request_skips_csrf(
     db_session: AsyncSession,
 ) -> None:
     user = await create_test_user(client, 600002)
-    await _make_admin(db_session, user["id"])
-    headers = await auth_headers(client, user["id"])
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=user["id"]
+    )
     r = await client.patch(
         f"/api/v1/admin/users/{user['id']}",
         json={"display_name": "Renamed"},
@@ -64,8 +66,9 @@ async def test_admin_get_no_csrf_required(
     db_session: AsyncSession,
 ) -> None:
     user = await create_test_user(client, 600003)
-    await _make_admin(db_session, user["id"])
-    headers = await auth_headers(client, user["id"])
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=user["id"]
+    )
     r = await client.get(
         "/api/v1/admin/users",
         headers=headers,
@@ -78,8 +81,9 @@ async def test_admin_csrf_double_submit_match(
     db_session: AsyncSession,
 ) -> None:
     user = await create_test_user(client, 600004)
-    await _make_admin(db_session, user["id"])
-    headers = await auth_headers(client, user["id"])
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=user["id"]
+    )
 
     csrf_resp = await client.get(
         "/api/v1/admin/auth/csrf",
@@ -104,8 +108,9 @@ async def test_admin_response_has_security_headers(
     db_session: AsyncSession,
 ) -> None:
     user = await create_test_user(client, 600006)
-    await _make_admin(db_session, user["id"])
-    headers = await auth_headers(client, user["id"])
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=user["id"]
+    )
     r = await client.get(
         "/api/v1/admin/users",
         headers=headers,

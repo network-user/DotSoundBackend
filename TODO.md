@@ -518,6 +518,7 @@ stream URL стороннего сервиса для текущего внеш�
 
 ## DevOps / CI
 
+- **Branch coverage 95% (4 репо):** `scripts/check_branch_coverage.py` + `pytest --cov-branch` / `coverage.json` → порог `percent_branches_covered` (см. Makefile / `AGENTS.md`). Продолжение: автотесты; полный прогон отложен.
 - GitHub Actions: lint + test на PR (Backend, Bot, PrivateCore)
 - Автоматический деплой на VPS
 - Расширенный healthcheck (`/api/v1/health/deep` — БД, Redis, S3)

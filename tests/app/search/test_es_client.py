@@ -11,17 +11,24 @@ import app.search.es_client as mod
 
 @pytest.mark.anyio
 async def test_close_es_clears_singleton() -> None:
-    with patch.object(mod, "_es_configured", return_value=True), patch(
-        "app.search.es_client.AsyncElasticsearch"
-    ) as es_cls:
-        inst = MagicMock()
-        inst.close = AsyncMock()
-        es_cls.return_value = inst
-        mod.get_es()
-        assert mod._client is not None
-        await mod.close_es()
-        inst.close.assert_awaited()
-        assert mod._client is None
+    prior = mod._client
+    mod._client = None
+    try:
+        with patch.object(
+            mod, "_es_configured", return_value=True
+        ), patch(
+            "app.search.es_client.AsyncElasticsearch"
+        ) as es_cls:
+            inst = MagicMock()
+            inst.close = AsyncMock()
+            es_cls.return_value = inst
+            mod.get_es()
+            assert mod._client is not None
+            await mod.close_es()
+            inst.close.assert_awaited()
+            assert mod._client is None
+    finally:
+        mod._client = prior
 
 
 def test_get_es_when_not_configured() -> None:

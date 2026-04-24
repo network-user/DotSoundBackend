@@ -3,9 +3,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.track import Track
 from tests.conftest import (
     auth_headers,
     create_test_track,
@@ -13,6 +14,17 @@ from tests.conftest import (
 )
 
 pytestmark = pytest.mark.anyio
+
+
+async def _set_track_video_key(
+    db_session: AsyncSession, track_id: int, key: str
+) -> None:
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == track_id)
+        .values(video_key=key)
+    )
+    await db_session.commit()
 
 
 async def test_upload_valid_mp3(
@@ -384,9 +396,19 @@ async def test_upload_video_success(
     video_data = b"\x00\x00\x00\x1cftypisom" + (
         b"\x00" * 100
     )
-    with patch(
-        "app.core.s3.upload_object",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "app.core.s3.upload_object",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "app.services.file_validator.validate_video",
+            return_value="video/mp4",
+        ),
+        patch(
+            "app.services.video_transcoding.transcode_video.kiq",
+            new_callable=AsyncMock,
+        ),
     ):
         r = await client.post(
             f"/api/v1/tracks/{track['id']}/video",
@@ -401,12 +423,13 @@ async def test_upload_video_success(
         )
     assert r.status_code == 200
     data = r.json()
-    assert data["video_key"] is not None
-    assert data["video_key"].startswith("videos/")
+    assert data["video_processing_status"] == "processing"
+    assert data.get("video_key") is None
 
 
 async def test_delete_video_success(
     client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
     user = await create_test_user(client, 60021)
     headers = await auth_headers(
@@ -419,9 +442,19 @@ async def test_delete_video_success(
     video_data = b"\x00\x00\x00\x1cftypisom" + (
         b"\x00" * 100
     )
-    with patch(
-        "app.core.s3.upload_object",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "app.core.s3.upload_object",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "app.services.file_validator.validate_video",
+            return_value="video/mp4",
+        ),
+        patch(
+            "app.services.video_transcoding.transcode_video.kiq",
+            new_callable=AsyncMock,
+        ),
     ):
         r = await client.post(
             f"/api/v1/tracks/{track['id']}/video",
@@ -434,7 +467,10 @@ async def test_delete_video_success(
                 )
             },
         )
-    assert r.json()["video_key"] is not None
+    assert r.json()["video_processing_status"] == "processing"
+    await _set_track_video_key(
+        db_session, track["id"], "videos/vid1.mp4"
+    )
 
     with patch(
         "app.core.s3.delete_object",
@@ -579,6 +615,7 @@ async def test_update_track_non_owner(
 
 async def test_delete_track_cleans_video_s3(
     client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
     user = await create_test_user(client, 60022)
     headers = await auth_headers(
@@ -591,9 +628,19 @@ async def test_delete_track_cleans_video_s3(
     video_data = b"\x00\x00\x00\x1cftypisom" + (
         b"\x00" * 100
     )
-    with patch(
-        "app.core.s3.upload_object",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "app.core.s3.upload_object",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "app.services.file_validator.validate_video",
+            return_value="video/mp4",
+        ),
+        patch(
+            "app.services.video_transcoding.transcode_video.kiq",
+            new_callable=AsyncMock,
+        ),
     ):
         await client.post(
             f"/api/v1/tracks/{track['id']}/video",
@@ -606,6 +653,9 @@ async def test_delete_track_cleans_video_s3(
                 )
             },
         )
+    await _set_track_video_key(
+        db_session, track["id"], "videos/enc1.mp4"
+    )
 
     with patch(
         "app.core.s3.delete_object",
