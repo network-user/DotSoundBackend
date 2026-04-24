@@ -8,6 +8,15 @@ from app.models.user import User
 
 pytestmark = pytest.mark.anyio
 
+
+@pytest.fixture(autouse=True)
+def _mock_import_finish_notification() -> object:
+    with patch(
+        "app.services.import_job_notifications.send_import_job_finished_notification",
+        new_callable=AsyncMock,
+    ) as m:
+        yield m
+
 _MOD = "app.services.import_worker"
 
 

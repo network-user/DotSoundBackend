@@ -17,6 +17,7 @@ import { ProfileTrackList } from '@/components/Profile/ProfileTrackList'
 import { ImportView } from '@/components/Import/ImportView'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { ProfileAdminButton } from '@/components/Admin/ProfileAdminButton'
+import { ProfileDebugMenu } from '@/components/Admin/ProfileDebugMenu'
 import { MyComplaintsList } from '@/components/Profile/MyComplaintsList'
 
 type ProfileTab = 'profile' | 'import' | 'complaints'
@@ -47,8 +48,16 @@ export function ProfileView({
   const [saving, setSaving] = useState(false)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<number>>(new Set())
   const deleteTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
+  const [serverDebug, setServerDebug] = useState(false)
 
   const tgUser = tg.initDataUnsafe?.user
+
+  useEffect(() => {
+    api
+      .getAuthConfig()
+      .then(c => setServerDebug(Boolean(c.debug)))
+      .catch(() => setServerDebug(false))
+  }, [])
 
   useEffect(() => {
     const internalId = getInternalUserId()
@@ -198,6 +207,7 @@ export function ProfileView({
         <div className="profile-header-actions">
           <NotificationBell />
           <ProfileAdminButton />
+          <ProfileDebugMenu serverDebug={serverDebug} />
           {onOpenSettings && (
             <button
               className="icon-btn profile-settings-btn"

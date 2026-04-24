@@ -134,6 +134,15 @@ class AppSettings(BaseSettings):
     sentry_traces_sample_rate: float = 0.1
     docker_socket_path: str = "/var/run/docker.sock"
 
+    # Elasticsearch (suggest + full text search; optional — empty URL disables).
+    elasticsearch_url: str = ""
+    elasticsearch_enabled: bool = True
+    elasticsearch_index_tracks: str = "dotsound_tracks"
+    elasticsearch_index_artists: str = "dotsound_artists"
+    elasticsearch_backfill_on_empty: bool = False
+    elasticsearch_playcount_flush_interval_seconds: float = 90.0
+    elasticsearch_dev_bootstrap: bool = False
+
     # Compute-worker pull API protection. Comma-separated list of
     # CIDRs allowed to hit /api/v1/internal/*. Empty in prod is a
     # configuration error: the model validator below raises so the

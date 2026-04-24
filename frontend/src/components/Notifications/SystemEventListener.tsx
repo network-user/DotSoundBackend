@@ -25,6 +25,8 @@ const TOAST_BY_TYPE: Record<
   track_hidden: 'warning',
   track_restored: 'success',
   admin_message: 'info',
+  import_completed: 'success',
+  import_failed: 'error',
 }
 
 const HAPTIC_BY_TYPE: Record<
@@ -37,6 +39,8 @@ const HAPTIC_BY_TYPE: Record<
   complaint_resolved: 'success',
   track_hidden: 'warning',
   track_restored: 'success',
+  import_completed: 'success',
+  import_failed: 'error',
 }
 
 export function SystemEventListener() {

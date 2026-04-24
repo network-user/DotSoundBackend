@@ -62,6 +62,34 @@ services:
     networks:
       - dotsound
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.2
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl -f http://localhost:9200/_cluster/health || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    logging: *default-logging
+    networks:
+      - dotsound
+
   backend:
     build:
       context: ..
@@ -78,6 +106,7 @@ services:
       MINIO_ENDPOINT: minio:9000
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+asyncpg://dotsound:dotsound@postgres:5432/dotsound
+      ELASTICSEARCH_URL: http://elasticsearch:9200
     ports:
       - "8000:8000"
     depends_on:
@@ -86,6 +115,8 @@ services:
       minio:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      elasticsearch:
         condition: service_healthy
     volumes:
       - .:/app
@@ -109,12 +140,15 @@ services:
       MINIO_ENDPOINT: minio:9000
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+asyncpg://dotsound:dotsound@postgres:5432/dotsound
+      ELASTICSEARCH_URL: http://elasticsearch:9200
     depends_on:
       redis:
         condition: service_healthy
       postgres:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      elasticsearch:
         condition: service_healthy
     volumes:
       - .:/app
@@ -223,6 +257,7 @@ volumes:
   pgadmin_data:
   portainer_data:
   redis_data:
+  elasticsearch_data:
   backup_data:
 
 networks:

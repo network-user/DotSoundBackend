@@ -1,12 +1,17 @@
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.repositories.artist import ArtistRepository
 from app.repositories.preference import (
     PreferenceRepository,
 )
 from app.repositories.track import TrackRepository
+from app.schemas.onboarding import OnboardingStatusResponse
+from app.services.telegram_profile_preflight import (
+    preflight_telegram_profile_music,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -30,6 +35,73 @@ class OnboardingService:
         return await self._pref_repo.get_by_user_id(
             user_id
         )
+
+    async def get_status_response(
+        self, user: User
+    ) -> OnboardingStatusResponse:
+        pref = await self._pref_repo.get_by_user_id(
+            user.id
+        )
+        pf = await preflight_telegram_profile_music(user)
+        if not pref:
+            return OnboardingStatusResponse(
+                onboarding_completed=False,
+                calibration_completed=False,
+                import_prompt_acknowledged=False,
+                can_import_from_telegram=(
+                    pf.can_import_from_telegram
+                ),
+                has_telegram_profile_music=(
+                    pf.has_telegram_profile_music
+                ),
+            )
+        return OnboardingStatusResponse(
+            onboarding_completed=pref.onboarding_completed,
+            calibration_completed=pref.calibration_completed,
+            preferred_genres=pref.preferred_genres,
+            preferred_moods=pref.preferred_moods,
+            import_prompt_acknowledged=(
+                pref.onboarding_import_acknowledged
+            ),
+            can_import_from_telegram=(
+                pf.can_import_from_telegram
+            ),
+            has_telegram_profile_music=(
+                pf.has_telegram_profile_music
+            ),
+        )
+
+    async def acknowledge_import_prompt(
+        self, user_id: int
+    ) -> UserPreference:
+        pref = await self._pref_repo.upsert(
+            user_id=user_id,
+            onboarding_import_acknowledged=True,
+        )
+        logger.info(
+            "onboarding_import_acknowledged",
+            user_id=user_id,
+        )
+        return pref
+
+    async def reset_onboarding_state(
+        self, user_id: int
+    ) -> UserPreference:
+        """Debug / QA: show onboarding wizard again from a clean state."""
+        pref = await self._pref_repo.upsert(
+            user_id=user_id,
+            onboarding_completed=False,
+            calibration_completed=False,
+            onboarding_import_acknowledged=False,
+            preferred_genres=None,
+            preferred_artist_ids=None,
+            preferred_moods=None,
+        )
+        logger.info(
+            "onboarding_state_reset",
+            user_id=user_id,
+        )
+        return pref
 
     async def save_preferences(
         self,
@@ -159,6 +231,7 @@ class OnboardingService:
         return await self._pref_repo.upsert(
             user_id=user_id,
             onboarding_completed=True,
+            onboarding_import_acknowledged=True,
         )
 
     async def get_available_genres(

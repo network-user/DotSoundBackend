@@ -33,8 +33,7 @@ class PreferenceRepository(
         )
         if existing:
             for k, v in kwargs.items():
-                if v is not None:
-                    setattr(existing, k, v)
+                setattr(existing, k, v)
             await self._session.flush()
             await self._session.refresh(existing)
             return existing

@@ -25,6 +25,9 @@ class OnboardingStatusResponse(BaseModel):
     calibration_completed: bool
     preferred_genres: list[str] | None = None
     preferred_moods: list[str] | None = None
+    import_prompt_acknowledged: bool = False
+    can_import_from_telegram: bool = False
+    has_telegram_profile_music: bool | None = None
 
 
 class ArtistBriefResponse(BaseModel):

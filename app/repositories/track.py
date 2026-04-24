@@ -125,6 +125,17 @@ class TrackRepository(BaseRepository[Track]):
         )
         return list(tracks_result.scalars().all()), total
 
+    async def get_by_ids_preserve_order(
+        self, track_ids: list[int]
+    ) -> list[Track]:
+        if not track_ids:
+            return []
+        result = await self._session.execute(
+            select(Track).where(Track.id.in_(track_ids))
+        )
+        by_id = {t.id: t for t in result.scalars().all()}
+        return [by_id[i] for i in track_ids if i in by_id]
+
     async def search(
         self,
         query: str,

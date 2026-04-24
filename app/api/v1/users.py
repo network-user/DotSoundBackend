@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
@@ -41,6 +42,9 @@ from app.schemas.user import (
 from app.services.album_service import AlbumService
 from app.services.eq_service import EqService
 from app.services.follow_service import FollowService
+from app.services.onboarding_service import (
+    OnboardingService,
+)
 from app.services.signal_service import (
     SignalService,
 )
@@ -187,6 +191,35 @@ async def restore_me(
         )
     user = await service.get_by_id(current_user.id)
     return UserResponse.model_validate(user)
+
+
+@router.post(
+    "/me/debug/reset-onboarding",
+    status_code=status.HTTP_200_OK,
+    summary="[DEBUG] Reset product onboarding (admin only, debug mode)",
+)
+@limiter.limit("10/minute")
+async def debug_reset_onboarding(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    if not settings.debug:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found",
+        )
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin only",
+        )
+    structlog.contextvars.bind_contextvars(
+        user_id=current_user.id
+    )
+    svc = OnboardingService(session)
+    await svc.reset_onboarding_state(current_user.id)
+    return {"status": "ok"}
 
 
 @router.post(
