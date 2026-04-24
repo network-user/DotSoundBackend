@@ -37,8 +37,9 @@ migrate: ## Run Alembic migrations
 test: ## Run pytest
 	poetry run pytest -v
 
-test-cov: ## Run pytest with coverage
-	poetry run pytest --cov=app --cov-report=term-missing --cov-report=html -v
+test-cov: ## Run pytest with coverage (enforces 95% branch)
+	poetry run pytest --cov=app --cov-branch --cov-report=term-missing --cov-report=html --cov-report=json:coverage.json -v
+	poetry run python scripts/check_branch_coverage.py
 
 test-fast: ## Run fast tests only (skip slow/s3/redis)
 	poetry run pytest -v -m "not slow and not s3 and not redis"

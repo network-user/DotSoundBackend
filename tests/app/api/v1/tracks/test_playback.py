@@ -3,6 +3,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import AsyncClient
 
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.track import Track
 from tests.conftest import (
     auth_headers,
     create_test_track,
@@ -224,6 +228,7 @@ async def test_get_share_links_not_found(
 
 async def test_video_proxy_success(
     client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
     from io import BytesIO
 
@@ -238,11 +243,21 @@ async def test_video_proxy_success(
     video_bytes = b"\x00\x00\x00\x1cftypisom" + (
         b"\x00" * 100
     )
-    with patch(
-        "app.core.s3.upload_object",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "app.core.s3.upload_object",
+            new_callable=AsyncMock,
+        ),
+        patch(
+            "app.services.file_validator.validate_video",
+            return_value="video/mp4",
+        ),
+        patch(
+            "app.services.video_transcoding.transcode_video.kiq",
+            new_callable=AsyncMock,
+        ),
     ):
-        await client.post(
+        up = await client.post(
             f"/api/v1/tracks/{t['id']}/video",
             headers=headers,
             files={
@@ -253,6 +268,13 @@ async def test_video_proxy_success(
                 )
             },
         )
+        assert up.status_code in (200, 201, 204)
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == t["id"])
+        .values(video_key="videos/px1.mp4")
+    )
+    await db_session.commit()
 
     with patch(
         "app.core.s3.download_object",

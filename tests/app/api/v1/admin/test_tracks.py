@@ -1,10 +1,9 @@
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
 from tests.conftest import (
+    admin_bearer_for_user,
     auth_headers,
     create_test_track,
     create_test_user,
@@ -13,24 +12,14 @@ from tests.conftest import (
 pytestmark = pytest.mark.anyio
 
 
-async def _make_admin(
-    db_session: AsyncSession, user_id: int
-) -> None:
-    await db_session.execute(
-        update(User)
-        .where(User.id == user_id)
-        .values(is_admin=True)
-    )
-    await db_session.commit()
-
-
 async def test_admin_list_tracks(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
     admin = await create_test_user(client, 130001)
-    await _make_admin(db_session, admin["id"])
-    headers = await auth_headers(client, admin["id"])
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
 
     r = await client.get(
         "/api/v1/admin/tracks",
@@ -48,8 +37,9 @@ async def test_admin_toggle_track_visibility(
     db_session: AsyncSession,
 ) -> None:
     admin = await create_test_user(client, 130002)
-    await _make_admin(db_session, admin["id"])
-    admin_h = await auth_headers(client, admin["id"])
+    admin_h = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
     track = await create_test_track(
         client, "Visible Track",
         uploader_id=admin["id"],
@@ -70,8 +60,9 @@ async def test_admin_delete_track_not_found(
     db_session: AsyncSession,
 ) -> None:
     admin = await create_test_user(client, 130003)
-    await _make_admin(db_session, admin["id"])
-    headers = await auth_headers(client, admin["id"])
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
 
     r = await client.delete(
         "/api/v1/admin/tracks/99999",
@@ -89,4 +80,4 @@ async def test_non_admin_rejected(
         "/api/v1/admin/tracks",
         headers=headers,
     )
-    assert r.status_code == 403
+    assert r.status_code == 401

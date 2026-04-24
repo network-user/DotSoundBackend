@@ -1,3 +1,7 @@
+import sys
+import types
+from collections.abc import Generator
+
 import pytest
 from fastapi import HTTPException
 
@@ -6,6 +10,33 @@ from app.services.file_validator import (
     validate_image,
     validate_video,
 )
+
+
+def _mock_from_buffer(data: bytes, mime: bool = True) -> str:
+    if data.startswith(b"ID3") or data[0:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+        return "audio/mpeg"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if b"ftyp" in data[:32]:
+        return "video/mp4"
+    if data[:4] == b"\x1a\x45\xdf\xa3" or b"webm" in data[:200]:
+        return "video/webm"
+    return "application/octet-stream"
+
+
+@pytest.fixture(autouse=True)
+def _inject_magic_for_tests() -> Generator[None, None, None]:
+    old = sys.modules.get("magic")
+    fake = types.ModuleType("magic")
+    fake.from_buffer = _mock_from_buffer
+    sys.modules["magic"] = fake
+    yield
+    if old is not None:
+        sys.modules["magic"] = old
+    else:
+        del sys.modules["magic"]
 
 
 _MP3_HEADER = b"\xff\xfb\x90\x00" + b"\x00" * 256

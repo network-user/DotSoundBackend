@@ -1,4 +1,7 @@
 from io import BytesIO
+import importlib
+import sys
+import types
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -18,6 +21,35 @@ from app.main import create_app
 from app.models.base import Base
 
 _TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
+
+def _from_buffer_for_tests(data: bytes, mime: bool = True) -> str:
+    if data.startswith(b"ID3") or data[0:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+        return "audio/mpeg"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if b"ftyp" in data[:32]:
+        return "video/mp4"
+    if data[:4] == b"\x1a\x45\xdf\xa3" or b"webm" in data[:200]:
+        return "video/webm"
+    return "application/octet-stream"
+
+
+def _ensure_magic_test_stub() -> None:
+    if "magic" in sys.modules:
+        return
+    try:
+        mod = importlib.import_module("magic")
+        mod.from_buffer(b"\xff\xfb" + b"\x00" * 16, mime=True)
+    except Exception:
+        m = types.ModuleType("magic")
+        m.from_buffer = _from_buffer_for_tests
+        sys.modules["magic"] = m
+
+
+_ensure_magic_test_stub()
 
 
 @compiles(BigInteger, "sqlite")
@@ -244,4 +276,66 @@ async def auth_headers(
     )
     assert response.status_code == 200
     token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+async def admin_bearer_for_user(
+    _client: AsyncClient,
+    db_session: AsyncSession,
+    *,
+    user_id: int,
+) -> dict[str, str]:
+    from secrets import token_hex
+
+    from dotsound_private_core.services.admin_security_policy import (
+        ADMIN_SESSION_TTL_SECONDS,
+    )
+    from sqlalchemy import update
+
+    from app.core.auth import create_admin_token
+    from app.models.user import User
+    from app.repositories.admin_device import (
+        AdminDeviceRepository,
+    )
+    from app.repositories.admin_session import (
+        AdminSessionRepository,
+    )
+
+    await db_session.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(
+            is_admin=True,
+            admin_init=True,
+        )
+    )
+    await db_session.commit()
+    dev_repo = AdminDeviceRepository(db_session)
+    dev = await dev_repo.create_pending(
+        user_id=user_id,
+        fingerprint_hash=token_hex(16),
+        label="t",
+        ip="127.0.0.1",
+        ua="test",
+    )
+    await dev_repo.trust(dev)
+    sess_repo = AdminSessionRepository(db_session)
+    jti = token_hex(16)
+    rjti = token_hex(16)
+    await sess_repo.create(
+        user_id=user_id,
+        device_id=dev.id,
+        jti=jti,
+        refresh_jti=rjti,
+        ip="127.0.0.1",
+        ua="test",
+        ttl_seconds=ADMIN_SESSION_TTL_SECONDS,
+    )
+    await db_session.commit()
+    token = create_admin_token(
+        user_id=user_id,
+        jti=jti,
+        device_id=dev.id,
+        ttl_seconds=ADMIN_SESSION_TTL_SECONDS,
+    )
     return {"Authorization": f"Bearer {token}"}
