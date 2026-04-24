@@ -158,11 +158,14 @@ export function NotificationList({
       document.querySelector('.notification-items')
     itemsEl?.addEventListener('scroll', onReposition, {
       passive: true,
-    } as AddEventListenerOptions)
+    })
     return () => {
       window.removeEventListener('resize', onReposition)
       window.removeEventListener('scroll', onReposition, true)
-      itemsEl?.removeEventListener('scroll', onReposition)
+      itemsEl?.removeEventListener(
+        'scroll',
+        onReposition,
+      )
     }
   }, [menuOpenId, placeMenu])
 
@@ -291,16 +294,8 @@ export function NotificationList({
         <ul
           className="notification-menu-portal"
           style={{
-            position: 'fixed',
             top: menuPos.top,
             left: menuPos.left,
-            width: NOTIF_MENU_W,
-            minWidth: NOTIF_MENU_W,
-            zIndex: 20_000,
-            margin: 0,
-            padding: '4px 0',
-            listStyle: 'none',
-            boxSizing: 'border-box',
           }}
           role="menu"
         >
@@ -490,7 +485,7 @@ export function NotificationList({
                     >
                       <Icon
                         name="more-vertical"
-                        size={22}
+                        size={24}
                       />
                     </button>
                   </div>

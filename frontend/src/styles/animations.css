@@ -1571,44 +1571,49 @@
   position: relative;
   flex-shrink: 0;
   display: flex;
-  align-items: flex-start;
-  padding: 10px 12px 0 0;
+  align-items: center;
+  padding: 6px 8px 0 0;
 }
 
+/* Только крупнее «точки»; без квадрата/заливки. Отступ = зона касания. */
 .notification-more {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  margin: 0;
+  padding: 8px 6px;
   border: none;
-  border-radius: 8px;
-  background: transparent;
+  border-radius: 0;
+  background: none;
   color: var(--text-secondary, #a0a0a0);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  line-height: 0;
+  transition: color 0.15s ease, opacity 0.15s ease;
 }
 
 .notification-more:hover {
-  background: rgba(255, 255, 255, 0.08);
   color: var(--text, #fff);
+  opacity: 1;
 }
 
-.notification-menu-dropdown {
-  position: absolute;
-  right: 4px;
-  bottom: calc(100% + 4px);
+/* Портал в body: fixed + z-index, не режется overflow списка и не уходит под заголовок. */
+.notification-menu-portal {
+  position: fixed;
+  z-index: 20000;
   margin: 0;
   padding: 4px 0;
-  min-width: 188px;
   list-style: none;
-  z-index: 5;
-  background: var(--glass-tint-3, rgba(16, 16, 16, 0.95));
-  border: 1px solid var(--glass-edge, rgba(255, 255, 255, 0.1));
+  min-width: 200px;
+  width: 200px;
+  box-sizing: border-box;
+  background: var(--glass-tint-3, rgba(16, 16, 16, 0.96));
+  border: 1px solid var(--glass-edge, rgba(255, 255, 255, 0.12));
   border-radius: 10px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  box-shadow:
+    0 4px 6px rgba(0, 0, 0, 0.2),
+    0 10px 40px rgba(0, 0, 0, 0.5);
+  -webkit-backdrop-filter: blur(16px) saturate(1.2);
+  backdrop-filter: blur(16px) saturate(1.2);
 }
 
 .notification-menu-item {
