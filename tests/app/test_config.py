@@ -11,6 +11,7 @@ _REQUIRED_ENV = {
     "MINIO_ACCESS_KEY": "minioadmin",
     "MINIO_SECRET_KEY": "minioadmin",
     "MINIO_BUCKET": "test-bucket",
+    "INTERNAL_API_ALLOWED_CIDRS": "10.0.0.0/8",
 }
 
 
