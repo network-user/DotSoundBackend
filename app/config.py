@@ -179,6 +179,8 @@ class AppSettings(BaseSettings):
     elasticsearch_backfill_on_empty: bool = False
     elasticsearch_playcount_flush_interval_seconds: float = 90.0
     elasticsearch_dev_bootstrap: bool = False
+    elasticsearch_track_fuzziness: str = "AUTO"
+    elasticsearch_fuzzy_max_expansions: int = 50
 
     # Compute-worker pull API protection. Comma-separated list of
     # CIDRs allowed to hit /api/v1/internal/*. Empty in prod is a

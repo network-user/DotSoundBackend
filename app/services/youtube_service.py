@@ -88,6 +88,30 @@ def _yt_search_sync(query: str, limit: int) -> list[dict]:
     return out
 
 
+# Prefer itags / non-manifest URLs. HLS (.m3u8) to googlevideo fails in
+# the browser: hls.js fetches without CORS. A single-URL https stream
+# is proxied same-origin in ``playback.audio_stream`` like Bandcamp.
+_YT_DLP_BASE_OPTS: dict = {
+    "quiet": True,
+    "no_warnings": True,
+    "noprogress": True,
+    "skip_download": True,
+    "extractor_args": {
+        "youtube": {
+            "player_client": ["web", "android", "ios"],
+        },
+    },
+}
+# Itag-first, then m4a/webm; last ``best`` can still be HLS — we reject m3u8
+# in ``_yt_pick_stream_url`` and in ``_yt_extract_stream_pair`` retry.
+_YT_FORMAT_PROGRESSIVE: str = (
+    "140/141/139/251/250/249/9/0/"
+    "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best"
+)
+# Last resort: itags only.
+_YT_FORMAT_ITAG_FALLBACK: str = "140/141/139/251/250/249/9/0"
+
+
 def _yt_stream_protocol(url: str, meta: dict) -> str:
     """If yt-dlp gives an HLS master (.m3u8), we must return ``hls`` so the
     client uses hls.js. Feeding m3u8 to ``<audio src>`` (``direct``) does not
@@ -104,24 +128,92 @@ def _yt_stream_protocol(url: str, meta: dict) -> str:
     return "direct"
 
 
-def _yt_extract_info(url: str) -> dict:
+def _yt_extract_info(
+    url: str, *, format_str: str | None = None
+) -> dict:
     try:
         import yt_dlp
     except ImportError as exc:
         raise RuntimeError("yt-dlp is not installed") from exc
 
-    opts: dict = {
-        "quiet": True,
-        "no_warnings": True,
-        "noprogress": True,
-        "skip_download": True,
-        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
-    }
+    fmt = format_str or _YT_FORMAT_PROGRESSIVE
+    opts: dict = {**_YT_DLP_BASE_OPTS, "format": fmt}
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
     if info is None:
         raise ValueError("yt-dlp returned no info")
     return info  # type: ignore[return-value]
+
+
+def _yt_url_looks_hls(
+    u: str | None,
+) -> bool:
+    if not u:
+        return True
+    s = u.lower()
+    return (
+        ".m3u8" in s
+        or "manifest" in s
+        or "manifest/hls" in s
+    )
+
+
+def _yt_pick_stream_url(
+    info: dict,
+) -> tuple[str, dict] | None:
+    """Single merged ``info['url']`` is often a master m3u8; skip it then."""
+    url: str | None = info.get("url")
+    protocol_meta: dict = info
+    if url and not _yt_url_looks_hls(url):
+        return url, protocol_meta
+    if url and _yt_url_looks_hls(url):
+        url = None
+    formats: list[dict] = info.get("formats") or []
+    audio = [
+        f
+        for f in formats
+        if f.get("acodec") != "none"
+        and f.get("vcodec") in (None, "none", "")
+        and f.get("url")
+        and not _yt_url_looks_hls(f.get("url"))
+    ]
+    if not audio:
+        return None
+    best = max(
+        audio,
+        key=lambda f: float(
+            f.get("tbr") or f.get("abr") or 0
+        ),
+    )
+    burl: str | None = best.get("url")
+    if not burl:
+        return None
+    return burl, best
+
+
+def _yt_extract_stream_pair(
+    yt_url: str,
+) -> tuple[str, str]:
+    """URL + ``hls``/``direct``; prefers progressive https over m3u8."""
+    info = _yt_extract_info(yt_url)
+    picked = _yt_pick_stream_url(info)
+    if picked:
+        u, meta = picked
+        proto = _yt_stream_protocol(u, meta)
+        if proto != "hls":
+            return u, proto
+    # Retry with a tighter itag list to avoid HLS master manifests.
+    info2 = _yt_extract_info(
+        yt_url, format_str=_YT_FORMAT_ITAG_FALLBACK
+    )
+    picked2 = _yt_pick_stream_url(info2)
+    if not picked2:
+        raise ValueError("no stream url from yt-dlp")
+    u2, meta2 = picked2
+    p2 = _yt_stream_protocol(u2, meta2)
+    if p2 == "hls":
+        raise ValueError("only m3u8 HLS; cannot play in browser without proxy")
+    return u2, p2
 
 
 class YouTubeService:
@@ -170,11 +262,23 @@ class YouTubeService:
     ) -> tuple[str, str]:
         try:
             async with youtube_slot():
-                info = await asyncio.to_thread(_yt_extract_info, yt_url)
+                pair: tuple[str, str] = await asyncio.to_thread(
+                    _yt_extract_stream_pair, yt_url
+                )
         except OutboundSemaphoreTimeout as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="YouTube сейчас перегружен, попробуйте позже.",
+            ) from exc
+        except ValueError as exc:
+            logger.warning(
+                "yt_stream_hls_or_missing",
+                error=str(exc),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Для этого видео нет прямого аудио (только HLS) "
+                "— воспроизведение в браузере сейчас не поддерживается.",
             ) from exc
         except Exception as exc:
             logger.warning(
@@ -186,35 +290,7 @@ class YouTubeService:
                 detail="Не удалось получить поток YouTube. "
                 "Попробуйте позже.",
             ) from exc
-
-        url: str | None = info.get("url")
-        protocol_meta: dict = info
-        if not url:
-            formats: list[dict] = info.get("formats") or []
-            audio = [
-                f
-                for f in formats
-                if f.get("acodec") != "none"
-                and f.get("vcodec") in (None, "none", "")
-                and f.get("url")
-            ]
-            if audio:
-                best = max(
-                    audio,
-                    key=lambda f: (
-                        f.get("tbr") or f.get("abr") or 0
-                    ),
-                )
-                url = best.get("url")
-                protocol_meta = best
-
-        if not url:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Для этого видео не найден аудио-поток.",
-            )
-
-        return url, _yt_stream_protocol(url, protocol_meta)
+        return pair
 
     async def import_or_get_track(
         self,

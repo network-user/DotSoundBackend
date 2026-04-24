@@ -12,26 +12,29 @@ from app.services import search_query_service as svs
 def test_base_track_filters_playable() -> None:
     f = svs._base_track_filters(playable_only=True)
     assert len(f) == 3
-    assert any(
-        b.get("term", {}).get("playable") is True for b in f
-    )
+    assert any(b.get("term", {}).get("playable") is True for b in f)
 
 
 def test_base_track_filters_all() -> None:
     f = svs._base_track_filters(playable_only=False)
     assert len(f) == 2
-    assert not any(
-        b.get("term", {}).get("playable")
-        is True
-        for b in f
-    )
+    assert not any(b.get("term", {}).get("playable") is True for b in f)
+
+
+def test_track_search_should_clauses_layered() -> None:
+    layers = svs._track_search_should_clauses("hello world")
+    assert len(layers) == 2
+    a = layers[0]["multi_match"]
+    b = layers[1]["multi_match"]
+    assert a.get("fuzziness") is None
+    assert b.get("fuzziness")
+    assert b.get("fuzzy_max_expansions", 0) > 0
+    assert a["boost"] > b.get("boost", 0.0)
 
 
 @pytest.mark.anyio
 async def test_es_search_tracks_returns_none_without_es() -> None:
-    with patch.object(
-        svs, "es_available", return_value=False
-    ):
+    with patch.object(svs, "es_available", return_value=False):
         r = await svs.es_search_tracks(
             "a", page=1, size=10, playable_only=True
         )
@@ -70,6 +73,13 @@ async def test_es_search_tracks_success() -> None:
         )
     assert total == 2
     assert ids == [1, 2]
+    es.search.assert_awaited_once()
+    _args, call_kw = es.search.call_args
+    body = call_kw.get("body") or {}
+    should = body.get("query", {}).get("bool", {}).get("should", [])
+    assert len(should) == 2
+    assert "multi_match" in should[0]
+    assert "fuzziness" in should[1].get("multi_match", {})
 
 
 @pytest.mark.anyio
@@ -80,16 +90,12 @@ async def test_es_search_tracks_on_exception() -> None:
         patch.object(svs, "es_available", return_value=True),
         patch.object(svs, "get_es", return_value=es),
     ):
-        r = await svs.es_search_tracks(
-            "q", page=1, size=2, playable_only=True
-        )
+        r = await svs.es_search_tracks("q", page=1, size=2, playable_only=True)
     assert r is None
 
 
 @pytest.mark.anyio
 async def test_es_suggest_mixed_without_es() -> None:
-    with patch.object(
-        svs, "es_available", return_value=False
-    ):
+    with patch.object(svs, "es_available", return_value=False):
         r = await svs.es_suggest_mixed("ab")
         assert r is None

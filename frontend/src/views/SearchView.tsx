@@ -111,20 +111,44 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     setSuggestArtists([])
     saveToHistory(debouncedQuery.trim())
     let cancelled = false
-    Promise.all([
-      api.getTracks({ q: debouncedQuery, size: 30 }).catch(() => ({
-        items: [] as Track[],
-        total: 0,
-        page: 1,
-        size: 30,
-      })),
-      api
-        .searchSuggest(debouncedQuery, 12)
-        .catch(() => ({ items: [] as SearchSuggestItem[] })),
-      api.searchSoundCloud(debouncedQuery, 8).catch(() => [] as SCSearchResult[]),
-      api.searchYouTube(debouncedQuery, 8).catch(() => [] as YTSearchResult[]),
-      api.searchBandcamp(debouncedQuery, 8).catch(() => [] as BCSearchResult[]),
-    ]).then(async ([internal, sug, sc, yt, bc]) => {
+    const q = debouncedQuery
+    const emptySuggest = { items: [] as SearchSuggestItem[] }
+
+    api
+      .searchSoundCloud(q, 8)
+      .then((sc) => {
+        if (!cancelled) setSCResults(sc)
+      })
+      .catch(() => {
+        if (!cancelled) setSCResults([])
+      })
+    api
+      .searchYouTube(q, 8)
+      .then((yt) => {
+        if (!cancelled) setYtResults(yt)
+      })
+      .catch(() => {
+        if (!cancelled) setYtResults([])
+      })
+    api
+      .searchBandcamp(q, 8)
+      .then((bc) => {
+        if (!cancelled) setBcResults(bc)
+      })
+      .catch(() => {
+        if (!cancelled) setBcResults([])
+      })
+
+    void (async () => {
+      const [internal, sug] = await Promise.all([
+        api.getTracks({ q, size: 30 }).catch(() => ({
+          items: [] as Track[],
+          total: 0,
+          page: 1,
+          size: 30,
+        })),
+        api.searchSuggest(q, 12).catch(() => emptySuggest),
+      ])
       if (cancelled) return
       const have = new Set(internal.items.map((t) => t.id))
       const fromSuggest = sug.items
@@ -147,10 +171,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
       setSuggestArtists(
         sug.items.filter((i) => i.kind === 'artist'),
       )
-      setSCResults(sc)
-      setYtResults(yt)
-      setBcResults(bc)
-    })
+    })()
     return () => {
       cancelled = true
     }
@@ -341,7 +362,11 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
               </p>
             )}
           </div>
+        </>
+      )}
 
+      {(tracks === null || Array.isArray(tracks)) && (
+        <>
           {ytResults.length > 0 && (
             <div className="search-section">
               <p className="search-section-label">
@@ -585,15 +610,16 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
               })}
             </div>
           )}
-
-          {tracks.length === 0 &&
-            scResults.length === 0 &&
-            ytResults.length === 0 &&
-            bcResults.length === 0 &&
-            suggestArtists.length === 0 && (
-            <p className="empty-hint">Ничего не найдено</p>
-          )}
         </>
+      )}
+
+      {Array.isArray(tracks) &&
+        tracks.length === 0 &&
+        scResults.length === 0 &&
+        ytResults.length === 0 &&
+        bcResults.length === 0 &&
+        suggestArtists.length === 0 && (
+        <p className="empty-hint">Ничего не найдено</p>
       )}
     </section>
   )
