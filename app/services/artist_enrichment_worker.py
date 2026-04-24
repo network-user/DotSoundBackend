@@ -68,6 +68,11 @@ async def enrich_artist_task(
                 bypass_cache=bypass_cache,
                 progress_id=progress_id or None,
             )
+            from app.services.search_index_notify import (
+                schedule_reindex_artist,
+            )
+
+            await schedule_reindex_artist(artist_id)
             logger.info(
                 "enrich_artist_task_done",
                 artist_id=artist_id,

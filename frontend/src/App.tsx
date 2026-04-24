@@ -442,7 +442,14 @@ export function App() {
         <Suspense fallback={<RouteFallback />}>
         <AnimatedRoutes>
           <Route path="/" element={<HomeView />} />
-          <Route path="/search" element={<SearchView />} />
+          <Route
+            path="/search"
+            element={
+              <SearchView
+                onOpenArtist={(id) => setArtistId(id)}
+              />
+            }
+          />
           <Route path="/upload" element={<UploadView />} />
           <Route path="/library" element={<LibraryView />} />
           <Route

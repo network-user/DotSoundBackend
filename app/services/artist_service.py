@@ -91,6 +91,18 @@ class ArtistService:
             id=artist.id,
         )
         try:
+            from app.services.search_index_notify import (
+                schedule_reindex_artist,
+            )
+
+            await schedule_reindex_artist(artist.id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "artist_es_schedule_failed",
+                artist_id=artist.id,
+                error=str(exc),
+            )
+        try:
             from app.services.artist_enrichment_worker import (
                 enrich_artist_task,
             )
@@ -182,6 +194,22 @@ class ArtistService:
         query: str,
         limit: int = 20,
     ) -> list[Artist]:
+        from app.config import settings
+        from app.search.es_client import es_available
+        from app.services import search_query_service
+
+        if (
+            settings.elasticsearch_enabled
+            and (settings.elasticsearch_url or "").strip()
+            and es_available()
+        ):
+            ids = await search_query_service.es_search_artists(
+                query, limit=limit
+            )
+            if ids is not None and ids:
+                return await self._repo.get_by_ids_preserve_order(
+                    ids[:limit]
+                )
         normalized = normalize_name(query)
         return await self._repo.search(
             normalized, limit

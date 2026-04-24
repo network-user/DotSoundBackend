@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import structlog
 from dataclasses import dataclass
+
+import structlog
 
 from app.config import settings
 from app.search.es_client import es_available, get_es
@@ -88,10 +89,7 @@ async def es_search_tracks(
         return None
     total = 0
     th = res.get("hits", {}).get("total", 0)
-    if isinstance(th, dict):
-        total = int(th.get("value", 0))
-    else:
-        total = int(th)
+    total = int(th.get("value", 0)) if isinstance(th, dict) else int(th)
     hits = res.get("hits", {}).get("hits", [])
     ids: list[int] = []
     for h in hits:
@@ -162,9 +160,10 @@ async def es_suggest_mixed(
         "size": per,
     }
     try:
-        t_res, a_res = await es.search(
+        t_res = await es.search(
             index=settings.elasticsearch_index_tracks, body=t_body
-        ), await es.search(
+        )
+        a_res = await es.search(
             index=settings.elasticsearch_index_artists, body=a_body
         )
     except Exception as exc:  # noqa: BLE001
@@ -198,3 +197,43 @@ async def es_suggest_mixed(
             )
         )
     return out[:limit]
+
+
+async def es_search_artists(
+    q: str, *, limit: int = 20
+) -> list[int] | None:
+    if not es_available():
+        return None
+    if not (q or "").strip():
+        return None
+    es = get_es()
+    body: dict = {
+        "query": {
+            "multi_match": {
+                "query": q.strip(),
+                "type": "best_fields",
+                "fields": [
+                    "name^2",
+                    "name_sayt^1.2",
+                    "name_sayt._2gram",
+                ],
+                "fuzziness": "AUTO",
+            }
+        },
+        "size": min(100, max(1, limit)),
+        "track_total_hits": False,
+    }
+    try:
+        res = await es.search(
+            index=settings.elasticsearch_index_artists, body=body
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("es_search_artists_failed", error=str(exc))
+        return None
+    out: list[int] = []
+    for h in res.get("hits", {}).get("hits", []):
+        src = h.get("_source") or {}
+        aid = src.get("artist_id")
+        if aid is not None:
+            out.append(int(aid))
+    return out

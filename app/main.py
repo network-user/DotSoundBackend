@@ -14,9 +14,11 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.router import api_router
 from app.config import settings
+from app.core import (
+    log_setup,  # noqa: F401 — installs debug file logs on import
+)
 from app.core.db import dispose_engine
 from app.core.logging import configure_logging
-from app.core import log_setup  # noqa: F401 — installs debug file logs on import
 from app.core.observability import (
     setup_observability,
 )
@@ -35,6 +37,16 @@ from app.middlewares.secure_static import SecureStaticMiddleware
 from app.middlewares.security_headers import SecurityHeadersMiddleware
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+async def _elasticsearch_drain_lifecycle(
+    stop: asyncio.Event,
+) -> None:
+    from app.services.search_playcount_drain import (
+        playcount_drain_loop,
+    )
+
+    await playcount_drain_loop(stop)
 
 
 @asynccontextmanager
@@ -58,8 +70,67 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         )
     await ensure_bucket_exists()
     await ws_manager.startup()
+
+    play_stop: asyncio.Event | None = None
+    drain_task: asyncio.Task[None] | None = None
+    if (
+        settings.elasticsearch_enabled
+        and (settings.elasticsearch_url or "").strip()
+    ):
+        from app.search.es_client import es_available
+        from app.services.search_index_service import (
+            count_tracks_indexed,
+            init_elasticsearch_starter,
+        )
+
+        if es_available():
+            try:
+                await init_elasticsearch_starter()
+            except Exception as exc:  # noqa: BLE001
+                logger.exception(
+                    "elasticsearch_init_failed", error=str(exc)
+                )
+            if settings.elasticsearch_backfill_on_empty or (
+                settings.elasticsearch_dev_bootstrap
+            ):
+                try:
+                    n = await count_tracks_indexed()
+                    if n < 1:
+                        from app.services import search_index_worker
+
+                        await (
+                            search_index_worker.reindex_backfill_all_task.kiq()
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "elasticsearch_backfill_kiq_failed",
+                        error=str(exc),
+                    )
+            play_stop = asyncio.Event()
+            drain_task = asyncio.create_task(
+                _elasticsearch_drain_lifecycle(play_stop)
+            )
+
     yield
     logger.info("sound_api_shutting_down")
+    if play_stop is not None and drain_task is not None:
+        play_stop.set()
+        try:
+            await asyncio.wait_for(
+                drain_task, timeout=10.0
+            )
+        except TimeoutError:
+            logger.warning("elasticsearch_drain_task_timeout")
+    if (
+        settings.elasticsearch_enabled
+        and (settings.elasticsearch_url or "").strip()
+    ):
+        from app.search.es_client import close_es
+
+        try:
+            await close_es()
+        except Exception:  # noqa: BLE001
+            logger.exception("elasticsearch_close_failed")
     await ws_manager.shutdown()
     await close_redis()
     await dispose_engine()

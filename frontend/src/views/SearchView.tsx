@@ -7,9 +7,17 @@ import { usePlayer } from '@/store/PlayerContext'
 import { useLikes } from '@/store/LikesContext'
 import { useDebounce } from '@/hooks/useDebounce'
 import { Icon } from '@/components/Icon/Icon'
-import type { SCSearchResult, Track } from '@/types/api'
+import type {
+  SCSearchResult,
+  SearchSuggestItem,
+  Track,
+} from '@/types/api'
 
-export function SearchView() {
+type SearchViewProps = {
+  onOpenArtist?: (id: number) => void
+}
+
+export function SearchView({ onOpenArtist }: SearchViewProps) {
   const { playTrack } = usePlayer()
   const { toggleLike } = useLikes()
   const [query, setQuery] = useState('')
@@ -17,6 +25,7 @@ export function SearchView() {
   const [scResults, setSCResults] = useState<SCSearchResult[]>([])
   const [importedSC, setImportedSC] = useState<Record<string, Track>>({})
   const [importing, setImporting] = useState<string | null>(null)
+  const [suggest, setSuggest] = useState<SearchSuggestItem[]>([])
   const debouncedQuery = useDebounce(query, 350)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -48,6 +57,7 @@ export function SearchView() {
     if (!debouncedQuery.trim()) {
       setTracks('idle')
       setSCResults([])
+      setSuggest([])
       return
     }
     setTracks(null)
@@ -62,10 +72,12 @@ export function SearchView() {
         size: 20,
       })),
       api.searchSoundCloud(debouncedQuery, 10).catch(() => [] as SCSearchResult[]),
-    ]).then(([internal, sc]) => {
+      api.searchSuggest(debouncedQuery, 8).catch(() => ({ items: [] })),
+    ]).then(([internal, sc, sug]) => {
       if (cancelled) return
       setTracks(internal.items)
       setSCResults(sc)
+      setSuggest(sug.items)
     })
     return () => { cancelled = true }
   }, [debouncedQuery])
@@ -100,12 +112,23 @@ export function SearchView() {
     setQuery('')
     setTracks('idle')
     setSCResults([])
+    setSuggest([])
     inputRef.current?.focus()
+  }
+
+  const onPickSuggest = async (item: SearchSuggestItem) => {
+    if (item.kind === 'track') {
+      const t = await api.getTrack(item.id)
+      await playTrack(t)
+    } else if (item.kind === 'artist' && onOpenArtist) {
+      onOpenArtist(item.id)
+    }
   }
 
   return (
     <section id="view-search" className="view active">
-      <div className="search-bar">
+      <div className="search-sticky">
+        <div className="search-bar">
         <span className="search-icon"><Icon name="search" size={16} /></span>
         <input
           ref={inputRef}
@@ -118,6 +141,29 @@ export function SearchView() {
         />
         {query && (
           <button className="icon-btn" onClick={clearSearch}><Icon name="x" size={16} /></button>
+        )}
+        </div>
+        {suggest.length > 0 && query.trim() && (
+          <ul className="search-suggest" role="listbox" aria-label="Подсказки">
+            {suggest.map((s) => (
+              <li key={`${s.kind}-${s.id}`} role="option">
+                <button
+                  type="button"
+                  className="search-suggest-row"
+                  onClick={() => { void onPickSuggest(s) }}
+                >
+                  <span className="search-suggest-kind">
+                    {s.kind === 'track' ? 'Трек' : 'Артист'}
+                  </span>
+                  <span className="search-suggest-line">
+                    {s.kind === 'track'
+                      ? (s.title ?? '—') + (s.name ? ` — ${s.name}` : '')
+                      : (s.name ?? '—')}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 

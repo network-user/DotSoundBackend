@@ -23,6 +23,7 @@ from app.api.v1 import (
     onboarding,
     playlists,
     recommendations,
+    search,
     signals,
     soundcloud,
     tracks,
@@ -57,6 +58,7 @@ api_router.include_router(blocks.router)
 api_router.include_router(notifications.router)
 api_router.include_router(onboarding.router)
 api_router.include_router(recommendations.router)
+api_router.include_router(search.router)
 api_router.include_router(signals.router)
 api_router.include_router(artists.router)
 api_router.include_router(audio_compute.router)

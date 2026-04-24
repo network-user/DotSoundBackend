@@ -66,13 +66,69 @@ class TrackService:
         query: str,
         page: int = 1,
         size: int = 20,
+        playable_only: bool = False,
     ) -> tuple[list[Track], int]:
+        from app.config import settings
+        from app.core.observability import (
+            elasticsearch_query_observed,
+        )
+        from app.search.es_client import es_available
+        from app.services import search_query_service
+
+        use_es = bool(
+            settings.elasticsearch_enabled
+            and (settings.elasticsearch_url or "").strip()
+            and es_available()
+        )
+        if use_es:
+            es_hits = await search_query_service.es_search_tracks(
+                query,
+                page=page,
+                size=size,
+                playable_only=playable_only,
+            )
+            if es_hits is not None:
+                ids, total = es_hits
+                elasticsearch_query_observed(
+                    op="track_search", outcome="es_ok"
+                )
+                if not ids:
+                    logger.info(
+                        "tracks_searched",
+                        source="elasticsearch",
+                        query=query,
+                        page=page,
+                        total=0,
+                    )
+                    return [], total
+                orm = await self._repo.get_by_ids_preserve_order(ids)
+                if len(orm) != len(ids):
+                    logger.info(
+                        "es_sql_hydrate_mismatch",
+                        want=len(ids),
+                        got=len(orm),
+                    )
+                logger.info(
+                    "tracks_searched",
+                    source="elasticsearch",
+                    query=query,
+                    page=page,
+                    total=total,
+                )
+                return orm, total
+            elasticsearch_query_observed(
+                op="track_search", outcome="pg_fallback"
+            )
         offset = (page - 1) * size
         tracks, total = await self._repo.search(
-            query=query, offset=offset, limit=size
+            query=query,
+            offset=offset,
+            limit=size,
+            playable_only=playable_only,
         )
         logger.info(
             "tracks_searched",
+            source="postgresql",
             query=query,
             page=page,
             total=total,
@@ -113,11 +169,18 @@ class TrackService:
     async def update_visibility(
         self, track_id: int, user_id: int, is_public: bool
     ) -> Track | None:
-        return await self._repo.update_visibility(
+        out = await self._repo.update_visibility(
             track_id=track_id,
             user_id=user_id,
             is_public=is_public,
         )
+        if out:
+            from app.services.search_index_notify import (
+                schedule_reindex_track,
+            )
+
+            await schedule_reindex_track(out.id)
+        return out
 
     async def update_track(
         self,
@@ -125,18 +188,32 @@ class TrackService:
         user_id: int,
         **fields: object,
     ) -> Track | None:
-        return await self._repo.update_track(
+        out = await self._repo.update_track(
             track_id=track_id,
             user_id=user_id,
             **fields,
         )
+        if out:
+            from app.services.search_index_notify import (
+                schedule_reindex_track,
+            )
+
+            await schedule_reindex_track(out.id)
+        return out
 
     async def delete_by_owner(
         self, track_id: int, user_id: int
     ) -> Track | None:
-        return await self._repo.delete_by_owner(
+        out = await self._repo.delete_by_owner(
             track_id=track_id, user_id=user_id
         )
+        if out is not None:
+            from app.services.search_index_notify import (
+                schedule_delete_track,
+            )
+
+            await schedule_delete_track(track_id)
+        return out
 
     async def list_public_by_user(
         self,

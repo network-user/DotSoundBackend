@@ -133,7 +133,6 @@ async def reindex_all_tracks_artist_backfill() -> int:
     from app.core.db import AsyncSessionLocal
 
     await init_elasticsearch_starter()
-    es = get_es()
     n_tracks = 0
     async with AsyncSessionLocal() as session:
         res = await session.execute(
@@ -159,7 +158,7 @@ async def reindex_all_tracks_artist_backfill() -> int:
 
 
 async def reindex_artist_affected_tracks(artist_id: int) -> None:
-    """Reindex all tracks linked to an artist (metadata on Track may be stale)."""
+    """Reindex tracks linked to an artist (Track.artist may be stale)."""
     if not es_available():
         return
     from app.core.db import AsyncSessionLocal

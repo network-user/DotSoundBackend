@@ -44,7 +44,10 @@ async def list_tracks(
             search_query=q
         )
         tracks, total = await service.search(
-            q, page=page, size=size
+            q,
+            page=page,
+            size=size,
+            playable_only=playable,
         )
     else:
         tracks, total = await service.list_tracks(

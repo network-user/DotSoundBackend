@@ -7,12 +7,7 @@ from app.models.track import Track
 def track_playable(t: Track) -> bool:
     if t.file_key:
         return True
-    if t.access_mode in (
-        "third_party_stream",
-        "official_embed",
-    ):
-        return True
-    return False
+    return t.access_mode in ("third_party_stream", "official_embed")
 
 
 def track_to_doc(t: Track) -> dict:

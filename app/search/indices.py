@@ -17,11 +17,41 @@ _TRACKS_MAPPING = {
     "mappings": {
         "properties": {
             "track_id": {"type": "integer"},
-            "title": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
-            "title_sayt": {"type": "search_as_you_type", "max_shingle_size": 3},
-            "artist": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 256}}},
-            "artist_sayt": {"type": "search_as_you_type", "max_shingle_size": 3},
-            "genre": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 100}}},
+            "title": {
+                "type": "text",
+                "fields": {
+                    "keyword": {
+                        "type": "keyword",
+                        "ignore_above": 256,
+                    }
+                },
+            },
+            "title_sayt": {
+                "type": "search_as_you_type",
+                "max_shingle_size": 3,
+            },
+            "artist": {
+                "type": "text",
+                "fields": {
+                    "keyword": {
+                        "type": "keyword",
+                        "ignore_above": 256,
+                    }
+                },
+            },
+            "artist_sayt": {
+                "type": "search_as_you_type",
+                "max_shingle_size": 3,
+            },
+            "genre": {
+                "type": "text",
+                "fields": {
+                    "keyword": {
+                        "type": "keyword",
+                        "ignore_above": 100,
+                    }
+                },
+            },
             "play_count": {"type": "integer"},
             "is_active": {"type": "boolean"},
             "is_public": {"type": "boolean"},

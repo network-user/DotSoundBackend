@@ -31,6 +31,7 @@ _PROM_SPEECHKIT_BUDGET_REMAINING = None
 _PROM_TIER_FALLBACK_TOTAL = None
 _PROM_HMAC_AUTH_FAILURES = None
 _PROM_WORKER_ANOMALY_TOTAL = None
+_PROM_ELASTICSEARCH_QUERIES = None
 
 
 def _is_internal_ip(client_host: str | None) -> bool:
@@ -101,6 +102,7 @@ def setup_metrics(application: object) -> None:
     global _PROM_TIER_FALLBACK_TOTAL
     global _PROM_HMAC_AUTH_FAILURES
     global _PROM_WORKER_ANOMALY_TOTAL
+    global _PROM_ELASTICSEARCH_QUERIES
 
     _PROM_LYRICS_JOBS_TOTAL = Counter(
         "lyrics_jobs_total",
@@ -113,7 +115,14 @@ def setup_metrics(application: object) -> None:
         "End-to-end LyricsJob duration by tier.",
         ["tier"],
         buckets=(
-            1, 5, 15, 30, 60, 120, 300, 600,
+            1,
+            5,
+            15,
+            30,
+            60,
+            120,
+            300,
+            600,
         ),
         registry=registry,
     )
@@ -155,6 +164,12 @@ def setup_metrics(application: object) -> None:
         "worker_anomaly_total",
         "Anomaly detector flags raised per type.",
         ["anomaly_type"],
+        registry=registry,
+    )
+    _PROM_ELASTICSEARCH_QUERIES = Counter(
+        "elasticsearch_query_total",
+        "Elasticsearch read paths (search/suggest) by outcome.",
+        ["op", "outcome"],
         registry=registry,
     )
 
@@ -362,13 +377,11 @@ def lyrics_job_observed(
     *, tier: str, status: str, duration_seconds: float
 ) -> None:
     if _PROM_LYRICS_JOBS_TOTAL is not None:
-        _PROM_LYRICS_JOBS_TOTAL.labels(
-            tier=tier, status=status
-        ).inc()
+        _PROM_LYRICS_JOBS_TOTAL.labels(tier=tier, status=status).inc()
     if _PROM_LYRICS_JOB_DURATION is not None:
-        _PROM_LYRICS_JOB_DURATION.labels(
-            tier=tier
-        ).observe(max(0.0, duration_seconds))
+        _PROM_LYRICS_JOB_DURATION.labels(tier=tier).observe(
+            max(0.0, duration_seconds)
+        )
 
 
 def tier_fallback_observed(
@@ -384,34 +397,26 @@ def tier_fallback_observed(
 
 def hmac_auth_failure_observed(*, reason: str) -> None:
     if _PROM_HMAC_AUTH_FAILURES is not None:
-        _PROM_HMAC_AUTH_FAILURES.labels(
-            reason=reason
-        ).inc()
+        _PROM_HMAC_AUTH_FAILURES.labels(reason=reason).inc()
 
 
 def worker_anomaly_observed(*, anomaly_type: str) -> None:
     if _PROM_WORKER_ANOMALY_TOTAL is not None:
-        _PROM_WORKER_ANOMALY_TOTAL.labels(
-            anomaly_type=anomaly_type
-        ).inc()
+        _PROM_WORKER_ANOMALY_TOTAL.labels(anomaly_type=anomaly_type).inc()
 
 
 def worker_heartbeat_lag_observed(
     *, worker_id: str, lag_seconds: float
 ) -> None:
     if _PROM_WORKER_HEARTBEAT_LAG is not None:
-        _PROM_WORKER_HEARTBEAT_LAG.labels(
-            worker_id=worker_id
-        ).set(max(0.0, lag_seconds))
+        _PROM_WORKER_HEARTBEAT_LAG.labels(worker_id=worker_id).set(
+            max(0.0, lag_seconds)
+        )
 
 
-def worker_jobs_in_flight_set(
-    *, worker_id: str, count: int
-) -> None:
+def worker_jobs_in_flight_set(*, worker_id: str, count: int) -> None:
     if _PROM_WORKER_JOBS_IN_FLIGHT is not None:
-        _PROM_WORKER_JOBS_IN_FLIGHT.labels(
-            worker_id=worker_id
-        ).set(int(count))
+        _PROM_WORKER_JOBS_IN_FLIGHT.labels(worker_id=worker_id).set(int(count))
 
 
 def speechkit_spent_inc(rub: float) -> None:
@@ -421,6 +426,9 @@ def speechkit_spent_inc(rub: float) -> None:
 
 def speechkit_budget_remaining_set(rub: float) -> None:
     if _PROM_SPEECHKIT_BUDGET_REMAINING is not None:
-        _PROM_SPEECHKIT_BUDGET_REMAINING.set(
-            max(0.0, float(rub))
-        )
+        _PROM_SPEECHKIT_BUDGET_REMAINING.set(max(0.0, float(rub)))
+
+
+def elasticsearch_query_observed(*, op: str, outcome: str) -> None:
+    if _PROM_ELASTICSEARCH_QUERIES is not None:
+        _PROM_ELASTICSEARCH_QUERIES.labels(op=op, outcome=outcome).inc()

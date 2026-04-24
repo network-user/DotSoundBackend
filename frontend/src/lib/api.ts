@@ -26,6 +26,7 @@ import type {
   Playlist,
   PlaylistWithTracks,
   SCSearchResult,
+  SearchSuggestResponse,
   ShareResponse,
   StreamResponse,
   SyncedLine,
@@ -243,6 +244,17 @@ export const api = {
     if (params?.page) sp.set('page', String(params.page))
     const query = sp.toString() ? `?${sp}` : ''
     return request(`/api/v1/tracks${query}`)
+  },
+
+  searchSuggest(
+    q: string,
+    limit = 8,
+  ): Promise<SearchSuggestResponse> {
+    return request(
+      `/api/v1/search/suggest?q=${encodeURIComponent(
+        q,
+      )}&limit=${limit}`,
+    )
   },
 
   getMyTracks(page = 1, size = 50): Promise<TrackListResponse> {
