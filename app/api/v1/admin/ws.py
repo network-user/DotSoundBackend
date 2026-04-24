@@ -57,6 +57,11 @@ from app.services.admin_dashboard_service import (
 from app.services.container_health_service import (
     get_container_summary,
 )
+from app.config import settings
+from app.services.local_dev_log_service import (
+    is_local_dev_logs_enabled,
+    query_dev_logs,
+)
 from app.services.loki_service import (
     LokiServiceError,
     query_range,
@@ -200,23 +205,58 @@ async def _push_logs(
         since_ns[0],
         end_ns - 60 * 1_000_000_000,
     )
-    try:
-        rows = await query_range(
-            selectors=selectors,
-            contains=contains,
-            start_ns=start_ns,
-            end_ns=end_ns,
-            limit=200,
-        )
-    except LokiServiceError as exc:
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "channel": "logs",
-                    "data": {"error": str(exc)},
-                }
+    loki_configured = bool((settings.loki_url or "").strip())
+    s = dict(selectors)
+    if (
+        not loki_configured
+        and is_local_dev_logs_enabled()
+        and s.get("service") == "dotsound-backend"
+        and not s.get("container")
+    ):
+        s.pop("service", None)
+
+    rows: list[dict[str, Any]] = []
+    if loki_configured:
+        try:
+            rows = await query_range(
+                selectors=selectors,
+                contains=contains,
+                start_ns=start_ns,
+                end_ns=end_ns,
+                limit=200,
             )
-        )
+        except LokiServiceError as exc:
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "channel": "logs",
+                        "data": {"error": str(exc)},
+                    }
+                )
+            )
+            return
+    elif is_local_dev_logs_enabled():
+        try:
+            rows = await asyncio.to_thread(
+                lambda: query_dev_logs(
+                    selectors=s,
+                    contains=contains,
+                    start_ns=start_ns,
+                    end_ns=end_ns,
+                    limit=200,
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "channel": "logs",
+                        "data": {"error": str(exc)},
+                    }
+                )
+            )
+            return
+    else:
         return
     if not rows:
         return

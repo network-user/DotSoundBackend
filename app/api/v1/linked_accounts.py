@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -402,10 +402,11 @@ async def disconnect_provider(
     provider: str,
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> None:
+) -> Response:
     _assert_provider(provider)
     svc = LinkedAccountService(session)
     await svc.delete_account(current_user.id, provider)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(

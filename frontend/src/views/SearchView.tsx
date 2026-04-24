@@ -17,6 +17,9 @@ type SearchViewProps = {
   onOpenArtist?: (id: number) => void
 }
 
+const SEARCH_DEBOUNCE_MS = 380
+const SUGGEST_DEBOUNCE_MS = 160
+
 export function SearchView({ onOpenArtist }: SearchViewProps) {
   const { playTrack } = usePlayer()
   const { toggleLike } = useLikes()
@@ -26,7 +29,8 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const [importedSC, setImportedSC] = useState<Record<string, Track>>({})
   const [importing, setImporting] = useState<string | null>(null)
   const [suggest, setSuggest] = useState<SearchSuggestItem[]>([])
-  const debouncedQuery = useDebounce(query, 350)
+  const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
+  const debouncedSuggestQ = useDebounce(query, SUGGEST_DEBOUNCE_MS)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [history, setHistory] = useState<string[]>(() => {
@@ -54,10 +58,34 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   }, [])
 
   useEffect(() => {
+    if (!query.trim()) {
+      setSuggest([])
+    }
+  }, [query])
+
+  useEffect(() => {
+    if (!debouncedSuggestQ.trim()) {
+      setSuggest([])
+      return
+    }
+    let cancelled = false
+    void api
+      .searchSuggest(debouncedSuggestQ, 8)
+      .then((sug) => {
+        if (!cancelled) setSuggest(sug.items)
+      })
+      .catch(() => {
+        if (!cancelled) setSuggest([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [debouncedSuggestQ])
+
+  useEffect(() => {
     if (!debouncedQuery.trim()) {
       setTracks('idle')
       setSCResults([])
-      setSuggest([])
       return
     }
     setTracks(null)
@@ -72,14 +100,14 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
         size: 20,
       })),
       api.searchSoundCloud(debouncedQuery, 10).catch(() => [] as SCSearchResult[]),
-      api.searchSuggest(debouncedQuery, 8).catch(() => ({ items: [] })),
-    ]).then(([internal, sc, sug]) => {
+    ]).then(([internal, sc]) => {
       if (cancelled) return
       setTracks(internal.items)
       setSCResults(sc)
-      setSuggest(sug.items)
     })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [debouncedQuery])
 
   const ensureImported = async (result: SCSearchResult): Promise<Track | null> => {

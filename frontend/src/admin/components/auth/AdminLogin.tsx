@@ -83,7 +83,6 @@ export function AdminLogin() {
         <Press
           type="submit"
           variant="primary"
-          onClick={handleSubmit}
           disabled={busy || code.length < 6}
         >
           {busy

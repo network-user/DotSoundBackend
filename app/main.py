@@ -26,6 +26,9 @@ from app.core.rate_limit import limiter
 from app.core.redis import close_redis
 from app.core.s3 import ensure_bucket_exists
 from app.core.ws_manager import ws_manager
+from app.middlewares.admin_audit_log import (
+    AdminAuditLogMiddleware,
+)
 from app.middlewares.admin_security import (
     AdminSecurityMiddleware,
 )
@@ -182,6 +185,7 @@ def create_app() -> FastAPI:
         TrustedHostMiddleware,
         allowed_hosts=hosts,
     )
+    application.add_middleware(AdminAuditLogMiddleware)
 
     application.include_router(api_router)
     application.mount(

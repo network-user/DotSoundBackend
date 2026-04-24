@@ -1,6 +1,8 @@
 import hashlib
 import logging
+import os
 import sys
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -122,6 +124,40 @@ def _redact_processor(
     return out
 
 
+def _attach_dev_file_handler(level: int) -> None:
+    """When ``DOTSOUND_DEV_LOG_DIR`` / settings ``dotsound_dev_log_dir``
+    is set, duplicate structlog/stdout output to ``backend.log``.
+    """
+    from app.config import settings
+
+    raw = (settings.dotsound_dev_log_dir or "").strip() or (
+        os.environ.get("DOTSOUND_DEV_LOG_DIR") or ""
+    ).strip()
+    if not raw:
+        return
+    try:
+        log_dir = Path(
+            os.path.expanduser(os.path.expandvars(raw))
+        ).resolve()
+        log_dir.mkdir(parents=True, exist_ok=True)
+        path = log_dir / "backend.log"
+        base_s = str(path)
+        root = logging.getLogger()
+        for h in root.handlers:
+            bfn = getattr(h, "baseFilename", None)
+            if bfn and str(bfn) == base_s:
+                return
+        fh = logging.FileHandler(
+            path,
+            encoding="utf-8",
+        )
+        fh.setLevel(level)
+        fh.setFormatter(logging.Formatter("%(message)s"))
+        root.addHandler(fh)
+    except OSError:
+        return
+
+
 def configure_logging(
     log_level: str = "INFO",
     redact: bool = True,
@@ -174,6 +210,10 @@ def configure_logging(
         level=level,
         format="%(message)s",
     )
+
+    # Mirror console to a shared file for local admin log tail (see
+    # ``DOTSOUND_DEV_LOG_DIR`` in docs / ``dotsound_dev_log_dir`` in config).
+    _attach_dev_file_handler(level)
 
     for noisy in (
         "uvicorn.access",

@@ -32,6 +32,42 @@ the onboarding flow.
 See [onboarding.md](onboarding.md) for the bootstrap of the very
 first administrator from scratch.
 
+## Observability (Prometheus / Loki)
+
+- **Prometheus** (metrics in **Metrics**): set `PROMETHEUS_URL` in the
+  backend `.env` to a reachable Prom base URL. With
+  `docker-compose.observability.yml`, the host port is **9091** (mapped
+  to Prom’s 9090), e.g. `PROMETHEUS_URL=http://localhost:9091` when the
+  API runs on the host. The Prom config in `infra/prometheus/prometheus.yml`
+  must scrape the same host:port as your running API (often
+  `localhost:8000` in dev).
+- **Loki** (log search in **Logs**): set `LOKI_URL` (e.g.
+  `http://localhost:3100` with the observability compose).
+
+## Local dev log files (no Docker Loki)
+
+For `poetry run` on **Backend**, **Bot**, and **Compute worker** without
+Loki, set a shared directory and the same env var in all three shells:
+
+```bash
+# Windows / PowerShell example
+set DOTSOUND_DEV_LOG_DIR=C:\path\to\shared-logs
+# or in backend .env:
+DOTSOUND_DEV_LOG_DIR=C:\path\to\shared-logs
+```
+
+The API also reads `dotsound_dev_log_dir` from settings (same value).
+
+- Backend mirrors console output to `backend.log` in that directory
+  (see `app/core/logging.py`).
+- Bot writes `bot.log` (`bot/core/logging.py` when `DOTSOUND_DEV_LOG_DIR` is set).
+- Compute worker writes `compute-worker.log` (`worker/observability/log.py`).
+
+With `loki_url` empty and `DOTSOUND_DEV_LOG_DIR` pointing at a real
+directory, **Logs** in the admin UI uses **local_dev** mode (merged
+tail of those files). **Live** log stream over the admin WebSocket uses
+the same source when Loki is not configured.
+
 ## Admin sections
 
 | Section | Route | Capability |
