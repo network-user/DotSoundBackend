@@ -1,6 +1,9 @@
 import pytest
 from dirty_equals import IsPartialDict
 from httpx import AsyncClient
+from unittest.mock import patch
+
+from tests.conftest import auth_headers, create_test_user
 
 pytestmark = pytest.mark.anyio
 
@@ -79,3 +82,18 @@ async def test_get_user_by_id(
     )
     assert response.status_code == 200
     assert response.json()["id"] == user_id
+
+
+@patch("app.api.v1.users.settings")
+async def test_debug_reset_onboarding_404_when_not_debug(
+    mock_settings: object,
+    client: AsyncClient,
+) -> None:
+    mock_settings.debug = False
+    await create_test_user(client, 9001)
+    headers = await auth_headers(client, 9001)
+    r = await client.post(
+        "/api/v1/users/me/debug/reset-onboarding",
+        headers=headers,
+    )
+    assert r.status_code == 404

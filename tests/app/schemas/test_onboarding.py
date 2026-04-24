@@ -72,9 +72,13 @@ def test_onboarding_status() -> None:
         calibration_completed=False,
         preferred_genres=["rock"],
         preferred_moods=None,
+        import_prompt_acknowledged=True,
+        can_import_from_telegram=False,
+        has_telegram_profile_music=None,
     )
     assert resp.onboarding_completed is True
     assert resp.calibration_completed is False
+    assert resp.import_prompt_acknowledged is True
 
 
 def test_artist_brief() -> None:

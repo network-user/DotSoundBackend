@@ -28,22 +28,17 @@ async def get_status(
     db: AsyncSession = Depends(get_db),
 ):
     svc = OnboardingService(db)
-    pref = await svc.get_status(user.id)
-    if not pref:
-        return OnboardingStatusResponse(
-            onboarding_completed=False,
-            calibration_completed=False,
-        )
-    return OnboardingStatusResponse(
-        onboarding_completed=(
-            pref.onboarding_completed
-        ),
-        calibration_completed=(
-            pref.calibration_completed
-        ),
-        preferred_genres=pref.preferred_genres,
-        preferred_moods=pref.preferred_moods,
-    )
+    return await svc.get_status_response(user)
+
+
+@router.post("/import-ack")
+async def acknowledge_import_prompt(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    svc = OnboardingService(db)
+    await svc.acknowledge_import_prompt(user.id)
+    return {"status": "ok"}
 
 
 @router.get(

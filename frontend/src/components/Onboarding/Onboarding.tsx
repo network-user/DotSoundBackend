@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
+import { OnboardingImportStep } from '@/components/Onboarding/OnboardingImportStep'
 import type { Track } from '@/types/api'
 
 interface Props {
   onComplete: () => void
 }
 
-type Step = 'genres' | 'artists' | 'moods' | 'calibration'
+type Step = 'import' | 'genres' | 'artists' | 'moods' | 'calibration'
 
 const MOODS = [
   { id: 'chill', label: 'Chill' },
@@ -20,37 +21,78 @@ const MOODS = [
 ]
 
 export function Onboarding({ onComplete }: Props) {
+  const [includeImport, setIncludeImport] = useState(false)
   const [step, setStep] = useState<Step>('genres')
   const [genres, setGenres] = useState<string[]>([])
   const [availableGenres, setAvailableGenres] = useState<string[]>([])
-  const [artists, setArtists] = useState<{ id: number; name: string; image_key: string | null }[]>([])
+  const [artists, setArtists] = useState<
+    { id: number; name: string; image_key: string | null }[]
+  >([])
   const [selectedArtists, setSelectedArtists] = useState<number[]>([])
   const [selectedMoods, setSelectedMoods] = useState<string[]>([])
   const [calibrationTracks, setCalibrationTracks] = useState<Track[]>([])
-  const [calibrationResults, setCalibrationResults] = useState<Record<number, boolean>>({})
+  const [calibrationResults, setCalibrationResults] = useState<
+    Record<number, boolean>
+  >({})
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    api
+      .getOnboardingStatus()
+      .then(s => {
+        if (!s.import_prompt_acknowledged) {
+          setIncludeImport(true)
+          setStep('import')
+        } else {
+          setIncludeImport(false)
+          setStep('genres')
+        }
+      })
+      .catch(() => {
+        setIncludeImport(false)
+        setStep('genres')
+      })
+  }, [])
 
   useEffect(() => {
     api.getOnboardingGenres().then(setAvailableGenres).catch(() => {})
   }, [])
 
-  const loadArtists = useCallback((selectedGenres: string[]) => {
-    api.getOnboardingArtists(selectedGenres).then(setArtists).catch(() => {})
+  const loadArtists = useCallback(
+    (selectedGenres: string[]) => {
+      api
+        .getOnboardingArtists(selectedGenres)
+        .then(setArtists)
+        .catch(() => {})
+    },
+    [],
+  )
+
+  const onImportDone = useCallback(() => {
+    setStep('genres')
   }, [])
 
   const toggleGenre = (g: string) => {
-    setGenres(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g])
+    setGenres(prev =>
+      prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g],
+    )
   }
 
   const toggleArtist = (id: number) => {
     setSelectedArtists(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id],
     )
   }
 
   const toggleMood = (m: string) => {
-    setSelectedMoods(prev => prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m])
+    setSelectedMoods(prev =>
+      prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m],
+    )
   }
+
+  const stepOrder: Step[] = includeImport
+    ? ['import', 'genres', 'artists', 'moods', 'calibration']
+    : ['genres', 'artists', 'moods', 'calibration']
 
   const handleNext = async () => {
     if (step === 'genres') {
@@ -69,53 +111,67 @@ export function Onboarding({ onComplete }: Props) {
         const tracks = await api.getCalibrationTracks()
         setCalibrationTracks(tracks)
         setStep('calibration')
-      } catch { }
+      } catch {
+        /* ignore */
+      }
       setSaving(false)
     } else if (step === 'calibration') {
       setSaving(true)
       try {
-        const items = Object.entries(calibrationResults).map(([tid, liked]) => ({
-          track_id: Number(tid),
-          liked,
-        }))
+        const items = Object.entries(calibrationResults).map(
+          ([tid, liked]) => ({
+            track_id: Number(tid),
+            liked,
+          }),
+        )
         if (items.length > 0) {
           await api.saveCalibration(items)
         }
         await api.completeOnboarding()
         onComplete()
-      } catch { }
+      } catch {
+        /* ignore */
+      }
       setSaving(false)
     }
   }
 
   const handleSkip = async () => {
+    if (step === 'import') return
     setSaving(true)
     try {
       await api.completeOnboarding()
       onComplete()
-    } catch { }
+    } catch {
+      /* ignore */
+    }
     setSaving(false)
   }
 
-  const stepIndex = ['genres', 'artists', 'moods', 'calibration'].indexOf(step)
+  const stepIndex = stepOrder.indexOf(step)
+  const dotCount = stepOrder.length
 
   return (
     <div className="onboarding-overlay">
       <div className="onboarding-container">
         <div className="onboarding-progress">
-          {[0, 1, 2, 3].map(i => (
+          {Array.from({ length: dotCount }, (_, i) => (
             <div
               key={i}
-              className={`onboarding-dot${i <= stepIndex ? ' active' : ''}`}
+              className={`onboarding-dot${
+                i <= stepIndex ? ' active' : ''
+              }`}
             />
           ))}
         </div>
 
+        {step === 'import' && (
+          <OnboardingImportStep onDone={onImportDone} />
+        )}
+
         {step === 'genres' && (
           <div className="onboarding-step">
-            <h2 className="onboarding-title">
-              Какую музыку слушаете?
-            </h2>
+            <h2 className="onboarding-title">Какую музыку слушаете?</h2>
             <p className="onboarding-subtitle">
               Выберите жанры (минимум 3)
             </p>
@@ -123,7 +179,9 @@ export function Onboarding({ onComplete }: Props) {
               {availableGenres.map(g => (
                 <button
                   key={g}
-                  className={`onboarding-chip${genres.includes(g) ? ' selected' : ''}`}
+                  className={`onboarding-chip${
+                    genres.includes(g) ? ' selected' : ''
+                  }`}
                   onClick={() => toggleGenre(g)}
                 >
                   {g}
@@ -135,9 +193,7 @@ export function Onboarding({ onComplete }: Props) {
 
         {step === 'artists' && (
           <div className="onboarding-step">
-            <h2 className="onboarding-title">
-              Любимые исполнители
-            </h2>
+            <h2 className="onboarding-title">Любимые исполнители</h2>
             <p className="onboarding-subtitle">
               Выберите исполнителей или пропустите
             </p>
@@ -145,7 +201,9 @@ export function Onboarding({ onComplete }: Props) {
               {artists.map(a => (
                 <button
                   key={a.id}
-                  className={`onboarding-artist-card${selectedArtists.includes(a.id) ? ' selected' : ''}`}
+                  className={`onboarding-artist-card${
+                    selectedArtists.includes(a.id) ? ' selected' : ''
+                  }`}
                   onClick={() => toggleArtist(a.id)}
                 >
                   {a.image_key ? (
@@ -155,7 +213,9 @@ export function Onboarding({ onComplete }: Props) {
                       <Icon name="user" size={24} />
                     </div>
                   )}
-                  <span className="onboarding-artist-name">{a.name}</span>
+                  <span className="onboarding-artist-name">
+                    {a.name}
+                  </span>
                 </button>
               ))}
               {artists.length === 0 && (
@@ -169,9 +229,7 @@ export function Onboarding({ onComplete }: Props) {
 
         {step === 'moods' && (
           <div className="onboarding-step">
-            <h2 className="onboarding-title">
-              Настроение
-            </h2>
+            <h2 className="onboarding-title">Настроение</h2>
             <p className="onboarding-subtitle">
               Какую атмосферу предпочитаете?
             </p>
@@ -179,7 +237,9 @@ export function Onboarding({ onComplete }: Props) {
               {MOODS.map(m => (
                 <button
                   key={m.id}
-                  className={`onboarding-chip${selectedMoods.includes(m.id) ? ' selected' : ''}`}
+                  className={`onboarding-chip${
+                    selectedMoods.includes(m.id) ? ' selected' : ''
+                  }`}
                   onClick={() => toggleMood(m.id)}
                 >
                   {m.label}
@@ -191,30 +251,53 @@ export function Onboarding({ onComplete }: Props) {
 
         {step === 'calibration' && (
           <div className="onboarding-step">
-            <h2 className="onboarding-title">
-              Оцените треки
-            </h2>
+            <h2 className="onboarding-title">Оцените треки</h2>
             <p className="onboarding-subtitle">
               Это поможет подобрать музыку для вас
             </p>
             <div className="onboarding-calibration-list">
               {calibrationTracks.map(t => (
-                <div key={t.id} className="onboarding-calibration-item">
+                <div
+                  key={t.id}
+                  className="onboarding-calibration-item"
+                >
                   <CoverImage coverKey={t.cover_key} />
                   <div className="onboarding-calibration-info">
-                    <span className="onboarding-calibration-title">{t.title}</span>
-                    <span className="onboarding-calibration-artist">{t.artist ?? '—'}</span>
+                    <span className="onboarding-calibration-title">
+                      {t.title}
+                    </span>
+                    <span className="onboarding-calibration-artist">
+                      {t.artist ?? '—'}
+                    </span>
                   </div>
                   <div className="onboarding-calibration-actions">
                     <button
-                      className={`icon-btn${calibrationResults[t.id] === true ? ' active' : ''}`}
-                      onClick={() => setCalibrationResults(prev => ({ ...prev, [t.id]: true }))}
+                      className={`icon-btn${
+                        calibrationResults[t.id] === true
+                          ? ' active'
+                          : ''
+                      }`}
+                      onClick={() =>
+                        setCalibrationResults(prev => ({
+                          ...prev,
+                          [t.id]: true,
+                        }))
+                      }
                     >
                       <Icon name="heart" size={20} />
                     </button>
                     <button
-                      className={`icon-btn${calibrationResults[t.id] === false ? ' active' : ''}`}
-                      onClick={() => setCalibrationResults(prev => ({ ...prev, [t.id]: false }))}
+                      className={`icon-btn${
+                        calibrationResults[t.id] === false
+                          ? ' active'
+                          : ''
+                      }`}
+                      onClick={() =>
+                        setCalibrationResults(prev => ({
+                          ...prev,
+                          [t.id]: false,
+                        }))
+                      }
                     >
                       <Icon name="thumbs-down" size={20} />
                     </button>
@@ -225,30 +308,31 @@ export function Onboarding({ onComplete }: Props) {
           </div>
         )}
 
-        <div className="onboarding-footer">
-          <button
-            className="onboarding-skip"
-            onClick={handleSkip}
-            disabled={saving}
-          >
-            Пропустить
-          </button>
-          <button
-            className="onboarding-next"
-            onClick={handleNext}
-            disabled={
-              saving ||
-              (step === 'genres' && genres.length < 3)
-            }
-          >
-            {saving
-              ? 'Сохранение...'
-              : step === 'calibration'
-                ? 'Готово'
-                : 'Далее'
-            }
-          </button>
-        </div>
+        {step !== 'import' && (
+          <div className="onboarding-footer">
+            <button
+              className="onboarding-skip"
+              onClick={handleSkip}
+              disabled={saving}
+            >
+              Пропустить
+            </button>
+            <button
+              className="onboarding-next"
+              onClick={handleNext}
+              disabled={
+                saving ||
+                (step === 'genres' && genres.length < 3)
+              }
+            >
+              {saving
+                ? 'Сохранение...'
+                : step === 'calibration'
+                  ? 'Готово'
+                  : 'Далее'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -81,7 +81,16 @@ async def process_external_import_job(job_id: int) -> None:
         selected = (job.tracks_data or {}).get("selected", [])
         if not selected:
             job.status = "done"
+            job.total_tracks = 0
             await session.commit()
+            await session.refresh(job)
+            from app.services.import_job_notifications import (
+                send_import_job_finished_notification,
+            )
+
+            await send_import_job_finished_notification(
+                session, job
+            )
             return
 
         sc_service = SoundCloudService(settings.sc_client_id, session)
@@ -283,6 +292,15 @@ async def process_external_import_job(job_id: int) -> None:
             "not_matched": not_matched,
         }
         await session.commit()
+        await session.refresh(job)
+
+        from app.services.import_job_notifications import (
+            send_import_job_finished_notification,
+        )
+
+        await send_import_job_finished_notification(
+            session, job
+        )
 
         logger.info(
             "external_import_finished",

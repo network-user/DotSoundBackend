@@ -80,6 +80,7 @@ import { InstallPrompt } from '@/components/PwaInstall/InstallPrompt'
 import { QueueSheet } from '@/components/QueueSheet/QueueSheet'
 import { BannedScreen } from '@/components/BannedScreen/BannedScreen'
 import { SystemEventListener } from '@/components/Notifications/SystemEventListener'
+import { ImportActivityBanner } from '@/components/Import/ImportActivityBanner'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
 import { useTrackDeepLink } from '@/hooks/useDeepLink'
 import { HomeView } from '@/views/HomeView'
@@ -497,6 +498,7 @@ export function App() {
       <QueueSheet />
       <InstallPrompt />
       <SystemEventListener />
+      {!needsOnboarding && !needsAuth && <ImportActivityBanner />}
       <SettingsSheet
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

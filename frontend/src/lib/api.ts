@@ -38,6 +38,7 @@ import type {
   TrackUploadResponse,
   TwoFASetupResponse,
   UserLikesResponse,
+  OnboardingStatus,
   UserResponse,
   UserStatsResponse,
 } from '@/types/api'
@@ -1324,13 +1325,20 @@ export const api = {
 
   // ── Onboarding ──────────────────────────────────
 
-  getOnboardingStatus(): Promise<{
-    onboarding_completed: boolean
-    calibration_completed: boolean
-    preferred_genres: string[] | null
-    preferred_moods: string[] | null
-  }> {
+  getOnboardingStatus(): Promise<OnboardingStatus> {
     return request('/api/v1/onboarding/status')
+  },
+
+  acknowledgeOnboardingImport(): Promise<void> {
+    return request('/api/v1/onboarding/import-ack', {
+      method: 'POST',
+    })
+  },
+
+  debugResetOnboarding(): Promise<void> {
+    return request('/api/v1/users/me/debug/reset-onboarding', {
+      method: 'POST',
+    })
   },
 
   getOnboardingGenres(): Promise<string[]> {

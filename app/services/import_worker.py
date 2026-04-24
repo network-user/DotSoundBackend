@@ -40,7 +40,16 @@ async def process_import_job(job_id: int) -> None:
         selected = (job.tracks_data or {}).get("selected", [])
         if not selected:
             job.status = "done"
+            job.total_tracks = 0
             await session.commit()
+            await session.refresh(job)
+            from app.services.import_job_notifications import (
+                send_import_job_finished_notification,
+            )
+
+            await send_import_job_finished_notification(
+                session, job
+            )
             return
 
         headers = build_internal_headers(settings.bot_internal_secret)
@@ -175,6 +184,15 @@ async def process_import_job(job_id: int) -> None:
         tracks_data["imported"] = imported_tracks
         job.tracks_data = tracks_data
         await session.commit()
+        await session.refresh(job)
+
+        from app.services.import_job_notifications import (
+            send_import_job_finished_notification,
+        )
+
+        await send_import_job_finished_notification(
+            session, job
+        )
 
         logger.info(
             "import_job_finished",

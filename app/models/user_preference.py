@@ -34,3 +34,8 @@ class UserPreference(Base, TimestampMixin):
     calibration_completed: Mapped[bool] = mapped_column(
         Boolean, server_default="false", nullable=False
     )
+    onboarding_import_acknowledged: Mapped[bool] = (
+        mapped_column(
+            Boolean, server_default="false", nullable=False
+        )
+    )

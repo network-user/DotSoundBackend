@@ -140,6 +140,16 @@ export interface UserStatsResponse {
   top_tracks: Track[]
 }
 
+export interface OnboardingStatus {
+  onboarding_completed: boolean
+  calibration_completed: boolean
+  preferred_genres: string[] | null
+  preferred_moods: string[] | null
+  import_prompt_acknowledged: boolean
+  can_import_from_telegram: boolean
+  has_telegram_profile_music: boolean | null
+}
+
 export interface SCSearchResult {
   sc_id: number
   title: string
