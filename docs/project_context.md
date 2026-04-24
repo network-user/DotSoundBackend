@@ -93,7 +93,8 @@ backfill). `TrackService.search` и discovery при доступном ES сн�
 (`es_ok`, `pg_fallback`) и `suggest` (`es_ok`, `es_fail`, `es_error`).
 
 Подробные переменные: `elasticsearch_url`, `elasticsearch_enabled`, имена индексов,
-`elasticsearch_backfill_on_empty`, `elasticsearch_dev_bootstrap` — в `app/config.py` и `.env.example`.
+`elasticsearch_backfill_on_empty`, `elasticsearch_dev_bootstrap`,
+`elasticsearch_track_fuzziness`, `elasticsearch_fuzzy_max_expansions` — в `app/config.py` и `.env.example`.
 
 ---
 

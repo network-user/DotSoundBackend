@@ -1,5 +1,8 @@
 """Track playback endpoints — stream URL, play count, cover, single track."""
 
+from collections.abc import AsyncIterator
+
+import httpx
 import structlog
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -100,6 +103,119 @@ def _check_access(track: object, current_user: User | None = None) -> None:
     )
 
 
+async def _http_proxy_range_get(
+    request: Request,
+    stream_url: str,
+    *,
+    detail_fail: str,
+    detail_error: str,
+) -> StreamingResponse:
+    """Proxy GET + Range: media is same-origin for WebAudio + ``<audio>``."""
+    from app.config import settings
+
+    range_header: str | None = request.headers.get("range")
+    h: dict[str, str] = {
+        "User-Agent": settings.outbound_user_agent,
+    }
+    if range_header:
+        h["Range"] = range_header
+
+    client = httpx.AsyncClient(
+        timeout=httpx.Timeout(300.0, connect=30.0),
+        follow_redirects=True,
+    )
+    try:
+        req = client.build_request("GET", stream_url, headers=h)
+        resp = await client.send(req, stream=True)
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=detail_error,
+        ) from exc
+
+    if resp.status_code not in (200, 206):
+        await resp.aread()
+        await resp.aclose()
+        await client.aclose()
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=detail_fail,
+        )
+
+    out_h: dict[str, str] = {
+        "Accept-Ranges": resp.headers.get("accept-ranges", "bytes"),
+    }
+    if (ct := resp.headers.get("content-type")):
+        out_h["Content-Type"] = ct
+    if (cl := resp.headers.get("content-length")):
+        out_h["Content-Length"] = cl
+    if (cr := resp.headers.get("content-range")):
+        out_h["Content-Range"] = cr
+
+    async def body_iter() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in resp.aiter_bytes(65536):
+                yield chunk
+        finally:
+            await resp.aclose()
+            await client.aclose()
+
+    return StreamingResponse(
+        body_iter(),
+        status_code=resp.status_code,
+        media_type=resp.headers.get("content-type", "audio/mpeg"),
+        headers=out_h,
+    )
+
+
+async def _proxy_cors_bypass_third_party_audio(
+    request: Request,
+    track: object,
+    session: AsyncSession,
+) -> StreamingResponse:
+    """CDNs (YouTube, Bandcamp) do not allow CORS for this player setup."""
+    sp = getattr(track, "source_platform", None)
+    if sp == "bandcamp":
+        from app.services.bandcamp_service import BandcampService
+
+        src: str | None = getattr(track, "source_url", None)
+        if not src:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Bandcamp track missing source URL",
+            )
+        bc = BandcampService(session)
+        stream_url, _ = await bc.get_stream_info(src)
+        return await _http_proxy_range_get(
+            request,
+            stream_url,
+            detail_fail="Bandcamp stream failed",
+            detail_error="Bandcamp stream error",
+        )
+    if sp == "youtube":
+        from app.services.youtube_service import YouTubeService
+
+        yu: str | None = getattr(track, "source_url", None)
+        if not yu:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="YouTube track missing source URL",
+            )
+        ys = YouTubeService(session)
+        stream_url, _ = await ys.get_stream_info(yu)
+        return await _http_proxy_range_get(
+            request,
+            stream_url,
+            detail_fail="YouTube stream failed",
+            detail_error="YouTube stream error",
+        )
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="proxy only for bandcamp or youtube",
+    )
+
+
 @router.get(
     "/{track_id}/stream",
     response_model=StreamResponse,
@@ -122,6 +238,16 @@ async def stream_track(
         )
     _check_access(track, current_user)
     if track.access_mode == "third_party_stream":
+        spf = getattr(track, "source_platform", None)
+        if spf in ("bandcamp", "youtube"):
+            return StreamResponse(
+                track_id=track_id,
+                url=f"/api/v1/tracks/{track_id}/audio",
+                stream_type="direct",
+                expires_in=_stream_ttl(
+                    "bandcamp" if spf == "bandcamp" else "youtube"
+                ),
+            )
         stream_url, protocol = await _resolve_third_party_stream(
             track, session
         )
@@ -237,6 +363,12 @@ async def audio_stream(
         )
 
     if track.access_mode == "third_party_stream":
+        if getattr(
+            track, "source_platform", None
+        ) in ("bandcamp", "youtube"):
+            return await _proxy_cors_bypass_third_party_audio(
+                request, track, session
+            )
         stream_url, _ = await _resolve_third_party_stream(
             track, session
         )

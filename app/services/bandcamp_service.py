@@ -50,18 +50,21 @@ def _bc_search_from_html(
 ) -> list[dict[str, str | int | None]]:
     seen: set[str] = set()
     out: list[dict[str, str | int | None]] = []
+    # Bandcamp search results use href with query (?from=search&…); a path-only
+    # class like [^"?'#]+ would fail before the closing quote.
     for m in re.finditer(
         r'href="(https?://[a-z0-9][a-z0-9.\-]*\.bandcamp\.com'
-        r'/track/[^"\'?#]+)"',
+        r'/track/[^"]+)"',
         page_html,
         re.IGNORECASE,
     ):
-        u: str = m.group(1).rstrip(".,)").rstrip()
+        u: str = html.unescape(m.group(1)).rstrip(".,)").rstrip()
         u = re.sub(
             r"\s+",
             "",
             u,
         )  # defensive
+        u = u.split("?", 1)[0].rstrip("/")
         if u in seen:
             continue
         seen.add(u)

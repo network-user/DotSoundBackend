@@ -333,6 +333,9 @@
 
 ## Frontend оптимизация
 
+- [x] **SearchView: прогрессивная выдача** — `getTracks` / `searchSuggest`
+  не ждут YouTube, Bandcamp, SoundCloud; внешние секции обновляются
+  по мере ответа и могут отображаться до готовности блока «На платформе»
 - **PlayerContext split (производительность)**
   - 3 контекста: `PlayerStateCtx` (currentTime, duration, isPlaying),
   `PlayerActionsCtx` (стабильные callbacks через useCallback),
@@ -364,8 +367,8 @@
 
 - [x] **Elasticsearch (поиск + suggest)**: индексы треков/артистов,
   Taskiq reindex/backfill, `GET /api/v1/search/suggest`, поиск треков
-  с `q` через ES + PG fallback, counter `elasticsearch_query_total`
-  (op/outcome) в `observability`
+  с `q` через ES + PG fallback, bool/should (strict + fuzzy) для треков/артистов
+  и саджеста, counter `elasticsearch_query_total` (op/outcome) в `observability`
 - playable_only фильтр в track listing endpoints
 - internal-token endpoint с полной защитой
 - WebSocket: событие player.state для синхронизации

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import structlog
 from sqlalchemy import select
@@ -29,16 +30,52 @@ class SuggestItem:
     duration_seconds: int | None = None
 
 
-def _base_track_filters(
-    *, playable_only: bool
-) -> list[dict]:
-    filters: list[dict] = [
+def _base_track_filters(*, playable_only: bool) -> list[dict[str, Any]]:
+    filters: list[dict[str, Any]] = [
         {"term": {"is_active": True}},
         {"term": {"is_public": True}},
     ]
     if playable_only:
         filters.append({"term": {"playable": True}})
     return filters
+
+
+def _track_multi_match_fields() -> list[str]:
+    return [
+        "title^2",
+        "artist^2",
+        "title_sayt^1.2",
+        "artist_sayt^1.2",
+        "genre",
+    ]
+
+
+def _track_search_should_clauses(
+    q_text: str,
+) -> list[dict[str, Any]]:
+    fields = _track_multi_match_fields()
+    fuzz = settings.elasticsearch_track_fuzziness
+    fmax = settings.elasticsearch_fuzzy_max_expansions
+    return [
+        {
+            "multi_match": {
+                "query": q_text,
+                "type": "best_fields",
+                "fields": fields,
+                "boost": 1.0,
+            }
+        },
+        {
+            "multi_match": {
+                "query": q_text,
+                "type": "best_fields",
+                "fields": fields,
+                "fuzziness": fuzz,
+                "fuzzy_max_expansions": fmax,
+                "boost": 0.35,
+            }
+        },
+    ]
 
 
 async def es_search_tracks(
@@ -54,27 +91,13 @@ async def es_search_tracks(
         return None
     es = get_es()
     offset = (page - 1) * size
-    must = {
-        "multi_match": {
-            "query": q.strip(),
-            "type": "best_fields",
-            "fields": [
-                "title^2",
-                "artist^2",
-                "title_sayt^1.2",
-                "artist_sayt^1.2",
-                "genre",
-            ],
-            "fuzziness": "AUTO",
-        }
-    }
-    body: dict = {
+    q_text = q.strip()
+    body: dict[str, Any] = {
         "query": {
             "bool": {
-                "filter": _base_track_filters(
-                    playable_only=playable_only
-                ),
-                "must": [must],
+                "filter": _base_track_filters(playable_only=playable_only),
+                "should": _track_search_should_clauses(q_text),
+                "minimum_should_match": 1,
             }
         },
         "from": offset,
@@ -122,11 +145,13 @@ async def es_suggest_mixed(
     es = get_es()
     qstrip = q.strip()
     per = max(1, min(8, limit // 2 + 1))
-    t_body = {
+    fuzz = settings.elasticsearch_track_fuzziness
+    fmax = settings.elasticsearch_fuzzy_max_expansions
+    t_body: dict[str, Any] = {
         "query": {
             "bool": {
                 "filter": _base_track_filters(playable_only=False),
-                "must": [
+                "should": [
                     {
                         "multi_match": {
                             "query": qstrip,
@@ -139,9 +164,21 @@ async def es_suggest_mixed(
                                 "artist_sayt._2gram",
                                 "artist_sayt._3gram",
                             ],
+                            "boost": 1.0,
                         }
-                    }
+                    },
+                    {
+                        "multi_match": {
+                            "query": qstrip,
+                            "type": "best_fields",
+                            "fields": ["title^2", "artist^2"],
+                            "fuzziness": fuzz,
+                            "fuzzy_max_expansions": fmax,
+                            "boost": 0.25,
+                        }
+                    },
                 ],
+                "minimum_should_match": 1,
             }
         },
         "size": per,
@@ -149,17 +186,35 @@ async def es_suggest_mixed(
             {"play_count": "desc"},
         ],
     }
-    a_body = {
+    a_body: dict[str, Any] = {
         "query": {
-            "multi_match": {
-                "query": qstrip,
-                "type": "bool_prefix",
-                "fields": [
-                    "name_sayt",
-                    "name_sayt._2gram",
-                    "name_sayt._3gram",
-                    "name",
+            "bool": {
+                "should": [
+                    {
+                        "multi_match": {
+                            "query": qstrip,
+                            "type": "bool_prefix",
+                            "fields": [
+                                "name_sayt",
+                                "name_sayt._2gram",
+                                "name_sayt._3gram",
+                                "name",
+                            ],
+                            "boost": 1.0,
+                        }
+                    },
+                    {
+                        "multi_match": {
+                            "query": qstrip,
+                            "type": "best_fields",
+                            "fields": ["name^2", "name"],
+                            "fuzziness": fuzz,
+                            "fuzzy_max_expansions": fmax,
+                            "boost": 0.25,
+                        }
+                    },
                 ],
+                "minimum_should_match": 1,
             }
         },
         "size": per,
@@ -242,25 +297,44 @@ async def enrich_suggest_tracks_from_db(
     return out
 
 
-async def es_search_artists(
-    q: str, *, limit: int = 20
-) -> list[int] | None:
+async def es_search_artists(q: str, *, limit: int = 20) -> list[int] | None:
     if not es_available():
         return None
     if not (q or "").strip():
         return None
     es = get_es()
-    body: dict = {
+    q_text = q.strip()
+    artist_fields = [
+        "name^2",
+        "name_sayt^1.2",
+        "name_sayt._2gram",
+    ]
+    fuzz = settings.elasticsearch_track_fuzziness
+    fmax = settings.elasticsearch_fuzzy_max_expansions
+    body: dict[str, Any] = {
         "query": {
-            "multi_match": {
-                "query": q.strip(),
-                "type": "best_fields",
-                "fields": [
-                    "name^2",
-                    "name_sayt^1.2",
-                    "name_sayt._2gram",
+            "bool": {
+                "should": [
+                    {
+                        "multi_match": {
+                            "query": q_text,
+                            "type": "best_fields",
+                            "fields": artist_fields,
+                            "boost": 1.0,
+                        }
+                    },
+                    {
+                        "multi_match": {
+                            "query": q_text,
+                            "type": "best_fields",
+                            "fields": artist_fields,
+                            "fuzziness": fuzz,
+                            "fuzzy_max_expansions": fmax,
+                            "boost": 0.35,
+                        }
+                    },
                 ],
-                "fuzziness": "AUTO",
+                "minimum_should_match": 1,
             }
         },
         "size": min(100, max(1, limit)),
