@@ -4081,83 +4081,81 @@ html.le-lyrics-sync-open body {
     var(--player-h, 80px) + var(--nav-h, 60px) + var(
         --safe-bottom,
         0px
-      ) + 12px
+      ) + 8px
   );
   z-index: calc(var(--z-toast, 1200) - 1);
-  width: min(92vw, 440px);
-  padding: 10px 14px;
+  width: min(92vw, 400px);
+  padding: 8px 4px 8px 12px;
   border-radius: var(--r-md, 12px);
   border: 1px solid var(--glass-edge);
-  background: var(--glass-tint-3);
+  background: var(--glass-tint-2);
   -webkit-backdrop-filter: var(--glass-blur-medium);
   backdrop-filter: var(--glass-blur-medium);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
 }
 
 .import-activity-banner__row {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
 }
 
-.import-activity-banner__shimmer {
-  width: 8px;
-  height: 8px;
-  margin-top: 6px;
-  border-radius: 50%;
-  background: var(--text-primary);
-  animation: import-pulse 1.2s ease-in-out infinite;
+.import-activity-banner__dismiss {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-sm, 8px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
 }
 
-@keyframes import-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.9);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .import-activity-banner__shimmer {
-    animation: none;
-    opacity: 0.7;
-  }
+.import-activity-banner__dismiss:hover {
+  color: var(--text);
+  background: var(--glass-tint-3);
 }
 
 .import-activity-banner__text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
+  flex: 1;
 }
 
 .import-activity-banner__line {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .import-activity-banner__sub {
   font-size: 12px;
   color: var(--text-muted);
+  opacity: 0.9;
 }
 
 .import-activity-banner__bar {
-  margin-top: 8px;
-  height: 3px;
-  border-radius: 2px;
+  margin-top: 6px;
+  height: 2px;
+  border-radius: 1px;
   background: var(--glass-tint-2);
   overflow: hidden;
 }
 
 .import-activity-banner__bar-fill {
   height: 100%;
-  border-radius: 2px;
-  background: var(--text-primary);
+  border-radius: 1px;
+  background: var(--text-muted);
+  opacity: 0.55;
   transition: width 0.35s var(--ease-standard, ease);
 }
 
