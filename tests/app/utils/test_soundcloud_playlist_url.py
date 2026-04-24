@@ -10,6 +10,17 @@ from app.utils.soundcloud_playlist_url import (
 pytestmark = pytest.mark.anyio
 
 
+def test_canonical_strips_query_and_utm() -> None:
+    from app.utils.soundcloud_playlist_url import (
+        _canonical_sc_playlist_url,
+    )
+
+    o = _canonical_sc_playlist_url(
+        "https://soundcloud.com/a/sets/b?ref=clipboard&si=1",
+    )
+    assert o == "https://soundcloud.com/a/sets/b"
+
+
 def test_is_public_accepts_www_and_m() -> None:
     assert is_public_soundcloud_playlist_url(
         "https://soundcloud.com/u/sets/mix"

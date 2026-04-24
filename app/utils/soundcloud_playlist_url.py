@@ -27,12 +27,35 @@ _SC_ALLOWED_RESOLVE_HOSTS = frozenset(
 
 def is_public_soundcloud_playlist_url(url: str) -> bool:
     u = (url or "").strip()
+    if not u:
+        return False
     return bool(_SC_PLAYLIST_RE.match(u))
 
 
-def _strip_fragment(url: str) -> str:
-    p = urlparse(url)
-    return urlunparse(p._replace(fragment=""))
+def _canonical_sc_playlist_url(url: str) -> str:
+    """
+    Path-only playlist URL: drop utm/tracking query and #fragment,
+    force https, collapse www. and m. to soundcloud.com.
+    (SoundCloud resolve API and imports misbehave with share query strings.)
+    """
+    p = urlparse((url or "").strip())
+    netloc = (p.netloc or "").lower()
+    if "@" in netloc:
+        netloc = netloc.rsplit("@", 1)[-1]
+    if netloc.startswith("www."):
+        netloc = netloc[4:]
+    if netloc == "m.soundcloud.com":
+        netloc = "soundcloud.com"
+    scheme = p.scheme.lower() if p.scheme else "https"
+    if scheme in ("http", "https"):
+        scheme = "https"
+    p2 = p._replace(
+        scheme=scheme,
+        netloc=netloc,
+        query="",
+        fragment="",
+    )
+    return urlunparse(p2)
 
 
 def _netloc_host(netloc: str) -> str:
@@ -70,7 +93,7 @@ async def _follow_to_final_url(url: str) -> str:
     ) as client:
         r = await client.get(url)
     r.raise_for_status()
-    return _strip_fragment(str(r.url))
+    return _canonical_sc_playlist_url(str(r.url))
 
 
 async def resolve_public_soundcloud_playlist_url(
@@ -79,7 +102,8 @@ async def resolve_public_soundcloud_playlist_url(
     """
     Return a canonical https://soundcloud.com/.../sets/... URL.
 
-    - Already full playlist links are returned (fragment removed, m. kept if matched).
+    - Full ``.../sets/...`` links are returned canonical
+      (https, no ``?ref=`` / UTM / ``#``, ``m.`` → ``soundcloud.com``).
     - ``on.soundcloud.com/...`` and other resolvable SC hosts are followed until
       a .../sets/... page is reached (or validation fails).
     """
@@ -87,8 +111,9 @@ async def resolve_public_soundcloud_playlist_url(
     if not u:
         msg = "URL is required"
         raise ValueError(msg)
-    if is_public_soundcloud_playlist_url(u):
-        return _strip_fragment(u)
+    c0 = _canonical_sc_playlist_url(u)
+    if is_public_soundcloud_playlist_url(c0):
+        return c0
     try:
         parsed = urlparse(u)
     except ValueError as exc:
@@ -118,10 +143,11 @@ async def resolve_public_soundcloud_playlist_url(
     except httpx.HTTPError as exc:
         msg = "Could not open this SoundCloud link. Check that it is valid and public."
         raise ValueError(msg) from exc
-    if not is_public_soundcloud_playlist_url(final):
+    cfinal = _canonical_sc_playlist_url(final)
+    if not is_public_soundcloud_playlist_url(cfinal):
         msg = (
             "This link does not resolve to a public playlist "
             "(URL must contain /sets/ on soundcloud.com)."
         )
         raise ValueError(msg)
-    return final
+    return cfinal
