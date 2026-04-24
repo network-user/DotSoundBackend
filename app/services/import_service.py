@@ -1,7 +1,9 @@
+import asyncio
 import httpx
 import structlog
 from dotsound_private_core.services import (
     build_internal_headers,
+    fetch_user_library,
     profile_audios_url,
 )
 from fastapi import HTTPException, status
@@ -11,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.import_job import ImportJob
 from app.models.user import User
+from app.models.user_linked_account import UserLinkedAccount
 from app.repositories.user import UserRepository
 from app.services.external_providers import (
     ProviderError,
@@ -27,6 +30,10 @@ EXTERNAL_IMPORT_SOURCES: frozenset[str] = frozenset(
         "spotify",
         "soundcloud_playlist",
         "vk_music",
+        # Account-based sources — resolved via OAuth tokens
+        "spotify_account",
+        "soundcloud_account",
+        "vk_account",
     }
 )
 
@@ -167,6 +174,111 @@ class ImportService:
         logger.info(
             "external_scan_complete",
             job_id=job.id,
+            source=source,
+            total=len(tracks),
+        )
+        return job
+
+    async def scan_account_library(
+        self,
+        user_id: int,
+        provider: str,
+        source: str,
+        account: UserLinkedAccount,
+    ) -> ImportJob:
+        """Scan a user's personal library from a connected provider account.
+
+        ``source`` is ``"liked"`` or an opaque playlist ID from
+        :func:`~app.api.v1.linked_accounts.list_provider_playlists`.
+        """
+        from app.services.linked_account_service import LinkedAccountService
+
+        job_source = f"{provider}_account"
+        user = await self._resolve_user(user_id)
+
+        active = await self._get_active_job(user.id)
+        if active:
+            return active
+
+        job = ImportJob(
+            user_id=user.id,
+            source=job_source,
+            status="scanning",
+        )
+        self._session.add(job)
+        await self._session.flush()
+        await self._session.refresh(job)
+
+        linked_svc = LinkedAccountService(self._session)
+        access_token, _ = linked_svc.get_decrypted_tokens(account)
+
+        client_id = (
+            settings.soundcloud_oauth_client_id
+            if provider == "soundcloud"
+            else ""
+        )
+
+        try:
+            result = await asyncio.to_thread(
+                fetch_user_library,
+                provider,
+                access_token,
+                source,
+                client_id=client_id,
+            )
+        except Exception as exc:
+            job.status = "failed"
+            job.tracks_data = {
+                "error_code": "provider_unavailable",
+                "error_message": str(exc),
+            }
+            logger.error(
+                "account_library_scan_error",
+                job_id=job.id,
+                provider=provider,
+                error=str(exc),
+            )
+            return job
+
+        if result.status != "ok":
+            job.status = "failed"
+            job.tracks_data = {
+                "error_code": result.status,
+                "error_message": result.error_message or result.status,
+            }
+            logger.info(
+                "account_library_scan_provider_error",
+                job_id=job.id,
+                provider=provider,
+                code=result.status,
+            )
+            return job
+
+        tracks = [
+            {
+                "title": t.title,
+                "artist": t.artist,
+                "duration_seconds": t.duration_seconds,
+                "external_id": t.external_id,
+            }
+            for t in result.tracks
+        ]
+        source_label = (
+            "Liked tracks"
+            if source == "liked"
+            else f"Playlist: {source}"
+        )
+        job.status = "ready"
+        job.total_tracks = len(tracks)
+        job.tracks_data = {
+            "kind": result.kind or "playlist",
+            "source_label": source_label,
+            "tracks": tracks,
+        }
+        logger.info(
+            "account_library_scan_complete",
+            job_id=job.id,
+            provider=provider,
             source=source,
             total=len(tracks),
         )

@@ -35,13 +35,34 @@ async def _safe_count(
         return 0
 
 
+_PRESENCE_PREFIX = "presence:"
+
+
 async def _online_users_count() -> int:
+    """Count users with WebSocket presence status *online* in Redis.
+
+    Keys are ``presence:{user_id}`` (see :mod:`app.core.ws_manager`); the
+    legacy ``ws:user:*`` pattern was never used and always returned 0.
+    """
     redis = get_redis_client()
+    online = 0
     try:
-        keys = await redis.keys("ws:user:*")
-        return len(keys)
+        async for key in redis.scan_iter(match=f"{_PRESENCE_PREFIX}*"):
+            raw = await redis.get(key)
+            if not raw:
+                continue
+            try:
+                data = json.loads(
+                    raw if isinstance(raw, str) else raw.decode()
+                )
+            except (TypeError, ValueError, UnicodeError):
+                continue
+            if data.get("status") == "online":
+                online += 1
     except Exception:
+        logger.exception("admin_dashboard_online_count_failed")
         return 0
+    return online
 
 
 async def collect_overview(

@@ -90,8 +90,25 @@ export function ImportActivityBanner() {
     setDismissedJobId(job.id)
   }
 
-  if (!job) return null
-  if (dismissedJobId != null && job.id === dismissedJobId) {
+  const ribbonShown =
+    job != null &&
+    (dismissedJobId == null || job.id !== dismissedJobId)
+
+  useEffect(() => {
+    if (ribbonShown) {
+      document.documentElement.setAttribute(
+        'data-import-ribbon',
+        '1',
+      )
+    } else {
+      document.documentElement.removeAttribute('data-import-ribbon')
+    }
+    return () => {
+      document.documentElement.removeAttribute('data-import-ribbon')
+    }
+  }, [ribbonShown])
+
+  if (!ribbonShown || !job) {
     return null
   }
 

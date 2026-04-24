@@ -62,27 +62,35 @@ export function AdminLogin() {
       <p className="admin-auth-hint">
         {t('admin.auth.signInHint')}
       </p>
-      <TotpInput
-        value={code}
-        onChange={setCode}
-        onComplete={handleSubmit}
-        autoFocus
-        disabled={busy}
-      />
-      {error && (
-        <div className="admin-auth-error">
-          {error}
-        </div>
-      )}
-      <Press
-        variant="primary"
-        onClick={handleSubmit}
-        disabled={busy || code.length < 6}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          void handleSubmit()
+        }}
       >
-        {busy
-          ? t('admin.auth.signingIn')
-          : t('admin.auth.signIn')}
-      </Press>
+        <TotpInput
+          value={code}
+          onChange={setCode}
+          onComplete={handleSubmit}
+          autoFocus
+          disabled={busy}
+        />
+        {error && (
+          <div className="admin-auth-error">
+            {error}
+          </div>
+        )}
+        <Press
+          type="submit"
+          variant="primary"
+          onClick={handleSubmit}
+          disabled={busy || code.length < 6}
+        >
+          {busy
+            ? t('admin.auth.signingIn')
+            : t('admin.auth.signIn')}
+        </Press>
+      </form>
     </div>
   )
 }

@@ -98,6 +98,15 @@ body.monochrome #app {
   scrollbar-width: none;
   width: 100%;
   min-width: 0;
+  transition: padding-top 0.2s var(--ease-standard, ease);
+}
+
+/* Room for fixed `ImportActivityBanner` under status bar (see .import-activity-banner). */
+html[data-import-ribbon='1'] #main {
+  padding-top: 56px;
+}
+html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
+  padding-top: 92px;
 }
 #main::-webkit-scrollbar { display: none; }
 
@@ -4073,16 +4082,13 @@ html.le-lyrics-sync-open body {
   padding-top: 8px;
 }
 
+/* Fixed under safe area, aligned with in-app “header” band; not over bottom nav. */
 .import-activity-banner {
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(
-    var(--player-h, 80px) + var(--nav-h, 60px) + var(
-        --safe-bottom,
-        0px
-      ) + 8px
-  );
+  top: calc(var(--safe-top) + 8px);
+  bottom: auto;
   z-index: calc(var(--z-toast, 1200) - 1);
   width: min(92vw, 400px);
   padding: 8px 4px 8px 12px;
@@ -4092,6 +4098,10 @@ html.le-lyrics-sync-open body {
   -webkit-backdrop-filter: var(--glass-blur-medium);
   backdrop-filter: var(--glass-blur-medium);
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+}
+
+#app:has(.offline-banner) .import-activity-banner {
+  top: calc(var(--safe-top) + 44px);
 }
 
 .import-activity-banner__row {
