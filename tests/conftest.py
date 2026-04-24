@@ -118,13 +118,33 @@ async def client(db_engine) -> AsyncClient:
         yield ac  # type: ignore[misc]
 
 
+async def _fake_put_cas(
+    data: bytes,
+    content_sha256_hex: str,
+    extension: str,
+    content_type: str,
+) -> str:
+    from app.core.s3 import build_cas_audio_key
+
+    return build_cas_audio_key(
+        content_sha256_hex, extension
+    )
+
+
 @pytest.fixture
 def mock_s3():
-    with patch(
-        "app.core.s3.upload_audio",
-        new_callable=AsyncMock,
-        return_value="anon/testkey.mp3",
-    ) as m:
+    with (
+        patch(
+            "app.core.s3.put_cas_audio",
+            new_callable=AsyncMock,
+            side_effect=_fake_put_cas,
+        ) as m,
+        patch(
+            "app.core.s3.upload_audio",
+            new_callable=AsyncMock,
+            return_value="anon/testkey.mp3",
+        ),
+    ):
         yield m
 
 

@@ -15,6 +15,33 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _PRESIGNED_TTL_SECONDS = 3600
 
+
+def build_cas_audio_key(
+    content_sha256_hex: str, extension: str
+) -> str:
+    ext = (
+        extension.lstrip(".")
+        if extension
+        else "bin"
+    )
+    prefix = content_sha256_hex[:2]
+    return f"blobs/{prefix}/{content_sha256_hex}.{ext}"
+
+
+async def put_cas_audio(
+    data: bytes,
+    content_sha256_hex: str,
+    extension: str,
+    content_type: str,
+) -> str:
+    file_key = build_cas_audio_key(
+        content_sha256_hex, extension
+    )
+    await upload_object(
+        file_key, data, content_type
+    )
+    return file_key
+
 _ALLOWED_COVER_MIMES = frozenset(
     {"image/jpeg", "image/png", "image/webp"}
 )
@@ -178,6 +205,38 @@ async def upload_voice(
         file_key=file_key,
     )
     return file_key, duration, waveform
+
+
+async def delete_objects_by_prefix(prefix: str) -> int:
+    """List and delete all object keys with the given key prefix. Returns count."""
+    n = 0
+    cont_token = None
+    async with get_s3_client() as s3:
+        while True:
+            kwargs: dict[str, Any] = {
+                "Bucket": settings.minio_bucket,
+                "Prefix": prefix,
+            }
+            if cont_token:
+                kwargs["ContinuationToken"] = cont_token
+            resp: dict[str, Any] = await s3.list_objects_v2(  # type: ignore[assignment]
+                **kwargs
+            )
+            for obj in resp.get("Contents") or ():
+                key: str = obj["Key"]
+                n += 1
+                try:
+                    await s3.delete_object(
+                        Bucket=settings.minio_bucket, Key=key
+                    )
+                except Exception:
+                    logger.warning(
+                        "s3_prefix_delete_key_failed", key=key
+                    )
+            if not resp.get("IsTruncated"):
+                break
+            cont_token = resp.get("NextContinuationToken")
+    return n
 
 
 async def delete_object(file_key: str) -> None:

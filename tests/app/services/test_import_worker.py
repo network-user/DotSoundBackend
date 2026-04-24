@@ -20,6 +20,14 @@ def _mock_import_finish_notification() -> object:
 _MOD = "app.services.import_worker"
 
 
+async def _put_cas_side(
+    _data: bytes, sha: str, ext: str, _ct: str
+) -> str:
+    from app.core.s3 import build_cas_audio_key
+
+    return build_cas_audio_key(sha, ext)
+
+
 async def _make_user(
     session: AsyncSession,
 ) -> User:
@@ -136,13 +144,17 @@ async def test_process_wrong_status(
 
 
 @patch(f"{_MOD}.generate_and_upload_cover")
-@patch(f"{_MOD}.upload_audio", new_callable=AsyncMock)
+@patch(
+    "app.core.s3.put_cas_audio",
+    new_callable=AsyncMock,
+    side_effect=_put_cas_side,
+)
 @patch(f"{_MOD}.httpx.AsyncClient")
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_process_imports_track(
     mock_session_local: AsyncMock,
     mock_httpx_cls: AsyncMock,
-    mock_upload: AsyncMock,
+    _mock_cas: AsyncMock,
     mock_cover: AsyncMock,
     session: AsyncSession,
 ) -> None:
@@ -185,7 +197,6 @@ async def test_process_imports_track(
     )
     mock_httpx_cls.return_value = http_client
 
-    mock_upload.return_value = "audio/key.mp3"
     mock_cover.kiq = AsyncMock()
 
     from app.services.import_worker import (
@@ -235,13 +246,17 @@ async def test_process_skips_large_file(
     assert job.failed_tracks == 1
 
 
-@patch(f"{_MOD}.upload_audio", new_callable=AsyncMock)
+@patch(
+    "app.core.s3.put_cas_audio",
+    new_callable=AsyncMock,
+    side_effect=_put_cas_side,
+)
 @patch(f"{_MOD}.httpx.AsyncClient")
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_process_handles_download_fail(
     mock_session_local: AsyncMock,
     mock_httpx_cls: AsyncMock,
-    mock_upload: AsyncMock,
+    _mock_cas: AsyncMock,
     session: AsyncSession,
 ) -> None:
     user = await _make_user(session)

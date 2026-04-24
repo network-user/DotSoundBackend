@@ -27,6 +27,7 @@ from app.schemas.track import (
     TrackUpdateRequest,
     TrackUploadResponse,
 )
+from app.services.audio_blob_service import AudioBlobService
 from app.services.cover_worker import (
     generate_and_upload_cover,
 )
@@ -198,13 +199,16 @@ async def delete_track(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found or access denied",
         )
-    for key in (
-        track.file_key
-        if track.source == "internal"
-        else None,
-        track.cover_key,
-        track.video_key,
-    ):
+    ab = AudioBlobService(session)
+    await ab.try_release_for_track(track)
+    await session.refresh(track)
+    try:
+        await s3.delete_objects_by_prefix(
+            f"hls/{track_id}/"
+        )
+    except Exception:
+        logger.warning("hls_prefix_delete_failed", track_id=track_id)
+    for key in (track.cover_key, track.video_key):
         if not key:
             continue
         try:
@@ -214,6 +218,15 @@ async def delete_track(
                 "s3_delete_failed",
                 track_id=track_id,
                 file_key=key,
+            )
+    if not track.blob_id and track.file_key:
+        try:
+            await s3.delete_object(track.file_key)
+        except Exception:
+            logger.warning(
+                "s3_delete_failed",
+                track_id=track_id,
+                file_key=track.file_key,
             )
     logger.info(
         "track_deleted",
