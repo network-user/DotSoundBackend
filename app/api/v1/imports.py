@@ -1,6 +1,10 @@
 from typing import Any
 
 import structlog
+from dotsound_private_core.services import (
+    is_allowed_vk_music_url,
+    normalize_vk_music_url,
+)
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +23,10 @@ class ImportStartRequest(BaseModel):
 
 
 class YandexMusicImportRequest(BaseModel):
+    url: str = Field(..., min_length=1)
+
+
+class VkMusicImportRequest(BaseModel):
     url: str = Field(..., min_length=1)
 
 
@@ -74,6 +82,32 @@ async def scan_yandex_music(
         user_id=current_user.id,
         source="yandex_music",
         url=body.url,
+    )
+    return ImportJobResponse.model_validate(job)
+
+
+@router.post(
+    "/vk_music",
+    response_model=ImportJobResponse,
+)
+@limiter.limit("5/minute")
+async def scan_vk_music(
+    request: Request,
+    body: VkMusicImportRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ImportJobResponse:
+    norm = normalize_vk_music_url(body.url)
+    if not is_allowed_vk_music_url(norm):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="URL must be a vk.com link",
+        )
+    service = ImportService(session)
+    job = await service.scan_external_playlist(
+        user_id=current_user.id,
+        source="vk_music",
+        url=norm,
     )
     return ImportJobResponse.model_validate(job)
 

@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -73,3 +74,91 @@ async def test_scan_yandex_music_rejects_non_yandex_url(
         json={"url": "https://example.com/playlist/1"},
     )
     assert r.status_code == 400
+
+
+async def test_scan_vk_music_requires_auth(
+    client: AsyncClient,
+) -> None:
+    r = await client.post(
+        "/api/v1/import/vk_music",
+        json={
+            "url": "https://vk.com/music/playlist/1/2/3",
+        },
+    )
+    assert r.status_code == 401
+
+
+async def test_scan_vk_music_rejects_non_vk_url(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 90003)
+    headers = await auth_headers(client, user["id"])
+    r = await client.post(
+        "/api/v1/import/vk_music",
+        headers=headers,
+        json={"url": "https://example.com/vk.com-fake"},
+    )
+    assert r.status_code == 400
+
+
+async def test_scan_vk_passes_normalized_url_to_service(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 90004)
+    headers = await auth_headers(client, user["id"])
+    with patch(
+        "app.api.v1.imports.ImportService.scan_external_playlist",
+        new_callable=AsyncMock,
+    ) as mock_scan:
+        mock_scan.return_value = SimpleNamespace(
+            id=1,
+            user_id=user["id"],
+            source="vk_music",
+            status="ready",
+            total_tracks=0,
+            completed_tracks=0,
+            failed_tracks=0,
+            tracks_data={},
+        )
+        r = await client.post(
+            "/api/v1/import/vk_music",
+            headers=headers,
+            json={"url": "https://vk.com/audios-123?z=1"},
+        )
+    assert r.status_code == 200
+    mock_scan.assert_called_once()
+    k = mock_scan.call_args.kwargs
+    assert k["source"] == "vk_music"
+    assert k["url"] == "https://vk.com/audios-123"
+
+
+async def test_scan_vk_album_url_accepted(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 90005)
+    headers = await auth_headers(client, user["id"])
+    album = (
+        "https://vk.com/music/album/-2000341563_"
+        "24341563_5488eb82b4c6a1e448"
+    )
+    with patch(
+        "app.api.v1.imports.ImportService.scan_external_playlist",
+        new_callable=AsyncMock,
+    ) as mock_scan:
+        mock_scan.return_value = SimpleNamespace(
+            id=1,
+            user_id=user["id"],
+            source="vk_music",
+            status="ready",
+            total_tracks=0,
+            completed_tracks=0,
+            failed_tracks=0,
+            tracks_data={},
+        )
+        r = await client.post(
+            "/api/v1/import/vk_music",
+            headers=headers,
+            json={"url": album},
+        )
+    assert r.status_code == 200
+    assert mock_scan.call_args.kwargs["url"] == album.rstrip("/")

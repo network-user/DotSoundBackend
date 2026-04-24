@@ -6,6 +6,7 @@ import type {
   ImportJobResponse,
 } from '@/types/api'
 import { ImportSourcePicker } from './ImportSourcePicker'
+import { VkMusicUrlModal } from './VkMusicUrlModal'
 import { YandexMusicUrlModal } from './YandexMusicUrlModal'
 
 type AudioInfo = ImportAudioInfo
@@ -23,6 +24,7 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024
 
 const EXTERNAL_SOURCES = new Set([
   'yandex_music',
+  'vk_music',
   'spotify',
   'soundcloud_playlist',
 ])
@@ -60,6 +62,9 @@ function scanningLabel(source: string | undefined): string {
   if (source === 'yandex_music') {
     return 'Сканируем плейлист Яндекс Музыки...'
   }
+  if (source === 'vk_music') {
+    return 'Сканируем VK...'
+  }
   if (EXTERNAL_SOURCES.has(source || '')) {
     return 'Сканируем плейлист...'
   }
@@ -73,6 +78,7 @@ export function ImportView({ active }: { active: boolean }) {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [yandexModalOpen, setYandexModalOpen] = useState(false)
+  const [vkModalOpen, setVkModalOpen] = useState(false)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const pollCountRef = useRef(0)
@@ -143,7 +149,9 @@ export function ImportView({ active }: { active: boolean }) {
     const all = new Set<number>(
       list
         .map((_, i) => i)
-        .filter((i) => !list[i].file_size || list[i].file_size! <= MAX_FILE_SIZE)
+        .filter(
+          i => !list[i].file_size || list[i].file_size! <= MAX_FILE_SIZE,
+        ),
     )
     setSelected(all)
     setPhase('select')
@@ -154,6 +162,10 @@ export function ImportView({ active }: { active: boolean }) {
     setError(null)
     if (sourceId === 'yandex') {
       setYandexModalOpen(true)
+      return
+    }
+    if (sourceId === 'vk') {
+      setVkModalOpen(true)
       return
     }
     if (sourceId !== 'telegram') return
@@ -195,6 +207,35 @@ export function ImportView({ active }: { active: boolean }) {
       throw e
     }
   }, [applyScanResult])
+
+  const handleVkScan = useCallback(
+    async (url: string) => {
+      setError(null)
+      setPhase('scanning')
+      try {
+        const j = await api.startVkMusicImport(url)
+        if (j.status === 'failed') {
+          const code = j.tracks_data?.error_code
+          const msg =
+            code === 'not_found'
+              ? 'Плейлист или страница не найдены'
+              : code === 'private'
+                ? 'Содержимое недоступно (закрыто или нужен вход в VK)'
+                : code === 'invalid_url'
+                  ? 'Ссылка не похожа на поддерживаемую страницу VK'
+                  : 'Не удалось получить список треков. Попробуйте позже.'
+          setPhase('pick')
+          throw new Error(msg)
+        }
+        applyScanResult(j)
+        setVkModalOpen(false)
+      } catch (e) {
+        setPhase('pick')
+        throw e
+      }
+    },
+    [applyScanResult],
+  )
 
   const toggleTrack = (idx: number) => {
     setSelected((prev) => {
@@ -454,6 +495,12 @@ export function ImportView({ active }: { active: boolean }) {
         open={yandexModalOpen}
         onClose={() => setYandexModalOpen(false)}
         onScan={handleYandexScan}
+      />
+
+      <VkMusicUrlModal
+        open={vkModalOpen}
+        onClose={() => setVkModalOpen(false)}
+        onScan={handleVkScan}
       />
 
       {cancelConfirmOpen && (

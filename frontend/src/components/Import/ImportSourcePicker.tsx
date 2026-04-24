@@ -24,7 +24,7 @@ const SOURCES: Source[] = [
     id: 'vk',
     label: 'VK Музыка',
     icon: 'source-vk',
-    available: false,
+    available: true,
   },
   {
     id: 'spotify',

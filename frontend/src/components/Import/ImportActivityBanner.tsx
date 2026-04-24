@@ -2,34 +2,12 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import type { ImportJobResponse } from '@/types/api'
 
-const ACTIVE = new Set([
-  'scanning',
-  'ready',
-  'queued',
-  'importing',
-])
+/** Only real background work. `ready` / `scanning` belong in Профиль → Импорт. */
+const ACTIVE = new Set(['queued', 'importing'])
 
 function labelFor(
   j: ImportJobResponse,
 ): { line: string; sub?: string } {
-  if (j.status === 'scanning') {
-    if (j.source === 'yandex_music') {
-      return { line: 'Сканируем Яндекс.Музыку…' }
-    }
-    if (
-      j.source === 'spotify' ||
-      j.source === 'soundcloud_playlist'
-    ) {
-      return { line: 'Сканируем плейлист…' }
-    }
-    return { line: 'Ищем треки в Telegram…' }
-  }
-  if (j.status === 'ready') {
-    return {
-      line: 'Выберите треки',
-      sub: 'Профиль → Импорт',
-    }
-  }
   if (j.status === 'queued') {
     return {
       line: 'Импорт в очереди',
