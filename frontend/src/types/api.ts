@@ -173,6 +173,24 @@ export interface SCSearchResult {
   sc_uri: string
 }
 
+export interface YTSearchResult {
+  video_id: string
+  title: string
+  artist: string | null
+  duration_seconds: number | null
+  thumbnail_url: string | null
+  watch_url: string
+}
+
+export interface BCSearchResult {
+  result_id: string
+  title: string
+  artist: string | null
+  duration_seconds: number | null
+  artwork_url: string | null
+  track_url: string
+}
+
 export interface AvatarResponse {
   avatar_url: string
 }

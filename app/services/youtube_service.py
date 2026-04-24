@@ -32,6 +32,62 @@ def _extract_video_id(url: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _yt_search_sync(query: str, limit: int) -> list[dict]:
+    import yt_dlp
+
+    cap = max(1, min(int(limit), 20))
+    opts: dict = {
+        "quiet": True,
+        "no_warnings": True,
+        "noprogress": True,
+        "extract_flat": "in_playlist",
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(
+            f"ytsearch{cap}:{query}",
+            download=False,
+        )
+    if not info:
+        return []
+    entries: list[dict] = [e for e in (info.get("entries") or []) if e]
+    out: list[dict] = []
+    for e in entries:
+        if len(out) >= cap:
+            break
+        vid = (e.get("id") or "").strip()
+        if not vid or len(vid) != 11:
+            u = (e.get("url") or "").split("v=")[-1].split("&")[0]
+            if len(u) == 11:
+                vid = u
+        if not vid or len(vid) != 11:
+            continue
+        title = (e.get("title") or "Unknown").strip()
+        artist = e.get("uploader") or e.get("channel") or e.get("uploader_id")
+        if artist:
+            artist = str(artist)
+        else:
+            artist = None
+        dur: int | None = e.get("duration")
+        if dur is not None:
+            dur = int(dur)
+        thumb: str | None = e.get("thumbnail")
+        if not thumb:
+            th = e.get("thumbnails") or []
+            if th:
+                thumb = th[0].get("url")
+        out.append(
+            {
+                "video_id": vid,
+                "title": title,
+                "artist": artist,
+                "duration_seconds": dur,
+                "thumbnail_url": thumb,
+                "watch_url": _canonical_yt_url(vid),
+            }
+        )
+    return out
+
+
 def _yt_extract_info(url: str) -> dict:
     try:
         import yt_dlp
@@ -55,6 +111,22 @@ def _yt_extract_info(url: str) -> dict:
 class YouTubeService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def search(self, q: str, limit: int = 10) -> list[dict]:
+        q = (q or "").strip()
+        if not q:
+            return []
+        try:
+            async with youtube_slot():
+                rows = await asyncio.to_thread(
+                    _yt_search_sync, q, limit
+                )
+        except OutboundSemaphoreTimeout as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="YouTube сейчас перегружен, попробуйте позже.",
+            ) from exc
+        return rows
 
     async def resolve_url(self, yt_url: str) -> dict:
         try:

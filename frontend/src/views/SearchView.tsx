@@ -8,25 +8,46 @@ import { useLikes } from '@/store/LikesContext'
 import { useDebounce } from '@/hooks/useDebounce'
 import { Icon } from '@/components/Icon/Icon'
 import type {
+  BCSearchResult,
   SCSearchResult,
   SearchSuggestItem,
   Track,
+  YTSearchResult,
 } from '@/types/api'
 
 type SearchViewProps = {
   onOpenArtist?: (id: number) => void
 }
 
-const SEARCH_DEBOUNCE_MS = 380
-const SUGGEST_DEBOUNCE_MS = 160
+const SEARCH_DEBOUNCE_MS = 300
 
-function formatSuggestDuration(
-  sec: number | null | undefined,
-): string | null {
-  if (sec == null || sec < 0) return null
-  const m = Math.floor(sec / 60)
-  const s = sec % 60
-  return `${m}:${String(s).padStart(2, '0')}`
+/** Порядок треков из ES suggest сверху, остальные — как в выдаче getTracks */
+function mergeTracksBySuggestOrder(
+  items: Track[],
+  suggest: SearchSuggestItem[],
+): Track[] {
+  const orderIds = suggest
+    .filter((s) => s.kind === 'track')
+    .map((s) => s.id)
+  if (orderIds.length === 0) {
+    return items
+  }
+  const byId = new Map(items.map((t) => [t.id, t]))
+  const seen = new Set<number>()
+  const out: Track[] = []
+  for (const id of orderIds) {
+    const t = byId.get(id)
+    if (t) {
+      out.push(t)
+      seen.add(id)
+    }
+  }
+  for (const t of items) {
+    if (!seen.has(t.id)) {
+      out.push(t)
+    }
+  }
+  return out
 }
 
 export function SearchView({ onOpenArtist }: SearchViewProps) {
@@ -35,15 +56,19 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const [query, setQuery] = useState('')
   const [tracks, setTracks] = useState<Track[] | null | 'idle'>('idle')
   const [scResults, setSCResults] = useState<SCSearchResult[]>([])
+  const [ytResults, setYtResults] = useState<YTSearchResult[]>([])
+  const [bcResults, setBcResults] = useState<BCSearchResult[]>([])
   const [importedSC, setImportedSC] = useState<Record<string, Track>>({})
+  const [importedYT, setImportedYT] = useState<Record<string, Track>>({})
+  const [importedBC, setImportedBC] = useState<Record<string, Track>>({})
   const [importing, setImporting] = useState<string | null>(null)
-  const [suggest, setSuggest] = useState<SearchSuggestItem[]>([])
-  /** idle | loading | success (may be 0 items) | error */
-  const [suggestStatus, setSuggestStatus] = useState<
-    'idle' | 'loading' | 'ok' | 'err'
-  >('idle')
+  const [importingYt, setImportingYt] = useState<string | null>(null)
+  const [importingBc, setImportingBc] = useState<string | null>(null)
+  /** Артисты из suggest — компактный ряд над списком треков */
+  const [suggestArtists, setSuggestArtists] = useState<SearchSuggestItem[]>(
+    [],
+  )
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
-  const debouncedSuggestQ = useDebounce(query, SUGGEST_DEBOUNCE_MS)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [history, setHistory] = useState<string[]>(() => {
@@ -71,64 +96,99 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   }, [])
 
   useEffect(() => {
-    if (!query.trim()) {
-      setSuggest([])
-      setSuggestStatus('idle')
-    }
-  }, [query])
-
-  useEffect(() => {
-    if (!debouncedSuggestQ.trim()) {
-      setSuggest([])
-      setSuggestStatus('idle')
-      return
-    }
-    let cancelled = false
-    setSuggestStatus('loading')
-    void api
-      .searchSuggest(debouncedSuggestQ, 8)
-      .then((sug) => {
-        if (cancelled) return
-        setSuggest(sug.items)
-        setSuggestStatus('ok')
-      })
-      .catch(() => {
-        if (cancelled) return
-        setSuggest([])
-        setSuggestStatus('err')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [debouncedSuggestQ])
-
-  useEffect(() => {
     if (!debouncedQuery.trim()) {
       setTracks('idle')
       setSCResults([])
+      setYtResults([])
+      setBcResults([])
+      setSuggestArtists([])
       return
     }
     setTracks(null)
     setSCResults([])
+    setYtResults([])
+    setBcResults([])
+    setSuggestArtists([])
     saveToHistory(debouncedQuery.trim())
     let cancelled = false
     Promise.all([
-      api.getTracks({ q: debouncedQuery, size: 20 }).catch(() => ({
+      api.getTracks({ q: debouncedQuery, size: 30 }).catch(() => ({
         items: [] as Track[],
         total: 0,
         page: 1,
-        size: 20,
+        size: 30,
       })),
-      api.searchSoundCloud(debouncedQuery, 10).catch(() => [] as SCSearchResult[]),
-    ]).then(([internal, sc]) => {
+      api
+        .searchSuggest(debouncedQuery, 12)
+        .catch(() => ({ items: [] as SearchSuggestItem[] })),
+      api.searchSoundCloud(debouncedQuery, 8).catch(() => [] as SCSearchResult[]),
+      api.searchYouTube(debouncedQuery, 8).catch(() => [] as YTSearchResult[]),
+      api.searchBandcamp(debouncedQuery, 8).catch(() => [] as BCSearchResult[]),
+    ]).then(async ([internal, sug, sc, yt, bc]) => {
       if (cancelled) return
-      setTracks(internal.items)
+      const have = new Set(internal.items.map((t) => t.id))
+      const fromSuggest = sug.items
+        .filter((i) => i.kind === 'track')
+        .map((i) => i.id)
+      const missing = fromSuggest.filter((id) => !have.has(id))
+      const extra: Track[] = []
+      if (missing.length > 0) {
+        const loaded = await Promise.all(
+          missing.map((id) => api.getTrack(id).catch(() => null)),
+        )
+        for (const t of loaded) {
+          if (t) extra.push(t)
+        }
+      }
+      if (cancelled) return
+      const combined = [...internal.items, ...extra]
+      const merged = mergeTracksBySuggestOrder(combined, sug.items)
+      setTracks(merged)
+      setSuggestArtists(
+        sug.items.filter((i) => i.kind === 'artist'),
+      )
       setSCResults(sc)
+      setYtResults(yt)
+      setBcResults(bc)
     })
     return () => {
       cancelled = true
     }
   }, [debouncedQuery])
+
+  const ensureImportedYT = async (
+    result: YTSearchResult,
+  ): Promise<Track | null> => {
+    if (importedYT[result.video_id]) return importedYT[result.video_id]
+    if (importingYt === result.video_id) return null
+    setImportingYt(result.video_id)
+    try {
+      const track = await api.importYouTubeTrack(result.watch_url, true)
+      setImportedYT((prev) => ({ ...prev, [result.video_id]: track }))
+      return track
+    } catch {
+      return null
+    } finally {
+      setImportingYt(null)
+    }
+  }
+
+  const ensureImportedBC = async (
+    result: BCSearchResult,
+  ): Promise<Track | null> => {
+    if (importedBC[result.track_url]) return importedBC[result.track_url]
+    if (importingBc === result.track_url) return null
+    setImportingBc(result.track_url)
+    try {
+      const track = await api.importBandcampTrack(result.track_url, true)
+      setImportedBC((prev) => ({ ...prev, [result.track_url]: track }))
+      return track
+    } catch {
+      return null
+    } finally {
+      setImportingBc(null)
+    }
+  }
 
   const ensureImported = async (result: SCSearchResult): Promise<Track | null> => {
     if (importedSC[result.sc_url]) return importedSC[result.sc_url]
@@ -150,9 +210,31 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     if (track) await playTrack(track)
   }
 
+  const handlePlayYT = async (result: YTSearchResult) => {
+    const track = await ensureImportedYT(result)
+    if (track) await playTrack(track)
+  }
+
+  const handlePlayBC = async (result: BCSearchResult) => {
+    const track = await ensureImportedBC(result)
+    if (track) await playTrack(track)
+  }
+
   const handleLikeSC = async (e: React.MouseEvent, result: SCSearchResult) => {
     e.stopPropagation()
     const track = await ensureImported(result)
+    if (track) await toggleLike(track.id)
+  }
+
+  const handleLikeYT = async (e: React.MouseEvent, result: YTSearchResult) => {
+    e.stopPropagation()
+    const track = await ensureImportedYT(result)
+    if (track) await toggleLike(track.id)
+  }
+
+  const handleLikeBC = async (e: React.MouseEvent, result: BCSearchResult) => {
+    e.stopPropagation()
+    const track = await ensureImportedBC(result)
     if (track) await toggleLike(track.id)
   }
 
@@ -160,135 +242,30 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     setQuery('')
     setTracks('idle')
     setSCResults([])
-    setSuggest([])
-    setSuggestStatus('idle')
+    setYtResults([])
+    setBcResults([])
+    setSuggestArtists([])
     inputRef.current?.focus()
   }
-
-  const onPickSuggest = async (item: SearchSuggestItem) => {
-    if (item.kind === 'track') {
-      const t = await api.getTrack(item.id)
-      await playTrack(t)
-    } else if (item.kind === 'artist' && onOpenArtist) {
-      onOpenArtist(item.id)
-    }
-  }
-
-  const showSuggestList = suggest.length > 0
-  const showSuggestPanel = Boolean(
-    query.trim() &&
-      (suggestStatus === 'loading' ||
-        suggestStatus === 'err' ||
-        (suggestStatus === 'ok' && showSuggestList)),
-  )
 
   return (
     <section id="view-search" className="view active">
       <div className="search-sticky">
-        <div className="search-combobox">
-          <div className="search-bar">
+        <div className="search-bar">
         <span className="search-icon"><Icon name="search" size={16} /></span>
         <input
           ref={inputRef}
           id="search-input"
-          type="text"
+          type="search"
+          enterKeyHint="search"
           placeholder="Трек или исполнитель…"
           autoComplete="off"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          role="combobox"
-          aria-expanded={showSuggestPanel}
-          aria-controls="search-suggest-popover"
-          aria-autocomplete="list"
         />
         {query && (
           <button type="button" className="icon-btn" onClick={clearSearch}><Icon name="x" size={16} /></button>
         )}
-          </div>
-          {showSuggestPanel && (
-            <div
-              className="search-suggest-popover"
-              id="search-suggest-popover"
-              role="presentation"
-            >
-              {suggestStatus === 'loading' && (
-                <p className="search-suggest-message" role="status">
-                  Ищем варианты…
-                </p>
-              )}
-              {suggestStatus === 'err' && (
-                <p className="search-suggest-message search-suggest-error" role="alert">
-                  Подсказки недоступны. Проверьте, что API и Elasticsearch
-                  запущены.
-                </p>
-              )}
-              {showSuggestList && (
-                <ul
-                  className="search-suggest"
-                  id="search-suggest-listbox"
-                  role="listbox"
-                  aria-label="Подсказки"
-                >
-                  {suggest.map((s) => {
-                    const dur =
-                      s.kind === 'track'
-                        ? formatSuggestDuration(s.duration_seconds)
-                        : null
-                    return (
-                    <li key={`${s.kind}-${s.id}`} role="option">
-                      <button
-                        type="button"
-                        className={`search-suggest-row${s.kind === 'track' ? ' search-suggest-row-track' : ' search-suggest-row-artist'}`}
-                        onClick={() => { void onPickSuggest(s) }}
-                      >
-                        {s.kind === 'track' ? (
-                          <CoverImage
-                            coverKey={s.cover_key ?? null}
-                            size={44}
-                            className="search-suggest-thumb"
-                          />
-                        ) : (
-                          <div
-                            className="search-suggest-thumb search-suggest-thumb-artist"
-                            aria-hidden
-                          >
-                            <Icon name="user" size={20} />
-                          </div>
-                        )}
-                        <div className="search-suggest-text">
-                          <div className="search-suggest-meta">
-                            <span className="search-suggest-kind">
-                              {s.kind === 'track' ? 'Трек' : 'Артист'}
-                            </span>
-                          </div>
-                          {s.kind === 'track' ? (
-                            <>
-                              <span className="search-suggest-title">
-                                {s.title ?? '—'}
-                              </span>
-                              {s.name ? (
-                                <span className="search-suggest-sub">
-                                  {s.name}
-                                </span>
-                              ) : null}
-                            </>
-                          ) : (
-                            <span className="search-suggest-title">
-                              {s.name ?? '—'}
-                            </span>
-                          )}
-                        </div>
-                        {dur ? (
-                          <span className="search-suggest-dur">{dur}</span>
-                        ) : null}
-                      </button>
-                    </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
@@ -328,10 +305,216 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
 
       {Array.isArray(tracks) && (
         <>
-          {tracks.length > 0 && (
-            <div className="search-section">
-              <p className="search-section-label">На платформе</p>
+          {suggestArtists.length > 0 && (
+            <div className="search-section search-artist-suggest">
+              <p className="search-section-label">Артисты</p>
+              <div
+                className="search-artist-chips"
+                role="list"
+                aria-label="Совпадения по артистам"
+              >
+                {suggestArtists.map((a) => (
+                  <button
+                    type="button"
+                    key={a.id}
+                    className="search-artist-chip"
+                    role="listitem"
+                    onClick={() => {
+                      onOpenArtist?.(a.id)
+                    }}
+                  >
+                    {a.name ?? '—'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="search-section">
+            <p className="search-section-label">На платформе</p>
+            {tracks.length > 0 ? (
               <TrackList tracks={tracks} emptyMessage="" />
+            ) : (
+              <p className="search-catalog-empty">
+                В каталоге пусто по этому запросу — смотрите
+                внешний поиск YouTube, Bandcamp и SoundCloud ниже.
+              </p>
+            )}
+          </div>
+
+          {ytResults.length > 0 && (
+            <div className="search-section">
+              <p className="search-section-label">
+                YouTube · внешний источник
+              </p>
+              {ytResults.map((r) => {
+                const imported = importedYT[r.video_id]
+                if (imported) {
+                  return (
+                    <TrackCard
+                      key={r.video_id}
+                      track={imported}
+                    />
+                  )
+                }
+                return (
+                  <div
+                    key={r.video_id}
+                    className="track-card sc-result"
+                    onClick={() => handlePlayYT(r)}
+                  >
+                    <CoverImage
+                      coverKey={null}
+                      externalUrl={r.thumbnail_url}
+                    />
+                    <div className="track-card-info">
+                      <div className="track-card-title-row">
+                        <p className="track-card-title">{r.title}</p>
+                        <span className="track-badge track-badge-yt">
+                          YT
+                        </span>
+                      </div>
+                      <p className="track-card-artist">
+                        {r.artist ?? '—'}
+                      </p>
+                      <p className="track-card-meta">
+                        {r.duration_seconds != null && (
+                          <span className="sc-duration">
+                            {Math.floor(
+                              r.duration_seconds / 60,
+                            )}:{String(
+                              r.duration_seconds % 60,
+                            ).padStart(2, '0')}
+                          </span>
+                        )}
+                      </p>
+                      <span className="track-source">
+                        внешний источник:{' '}
+                        <a
+                          href={r.watch_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="track-source-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          YouTube
+                        </a>
+                      </span>
+                      <span className="track-source">
+                        после добавления трек будет доступен как
+                        внешний поток стороннего сервиса
+                      </span>
+                    </div>
+                    <div
+                      className="track-card-actions"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        className="track-card-like"
+                        title="Добавить и лайкнуть"
+                        onClick={(e) => handleLikeYT(e, r)}
+                        disabled={importingYt === r.video_id}
+                        type="button"
+                      >
+                        <Icon name="heart-outline" size={18} />
+                      </button>
+                      <span className="sc-play-hint sc-play-hint--yt">
+                        {importingYt === r.video_id
+                          ? '...'
+                          : 'Добавить и слушать'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {bcResults.length > 0 && (
+            <div className="search-section">
+              <p className="search-section-label">
+                Bandcamp · внешний источник
+              </p>
+              {bcResults.map((r) => {
+                const imported = importedBC[r.track_url]
+                if (imported) {
+                  return (
+                    <TrackCard
+                      key={r.result_id}
+                      track={imported}
+                    />
+                  )
+                }
+                return (
+                  <div
+                    key={r.result_id}
+                    className="track-card sc-result"
+                    onClick={() => handlePlayBC(r)}
+                  >
+                    <CoverImage
+                      coverKey={null}
+                      externalUrl={r.artwork_url}
+                    />
+                    <div className="track-card-info">
+                      <div className="track-card-title-row">
+                        <p className="track-card-title">{r.title}</p>
+                        <span className="track-badge track-badge-bc">
+                          BC
+                        </span>
+                      </div>
+                      <p className="track-card-artist">
+                        {r.artist ?? '—'}
+                      </p>
+                      <p className="track-card-meta">
+                        {r.duration_seconds != null && (
+                          <span className="sc-duration">
+                            {Math.floor(
+                              r.duration_seconds / 60,
+                            )}:{String(
+                              r.duration_seconds % 60,
+                            ).padStart(2, '0')}
+                          </span>
+                        )}
+                      </p>
+                      <span className="track-source">
+                        внешний источник:{' '}
+                        <a
+                          href={r.track_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="track-source-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Bandcamp
+                        </a>
+                      </span>
+                      <span className="track-source">
+                        после добавления трек будет доступен как
+                        внешний поток стороннего сервиса
+                      </span>
+                    </div>
+                    <div
+                      className="track-card-actions"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        className="track-card-like"
+                        title="Добавить и лайкнуть"
+                        onClick={(e) => handleLikeBC(e, r)}
+                        disabled={importingBc === r.track_url}
+                        type="button"
+                      >
+                        <Icon name="heart-outline" size={18} />
+                      </button>
+                      <span className="sc-play-hint sc-play-hint--bc">
+                        {importingBc === r.track_url
+                          ? '...'
+                          : 'Добавить и слушать'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
 
@@ -403,7 +586,11 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
             </div>
           )}
 
-          {tracks.length === 0 && scResults.length === 0 && (
+          {tracks.length === 0 &&
+            scResults.length === 0 &&
+            ytResults.length === 0 &&
+            bcResults.length === 0 &&
+            suggestArtists.length === 0 && (
             <p className="empty-hint">Ничего не найдено</p>
           )}
         </>

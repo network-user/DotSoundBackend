@@ -126,6 +126,8 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
               </span>
             )}
             {track.source === 'soundcloud' && <span className="track-badge track-badge-sc">SC</span>}
+            {track.source === 'youtube' && <span className="track-badge track-badge-yt">YT</span>}
+            {track.source === 'bandcamp' && <span className="track-badge track-badge-bc">BC</span>}
             {track.source === 'telegram' && <span className="track-badge track-badge-tg">TG</span>}
             {catalogLabel && <span className="track-badge">{catalogLabel}</span>}
           </div>

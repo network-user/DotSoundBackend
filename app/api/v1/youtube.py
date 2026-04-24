@@ -1,12 +1,12 @@
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
-from app.schemas.track import TrackResponse
+from app.schemas.track import TrackResponse, YTSearchResult
 from app.services.youtube_service import YouTubeService, _extract_video_id
 
 router = APIRouter(prefix="/youtube", tags=["youtube"])
@@ -16,6 +16,23 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 class YTImportRequest(BaseModel):
     yt_url: str
     is_public: bool = True
+
+
+@router.get(
+    "/search",
+    response_model=list[YTSearchResult],
+    summary="Search videos on YouTube (public preview list)",
+)
+@limiter.limit("20/minute")
+async def search_youtube(
+    request: Request,
+    q: str = Query(..., min_length=1),
+    limit: int = Query(10, ge=1, le=20),
+    session: AsyncSession = Depends(get_db),
+) -> list[YTSearchResult]:
+    service = YouTubeService(session)
+    rows = await service.search(q, limit=limit)
+    return [YTSearchResult(**r) for r in rows]
 
 
 @router.post(

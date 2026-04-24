@@ -24,6 +24,7 @@ import type {
   LyricsAutoStatusResponse,
   LyricsResponse,
   Playlist,
+  BCSearchResult,
   PlaylistWithTracks,
   SCSearchResult,
   SearchSuggestResponse,
@@ -43,6 +44,7 @@ import type {
   UserResponse,
   UserStatsResponse,
   LinkedAccountInfo,
+  YTSearchResult,
   ConnectOAuthResponse,
   AccountImportBody,
   OAuthLinkedProvider,
@@ -346,6 +348,14 @@ export const api = {
 
   searchSoundCloud(q: string, limit = 20): Promise<SCSearchResult[]> {
     return request(`/api/v1/soundcloud/search?q=${encodeURIComponent(q)}&limit=${limit}`)
+  },
+
+  searchYouTube(q: string, limit = 10): Promise<YTSearchResult[]> {
+    return request(`/api/v1/youtube/search?q=${encodeURIComponent(q)}&limit=${limit}`)
+  },
+
+  searchBandcamp(q: string, limit = 10): Promise<BCSearchResult[]> {
+    return request(`/api/v1/bandcamp/search?q=${encodeURIComponent(q)}&limit=${limit}`)
   },
 
   importSCTrack(sc_url: string, is_public = true): Promise<Track> {
