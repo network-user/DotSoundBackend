@@ -1,7 +1,10 @@
 import {
+  useCallback,
   useEffect,
+  useLayoutEffect,
   useState,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { onWS } from '@/lib/ws'
@@ -16,6 +19,42 @@ interface Props {
   open: boolean
   onClose: () => void
   onMutate?: () => void
+}
+
+const NOTIF_MENU_W = 200
+const NOTIF_MENU_EST_H = 148
+const NOTIF_VIEW_PAD = 8
+
+function computeMenuPos(
+  anchor: HTMLElement,
+): { top: number; left: number } {
+  const r = anchor.getBoundingClientRect()
+  const vh = window.innerHeight
+  const vw = window.innerWidth
+  const left = Math.max(
+    NOTIF_VIEW_PAD,
+    Math.min(
+      r.right - NOTIF_MENU_W,
+      vw - NOTIF_MENU_W - NOTIF_VIEW_PAD,
+    ),
+  )
+  const downTop = r.bottom + 6
+  const upTop = r.top - NOTIF_MENU_EST_H - 6
+  let top: number
+  if (downTop + NOTIF_MENU_EST_H <= vh - NOTIF_VIEW_PAD) {
+    top = downTop
+  } else if (upTop >= NOTIF_VIEW_PAD) {
+    top = upTop
+  } else {
+    top = Math.max(
+      NOTIF_VIEW_PAD,
+      Math.min(
+        downTop,
+        vh - NOTIF_MENU_EST_H - NOTIF_VIEW_PAD,
+      ),
+    )
+  }
+  return { top, left }
 }
 
 const KIND_ICON: Record<string, string> = {
@@ -85,12 +124,57 @@ export function NotificationList({
   const [menuOpenId, setMenuOpenId] = useState<
     number | null
   >(null)
+  const [menuPos, setMenuPos] = useState<{
+    top: number
+    left: number
+  } | null>(null)
+
+  const placeMenu = useCallback((id: number) => {
+    const el = document.querySelector(
+      `[data-notif-menu-anchor="${id}"]`,
+    ) as HTMLElement | null
+    if (!el) {
+      return
+    }
+    setMenuPos(computeMenuPos(el))
+  }, [])
+
+  useLayoutEffect(() => {
+    if (menuOpenId == null) {
+      setMenuPos(null)
+      return
+    }
+    placeMenu(menuOpenId)
+  }, [menuOpenId, placeMenu, items])
+
+  useEffect(() => {
+    if (menuOpenId == null) return
+    const onReposition = () => {
+      placeMenu(menuOpenId)
+    }
+    window.addEventListener('resize', onReposition)
+    window.addEventListener('scroll', onReposition, true)
+    const itemsEl =
+      document.querySelector('.notification-items')
+    itemsEl?.addEventListener('scroll', onReposition, {
+      passive: true,
+    } as AddEventListenerOptions)
+    return () => {
+      window.removeEventListener('resize', onReposition)
+      window.removeEventListener('scroll', onReposition, true)
+      itemsEl?.removeEventListener('scroll', onReposition)
+    }
+  }, [menuOpenId, placeMenu])
 
   useEffect(() => {
     if (menuOpenId == null) return
     const onDoc = (e: MouseEvent) => {
       if (menuOpenId == null) return
-      const w = (e.target as Element | null)?.closest(
+      const t = e.target as Element | null
+      if (t?.closest?.('.notification-menu-portal')) {
+        return
+      }
+      const w = t?.closest?.(
         '[data-notif-id]',
       )
       if (
@@ -102,6 +186,7 @@ export function NotificationList({
         return
       }
       setMenuOpenId(null)
+      setMenuPos(null)
     }
     document.addEventListener('mousedown', onDoc)
     return () =>
@@ -119,7 +204,11 @@ export function NotificationList({
   }
 
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      setMenuOpenId(null)
+      setMenuPos(null)
+      return
+    }
     setLoading(true)
     api
       .getNotifications()
@@ -152,11 +241,13 @@ export function NotificationList({
 
   const handleRowClick = (id: number) => {
     setMenuOpenId(null)
+    setMenuPos(null)
     void handleMarkRead(id)
   }
 
   const handleMarkUnread = async (id: number) => {
     setMenuOpenId(null)
+    setMenuPos(null)
     setItems((prev) =>
       prev.map((n) =>
         n.id === id
@@ -174,6 +265,7 @@ export function NotificationList({
 
   const handleDelete = async (id: number) => {
     setMenuOpenId(null)
+    setMenuPos(null)
     setItems((prev) => prev.filter((n) => n.id !== id))
     try {
       await api.deleteNotification(id)
@@ -184,6 +276,89 @@ export function NotificationList({
   }
 
   if (!exit.mounted) return null
+
+  const menuN =
+    menuOpenId == null
+      ? null
+      : items.find((x) => x.id === menuOpenId) ||
+        null
+
+  const menuPortal =
+    menuOpenId != null &&
+    menuPos &&
+    menuN && (
+      createPortal(
+        <ul
+          className="notification-menu-portal"
+          style={{
+            position: 'fixed',
+            top: menuPos.top,
+            left: menuPos.left,
+            width: NOTIF_MENU_W,
+            minWidth: NOTIF_MENU_W,
+            zIndex: 20_000,
+            margin: 0,
+            padding: '4px 0',
+            listStyle: 'none',
+            boxSizing: 'border-box',
+          }}
+          role="menu"
+        >
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              className="notification-menu-item"
+              onClick={(e) => {
+                e.stopPropagation()
+                setMenuOpenId(null)
+                setMenuPos(null)
+                void handleMarkRead(
+                  menuN.id,
+                )
+              }}
+              disabled={menuN.is_read}
+            >
+              {t('notifications.markRead')}
+            </button>
+          </li>
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              className="notification-menu-item"
+              onClick={(e) => {
+                e.stopPropagation()
+                setMenuOpenId(null)
+                setMenuPos(null)
+                void handleMarkUnread(
+                  menuN.id,
+                )
+              }}
+              disabled={!menuN.is_read}
+            >
+              {t('notifications.markUnread')}
+            </button>
+          </li>
+          <li role="none">
+            <button
+              type="button"
+              role="menuitem"
+              className="notification-menu-item danger"
+              onClick={(e) => {
+                e.stopPropagation()
+                void handleDelete(
+                  menuN.id,
+                )
+              }}
+            >
+              {t('notifications.delete')}
+            </button>
+          </li>
+        </ul>,
+        document.body,
+      )
+    )
 
   return (
     <div
@@ -291,14 +466,20 @@ export function NotificationList({
                     <button
                       type="button"
                       className="notification-more"
+                      data-notif-menu-anchor={n.id}
                       onClick={(e) => {
                         e.stopPropagation()
-                        setMenuOpenId(
+                        if (
                           menuOpenId ===
-                            n.id
-                            ? null
-                            : n.id,
-                        )
+                          n.id
+                        ) {
+                          setMenuOpenId(null)
+                          setMenuPos(
+                            null,
+                          )
+                        } else {
+                          setMenuOpenId(n.id)
+                        }
                       }}
                       aria-label={t(
                         'notifications.moreActions',
@@ -309,85 +490,16 @@ export function NotificationList({
                     >
                       <Icon
                         name="more-vertical"
-                        size={16}
+                        size={22}
                       />
                     </button>
-                    {menuOpenId ===
-                      n.id && (
-                      <ul
-                        className="notification-menu-dropdown"
-                        role="menu"
-                      >
-                        <li role="none">
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="notification-menu-item"
-                            onClick={(
-                              e,
-                            ) => {
-                              e.stopPropagation()
-                              setMenuOpenId(
-                                null,
-                              )
-                              void handleMarkRead(
-                                n.id,
-                              )
-                            }}
-                            disabled={n.is_read}
-                          >
-                            {t(
-                              'notifications.markRead',
-                            )}
-                          </button>
-                        </li>
-                        <li role="none">
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="notification-menu-item"
-                            onClick={(
-                              e,
-                            ) => {
-                              e.stopPropagation()
-                              void handleMarkUnread(
-                                n.id,
-                              )
-                            }}
-                            disabled={!n.is_read}
-                          >
-                            {t(
-                              'notifications.markUnread',
-                            )}
-                          </button>
-                        </li>
-                        <li role="none">
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="notification-menu-item danger"
-                            onClick={(
-                              e,
-                            ) => {
-                              e.stopPropagation()
-                              void handleDelete(
-                                n.id,
-                              )
-                            }}
-                          >
-                            {t(
-                              'notifications.delete',
-                            )}
-                          </button>
-                        </li>
-                      </ul>
-                    )}
                   </div>
                 </div>
               )
             })}
           </div>
         )}
+        {menuPortal}
       </div>
     </div>
   )

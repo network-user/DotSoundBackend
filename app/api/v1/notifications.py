@@ -6,6 +6,7 @@ from fastapi import (
     APIRouter,
     Depends,
     HTTPException,
+    Response,
     status,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -91,7 +92,7 @@ async def delete_notification(
     notification_id: int,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
-) -> None:
+) -> Response:
     svc = NotificationService(session)
     deleted = await svc.delete(notification_id, user.id)
     if not deleted:
@@ -99,3 +100,4 @@ async def delete_notification(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Not found",
         )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
