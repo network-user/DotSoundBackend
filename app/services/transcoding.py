@@ -9,6 +9,7 @@ from app.core import s3
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker  # Добавлено
 from app.models.track import Track
+from app.services.audio_blob_service import AudioBlobService
 
 logger = structlog.stdlib.get_logger(__name__)
 
@@ -88,35 +89,41 @@ async def transcode_and_upload(
             await _update_track_status(track_id, "error", None, None)
             return
 
-        # Upload MP3 (used as range-streaming fallback)
+        # Upload HLS segments and playlists (per-track, not content-deduped)
+        manifest_key = await _upload_hls(
+            track_id, hi_dir, lo_dir
+        )
+
+        # CAS MP3 blob: shared across users and imports when bytes match
         async with AsyncSessionLocal() as session:
+            svc = AudioBlobService(session)
             track = await session.get(Track, track_id)
-            uploader_id = track.uploaded_by_id if track else None
+            if not track:
+                await _update_track_status(
+                    track_id, "error", None, None
+                )
+                return
+            ab, _ = await svc.get_or_create_from_bytes(
+                mp3_data, "mp3", "audio/mpeg"
+            )
+            await svc.attach_playback_blob(track, ab)
+            track.processing_status = "active"
+            track.file_size_bytes = len(mp3_data)
+            track.hls_manifest_key = manifest_key
+            file_key_log = track.file_key
+            await session.commit()
+            logger.info(
+                "transcoding_complete",
+                file_key=file_key_log,
+                manifest_key=manifest_key,
+                mp3_size=len(mp3_data),
+            )
+            from app.services.search_index_notify import (
+                schedule_reindex_track,
+            )
 
-        file_key = await s3.upload_audio(
-            data=mp3_data,
-            extension="mp3",
-            content_type="audio/mpeg",
-            user_id=uploader_id,
-        )
-
-        # Upload HLS segments and playlists
-        manifest_key = await _upload_hls(track_id, hi_dir, lo_dir)
-
-        logger.info(
-            "transcoding_complete",
-            file_key=file_key,
-            manifest_key=manifest_key,
-            mp3_size=len(mp3_data),
-        )
-
-        await _update_track_status(
-            track_id,
-            "active",
-            file_key,
-            len(mp3_data),
-            hls_manifest_key=manifest_key,
-        )
+            if track_id:
+                await schedule_reindex_track(track_id)
 
     except Exception:
         logger.exception("transcoding_exception", track_id=track_id)

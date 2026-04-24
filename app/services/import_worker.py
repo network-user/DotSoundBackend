@@ -9,7 +9,8 @@ from dotsound_private_core.services import (
 
 from app.config import settings
 from app.core.db import AsyncSessionLocal
-from app.core.s3 import upload_audio
+from app.repositories.track import TrackRepository
+from app.services.audio_blob_service import AudioBlobService
 from app.core.tkq import broker
 from app.models.import_job import ImportJob
 from app.models.track import Track
@@ -54,6 +55,8 @@ async def process_import_job(job_id: int) -> None:
 
         headers = build_internal_headers(settings.bot_internal_secret)
         library_repo = UserTrackLibraryRepository(session)
+        track_repo = TrackRepository(session)
+        blob_service = AudioBlobService(session)
 
         imported_tracks: list[dict] = []
 
@@ -104,12 +107,48 @@ async def process_import_job(job_id: int) -> None:
                 mime = audio_info.get("mime_type", "audio/mpeg")
                 ext = resolve_audio_extension(mime)
 
-                file_key = await upload_audio(
-                    data=audio_bytes,
-                    extension=ext,
-                    content_type=mime or "audio/mpeg",
-                    user_id=job.user_id,
+                audio_blob, _ = await blob_service.get_or_create_from_bytes(
+                    audio_bytes,
+                    ext,
+                    mime or "audio/mpeg",
                 )
+                existing = (
+                    await track_repo.get_active_by_uploader_and_blob_id(
+                        job.user_id,
+                        audio_blob.id,
+                    )
+                )
+                if existing is not None:
+                    try:
+                        await library_repo.add(
+                            user_id=job.user_id,
+                            track_id=existing.id,
+                            source="telegram",
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "import_library_add_failed",
+                            job_id=job_id,
+                            track_id=existing.id,
+                            error=str(exc),
+                        )
+                    job.completed_tracks += 1
+                    imported_tracks.append(
+                        {
+                            "title": title,
+                            "status": "deduped",
+                            "track_id": existing.id,
+                        }
+                    )
+                    logger.info(
+                        "import_track_deduped",
+                        job_id=job_id,
+                        track_id=existing.id,
+                        title=title,
+                    )
+                    await session.commit()
+                    await session.refresh(job)
+                    continue
 
                 track = Track(
                     title=title,
@@ -120,13 +159,16 @@ async def process_import_job(job_id: int) -> None:
                     access_mode="internal_stream",
                     source_platform="telegram",
                     imported_from="telegram",
-                    file_key=file_key,
+                    file_key=None,
                     file_size_bytes=len(audio_bytes),
                     uploaded_by_id=job.user_id,
                     is_public=True,
                 )
                 session.add(track)
                 await session.flush()
+                await blob_service.attach_playback_blob(
+                    track, audio_blob
+                )
 
                 try:
                     await library_repo.add(

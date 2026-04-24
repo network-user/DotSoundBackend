@@ -50,10 +50,26 @@ class AdminService:
         return await self._repo.get_track(track_id)
 
     async def delete_track(self, track_id: int) -> bool:
+        from app.services.audio_blob_service import (
+            AudioBlobService,
+        )
+
         track = await self._repo.get_track(track_id)
         if track is None:
             return False
-        if track.source == "internal" and track.file_key:
+        ab = AudioBlobService(self._session)
+        await ab.try_release_for_track(track)
+        await self._session.refresh(track)
+        try:
+            await s3.delete_objects_by_prefix(
+                f"hls/{track_id}/"
+            )
+        except Exception:
+            logger.warning(
+                "admin_hls_prefix_delete_failed",
+                track_id=track_id,
+            )
+        if not track.blob_id and track.file_key:
             try:
                 await s3.delete_object(track.file_key)
             except Exception:
@@ -77,10 +93,18 @@ class AdminService:
     async def set_track_visibility(
         self, track_id: int, is_active: bool
     ) -> Track | None:
+        from app.services.audio_blob_service import (
+            AudioBlobService,
+        )
+
         track = await self._repo.get_track(track_id)
         if track is None:
             return None
+        was_active = track.is_active
         track.is_active = is_active
+        if was_active and not is_active:
+            ab = AudioBlobService(self._session)
+            await ab.try_release_for_track(track)
         await self._session.flush()
         return track
 
@@ -172,6 +196,12 @@ class AdminService:
             )
             if track is not None and track.is_active:
                 track.is_active = False
+                from app.services.audio_blob_service import (
+                    AudioBlobService,
+                )
+
+                ab = AudioBlobService(self._session)
+                await ab.try_release_for_track(track)
                 track_hidden = True
         elif action == "dismiss":
             complaint.is_resolved = True

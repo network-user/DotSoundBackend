@@ -19,6 +19,7 @@ from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.album import Album
+    from app.models.audio_blob import AudioBlob
     from app.models.complaint import Complaint
     from app.models.lyrics import TrackLyrics
     from app.models.track_info import TrackInfo
@@ -41,6 +42,18 @@ class Track(Base, TimestampMixin):
             unique=True,
             postgresql_where=text("external_id IS NOT NULL"),
             sqlite_where=text("external_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_tracks_user_blob_active",
+            "uploaded_by_id",
+            "blob_id",
+            unique=True,
+            postgresql_where=text(
+                "blob_id IS NOT NULL AND is_active IS TRUE"
+            ),
+            sqlite_where=text(
+                "blob_id IS NOT NULL AND is_active = 1"
+            ),
         ),
     )
 
@@ -141,6 +154,20 @@ class Track(Base, TimestampMixin):
     )
     description: Mapped[str | None] = mapped_column(
         Text, nullable=True
+    )
+    blob_id: Mapped[int | None] = mapped_column(
+        ForeignKey("audio_blobs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    blob_ref_freed: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
+
+    audio_blob: Mapped[AudioBlob | None] = relationship(
+        "AudioBlob",
+        back_populates="tracks",
+        foreign_keys=[blob_id],
     )
 
     complaints: Mapped[list[Complaint]] = relationship(

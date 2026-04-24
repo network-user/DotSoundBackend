@@ -11,6 +11,7 @@ from app.models.track import Track
 from app.models.user import User
 from app.repositories.complaint import ComplaintRepository
 from app.repositories.user import UserRepository
+from app.services.audio_blob_service import AudioBlobService
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -58,8 +59,12 @@ class ComplaintService:
         count = await self._repo.count_by_track(track_id)
         track_hidden = False
 
-        if should_auto_hide_track(count, threshold) and track and track.is_active:
+        if should_auto_hide_track(
+            count, threshold
+        ) and track and track.is_active:
             track.is_active = False
+            ab = AudioBlobService(self._session)
+            await ab.try_release_for_track(track)
             track_hidden = True
             logger.warning(
                 "track_auto_hidden",

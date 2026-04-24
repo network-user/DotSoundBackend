@@ -12,6 +12,14 @@ pytestmark = pytest.mark.anyio
 _MOD = "app.services.transcoding"
 
 
+async def _put_cas_side(
+    _data: bytes, sha: str, ext: str, _ct: str
+) -> str:
+    from app.core.s3 import build_cas_audio_key
+
+    return build_cas_audio_key(sha, ext)
+
+
 async def _make_track(
     session: AsyncSession,
 ) -> Track:
@@ -49,9 +57,9 @@ _RAW = b"\xff\xfb" + b"\x00" * 100
     return_value="hls/1/master.m3u8",
 )
 @patch(
-    f"{_MOD}.s3.upload_audio",
+    "app.core.s3.put_cas_audio",
     new_callable=AsyncMock,
-    return_value="audio/1.mp3",
+    side_effect=_put_cas_side,
 )
 @patch(
     f"{_MOD}.s3.download_object",
@@ -212,18 +220,14 @@ async def test_update_track_status_not_found(
 
 
 @patch(
-    f"{_MOD}._update_track_status",
-    new_callable=AsyncMock,
-)
-@patch(
     f"{_MOD}._upload_hls",
     new_callable=AsyncMock,
     return_value="hls/1/master.m3u8",
 )
 @patch(
-    f"{_MOD}.s3.upload_audio",
+    "app.core.s3.put_cas_audio",
     new_callable=AsyncMock,
-    return_value="audio/1.mp3",
+    side_effect=_put_cas_side,
 )
 @patch(
     f"{_MOD}.s3.download_object",
@@ -235,15 +239,16 @@ async def test_update_track_status_not_found(
     new_callable=AsyncMock,
 )
 @patch(f"{_MOD}.asyncio.create_subprocess_exec")
+@patch("app.services.search_index_notify.schedule_reindex_track", new_callable=AsyncMock)
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_transcode_success(
     mock_session_local: AsyncMock,
+    mock_reindex: AsyncMock,
     mock_exec: AsyncMock,
     mock_del: AsyncMock,
     mock_dl: AsyncMock,
-    mock_upload: AsyncMock,
+    _mock_cas: AsyncMock,
     mock_hls: AsyncMock,
-    mock_status: AsyncMock,
     session: AsyncSession,
     tmp_path: Path,
 ) -> None:
@@ -286,8 +291,12 @@ async def test_transcode_success(
             track.id, "temp/raw.mp3", "t.mp3"
         )
 
-    last_call = mock_status.call_args
-    assert last_call[0][1] == "active"
+    await session.refresh(track)
+    assert track.processing_status == "active"
+    assert track.file_key
+    assert str(track.file_key).startswith("blobs/")
+    assert track.hls_manifest_key == "hls/1/master.m3u8"
+    mock_reindex.assert_awaited()
 
 
 @patch(

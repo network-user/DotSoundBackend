@@ -9,6 +9,7 @@ from app.models.admin_login_attempt import (
 )
 from app.models.admin_session import AdminSession
 from app.models.album import Album
+from app.models.audio_blob import AudioBlob
 from app.models.app_setting import AppSetting
 from app.models.artist import Artist, TrackArtist
 from app.models.block import UserBlock
@@ -58,6 +59,7 @@ __all__ = [
     "AdminLoginAttempt",
     "AdminSession",
     "Album",
+    "AudioBlob",
     "AppSetting",
     "Artist",
     "CommentHide",

@@ -8,11 +8,13 @@ import pytest
 from botocore.exceptions import ClientError
 
 from app.core.s3 import (
+    build_cas_audio_key,
     delete_object,
     download_object,
     download_object_range,
     ensure_bucket_exists,
     get_presigned_url,
+    put_cas_audio,
     upload_audio,
     upload_cover,
     upload_object,
@@ -31,10 +33,36 @@ def _s3_client_mock() -> AsyncMock:
     client.get_object = AsyncMock()
     client.head_bucket = AsyncMock()
     client.create_bucket = AsyncMock()
+    client.list_objects_v2 = AsyncMock(
+        return_value={"Contents": []}
+    )
     client.generate_presigned_url = AsyncMock(
         return_value="https://s3/presigned"
     )
     return client
+
+
+def test_build_cas_audio_key() -> None:
+    sha = "a" * 64
+    k = build_cas_audio_key(sha, "mp3")
+    assert k == f"blobs/aa/{sha}.mp3"
+
+
+@patch(f"{_MOD}.get_s3_client")
+@patch(f"{_MOD}.upload_object", new_callable=AsyncMock)
+async def test_put_cas_audio(
+    mock_uo: AsyncMock, mock_ctx: MagicMock
+) -> None:
+    client = _s3_client_mock()
+    ctx = AsyncMock()
+    ctx.__aenter__ = AsyncMock(return_value=client)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    mock_ctx.return_value = ctx
+    data = b"\x00" * 10
+    sha = "b" * 64
+    key = await put_cas_audio(data, sha, "mp3", "audio/mpeg")
+    assert f"blobs/bb/{sha}" in key
+    mock_uo.assert_awaited()
 
 
 @patch(f"{_MOD}.get_s3_client")

@@ -241,6 +241,22 @@ class TrackRepository(BaseRepository[Track]):
         await self._session.flush()
         return result.scalar_one_or_none()
 
+    async def get_active_by_uploader_and_blob_id(
+        self,
+        user_id: int,
+        blob_id: int,
+    ) -> Track | None:
+        r = await self._session.execute(
+            select(Track)
+            .where(
+                Track.uploaded_by_id == user_id,
+                Track.blob_id == blob_id,
+                Track.is_active.is_(True),
+            )
+            .limit(1)
+        )
+        return r.scalars().first()
+
     async def delete_by_owner(
         self, track_id: int, user_id: int
     ) -> Track | None:
