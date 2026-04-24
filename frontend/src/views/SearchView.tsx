@@ -20,6 +20,15 @@ type SearchViewProps = {
 const SEARCH_DEBOUNCE_MS = 380
 const SUGGEST_DEBOUNCE_MS = 160
 
+function formatSuggestDuration(
+  sec: number | null | undefined,
+): string | null {
+  if (sec == null || sec < 0) return null
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
 export function SearchView({ onOpenArtist }: SearchViewProps) {
   const { playTrack } = usePlayer()
   const { toggleLike } = useLikes()
@@ -29,6 +38,10 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const [importedSC, setImportedSC] = useState<Record<string, Track>>({})
   const [importing, setImporting] = useState<string | null>(null)
   const [suggest, setSuggest] = useState<SearchSuggestItem[]>([])
+  /** idle | loading | success (may be 0 items) | error */
+  const [suggestStatus, setSuggestStatus] = useState<
+    'idle' | 'loading' | 'ok' | 'err'
+  >('idle')
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
   const debouncedSuggestQ = useDebounce(query, SUGGEST_DEBOUNCE_MS)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -60,22 +73,29 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   useEffect(() => {
     if (!query.trim()) {
       setSuggest([])
+      setSuggestStatus('idle')
     }
   }, [query])
 
   useEffect(() => {
     if (!debouncedSuggestQ.trim()) {
       setSuggest([])
+      setSuggestStatus('idle')
       return
     }
     let cancelled = false
+    setSuggestStatus('loading')
     void api
       .searchSuggest(debouncedSuggestQ, 8)
       .then((sug) => {
-        if (!cancelled) setSuggest(sug.items)
+        if (cancelled) return
+        setSuggest(sug.items)
+        setSuggestStatus('ok')
       })
       .catch(() => {
-        if (!cancelled) setSuggest([])
+        if (cancelled) return
+        setSuggest([])
+        setSuggestStatus('err')
       })
     return () => {
       cancelled = true
@@ -141,6 +161,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     setTracks('idle')
     setSCResults([])
     setSuggest([])
+    setSuggestStatus('idle')
     inputRef.current?.focus()
   }
 
@@ -153,10 +174,19 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     }
   }
 
+  const showSuggestList = suggest.length > 0
+  const showSuggestPanel = Boolean(
+    query.trim() &&
+      (suggestStatus === 'loading' ||
+        suggestStatus === 'err' ||
+        (suggestStatus === 'ok' && showSuggestList)),
+  )
+
   return (
     <section id="view-search" className="view active">
       <div className="search-sticky">
-        <div className="search-bar">
+        <div className="search-combobox">
+          <div className="search-bar">
         <span className="search-icon"><Icon name="search" size={16} /></span>
         <input
           ref={inputRef}
@@ -166,33 +196,100 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
           autoComplete="off"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          role="combobox"
+          aria-expanded={showSuggestPanel}
+          aria-controls="search-suggest-popover"
+          aria-autocomplete="list"
         />
         {query && (
-          <button className="icon-btn" onClick={clearSearch}><Icon name="x" size={16} /></button>
+          <button type="button" className="icon-btn" onClick={clearSearch}><Icon name="x" size={16} /></button>
         )}
-        </div>
-        {suggest.length > 0 && query.trim() && (
-          <ul className="search-suggest" role="listbox" aria-label="Подсказки">
-            {suggest.map((s) => (
-              <li key={`${s.kind}-${s.id}`} role="option">
-                <button
-                  type="button"
-                  className="search-suggest-row"
-                  onClick={() => { void onPickSuggest(s) }}
+          </div>
+          {showSuggestPanel && (
+            <div
+              className="search-suggest-popover"
+              id="search-suggest-popover"
+              role="presentation"
+            >
+              {suggestStatus === 'loading' && (
+                <p className="search-suggest-message" role="status">
+                  Ищем варианты…
+                </p>
+              )}
+              {suggestStatus === 'err' && (
+                <p className="search-suggest-message search-suggest-error" role="alert">
+                  Подсказки недоступны. Проверьте, что API и Elasticsearch
+                  запущены.
+                </p>
+              )}
+              {showSuggestList && (
+                <ul
+                  className="search-suggest"
+                  id="search-suggest-listbox"
+                  role="listbox"
+                  aria-label="Подсказки"
                 >
-                  <span className="search-suggest-kind">
-                    {s.kind === 'track' ? 'Трек' : 'Артист'}
-                  </span>
-                  <span className="search-suggest-line">
-                    {s.kind === 'track'
-                      ? (s.title ?? '—') + (s.name ? ` — ${s.name}` : '')
-                      : (s.name ?? '—')}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+                  {suggest.map((s) => {
+                    const dur =
+                      s.kind === 'track'
+                        ? formatSuggestDuration(s.duration_seconds)
+                        : null
+                    return (
+                    <li key={`${s.kind}-${s.id}`} role="option">
+                      <button
+                        type="button"
+                        className={`search-suggest-row${s.kind === 'track' ? ' search-suggest-row-track' : ' search-suggest-row-artist'}`}
+                        onClick={() => { void onPickSuggest(s) }}
+                      >
+                        {s.kind === 'track' ? (
+                          <CoverImage
+                            coverKey={s.cover_key ?? null}
+                            size={44}
+                            className="search-suggest-thumb"
+                          />
+                        ) : (
+                          <div
+                            className="search-suggest-thumb search-suggest-thumb-artist"
+                            aria-hidden
+                          >
+                            <Icon name="user" size={20} />
+                          </div>
+                        )}
+                        <div className="search-suggest-text">
+                          <div className="search-suggest-meta">
+                            <span className="search-suggest-kind">
+                              {s.kind === 'track' ? 'Трек' : 'Артист'}
+                            </span>
+                          </div>
+                          {s.kind === 'track' ? (
+                            <>
+                              <span className="search-suggest-title">
+                                {s.title ?? '—'}
+                              </span>
+                              {s.name ? (
+                                <span className="search-suggest-sub">
+                                  {s.name}
+                                </span>
+                              ) : null}
+                            </>
+                          ) : (
+                            <span className="search-suggest-title">
+                              {s.name ?? '—'}
+                            </span>
+                          )}
+                        </div>
+                        {dur ? (
+                          <span className="search-suggest-dur">{dur}</span>
+                        ) : null}
+                      </button>
+                    </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {tracks === 'idle' && history.length === 0 && (

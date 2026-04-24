@@ -11,6 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.models.track import Track
+from app.services.outbound_semaphore import (
+    OutboundSemaphoreTimeout,
+    youtube_slot,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -54,7 +58,13 @@ class YouTubeService:
 
     async def resolve_url(self, yt_url: str) -> dict:
         try:
-            info = await asyncio.to_thread(_yt_extract_info, yt_url)
+            async with youtube_slot():
+                info = await asyncio.to_thread(_yt_extract_info, yt_url)
+        except OutboundSemaphoreTimeout as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="YouTube сейчас перегружен, попробуйте позже.",
+            ) from exc
         except Exception as exc:
             logger.warning(
                 "yt_resolve_failed",
@@ -71,7 +81,13 @@ class YouTubeService:
         self, yt_url: str
     ) -> tuple[str, str]:
         try:
-            info = await asyncio.to_thread(_yt_extract_info, yt_url)
+            async with youtube_slot():
+                info = await asyncio.to_thread(_yt_extract_info, yt_url)
+        except OutboundSemaphoreTimeout as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="YouTube сейчас перегружен, попробуйте позже.",
+            ) from exc
         except Exception as exc:
             logger.warning(
                 "yt_stream_failed",

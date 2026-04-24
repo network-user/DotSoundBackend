@@ -3,13 +3,16 @@ from __future__ import annotations
 import structlog
 from fastapi import (
     APIRouter,
+    Depends,
     Query,
     Request,
     status,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.dependencies import get_db
 from app.core.observability import elasticsearch_query_observed
 from app.core.rate_limit import limiter
 from app.schemas.search_suggest import (
@@ -34,6 +37,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 @limiter.limit("60/minute")
 async def search_suggest(
     request: Request,
+    db: AsyncSession = Depends(get_db),
     q: str = Query(
         min_length=1, max_length=200, description="User input prefix"
     ),
@@ -56,6 +60,9 @@ async def search_suggest(
         elasticsearch_query_observed(op="suggest", outcome="es_fail")
         return SuggestListResponse(items=[])
     elasticsearch_query_observed(op="suggest", outcome="es_ok")
+    enriched = await search_query_service.enrich_suggest_tracks_from_db(
+        db, res
+    )
     return SuggestListResponse(
         items=[
             SuggestItemResponse(
@@ -63,8 +70,10 @@ async def search_suggest(
                 id=x.id,
                 title=x.title,
                 name=x.name,
+                cover_key=x.cover_key,
+                duration_seconds=x.duration_seconds,
             )
-            for x in res
+            for x in enriched
         ]
     )
 

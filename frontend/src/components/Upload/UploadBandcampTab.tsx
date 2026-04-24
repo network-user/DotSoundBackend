@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api } from '@/lib/api'
+import { api, getApiErrorMessage } from '@/lib/api'
 import type { Track } from '@/types/api'
 
 interface Props {
@@ -23,12 +23,15 @@ export function UploadBandcampTab({ onSuccess }: Props) {
       setPreview(track)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
+      const isCode = /^[1-5]\d{2}$/.test(msg)
       setError(
-        msg === '400' ? 'Неверная ссылка. Вставьте URL трека с bandcamp.com' :
-        msg === '402' ? 'Этот трек требует покупки на Bandcamp и недоступен для стриминга' :
-        msg === '404' ? 'Трек не найден или удалён' :
-        msg === '422' ? 'Не удалось получить данные трека. Проверьте, что ссылка ведёт на отдельный трек.' :
-        'Ошибка. Проверьте ссылку.',
+        isCode ? (
+          msg === '400' ? 'Неверная ссылка. Вставьте URL трека с bandcamp.com' :
+          msg === '402' ? 'Этот трек требует покупки на Bandcamp и недоступен для стриминга' :
+          msg === '404' ? 'Трек не найден или удалён' :
+          msg === '422' ? 'Не удалось получить данные трека. Проверьте, что ссылка ведёт на отдельный трек.' :
+          'Ошибка. Проверьте ссылку.'
+        ) : getApiErrorMessage(err, 'Ошибка. Проверьте ссылку.'),
       )
     } finally {
       setLoading(false)

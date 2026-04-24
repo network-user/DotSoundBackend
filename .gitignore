@@ -27,6 +27,8 @@ app/static/mini_app/
 # Frontend node_modules
 frontend/node_modules/
 .claude/
+# Local chat context exports (do not commit)
+context_delete.txt
 
 # Debug-mode per-service log files (settings.debug=true only)
 logs/
