@@ -220,6 +220,46 @@ async def test_scan_soundcloud_passes_to_service(
     assert k["url"] == url
 
 
+async def test_scan_soundcloud_uses_resolved_on_short_url(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 90014)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    resolved = "https://soundcloud.com/artist/sets/playlist-1"
+    with (
+        patch(
+            "app.api.v1.imports.resolve_public_soundcloud_playlist_url",
+            new_callable=AsyncMock,
+            return_value=resolved,
+        ) as m_res,
+        patch(
+            "app.api.v1.imports.ImportService.scan_external_playlist",
+            new_callable=AsyncMock,
+        ) as mock_scan,
+    ):
+        mock_scan.return_value = SimpleNamespace(
+            id=1,
+            user_id=user["id"],
+            source="soundcloud_playlist",
+            status="ready",
+            total_tracks=0,
+            completed_tracks=0,
+            failed_tracks=0,
+            tracks_data={},
+        )
+        r = await client.post(
+            "/api/v1/import/soundcloud_playlist",
+            headers=headers,
+            json={"url": "https://on.soundcloud.com/abc12"},
+        )
+    assert r.status_code == 200
+    m_res.assert_awaited()
+    k = mock_scan.call_args.kwargs
+    assert k["url"] == resolved
+
+
 async def test_scan_spotify_requires_auth(
     client: AsyncClient,
 ) -> None:
