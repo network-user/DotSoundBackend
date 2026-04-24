@@ -13,12 +13,22 @@ export const EXTERNAL_SOURCES = new Set([
   'soundcloud_playlist',
 ])
 
+/** Linked OAuth library scan — same `tracks` shape as URL-based imports */
+export const ACCOUNT_IMPORT_SOURCES = new Set([
+  'spotify_account',
+  'vk_account',
+  'soundcloud_account',
+])
+
 export function normalizeJobTracks(
   job: ImportJobResponse,
 ): ImportAudioInfo[] {
   const data = job.tracks_data
   if (!data) return []
-  if (EXTERNAL_SOURCES.has(job.source)) {
+  if (
+    EXTERNAL_SOURCES.has(job.source) ||
+    ACCOUNT_IMPORT_SOURCES.has(job.source)
+  ) {
     const tracks: ImportExternalTrackInfo[] = data.tracks || []
     return tracks.map((t, i) => ({
       file_id: `${job.source}:${i}`,
@@ -74,6 +84,15 @@ export function scanningLabel(
   }
   if (source === 'soundcloud_playlist') {
     return 'Сканируем плейлист SoundCloud...'
+  }
+  if (source === 'spotify_account') {
+    return 'Загружаем библиотеку Spotify...'
+  }
+  if (source === 'vk_account') {
+    return 'Загружаем аудио из аккаунта VK...'
+  }
+  if (source === 'soundcloud_account') {
+    return 'Загружаем библиотеку SoundCloud...'
   }
   if (EXTERNAL_SOURCES.has(source || '')) {
     return 'Сканируем плейлист...'

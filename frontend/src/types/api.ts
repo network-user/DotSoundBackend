@@ -9,7 +9,7 @@ export interface Track {
   play_count: number
   is_active: boolean
   is_public: boolean
-  source: 'internal' | 'soundcloud' | 'telegram'
+  source: 'internal' | 'soundcloud' | 'telegram' | 'youtube' | 'bandcamp'
   catalog_type: 'ugc' | 'licensed' | 'external_reference'
   access_mode:
     | 'internal_stream'
@@ -519,4 +519,22 @@ export interface ImportJobResponse {
     }[]
   } | null
   queue_position?: number | null
+}
+
+export type OAuthLinkedProvider = 'spotify' | 'soundcloud' | 'vk'
+
+export interface LinkedAccountInfo {
+  provider: string
+  provider_username: string | null
+  provider_user_id: string | null
+  connected: boolean
+}
+
+export interface ConnectOAuthResponse {
+  auth_url: string
+}
+
+export interface AccountImportBody {
+  source?: 'liked' | 'playlist'
+  playlist_id?: string | null
 }

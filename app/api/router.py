@@ -7,6 +7,7 @@ from app.api.v1 import (
     artists,
     auth,
     auth_email,
+    bandcamp,
     blocks,
     chats,
     comments,
@@ -30,6 +31,7 @@ from app.api.v1 import (
     tracks,
     users,
     ws,
+    youtube,
 )
 from app.api.v1.internal import audio_compute
 
@@ -45,6 +47,8 @@ api_router.include_router(likes.router)
 api_router.include_router(dislikes.router)
 api_router.include_router(playlists.router)
 api_router.include_router(soundcloud.router)
+api_router.include_router(youtube.router)
+api_router.include_router(bandcamp.router)
 api_router.include_router(complaints.router, tags=["complaints"])
 api_router.include_router(metadata.router)
 api_router.include_router(admin.router)

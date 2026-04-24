@@ -562,7 +562,21 @@ bounded-transport exception
 
 ---
 
-*Последнее обновление: 2026-04-23 (план: karaoke + catalog align).*
+*Последнее обновление: 2026-04-24 (multi-platform streaming: YouTube + Bandcamp).*
+
+## Платформы — будущее
+
+- [ ] **Гибридный плеер**: для платформ с официальными embed-виджетами реализовать
+  `access_mode="official_embed"` — хранить embed URL, отрисовывать `<iframe>` вместо
+  нативного плеера, отключить EQ. Приоритет: YouTube (требует TOS раздел 5.D).
+- [ ] **VK Музыка**: OAuth уже реализован (`linked_accounts`, scope `audio`). Нужно добавить
+  `VKStreamService` (получает HLS-URL через `audio.getById` с user OAuth token) и расширить
+  `playback.py`. Отложено — российский сервис.
+- [ ] **Яндекс Музыка**: нужен новый OAuth-провайдер (`Yandex OAuth`, oauth.yandex.ru) +
+  неофициальный API-адаптер. Отложено — российский сервис.
+- [ ] **YouTube TOS compliance**: согласно TOS YouTube раздел 5.D прямой API-стриминг запрещён.
+  Долгосрочно: мигрировать на `access_mode="official_embed"` (iframe-embed), API-стриминг
+  оставить только как dev/fallback.
 
 ## Sprint concurrency hardening (2026-04-22)
 

@@ -72,6 +72,7 @@ import { AuthorView } from '@/components/AuthorView/AuthorView'
 import { BottomNav } from '@/components/BottomNav/BottomNav'
 import { ComplaintModal } from '@/components/ComplaintModal/ComplaintModal'
 import { SettingsSheet } from '@/components/Settings/SettingsSheet'
+import { OauthConnectionsReturn } from '@/components/Settings/OauthConnectionsReturn'
 import { Equalizer } from '@/components/Equalizer/Equalizer'
 import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics'
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
@@ -491,6 +492,10 @@ export function App() {
             }
           />
           <Route path="/track/:trackId" element={<TrackDeepLinkRoute />} />
+          <Route
+            path="/settings/connections"
+            element={<OauthConnectionsReturn />}
+          />
           <Route path="/legal" element={<LegalView />} />
           <Route path="/legal/:docId" element={<LegalDocView />} />
           <Route path="/daily-mix" element={<DailyMixView />} />

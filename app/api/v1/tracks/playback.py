@@ -31,6 +31,64 @@ router = APIRouter()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
+def _stream_ttl(source_platform: str | None) -> int:
+    if source_platform == "youtube":
+        return 21600  # ~6 hours
+    if source_platform == "bandcamp":
+        return 3600   # ~1 hour
+    return 300        # SoundCloud default
+
+
+async def _resolve_third_party_stream(
+    track: object,
+    session: object,
+) -> tuple[str, str]:
+    platform: str | None = getattr(track, "source_platform", None)
+
+    if platform == "soundcloud" or (
+        not platform and getattr(track, "sc_url", None)
+    ):
+        if not getattr(track, "sc_url", None):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="SC track missing URL",
+            )
+        from app.config import settings
+        from app.services.soundcloud_service import SoundCloudService
+
+        sc_service = SoundCloudService(settings.sc_client_id, session)  # type: ignore[arg-type]
+        return await sc_service.get_stream_info(track.sc_url)  # type: ignore[attr-defined]
+
+    if platform == "youtube":
+        src: str | None = getattr(track, "source_url", None)
+        if not src:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="YouTube track missing source URL",
+            )
+        from app.services.youtube_service import YouTubeService
+
+        yt_service = YouTubeService(session)  # type: ignore[arg-type]
+        return await yt_service.get_stream_info(src)
+
+    if platform == "bandcamp":
+        src = getattr(track, "source_url", None)
+        if not src:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Bandcamp track missing source URL",
+            )
+        from app.services.bandcamp_service import BandcampService
+
+        bc_service = BandcampService(session)  # type: ignore[arg-type]
+        return await bc_service.get_stream_info(src)
+
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=f"Unknown stream platform: {platform!r}",
+    )
+
+
 def _check_access(track: object, current_user: User | None = None) -> None:
     if getattr(track, "is_public", True):
         return
@@ -64,27 +122,14 @@ async def stream_track(
         )
     _check_access(track, current_user)
     if track.access_mode == "third_party_stream":
-        if not track.sc_url:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="SC track missing URL",
-            )
-        from app.config import settings
-        from app.services.soundcloud_service import SoundCloudService
-
-        sc_service = SoundCloudService(settings.sc_client_id, session)
-        stream_url, protocol = (
-            await sc_service.get_stream_info(track.sc_url)
+        stream_url, protocol = await _resolve_third_party_stream(
+            track, session
         )
         return StreamResponse(
             track_id=track_id,
             url=stream_url,
-            stream_type=(
-                "hls"
-                if protocol == "hls"
-                else "direct"
-            ),
-            expires_in=300,
+            stream_type="hls" if protocol == "hls" else "direct",
+            expires_in=_stream_ttl(track.source_platform),
         )
     if not track.file_key:
         raise HTTPException(
@@ -192,21 +237,10 @@ async def audio_stream(
         )
 
     if track.access_mode == "third_party_stream":
-        if not track.sc_url:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="SC track missing URL",
-            )
-        from app.config import settings
-        from app.services.soundcloud_service import SoundCloudService
-
-        sc_service = SoundCloudService(settings.sc_client_id, session)
-        stream_url = await sc_service.get_stream_url(
-            track.sc_url
+        stream_url, _ = await _resolve_third_party_stream(
+            track, session
         )
-        return RedirectResponse(
-            url=stream_url, status_code=302
-        )
+        return RedirectResponse(url=stream_url, status_code=302)
 
     if not track.file_key:
         raise HTTPException(

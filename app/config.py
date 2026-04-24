@@ -83,6 +83,8 @@ class AppSettings(BaseSettings):
     # generate_lyrics_task for the same track_id at the same time.
     soundcloud_global_concurrency: int = 4
     soundcloud_slot_acquire_timeout_seconds: float = 30.0
+    youtube_concurrency: int = 4
+    bandcamp_concurrency: int = 4
     lyrics_per_track_lock_ttl_seconds: int = 300
 
     # Stage 4 backpressure on ImportJob. New jobs above

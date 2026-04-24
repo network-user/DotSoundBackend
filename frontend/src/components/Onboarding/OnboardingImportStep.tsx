@@ -10,6 +10,7 @@ import { SoundCloudPlaylistUrlModal } from '@/components/Import/SoundCloudPlayli
 import { SpotifyUrlModal } from '@/components/Import/SpotifyUrlModal'
 import { VkMusicUrlModal } from '@/components/Import/VkMusicUrlModal'
 import { YandexMusicUrlModal } from '@/components/Import/YandexMusicUrlModal'
+import { PlatformImportMethodModal } from '@/components/Import/PlatformImportMethodModal'
 import {
   defaultSelectedIndices,
   fmtDuration,
@@ -42,6 +43,9 @@ export function OnboardingImportStep({ onDone }: Props) {
   const [vkOpen, setVkOpen] = useState(false)
   const [scOpen, setScOpen] = useState(false)
   const [spotifyOpen, setSpotifyOpen] = useState(false)
+  const [importMethod, setImportMethod] = useState<
+    null | 'vk' | 'spotify'
+  >(null)
   const [flow, setFlow] = useState<Flow>('pick')
   const [job, setJob] = useState<ImportJobResponse | null>(null)
   const [audios, setAudios] = useState<ImportAudioInfo[]>([])
@@ -841,27 +845,27 @@ export function OnboardingImportStep({ onDone }: Props) {
         <button
           type="button"
           className="onboarding-import-card"
-          onClick={() => setVkOpen(true)}
+          onClick={() => setImportMethod('vk')}
           disabled={busy}
         >
           <span className="onboarding-import-card-icon">
             <Icon name="source-vk" size={24} />
           </span>
           <span className="onboarding-import-card-title">VK Музыка</span>
-          <span className="hint">Ссылка (vk.com или vk.ru)</span>
+          <span className="hint">Ссылка или вход в аккаунт</span>
         </button>
 
         <button
           type="button"
           className="onboarding-import-card"
-          onClick={() => setSpotifyOpen(true)}
+          onClick={() => setImportMethod('spotify')}
           disabled={busy}
         >
           <span className="onboarding-import-card-icon">
             <Icon name="source-spotify" size={24} />
           </span>
           <span className="onboarding-import-card-title">Spotify</span>
-          <span className="hint">Плейлист или альбом (open.spotify.com)</span>
+          <span className="hint">Ссылка или вход в аккаунт</span>
         </button>
 
         <button
@@ -911,6 +915,29 @@ export function OnboardingImportStep({ onDone }: Props) {
         open={spotifyOpen}
         onClose={() => setSpotifyOpen(false)}
         onScan={onSpotifyUrl}
+      />
+      <PlatformImportMethodModal
+        open={importMethod != null}
+        platform={importMethod === 'vk' ? 'vk' : 'spotify'}
+        onClose={() => setImportMethod(null)}
+        onPickByLink={() => {
+          const p = importMethod
+          setImportMethod(null)
+          if (p === 'vk') setVkOpen(true)
+          else if (p === 'spotify') setSpotifyOpen(true)
+        }}
+        onAccountScanReady={j => {
+          setImportMethod(null)
+          setErr(null)
+          if (j.status === 'failed') {
+            setErr('Не удалось прочитать библиотеку. Попробуйте по ссылке.')
+            return
+          }
+          if (!applyScanJob(j)) {
+            setErr('Не удалось прочитать плейлист')
+            setFlow('pick')
+          }
+        }}
       />
       <SoundCloudPlaylistUrlModal
         open={scOpen}

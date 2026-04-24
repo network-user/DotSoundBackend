@@ -11,6 +11,13 @@ import { usePlayer } from '@/store/PlayerContext'
 import { haptic } from '@/lib/telegram'
 import { useRipple } from '@/components/ui/Ripple'
 
+const PLATFORM_LABELS: Record<string, string> = {
+  youtube: 'YouTube',
+  bandcamp: 'Bandcamp',
+  vk: 'VK Музыка',
+  yandex: 'Яндекс Музыка',
+}
+
 function fmt(sec: number) {
   if (!sec || isNaN(sec)) return '0:00'
   const m = Math.floor(sec / 60)
@@ -190,6 +197,24 @@ export function PlayerBar() {
           <p className="pb-artist hint">
             {track.artist ?? '—'}
           </p>
+          {track.source_platform &&
+            track.source_platform !== 'soundcloud' &&
+            track.source_url && (
+              <a
+                className="pb-source-link"
+                href={track.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title={`Слушать на ${PLATFORM_LABELS[track.source_platform] ?? track.source_platform}`}
+              >
+                <Icon
+                  name={`source-${track.source_platform}`}
+                  size={12}
+                />
+                <span>{PLATFORM_LABELS[track.source_platform] ?? track.source_platform}</span>
+              </a>
+            )}
         </div>
 
         <div id="pb-controls" className="pb-ctl-v2">
