@@ -13,6 +13,7 @@ from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.services.import_service import ImportService
+from app.services.linked_account_service import LinkedAccountService
 from app.utils.soundcloud_playlist_url import (
     resolve_public_soundcloud_playlist_url,
 )
@@ -24,6 +25,21 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 class ImportStartRequest(BaseModel):
     track_indices: list[int]
+
+
+class AccountImportRequest(BaseModel):
+    """Import from a connected provider account.
+
+    ``source`` can be:
+    - ``"liked"``  — all saved / liked tracks from the account (default)
+    - ``"playlist"`` — a specific playlist; requires ``playlist_id``
+
+    Use ``GET /linked-accounts/{provider}/playlists`` to get the list of
+    available playlists before requesting a playlist import.
+    """
+
+    source: str = "liked"
+    playlist_id: str | None = None
 
 
 class YandexMusicImportRequest(BaseModel):
@@ -259,3 +275,91 @@ async def cancel_import(
     service = ImportService(session)
     job = await service.cancel_job(job_id, current_user.id)
     return ImportJobResponse.model_validate(job)
+
+
+async def _scan_account(
+    provider: str,
+    body: AccountImportRequest,
+    session: AsyncSession,
+    current_user: User,
+) -> ImportJobResponse:
+    """Shared handler for all account-based import endpoints."""
+    if body.source not in ("liked", "playlist"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail='source must be "liked" or "playlist"',
+        )
+    if body.source == "playlist" and not body.playlist_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="playlist_id is required when source is \"playlist\"",
+        )
+
+    linked_svc = LinkedAccountService(session)
+    account = await linked_svc.get_account(current_user.id, provider)
+    if not account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"{provider.capitalize()} account is not connected. "
+                "Connect it in account settings first."
+            ),
+        )
+    account = await linked_svc.refresh_if_expired(account)
+
+    resolved_source = (
+        body.playlist_id if body.source == "playlist" else "liked"
+    )
+    import_svc = ImportService(session)
+    job = await import_svc.scan_account_library(
+        user_id=current_user.id,
+        provider=provider,
+        source=resolved_source,
+        account=account,
+    )
+    return ImportJobResponse.model_validate(job)
+
+
+@router.post(
+    "/spotify_account",
+    response_model=ImportJobResponse,
+    summary="Import from connected Spotify account",
+)
+@limiter.limit("5/minute")
+async def scan_spotify_account(
+    request: Request,
+    body: AccountImportRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ImportJobResponse:
+    return await _scan_account("spotify", body, session, current_user)
+
+
+@router.post(
+    "/soundcloud_account",
+    response_model=ImportJobResponse,
+    summary="Import liked tracks from connected SoundCloud account",
+)
+@limiter.limit("5/minute")
+async def scan_soundcloud_account(
+    request: Request,
+    body: AccountImportRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ImportJobResponse:
+    return await _scan_account("soundcloud", body, session, current_user)
+
+
+@router.post(
+    "/vk_account",
+    response_model=ImportJobResponse,
+    summary="Import audio from connected VK account",
+)
+@limiter.limit("5/minute")
+async def scan_vk_account(
+    request: Request,
+    body: AccountImportRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ImportJobResponse:
+    return await _scan_account("vk", body, session, current_user)

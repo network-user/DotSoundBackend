@@ -16,6 +16,7 @@ from app.api.v1 import (
     health,
     imports,
     likes,
+    linked_accounts,
     lyrics,
     messages,
     metadata,
@@ -51,6 +52,7 @@ api_router.include_router(lyrics.router)
 api_router.include_router(follows.router)
 api_router.include_router(albums.router)
 api_router.include_router(imports.router)
+api_router.include_router(linked_accounts.router)
 api_router.include_router(chats.router)
 api_router.include_router(messages.router)
 api_router.include_router(comments.router)

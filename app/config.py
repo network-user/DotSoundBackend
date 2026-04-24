@@ -120,6 +120,30 @@ class AppSettings(BaseSettings):
     lyrics_provider_name: str = ""
     track_info_provider_name: str = ""
 
+    # OAuth provider credentials for linked-account import.
+    # Each provider needs its own app registration:
+    #   Spotify:    developer.spotify.com
+    #   SoundCloud: soundcloud.com/you/apps
+    #   VK:         vk.com/editapp (audio scope requires manual approval)
+    spotify_client_id: str = ""
+    spotify_client_secret: str = ""
+    spotify_redirect_uri: str = ""
+
+    soundcloud_oauth_client_id: str = ""
+    soundcloud_oauth_client_secret: str = ""
+    soundcloud_oauth_redirect_uri: str = ""
+
+    vk_app_id: str = ""
+    vk_app_secret: str = ""
+    vk_redirect_uri: str = ""
+
+    # Fernet key for encrypting stored OAuth access/refresh tokens.
+    # If empty, falls back to totp_encryption_key.
+    oauth_token_encryption_key: str = ""
+
+    # TTL for OAuth state tokens stored in Redis (seconds).
+    oauth_state_ttl_seconds: int = 600
+
     admin_jwt_secret: str = ""
     admin_csrf_secret: str = ""
     admin_telegram_alert_chat_id: str = ""

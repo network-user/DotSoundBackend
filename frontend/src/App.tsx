@@ -437,6 +437,7 @@ export function App() {
   return (
     <div id="app">
       <OfflineBanner />
+      {!needsOnboarding && !needsAuth && <ImportActivityBanner />}
       <main id="main">
         <ErrorBoundary>
         <Suspense fallback={<RouteFallback />}>
@@ -505,7 +506,6 @@ export function App() {
       <QueueSheet />
       <InstallPrompt />
       <SystemEventListener />
-      {!needsOnboarding && !needsAuth && <ImportActivityBanner />}
       <SettingsSheet
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

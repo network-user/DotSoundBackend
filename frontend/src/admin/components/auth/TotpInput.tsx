@@ -86,6 +86,14 @@ export function TotpInput({
     index: number,
     event: KeyboardEvent<HTMLInputElement>,
   ) {
+    if (event.key === 'Enter') {
+      const joined = cells.join('')
+      if (joined.length === 6) {
+        event.preventDefault()
+        onComplete?.(joined)
+      }
+      return
+    }
     if (
       event.key === 'Backspace' &&
       !cells[index] &&
