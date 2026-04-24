@@ -13,6 +13,7 @@ def test_scan_mode_accepts_none() -> None:
         minio_access_key="key",
         minio_secret_key="secret",
         minio_bucket="bucket",
+        internal_api_allowed_cidrs="10.0.0.0/8",
         upload_malware_scan_mode="none",
     )
     assert s.upload_malware_scan_mode == "none"
@@ -27,6 +28,7 @@ def test_scan_mode_accepts_lightweight() -> None:
         minio_access_key="key",
         minio_secret_key="secret",
         minio_bucket="bucket",
+        internal_api_allowed_cidrs="10.0.0.0/8",
         upload_malware_scan_mode="lightweight",
     )
     assert s.upload_malware_scan_mode == "lightweight"
@@ -41,6 +43,7 @@ def test_scan_mode_accepts_clamav() -> None:
         minio_access_key="key",
         minio_secret_key="secret",
         minio_bucket="bucket",
+        internal_api_allowed_cidrs="10.0.0.0/8",
         upload_malware_scan_mode="clamav",
     )
     assert s.upload_malware_scan_mode == "clamav"
@@ -56,5 +59,6 @@ def test_scan_mode_rejects_invalid() -> None:
             minio_access_key="key",
             minio_secret_key="secret",
             minio_bucket="bucket",
+            internal_api_allowed_cidrs="10.0.0.0/8",
             upload_malware_scan_mode="invalid",
         )

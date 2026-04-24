@@ -8,6 +8,18 @@ DotSound — музыкальная платформа в Telegram (SoundCloud-s
 - `DotSoundPrivateCore` (приватная бизнес-логика: алгоритмы, рекомендации, ML, scoring, anti-abuse)
 - `DotSoundComputeWorker` (pull-based ASR-воркер: faster-whisper + опциональный Demucs; импортирует PrivateCore через path develop=true)
 
+## Тесты (конвенция для всех Python-репо)
+
+- **Зеркало кода:** каталог `tests/<корневой_пакет>/` повторяет дерево пакета
+  (здесь: `tests/app/...` ↔ `app/...`). Имена: `test_<модуль>.py` рядом с тестируемым слоем.
+- **Корень `tests/`:** общий `conftest.py`, при необходимости вложенные
+  `conftest.py` в тяжёлых подпакетах; общие фабрики — `tests/factories.py`.
+- **Pytest:** `testpaths = ["tests"]`, `asyncio_mode = "auto"`; async-тесты с
+  `pytestmark = pytest.mark.anyio` там, где принято в существующих модулях.
+- **Покрытие:** `[tool.coverage.*]` в `pyproject.toml`, `source` = корневой пакет,
+  `branch = true`, отчёт `coverage.xml` для CI. Шаблон отчёта по спринтам:
+  `tests/SPRINT_TEST_REPORT_TEMPLATE.md`.
+
 ## TODO-трекер
 - Файл `TODO.md` в корне — единый источник задач проекта.
 - Агент обязан прочитать его в начале сессии и обновить после
