@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
@@ -137,6 +142,15 @@ export function LyricsEditor({
       })
     }
   }, [currentLine])
+
+  useEffect(() => {
+    if (step !== 'sync') return
+    const root = document.documentElement
+    root.classList.add('le-lyrics-sync-open')
+    return () => {
+      root.classList.remove('le-lyrics-sync-open')
+    }
+  }, [step])
 
   useEffect(() => {
     if (step === 'sync') {
@@ -297,8 +311,13 @@ export function LyricsEditor({
     ? (currentTime / duration) * 100
     : 0
 
-  return (
-    <div className="le-fullscreen">
+  const syncNode = (
+    <div
+      className="le-fullscreen le-fullscreen--portal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Расстановка таймкодов"
+    >
       <div className="le-fs-header">
         <button
           className="icon-btn"
@@ -422,5 +441,10 @@ export function LyricsEditor({
         </button>
       </div>
     </div>
+  )
+
+  return createPortal(
+    syncNode,
+    document.body,
   )
 }

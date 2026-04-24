@@ -2430,6 +2430,99 @@ textarea.form-input { resize: none; }
   flex-direction: column;
   animation: fadeIn 0.2s ease;
 }
+/* Портал в body: вне карточки/трансформов, выше плеера и остального UI,
+   иначе fixed+z-index внутри sheet визуально и по hit-test смешиваются с фоном. */
+.le-fullscreen--portal {
+  z-index: 10050;
+  isolation: isolate;
+  background: rgba(5, 5, 7, 0.92);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  backdrop-filter: blur(20px) saturate(1.15);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+html.le-lyrics-sync-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+html.le-lyrics-sync-open body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+.le-fullscreen--portal .le-fs-header {
+  position: relative;
+  z-index: 2;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.35),
+    rgba(0, 0, 0, 0.05) 100%
+  );
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  padding-top: max(12px, env(safe-area-inset-top, 0px));
+}
+.le-fullscreen--portal .le-fs-header .icon-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text, #e8e8e8);
+}
+.le-fullscreen--portal .le-fs-seek {
+  position: relative;
+  z-index: 2;
+}
+.le-fullscreen--portal .le-fs-seek input {
+  height: 5px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.le-fullscreen--portal .le-fs-seek input::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
+  background: #fff;
+}
+.le-fullscreen--portal .le-fs-controls {
+  position: relative;
+  z-index: 2;
+  padding: 16px 0 14px;
+}
+.le-fullscreen--portal .le-fs-controls .ctrl-btn {
+  width: 44px;
+  height: 44px;
+  color: #f0f0f0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+.le-fullscreen--portal
+  .le-fs-controls
+  .ctrl-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.le-fullscreen--portal .le-fs-current {
+  position: relative;
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 18px rgba(0, 0, 0, 0.45);
+}
+.le-fullscreen--portal .le-fs-list {
+  -webkit-overflow-scrolling: touch;
+  touch-action: auto;
+  overscroll-behavior: contain;
+}
+.le-fullscreen--portal .le-fs-save {
+  position: relative;
+  z-index: 2;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.1),
+    rgba(0, 0, 0, 0.5)
+  );
+  border-top-color: rgba(255, 255, 255, 0.1);
+  padding-bottom: max(
+    calc(var(--nav-h) + 16px),
+    calc(16px + env(safe-area-inset-bottom, 0px))
+  );
+}
 .le-fs-header {
   display: flex;
   align-items: center;

@@ -6,6 +6,9 @@ import {
 } from 'react'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
+import { SoundCloudPlaylistUrlModal } from '@/components/Import/SoundCloudPlaylistUrlModal'
+import { SpotifyUrlModal } from '@/components/Import/SpotifyUrlModal'
+import { VkMusicUrlModal } from '@/components/Import/VkMusicUrlModal'
 import { YandexMusicUrlModal } from '@/components/Import/YandexMusicUrlModal'
 import {
   defaultSelectedIndices,
@@ -30,18 +33,15 @@ interface Props {
   onDone: () => void
 }
 
-const SOON = [
-  { id: 'vk', label: 'VK Музыка', icon: 'source-vk' as const },
-  { id: 'spotify', label: 'Spotify', icon: 'source-spotify' as const },
-  { id: 'soundcloud', label: 'SoundCloud', icon: 'source-soundcloud' as const },
-]
-
 const MAX_POLLS = 150
 const POLL_MS = 2000
 
 export function OnboardingImportStep({ onDone }: Props) {
   const [status, setStatus] = useState<OnboardingStatus | null>(null)
   const [yandexOpen, setYandexOpen] = useState(false)
+  const [vkOpen, setVkOpen] = useState(false)
+  const [scOpen, setScOpen] = useState(false)
+  const [spotifyOpen, setSpotifyOpen] = useState(false)
   const [flow, setFlow] = useState<Flow>('pick')
   const [job, setJob] = useState<ImportJobResponse | null>(null)
   const [audios, setAudios] = useState<ImportAudioInfo[]>([])
@@ -167,6 +167,69 @@ export function OnboardingImportStep({ onDone }: Props) {
         throw new Error('scan_failed')
       }
       setYandexOpen(false)
+      if (!applyScanJob(j)) {
+        setErr('Не удалось прочитать плейлист')
+        setFlow('pick')
+      }
+    } catch {
+      setErr('Не удалось прочитать плейлист')
+      setFlow('pick')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onVkUrl = async (url: string) => {
+    setErr(null)
+    setBusy(true)
+    try {
+      const j = await api.startVkMusicImport(url)
+      if (j.status === 'failed') {
+        throw new Error('scan_failed')
+      }
+      setVkOpen(false)
+      if (!applyScanJob(j)) {
+        setErr('Не удалось прочитать плейлист')
+        setFlow('pick')
+      }
+    } catch {
+      setErr('Не удалось прочитать плейлист')
+      setFlow('pick')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onSoundCloudUrl = async (url: string) => {
+    setErr(null)
+    setBusy(true)
+    try {
+      const j = await api.startSoundCloudPlaylistImport(url)
+      if (j.status === 'failed') {
+        throw new Error('scan_failed')
+      }
+      setScOpen(false)
+      if (!applyScanJob(j)) {
+        setErr('Не удалось прочитать плейлист')
+        setFlow('pick')
+      }
+    } catch {
+      setErr('Не удалось прочитать плейлист')
+      setFlow('pick')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onSpotifyUrl = async (url: string) => {
+    setErr(null)
+    setBusy(true)
+    try {
+      const j = await api.startSpotifyImport(url)
+      if (j.status === 'failed') {
+        throw new Error('scan_failed')
+      }
+      setSpotifyOpen(false)
       if (!applyScanJob(j)) {
         setErr('Не удалось прочитать плейлист')
         setFlow('pick')
@@ -709,6 +772,21 @@ export function OnboardingImportStep({ onDone }: Props) {
           onClose={() => setYandexOpen(false)}
           onScan={onYandexUrl}
         />
+        <VkMusicUrlModal
+          open={vkOpen}
+          onClose={() => setVkOpen(false)}
+          onScan={onVkUrl}
+        />
+        <SpotifyUrlModal
+          open={spotifyOpen}
+          onClose={() => setSpotifyOpen(false)}
+          onScan={onSpotifyUrl}
+        />
+        <SoundCloudPlaylistUrlModal
+          open={scOpen}
+          onClose={() => setScOpen(false)}
+          onScan={onSoundCloudUrl}
+        />
       </div>
     )
   }
@@ -760,18 +838,44 @@ export function OnboardingImportStep({ onDone }: Props) {
           <span className="hint">Ссылка на плейлист или альбом</span>
         </button>
 
-        {SOON.map(s => (
-          <div
-            key={s.id}
-            className="onboarding-import-card disabled"
-          >
-            <span className="onboarding-import-card-icon">
-              <Icon name={s.icon} size={24} />
-            </span>
-            <span className="onboarding-import-card-title">{s.label}</span>
-            <span className="onboarding-import-soon">скоро</span>
-          </div>
-        ))}
+        <button
+          type="button"
+          className="onboarding-import-card"
+          onClick={() => setVkOpen(true)}
+          disabled={busy}
+        >
+          <span className="onboarding-import-card-icon">
+            <Icon name="source-vk" size={24} />
+          </span>
+          <span className="onboarding-import-card-title">VK Музыка</span>
+          <span className="hint">Ссылка (vk.com или vk.ru)</span>
+        </button>
+
+        <button
+          type="button"
+          className="onboarding-import-card"
+          onClick={() => setSpotifyOpen(true)}
+          disabled={busy}
+        >
+          <span className="onboarding-import-card-icon">
+            <Icon name="source-spotify" size={24} />
+          </span>
+          <span className="onboarding-import-card-title">Spotify</span>
+          <span className="hint">Плейлист или альбом (open.spotify.com)</span>
+        </button>
+
+        <button
+          type="button"
+          className="onboarding-import-card"
+          onClick={() => setScOpen(true)}
+          disabled={busy}
+        >
+          <span className="onboarding-import-card-icon">
+            <Icon name="source-soundcloud" size={24} />
+          </span>
+          <span className="onboarding-import-card-title">SoundCloud</span>
+          <span className="hint">Публичный плейлист (/sets/)</span>
+        </button>
       </div>
 
       <div className="onboarding-import-footer-btns">
@@ -797,6 +901,21 @@ export function OnboardingImportStep({ onDone }: Props) {
         open={yandexOpen}
         onClose={() => setYandexOpen(false)}
         onScan={onYandexUrl}
+      />
+      <VkMusicUrlModal
+        open={vkOpen}
+        onClose={() => setVkOpen(false)}
+        onScan={onVkUrl}
+      />
+      <SpotifyUrlModal
+        open={spotifyOpen}
+        onClose={() => setSpotifyOpen(false)}
+        onScan={onSpotifyUrl}
+      />
+      <SoundCloudPlaylistUrlModal
+        open={scOpen}
+        onClose={() => setScOpen(false)}
+        onScan={onSoundCloudUrl}
       />
     </div>
   )
