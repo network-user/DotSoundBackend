@@ -84,7 +84,9 @@ class AppSettings(BaseSettings):
     soundcloud_global_concurrency: int = 4
     soundcloud_slot_acquire_timeout_seconds: float = 30.0
     youtube_concurrency: int = 4
+    youtube_slot_acquire_timeout_seconds: float = 30.0
     bandcamp_concurrency: int = 4
+    bandcamp_slot_acquire_timeout_seconds: float = 30.0
     lyrics_per_track_lock_ttl_seconds: int = 300
 
     # Stage 4 backpressure on ImportJob. New jobs above

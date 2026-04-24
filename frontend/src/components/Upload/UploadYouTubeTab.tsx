@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api } from '@/lib/api'
+import { api, getApiErrorMessage } from '@/lib/api'
 import type { Track } from '@/types/api'
 
 interface Props {
@@ -23,12 +23,15 @@ export function UploadYouTubeTab({ onSuccess }: Props) {
       setPreview(track)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
+      const isCode = /^[1-5]\d{2}$/.test(msg)
       setError(
-        msg === '400' ? 'Неверная ссылка. Вставьте URL видео с youtube.com или youtu.be' :
-        msg === '404' ? 'Видео не найдено или недоступно' :
-        msg === '422' ? 'Не удалось получить аудио-поток. Возможно, видео ограничено.' :
-        msg === '503' ? 'YouTube временно недоступен. Попробуйте позже.' :
-        'Ошибка. Проверьте ссылку.',
+        isCode ? (
+          msg === '400' ? 'Неверная ссылка. Вставьте URL видео с youtube.com или youtu.be' :
+          msg === '404' ? 'Видео не найдено или недоступно' :
+          msg === '422' ? 'Не удалось получить аудио-поток. Возможно, видео ограничено.' :
+          msg === '503' ? 'YouTube временно недоступен. Попробуйте позже.' :
+          'Ошибка. Проверьте ссылку.'
+        ) : getApiErrorMessage(err, 'Ошибка. Проверьте ссылку.'),
       )
     } finally {
       setLoading(false)

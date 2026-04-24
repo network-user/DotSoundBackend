@@ -39,6 +39,8 @@ export interface SearchSuggestItem {
   id: number
   title: string | null
   name: string | null
+  cover_key?: string | null
+  duration_seconds?: number | null
 }
 
 export interface SearchSuggestResponse {

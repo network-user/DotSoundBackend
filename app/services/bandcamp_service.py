@@ -13,6 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import s3
 from app.config import settings
 from app.models.track import Track
+from app.services.outbound_semaphore import (
+    OutboundSemaphoreTimeout,
+    bandcamp_slot,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -51,24 +55,31 @@ class BandcampService:
         self._session = session
 
     async def _fetch_page(self, bc_url: str) -> str:
-        async with httpx.AsyncClient(
-            timeout=15,
-            headers={
-                "User-Agent": (
-                    settings.outbound_user_agent
-                ),
-                "Accept-Language": "en-US,en;q=0.9",
-            },
-            follow_redirects=True,
-        ) as client:
-            r = await client.get(bc_url)
-            if r.status_code == 404:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="Трек не найден на Bandcamp.",
-                )
-            r.raise_for_status()
-        return r.text
+        try:
+            async with bandcamp_slot():
+                async with httpx.AsyncClient(
+                    timeout=15,
+                    headers={
+                        "User-Agent": (
+                            settings.outbound_user_agent
+                        ),
+                        "Accept-Language": "en-US,en;q=0.9",
+                    },
+                    follow_redirects=True,
+                ) as client:
+                    r = await client.get(bc_url)
+                    if r.status_code == 404:
+                        raise HTTPException(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            detail="Трек не найден на Bandcamp.",
+                        )
+                    r.raise_for_status()
+                    return r.text
+        except OutboundSemaphoreTimeout as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Bandcamp сейчас перегружен, попробуйте позже.",
+            ) from exc
 
     async def resolve_url(self, bc_url: str) -> dict:
         try:

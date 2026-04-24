@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import structlog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.track import Track
 from app.search.es_client import es_available, get_es
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -22,6 +25,8 @@ class SuggestItem:
     id: int
     title: str | None
     name: str | None
+    cover_key: str | None = None
+    duration_seconds: int | None = None
 
 
 def _base_track_filters(
@@ -181,6 +186,8 @@ async def es_suggest_mixed(
                 id=int(tid),
                 title=src.get("title"),
                 name=src.get("artist"),
+                cover_key=None,
+                duration_seconds=None,
             )
         )
     for h in a_res.get("hits", {}).get("hits", []):
@@ -194,9 +201,45 @@ async def es_suggest_mixed(
                 id=int(aid),
                 title=None,
                 name=src.get("name"),
+                cover_key=None,
+                duration_seconds=None,
             )
         )
     return out[:limit]
+
+
+async def enrich_suggest_tracks_from_db(
+    session: AsyncSession, items: list[SuggestItem]
+) -> list[SuggestItem]:
+    """Attach cover and duration for track rows from PostgreSQL."""
+    tids = [i.id for i in items if i.kind == "track"]
+    if not tids:
+        return items
+    r = await session.execute(
+        select(Track.id, Track.cover_key, Track.duration_seconds).where(
+            Track.id.in_(tids)
+        )
+    )
+    meta: dict[int, tuple[str | None, int | None]] = {
+        int(row[0]): (row[1], row[2]) for row in r.all()
+    }
+    out: list[SuggestItem] = []
+    for i in items:
+        if i.kind != "track":
+            out.append(i)
+            continue
+        ck, dur = meta.get(i.id, (None, None))
+        out.append(
+            SuggestItem(
+                kind=i.kind,
+                id=i.id,
+                title=i.title,
+                name=i.name,
+                cover_key=ck,
+                duration_seconds=dur,
+            )
+        )
+    return out
 
 
 async def es_search_artists(

@@ -10,6 +10,8 @@ class SuggestItemResponse(BaseModel):
     id: int
     title: str | None = None
     name: str | None = None
+    cover_key: str | None = None
+    duration_seconds: int | None = None
     model_config = {
         "json_schema_extra": {
             "example": {
