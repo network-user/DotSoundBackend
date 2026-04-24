@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { usePlayer } from '@/store/PlayerContext'
 import { UploadFileTab } from '@/components/Upload/UploadFileTab'
 import { UploadSoundCloudTab } from '@/components/Upload/UploadSoundCloudTab'
+import { UploadYouTubeTab } from '@/components/Upload/UploadYouTubeTab'
+import { UploadBandcampTab } from '@/components/Upload/UploadBandcampTab'
 import type { Track } from '@/types/api'
 
-type Tab = 'file' | 'soundcloud'
+type Tab = 'file' | 'soundcloud' | 'youtube' | 'bandcamp'
 
 export function UploadView() {
   const navigate = useNavigate()
@@ -34,10 +36,24 @@ export function UploadView() {
         >
           SoundCloud
         </button>
+        <button
+          className={`upload-tab${tab === 'youtube' ? ' active' : ''}`}
+          onClick={() => setTab('youtube')}
+        >
+          YouTube
+        </button>
+        <button
+          className={`upload-tab${tab === 'bandcamp' ? ' active' : ''}`}
+          onClick={() => setTab('bandcamp')}
+        >
+          Bandcamp
+        </button>
       </div>
 
       {tab === 'file' && <UploadFileTab onSuccess={handleSuccess} />}
       {tab === 'soundcloud' && <UploadSoundCloudTab onSuccess={handleSuccess} />}
+      {tab === 'youtube' && <UploadYouTubeTab onSuccess={handleSuccess} />}
+      {tab === 'bandcamp' && <UploadBandcampTab onSuccess={handleSuccess} />}
     </section>
   )
 }

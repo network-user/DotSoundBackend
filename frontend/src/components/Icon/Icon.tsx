@@ -120,6 +120,10 @@ const PATHS: Record<string, string> = {
     'M12 22a10 10 0 110-20 10 10 0 010 20z M6 9q6-3 12 0 M7 12q5-2.5 10 0 M8 15q4-2 8 0',
   'source-soundcloud':
     'M13 18h6a3 3 0 010-6 4 4 0 00-6-2v8 M4 13v5 M7 11v7 M10 9v9',
+  'source-youtube':
+    'M3 4h18a2 2 0 012 2v12a2 2 0 01-2 2H3a2 2 0 01-2-2V6a2 2 0 012-2z M10 9l6 3-6 3V9z',
+  'source-bandcamp':
+    'M9 5v14 M9 5h4a4 4 0 010 8H9 M9 13h4a4 4 0 010 8H9',
   pip:
     'M3 4h18a2 2 0 012 2v12a2 2 0 01-2 2H3a2 2 0 01-2-2V6a2 2 0 012-2z M11 11h8v6h-8z',
   speed:

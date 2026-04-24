@@ -12,6 +12,7 @@ import { SoundCloudPlaylistUrlModal } from './SoundCloudPlaylistUrlModal'
 import { SpotifyUrlModal } from './SpotifyUrlModal'
 import { VkMusicUrlModal } from './VkMusicUrlModal'
 import { YandexMusicUrlModal } from './YandexMusicUrlModal'
+import { PlatformImportMethodModal } from './PlatformImportMethodModal'
 
 type AudioInfo = ImportAudioInfo
 type ImportJobData = ImportJobResponse
@@ -36,6 +37,9 @@ export function ImportView({ active }: { active: boolean }) {
   const [vkModalOpen, setVkModalOpen] = useState(false)
   const [scModalOpen, setScModalOpen] = useState(false)
   const [spotifyModalOpen, setSpotifyModalOpen] = useState(false)
+  const [importMethodPlatform, setImportMethodPlatform] = useState<
+    null | 'vk' | 'spotify'
+  >(null)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const pollCountRef = useRef(0)
@@ -138,7 +142,7 @@ export function ImportView({ active }: { active: boolean }) {
       return
     }
     if (sourceId === 'vk') {
-      setVkModalOpen(true)
+      setImportMethodPlatform('vk')
       return
     }
     if (sourceId === 'soundcloud') {
@@ -146,7 +150,7 @@ export function ImportView({ active }: { active: boolean }) {
       return
     }
     if (sourceId === 'spotify') {
-      setSpotifyModalOpen(true)
+      setImportMethodPlatform('spotify')
       return
     }
     if (sourceId !== 'telegram') return
@@ -255,6 +259,26 @@ export function ImportView({ active }: { active: boolean }) {
       } catch (e) {
         setPhase('pick')
         throw e
+      }
+    },
+    [applyScanResult, extScanError],
+  )
+
+  const applyAccountImportJob = useCallback(
+    (j: ImportJobData) => {
+      setError(null)
+      if (j.status === 'failed') {
+        const code = j.tracks_data?.error_code as string | undefined
+        setPhase('pick')
+        setError(
+          extScanError(code) ||
+            'Не удалось получить треки из аккаунта. Попробуйте по ссылке.',
+        )
+        return
+      }
+      if (!applyScanResult(j)) {
+        setError('Не удалось получить треки из аккаунта')
+        setPhase('pick')
       }
     },
     [applyScanResult, extScanError],
@@ -536,6 +560,22 @@ export function ImportView({ active }: { active: boolean }) {
         open={spotifyModalOpen}
         onClose={() => setSpotifyModalOpen(false)}
         onScan={handleSpotifyScan}
+      />
+
+      <PlatformImportMethodModal
+        open={importMethodPlatform != null}
+        platform={importMethodPlatform === 'vk' ? 'vk' : 'spotify'}
+        onClose={() => setImportMethodPlatform(null)}
+        onPickByLink={() => {
+          const p = importMethodPlatform
+          setImportMethodPlatform(null)
+          if (p === 'vk') setVkModalOpen(true)
+          else if (p === 'spotify') setSpotifyModalOpen(true)
+        }}
+        onAccountScanReady={j => {
+          setImportMethodPlatform(null)
+          applyAccountImportJob(j)
+        }}
       />
 
       {cancelConfirmOpen && (

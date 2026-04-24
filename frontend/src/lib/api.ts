@@ -42,6 +42,10 @@ import type {
   OnboardingStatus,
   UserResponse,
   UserStatsResponse,
+  LinkedAccountInfo,
+  ConnectOAuthResponse,
+  AccountImportBody,
+  OAuthLinkedProvider,
 } from '@/types/api'
 
 let accessToken: string | null = null
@@ -349,6 +353,22 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sc_url, is_public }),
+    })
+  },
+
+  importYouTubeTrack(yt_url: string, is_public = true): Promise<Track> {
+    return request('/api/v1/youtube/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ yt_url, is_public }),
+    })
+  },
+
+  importBandcampTrack(bc_url: string, is_public = true): Promise<Track> {
+    return request('/api/v1/bandcamp/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bc_url, is_public }),
     })
   },
 
@@ -1026,6 +1046,44 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url }),
+    })
+  },
+
+  getLinkedAccounts(): Promise<LinkedAccountInfo[]> {
+    return request('/api/v1/linked-accounts')
+  },
+
+  startLinkedAccountConnect(
+    provider: OAuthLinkedProvider,
+  ): Promise<ConnectOAuthResponse> {
+    return request(`/api/v1/linked-accounts/${provider}/connect`, {
+      method: 'POST',
+    })
+  },
+
+  startSpotifyAccountImport(
+    body: AccountImportBody = {},
+  ): Promise<ImportJobResponse> {
+    return request('/api/v1/import/spotify_account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: body.source ?? 'liked',
+        playlist_id: body.playlist_id ?? null,
+      }),
+    })
+  },
+
+  startVkAccountImport(
+    body: AccountImportBody = {},
+  ): Promise<ImportJobResponse> {
+    return request('/api/v1/import/vk_account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        source: body.source ?? 'liked',
+        playlist_id: body.playlist_id ?? null,
+      }),
     })
   },
 
