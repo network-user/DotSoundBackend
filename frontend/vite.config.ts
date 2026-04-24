@@ -29,6 +29,7 @@ export default defineConfig({
         display: 'standalone',
         display_override: ['standalone', 'minimal-ui'],
         orientation: 'portrait',
+        id: '/mini_app/',
         start_url: '/mini_app/',
         scope: '/mini_app/',
         prefer_related_applications: false,

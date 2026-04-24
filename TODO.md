@@ -147,6 +147,7 @@
 
 ## PWA / Фоновый плеер
 
+- [x] Установка на устройство: `isTelegram()` по `initData` / user; `InstallPrompt` (iOS Safari / прочий iOS, Chromium `beforeinstallprompt`, fallback без BIP); manifest `id`, один `link` manifest
 - Media Session API (lock-screen контроли: play/pause/next/prev/seekto)
 - Браузерная версия с email auth + Telegram code auth
 - **PWA-слой поверх текущего SPA**
