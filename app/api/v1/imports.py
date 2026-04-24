@@ -13,7 +13,9 @@ from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.services.import_service import ImportService
-from app.utils.soundcloud_playlist_url import is_public_soundcloud_playlist_url
+from app.utils.soundcloud_playlist_url import (
+    resolve_public_soundcloud_playlist_url,
+)
 from app.utils.spotify_import_url import is_open_spotify_playlist_or_album_url
 
 router = APIRouter(prefix="/import", tags=["import"])
@@ -136,19 +138,20 @@ async def scan_soundcloud_playlist(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ImportJobResponse:
-    if not is_public_soundcloud_playlist_url(body.url):
+    try:
+        normalized = await resolve_public_soundcloud_playlist_url(
+            body.url
+        )
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "URL must be a public soundcloud.com playlist link "
-                "(.../sets/...)"
-            ),
-        )
+            detail=str(exc) or "Invalid SoundCloud playlist URL",
+        ) from exc
     service = ImportService(session)
     job = await service.scan_external_playlist(
         user_id=current_user.id,
         source="soundcloud_playlist",
-        url=body.url.strip(),
+        url=normalized,
     )
     return ImportJobResponse.model_validate(job)
 

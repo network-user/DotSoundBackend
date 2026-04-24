@@ -9,6 +9,7 @@ interface Props {
 
 const _SC_SETS = /soundcloud\.com\/[^/]+\/sets\//i
 
+/** Allows full .../sets/... links, m.soundcloud.com, and on.soundcloud.com short links. */
 function isPlausibleScPlaylistUrl(trimmed: string): boolean {
   try {
     const u = new URL(trimmed)
@@ -16,10 +17,23 @@ function isPlausibleScPlaylistUrl(trimmed: string): boolean {
       return false
     }
     const h = u.hostname.toLowerCase()
-    if (h !== 'soundcloud.com' && !h.endsWith('.soundcloud.com')) {
+    if (h === 'api.soundcloud.com') {
       return false
     }
-    return _SC_SETS.test(trimmed)
+    if (h === 'on.soundcloud.com') {
+      return u.pathname.length > 1
+    }
+    if (
+      h === 'soundcloud.com' ||
+      h === 'www.soundcloud.com' ||
+      h === 'm.soundcloud.com'
+    ) {
+      return _SC_SETS.test(u.href)
+    }
+    if (h.endsWith('.soundcloud.com')) {
+      return _SC_SETS.test(u.href)
+    }
+    return false
   } catch {
     return false
   }
@@ -101,10 +115,10 @@ export function SoundCloudPlaylistUrlModal({
           </button>
         </div>
         <p className="modal-hint">
-          Откройте публичный плейлист, скопируйте ссылку вида{' '}
-          <code>soundcloud.com/…/sets/…</code>. Импорт одного трека
-          &nbsp;— в другом сценарии
-          {'. '}
+          Публичный плейлист: ссылка с{' '}
+          <code>…/sets/…</code> на soundcloud.com, либо короткая{' '}
+          <code>on.soundcloud.com/…</code>. Один трек
+          &nbsp;— в другом сценарии.
         </p>
         <div className="form-group">
           <label className="form-label">Ссылка на плейлист</label>
@@ -113,7 +127,7 @@ export function SoundCloudPlaylistUrlModal({
             type="url"
             inputMode="url"
             autoComplete="off"
-            placeholder="https://soundcloud.com/.../sets/…"
+            placeholder="https://on.soundcloud.com/… или …/sets/…"
             value={url}
             onChange={e => setUrl(e.target.value)}
             onKeyDown={e => {
