@@ -88,6 +88,22 @@ def _yt_search_sync(query: str, limit: int) -> list[dict]:
     return out
 
 
+def _yt_stream_protocol(url: str, meta: dict) -> str:
+    """If yt-dlp gives an HLS master (.m3u8), we must return ``hls`` so the
+    client uses hls.js. Feeding m3u8 to ``<audio src>`` (``direct``) does not
+    work in browsers.
+    """
+    u = (url or "").lower()
+    if ".m3u8" in u or "manifest/hls" in u:
+        return "hls"
+    p = (meta.get("protocol") or "").lower()
+    if p.startswith("m3u8"):
+        return "hls"
+    if "m3u8" in p:
+        return "hls"
+    return "direct"
+
+
 def _yt_extract_info(url: str) -> dict:
     try:
         import yt_dlp
@@ -172,6 +188,7 @@ class YouTubeService:
             ) from exc
 
         url: str | None = info.get("url")
+        protocol_meta: dict = info
         if not url:
             formats: list[dict] = info.get("formats") or []
             audio = [
@@ -189,6 +206,7 @@ class YouTubeService:
                     ),
                 )
                 url = best.get("url")
+                protocol_meta = best
 
         if not url:
             raise HTTPException(
@@ -196,7 +214,7 @@ class YouTubeService:
                 detail="Для этого видео не найден аудио-поток.",
             )
 
-        return url, "direct"
+        return url, _yt_stream_protocol(url, protocol_meta)
 
     async def import_or_get_track(
         self,

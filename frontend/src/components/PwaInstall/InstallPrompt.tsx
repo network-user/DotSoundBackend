@@ -9,7 +9,14 @@ import {
 const STORAGE_KEY = 'pwa-install-dismissed-at'
 const VISIT_KEY = 'pwa-visit-count'
 const DELAY_MS = 30_000
+const FALLBACK_NO_BIP_MS = 55_000
 const MIN_VISITS = 2
+
+type PanelMode =
+  | 'bip'
+  | 'ios_safari'
+  | 'ios_other'
+  | 'menu_hint'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>
@@ -33,13 +40,33 @@ function isStandalone(): boolean {
   }
 }
 
-function isIOSSafari(): boolean {
+function isIOS(): boolean {
   try {
     const ua = navigator.userAgent || ''
-    const iOS = /iPad|iPhone|iPod/.test(ua)
-    const safari =
-      /Safari/.test(ua) && !/CriOS|FxiOS/.test(ua)
-    return iOS && safari
+    if (/iPad|iPhone|iPod/.test(ua)) {
+      return true
+    }
+    if (
+      /Mac/.test(navigator.platform)
+      && ((navigator as Navigator & { maxTouchPoints?: number })
+        .maxTouchPoints ?? 0) > 1
+    ) {
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+function isIOSSafariForCopy(): boolean {
+  try {
+    const ua = navigator.userAgent || ''
+    if (!isIOS()) return false
+    return (
+      /Safari/.test(ua)
+      && !/CriOS|FxiOS|EdgiOS|OPiOS|OPT\//.test(ua)
+    )
   } catch {
     return false
   }
@@ -73,9 +100,12 @@ function bumpVisits(): number {
 
 export function InstallPrompt() {
   const [visible, setVisible] = useState(false)
-  const [iosFlow, setIosFlow] = useState(false)
+  const [panelMode, setPanelMode] = useState<PanelMode | null>(
+    null,
+  )
   const promptRef =
     useRef<BeforeInstallPromptEvent | null>(null)
+  const bipEventReceived = useRef(false)
   const toast = useToast()
 
   useEffect(() => {
@@ -87,9 +117,13 @@ export function InstallPrompt() {
 
     const onBefore = (e: Event) => {
       e.preventDefault()
+      if (isIOS()) {
+        return
+      }
+      bipEventReceived.current = true
       promptRef.current =
         e as BeforeInstallPromptEvent
-      setIosFlow(false)
+      setPanelMode('bip')
       window.setTimeout(
         () => setVisible(true),
         DELAY_MS,
@@ -97,6 +131,7 @@ export function InstallPrompt() {
     }
     const onInstalled = () => {
       setVisible(false)
+      setPanelMode(null)
       try {
         localStorage.setItem(
           STORAGE_KEY,
@@ -118,14 +153,30 @@ export function InstallPrompt() {
       onInstalled,
     )
 
-    if (isIOSSafari()) {
-      window.setTimeout(() => {
-        setIosFlow(true)
+    let tIos: ReturnType<typeof setTimeout> | undefined
+    if (isIOS()) {
+      tIos = setTimeout(() => {
+        setPanelMode(
+          isIOSSafariForCopy()
+            ? 'ios_safari'
+            : 'ios_other',
+        )
         setVisible(true)
       }, DELAY_MS)
+    } else {
+      tIos = setTimeout(() => {
+        if (bipEventReceived.current) {
+          return
+        }
+        setPanelMode('menu_hint')
+        setVisible(true)
+      }, FALLBACK_NO_BIP_MS)
     }
 
     return () => {
+      if (tIos !== undefined) {
+        clearTimeout(tIos)
+      }
       window.removeEventListener(
         'beforeinstallprompt',
         onBefore as EventListener,
@@ -137,10 +188,13 @@ export function InstallPrompt() {
     }
   }, [toast])
 
-  if (!visible) return null
+  if (!visible || panelMode === null) {
+    return null
+  }
 
   const dismiss = (persist = true) => {
     setVisible(false)
+    setPanelMode(null)
     if (persist) {
       try {
         localStorage.setItem(
@@ -171,6 +225,44 @@ export function InstallPrompt() {
     }
   }
 
+  const hint = () => {
+    switch (panelMode) {
+      case 'ios_safari':
+        return (
+          <>
+            Откройте «Поделиться» в Safari и выберите
+            «На экран «Домой»».
+          </>
+        )
+      case 'ios_other':
+        return (
+          <>
+            Нажмите «Поделиться» или кнопку «⋯» в
+            панели браузера, затем «На экран «Домой»».
+          </>
+        )
+      case 'menu_hint':
+        return (
+          <>
+            Установка через меню браузера: ищите пункт
+            «Установить приложение» или «Добавить на
+            экран (Домой)».
+          </>
+        )
+      case 'bip':
+      default:
+        return (
+          <>
+            Получайте плеер в одно касание с рабочего
+            стола.
+          </>
+        )
+    }
+  }
+
+  const usePrimaryForInstall =
+    panelMode === 'bip' && promptRef.current !== null
+
   return (
     <div
       className="install-prompt"
@@ -184,38 +276,33 @@ export function InstallPrompt() {
         <div className="install-prompt__title">
           Установить .sound
         </div>
-        {iosFlow ? (
-          <div className="install-prompt__hint">
-            Откройте «Поделиться» в Safari и
-            выберите «На экран Домой».
-          </div>
-        ) : (
-          <div className="install-prompt__hint">
-            Получайте плеер в одно касание с
-            рабочего стола.
-          </div>
-        )}
+        <div className="install-prompt__hint">
+          {hint()}
+        </div>
       </div>
       <div className="install-prompt__actions">
-        {iosFlow ? (
+        {usePrimaryForInstall ? (
           <button
             className="install-prompt__btn primary"
-            onClick={() => dismiss(true)}
+            onClick={install}
+            type="button"
           >
-            Понятно
+            Установить
           </button>
         ) : (
           <button
             className="install-prompt__btn primary"
-            onClick={install}
+            onClick={() => dismiss(true)}
+            type="button"
           >
-            Установить
+            Понятно
           </button>
         )}
         <button
           className="install-prompt__btn"
           onClick={() => dismiss(true)}
           aria-label="Закрыть"
+          type="button"
         >
           <Icon name="x" size={16} />
         </button>

@@ -88,11 +88,16 @@ export function setBackButton(
 
 export function isTelegram(): boolean {
   try {
-    return Boolean(
-      (WebApp as any)?.initDataUnsafe?.user
-        ?? (WebApp as any)?.platform,
+    const init = (WebApp as any)?.initData
+    if (typeof init === 'string' && init.length > 0) {
+      return true
+    }
+    const u = (WebApp as any)?.initDataUnsafe?.user
+    return (
+      u !== undefined
+      && u !== null
+      && typeof u === 'object'
     )
-      && Boolean(window.Telegram?.WebApp)
   } catch {
     return false
   }
