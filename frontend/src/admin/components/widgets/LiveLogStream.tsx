@@ -4,7 +4,9 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Press } from '@/components/ui/Press'
+import { adminApi } from '../../lib/adminApi'
 import { AdminWs } from '../../lib/adminWs'
 
 interface LogRow {
@@ -49,6 +51,18 @@ export function LiveLogStream({
   const containerRef =
     useRef<HTMLDivElement | null>(null)
   const stickToBottomRef = useRef(true)
+
+  const sourceProbe = useQuery({
+    queryKey: ['admin', 'logs', 'source-probe'],
+    queryFn: () =>
+      adminApi.logsQuery({
+        minutes: 1,
+        limit: 1,
+      }),
+    staleTime: 30_000,
+  })
+  const src = (sourceProbe.data as { source_status?: string })
+    ?.source_status
 
   useEffect(() => {
     const ws = new AdminWs({
@@ -127,6 +141,18 @@ export function LiveLogStream({
 
   return (
     <div className="admin-live-log">
+      {src === 'disabled' && (
+        <div className="admin-warning" role="status">
+          Loki is not configured. Set LOKI_URL or use
+          DOTSOUND_DEV_LOG_DIR for local file logs (see
+          docs/admin/README).
+        </div>
+      )}
+      {src === 'local_dev' && (
+        <div className="admin-card__sub" role="status">
+          Local dev: tailing log files (DOTSOUND_DEV_LOG_DIR).
+        </div>
+      )}
       <div className="admin-toolbar admin-toolbar--wrap">
         <input
           type="text"

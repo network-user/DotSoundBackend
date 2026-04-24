@@ -96,6 +96,30 @@ def test_default_values(
     assert cfg.complaint_threshold == 3
     assert cfg.minio_use_ssl is False
     assert cfg.redact_logs is True
+    assert cfg.elasticsearch_url == "http://127.0.0.1:9200"
+    assert cfg.elasticsearch_fallback_to_postgres_on_zero is True
+
+
+def test_elasticsearch_url_empty_in_env_disables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _make_settings(
+        monkeypatch,
+        ELASTICSEARCH_URL="",
+    )
+
+    assert cfg.elasticsearch_url == ""
+
+
+def test_elasticsearch_fallback_to_postgres_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _make_settings(
+        monkeypatch,
+        ELASTICSEARCH_FALLBACK_TO_POSTGRES_ON_ZERO="false",
+    )
+
+    assert cfg.elasticsearch_fallback_to_postgres_on_zero is False
 
 
 def test_env_overrides_defaults(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,10 +10,19 @@ from app.models.track import Track
 from app.models.user import User
 from app.services import admin_dashboard_service
 from app.services.admin_dashboard_service import (
+    _online_users_count,
     collect_overview,
 )
 
 pytestmark = pytest.mark.anyio
+
+
+def _redis_glob_match(key: str, pattern: str) -> bool:
+    if pattern in ("*", b"*"):
+        return True
+    if not pattern.endswith("*"):
+        return key == pattern
+    return key.startswith(str(pattern)[:-1])
 
 
 class FakeRedis:
@@ -32,6 +43,13 @@ class FakeRedis:
             for k in self.store
             if pattern.replace("*", "") in k
         ]
+
+    async def scan_iter(
+        self, match: str = "*", **_kwargs: object
+    ):
+        for k in self.store:
+            if _redis_glob_match(k, match):
+                yield k
 
 
 @pytest.fixture
@@ -87,6 +105,21 @@ async def test_collect_overview_aggregates_counts(
     assert (
         "storage_bytes" in overview["tracks"]
     )
+
+
+async def test_online_users_count_presence_online(
+    fake_redis: FakeRedis,
+) -> None:
+    fake_redis.store["presence:1"] = json.dumps(
+        {"status": "online", "ts": 1.0}
+    )
+    fake_redis.store["presence:2"] = json.dumps(
+        {"status": "offline", "ts": 2.0}
+    )
+    fake_redis.store["presence:3"] = json.dumps(
+        {"status": "online", "ts": 3.0}
+    )
+    assert await _online_users_count() == 2
 
 
 async def test_collect_overview_uses_cache(

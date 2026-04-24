@@ -155,11 +155,21 @@ export function LogsRoute() {
           {(error as Error).message}
         </div>
       )}
-      {(data as any)?.source_status === 'disabled' && (
+      {(data as { source_status?: string })?.source_status ===
+        'local_dev' && (
+        <div className="admin-card__sub">
+          {t('admin.logs.sourceLocalDev', {
+            defaultValue:
+              'Local dev: log files in DOTSOUND_DEV_LOG_DIR (backend.log, bot.log, compute-worker.log).',
+          })}
+        </div>
+      )}
+      {(data as { source_status?: string })?.source_status ===
+        'disabled' && (
         <div className="admin-warning">
           {t('admin.logs.sourceDisabled', {
             defaultValue:
-              'Loki не настроен или observability-стек не поднят. Запустите docker compose -f docker-compose.observability.yml up -d.',
+              'Loki не настроен или observability-стек не поднят. Запустите docker compose -f docker-compose.observability.yml up -d. Для dev без Loki: задайте DOTSOUND_DEV_LOG_DIR и дублируйте логи в файлы (см. docs/admin/README).',
           })}
         </div>
       )}

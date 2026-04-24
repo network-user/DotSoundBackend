@@ -70,9 +70,20 @@ export function MetricsRoute() {
     (errs.data as any)?.source_reason ??
     (lat.data as any)?.source_reason
 
+  const queryError =
+    [list, rps, errs, lat].find((q) => q.isError)
+      ?.error ?? null
+
   return (
     <div>
       <h1>{t('admin.metrics.title')}</h1>
+      {queryError && (
+        <div className="admin-error" role="alert">
+          {queryError instanceof Error
+            ? queryError.message
+            : String(queryError)}
+        </div>
+      )}
       <div className="admin-toolbar">
         <select
           value={String(minutes)}

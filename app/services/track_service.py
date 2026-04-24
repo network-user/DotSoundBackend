@@ -89,36 +89,48 @@ class TrackService:
             )
             if es_hits is not None:
                 ids, total = es_hits
-                elasticsearch_query_observed(
-                    op="track_search", outcome="es_ok"
-                )
-                if not ids:
+                if ids:
+                    elasticsearch_query_observed(
+                        op="track_search", outcome="es_ok"
+                    )
+                    orm = await self._repo.get_by_ids_preserve_order(ids)
+                    if len(orm) != len(ids):
+                        logger.info(
+                            "es_sql_hydrate_mismatch",
+                            want=len(ids),
+                            got=len(orm),
+                        )
                     logger.info(
                         "tracks_searched",
                         source="elasticsearch",
                         query=query,
                         page=page,
-                        total=0,
+                        total=total,
+                    )
+                    return orm, total
+                if (
+                    total == 0
+                    and settings.elasticsearch_fallback_to_postgres_on_zero
+                ):
+                    elasticsearch_query_observed(
+                        op="track_search", outcome="pg_fallback"
+                    )
+                else:
+                    elasticsearch_query_observed(
+                        op="track_search", outcome="es_ok"
+                    )
+                    logger.info(
+                        "tracks_searched",
+                        source="elasticsearch",
+                        query=query,
+                        page=page,
+                        total=total,
                     )
                     return [], total
-                orm = await self._repo.get_by_ids_preserve_order(ids)
-                if len(orm) != len(ids):
-                    logger.info(
-                        "es_sql_hydrate_mismatch",
-                        want=len(ids),
-                        got=len(orm),
-                    )
-                logger.info(
-                    "tracks_searched",
-                    source="elasticsearch",
-                    query=query,
-                    page=page,
-                    total=total,
+            else:
+                elasticsearch_query_observed(
+                    op="track_search", outcome="pg_fallback"
                 )
-                return orm, total
-            elasticsearch_query_observed(
-                op="track_search", outcome="pg_fallback"
-            )
         offset = (page - 1) * size
         tracks, total = await self._repo.search(
             query=query,

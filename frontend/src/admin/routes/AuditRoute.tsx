@@ -68,25 +68,26 @@ export function AuditRoute() {
   const [page, setPage] = useState(1)
   const [action, setAction] = useState('')
   const [userId, setUserId] = useState('')
-  const { data, isFetching } = useQuery({
-    queryKey: [
-      'admin',
-      'audit',
-      page,
-      action,
-      userId,
-    ],
-    queryFn: () =>
-      adminApi.listAudit({
+  const { data, isFetching, isError, error } =
+    useQuery({
+      queryKey: [
+        'admin',
+        'audit',
         page,
-        size: 50,
-        action: action || undefined,
-        user_id: userId
-          ? Number(userId)
-          : undefined,
-      }),
-    placeholderData: keepPreviousData,
-  })
+        action,
+        userId,
+      ],
+      queryFn: () =>
+        adminApi.listAudit({
+          page,
+          size: 50,
+          action: action || undefined,
+          user_id: userId
+            ? Number(userId)
+            : undefined,
+        }),
+      placeholderData: keepPreviousData,
+    })
   const total = data?.total || 0
   const totalPages = Math.max(
     1,
@@ -95,6 +96,13 @@ export function AuditRoute() {
   return (
     <div>
       <h1>{t('admin.audit.title')}</h1>
+      {isError && (
+        <div className="admin-error" role="alert">
+          {error instanceof Error
+            ? error.message
+            : String(error)}
+        </div>
+      )}
       <div className="admin-toolbar">
         <input
           type="text"

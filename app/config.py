@@ -151,6 +151,10 @@ class AppSettings(BaseSettings):
 
     prometheus_url: str = ""
     loki_url: str = ""
+    # Shared log directory for ``poetry run`` dev: backend / bot / worker
+    # write `backend.log`, `bot.log`, `compute-worker.log` here. Admin
+    # reads when ``loki_url`` is empty.
+    dotsound_dev_log_dir: str = ""
     tempo_url: str = ""
     otel_exporter_otlp_endpoint: str = ""
     sentry_dsn: str = ""
@@ -158,9 +162,14 @@ class AppSettings(BaseSettings):
     sentry_traces_sample_rate: float = 0.1
     docker_socket_path: str = "/var/run/docker.sock"
 
-    # Elasticsearch (suggest + full text search; optional — empty URL disables).
-    elasticsearch_url: str = ""
+    # Elasticsearch (suggest + full text search). Set ELASTICSEARCH_URL=""
+    # in env to disable, or set ELASTICSEARCH_ENABLED=false.
+    elasticsearch_url: str = "http://127.0.0.1:9200"
     elasticsearch_enabled: bool = True
+    # If ES returns zero hits, run PostgreSQL text search (covers empty
+    # index, stale data, and genuine no-match with one extra query).
+    # Set to false in production if you want strict ES-only semantics.
+    elasticsearch_fallback_to_postgres_on_zero: bool = True
     elasticsearch_index_tracks: str = "dotsound_tracks"
     elasticsearch_index_artists: str = "dotsound_artists"
     elasticsearch_backfill_on_empty: bool = False
