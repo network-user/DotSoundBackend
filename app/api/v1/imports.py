@@ -13,6 +13,8 @@ from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.services.import_service import ImportService
+from app.utils.soundcloud_playlist_url import is_public_soundcloud_playlist_url
+from app.utils.spotify_import_url import is_open_spotify_playlist_or_album_url
 
 router = APIRouter(prefix="/import", tags=["import"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -28,6 +30,14 @@ class YandexMusicImportRequest(BaseModel):
 
 class VkMusicImportRequest(BaseModel):
     url: str = Field(..., min_length=1)
+
+
+class SoundCloudPlaylistImportRequest(BaseModel):
+    url: str = Field(..., min_length=1, max_length=4096)
+
+
+class SpotifyImportRequest(BaseModel):
+    url: str = Field(..., min_length=1, max_length=4096)
 
 
 class ImportJobResponse(BaseModel):
@@ -101,13 +111,71 @@ async def scan_vk_music(
     if not is_allowed_vk_music_url(norm):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="URL must be a vk.com link",
+            detail=(
+                "URL must be an official VK (vk.com or vk.ru) "
+                "music or playlist link"
+            ),
         )
     service = ImportService(session)
     job = await service.scan_external_playlist(
         user_id=current_user.id,
         source="vk_music",
         url=norm,
+    )
+    return ImportJobResponse.model_validate(job)
+
+
+@router.post(
+    "/soundcloud_playlist",
+    response_model=ImportJobResponse,
+)
+@limiter.limit("5/minute")
+async def scan_soundcloud_playlist(
+    request: Request,
+    body: SoundCloudPlaylistImportRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ImportJobResponse:
+    if not is_public_soundcloud_playlist_url(body.url):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "URL must be a public soundcloud.com playlist link "
+                "(.../sets/...)"
+            ),
+        )
+    service = ImportService(session)
+    job = await service.scan_external_playlist(
+        user_id=current_user.id,
+        source="soundcloud_playlist",
+        url=body.url.strip(),
+    )
+    return ImportJobResponse.model_validate(job)
+
+
+@router.post(
+    "/spotify",
+    response_model=ImportJobResponse,
+)
+@limiter.limit("5/minute")
+async def scan_spotify(
+    request: Request,
+    body: SpotifyImportRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ImportJobResponse:
+    if not is_open_spotify_playlist_or_album_url(body.url):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "URL must be an open.spotify.com public playlist or album link"
+            ),
+        )
+    service = ImportService(session)
+    job = await service.scan_external_playlist(
+        user_id=current_user.id,
+        source="spotify",
+        url=body.url.strip(),
     )
     return ImportJobResponse.model_validate(job)
 

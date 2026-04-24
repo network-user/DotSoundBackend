@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import structlog
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.notification import Notification
@@ -68,6 +68,31 @@ class NotificationRepository:
             .values(is_read=True)
         )
         await self._s.flush()
+
+    async def mark_unread(
+        self, notification_id: int, user_id: int
+    ) -> None:
+        await self._s.execute(
+            update(Notification)
+            .where(
+                Notification.id == notification_id,
+                Notification.user_id == user_id,
+            )
+            .values(is_read=False)
+        )
+        await self._s.flush()
+
+    async def delete(
+        self, notification_id: int, user_id: int
+    ) -> bool:
+        result = await self._s.execute(
+            delete(Notification).where(
+                Notification.id == notification_id,
+                Notification.user_id == user_id,
+            )
+        )
+        await self._s.flush()
+        return (getattr(result, "rowcount", None) or 0) > 0
 
     async def mark_all_read(
         self, user_id: int

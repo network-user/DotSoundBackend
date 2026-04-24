@@ -1,11 +1,15 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { api } from '@/lib/api'
-import type {
-  ImportAudioInfo,
-  ImportExternalTrackInfo,
-  ImportJobResponse,
-} from '@/types/api'
+import type { ImportAudioInfo, ImportJobResponse } from '@/types/api'
 import { ImportSourcePicker } from './ImportSourcePicker'
+import {
+  fmtDuration,
+  fmtSize,
+  normalizeJobTracks,
+  scanningLabel,
+} from './importJobUtils'
+import { SoundCloudPlaylistUrlModal } from './SoundCloudPlaylistUrlModal'
+import { SpotifyUrlModal } from './SpotifyUrlModal'
 import { VkMusicUrlModal } from './VkMusicUrlModal'
 import { YandexMusicUrlModal } from './YandexMusicUrlModal'
 
@@ -22,55 +26,6 @@ type Phase =
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
 
-const EXTERNAL_SOURCES = new Set([
-  'yandex_music',
-  'vk_music',
-  'spotify',
-  'soundcloud_playlist',
-])
-
-function fmtDuration(sec: number | null): string {
-  if (!sec) return ''
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60).toString().padStart(2, '0')
-  return `${m}:${s}`
-}
-
-function fmtSize(bytes: number | null): string {
-  if (!bytes) return ''
-  const mb = bytes / (1024 * 1024)
-  return `${mb.toFixed(1)} МБ`
-}
-
-function normalizeJobTracks(job: ImportJobData): AudioInfo[] {
-  const data = job.tracks_data
-  if (!data) return []
-  if (EXTERNAL_SOURCES.has(job.source)) {
-    const tracks: ImportExternalTrackInfo[] = data.tracks || []
-    return tracks.map((t, i) => ({
-      file_id: `${job.source}:${i}`,
-      title: t.title,
-      performer: t.artist,
-      duration: t.duration_seconds,
-      file_size: null,
-    }))
-  }
-  return data.audios || []
-}
-
-function scanningLabel(source: string | undefined): string {
-  if (source === 'yandex_music') {
-    return 'Сканируем плейлист Яндекс Музыки...'
-  }
-  if (source === 'vk_music') {
-    return 'Сканируем VK...'
-  }
-  if (EXTERNAL_SOURCES.has(source || '')) {
-    return 'Сканируем плейлист...'
-  }
-  return 'Ищем треки в вашем профиле Telegram...'
-}
-
 export function ImportView({ active }: { active: boolean }) {
   const [phase, setPhase] = useState<Phase>('pick')
   const [job, setJob] = useState<ImportJobData | null>(null)
@@ -79,6 +34,8 @@ export function ImportView({ active }: { active: boolean }) {
   const [error, setError] = useState<string | null>(null)
   const [yandexModalOpen, setYandexModalOpen] = useState(false)
   const [vkModalOpen, setVkModalOpen] = useState(false)
+  const [scModalOpen, setScModalOpen] = useState(false)
+  const [spotifyModalOpen, setSpotifyModalOpen] = useState(false)
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const pollCountRef = useRef(0)
@@ -158,6 +115,22 @@ export function ImportView({ active }: { active: boolean }) {
     return true
   }, [])
 
+  const extScanError = useCallback(
+    (code: string | undefined) => {
+      if (code === 'not_found') {
+        return 'Плейлист или страница не найдены'
+      }
+      if (code === 'private') {
+        return 'Содержимое недоступно (закрыто или нужен вход в сервис)'
+      }
+      if (code === 'invalid_url') {
+        return 'Ссылка не распознана или в неверном формате'
+      }
+      return 'Не удалось получить список треков. Попробуйте позже.'
+    },
+    [],
+  )
+
   const handleSourceSelect = useCallback(async (sourceId: string) => {
     setError(null)
     if (sourceId === 'yandex') {
@@ -166,6 +139,14 @@ export function ImportView({ active }: { active: boolean }) {
     }
     if (sourceId === 'vk') {
       setVkModalOpen(true)
+      return
+    }
+    if (sourceId === 'soundcloud') {
+      setScModalOpen(true)
+      return
+    }
+    if (sourceId === 'spotify') {
+      setSpotifyModalOpen(true)
       return
     }
     if (sourceId !== 'telegram') return
@@ -235,6 +216,48 @@ export function ImportView({ active }: { active: boolean }) {
       }
     },
     [applyScanResult],
+  )
+
+  const handleSoundCloudScan = useCallback(
+    async (url: string) => {
+      setError(null)
+      setPhase('scanning')
+      try {
+        const j = await api.startSoundCloudPlaylistImport(url)
+        if (j.status === 'failed') {
+          const code = j.tracks_data?.error_code as string | undefined
+          setPhase('pick')
+          throw new Error(extScanError(code))
+        }
+        applyScanResult(j)
+        setScModalOpen(false)
+      } catch (e) {
+        setPhase('pick')
+        throw e
+      }
+    },
+    [applyScanResult, extScanError],
+  )
+
+  const handleSpotifyScan = useCallback(
+    async (url: string) => {
+      setError(null)
+      setPhase('scanning')
+      try {
+        const j = await api.startSpotifyImport(url)
+        if (j.status === 'failed') {
+          const code = j.tracks_data?.error_code as string | undefined
+          setPhase('pick')
+          throw new Error(extScanError(code))
+        }
+        applyScanResult(j)
+        setSpotifyModalOpen(false)
+      } catch (e) {
+        setPhase('pick')
+        throw e
+      }
+    },
+    [applyScanResult, extScanError],
   )
 
   const toggleTrack = (idx: number) => {
@@ -501,6 +524,18 @@ export function ImportView({ active }: { active: boolean }) {
         open={vkModalOpen}
         onClose={() => setVkModalOpen(false)}
         onScan={handleVkScan}
+      />
+
+      <SoundCloudPlaylistUrlModal
+        open={scModalOpen}
+        onClose={() => setScModalOpen(false)}
+        onScan={handleSoundCloudScan}
+      />
+
+      <SpotifyUrlModal
+        open={spotifyModalOpen}
+        onClose={() => setSpotifyModalOpen(false)}
+        onScan={handleSpotifyScan}
       />
 
       {cancelConfirmOpen && (

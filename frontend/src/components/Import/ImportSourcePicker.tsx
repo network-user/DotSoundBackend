@@ -30,13 +30,13 @@ const SOURCES: Source[] = [
     id: 'spotify',
     label: 'Spotify',
     icon: 'source-spotify',
-    available: false,
+    available: true,
   },
   {
     id: 'soundcloud',
     label: 'SoundCloud',
     icon: 'source-soundcloud',
-    available: false,
+    available: true,
   },
 ]
 
