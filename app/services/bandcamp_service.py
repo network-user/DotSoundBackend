@@ -1,3 +1,4 @@
+import hashlib
 import html
 import json
 import re
@@ -32,6 +33,54 @@ _PAGEDATA_RE = re.compile(
 )
 
 
+def _bc_title_from_track_url(url: str) -> str:
+    if "/track/" not in url:
+        return "Track"
+    part = url.rstrip("/").rsplit("/track/", 1)[-1]
+    if not part:
+        return "Track"
+    from urllib.parse import unquote
+
+    s = unquote(part).replace("-", " ").strip()
+    return s or "Track"
+
+
+def _bc_search_from_html(
+    page_html: str, limit: int
+) -> list[dict[str, str | int | None]]:
+    seen: set[str] = set()
+    out: list[dict[str, str | int | None]] = []
+    for m in re.finditer(
+        r'href="(https?://[a-z0-9][a-z0-9.\-]*\.bandcamp\.com'
+        r'/track/[^"\'?#]+)"',
+        page_html,
+        re.IGNORECASE,
+    ):
+        u: str = m.group(1).rstrip(".,)").rstrip()
+        u = re.sub(
+            r"\s+",
+            "",
+            u,
+        )  # defensive
+        if u in seen:
+            continue
+        seen.add(u)
+        rid = hashlib.sha256(u.encode("utf-8")).hexdigest()[:20]
+        out.append(
+            {
+                "result_id": rid,
+                "title": _bc_title_from_track_url(u),
+                "artist": None,
+                "duration_seconds": None,
+                "artwork_url": None,
+                "track_url": u,
+            }
+        )
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _parse_tralbum(page_html: str) -> dict:
     m = _TRALBUM_ATTR_RE.search(page_html)
     if m:
@@ -53,6 +102,39 @@ def _parse_tralbum(page_html: str) -> dict:
 class BandcampService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def search(self, q: str, limit: int = 10) -> list[dict]:
+        q = (q or "").strip()
+        if not q:
+            return []
+        cap = max(1, min(int(limit), 20))
+        try:
+            async with bandcamp_slot():
+                async with httpx.AsyncClient(
+                    timeout=20,
+                    headers={
+                        "User-Agent": (
+                            settings.outbound_user_agent
+                        ),
+                        "Accept-Language": "en-US,en;q=0.9",
+                    },
+                    follow_redirects=True,
+                ) as client:
+                    r = await client.get(
+                        "https://bandcamp.com/search",
+                        params={"q": q, "item_type": "t"},
+                    )
+                    r.raise_for_status()
+                    rows = _bc_search_from_html(r.text, cap)
+        except OutboundSemaphoreTimeout as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Bandcamp сейчас перегружен, попробуйте позже.",
+            ) from exc
+        except httpx.HTTPError as exc:
+            logger.warning("bc_search_http", error=str(exc))
+            return []
+        return list(rows)
 
     async def _fetch_page(self, bc_url: str) -> str:
         try:

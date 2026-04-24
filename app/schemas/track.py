@@ -111,6 +111,24 @@ class SCSearchResult(BaseModel):
     sc_uri: str
 
 
+class YTSearchResult(BaseModel):
+    video_id: str
+    title: str
+    artist: str | None
+    duration_seconds: int | None
+    thumbnail_url: str | None
+    watch_url: str
+
+
+class BCSearchResult(BaseModel):
+    result_id: str
+    title: str
+    artist: str | None
+    duration_seconds: int | None
+    artwork_url: str | None
+    track_url: str
+
+
 class PlaybackMode(str, Enum):
     sequential = "sequential"
     shuffle = "shuffle"
