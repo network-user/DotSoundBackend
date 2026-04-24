@@ -43,3 +43,7 @@ class CommentRequest(BaseModel):
 
 class ReadNotificationsRequest(BaseModel):
     notification_id: int
+
+
+class UnreadNotificationRequest(BaseModel):
+    notification_id: int

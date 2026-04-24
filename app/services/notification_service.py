@@ -96,3 +96,17 @@ class NotificationService:
         self, user_id: int
     ) -> None:
         await self._repo.mark_all_read(user_id)
+
+    async def mark_unread(
+        self, notification_id: int, user_id: int
+    ) -> None:
+        await self._repo.mark_unread(
+            notification_id, user_id
+        )
+
+    async def delete(
+        self, notification_id: int, user_id: int
+    ) -> bool:
+        return await self._repo.delete(
+            notification_id, user_id
+        )

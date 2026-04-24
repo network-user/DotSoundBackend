@@ -9,6 +9,7 @@ from app.schemas.chat import (
     MarkReadRequest,
     ReactionRequest,
     ReadNotificationsRequest,
+    UnreadNotificationRequest,
     SendMessageRequest,
     VoteRequest,
 )
@@ -200,3 +201,10 @@ def test_read_notifications_valid() -> None:
 def test_read_notifications_missing() -> None:
     with pytest.raises(ValidationError):
         ReadNotificationsRequest()
+
+
+def test_unread_notification_valid() -> None:
+    req = UnreadNotificationRequest(
+        notification_id=1
+    )
+    assert req.notification_id == 1

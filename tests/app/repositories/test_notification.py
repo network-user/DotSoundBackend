@@ -99,3 +99,39 @@ async def test_mark_all_read(
 
     await repo.mark_all_read(user.id)
     assert await repo.unread_count(user.id) == 0
+
+
+async def test_mark_unread(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session)
+    repo = NotificationRepository(session)
+    notif = await repo.create(
+        user_id=user.id,
+        type="like",
+        title="N",
+        body="B",
+    )
+    await repo.mark_read(notif.id, user.id)
+    assert await repo.unread_count(user.id) == 0
+    await repo.mark_unread(notif.id, user.id)
+    assert await repo.unread_count(user.id) == 1
+
+
+async def test_delete(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session)
+    repo = NotificationRepository(session)
+    notif = await repo.create(
+        user_id=user.id,
+        type="like",
+        title="N",
+        body="B",
+    )
+    ok = await repo.delete(notif.id, user.id)
+    assert ok
+    notifs = await repo.list_for_user(user.id)
+    assert len(notifs) == 0
+    ok2 = await repo.delete(999, user.id)
+    assert not ok2

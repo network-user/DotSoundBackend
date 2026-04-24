@@ -541,5 +541,55 @@
   "artistSupplemental": {
     "title": "Дополнительная информация",
     "fetch": "Получить AI-информацию"
+  },
+  "notifications": {
+    "title": "Уведомления",
+    "emptyTitle": "Тут пока пусто",
+    "emptyHint": "Когда что-то случится — увидите здесь.",
+    "closeAria": "Закрыть",
+    "moreActions": "Действия с уведомлением",
+    "markRead": "Прочитано",
+    "markUnread": "Непрочитанное",
+    "delete": "Удалить",
+    "time": {
+      "justNow": "только что",
+      "minutes": "{{count}} мин",
+      "hours": "{{count}} ч"
+    },
+    "import": {
+      "completeTitle": "Импорт завершён",
+      "failedTitle": "Импорт не удался",
+      "emptyBody": "{{source}}: в выборе не было треков.",
+      "addedBody": "{{source}}: в библиотеку добавлено {{count}} тр.",
+      "partialBody": "{{source}}: {{done}} в библиотеку, {{fail}} не импортировано.",
+      "failedBody": "Не удалось импортировать треки из {{source}}. Ошибок: {{count}}.",
+      "sources": {
+        "telegram": "Telegram",
+        "yandexMusic": "Яндекс.Музыка",
+        "vkMusic": "VK Музыка",
+        "spotify": "Spotify",
+        "soundcloud": "SoundCloud"
+      }
+    },
+    "toast": {
+      "fallbackSuccess": "Готово",
+      "fallbackWarning": "Внимание",
+      "fallbackError": "Ошибка",
+      "fallbackInfo": "Уведомление"
+    },
+    "complaint": {
+      "resolved": {
+        "title": "Жалоба принята",
+        "body": "Жалоба на трек принята модератором. Доступ к треку ограничен."
+      },
+      "dismissed": {
+        "title": "Жалоба отклонена",
+        "body": "Жалоба на трек рассмотрена и отклонена."
+      },
+      "inProgress": {
+        "title": "Жалоба в работе",
+        "body": "Жалоба на трек получена и взята в работу."
+      }
+    }
   }
 }

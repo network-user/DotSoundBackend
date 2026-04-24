@@ -51,7 +51,8 @@ async def send_import_job_finished_notification(
         )
         return
 
-    is_en = (user.locale or "").lower().startswith("en")
+    loc = (user.locale or "ru").strip()
+    is_en = loc.lower().startswith("en")
     sl = _source_label(job.source, is_en)
     done = int(job.completed_tracks or 0)
     fail = int(job.failed_tracks or 0)

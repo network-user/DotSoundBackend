@@ -8,6 +8,7 @@ export const MAX_FILE_SIZE = 20 * 1024 * 1024
 
 export const EXTERNAL_SOURCES = new Set([
   'yandex_music',
+  'vk_music',
   'spotify',
   'soundcloud_playlist',
 ])
@@ -64,6 +65,15 @@ export function scanningLabel(
 ): string {
   if (source === 'yandex_music') {
     return 'Сканируем плейлист Яндекс Музыки...'
+  }
+  if (source === 'vk_music') {
+    return 'Сканируем плейлист или страницу VK...'
+  }
+  if (source === 'spotify') {
+    return 'Сканируем плейлист или альбом Spotify...'
+  }
+  if (source === 'soundcloud_playlist') {
+    return 'Сканируем плейлист SoundCloud...'
   }
   if (EXTERNAL_SOURCES.has(source || '')) {
     return 'Сканируем плейлист...'

@@ -1,7 +1,12 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { onWS } from '@/lib/ws'
 import { useToast } from '@/components/ui/Toast'
 import { hapticNotification } from '@/lib/telegram'
+import {
+  buildNotificationToastMessage,
+} from '@/lib/notificationText'
+import type { AppNotification } from '@/types/api'
 
 interface NotificationEventData {
   event?: string
@@ -10,7 +15,7 @@ interface NotificationEventData {
   body?: string
   reason?: string
   message?: string
-  data?: Record<string, unknown>
+  data?: Record<string, unknown> | null
 }
 
 const TOAST_BY_TYPE: Record<
@@ -43,52 +48,72 @@ const HAPTIC_BY_TYPE: Record<
   import_failed: 'error',
 }
 
+function eventToNotif(
+  d: NotificationEventData,
+): Pick<
+  AppNotification,
+  'type' | 'title' | 'body' | 'data'
+> {
+  const typ =
+    d.type ||
+    (d.data?.type as string | undefined) ||
+    ''
+  const t = (d.title || '').trim()
+  const b = (
+    d.body ||
+    d.message ||
+    ''
+  ).trim()
+  return {
+    type: typ,
+    title: t,
+    body: b,
+    data: d.data ?? null,
+  }
+}
+
 export function SystemEventListener() {
   const toast = useToast()
+  const { t } = useTranslation()
 
   useEffect(() => {
     const handle = (raw: Record<string, unknown>) => {
-      const data = raw as NotificationEventData
-      const type =
-        data.type ||
-        (data.data?.type as string | undefined) ||
-        ''
-      const t = (data.title || '').trim()
-      const b = (data.body || data.message || '').trim()
-      let message = b
-      if (!message)
-        message =
-          t ||
-          (data.data?.body as string | undefined) ||
-          (data.data?.title as string | undefined) ||
-          ''
-      else if (
-        t &&
-        (type === 'import_completed' || type === 'import_failed')
-      ) {
-        message = `${t}. ${b}`
-      }
-      if (!type && !message) return
-      const kind = TOAST_BY_TYPE[type] || 'info'
+      const d = raw as NotificationEventData
+      const nLike = eventToNotif(d)
+      const message = buildNotificationToastMessage(
+        nLike,
+        t,
+      )
+      if (!nLike.type && !message) return
+      const kind = TOAST_BY_TYPE[nLike.type] || 'info'
       const importToastOpts =
-        type === 'import_completed' || type === 'import_failed'
+        nLike.type ===
+          'import_completed' ||
+        nLike.type === 'import_failed'
           ? { duration: 10_000 }
           : undefined
-      if (kind === 'success')
-        toast.success(message || 'Успех', importToastOpts)
-      else if (kind === 'warning')
+      if (kind === 'success') {
+        toast.success(
+          message || t('notifications.toast.fallbackSuccess'),
+          importToastOpts,
+        )
+      } else if (kind === 'warning') {
         toast.warning(
-          message || 'Предупреждение',
+          message || t('notifications.toast.fallbackWarning'),
           importToastOpts,
         )
-      else if (kind === 'error')
-        toast.error(message || 'Ошибка', importToastOpts)
-      else
+      } else if (kind === 'error') {
+        toast.error(
+          message || t('notifications.toast.fallbackError'),
+          importToastOpts,
+        )
+      } else {
         toast.info(
-          message || 'Уведомление',
+          message || t('notifications.toast.fallbackInfo'),
           importToastOpts,
         )
-      const haptic = HAPTIC_BY_TYPE[type]
+      }
+      const haptic = HAPTIC_BY_TYPE[nLike.type]
       if (haptic) hapticNotification(haptic)
     }
 
@@ -119,7 +144,7 @@ export function SystemEventListener() {
       offComplaint()
       offWarning()
     }
-  }, [toast])
+  }, [toast, t])
 
   return null
 }

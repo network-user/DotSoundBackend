@@ -1011,6 +1011,24 @@ export const api = {
     })
   },
 
+  startSoundCloudPlaylistImport(
+    url: string,
+  ): Promise<ImportJobResponse> {
+    return request('/api/v1/import/soundcloud_playlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })
+  },
+
+  startSpotifyImport(url: string): Promise<ImportJobResponse> {
+    return request('/api/v1/import/spotify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })
+  },
+
   startImportJob(
     jobId: number,
     trackIndices: number[],
@@ -1320,6 +1338,21 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ notification_id: notificationId }),
     })
+  },
+
+  markNotificationUnread(notificationId: number): Promise<void> {
+    return request('/api/v1/notifications/unread', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notification_id: notificationId }),
+    })
+  },
+
+  deleteNotification(notificationId: number): Promise<void> {
+    return request(
+      `/api/v1/notifications/${notificationId}`,
+      { method: 'DELETE' },
+    )
   },
 
   markAllNotificationsRead(): Promise<void> {

@@ -539,5 +539,55 @@
   "artistSupplemental": {
     "title": "Additional Information",
     "fetch": "Fetch AI info"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "emptyTitle": "Nothing here yet",
+    "emptyHint": "When something happens, you will see it here.",
+    "closeAria": "Close",
+    "moreActions": "Notification actions",
+    "markRead": "Mark as read",
+    "markUnread": "Mark as unread",
+    "delete": "Delete",
+    "time": {
+      "justNow": "just now",
+      "minutes": "{{count}} min",
+      "hours": "{{count}} h"
+    },
+    "import": {
+      "completeTitle": "Import complete",
+      "failedTitle": "Import failed",
+      "emptyBody": "{{source}}: no tracks in this import.",
+      "addedBody": "{{source}}: {{count}} track(s) added to your library.",
+      "partialBody": "{{source}}: {{done}} track(s) added, {{fail}} could not be imported.",
+      "failedBody": "Could not add tracks from {{source}}. ({{count}} error(s))",
+      "sources": {
+        "telegram": "Telegram",
+        "yandexMusic": "Yandex Music",
+        "vkMusic": "VK Music",
+        "spotify": "Spotify",
+        "soundcloud": "SoundCloud"
+      }
+    },
+    "toast": {
+      "fallbackSuccess": "Success",
+      "fallbackWarning": "Warning",
+      "fallbackError": "Error",
+      "fallbackInfo": "Notification"
+    },
+    "complaint": {
+      "resolved": {
+        "title": "Complaint accepted",
+        "body": "Your report was accepted. Access to the track is restricted."
+      },
+      "dismissed": {
+        "title": "Complaint dismissed",
+        "body": "Your report was reviewed and dismissed."
+      },
+      "inProgress": {
+        "title": "Complaint in progress",
+        "body": "Your report was received and is being handled."
+      }
+    }
   }
 }

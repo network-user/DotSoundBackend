@@ -7,28 +7,23 @@ interface Props {
   onScan: (url: string) => Promise<void>
 }
 
-/** Match backend: registrable ``*.vk.com`` or ``*.vk.ru`` (reject notvk.com). */
-function isPlausibleVkUrl(trimmed: string): boolean {
+function isPlausibleSpotifyUrl(trimmed: string): boolean {
   try {
     const u = new URL(trimmed)
     if (u.protocol !== 'http:' && u.protocol !== 'https:') {
       return false
     }
-    const h = u.hostname.toLowerCase()
-    const p = h.split('.')
-    if (p.length < 2) {
+    if (u.hostname.toLowerCase() !== 'open.spotify.com') {
       return false
     }
-    return (
-      p[p.length - 2] === 'vk' &&
-      (p[p.length - 1] === 'com' || p[p.length - 1] === 'ru')
-    )
+    const path = (u.pathname || '/').toLowerCase()
+    return path.startsWith('/playlist/') || path.startsWith('/album/')
   } catch {
     return false
   }
 }
 
-export function VkMusicUrlModal({ open, onClose, onScan }: Props) {
+export function SpotifyUrlModal({ open, onClose, onScan }: Props) {
   const [url, setUrl] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -53,20 +48,18 @@ export function VkMusicUrlModal({ open, onClose, onScan }: Props) {
   if (!open) return null
 
   const handleBackdrop = (e: MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget && !submitting) {
-      onClose()
-    }
+    if (e.target === e.currentTarget && !submitting) onClose()
   }
 
   const handleSubmit = async () => {
     const trimmed = url.trim()
     if (!trimmed) {
-      setError('Вставьте ссылку (альбом, плейлист, аудиозаписи)')
+      setError('Вставьте ссылку на плейлист или альбом')
       return
     }
-    if (!isPlausibleVkUrl(trimmed)) {
+    if (!isPlausibleSpotifyUrl(trimmed)) {
       setError(
-        'Ссылка должна вести на vk.com / vk.ru (m.vk.com, m.vk.ru, music.… и т.д.)',
+        'Ссылка должна быть open.spotify.com/playlist/... или open.spotify.com/album/...',
       )
       return
     }
@@ -78,7 +71,7 @@ export function VkMusicUrlModal({ open, onClose, onScan }: Props) {
       const msg = e instanceof Error ? e.message : ''
       setError(
         msg === '400'
-          ? 'Сервис не смог открыть ссылку. Проверьте, что страница публично доступна.'
+          ? 'Не удалось открыть ссылку. Плейлист или альбом должны быть публичны.'
           : msg === '401'
             ? 'Требуется авторизация'
             : 'Не удалось отсканировать ссылку. Попробуйте позже.',
@@ -91,7 +84,7 @@ export function VkMusicUrlModal({ open, onClose, onScan }: Props) {
     <div className="modal" onClick={handleBackdrop}>
       <div className="modal-content">
         <div className="modal-header">
-          <h3>Импорт из VK Музыка</h3>
+          <h3>Импорт из Spotify</h3>
           <button
             className="icon-btn"
             onClick={onClose}
@@ -102,28 +95,23 @@ export function VkMusicUrlModal({ open, onClose, onScan }: Props) {
           </button>
         </div>
         <p className="modal-hint">
-          Вставьте ссылку из VK (vk.com или vk.ru) как в адресной
-          &nbsp;строке: альбом{' '}
-          <code>.../music/album/...</code>
-          {', '}
-          плейлист, аудио или, например,{' '}
-          <code>…/audio?z=audio_playlist…</code> из приложения. Ссылка
-          &nbsp;нормализуется на сервере
+          Откройте плейлист или альбом в Spotify (в браузере), в меню
+          &nbsp;«Поделиться» выберите «Ссылка» и вставьте её
           {'. '}
         </p>
         <div className="form-group">
-          <label className="form-label">Ссылка на VK</label>
+          <label className="form-label">Ссылка</label>
           <input
             className="form-input"
             type="url"
             inputMode="url"
             autoComplete="off"
-            placeholder="https://vk.com/… или https://vk.ru/…"
+            placeholder="https://open.spotify.com/playlist/…"
             value={url}
             onChange={e => setUrl(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter' && !submitting) {
-                handleSubmit()
+                void handleSubmit()
               }
             }}
             disabled={submitting}
@@ -134,7 +122,7 @@ export function VkMusicUrlModal({ open, onClose, onScan }: Props) {
         <button
           className="btn-primary"
           disabled={submitting}
-          onClick={handleSubmit}
+          onClick={() => void handleSubmit()}
         >
           {submitting ? 'Сканируем...' : 'Сканировать'}
         </button>

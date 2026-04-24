@@ -1049,7 +1049,7 @@ websockets = ["websocket-client (>=1.3.0)"]
 
 [[package]]
 name = "dotsound-private-core"
-version = "0.3.3"
+version = "0.3.4"
 description = "Private business logic for DotSound services"
 optional = false
 python-versions = "^3.12"
