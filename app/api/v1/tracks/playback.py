@@ -247,6 +247,14 @@ async def stream_track(
     _check_access(track, current_user)
     if track.access_mode == "third_party_stream":
         spf = getattr(track, "source_platform", None)
+        if spf == "youtube" and not settings.youtube_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "YouTube playback is temporarily disabled. "
+                    "Set YOUTUBE_ENABLED=true once a proxy pool is configured."
+                ),
+            )
         if spf in ("bandcamp", "youtube"):
             return StreamResponse(
                 track_id=track_id,
