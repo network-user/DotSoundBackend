@@ -338,6 +338,109 @@ async def test_get_stream_url(
     assert url == "https://cdn/a.mp3"
 
 
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_get_charts_no_client_id(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    svc = SoundCloudService("", session)
+    result = await svc.get_charts()
+    assert result == []
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_get_charts_success(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {
+        "collection": [
+            {
+                "track": {
+                    "id": 1,
+                    "title": "Hit",
+                    "streamable": True,
+                }
+            },
+            {"track": None},
+            {"track": {"id": 2, "streamable": False}},
+        ]
+    }
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        return_value=mock_response
+    )
+    mock_client.__aenter__ = AsyncMock(
+        return_value=mock_client
+    )
+    mock_client.__aexit__ = AsyncMock(
+        return_value=False
+    )
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    result = await svc.get_charts(genre="rock", limit=10)
+
+    assert len(result) == 1
+    assert result[0]["title"] == "Hit"
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_get_charts_error_returns_empty(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 429
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        return_value=mock_response
+    )
+    mock_client.__aenter__ = AsyncMock(
+        return_value=mock_client
+    )
+    mock_client.__aexit__ = AsyncMock(
+        return_value=False
+    )
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    result = await svc.get_charts()
+    assert result == []
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_get_trending_delegates_to_charts(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {"collection": []}
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        return_value=mock_response
+    )
+    mock_client.__aenter__ = AsyncMock(
+        return_value=mock_client
+    )
+    mock_client.__aexit__ = AsyncMock(
+        return_value=False
+    )
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    result = await svc.get_trending(limit=5)
+    assert result == []
+
+
 async def test_import_or_get_track_sets_provenance(
     session: AsyncSession,
 ) -> None:
