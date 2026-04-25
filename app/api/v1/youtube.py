@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
@@ -18,6 +19,17 @@ class YTImportRequest(BaseModel):
     is_public: bool = True
 
 
+def _check_youtube_enabled() -> None:
+    if not settings.youtube_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "YouTube integration is temporarily disabled. "
+                "Set YOUTUBE_ENABLED=true once a proxy pool is configured."
+            ),
+        )
+
+
 @router.get(
     "/search",
     response_model=list[YTSearchResult],
@@ -30,6 +42,7 @@ async def search_youtube(
     limit: int = Query(10, ge=1, le=20),
     session: AsyncSession = Depends(get_db),
 ) -> list[YTSearchResult]:
+    _check_youtube_enabled()
     service = YouTubeService(session)
     rows = await service.search(q, limit=limit)
     return [YTSearchResult(**r) for r in rows]
@@ -48,6 +61,7 @@ async def import_youtube_track(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> TrackResponse:
+    _check_youtube_enabled()
     structlog.contextvars.bind_contextvars(yt_url=data.yt_url)
 
     video_id = _extract_video_id(data.yt_url)

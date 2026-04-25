@@ -13,6 +13,11 @@ from app.services.sc_semaphore import (
     SoundCloudSemaphoreTimeout,
     soundcloud_slot,
 )
+from app.services.url_cache import (
+    CACHE_KEY_SC,
+    get_cached_stream,
+    set_cached_stream,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -24,6 +29,15 @@ class SoundCloudService:
     def __init__(self, client_id: str, session: AsyncSession) -> None:
         self._client_id = client_id
         self._session = session
+
+    def _sc_client(
+        self, timeout: float = 10, **kwargs: object
+    ) -> httpx.AsyncClient:
+        """Return an AsyncClient routed through Tor if the pool is active."""
+        from app.services.tor_pool import get_outbound_proxy
+
+        proxy = get_outbound_proxy("soundcloud")
+        return httpx.AsyncClient(timeout=timeout, proxy=proxy, **kwargs)  # type: ignore[arg-type]
 
     async def search(self, query: str, limit: int = 20) -> list[dict]:
         if not self._client_id:
@@ -38,7 +52,7 @@ class SoundCloudService:
                         settings.soundcloud_slot_acquire_timeout_seconds
                     ),
                 ),
-                httpx.AsyncClient(timeout=10) as client,
+                self._sc_client() as client,
             ):
                 r = await client.get(
                     f"{_SC_API_BASE}/search",
@@ -99,7 +113,7 @@ class SoundCloudService:
                         settings.soundcloud_slot_acquire_timeout_seconds
                     ),
                 ),
-                httpx.AsyncClient(timeout=10) as client,
+                self._sc_client() as client,
             ):
                 r = await client.get(
                     f"{_SC_API_BASE}/charts",
@@ -155,7 +169,7 @@ class SoundCloudService:
                         settings.soundcloud_slot_acquire_timeout_seconds
                     ),
                 ),
-                httpx.AsyncClient(timeout=10) as client,
+                self._sc_client() as client,
             ):
                 r = await client.get(
                     f"{_SC_API_BASE}/tracks",
@@ -190,7 +204,7 @@ class SoundCloudService:
                         settings.soundcloud_slot_acquire_timeout_seconds
                     ),
                 ),
-                httpx.AsyncClient(timeout=10) as client,
+                self._sc_client() as client,
             ):
                 r = await client.get(
                     f"{_SC_API_BASE}/resolve",
@@ -239,6 +253,14 @@ class SoundCloudService:
         sc_url: str,
         prefer_hls: bool = False,
     ) -> tuple[str, str]:
+        cache_id = f"{sc_url}:{'hls' if prefer_hls else 'progressive'}"
+        cached = await get_cached_stream(CACHE_KEY_SC, cache_id)
+        if cached:
+            logger.debug(
+                "stream_url_cache_hit", service="soundcloud", sc_url=sc_url
+            )
+            return cached
+
         sc_data = await self.resolve_url(sc_url)
         transcodings: list[dict] = sc_data.get("media", {}).get(
             "transcodings", []
@@ -279,7 +301,7 @@ class SoundCloudService:
                         settings.soundcloud_slot_acquire_timeout_seconds
                     ),
                 ),
-                httpx.AsyncClient(timeout=10) as client,
+                self._sc_client() as client,
             ):
                 r = await client.get(selected["url"], params=params)
                 if r.status_code in (401, 403):
@@ -291,10 +313,18 @@ class SoundCloudService:
                         ),
                     )
                 r.raise_for_status()
-                return (
-                    r.json()["url"],
-                    selected.get("format", {}).get("protocol", "progressive"),
+                stream_url: str = r.json()["url"]
+                protocol: str = selected.get("format", {}).get(
+                    "protocol", "progressive"
                 )
+                await set_cached_stream(
+                    CACHE_KEY_SC,
+                    cache_id,
+                    stream_url,
+                    protocol,
+                    settings.stream_url_cache_ttl_soundcloud,
+                )
+                return stream_url, protocol
         except SoundCloudSemaphoreTimeout as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

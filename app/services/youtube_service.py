@@ -9,6 +9,7 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core import s3
 from app.models.track import Track
 from app.services.outbound_semaphore import (
@@ -332,11 +333,28 @@ def _yt_extract_stream_pair(
     return u2, p2
 
 
+# TODO: Re-enable YouTube after proxy support is added.
+# Google bot-gate and 429 responses make direct server-IP requests unreliable
+# at scale (1000+ users). Required: residential proxy pool or YouTube Data
+# API v3 + key rotation. Set YOUTUBE_ENABLED=true in .env to re-enable.
 class YouTubeService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @staticmethod
+    def _require_enabled() -> None:
+        if not settings.youtube_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "YouTube integration is temporarily disabled. "
+                    "Proxy support is required for reliable operation at scale. "
+                    "Set YOUTUBE_ENABLED=true once a proxy pool is configured."
+                ),
+            )
+
     async def search(self, q: str, limit: int = 10) -> list[dict]:
+        self._require_enabled()
         q = (q or "").strip()
         if not q:
             return []
@@ -355,6 +373,7 @@ class YouTubeService:
     async def list_mix_video_rows(
         self, seed_video_id: str, limit: int
     ) -> list[dict]:
+        self._require_enabled()
         try:
             async with youtube_slot():
                 return await asyncio.to_thread(
@@ -370,6 +389,7 @@ class YouTubeService:
             return []
 
     async def resolve_url(self, yt_url: str) -> dict:
+        self._require_enabled()
         try:
             async with youtube_slot():
                 info = await asyncio.to_thread(_yt_extract_info, yt_url)
@@ -399,6 +419,7 @@ class YouTubeService:
     async def get_stream_info(
         self, yt_url: str
     ) -> tuple[str, str]:
+        self._require_enabled()
         try:
             async with youtube_slot():
                 pair: tuple[str, str] = await asyncio.to_thread(

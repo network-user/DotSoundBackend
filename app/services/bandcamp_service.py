@@ -11,12 +11,17 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import s3
 from app.config import settings
+from app.core import s3
 from app.models.track import Track
 from app.services.outbound_semaphore import (
     OutboundSemaphoreTimeout,
     bandcamp_slot,
+)
+from app.services.url_cache import (
+    CACHE_KEY_BC,
+    get_cached_stream,
+    set_cached_stream,
 )
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -106,6 +111,15 @@ class BandcampService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    def _bc_client(
+        self, timeout: float = 15, **kwargs: object
+    ) -> httpx.AsyncClient:
+        """Return an AsyncClient routed through Tor if the pool is active."""
+        from app.services.tor_pool import get_outbound_proxy
+
+        proxy = get_outbound_proxy("bandcamp")
+        return httpx.AsyncClient(timeout=timeout, proxy=proxy, **kwargs)  # type: ignore[arg-type]
+
     async def search(self, q: str, limit: int = 10) -> list[dict]:
         q = (q or "").strip()
         if not q:
@@ -113,12 +127,10 @@ class BandcampService:
         cap = max(1, min(int(limit), 20))
         try:
             async with bandcamp_slot():
-                async with httpx.AsyncClient(
+                async with self._bc_client(
                     timeout=20,
                     headers={
-                        "User-Agent": (
-                            settings.outbound_user_agent
-                        ),
+                        "User-Agent": settings.outbound_user_agent,
                         "Accept-Language": "en-US,en;q=0.9",
                     },
                     follow_redirects=True,
@@ -142,12 +154,10 @@ class BandcampService:
     async def _fetch_page(self, bc_url: str) -> str:
         try:
             async with bandcamp_slot():
-                async with httpx.AsyncClient(
+                async with self._bc_client(
                     timeout=15,
                     headers={
-                        "User-Agent": (
-                            settings.outbound_user_agent
-                        ),
+                        "User-Agent": settings.outbound_user_agent,
                         "Accept-Language": "en-US,en;q=0.9",
                     },
                     follow_redirects=True,
@@ -196,6 +206,13 @@ class BandcampService:
     async def get_stream_info(
         self, bc_url: str
     ) -> tuple[str, str]:
+        cached = await get_cached_stream(CACHE_KEY_BC, bc_url)
+        if cached:
+            logger.debug(
+                "stream_url_cache_hit", service="bandcamp", bc_url=bc_url
+            )
+            return cached
+
         try:
             page = await self._fetch_page(bc_url)
             data = _parse_tralbum(page)
@@ -227,6 +244,13 @@ class BandcampService:
                 "прослушивания на Bandcamp.",
             )
 
+        await set_cached_stream(
+            CACHE_KEY_BC,
+            bc_url,
+            stream_url,
+            "direct",
+            settings.stream_url_cache_ttl_bandcamp,
+        )
         return stream_url, "direct"
 
     async def import_or_get_track(
