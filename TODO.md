@@ -365,6 +365,9 @@
 
 ## Backend API
 
+- [x] YouTube import/playback: fallback на auto-выбор формата в
+  `yt-dlp` при `Requested format is not available` (без 422/503 из-за
+  жёсткого format-string)
 - [x] **Elasticsearch (поиск + suggest)**: индексы треков/артистов,
   Taskiq reindex/backfill, `GET /api/v1/search/suggest`, поиск треков
   с `q` через ES + PG fallback, bool/should (strict + fuzzy) для треков/артистов

@@ -138,8 +138,21 @@ def _yt_extract_info(
 
     fmt = format_str or _YT_FORMAT_PROGRESSIVE
     opts: dict = {**_YT_DLP_BASE_OPTS, "format": fmt}
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception as exc:
+        msg = str(exc)
+        if "Requested format is not available" not in msg:
+            raise
+        fallback_opts: dict = {**_YT_DLP_BASE_OPTS}
+        logger.info(
+            "yt_format_fallback_to_auto",
+            url=url,
+            requested_format=fmt,
+        )
+        with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
     if info is None:
         raise ValueError("yt-dlp returned no info")
     return info  # type: ignore[return-value]
