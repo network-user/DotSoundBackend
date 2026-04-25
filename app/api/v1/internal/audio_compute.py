@@ -355,10 +355,18 @@ async def job_result(
             ]
 
             def _align() -> list[SyncedLine] | None:
+                audio_seconds = float(
+                    clean.get("audio_seconds") or 0.0
+                )
+                audio_duration_ms = (
+                    int(audio_seconds * 1000)
+                    if audio_seconds > 0.0
+                    else 0
+                )
                 return align_text_to_precomputed_asr_timed_words(
                     existing.plain_text,  # type: ignore[arg-type]
                     tw_pairs,
-                    audio_duration_ms=0,
+                    audio_duration_ms=audio_duration_ms,
                 )
 
             aligned = await asyncio.to_thread(_align)
@@ -389,7 +397,21 @@ async def job_result(
         sn_out = base
         sp_lbl = sp_out or "asr"
         ssn_out = f"faster-whisper (aligned, {sp_lbl})"
+        logger.info(
+            "remote_lyrics_catalog_align_applied",
+            job_id=job.id,
+            aligned_lines=len(synced_out or []),
+            asr_words=len(clean.get("asr_timed_words") or []),
+            audio_seconds=clean.get("audio_seconds"),
+        )
     else:
+        if use_catalog:
+            logger.info(
+                "remote_lyrics_catalog_align_skipped",
+                job_id=job.id,
+                asr_words=len(clean.get("asr_timed_words") or []),
+                audio_seconds=clean.get("audio_seconds"),
+            )
         sn_out, ssn_out = cws.attribution_for_remote_worker_result(
             current_tier=job.current_tier,
             synced_lines=synced_out,
