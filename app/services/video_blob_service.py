@@ -87,8 +87,10 @@ class VideoBlobService:
         await self._session.flush()
 
     async def try_release_for_track(self, track: Track) -> None:
-        if track.video_blob_id is None:
+        if track.video_blob_id is None or track.video_blob_ref_freed:
             return
+        track.video_blob_ref_freed = True
+        await self._session.flush()
         res = await self._session.execute(
             select(VideoBlob).where(VideoBlob.id == track.video_blob_id)
         )

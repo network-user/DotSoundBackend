@@ -75,9 +75,9 @@ class TrackFallbackService:
         track.previous_source_url = track.source_url
         track.source_url = source.source_url
         track.source_platform = source.source_platform
-        track.sc_url = source.sc_url
         track.external_id = source.external_id
         track.canonical_source_url = source.canonical_source_url
+        track.sc_url = None
         await self._session.flush()
         await self._session.commit()
         await self._session.refresh(track)

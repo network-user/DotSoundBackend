@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.models.image_blob import ImageBlob
+from app.models.track import Track
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -73,6 +74,13 @@ class ImageBlobService:
             return
         b.ref_count = b.ref_count + 1
         await self._session.flush()
+
+    async def try_release_for_track(self, track: Track) -> None:
+        if track.cover_blob_id is None or track.cover_blob_ref_freed:
+            return
+        track.cover_blob_ref_freed = True
+        await self._session.flush()
+        await self.try_release(track.cover_blob_id)
 
     async def try_release(self, blob_id: int) -> None:
         res = await self._session.execute(
