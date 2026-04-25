@@ -57,6 +57,7 @@ def _audio_extension(mime: str) -> str:
 
 class UploadService:
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._repo = TrackRepository(session)
         self._library_repo = UserTrackLibraryRepository(session)
 
@@ -166,6 +167,22 @@ class UploadService:
 
         await schedule_reindex_track(track.id)
 
+        if artist:
+            from app.services.artist_service import ArtistService
+
+            artist_svc = ArtistService(self._session)
+            try:
+                await artist_svc.resolve_and_link(
+                    track_id=track.id,
+                    raw_artist_string=artist,
+                    source="internal",
+                )
+            except Exception:
+                logger.warning(
+                    "upload_artist_link_failed",
+                    track_id=track.id,
+                )
+
         return track
 
     async def _upload_cover(
@@ -195,5 +212,8 @@ class UploadService:
             return None
 
         return await s3.upload_cover(
-            data=data, content_type=mime, user_id=user_id
+            data=data,
+            content_type=mime,
+            user_id=user_id,
+            session=self._session,
         )

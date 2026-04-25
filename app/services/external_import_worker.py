@@ -263,6 +263,23 @@ async def process_external_import_job(job_id: int) -> None:
                 )
 
                 await schedule_reindex_track(track.id)
+                if track.artist:
+                    from app.services.artist_service import ArtistService
+
+                    artist_svc = ArtistService(session)
+                    try:
+                        await artist_svc.resolve_and_link(
+                            track_id=track.id,
+                            raw_artist_string=track.artist,
+                            source=track.source_platform or "soundcloud",
+                        )
+                        await session.commit()
+                    except Exception:
+                        logger.warning(
+                            "external_import_artist_link_failed",
+                            track_id=track.id,
+                        )
+                        await session.rollback()
                 logger.info(
                     "external_import_track_done",
                     job_id=job_id,

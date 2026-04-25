@@ -42,6 +42,44 @@ async def put_cas_audio(
     )
     return file_key
 
+def build_cas_image_key(
+    content_sha256_hex: str, extension: str
+) -> str:
+    ext = extension.lstrip(".") if extension else "webp"
+    prefix = content_sha256_hex[:2]
+    return f"image-blobs/{prefix}/{content_sha256_hex}.{ext}"
+
+
+async def put_cas_image(
+    data: bytes,
+    content_sha256_hex: str,
+    extension: str,
+    content_type: str,
+) -> str:
+    file_key = build_cas_image_key(content_sha256_hex, extension)
+    await upload_object(file_key, data, content_type)
+    return file_key
+
+
+def build_cas_video_key(
+    content_sha256_hex: str, extension: str
+) -> str:
+    ext = extension.lstrip(".") if extension else "mp4"
+    prefix = content_sha256_hex[:2]
+    return f"video-blobs/{prefix}/{content_sha256_hex}.{ext}"
+
+
+async def put_cas_video(
+    data: bytes,
+    content_sha256_hex: str,
+    extension: str,
+    content_type: str,
+) -> str:
+    file_key = build_cas_video_key(content_sha256_hex, extension)
+    await upload_object(file_key, data, content_type)
+    return file_key
+
+
 _ALLOWED_COVER_MIMES = frozenset(
     {"image/jpeg", "image/png", "image/webp"}
 )
@@ -111,42 +149,42 @@ async def upload_image(
     prefix: str,
     max_size: int | None = None,
     user_id: int | None = None,
+    session: object | None = None,
 ) -> tuple[str, str, int, int]:
-    from app.services.media_service import (
-        process_image,
-    )
+    """Upload image, returning (img_key, thumb_key, width, height).
 
-    processed, thumb, w, h = process_image(
-        data, max_size
-    )
+    When *session* is provided the main image is stored via CAS
+    (ImageBlobService); the thumbnail remains UUID-based.
+    """
+    from app.services.media_service import process_image
+
+    processed, thumb, w, h = process_image(data, max_size)
 
     owner = str(user_id) if user_id else "anon"
-    base = f"{prefix}/{owner}/{uuid.uuid4().hex}"
-    img_key = f"{base}.webp"
-    thumb_key = f"{base}_thumb.webp"
+    thumb_key = f"{prefix}/{owner}/{uuid.uuid4().hex}_thumb.webp"
 
-    logger.info(
-        "s3_image_upload_started",
-        img_key=img_key,
-        original_bytes=len(data),
-        processed_bytes=len(processed),
-    )
-    async with get_s3_client() as s3:
-        await s3.put_object(
-            Bucket=settings.minio_bucket,
-            Key=img_key,
-            Body=processed,
-            ContentType="image/webp",
+    if session is not None:
+        from app.services.image_blob_service import ImageBlobService
+
+        svc = ImageBlobService(session)  # type: ignore[arg-type]
+        blob, _ = await svc.get_or_create_from_bytes(
+            processed, "webp", "image/webp"
         )
-        await s3.put_object(
-            Bucket=settings.minio_bucket,
-            Key=thumb_key,
-            Body=thumb,
-            ContentType="image/webp",
+        await svc.attach(blob)
+        img_key = blob.s3_key
+    else:
+        img_key = (
+            f"{prefix}/{owner}/{uuid.uuid4().hex}.webp"
         )
+        await upload_object(img_key, processed, "image/webp")
+
+    await upload_object(thumb_key, thumb, "image/webp")
+
     logger.info(
         "s3_image_upload_completed",
         img_key=img_key,
+        original_bytes=len(data),
+        processed_bytes=len(processed),
     )
     return img_key, thumb_key, w, h
 
@@ -155,12 +193,14 @@ async def upload_cover(
     data: bytes,
     content_type: str,
     user_id: int | None = None,
+    session: object | None = None,
 ) -> str:
     img_key, _, _, _ = await upload_image(
         data,
         prefix="covers",
         max_size=settings.image_cover_max_size,
         user_id=user_id,
+        session=session,
     )
     return img_key
 

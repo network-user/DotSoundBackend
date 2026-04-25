@@ -108,25 +108,36 @@ async def transcode_video(
         with open(output_path, "rb") as f:
             video_data = f.read()
 
-        video_key = f"videos/{track_id}/processed.mp4"
-        await s3.upload_object(
-            key=video_key,
-            data=video_data,
-            content_type="video/mp4",
-        )
-
-        thumbnail_key: str | None = None
+        thumb_data: bytes | None = None
         if os.path.exists(thumb_path):
             with open(thumb_path, "rb") as f:
                 thumb_data = f.read()
-            thumbnail_key = (
-                f"videos/{track_id}/thumb.jpg"
+
+        thumbnail_key: str | None = None
+        async with AsyncSessionLocal() as cas_session:
+            from app.services.image_blob_service import ImageBlobService
+            from app.services.video_blob_service import VideoBlobService
+
+            video_svc = VideoBlobService(cas_session)
+            video_blob, _ = await video_svc.get_or_create_from_bytes(
+                video_data, "mp4", "video/mp4"
             )
-            await s3.upload_object(
-                key=thumbnail_key,
-                data=thumb_data,
-                content_type="image/jpeg",
-            )
+            video_key = video_blob.s3_key
+
+            if thumb_data is not None:
+                img_svc = ImageBlobService(cas_session)
+                thumb_blob, _ = await img_svc.get_or_create_from_bytes(
+                    thumb_data, "jpg", "image/jpeg"
+                )
+                await img_svc.attach(thumb_blob)
+                thumbnail_key = thumb_blob.s3_key
+                await video_svc.set_thumbnail(video_blob, thumb_blob)
+
+            track_row = await cas_session.get(Track, track_id)
+            if track_row is not None:
+                await video_svc.attach_to_track(track_row, video_blob)
+
+            await cas_session.commit()
 
         await _update_video_status(
             track_id,

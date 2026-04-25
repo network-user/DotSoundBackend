@@ -21,8 +21,10 @@ if TYPE_CHECKING:
     from app.models.album import Album
     from app.models.audio_blob import AudioBlob
     from app.models.complaint import Complaint
+    from app.models.image_blob import ImageBlob
     from app.models.lyrics import TrackLyrics
     from app.models.track_info import TrackInfo
+    from app.models.video_blob import VideoBlob
 
 
 class Track(Base, TimestampMixin):
@@ -163,11 +165,34 @@ class Track(Base, TimestampMixin):
     blob_ref_freed: Mapped[bool] = mapped_column(
         Boolean, server_default="false", nullable=False
     )
+    previous_source_url: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True
+    )
+    cover_blob_id: Mapped[int | None] = mapped_column(
+        ForeignKey("image_blobs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    video_blob_id: Mapped[int | None] = mapped_column(
+        ForeignKey("video_blobs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
     audio_blob: Mapped[AudioBlob | None] = relationship(
         "AudioBlob",
         back_populates="tracks",
         foreign_keys=[blob_id],
+    )
+    cover_blob: Mapped[ImageBlob | None] = relationship(
+        "ImageBlob",
+        foreign_keys=[cover_blob_id],
+        back_populates="cover_tracks",
+    )
+    video_blob: Mapped[VideoBlob | None] = relationship(
+        "VideoBlob",
+        foreign_keys=[video_blob_id],
+        back_populates="tracks",
     )
 
     complaints: Mapped[list[Complaint]] = relationship(

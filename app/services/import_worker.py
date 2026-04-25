@@ -205,6 +205,21 @@ async def process_import_job(job_id: int) -> None:
                 )
 
                 await schedule_reindex_track(track.id)
+                if track.artist:
+                    from app.services.artist_service import ArtistService
+
+                    artist_svc = ArtistService(session)
+                    try:
+                        await artist_svc.resolve_and_link(
+                            track_id=track.id,
+                            raw_artist_string=track.artist,
+                            source="internal",
+                        )
+                    except Exception:
+                        logger.warning(
+                            "import_artist_link_failed",
+                            track_id=track.id,
+                        )
             except Exception as exc:
                 job.failed_tracks += 1
                 imported_tracks.append(
