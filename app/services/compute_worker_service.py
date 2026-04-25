@@ -694,6 +694,15 @@ def validate_lyrics_result(payload: dict) -> dict:
                 continue
             asr_parsed.append({"t": t, "w": w})
         asr_parsed = asr_parsed or None
+    audio_seconds: float | None = None
+    raw_audio_seconds = payload.get("audio_seconds")
+    if raw_audio_seconds is not None:
+        try:
+            parsed_audio_seconds = float(raw_audio_seconds)
+        except (TypeError, ValueError):
+            parsed_audio_seconds = 0.0
+        if parsed_audio_seconds > 0.0:
+            audio_seconds = parsed_audio_seconds
 
     return {
         "plain_text": plain_text,
@@ -702,6 +711,7 @@ def validate_lyrics_result(payload: dict) -> dict:
         "sync_profile": sync_profile,
         "audio_sha256": payload.get("audio_sha256"),
         "asr_timed_words": asr_parsed,
+        "audio_seconds": audio_seconds,
     }
 
 

@@ -215,6 +215,7 @@
   - Frontend: кнопки автогенерации, toggle таймкодов, i18n
   - Re-define fix: админ-кнопки с `bypass_cache=true` + расширенные debug-логи в карточке (шестерёнка)
   - Search fallback fix: при miss по `(artist,title)` делаем retry по `title-only` и сохраняем cache alias
+  - Stability fix (2026-04-25): remote catalog-align теперь получает `audio_seconds` от compute-worker для корректной шкалы времени; добавлен защитный rescue от схлопнутой line-sync таймлинии (когда строки прилипают к одному позднему якорю), плюс retry на отправку `result/fail` из worker.
 - **Auto-lyrics: вынос тяжёлой обработки на внешний GPU-сервис (далёкое будущее)**
   - Отдельный сервер/сервис с GPU для обработки аудио
   - Backend отправляет аудиофайл во внутренний API PrivateCore,
