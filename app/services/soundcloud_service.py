@@ -74,6 +74,65 @@ class SoundCloudService:
         logger.info("sc_search_done", query=query, count=len(tracks))
         return tracks
 
+    async def get_charts(
+        self,
+        genre: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Fetch top-chart tracks from the external provider."""
+        if not self._client_id:
+            return []
+        params: dict = {
+            "kind": "top",
+            "client_id": self._client_id,
+            "limit": limit,
+            "linked_partitioning": 1,
+        }
+        if genre:
+            params["genre"] = (
+                f"soundcloud:genres:{genre.lower()}"
+            )
+        try:
+            async with (
+                soundcloud_slot(
+                    timeout_seconds=(
+                        settings.soundcloud_slot_acquire_timeout_seconds
+                    ),
+                ),
+                httpx.AsyncClient(timeout=10) as client,
+            ):
+                r = await client.get(
+                    f"{_SC_API_BASE}/charts",
+                    params=params,
+                )
+                if r.status_code in (401, 429):
+                    logger.warning(
+                        "sc_charts_error",
+                        status=r.status_code,
+                    )
+                    return []
+                r.raise_for_status()
+                data = r.json()
+        except (SoundCloudSemaphoreTimeout, Exception) as exc:
+            logger.warning(
+                "sc_charts_failed", error=str(exc)
+            )
+            return []
+        return [
+            item["track"]
+            for item in data.get("collection", [])
+            if isinstance(item.get("track"), dict)
+            and item["track"].get("streamable")
+        ]
+
+    async def get_trending(
+        self, limit: int = 20
+    ) -> list[dict]:
+        """Global trending tracks (no genre filter)."""
+        return await self.get_charts(
+            genre=None, limit=limit
+        )
+
     async def resolve_url(self, sc_url: str) -> dict:
         if not self._client_id:
             raise HTTPException(

@@ -32,6 +32,50 @@ def _extract_video_id(url: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _yt_mix_flat_sync(seed_video_id: str, limit: int) -> list[dict]:
+    import yt_dlp
+
+    vid = (seed_video_id or "").strip()
+    if len(vid) != 11:
+        return []
+    cap = max(1, min(int(limit), 20))
+    mix_list = f"RD{vid}"
+    url = f"https://www.youtube.com/playlist?list={mix_list}"
+    opts: dict = {
+        "quiet": True,
+        "no_warnings": True,
+        "noprogress": True,
+        "extract_flat": "in_playlist",
+        "playlistend": cap,
+    }
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(
+            url,
+            download=False,
+        )
+    if not info:
+        return []
+    entries: list[dict] = [e for e in (info.get("entries") or []) if e]
+    out: list[dict] = []
+    for e in entries:
+        eid: str = (e.get("id") or "").strip()
+        if not eid or len(eid) != 11:
+            continue
+        if eid == vid:
+            continue
+        out.append(
+            {
+                "id": eid,
+                "title": (e.get("title") or "Unknown").strip(),
+                "uploader": e.get("uploader"),
+                "duration": e.get("duration"),
+            }
+        )
+        if len(out) >= cap:
+            break
+    return out
+
+
 def _yt_search_sync(query: str, limit: int) -> list[dict]:
     import yt_dlp
 
@@ -307,6 +351,23 @@ class YouTubeService:
                 detail="YouTube сейчас перегружен, попробуйте позже.",
             ) from exc
         return rows
+
+    async def list_mix_video_rows(
+        self, seed_video_id: str, limit: int
+    ) -> list[dict]:
+        try:
+            async with youtube_slot():
+                return await asyncio.to_thread(
+                    _yt_mix_flat_sync, seed_video_id, limit
+                )
+        except OutboundSemaphoreTimeout:
+            return []
+        except Exception as exc:
+            logger.warning(
+                "yt_mix_extract_failed",
+                error=str(exc),
+            )
+            return []
 
     async def resolve_url(self, yt_url: str) -> dict:
         try:

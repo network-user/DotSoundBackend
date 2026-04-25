@@ -12,7 +12,14 @@ from app.schemas.playlist import (
     PlaylistUpdate,
     PlaylistWithTracksResponse,
 )
+from app.schemas.playlist_collab import (
+    PlaylistInviteAccept,
+    PlaylistInviteOut,
+)
 from app.schemas.track import TrackResponse
+from app.services.playlist_collab_service import (
+    PlaylistCollabService,
+)
 from app.services.playlist_service import PlaylistService
 
 router = APIRouter(prefix="/playlists", tags=["playlists"])
@@ -196,3 +203,44 @@ async def remove_track(
     )
     service = PlaylistService(session)
     await service.remove_track(playlist_id, track_id, current_user.id)
+
+
+@router.post(
+    "/{playlist_id}/invites",
+    response_model=PlaylistInviteOut,
+    summary="Create one-time collaboration invite (owner only)",
+)
+@limiter.limit("20/minute")
+async def create_playlist_invite(
+    request: Request,
+    playlist_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PlaylistInviteOut:
+    svc = PlaylistCollabService(session)
+    raw, exp = await svc.create_invite(playlist_id, current_user)
+    return PlaylistInviteOut(
+        token=raw,
+        expires_at=exp,
+    )
+
+
+@router.post(
+    "/invites/accept",
+    response_model=PlaylistResponse,
+    summary="Accept a playlist invite (authenticated)",
+)
+@limiter.limit("30/minute")
+async def accept_playlist_invite(
+    request: Request,
+    body: PlaylistInviteAccept,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PlaylistResponse:
+    csvc = PlaylistCollabService(session)
+    pid = await csvc.accept(body.token, current_user)
+    psvc = PlaylistService(session)
+    p = await psvc.get(pid)
+    if not p:
+        raise HTTPException(404, "not_found")
+    return PlaylistResponse.model_validate(p)

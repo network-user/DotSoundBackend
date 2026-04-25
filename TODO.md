@@ -109,6 +109,15 @@
   - Тесты: PrivateCore 88 admin-related, Bot 9 admin alert,
   Backend smoke + repo
 
+## Продукт: пять спринтов (реализовано в Backend, 2026-04)
+
+- [x] S1 **Radio** — `GET /api/v1/tracks/{id}/radio` (каталог + YouTube mix/search + materialize), флаги `RADIO_*` в `config`, политика `dotsound_private_core.services.radio_policy`
+- [x] S2 **Co-listen** — `co_listen_rooms` + `POST/GET/PATCH /api/v1/colisten/rooms`, `WS /api/v1/colisten/ws/{room_id}` (Redis pub/sub), `dotsound_private_core.services.colisten_policy`
+- [x] S3 **Author stats** — `GET /api/v1/tracks/{id}/author-stats` (владелец), `listen_events` + `play_count` + лайки, `author_stats_policy` (округление)
+- [x] S4 **Плейлисты коллаб** — `playlist_collaborators`, `playlist_invite_tokens`, `POST /playlists/{id}/invites`, `POST /playlists/invites/accept`, правка `PlaylistService` для **editor** коллаб
+- [x] S5 **Сниппеты** — `track_snippets`, `POST /tracks/{id}/snippets`, `snippet_worker` (Taskiq + ffmpeg), `snippet_policy` + gating `catalog_type`
+- [ ] **Follow-up:** Mini App / бот (кнопки radio, colisten, UI статистики, accept invite), e2e-тесты, Prometheus-метрики `radio_*` / runbook; юридический sign-off third-party + сниппетов (см. `LEGAL.md`). Миграция: `alembic upgrade 0056`.
+
 ## Плеер в боте
 
 - Inline аудио-плеер (3 трека, editMessageMedia)

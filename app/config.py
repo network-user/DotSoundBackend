@@ -182,6 +182,13 @@ class AppSettings(BaseSettings):
     elasticsearch_track_fuzziness: str = "AUTO"
     elasticsearch_fuzzy_max_expansions: int = 50
 
+    radio_enabled: bool = True
+    radio_youtube_mix_enabled: bool = True
+    radio_max_suggestions: int = 10
+
+    snippet_ffmpeg_enabled: bool = True
+    snippet_external_catalog_allowed: bool = False
+
     # Compute-worker pull API protection. Comma-separated list of
     # CIDRs allowed to hit /api/v1/internal/*. Empty in prod is a
     # configuration error: the model validator below raises so the
