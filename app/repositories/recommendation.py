@@ -147,6 +147,23 @@ class RecommendationRepository:
         )
         return list(result.scalars().all())
 
+    async def get_tracks_by_ids(
+        self, ids: list[int]
+    ) -> list[Track]:
+        if not ids:
+            return []
+        result = await self._session.execute(
+            select(Track).where(Track.id.in_(ids))
+        )
+        id_order = {
+            tid: i for i, tid in enumerate(ids)
+        }
+        tracks = list(result.scalars().all())
+        tracks.sort(
+            key=lambda t: id_order.get(t.id, 9999)
+        )
+        return tracks
+
     async def get_track_artist_map(
         self, track_ids: list[int]
     ) -> dict[int, list[int]]:

@@ -282,6 +282,17 @@ Internal services → scoped JWT (15 мин) + IP whitelist
 
 ---
 
+## Продуктовые эндпоинты (радио, co-listen, автор-аналитика, коллаб, сниппеты)
+
+Публичный API дополнен: «радио-очередь» от сида, комнаты co-listen с
+WebSocket на Redis, статистика для владельца трека, приглашения в
+со-редакторы плейлиста и фоновые сниппеты UGC. Схема БД — миграция
+`0056_*`; политики лимитов в `DotSoundPrivateCore` (`radio_policy`,
+`colisten_policy`, `author_stats_policy`, `playlist_collab_policy`,
+`snippet_policy`).
+
+---
+
 ## Стиль кода
 
 - Python: Black (79 chars), Ruff, MyPy strict

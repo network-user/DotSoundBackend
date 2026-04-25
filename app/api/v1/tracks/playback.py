@@ -11,20 +11,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.rate_limit import limiter
-from app.dependencies import get_db, get_optional_user
+from app.dependencies import get_current_user, get_db, get_optional_user
 from app.models.user import User
 from app.repositories.track import TrackRepository
 from app.schemas.card import TrackCardResponse
 from app.schemas.share import ShareResponse
+from app.config import settings
+from app.schemas.snippet import SnippetCreateRequest, SnippetOut
 from app.schemas.track import (
     AdjacentTracksResponse,
     PlaybackMode,
     PlayResponse,
+    RadioTrackQueueResponse,
     StreamResponse,
     TrackQueueResponse,
     TrackResponse,
 )
 from app.services.card_service import CardService
+from app.services.radio_service import RadioService
+from app.services.snippet_service import SnippetService
 from app.services.search_playcount_drain import (
     mark_playcount_dirty_async,
 )
@@ -38,8 +43,8 @@ def _stream_ttl(source_platform: str | None) -> int:
     if source_platform == "youtube":
         return 21600  # ~6 hours
     if source_platform == "bandcamp":
-        return 3600   # ~1 hour
-    return 300        # SoundCloud default
+        return 3600  # ~1 hour
+    return 300  # SoundCloud default
 
 
 async def _resolve_third_party_stream(
@@ -95,7 +100,10 @@ async def _resolve_third_party_stream(
 def _check_access(track: object, current_user: User | None = None) -> None:
     if getattr(track, "is_public", True):
         return
-    if current_user and getattr(track, "uploaded_by_id", None) == current_user.id:
+    if (
+        current_user
+        and getattr(track, "uploaded_by_id", None) == current_user.id
+    ):
         return
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -146,11 +154,11 @@ async def _http_proxy_range_get(
     out_h: dict[str, str] = {
         "Accept-Ranges": resp.headers.get("accept-ranges", "bytes"),
     }
-    if (ct := resp.headers.get("content-type")):
+    if ct := resp.headers.get("content-type"):
         out_h["Content-Type"] = ct
-    if (cl := resp.headers.get("content-length")):
+    if cl := resp.headers.get("content-length"):
         out_h["Content-Length"] = cl
-    if (cr := resp.headers.get("content-range")):
+    if cr := resp.headers.get("content-range"):
         out_h["Content-Range"] = cr
 
     async def body_iter() -> AsyncIterator[bytes]:
@@ -259,17 +267,11 @@ async def stream_track(
                     TrackFallbackService,
                 )
 
-                fallback_svc = TrackFallbackService(
-                    session, _settings
-                )
-                updated = await fallback_svc.find_and_apply_fallback(
-                    track
-                )
+                fallback_svc = TrackFallbackService(session, _settings)
+                updated = await fallback_svc.find_and_apply_fallback(track)
                 if updated:
-                    stream_url, protocol = (
-                        await _resolve_third_party_stream(
-                            updated, session
-                        )
+                    stream_url, protocol = await _resolve_third_party_stream(
+                        updated, session
                     )
                 else:
                     raise
@@ -387,15 +389,11 @@ async def audio_stream(
         )
 
     if track.access_mode == "third_party_stream":
-        if getattr(
-            track, "source_platform", None
-        ) in ("bandcamp", "youtube"):
+        if getattr(track, "source_platform", None) in ("bandcamp", "youtube"):
             return await _proxy_cors_bypass_third_party_audio(
                 request, track, session
             )
-        stream_url, _ = await _resolve_third_party_stream(
-            track, session
-        )
+        stream_url, _ = await _resolve_third_party_stream(track, session)
         return RedirectResponse(url=stream_url, status_code=302)
 
     if not track.file_key:
@@ -407,9 +405,7 @@ async def audio_stream(
     range_header = request.headers.get("range")
     try:
         data, content_length, content_range, content_type = (
-            await s3.download_object_range(
-                track.file_key, range_header
-            )
+            await s3.download_object_range(track.file_key, range_header)
         )
     except ClientError as exc:
         code = exc.response["Error"]["Code"]
@@ -466,16 +462,12 @@ async def get_adjacent_tracks(
         )
 
     if mode == PlaybackMode.repeat_one:
-        return AdjacentTracksResponse(
-            prev_id=track_id, next_id=track_id
-        )
+        return AdjacentTracksResponse(prev_id=track_id, next_id=track_id)
 
     if mode == PlaybackMode.shuffle:
         rand_prev = await repo.get_random_id(track_id)
         rand_next = await repo.get_random_id(track_id)
-        return AdjacentTracksResponse(
-            prev_id=rand_prev, next_id=rand_next
-        )
+        return AdjacentTracksResponse(prev_id=rand_prev, next_id=rand_next)
 
     prev_id, next_id = await repo.get_adjacent(track_id)
     return AdjacentTracksResponse(prev_id=prev_id, next_id=next_id)
@@ -494,14 +486,67 @@ async def get_track_queue(
     session: AsyncSession = Depends(get_db),
 ) -> TrackQueueResponse:
     repo = TrackRepository(session)
-    tracks = await repo.get_next_tracks(
-        track_id, count
-    )
+    tracks = await repo.get_next_tracks(track_id, count)
     return TrackQueueResponse(
-        next_tracks=[
-            TrackResponse.model_validate(t)
-            for t in tracks
-        ]
+        next_tracks=[TrackResponse.model_validate(t) for t in tracks]
+    )
+
+
+@router.get(
+    "/{track_id}/radio",
+    response_model=RadioTrackQueueResponse,
+    summary="Get radio queue from seed (catalog + optional upstream mix)",
+)
+@limiter.limit("60/minute")
+async def get_radio_queue(
+    request: Request,
+    track_id: int,
+    count: int = Query(3, ge=1, le=20),
+    session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+) -> RadioTrackQueueResponse:
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    repo = TrackRepository(session)
+    track = await repo.get_by_id(track_id)
+    if not track or not track.is_active or not track.is_public:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    rsvc = RadioService(session, settings)
+    nxt, src = await rsvc.build_queue(track, count, current_user)
+    return RadioTrackQueueResponse(
+        next_tracks=[TrackResponse.model_validate(t) for t in nxt],
+        source=src,
+    )
+
+
+@router.post(
+    "/{track_id}/snippets",
+    response_model=SnippetOut,
+    summary="Request a short UGC audio snippet (async transcode)",
+)
+@limiter.limit("20/minute")
+async def post_track_snippet(
+    request: Request,
+    track_id: int,
+    body: SnippetCreateRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SnippetOut:
+    svc = SnippetService(session)
+    sn = await svc.request_snippet(
+        track_id, current_user, body.start_ms, body.end_ms
+    )
+    return SnippetOut(
+        id=sn.id,
+        track_id=sn.track_id,
+        status=sn.status,
+        file_key=sn.file_key,
+        start_ms=sn.start_ms,
+        end_ms=sn.end_ms,
+        error_message=sn.error_message,
+        created_at=sn.created_at,
     )
 
 
@@ -556,7 +601,11 @@ async def get_share_links(
 
     mini_app_url = settings.mini_app_url or ""
     bot_username = settings.telegram_bot_username or ""
-    web_url = f"{mini_app_url}/track/{track_id}" if mini_app_url else f"/api/v1/tracks/{track_id}"
+    web_url = (
+        f"{mini_app_url}/track/{track_id}"
+        if mini_app_url
+        else f"/api/v1/tracks/{track_id}"
+    )
     tg_url = (
         f"https://t.me/{bot_username}/app?startapp=track_{track_id}"
         if bot_username
@@ -589,9 +638,7 @@ async def video_proxy(
         )
     _check_access(track, current_user)
     try:
-        data = await s3.download_object(
-            track.video_key
-        )
+        data = await s3.download_object(track.video_key)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -603,9 +650,7 @@ async def video_proxy(
     return Response(
         content=data,
         media_type=ct,
-        headers={
-            "Cache-Control": "public, max-age=3600"
-        },
+        headers={"Cache-Control": "public, max-age=3600"},
     )
 
 

@@ -143,3 +143,8 @@ class AdjacentTracksResponse(BaseModel):
 
 class TrackQueueResponse(BaseModel):
     next_tracks: list[TrackResponse]
+
+
+class RadioTrackQueueResponse(BaseModel):
+    next_tracks: list[TrackResponse]
+    source: str | None = None

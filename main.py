@@ -28,6 +28,7 @@ if __name__ == "__main__":
             "app.services.track_info_worker",
             "app.services.artist_supplemental_worker",
             "app.services.search_index_worker",
+            "app.services.snippet_worker",
         ],
         stdout=sys.stdout,
         stderr=sys.stderr,

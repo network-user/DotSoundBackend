@@ -10,6 +10,7 @@ from app.api.v1 import (
     bandcamp,
     blocks,
     chats,
+    colisten,
     comments,
     complaints,
     dislikes,
@@ -58,6 +59,7 @@ api_router.include_router(albums.router)
 api_router.include_router(imports.router)
 api_router.include_router(linked_accounts.router)
 api_router.include_router(chats.router)
+api_router.include_router(colisten.router)
 api_router.include_router(messages.router)
 api_router.include_router(comments.router)
 api_router.include_router(blocks.router)

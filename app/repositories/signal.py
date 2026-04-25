@@ -72,6 +72,20 @@ class ListenEventRepository(
         )
         return result.scalar_one()
 
+    async def count_by_track_since(
+        self, track_id: int, since: datetime
+    ) -> int:
+        from sqlalchemy import func
+
+        r = await self._session.execute(
+            select(func.count())
+            .where(
+                ListenEvent.track_id == track_id,
+                ListenEvent.created_at >= since,
+            )
+        )
+        return int(r.scalar_one())
+
 
 class SearchEventRepository(
     BaseRepository[SearchEvent]

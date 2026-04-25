@@ -15,6 +15,7 @@ from app.models.video_blob import VideoBlob
 from app.models.app_setting import AppSetting
 from app.models.artist import Artist, TrackArtist
 from app.models.block import UserBlock
+from app.models.co_listen import CoListenRoom
 from app.models.compute_worker import ComputeWorker
 from app.models.comment import (
     CommentHide,
@@ -43,8 +44,13 @@ from app.models.message import (
 )
 from app.models.notification import Notification
 from app.models.playlist import Playlist, PlaylistTrack
+from app.models.playlist_collab import (
+    PlaylistCollaborator,
+    PlaylistInviteToken,
+)
 from app.models.search_event import SearchEvent
 from app.models.track import Track
+from app.models.track_snippet import TrackSnippet
 from app.models.upload_meta import TrackUploadMeta
 from app.models.user import User
 from app.models.user_linked_account import UserLinkedAccount
@@ -68,6 +74,7 @@ __all__ = [
     "AppSetting",
     "Artist",
     "CommentHide",
+    "CoListenRoom",
     "CommentVote",
     "Complaint",
     "ComputeWorker",
@@ -85,9 +92,12 @@ __all__ = [
     "MessageReaction",
     "Notification",
     "Playlist",
+    "PlaylistInviteToken",
     "PlaylistTrack",
+    "PlaylistCollaborator",
     "SearchEvent",
     "Track",
+    "TrackSnippet",
     "TrackArtist",
     "TrackComment",
     "TrackLyrics",

@@ -1,9 +1,11 @@
+
 import structlog
-from typing import Any
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.playlist import Playlist
+from app.models.playlist_collab import PlaylistCollaborator
 from app.models.track import Track
 from app.models.user import User
 from app.repositories.playlist import PlaylistRepository
@@ -15,6 +17,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 class PlaylistService:
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._repo = PlaylistRepository(session)
         self._track_repo = TrackRepository(session)
         self._user_repo = UserRepository(session)
@@ -87,7 +90,7 @@ class PlaylistService:
         requester_id: int,
         position: int = 0,
     ) -> None:
-        await self._get_owned(playlist_id, requester_id)
+        await self._get_can_write(playlist_id, requester_id)
         track = await self._track_repo.get_by_id(track_id)
         if not track or not track.is_active:
             raise HTTPException(
@@ -107,7 +110,7 @@ class PlaylistService:
         track_id: int,
         requester_id: int,
     ) -> None:
-        await self._get_owned(playlist_id, requester_id)
+        await self._get_can_write(playlist_id, requester_id)
         found = await self._repo.remove_track(
             playlist_id, track_id
         )
@@ -134,6 +137,35 @@ class PlaylistService:
                 detail="Playlist not found",
             )
         if playlist.owner_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not your playlist",
+            )
+        return playlist
+
+    async def _get_can_write(
+        self, playlist_id: int, requester_id: int
+    ) -> Playlist:
+        user = await self._resolve_user(requester_id)
+        playlist = await self._repo.get_by_id(playlist_id)
+        if not playlist:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Playlist not found",
+            )
+        if playlist.owner_id == user.id:
+            return playlist
+        r = await self._session.execute(
+            select(PlaylistCollaborator)
+            .where(
+                (PlaylistCollaborator.playlist_id == playlist_id)
+                & (PlaylistCollaborator.user_id == user.id)
+                & (PlaylistCollaborator.role == "editor")
+            )
+            .limit(1)
+        )
+        row = r.scalars().first()
+        if not row:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not your playlist",

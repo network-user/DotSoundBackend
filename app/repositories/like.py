@@ -99,3 +99,13 @@ class LikeRepository:
             .where(Track.uploaded_by_id == user_id, Track.is_active.is_(True))
         )
         return result.scalar_one()
+
+    async def count_for_track(self, track_id: int) -> int:
+        from sqlalchemy import func
+
+        r = await self._session.execute(
+            select(func.count())
+            .select_from(Like)
+            .where(Like.track_id == track_id)
+        )
+        return int(r.scalar_one())
