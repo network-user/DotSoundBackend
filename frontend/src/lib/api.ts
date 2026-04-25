@@ -1543,6 +1543,14 @@ export const api = {
     return request('/api/v1/recommendations/daily-mix')
   },
 
+  getDailyPlaylist(): Promise<import('@/types/api').DailyPlaylistResponse> {
+    return request('/api/v1/recommendations/daily-playlist')
+  },
+
+  refreshDailyPlaylist(): Promise<void> {
+    return request('/api/v1/recommendations/daily-playlist/refresh', { method: 'POST' })
+  },
+
   getRadio(seedTrackId: number, queueSize?: number): Promise<{ seed_type: string; seed_id: string; tracks: Track[] }> {
     const qs = queueSize ? `&queue_size=${queueSize}` : ''
     return request(`/api/v1/recommendations/radio?seed_track_id=${seedTrackId}${qs}`)

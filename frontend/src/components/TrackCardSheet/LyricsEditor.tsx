@@ -178,6 +178,7 @@ export function LyricsEditor({
             source_name: null,
             uploaded_by_id: null,
             video_key: null,
+            waveform_data: null,
             created_at: '',
           },
           localAudioUrl,

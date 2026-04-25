@@ -30,18 +30,9 @@ class RadioQueueResponse(BaseModel):
     tracks: list[TrackResponse]
 
 
-class ExternalTrackSuggestion(BaseModel):
-    title: str
-    artist: str | None = None
-    source: str
-    external_url: str | None = None
-    cover_url: str | None = None
-    duration_seconds: int | None = None
-
-
 class DailyPlaylistResponse(BaseModel):
     internal_tracks: list[TrackResponse]
-    external_suggestions: list[ExternalTrackSuggestion]
+    external_tracks: list[TrackResponse]
     global_top: list[TrackResponse]
     generated_at: str
     expires_at: str
@@ -49,6 +40,6 @@ class DailyPlaylistResponse(BaseModel):
 
 class WeeklyPlaylistResponse(BaseModel):
     internal_tracks: list[TrackResponse]
-    external_suggestions: list[ExternalTrackSuggestion]
+    external_tracks: list[TrackResponse]
     generated_at: str
     expires_at: str

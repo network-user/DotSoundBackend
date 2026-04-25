@@ -134,18 +134,22 @@ async def get_daily_playlist(
     payload = await svc.get_daily_playlist(user.id)
     repo = RecommendationRepository(db)
     internal = await repo.get_tracks_by_ids(
-        payload["internal_track_ids"]
+        payload.get("internal_track_ids", [])
+    )
+    external = await repo.get_tracks_by_ids(
+        payload.get("external_track_ids", [])
     )
     global_top = await repo.get_tracks_by_ids(
-        payload["global_top_ids"]
+        payload.get("global_top_ids", [])
     )
     return DailyPlaylistResponse(
         internal_tracks=[
             TrackResponse.model_validate(t)
             for t in internal
         ],
-        external_suggestions=payload[
-            "external_suggestions"
+        external_tracks=[
+            TrackResponse.model_validate(t)
+            for t in external
         ],
         global_top=[
             TrackResponse.model_validate(t)
@@ -168,15 +172,19 @@ async def get_weekly_playlist(
     payload = await svc.get_weekly_playlist(user.id)
     repo = RecommendationRepository(db)
     internal = await repo.get_tracks_by_ids(
-        payload["internal_track_ids"]
+        payload.get("internal_track_ids", [])
+    )
+    external = await repo.get_tracks_by_ids(
+        payload.get("external_track_ids", [])
     )
     return WeeklyPlaylistResponse(
         internal_tracks=[
             TrackResponse.model_validate(t)
             for t in internal
         ],
-        external_suggestions=payload[
-            "external_suggestions"
+        external_tracks=[
+            TrackResponse.model_validate(t)
+            for t in external
         ],
         generated_at=payload["generated_at"],
         expires_at=payload["expires_at"],
