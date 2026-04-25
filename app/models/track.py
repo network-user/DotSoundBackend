@@ -8,6 +8,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
     text,
@@ -170,6 +171,9 @@ class Track(Base, TimestampMixin):
     )
     video_blob_ref_freed: Mapped[bool] = mapped_column(
         Boolean, server_default="false", nullable=False
+    )
+    waveform_data: Mapped[list[float] | None] = mapped_column(
+        JSON, nullable=True
     )
     previous_source_url: Mapped[str | None] = mapped_column(
         String(2048), nullable=True

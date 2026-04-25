@@ -25,6 +25,7 @@ export interface Track {
   uploaded_by_id: number | null
   video_key: string | null
   created_at: string
+  waveform_data: number[] | null
 }
 
 export interface TrackListResponse {

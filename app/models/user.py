@@ -101,6 +101,9 @@ class User(Base, TimestampMixin):
         ForeignKey("image_blobs.id", ondelete="SET NULL"),
         nullable=True,
     )
+    avatar_blob_ref_freed: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
 
     avatar_blob: Mapped[ImageBlob | None] = relationship(
         "ImageBlob",

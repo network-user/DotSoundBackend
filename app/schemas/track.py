@@ -36,6 +36,7 @@ class TrackResponse(BaseModel):
     uploaded_by_id: int | None = None
     album_id: int | None = None
     created_at: datetime
+    waveform_data: list[float] | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

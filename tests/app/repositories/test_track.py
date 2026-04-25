@@ -186,3 +186,112 @@ async def test_delete_by_owner(
     )
     assert result is not None
     assert result.is_active is False
+
+
+async def test_find_by_title_and_duration_exact(
+    session: AsyncSession,
+) -> None:
+    from app.models.track import Track
+
+    user = await _make_user(session, telegram_id=300)
+    t = Track(
+        title="Perfect Match",
+        artist="A",
+        duration_seconds=200,
+        source_platform="youtube",
+        is_active=True,
+        is_public=True,
+        uploaded_by_id=user.id,
+    )
+    session.add(t)
+    await session.flush()
+
+    repo = TrackRepository(session)
+    results = await repo.find_by_title_and_duration(
+        title="Perfect Match",
+        duration_seconds=200,
+        platform="youtube",
+    )
+    assert len(results) == 1
+    assert results[0].id == t.id
+
+
+async def test_find_by_title_and_duration_within_tolerance(
+    session: AsyncSession,
+) -> None:
+    from app.models.track import Track
+
+    user = await _make_user(session, telegram_id=301)
+    t = Track(
+        title="Tolerance Track",
+        artist="A",
+        duration_seconds=210,
+        source_platform="soundcloud",
+        is_active=True,
+        is_public=True,
+        uploaded_by_id=user.id,
+    )
+    session.add(t)
+    await session.flush()
+
+    repo = TrackRepository(session)
+    results = await repo.find_by_title_and_duration(
+        title="Tolerance Track",
+        duration_seconds=200,
+        platform="soundcloud",
+    )
+    assert len(results) == 1
+
+
+async def test_find_by_title_and_duration_outside_tolerance(
+    session: AsyncSession,
+) -> None:
+    from app.models.track import Track
+
+    user = await _make_user(session, telegram_id=302)
+    t = Track(
+        title="Far Away",
+        artist="A",
+        duration_seconds=400,
+        source_platform="bandcamp",
+        is_active=True,
+        is_public=True,
+        uploaded_by_id=user.id,
+    )
+    session.add(t)
+    await session.flush()
+
+    repo = TrackRepository(session)
+    results = await repo.find_by_title_and_duration(
+        title="Far Away",
+        duration_seconds=200,
+        platform="bandcamp",
+    )
+    assert results == []
+
+
+async def test_find_by_title_and_duration_wrong_platform(
+    session: AsyncSession,
+) -> None:
+    from app.models.track import Track
+
+    user = await _make_user(session, telegram_id=303)
+    t = Track(
+        title="Platform Check",
+        artist="A",
+        duration_seconds=180,
+        source_platform="youtube",
+        is_active=True,
+        is_public=True,
+        uploaded_by_id=user.id,
+    )
+    session.add(t)
+    await session.flush()
+
+    repo = TrackRepository(session)
+    results = await repo.find_by_title_and_duration(
+        title="Platform Check",
+        duration_seconds=180,
+        platform="soundcloud",
+    )
+    assert results == []
