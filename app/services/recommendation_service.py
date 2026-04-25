@@ -34,7 +34,7 @@ from dotsound_private_core.services.scoring import (
 
 _DAILY_SIZE = 30
 _WEEKLY_SIZE = 50
-_EXTERNAL_RATIO = 0.3
+_EXTERNAL_RATIO = 0.7
 _GLOBAL_TOP_SIZE = 20
 
 
@@ -159,6 +159,47 @@ class RecommendationService:
             for t in tracks
         ]
 
+    async def _import_external_candidates(
+        self,
+        candidates: list,
+        user_id: int,
+    ) -> list[int]:
+        from app.config import settings
+        from app.services.soundcloud_service import SoundCloudService
+
+        if not candidates or not settings.sc_client_id:
+            return []
+
+        sc_svc = SoundCloudService(
+            settings.sc_client_id, self._session
+        )
+        track_ids: list[int] = []
+        for c in candidates:
+            if not c.external_url:
+                continue
+            try:
+                sc_data = {
+                    "permalink_url": c.external_url,
+                    "title": c.title,
+                    "user": {"username": c.artist or ""},
+                    "duration": (c.duration_seconds * 1000) if c.duration_seconds else None,
+                    "artwork_url": c.cover_url,
+                    "genre": c.genre,
+                    "id": c.external_id,
+                    "uri": f"soundcloud:tracks:{c.external_id}" if c.external_id else None,
+                }
+                track = await sc_svc.import_or_get_track(
+                    sc_data, uploader_id=user_id
+                )
+                track_ids.append(track.id)
+            except Exception as exc:
+                logger.warning(
+                    "sc_discovery_import_failed",
+                    title=c.title,
+                    error=str(exc),
+                )
+        return track_ids
+
     async def get_home_sections(
         self, user_id: int
     ) -> dict:
@@ -254,12 +295,7 @@ class RecommendationService:
                 )
 
         if genre_filter:
-            popular_genre = (
-                await self._rec_repo.get_candidate_tracks(
-                    limit=15,
-                    genre_filter=genre_filter,
-                )
-            )
+            popular_genre = candidates[:15]
             if popular_genre:
                 title = (
                     f"Популярное: "
@@ -525,22 +561,15 @@ class RecommendationService:
             if s.track_id in track_map
         ]
         global_top = await self.get_global_top()
+        external_track_ids = await self._import_external_candidates(
+            ext_picked, user_id
+        )
 
         ttl = _midnight_ttl()
         now = datetime.now(timezone.utc)
         payload: dict = {
             "internal_track_ids": internal_ids,
-            "external_suggestions": [
-                {
-                    "title": e.title,
-                    "artist": e.artist,
-                    "source": e.source,
-                    "external_url": e.external_url,
-                    "cover_url": e.cover_url,
-                    "duration_seconds": e.duration_seconds,
-                }
-                for e in ext_picked
-            ],
+            "external_track_ids": external_track_ids,
             "global_top_ids": [
                 t.id for t in global_top
             ],
@@ -604,22 +633,15 @@ class RecommendationService:
             for s in int_scored
             if s.track_id in track_map
         ]
+        external_track_ids = await self._import_external_candidates(
+            ext_picked, user_id
+        )
 
         ttl = _weekly_ttl()
         now = datetime.now(timezone.utc)
         payload = {
             "internal_track_ids": internal_ids,
-            "external_suggestions": [
-                {
-                    "title": e.title,
-                    "artist": e.artist,
-                    "source": e.source,
-                    "external_url": e.external_url,
-                    "cover_url": e.cover_url,
-                    "duration_seconds": e.duration_seconds,
-                }
-                for e in ext_picked
-            ],
+            "external_track_ids": external_track_ids,
             "generated_at": now.isoformat(),
             "expires_at": (
                 now + timedelta(seconds=ttl)

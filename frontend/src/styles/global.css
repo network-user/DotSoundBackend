@@ -561,6 +561,7 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   margin: 48px auto;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; }
 
 /* ── Search ── */
 .search-sticky {

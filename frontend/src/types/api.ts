@@ -35,6 +35,14 @@ export interface TrackListResponse {
   size: number
 }
 
+export interface DailyPlaylistResponse {
+  internal_tracks: Track[]
+  external_tracks: Track[]
+  global_top: Track[]
+  generated_at: string
+  expires_at: string
+}
+
 export interface SearchSuggestItem {
   kind: 'track' | 'artist'
   id: number

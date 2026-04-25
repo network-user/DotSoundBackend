@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { LikedView } from '@/views/LikedView'
 import { PlaylistsView } from '@/views/PlaylistsView'
 import { OfflineList } from '@/components/Profile/OfflineList'
 import { HistoryList } from '@/components/Profile/HistoryList'
+import { Icon } from '@/components/Icon/Icon'
 import { hapticSelection } from '@/lib/telegram'
 
 type Tab = 'liked' | 'playlists' | 'offline' | 'history'
@@ -39,6 +40,7 @@ function tabFromStorageDefault(): Tab {
 }
 
 export function LibraryView() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] =
     useSearchParams()
   const didSync = useRef(false)
@@ -82,6 +84,21 @@ export function LibraryView() {
       id="view-library"
       className="view active"
     >
+      <div style={{ padding: '8px 16px 0' }}>
+        <button
+          className="playlist-card"
+          style={{ width: '100%' }}
+          onClick={() => navigate('/daily-mix')}
+        >
+          <div style={{ fontSize: 32, lineHeight: 1 }}>📅</div>
+          <div style={{ flex: 1, textAlign: 'left' }}>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>Плейлист дня</div>
+            <div className="hint" style={{ fontSize: 12 }}>Персональная подборка + открытия</div>
+          </div>
+          <Icon name="chevron" size={18} />
+        </button>
+      </div>
+
       <div className="library-tabs">
         {TABS.map((t) => (
           <button

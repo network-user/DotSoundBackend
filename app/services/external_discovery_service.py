@@ -43,7 +43,8 @@ class ExternalDiscoveryService:
                 error=str(exc),
             )
 
-        for genre in (preferred_genres or [])[:2]:
+        genres_to_search = (preferred_genres or [])[:2] or ["popular", "new"]
+        for genre in genres_to_search:
             try:
                 raw += await svc.search(
                     genre, limit=limit_per_source

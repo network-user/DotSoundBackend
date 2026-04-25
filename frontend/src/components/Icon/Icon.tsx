@@ -147,6 +147,8 @@ const PATHS: Record<string, string> = {
     'M12 2l10 6-10 6L2 8l10-6z M2 17l10 5 10-5 M2 12l10 5 10-5',
   install:
     'M12 3v12 M5 9l7 6 7-6 M5 21h14',
+  'external-link':
+    'M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6 M15 3h6v6 M10 14L21 3',
 }
 
 const FILLED_ICONS = new Set([

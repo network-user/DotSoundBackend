@@ -128,10 +128,54 @@ class SoundCloudService:
     async def get_trending(
         self, limit: int = 20
     ) -> list[dict]:
-        """Global trending tracks (no genre filter)."""
-        return await self.get_charts(
-            genre=None, limit=limit
+        """Global trending tracks via charts or popular search fallback."""
+        result = await self.get_charts(
+            genre="all-music", limit=limit
         )
+        if result:
+            return result
+        return await self._get_popular_fallback(limit)
+
+    async def _get_popular_fallback(
+        self, limit: int = 20
+    ) -> list[dict]:
+        """Fallback: search for popular tracks when charts are unavailable."""
+        if not self._client_id:
+            return []
+        params = {
+            "q": "popular",
+            "client_id": self._client_id,
+            "limit": limit,
+            "linked_partitioning": 1,
+        }
+        try:
+            async with (
+                soundcloud_slot(
+                    timeout_seconds=(
+                        settings.soundcloud_slot_acquire_timeout_seconds
+                    ),
+                ),
+                httpx.AsyncClient(timeout=10) as client,
+            ):
+                r = await client.get(
+                    f"{_SC_API_BASE}/tracks",
+                    params=params,
+                )
+                if r.status_code != 200:
+                    return []
+                r.raise_for_status()
+                data = r.json()
+        except Exception as exc:
+            logger.warning(
+                "sc_popular_fallback_failed",
+                error=str(exc),
+            )
+            return []
+        collection = data if isinstance(data, list) else data.get("collection", [])
+        return [
+            t for t in collection
+            if isinstance(t, dict) and t.get("streamable")
+        ][:limit]
 
     async def resolve_url(self, sc_url: str) -> dict:
         if not self._client_id:
@@ -297,10 +341,15 @@ class SoundCloudService:
         duration_ms: int | None = sc_data.get("duration")
         duration_sec = duration_ms // 1000 if duration_ms else None
 
+        sc_id = sc_data.get("id")
         new_values = {
             "title": sc_data.get("title", "Unknown"),
             "artist": artist,
             "duration_seconds": duration_sec,
+            "genre": sc_data.get("genre") or None,
+            "description": sc_data.get("description") or None,
+            "external_id": str(sc_id) if sc_id else None,
+            "imported_from": "soundcloud",
             "source": "soundcloud",
             "catalog_type": "external_reference",
             "access_mode": "third_party_stream",

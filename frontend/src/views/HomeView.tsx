@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
+import { Icon } from '@/components/Icon/Icon'
 import { api } from '@/lib/api'
 import type { Track } from '@/types/api'
 
@@ -13,6 +15,7 @@ interface HomeSection {
 
 export function HomeView() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [sections, setSections] = useState<HomeSection[] | null>(null)
   const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(null)
 
@@ -38,6 +41,19 @@ export function HomeView() {
         </div>
         <NotificationBell />
       </div>
+
+      <button
+        className="playlist-card"
+        style={{ margin: '8px 16px 4px', width: 'calc(100% - 32px)' }}
+        onClick={() => navigate('/daily-mix')}
+      >
+        <div style={{ fontSize: 32, lineHeight: 1 }}>📅</div>
+        <div style={{ flex: 1, textAlign: 'left' }}>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>Плейлист дня</div>
+          <div className="hint" style={{ fontSize: 12 }}>Персональная подборка + открытия</div>
+        </div>
+        <Icon name="chevron" size={18} className="text-secondary" />
+      </button>
 
       {sections === null && fallbackTracks === null && (
         <div className="loader" />
