@@ -89,6 +89,30 @@ class AppSettings(BaseSettings):
     bandcamp_slot_acquire_timeout_seconds: float = 30.0
     lyrics_per_track_lock_ttl_seconds: int = 300
 
+    # YouTube — temporarily disabled; proxy support required before re-enabling.
+    # Google blocks direct server-IP requests at scale (bot-gate / 429).
+    # Set YOUTUBE_ENABLED=true only after a residential proxy pool is wired up.
+    youtube_enabled: bool = False
+
+    # Tor exit-node pool (SoundCloud, Bandcamp — NOT YouTube; Google blocks Tor exits).
+    # TOR_POOL_SIZE circuits are kept open and rotated every TOR_CIRCUIT_MAX_AGE_SECONDS.
+    # Requires Tor installed: apt install tor  /  Tor Expert Bundle on Windows.
+    tor_pool_enabled: bool = False
+    tor_pool_size: int = 10
+    tor_socks_base_port: int = 9050
+    tor_control_port: int = 9051
+    # Plain-text password for Tor ControlPort; leave empty to use CookieAuthentication.
+    tor_control_password: str = ""
+    # Path to tor/tor.exe binary; leave empty to use system PATH.
+    tor_bin_path: str = ""
+    tor_circuit_max_age_seconds: int = 600
+    tor_circuit_health_check_interval: int = 60
+    tor_circuit_max_failure_rate: float = 0.3
+
+    # Redis TTLs for cached stream URLs (seconds).
+    stream_url_cache_ttl_soundcloud: int = 3600
+    stream_url_cache_ttl_bandcamp: int = 7200
+
     # Stage 4 backpressure on ImportJob. New jobs above
     # ``import_max_concurrent_jobs`` enter the ``queued`` status;
     # the dispatcher loop promotes them to ``importing`` as soon

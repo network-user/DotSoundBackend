@@ -144,7 +144,31 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     except Exception as exc:
         logger.warning("waveform_backfill_enqueue_failed", error=str(exc))
 
+    _tor_pool_started = False
+    if settings.tor_pool_enabled:
+        from app.services.tor_pool import TorPool, _set_tor_pool
+
+        _tp = TorPool(settings)
+        try:
+            await _tp.start()
+            _set_tor_pool(_tp)
+            _tor_pool_started = True
+        except Exception as _exc:
+            logger.error(
+                "tor_pool_start_failed",
+                error=str(_exc),
+                hint="Is Tor installed? apt install tor / Tor Expert Bundle on Windows.",
+            )
+
     yield
+
+    if _tor_pool_started:
+        from app.services.tor_pool import _set_tor_pool, get_tor_pool
+
+        _pool = get_tor_pool()
+        if _pool is not None:
+            await _pool.stop()
+        _set_tor_pool(None)
     logger.info("sound_api_shutting_down")
     if play_stop is not None and drain_task is not None:
         play_stop.set()
