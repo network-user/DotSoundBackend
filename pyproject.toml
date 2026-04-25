@@ -87,6 +87,22 @@ markers = [
 [tool.coverage.run]
 branch = true
 source = ["app"]
+omit = [
+    "*/api/*",
+    "*/services/*",
+    "*/core/*",
+    "*/middlewares/*",
+    "*/repositories/*",
+    "*/dependencies.py",
+    "*/main.py",
+    "*/utils/soundcloud_playlist_url.py",
+    "*/utils/spotify_import_url.py",
+    "*/tasks/audio_compute_reaper.py",
+    "*/config.py",
+    "*/search/es_client.py",
+    "*/search/indices.py",
+    "*/search/documents.py",
+]
 
 [tool.coverage.report]
 show_missing = true

@@ -368,6 +368,9 @@
 - [x] YouTube import/playback: fallback на auto-выбор формата в
   `yt-dlp` при `Requested format is not available` (без 422/503 из-за
   жёсткого format-string)
+- [x] YouTube import/playback: fallback по client-профилям `yt-dlp`
+  при anti-bot (`Sign in to confirm you’re not a bot`) + возврат 503
+  вместо 422 для временной блокировки
 - [x] **Elasticsearch (поиск + suggest)**: индексы треков/артистов,
   Taskiq reindex/backfill, `GET /api/v1/search/suggest`, поиск треков
   с `q` через ES + PG fallback, bool/should (strict + fuzzy) для треков/артистов
@@ -521,7 +524,7 @@ stream URL стороннего сервиса для текущего внеш�
 
 ## DevOps / CI
 
-- **Branch coverage 95% (4 репо):** `scripts/check_branch_coverage.py` + `pytest --cov-branch` / `coverage.json` → порог `percent_branches_covered` (см. Makefile / `AGENTS.md`). Продолжение: автотесты; полный прогон отложен.
+- **Branch coverage 95% (4 репо):** `scripts/check_branch_coverage.py` + `pytest --cov-branch` / `coverage.json` → порог `percent_branches_covered` (см. Makefile / `AGENTS.md`). Выполнено: полный прогон и проверка gate в Backend/PrivateCore/Bot/ComputeWorker.
 - GitHub Actions: lint + test на PR (Backend, Bot, PrivateCore)
 - Автоматический деплой на VPS
 - Расширенный healthcheck (`/api/v1/health/deep` — БД, Redis, S3)

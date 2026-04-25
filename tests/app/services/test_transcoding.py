@@ -240,9 +240,11 @@ async def test_update_track_status_not_found(
 )
 @patch(f"{_MOD}.asyncio.create_subprocess_exec")
 @patch("app.services.search_index_notify.schedule_reindex_track", new_callable=AsyncMock)
+@patch("app.services.waveform_worker.generate_waveform_task.kiq", new_callable=AsyncMock)
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_transcode_success(
     mock_session_local: AsyncMock,
+    mock_waveform_kiq: AsyncMock,
     mock_reindex: AsyncMock,
     mock_exec: AsyncMock,
     mock_del: AsyncMock,
@@ -297,6 +299,7 @@ async def test_transcode_success(
     assert str(track.file_key).startswith("blobs/")
     assert track.hls_manifest_key == "hls/1/master.m3u8"
     mock_reindex.assert_awaited()
+    mock_waveform_kiq.assert_awaited_once_with(track.id)
 
 
 @patch(

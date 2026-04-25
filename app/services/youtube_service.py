@@ -102,6 +102,28 @@ _YT_DLP_BASE_OPTS: dict = {
         },
     },
 }
+
+_YT_DLP_CLIENT_FALLBACKS: tuple[dict, ...] = (
+    {},
+    {
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios"],
+            },
+        },
+    },
+    {
+        "extractor_args": {
+            "youtube": {
+                "player_client": [
+                    "android",
+                    "tv_embedded",
+                ],
+                "skip": ["webpage"],
+            },
+        },
+    },
+)
 # Itag-first, then m4a/webm; last ``best`` can still be HLS — we reject m3u8
 # in ``_yt_pick_stream_url`` and in ``_yt_extract_stream_pair`` retry.
 _YT_FORMAT_PROGRESSIVE: str = (
@@ -137,25 +159,53 @@ def _yt_extract_info(
         raise RuntimeError("yt-dlp is not installed") from exc
 
     fmt = format_str or _YT_FORMAT_PROGRESSIVE
-    opts: dict = {**_YT_DLP_BASE_OPTS, "format": fmt}
+    last_exc: Exception | None = None
+    for idx, extra in enumerate(_YT_DLP_CLIENT_FALLBACKS):
+        opts: dict = {
+            **_YT_DLP_BASE_OPTS,
+            **extra,
+            "format": fmt,
+        }
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+            if info is None:
+                raise ValueError("yt-dlp returned no info")
+            return info  # type: ignore[return-value]
+        except Exception as exc:
+            last_exc = exc
+            msg = str(exc)
+            is_format = "Requested format is not available" in msg
+            is_bot_gate = "Sign in to confirm you" in msg
+            if not is_format and not is_bot_gate:
+                raise
+            logger.warning(
+                "yt_extract_fallback_attempt",
+                url=url,
+                requested_format=fmt,
+                fallback_index=idx,
+                reason=(
+                    "format_unavailable"
+                    if is_format
+                    else "youtube_bot_gate"
+                ),
+            )
+            if idx == len(_YT_DLP_CLIENT_FALLBACKS) - 1:
+                break
+
+    # Last chance: remove explicit format to let yt-dlp pick any stream.
+    auto_last: dict = {**_YT_DLP_BASE_OPTS}
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-    except Exception as exc:
-        msg = str(exc)
-        if "Requested format is not available" not in msg:
-            raise
-        fallback_opts: dict = {**_YT_DLP_BASE_OPTS}
-        logger.info(
-            "yt_format_fallback_to_auto",
-            url=url,
-            requested_format=fmt,
-        )
-        with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-    if info is None:
-        raise ValueError("yt-dlp returned no info")
-    return info  # type: ignore[return-value]
+        with yt_dlp.YoutubeDL(auto_last) as ydl:
+            info_auto = ydl.extract_info(url, download=False)
+        if info_auto is None:
+            raise ValueError("yt-dlp returned no info")
+        logger.info("yt_format_fallback_to_auto", url=url, requested_format=fmt)
+        return info_auto  # type: ignore[return-value]
+    except Exception as auto_exc:
+        if last_exc is not None:
+            raise last_exc from auto_exc
+        raise
 
 
 def _yt_url_looks_hls(
@@ -168,6 +218,15 @@ def _yt_url_looks_hls(
         ".m3u8" in s
         or "manifest" in s
         or "manifest/hls" in s
+    )
+
+
+def _yt_is_bot_gate_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    return (
+        "sign in to confirm you" in msg
+        or "not a bot" in msg
+        or "cookies-from-browser" in msg
     )
 
 
@@ -263,6 +322,12 @@ class YouTubeService:
                 "yt_resolve_failed",
                 error=str(exc),
             )
+            if _yt_is_bot_gate_error(exc):
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="YouTube временно ограничил доступ к видео. "
+                    "Попробуйте снова позже.",
+                ) from exc
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Не удалось получить информацию о видео. "
@@ -298,6 +363,12 @@ class YouTubeService:
                 "yt_stream_failed",
                 error=str(exc),
             )
+            if _yt_is_bot_gate_error(exc):
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="YouTube временно ограничил выдачу потока. "
+                    "Попробуйте позже.",
+                ) from exc
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Не удалось получить поток YouTube. "
