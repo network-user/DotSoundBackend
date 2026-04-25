@@ -88,16 +88,24 @@ class RadioService:
         up_cap = min(cap, RADIO_DAILY_MATERIALIZE_CAP)
         if (
             self._settings.radio_youtube_mix_enabled
+            and self._settings.youtube_enabled
             and seed.source_platform == "youtube"
             and seed.external_id
         ):
             source_tag = "youtube_mix"
             uid = self._uploader_id(seed, current)
             yt = YouTubeService(self._session)
-            mix_rows = await yt.list_mix_video_rows(
-                str(seed.external_id).strip(),
-                up_cap,
-            )
+            try:
+                mix_rows = await yt.list_mix_video_rows(
+                    str(seed.external_id).strip(),
+                    up_cap,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "radio_yt_mix_failed",
+                    error=str(exc),
+                )
+                mix_rows = []
             rows_to_process: list[dict] = mix_rows
             if not mix_rows:
                 q = f"{seed.title} {seed.artist or ''}".strip()
