@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import select
@@ -10,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import s3
 from app.models.image_blob import ImageBlob
 from app.models.track import Track
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -81,6 +85,13 @@ class ImageBlobService:
         track.cover_blob_ref_freed = True
         await self._session.flush()
         await self.try_release(track.cover_blob_id)
+
+    async def try_release_for_user(self, user: User) -> None:
+        if user.avatar_blob_id is None or user.avatar_blob_ref_freed:
+            return
+        user.avatar_blob_ref_freed = True
+        await self._session.flush()
+        await self.try_release(user.avatar_blob_id)
 
     async def try_release(self, blob_id: int) -> None:
         res = await self._session.execute(

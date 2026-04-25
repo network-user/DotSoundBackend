@@ -17,6 +17,7 @@ import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackInfoContent } from '@/components/TrackInfoContent/TrackInfoContent'
 import { Waveform } from '@/components/Waveform/Waveform'
+import { WaveformBar } from '@/components/Waveform/WaveformBar'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { useToast } from '@/components/ui/Toast'
 import {
@@ -826,6 +827,15 @@ export function TrackCardSheet({
 
         <div className="tcs-player-controls">
           <div className="tcs-seek-wrap">
+            {track.waveform_data && track.waveform_data.length > 0 ? (
+              <WaveformBar
+                data={track.waveform_data}
+                progress={pct}
+                onSeek={seek}
+                height={40}
+                className="tcs-waveform-bar"
+              />
+            ) : (
             <input
               type="range"
               className="tcs-seek"
@@ -838,6 +848,7 @@ export function TrackCardSheet({
               }
               style={{ ['--progress' as string]: `${pct}%` }}
             />
+            )}
             <div className="tcs-time">
               <span>{fmt(currentTime)}</span>
               <span>{fmt(duration)}</span>

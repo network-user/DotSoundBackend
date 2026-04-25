@@ -131,6 +131,19 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             "artist_link_backfill_enqueue_failed", error=str(exc)
         )
 
+    try:
+        from app.core.db import AsyncSessionLocal as _ASL
+        from app.repositories.app_settings import AppSettingsRepository as _ASR
+        from app.services import waveform_worker
+
+        async with _ASL() as _ws:
+            _wdone = await _ASR(_ws).get(waveform_worker._SETTING_KEY)
+        if _wdone is None:
+            await waveform_worker.waveform_backfill_task.kiq()
+            logger.info("waveform_backfill_enqueued")
+    except Exception as exc:
+        logger.warning("waveform_backfill_enqueue_failed", error=str(exc))
+
     yield
     logger.info("sound_api_shutting_down")
     if play_stop is not None and drain_task is not None:

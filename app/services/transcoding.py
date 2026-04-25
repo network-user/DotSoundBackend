@@ -121,9 +121,13 @@ async def transcode_and_upload(
             from app.services.search_index_notify import (
                 schedule_reindex_track,
             )
+            from app.services.waveform_worker import (
+                generate_waveform_task,
+            )
 
             if track_id:
                 await schedule_reindex_track(track_id)
+                await generate_waveform_task.kiq(track_id)
 
     except Exception:
         logger.exception("transcoding_exception", track_id=track_id)
