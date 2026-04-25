@@ -3,6 +3,8 @@ from __future__ import annotations
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
+from app.services.soundcloud_service import SoundCloudService
 from dotsound_private_core.services.recommendation_engine import (
     ExternalTrackCandidate,
 )
@@ -22,16 +24,11 @@ class ExternalDiscoveryService:
         limit_per_source: int = 15,
     ) -> list[ExternalTrackCandidate]:
         """Fetch external track candidates: trending + genre search."""
-        from app.config import settings
-        from app.services.soundcloud_service import (
-            SoundCloudService,
-        )
-
-        if not settings.soundcloud_client_id:
+        if not settings.sc_client_id:
             return []
 
         svc = SoundCloudService(
-            settings.soundcloud_client_id,
+            settings.sc_client_id,
             self._session,
         )
         raw: list[dict] = []
