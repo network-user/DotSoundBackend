@@ -1,16 +1,24 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
+    ForeignKey,
+    Integer,
     String,
     Text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.image_blob import ImageBlob
 
 
 class User(Base, TimestampMixin):
@@ -88,4 +96,14 @@ class User(Base, TimestampMixin):
     )
     locale: Mapped[str | None] = mapped_column(
         String(10), nullable=True
+    )
+    avatar_blob_id: Mapped[int | None] = mapped_column(
+        ForeignKey("image_blobs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    avatar_blob: Mapped[ImageBlob | None] = relationship(
+        "ImageBlob",
+        foreign_keys=[avatar_blob_id],
+        back_populates="avatar_users",
     )

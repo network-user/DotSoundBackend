@@ -248,9 +248,33 @@ async def stream_track(
                     "bandcamp" if spf == "bandcamp" else "youtube"
                 ),
             )
-        stream_url, protocol = await _resolve_third_party_stream(
-            track, session
-        )
+        try:
+            stream_url, protocol = await _resolve_third_party_stream(
+                track, session
+            )
+        except HTTPException as exc:
+            if exc.status_code in (403, 404, 410, 503):
+                from app.config import settings as _settings
+                from app.services.track_fallback_service import (
+                    TrackFallbackService,
+                )
+
+                fallback_svc = TrackFallbackService(
+                    session, _settings
+                )
+                updated = await fallback_svc.find_and_apply_fallback(
+                    track
+                )
+                if updated:
+                    stream_url, protocol = (
+                        await _resolve_third_party_stream(
+                            updated, session
+                        )
+                    )
+                else:
+                    raise
+            else:
+                raise
         return StreamResponse(
             track_id=track_id,
             url=stream_url,

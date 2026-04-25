@@ -171,6 +171,35 @@ class TrackRepository(BaseRepository[Track]):
         )
         return list(tracks_result.scalars().all()), total
 
+    async def find_by_title_and_duration(
+        self,
+        title: str,
+        duration_seconds: int,
+        *,
+        platform: str,
+        tolerance_pct: float = 0.10,
+        limit: int = 5,
+    ) -> list[Track]:
+        low = int(duration_seconds * (1.0 - tolerance_pct))
+        high = int(duration_seconds * (1.0 + tolerance_pct))
+        low = max(low, duration_seconds - 10)
+        high = max(high, duration_seconds + 10)
+        pattern = f"%{title}%"
+        condition = (
+            Track.is_active.is_(True)
+            & Track.is_public.is_(True)
+            & (Track.source_platform == platform)
+            & Track.title.ilike(pattern)
+            & Track.duration_seconds.between(low, high)
+        )
+        result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.play_count.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def increment_play_count(self, track_id: int) -> bool:
         result = await self._session.execute(
             update(Track)
