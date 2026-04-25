@@ -165,6 +165,12 @@ class Track(Base, TimestampMixin):
     blob_ref_freed: Mapped[bool] = mapped_column(
         Boolean, server_default="false", nullable=False
     )
+    cover_blob_ref_freed: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
+    video_blob_ref_freed: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
     previous_source_url: Mapped[str | None] = mapped_column(
         String(2048), nullable=True
     )

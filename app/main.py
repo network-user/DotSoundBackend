@@ -114,6 +114,23 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
                 _elasticsearch_drain_lifecycle(play_stop)
             )
 
+    try:
+        from app.core.db import AsyncSessionLocal
+        from app.repositories.app_settings import AppSettingsRepository
+        from app.services import artist_backfill_worker
+
+        async with AsyncSessionLocal() as _s:
+            _done = await AppSettingsRepository(_s).get(
+                artist_backfill_worker._SETTING_KEY
+            )
+        if _done is None:
+            await artist_backfill_worker.artist_link_backfill_task.kiq()
+            logger.info("artist_link_backfill_enqueued")
+    except Exception as exc:
+        logger.warning(
+            "artist_link_backfill_enqueue_failed", error=str(exc)
+        )
+
     yield
     logger.info("sound_api_shutting_down")
     if play_stop is not None and drain_task is not None:
