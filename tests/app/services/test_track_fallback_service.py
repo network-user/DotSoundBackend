@@ -58,7 +58,7 @@ def _mock_redis(get_return: bytes | None = None) -> MagicMock:
     return redis
 
 
-@patch("app.services.track_fallback_service.get_redis_client")
+@patch("app.core.redis.get_redis_client")
 async def test_returns_none_when_no_title(
     _mock_redis_factory: MagicMock,
     db_session: AsyncSession,
@@ -71,7 +71,7 @@ async def test_returns_none_when_no_title(
     assert result is None
 
 
-@patch("app.services.track_fallback_service.get_redis_client")
+@patch("app.core.redis.get_redis_client")
 async def test_returns_none_when_no_duration(
     _mock_redis_factory: MagicMock,
     db_session: AsyncSession,
@@ -84,7 +84,7 @@ async def test_returns_none_when_no_duration(
     assert result is None
 
 
-@patch("app.services.track_fallback_service.get_redis_client")
+@patch("app.core.redis.get_redis_client")
 async def test_redis_block_returns_none(
     mock_factory: MagicMock,
     db_session: AsyncSession,
@@ -97,7 +97,7 @@ async def test_redis_block_returns_none(
     assert result is None
 
 
-@patch("app.services.track_fallback_service.get_redis_client")
+@patch("app.core.redis.get_redis_client")
 async def test_no_candidates_sets_redis_block(
     mock_factory: MagicMock,
     db_session: AsyncSession,
@@ -115,7 +115,7 @@ async def test_no_candidates_sets_redis_block(
     assert call_args[1]["ex"] == 3600
 
 
-@patch("app.services.track_fallback_service.get_redis_client")
+@patch("app.core.redis.get_redis_client")
 async def test_applies_replacement_from_other_platform(
     mock_factory: MagicMock,
     db_session: AsyncSession,
@@ -154,7 +154,7 @@ async def test_applies_replacement_from_other_platform(
     redis.set.assert_not_awaited()
 
 
-@patch("app.services.track_fallback_service.get_redis_client")
+@patch("app.core.redis.get_redis_client")
 async def test_apply_replacement_clears_sc_url(
     mock_factory: MagicMock,
     db_session: AsyncSession,
