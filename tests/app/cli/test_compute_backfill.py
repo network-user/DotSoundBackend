@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.cli import compute_backfill as cb
-from app.core import db as app_db
 
 pytestmark = pytest.mark.anyio
 
@@ -20,7 +19,7 @@ async def test_backfill_dry_run_uses_patched_session(
         db_engine, expire_on_commit=False
     )
     with patch.object(
-        app_db,
+        cb,
         "AsyncSessionLocal",
         factory,
     ):
