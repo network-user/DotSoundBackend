@@ -23,8 +23,7 @@ class TrackRepository(BaseRepository[Track]):
 
     async def get_total_uploaded_bytes(self, user_id: int) -> int:
         result = await self._session.execute(
-            select(func.coalesce(func.sum(Track.file_size_bytes), 0))
-            .where(
+            select(func.coalesce(func.sum(Track.file_size_bytes), 0)).where(
                 Track.uploaded_by_id == user_id,
                 Track.is_active.is_(True),
             )
@@ -32,15 +31,12 @@ class TrackRepository(BaseRepository[Track]):
         return result.scalar_one()
 
     @staticmethod
-    def _playable_filter():  # type: ignore[no-untyped-def]
-        return (
-            Track.file_key.isnot(None)
-            | (
-                Track.access_mode.in_(
-                    (
-                        "third_party_stream",
-                        "official_embed",
-                    )
+    def _playable_filter():  # type: ignore[no-untyped-def]  # noqa: ANN205
+        return Track.file_key.isnot(None) | (
+            Track.access_mode.in_(
+                (
+                    "third_party_stream",
+                    "official_embed",
                 )
             )
         )
@@ -78,9 +74,7 @@ class TrackRepository(BaseRepository[Track]):
     ) -> tuple[list[Track], int]:
         if not track_ids:
             return [], 0
-        condition = Track.id.in_(track_ids) & (
-            Track.is_active.is_(True)
-        )
+        condition = Track.id.in_(track_ids) & (Track.is_active.is_(True))
         if public_only:
             condition = condition & Track.is_public.is_(True)
         total_result = await self._session.execute(
@@ -106,8 +100,8 @@ class TrackRepository(BaseRepository[Track]):
         limit: int = 50,
         playable_only: bool = False,
     ) -> tuple[list[Track], int]:
-        condition = (
-            Track.is_active.is_(True) & (Track.uploaded_by_id == user_id)
+        condition = Track.is_active.is_(True) & (
+            Track.uploaded_by_id == user_id
         )
         if playable_only:
             condition = condition & self._playable_filter()
@@ -147,15 +141,13 @@ class TrackRepository(BaseRepository[Track]):
         base = (
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
-            & (
-                Track.title.ilike(pattern)
-                | Track.artist.ilike(pattern)
-            )
+            & (Track.title.ilike(pattern) | Track.artist.ilike(pattern))
         )
-        if playable_only:
-            condition = base & self._playable_filter()
-        else:
-            condition = base
+        condition = (
+            base & self._playable_filter()
+            if playable_only
+            else base
+        )
         logger.debug("db_search_tracks", query=query, offset=offset)
         total_result = await self._session.execute(
             select(func.count()).where(condition)
@@ -213,9 +205,7 @@ class TrackRepository(BaseRepository[Track]):
         if updated:
             logger.debug("db_play_count_incremented", track_id=track_id)
         else:
-            logger.warning(
-                "db_play_count_track_missing", track_id=track_id
-            )
+            logger.warning("db_play_count_track_missing", track_id=track_id)
         return updated
 
     async def update_visibility(
@@ -342,12 +332,8 @@ class TrackRepository(BaseRepository[Track]):
             .limit(1)
         )
 
-        next_row = (
-            await self._session.execute(next_q)
-        ).scalar_one_or_none()
-        prev_row = (
-            await self._session.execute(prev_q)
-        ).scalar_one_or_none()
+        next_row = (await self._session.execute(next_q)).scalar_one_or_none()
+        prev_row = (await self._session.execute(prev_q)).scalar_one_or_none()
         return prev_row, next_row
 
     async def get_next_tracks(
@@ -369,8 +355,7 @@ class TrackRepository(BaseRepository[Track]):
                 base
                 & or_(
                     Track.created_at < ct,
-                    (Track.created_at == ct)
-                    & (Track.id < tid),
+                    (Track.created_at == ct) & (Track.id < tid),
                 )
             )
             .order_by(
@@ -446,3 +431,35 @@ class TrackRepository(BaseRepository[Track]):
             .limit(limit)
         )
         return list(tracks_result.scalars().all()), total
+
+    @staticmethod
+    def _genre_sample_track_predicate():  # noqa: ANN205
+        return (
+            Track.blob_id.isnot(None)
+            & Track.file_key.isnot(None)
+            & Track.is_active.is_(True)
+            & Track.is_public.is_(True)
+            & Track.duration_seconds.isnot(None)
+        )
+
+    async def list_by_genre_for_genre_sample_backfill(
+        self,
+        genre: str,
+        *,
+        exclude_ids: set[int],
+        limit: int,
+    ) -> list[Track]:
+        if limit <= 0:
+            return []
+        condition = (
+            Track.genre == genre
+        ) & self._genre_sample_track_predicate()
+        if exclude_ids:
+            condition = condition & Track.id.notin_(exclude_ids)
+        result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.play_count.desc(), Track.id.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())

@@ -1,11 +1,11 @@
 import { useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
-import { usePlayer } from '@/store/PlayerContext'
+import { usePlayerActions } from '@/store/PlayerContext'
 
 export function useTrackDeepLink() {
   const { trackId } = useParams<{ trackId: string }>()
-  const { playTrack } = usePlayer()
+  const { playTrack } = usePlayerActions()
   const navigate = useNavigate()
 
   useEffect(() => {

@@ -41,6 +41,7 @@ KNOWN_CAPABILITIES: frozenset[str] = frozenset(
         "audio_compute.rotate_secret",
         "lyrics.routing",
         "metrics.view",
+        "recsys.genre_samples.manage",
         "settings.manage",
         "logs.view",
         "containers.view",

@@ -1466,6 +1466,24 @@ export const api = {
     return request('/api/v1/onboarding/genres')
   },
 
+  fetchGenrePreviewQueue(
+    genre: string,
+    limit: number = 10,
+  ): Promise<{ items: Track[] }> {
+    const q = new URLSearchParams()
+    if (limit) q.set('limit', String(limit))
+    const qs = q.toString() ? `?${q.toString()}` : ''
+    return request(
+      `/api/v1/onboarding/genres/${encodeURIComponent(
+        genre,
+      )}/preview-queue${qs}`,
+    )
+  },
+
+  trackPreviewSegmentPath(trackId: number): string {
+    return `/api/v1/track-preview/${trackId}/segment.mp4`
+  },
+
   getOnboardingArtists(genres?: string[]): Promise<{ id: number; name: string; image_key: string | null }[]> {
     const params = genres?.length ? `?genres=${genres.join(',')}` : ''
     return request(`/api/v1/onboarding/artists${params}`)

@@ -8,6 +8,7 @@ from . import (
     auth,
     complaints,
     dashboard,
+    genre_samples,
     logs,
     manifest,
     metrics,
@@ -22,6 +23,7 @@ from . import (
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 router.include_router(tracks.router)
+router.include_router(genre_samples.router)
 router.include_router(users.router)
 router.include_router(users_extended.router)
 router.include_router(complaints.router)

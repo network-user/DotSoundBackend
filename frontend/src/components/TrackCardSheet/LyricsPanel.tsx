@@ -6,7 +6,10 @@ import {
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
-import { usePlayer } from '@/store/PlayerContext'
+import {
+  usePlayerActions,
+  usePlayerState,
+} from '@/store/PlayerContext'
 import { useLyricsTask } from '@/store/lyricsTaskStore'
 import { Icon } from '@/components/Icon/Icon'
 import type { LyricsResponse } from '@/types/api'
@@ -30,8 +33,8 @@ export function LyricsPanel({
   catalogType,
 }: Props) {
   const { t } = useTranslation()
-  const { currentTime, duration, seek } =
-    usePlayer()
+  const { currentTime, duration } = usePlayerState()
+  const { seek } = usePlayerActions()
   const [lyrics, setLyrics] =
     useState<LyricsResponse | null>(null)
   const [loading, setLoading] = useState(false)

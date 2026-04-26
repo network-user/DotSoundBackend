@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
-import { usePlayer } from '@/store/PlayerContext'
+import { usePlayerActions } from '@/store/PlayerContext'
 import {
   getInternalUserId,
   setBackButton,
@@ -25,7 +25,7 @@ export function SettingsSheet({
   onLogout,
 }: Props) {
   const { t, i18n } = useTranslation()
-  const { openEq } = usePlayer()
+  const { openEq } = usePlayerActions()
   const [videoEnabled, setVideoEnabled] =
     useState(
       () =>

@@ -3,6 +3,7 @@ import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { OnboardingImportStep } from '@/components/Onboarding/OnboardingImportStep'
+import { OnboardingGenreScreen } from '@/components/Onboarding/OnboardingGenreScreen'
 import type { Track } from '@/types/api'
 
 interface Props {
@@ -170,25 +171,11 @@ export function Onboarding({ onComplete }: Props) {
         )}
 
         {step === 'genres' && (
-          <div className="onboarding-step">
-            <h2 className="onboarding-title">Какую музыку слушаете?</h2>
-            <p className="onboarding-subtitle">
-              Выберите жанры (минимум 3)
-            </p>
-            <div className="onboarding-chips">
-              {availableGenres.map(g => (
-                <button
-                  key={g}
-                  className={`onboarding-chip${
-                    genres.includes(g) ? ' selected' : ''
-                  }`}
-                  onClick={() => toggleGenre(g)}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
-          </div>
+          <OnboardingGenreScreen
+            availableGenres={availableGenres}
+            selectedGenres={genres}
+            onToggleGenre={toggleGenre}
+          />
         )}
 
         {step === 'artists' && (

@@ -13,7 +13,11 @@ import {
   tg,
 } from '@/lib/telegram'
 import { useLikes } from '@/store/LikesContext'
-import { usePlayer } from '@/store/PlayerContext'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+  usePlayerState,
+} from '@/store/PlayerContext'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackInfoContent } from '@/components/TrackInfoContent/TrackInfoContent'
@@ -77,13 +81,19 @@ export function TrackCardSheet({
   onOpenArtist,
 }: Props) {
   const {
-    track,
-    isCardOpen,
-    closeCard,
-    isPlaying,
     currentTime,
     duration,
+    isPlaying,
+  } = usePlayerState()
+  const {
+    track,
+    isCardOpen,
     volume,
+    playbackRate,
+    abLoop,
+  } = usePlayerMeta()
+  const {
+    closeCard,
     setVolume,
     togglePlay,
     seek,
@@ -97,12 +107,10 @@ export function TrackCardSheet({
     skipForward,
     skipBackward,
     setPlaybackRate,
-    playbackRate,
-    abLoop,
     setAbA,
     setAbB,
     clearAbLoop,
-  } = usePlayer()
+  } = usePlayerActions()
   const { t } = useTranslation()
   const toast = useToast()
   const videoRef = useRef<HTMLVideoElement>(null)

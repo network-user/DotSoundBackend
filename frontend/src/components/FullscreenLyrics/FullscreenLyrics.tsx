@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { getIsAdmin, getUserId } from '@/lib/telegram'
-import { usePlayer } from '@/store/PlayerContext'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+  usePlayerState,
+} from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import type { LyricsResponse, SyncedLine } from '@/types/api'
 
@@ -52,18 +56,16 @@ function activeWordIndex(line: SyncedLine, ms: number): number {
 
 export function FullscreenLyrics() {
   const { t } = useTranslation()
+  const { currentTime, duration, isPlaying } =
+    usePlayerState()
+  const { track, isLyricsOpen } = usePlayerMeta()
   const {
-    track,
-    isPlaying,
-    isLyricsOpen,
     closeLyrics,
-    currentTime,
-    duration,
     togglePlay,
     playNext,
     playPrev,
     seek,
-  } = usePlayer()
+  } = usePlayerActions()
 
   const [lyrics, setLyrics] = useState<LyricsResponse | null>(
     null,

@@ -8,7 +8,7 @@ import type {
   Track,
   UserStatsResponse,
 } from '@/types/api'
-import { usePlayer } from '@/store/PlayerContext'
+import { usePlayerActions } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import { ProfileHero } from '@/components/Profile/ProfileHero'
 import { ProfileStats } from '@/components/Profile/ProfileStats'
@@ -29,7 +29,7 @@ interface Props {
 export function ProfileView({
   onOpenSettings,
 }: Props) {
-  const { playTrack } = usePlayer()
+  const { playTrack } = usePlayerActions()
   const [tab, setTab] =
     useState<ProfileTab>('profile')
   const [stats, setStats] =
