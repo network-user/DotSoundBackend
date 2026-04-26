@@ -96,6 +96,8 @@ def test_default_values(
     assert cfg.complaint_threshold == 3
     assert cfg.minio_use_ssl is False
     assert cfg.redact_logs is True
+    assert cfg.redact_log_identifiers is True
+    assert cfg.tor_log_outbound_public_ip is False
     assert cfg.elasticsearch_url == "http://127.0.0.1:9200"
     assert cfg.elasticsearch_fallback_to_postgres_on_zero is True
 

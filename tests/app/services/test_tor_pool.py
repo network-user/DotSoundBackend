@@ -3,14 +3,18 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from unittest import mock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.services.tor_pool import (
+    _log_outbound_public_ip,
     _resolve_tor_control_port,
     _search_tor_bundles,
     resolve_tor_executable,
 )
+
+pytestmark = pytest.mark.anyio
 
 
 def test_resolve_uses_config_file(
@@ -70,3 +74,20 @@ def test_desktop_tbb_path_in_candidates(
         / "tor.exe"
     )
     assert want in paths
+
+
+@patch("app.services.tor_pool.httpx.AsyncClient")
+async def test_log_outbound_public_ip_uses_ipify(
+    client_cls: mock.MagicMock,
+) -> None:
+    resp = mock.MagicMock()
+    resp.text = "203.0.113.1\n"
+    resp.raise_for_status = mock.MagicMock()
+    inst = client_cls.return_value
+    inst.__aenter__ = AsyncMock(return_value=inst)
+    inst.__aexit__ = AsyncMock(return_value=None)
+    inst.get = AsyncMock(return_value=resp)
+    with mock.patch("app.services.tor_pool.logger.info") as logi:
+        await _log_outbound_public_ip()
+    logi.assert_called_once()
+    assert logi.call_args.kwargs["public_ip"] == "203.0.113.1"

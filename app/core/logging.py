@@ -23,6 +23,7 @@ _SENSITIVE_KEYS = frozenset(
         "access_token",
         "jwt_secret",
         "client_ip",
+        "public_ip",
         "to",
         "email",
         "code",
@@ -69,7 +70,24 @@ _COUNT_KEYS = frozenset(
     }
 )
 
+_CORRELATION_ID_KEYS = frozenset(
+    {
+        "telegram_id",
+        "user_id",
+        "owner_id",
+        "uploader_id",
+        "follower_id",
+        "following_id",
+        "reported_by_user_id",
+        "file_id",
+        "file_key",
+        "client_ip",
+        "public_ip",
+    }
+)
+
 _REDACT_ENABLED = False
+_REDACT_IDENTIFIERS = True
 
 THIRD_PARTY_LOGGER_NAMES: tuple[str, ...] = (
     "uvicorn.access",
@@ -108,10 +126,13 @@ def apply_third_party_log_levels(third_party_level: str) -> None:
 def _mask_value(key: str, value: Any) -> Any:
     if not _REDACT_ENABLED:
         return value
-    if key not in _SENSITIVE_KEYS:
-        return value
-    if key.lower() in _FULL_REDACT_KEYS:
+    lkey = key.lower()
+    if lkey in _FULL_REDACT_KEYS:
         return "***REDACTED***"
+    if lkey in _CORRELATION_ID_KEYS and not _REDACT_IDENTIFIERS:
+        return value
+    if lkey not in _SENSITIVE_KEYS:
+        return value
     s = str(value)
     if len(s) <= 4:
         return "***"
@@ -152,13 +173,17 @@ def _redact_processor(
         if lkey in _COUNT_KEYS and isinstance(value, list):
             out[key + "_count"] = len(value)
             continue
-        if (
-            isinstance(value, str)
-            and value.startswith(("http://", "https://"))
-            and ("?" in value or len(value) > 200)
+        if isinstance(value, str) and value.startswith(
+            ("http://", "https://")
         ):
-            out[key] = _redact_url(value)
-            continue
+            if _REDACT_IDENTIFIERS:
+                if "?" in value or len(value) > 200:
+                    out[key] = _redact_url(value)
+                    continue
+            else:
+                if len(value) > 4000:
+                    out[key] = _redact_url(value)
+                    continue
         out[key] = _mask_value(key, value)
     return out
 
@@ -198,11 +223,13 @@ def _attach_dev_file_handler(level: int) -> None:
 def configure_logging(
     log_level: str = "INFO",
     redact: bool = True,
+    redact_identifiers: bool = True,
     json_output: bool = False,
     third_party_level: str = "WARNING",
 ) -> None:
-    global _REDACT_ENABLED
+    global _REDACT_ENABLED, _REDACT_IDENTIFIERS
     _REDACT_ENABLED = redact
+    _REDACT_IDENTIFIERS = redact_identifiers if redact else True
 
     level = getattr(logging, log_level.upper(), logging.INFO)
 

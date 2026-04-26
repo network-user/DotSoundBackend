@@ -15,6 +15,54 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _tor_pool: TorPool | None = None
 
+_STEM_TOR_LOG_LINES = [
+    "notice stdout",
+    "warn stderr",
+]
+
+
+async def _log_outbound_public_ip() -> None:
+    url = "https://api.ipify.org"
+    try:
+        async with httpx.AsyncClient(
+            timeout=5.0,
+            trust_env=False,
+        ) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            text = (r.text or "").strip()
+    except Exception as exc:
+        logger.warning(
+            "tor_outbound_public_ip_failed",
+            error=str(exc)[:200],
+        )
+        return
+    if not text:
+        logger.warning("tor_outbound_public_ip_empty")
+        return
+    logger.info(
+        "tor_outbound_public_ip",
+        public_ip=text,
+        check="direct_https",
+        note=(
+            "Not the Tor exit IP. Same default route as tor.exe to entry "
+            "guards if the VPN is not split-tunnel."
+        ),
+    )
+
+
+def _tor_bootstrap_line(line: str) -> None:
+    t = (line or "").strip()
+    if not t:
+        return
+    if "Bootstrapped" in t:
+        logger.info("tor_bootstrap", line=t[:500])
+        return
+    if "[warn]" in t or "[err]" in t:
+        logger.warning("tor_bootstrap", line=t[:500])
+        return
+    logger.debug("tor_bootstrap", line=t[:500])
+
 
 def get_tor_pool() -> TorPool | None:
     return _tor_pool
@@ -197,7 +245,7 @@ class TorPool:
             "CookieAuthentication": "1",
             "MaxCircuitDirtiness": str(s.tor_circuit_max_age_seconds),
             "NewCircuitPeriod": "30",
-            "Log": "notice stderr",
+            "Log": _STEM_TOR_LOG_LINES,
         }
 
         tor_cmd: str = resolve_tor_executable(s.tor_bin_path)
@@ -208,6 +256,16 @@ class TorPool:
             base_port=base_port,
             tor_cmd=tor_cmd,
         )
+        logger.info(
+            "tor_bootstrap_awaiting",
+            completion_target_percent=80.0,
+            note=(
+                "stem parses Bootstrapped% lines from Tor stdout only. "
+                "On Windows, stem does not apply launch timeouts; "
+                "this step runs in a worker thread, so the timeout "
+                "is also not applied on Unix."
+            ),
+        )
 
         try:
             self._process = await asyncio.to_thread(
@@ -217,6 +275,7 @@ class TorPool:
                 timeout=90,
                 take_ownership=True,
                 completion_percent=80.0,
+                init_msg_handler=_tor_bootstrap_line,
             )
         except Exception as exc:
             logger.error("tor_pool_launch_failed", error=str(exc))
@@ -243,6 +302,9 @@ class TorPool:
                 error=str(exc),
             )
             self._controller = None
+
+        if s.tor_log_outbound_public_ip:
+            await _log_outbound_public_ip()
 
         self._health_task = asyncio.create_task(
             self._health_check_loop(), name="tor_health_check"

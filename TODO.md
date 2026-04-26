@@ -18,6 +18,7 @@
 
 - Система бэкапов: PostgreSQL + Redis + configs (локально)
 - Система логирования: JSON structlog + Docker log rotation
+  (тонкая настройка: `REDACT_LOGS`, `REDACT_LOG_IDENTIFIERS`, `LOG_THIRD_PARTY_LEVEL`)
 - **Полное копирование аудиофайлов (MinIO) на удалённый backup-VPS**
   - Подключение к отдельному серверу по SSH
   - `mc mirror` MinIO -> remote, инкрементально
