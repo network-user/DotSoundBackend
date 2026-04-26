@@ -308,15 +308,6 @@ WebSocket на Redis, статистика для владельца трека,
 
 ---
 
-## Recsys (параллельные чаты / handoff) — временно
-
-После завершения треков A / B-pre / B1 / B2 удалить эту секцию и каталог `docs/recsys-parallel/` (см. [`docs/recsys-parallel/README.md`](recsys-parallel/README.md) → «Уборка»).
-
-- Индекс треков и файлы с промптами: [`docs/recsys-parallel/README.md`](recsys-parallel/README.md)
-- Исторический диалог: [`.cursor/rules/context_delete.txt`](../.cursor/rules/context_delete.txt)
-
----
-
 ## Документы политик
 
 - `docs/ai-boundary-policy.md` — что идёт в PrivateCore, что в Backend

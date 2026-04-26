@@ -112,18 +112,19 @@
   + `users.locale`, стратификация пула кандидатов, RU-запросы в
   external discovery; см. `docs/project_context.md`,
   `docs/private-boundary-inventory.md`
-- [x] **recsys-parallel — Track A / Phase 1 (2026-04):** гибрид
+- [x] **Recsys — Track A / Phase 1 (2026-04):** гибрид
   `genre_samples` + очередь 15s превью, `GET .../preview-queue`,
-  `GET /api/v1/track-preview/{id}/segment.mp4`, админ-CRUD и capability
-  `recsys.genre_samples.manage` — см.
-  `docs/recsys-parallel/01-track-a-phase1.md`
-- [x] **recsys-parallel — Track B1 / Phase 5 Backend (2026-04):**
+  track-preview сегмент, админ-CRUD и capability
+  `recsys.genre_samples.manage`
+- [x] **Recsys — Track B1 / Phase 5 Backend (2026-04):**
   миграция `0060` (таблицы features/similarity), internal API
   `/api/v1/internal/compute/*` (HMAC), `compute_results_router`,
   post-upload enqueue, CLI `python -m app.cli.compute_backfill`,
-  `track_features_builder` + тесты; контракт для B2 — в
-  `docs/recsys-parallel/03-track-b-phase5-backend.md` (секция
-  «Зафиксированный контракт API»).
+  `track_features_builder` + тесты
+- [x] **Recsys handoff (2026-04-27):** удалён каталог
+  `docs/recsys-parallel/`; ссылка в `project_context` убрана; тест
+  `test_backfill_dry_run_uses_patched_session` чинит патч
+  `AsyncSessionLocal` в `app.cli.compute_backfill`
 - **Immediate: перенести auth/email policy в PrivateCore**
   - `account_linking_service`: `_LINK_TTL`, `_LINK_EMAIL_TYPE`, `_LINK_PREFIX`, `_LINK_TG_PREFIX`
   - `account_linking_service`: импортировать `is_disposable_email` из `dotsound_private_core.services.abuse`
