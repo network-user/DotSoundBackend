@@ -75,6 +75,22 @@ async def test_resolve_feat(
     assert len(artists) == 2
 
 
+async def test_resolve_dedup_duplicate_artist_in_one_string(
+    db_session: AsyncSession,
+) -> None:
+    uid = await _make_user(db_session)
+    tid = await _make_track(
+        db_session, owner_id=uid
+    )
+    svc = ArtistService(db_session)
+    artists = await svc.resolve_and_link(
+        tid, "Drake feat. Drake"
+    )
+    assert len(artists) == 1
+    tarts = await svc.get_track_artists(tid)
+    assert len(tarts) == 1
+
+
 async def test_dedup_same_artist(
     db_session: AsyncSession,
 ) -> None:

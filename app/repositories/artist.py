@@ -16,9 +16,7 @@ class ArtistRepository(BaseRepository[Artist]):
         self, name_normalized: str
     ) -> Artist | None:
         result = await self._session.execute(
-            select(Artist).where(
-                Artist.name_normalized == name_normalized
-            )
+            select(Artist).where(Artist.name_normalized == name_normalized)
         )
         return result.scalar_one_or_none()
 
@@ -41,9 +39,7 @@ class ArtistRepository(BaseRepository[Artist]):
         pattern = f"%{query.lower()}%"
         result = await self._session.execute(
             select(Artist)
-            .where(
-                Artist.name_normalized.ilike(pattern)
-            )
+            .where(Artist.name_normalized.ilike(pattern))
             .limit(limit)
         )
         return list(result.scalars().all())
@@ -56,20 +52,14 @@ class ArtistRepository(BaseRepository[Artist]):
         q = (
             select(
                 Artist,
-                func.count(TrackArtist.track_id).label(
-                    "track_count"
-                ),
+                func.count(TrackArtist.track_id).label("track_count"),
             )
             .join(
                 TrackArtist,
                 TrackArtist.artist_id == Artist.id,
             )
             .group_by(Artist.id)
-            .order_by(
-                func.count(
-                    TrackArtist.track_id
-                ).desc()
-            )
+            .order_by(func.count(TrackArtist.track_id).desc())
             .limit(limit)
         )
         result = await self._session.execute(q)
@@ -82,6 +72,45 @@ class ArtistRepository(BaseRepository[Artist]):
         role: str = "primary",
         position: int = 0,
     ) -> None:
+        bind = self._session.get_bind()
+        dialect = bind.dialect.name
+        if dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import (
+                insert as insert_pg,
+            )
+
+            await self._session.execute(
+                insert_pg(TrackArtist)
+                .values(
+                    track_id=track_id,
+                    artist_id=artist_id,
+                    role=role,
+                    position=position,
+                )
+                .on_conflict_do_nothing(constraint="uq_track_artist")
+            )
+            return
+        if dialect == "sqlite":
+            from sqlalchemy.dialects.sqlite import (
+                insert as insert_sqlite,
+            )
+
+            await self._session.execute(
+                insert_sqlite(TrackArtist)
+                .values(
+                    track_id=track_id,
+                    artist_id=artist_id,
+                    role=role,
+                    position=position,
+                )
+                .on_conflict_do_nothing(
+                    index_elements=[
+                        "track_id",
+                        "artist_id",
+                    ],
+                )
+            )
+            return
         existing = await self._session.execute(
             select(TrackArtist).where(
                 TrackArtist.track_id == track_id,
@@ -99,9 +128,7 @@ class ArtistRepository(BaseRepository[Artist]):
         self._session.add(link)
         await self._session.flush()
 
-    async def get_track_artists(
-        self, track_id: int
-    ) -> list[Artist]:
+    async def get_track_artists(self, track_id: int) -> list[Artist]:
         result = await self._session.execute(
             select(Artist)
             .join(

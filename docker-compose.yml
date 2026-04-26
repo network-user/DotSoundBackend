@@ -129,7 +129,7 @@ services:
       context: ..
       dockerfile: DotSoundBackend/Dockerfile
     restart: unless-stopped
-    command: taskiq worker app.core.tkq:broker app.services.transcoding app.services.import_worker app.services.cover_worker app.services.lyrics_worker app.services.artist_enrichment_worker app.services.track_info_worker app.services.artist_supplemental_worker app.services.search_index_worker
+    command: taskiq worker app.core.tkq:broker app.services.transcoding app.services.import_worker app.services.cover_worker app.services.lyrics_worker app.services.artist_enrichment_worker app.services.track_info_worker app.services.artist_supplemental_worker app.services.search_index_worker app.services.artist_backfill_worker app.services.waveform_worker
     env_file:
       - .env
       # PrivateCore-only configuration (lyrics provider tokens, audio

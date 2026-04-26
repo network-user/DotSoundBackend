@@ -28,12 +28,10 @@ logger = structlog.stdlib.get_logger(__name__)
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
 async def _preload_lyrics_assets(_state: TaskiqState) -> None:
-    """Preload heavy assets used by the lyrics provider.
-
-    Runs once per worker process. Heavy internal assets are
-    materialised in local cache here so that the first user
-    request doesn't pay the one-off latency.
-    """
+    """Load local ASR assets only when ``LYRICS_ALLOW_LOCAL_ASR`` (debug)."""
+    if not (settings.debug and settings.lyrics_allow_local_asr):
+        logger.info("lyrics_assets_preload_skipped", reason="no_local_asr")
+        return
     from dotsound_private_core.services.lyrics_provider import (
         warmup_lyrics_provider,
     )
@@ -623,6 +621,7 @@ def _call_provider(
     on_cancel,
     tier: int | None = None,
     external_id: str | None = None,
+    disable_local_asr: bool | None = None,
 ) -> object:
     """Invoke a lyrics provider entry point with graceful kw fallback.
 
@@ -638,14 +637,22 @@ def _call_provider(
     }
     if tier is not None:
         kwargs["tier"] = tier
+    if disable_local_asr is not None:
+        kwargs["disable_local_asr"] = disable_local_asr
     extra = {"on_cancel": on_cancel}
     if external_id is not None:
         extra["external_id"] = external_id
     try:
         return func(**kwargs, **extra)
     except TypeError:
-        pass
-    # Drop external_id and retry (older provider without that kwarg).
+        if "disable_local_asr" in kwargs:
+            kwargs = {
+                k: v for k, v in kwargs.items() if k != "disable_local_asr"
+            }
+            try:
+                return func(**kwargs, **extra)
+            except TypeError:
+                pass
     try:
         return func(**kwargs, on_cancel=on_cancel)
     except TypeError:
@@ -747,12 +754,13 @@ async def generate_lyrics_task(
     progress_id: str = "",
     bypass_cache: bool = False,
 ) -> dict:
-    """Outer Taskiq entry point.
+    """Outer Taskiq entry point (Redis lock; body in
+    :func:`_generate_lyrics_task_impl`).
 
-    Owns the per-track Redis lock so two concurrent imports for
-    the same track_id collapse to a single provider call. The real
-    work lives in :func:`_generate_lyrics_task_impl` so we can
-    wrap it in try/finally without indenting the whole body.
+    In-process ASR runs only when ``DEBUG`` and
+    ``LYRICS_ALLOW_LOCAL_ASR``; otherwise the provider is called with
+    ``disable_local_asr`` and timed lines come from the compute worker
+    pipeline when applicable.
     """
     lock_owner_token = progress_id or uuid.uuid4().hex
     lock_acquired = await _try_acquire_track_lock(
@@ -861,6 +869,9 @@ async def _generate_lyrics_task_impl(
         artist = track.artist or ""
         title = track.title or ""
         search_attempts = _lyrics_search_attempts(artist, title)
+        use_local_asr = bool(
+            settings.debug and settings.lyrics_allow_local_asr
+        )
 
         await _log(
             "searching",
@@ -889,10 +900,6 @@ async def _generate_lyrics_task_impl(
                         and isinstance(cached, dict)
                         and cached.get("text")
                     ):
-                        # Pre-save the cached text so the user sees
-                        # lyrics immediately while sync runs. Break
-                        # out of the cache loop to proceed with the
-                        # audio-based sync upgrade.
                         try:
                             repo_early = LyricsRepository(session)
                             await repo_early.create_or_update(
@@ -909,13 +916,21 @@ async def _generate_lyrics_task_impl(
                                 "lyrics_early_text_save_failed",
                                 track_id=track_id,
                             )
+                        if use_local_asr:
+                            await _log(
+                                "searching",
+                                "cache text pre-saved; running sync "
+                                "stage from audio",
+                                percent=12,
+                            )
+                            break
                         await _log(
                             "searching",
-                            "cache text pre-saved; running sync "
-                            "stage from audio",
+                            "cache text pre-saved; retrying without "
+                            "in-process ASR (compute worker for timed lines)",
                             percent=12,
                         )
-                        break
+                        continue
                     continue
 
                 cached_synced_raw = cached.get("synced_lines")
@@ -995,7 +1010,7 @@ async def _generate_lyrics_task_impl(
                 await _clear_cancel(progress_id)
                 return {"status": "cancelled"}
 
-            if with_sync and (
+            if use_local_asr and with_sync and (
                 track.file_key or getattr(track, "sc_url", None)
             ):
                 await _log(
@@ -1105,6 +1120,7 @@ async def _generate_lyrics_task_impl(
                             on_progress=on_progress,
                             on_cancel=on_cancel,
                             external_id=track.external_id,
+                            disable_local_asr=(not use_local_asr),
                         ),
                         timeout=float(
                             settings.lyrics_provider_timeout_seconds
@@ -1246,6 +1262,19 @@ async def generate_lyrics_debug_task(
     structlog.contextvars.bind_contextvars(
         track_id=track_id, progress_id=progress_id
     )
+    if not (settings.debug and settings.lyrics_allow_local_asr):
+        await _finalise(
+            progress_id,
+            "error",
+            log_line=(
+                "debug stage runs only with DEBUG=true and "
+                "LYRICS_ALLOW_LOCAL_ASR=true (use ComputeWorker for ASR)"
+            ),
+        )
+        return {
+            "status": "error",
+            "detail": "local_asr_debug_disabled",
+        }
     logger.info(
         "lyrics_debug_started",
         stage_id=stage_id,

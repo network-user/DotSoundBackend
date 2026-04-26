@@ -5,9 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.config import settings
 from app.services.lyrics_worker import (
-    _cached_satisfies_request,
     _cache_keys_for_track,
+    _cached_satisfies_request,
     _search_cache_key,
     generate_lyrics_task,
     invalidate_cached_lyrics_for_track,
@@ -108,7 +109,10 @@ class TestGenerateLyricsTask:
         mock_generate: MagicMock,
         mock_s3: AsyncMock,
         mock_db_session: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        monkeypatch.setattr(settings, "lyrics_allow_local_asr", True)
+        monkeypatch.setattr(settings, "debug", True)
         track = _FakeTrack()
         _setup_track_query(mock_db_session, track)
         mock_generate.return_value = _make_lyrics_result(with_sync=True)
@@ -437,7 +441,10 @@ class TestGenerateLyricsTask:
         mock_generate: MagicMock,
         _mock_s3: AsyncMock,
         mock_db_session: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        monkeypatch.setattr(settings, "lyrics_allow_local_asr", True)
+        monkeypatch.setattr(settings, "debug", True)
         # Integration check: when PrivateCore returns a result with
         # source_name="Yandex Music" (the priority provider path),
         # the worker must pass it through to LyricsRepository so
@@ -482,7 +489,10 @@ class TestGenerateLyricsTask:
         mock_generate: MagicMock,
         _mock_s3: AsyncMock,
         mock_db_session: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        monkeypatch.setattr(settings, "lyrics_allow_local_asr", True)
+        monkeypatch.setattr(settings, "debug", True)
         # When PrivateCore returns BOTH a text source ("Yandex
         # Music") and a separate sync source ("Audio Alignment",
         # i.e. timecodes built locally from audio), the worker

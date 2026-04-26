@@ -8,58 +8,66 @@ from urllib.parse import urlparse
 
 import structlog
 
-_SENSITIVE_KEYS = frozenset({
-    "telegram_id",
-    "user_id",
-    "owner_id",
-    "uploader_id",
-    "follower_id",
-    "following_id",
-    "reported_by_user_id",
-    "file_id",
-    "file_key",
-    "token",
-    "access_token",
-    "jwt_secret",
-    "client_ip",
-    "to",
-    "email",
-    "code",
-    "init_data",
-    "magic_link_url",
-    "session_token",
-    "backup_code",
-    "secret",
-    "totp_secret",
-    "worker_secret",
-    "x-worker-signature",
-    "x_worker_signature",
-    "signature",
-    "signature_hex",
-    "cookie",
-    "set-cookie",
-    "authorization",
-})
+_SENSITIVE_KEYS = frozenset(
+    {
+        "telegram_id",
+        "user_id",
+        "owner_id",
+        "uploader_id",
+        "follower_id",
+        "following_id",
+        "reported_by_user_id",
+        "file_id",
+        "file_key",
+        "token",
+        "access_token",
+        "jwt_secret",
+        "client_ip",
+        "to",
+        "email",
+        "code",
+        "init_data",
+        "magic_link_url",
+        "session_token",
+        "backup_code",
+        "secret",
+        "totp_secret",
+        "worker_secret",
+        "x-worker-signature",
+        "x_worker_signature",
+        "signature",
+        "signature_hex",
+        "cookie",
+        "set-cookie",
+        "authorization",
+    }
+)
 
-_FULL_REDACT_KEYS = frozenset({
-    "worker_secret",
-    "x-worker-signature",
-    "x_worker_signature",
-    "signature",
-    "signature_hex",
-    "cookie",
-    "set-cookie",
-    "authorization",
-})
+_FULL_REDACT_KEYS = frozenset(
+    {
+        "worker_secret",
+        "x-worker-signature",
+        "x_worker_signature",
+        "signature",
+        "signature_hex",
+        "cookie",
+        "set-cookie",
+        "authorization",
+    }
+)
 
-_HASH_AND_LEN_KEYS = frozenset({
-    "lyrics_text",
-    "plain_text",
-})
+_HASH_AND_LEN_KEYS = frozenset(
+    {
+        "lyrics_text",
+        "plain_text",
+    }
+)
 
-_COUNT_KEYS = frozenset({
-    "synced_lines",
-})
+_COUNT_KEYS = frozenset(
+    {
+        "synced_lines",
+    }
+)
 
 _REDACT_ENABLED = False
 
@@ -79,9 +87,7 @@ def _mask_value(key: str, value: Any) -> Any:
 
 
 def _hash_text(value: str) -> str:
-    return hashlib.sha256(
-        value.encode("utf-8", errors="ignore")
-    ).hexdigest()
+    return hashlib.sha256(value.encode("utf-8", errors="ignore")).hexdigest()
 
 
 def _redact_url(value: str) -> str:
@@ -106,18 +112,18 @@ def _redact_processor(
     out: dict[str, Any] = {}
     for key, value in event_dict.items():
         lkey = key.lower()
-        if lkey in _HASH_AND_LEN_KEYS and isinstance(
-            value, str
-        ):
+        if lkey in _HASH_AND_LEN_KEYS and isinstance(value, str):
             out[key + "_sha256"] = _hash_text(value)
             out[key + "_len"] = len(value)
             continue
         if lkey in _COUNT_KEYS and isinstance(value, list):
             out[key + "_count"] = len(value)
             continue
-        if isinstance(value, str) and value.startswith(
-            ("http://", "https://")
-        ) and ("?" in value or len(value) > 200):
+        if (
+            isinstance(value, str)
+            and value.startswith(("http://", "https://"))
+            and ("?" in value or len(value) > 200)
+        ):
             out[key] = _redact_url(value)
             continue
         out[key] = _mask_value(key, value)
@@ -136,9 +142,7 @@ def _attach_dev_file_handler(level: int) -> None:
     if not raw:
         return
     try:
-        log_dir = Path(
-            os.path.expanduser(os.path.expandvars(raw))
-        ).resolve()
+        log_dir = Path(os.path.expanduser(os.path.expandvars(raw))).resolve()
         log_dir.mkdir(parents=True, exist_ok=True)
         path = log_dir / "backend.log"
         base_s = str(path)
@@ -166,19 +170,13 @@ def configure_logging(
     global _REDACT_ENABLED
     _REDACT_ENABLED = redact
 
-    level = getattr(
-        logging, log_level.upper(), logging.INFO
-    )
+    level = getattr(logging, log_level.upper(), logging.INFO)
 
-    shared_processors: list[
-        structlog.types.Processor
-    ] = [
+    shared_processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
-        structlog.processors.TimeStamper(
-            fmt="iso", utc=True
-        ),
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.StackInfoRenderer(),
         _redact_processor,
@@ -189,9 +187,7 @@ def configure_logging(
             structlog.processors.JSONRenderer()
         )
     else:
-        renderer = structlog.dev.ConsoleRenderer(
-            colors=True
-        )
+        renderer = structlog.dev.ConsoleRenderer(colors=True)
 
     structlog.configure(
         processors=shared_processors
@@ -218,7 +214,7 @@ def configure_logging(
     for noisy in (
         "uvicorn.access",
         "sqlalchemy.engine",
+        "elastic_transport",
+        "elastic_transport.transport",
     ):
-        logging.getLogger(noisy).setLevel(
-            logging.WARNING
-        )
+        logging.getLogger(noisy).setLevel(logging.WARNING)
