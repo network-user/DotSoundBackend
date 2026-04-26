@@ -57,6 +57,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     configure_logging(
         settings.log_level,
         redact=settings.redact_logs,
+        redact_identifiers=settings.redact_log_identifiers,
         json_output=not settings.debug,
         third_party_level=settings.log_third_party_level,
     )

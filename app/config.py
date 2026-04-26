@@ -32,6 +32,9 @@ class AppSettings(BaseSettings):
     telegram_bot_username: str = ""
     debug: bool = False
     redact_logs: bool = True
+    # When redact_logs is on: False keeps correlation fields (user_id,
+    # file_id, client_ip, …) in events; secrets/tokens still masked.
+    redact_log_identifiers: bool = True
     allowed_origins: str = "*"
     allowed_hosts: str = "*"
     bot_internal_url: str = "http://localhost:8081"
@@ -116,6 +119,11 @@ class AppSettings(BaseSettings):
     tor_circuit_max_age_seconds: int = 600
     tor_circuit_health_check_interval: int = 60
     tor_circuit_max_failure_rate: float = 0.3
+    # One direct HTTPS request to api.ipify.org (no Tor, no env proxy) at
+    # Tor pool start. Shows the public IP for the default route (with a
+    # system VPN, usually the VPN address). Tor guard connections use the
+    # same route unless split-tunnel excludes tor.exe.
+    tor_log_outbound_public_ip: bool = False
 
     # Redis TTLs for cached stream URLs (seconds).
     stream_url_cache_ttl_soundcloud: int = 3600
