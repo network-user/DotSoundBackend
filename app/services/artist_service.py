@@ -27,7 +27,16 @@ class ArtistService:
         source: str = "internal",
         external_id: str | None = None,
     ) -> list[Artist]:
-        matches = resolve_artist_names(raw_artist_string)
+        raw_matches = resolve_artist_names(raw_artist_string)
+        if not raw_matches:
+            return []
+        seen_c: set[str] = set()
+        matches = []
+        for m in raw_matches:
+            if m.canonical in seen_c:
+                continue
+            seen_c.add(m.canonical)
+            matches.append(m)
         if not matches:
             return []
 
@@ -37,9 +46,7 @@ class ArtistService:
                 canonical=m.raw,
                 normalized=m.canonical,
                 source=source,
-                external_id=(
-                    external_id if i == 0 else None
-                ),
+                external_id=(external_id if i == 0 else None),
             )
             await self._repo.link_track(
                 track_id=track_id,
@@ -57,21 +64,13 @@ class ArtistService:
         source: str,
         external_id: str | None,
     ) -> Artist:
-        existing = (
-            await self._repo.find_by_normalized_name(
-                normalized
-            )
-        )
+        existing = await self._repo.find_by_normalized_name(normalized)
         if existing:
             return existing
 
-        all_artists = await self._repo.search(
-            normalized[:3], limit=50
-        )
+        all_artists = await self._repo.search(normalized[:3], limit=50)
         for candidate in all_artists:
-            if is_fuzzy_match(
-                normalized, candidate.name_normalized
-            ):
+            if is_fuzzy_match(normalized, candidate.name_normalized):
                 logger.info(
                     "artist_fuzzy_matched",
                     query=normalized,
@@ -107,9 +106,7 @@ class ArtistService:
                 enrich_artist_task,
             )
 
-            await enrich_artist_task.kiq(
-                artist_id=artist.id
-            )
+            await enrich_artist_task.kiq(artist_id=artist.id)
         except Exception:
             logger.exception(
                 "artist_enrich_schedule_failed",
@@ -117,14 +114,10 @@ class ArtistService:
             )
         return artist
 
-    async def get_by_id(
-        self, artist_id: int
-    ) -> Artist | None:
+    async def get_by_id(self, artist_id: int) -> Artist | None:
         return await self._repo.get_by_id(artist_id)
 
-    async def find_or_create_by_name(
-        self, raw_name: str
-    ) -> Artist | None:
+    async def find_or_create_by_name(self, raw_name: str) -> Artist | None:
         """Look up artist by (fuzzy) name, creating a new row if missing.
 
         Returns None if the raw name cannot be normalized into anything
@@ -145,10 +138,10 @@ class ArtistService:
         await self._backfill_track_links(artist)
         return artist
 
-    async def _backfill_track_links(
-        self, artist: Artist
-    ) -> None:
-        """Link tracks whose string `artist` field matches to this Artist row."""
+    async def _backfill_track_links(self, artist: Artist) -> None:
+        """Link tracks whose string `artist` field matches
+        to this Artist row.
+        """
         existing = await self._session.execute(
             select(TrackArtist.track_id).where(
                 TrackArtist.artist_id == artist.id
@@ -157,9 +150,7 @@ class ArtistService:
         already_linked = {row[0] for row in existing.all()}
 
         result = await self._session.execute(
-            select(Track.id, Track.artist).where(
-                Track.artist.is_not(None)
-            )
+            select(Track.id, Track.artist).where(Track.artist.is_not(None))
         )
         candidates = []
         for track_id, raw_artist in result.all():
@@ -170,9 +161,7 @@ class ArtistService:
             if is_fuzzy_match(
                 artist.name_normalized,
                 normalize_name(raw_artist),
-            ) or artist.name_normalized in normalize_name(
-                raw_artist
-            ):
+            ) or artist.name_normalized in normalize_name(raw_artist):
                 candidates.append(track_id)
 
         for track_id in candidates:
@@ -207,29 +196,19 @@ class ArtistService:
                 query, limit=limit
             )
             if ids is not None and ids:
-                return await self._repo.get_by_ids_preserve_order(
-                    ids[:limit]
-                )
+                return await self._repo.get_by_ids_preserve_order(ids[:limit])
         normalized = normalize_name(query)
-        return await self._repo.search(
-            normalized, limit
-        )
+        return await self._repo.search(normalized, limit)
 
     async def list_popular(
         self,
         limit: int = 50,
         genre_filter: list[str] | None = None,
     ) -> list[Artist]:
-        return await self._repo.list_popular(
-            limit, genre_filter
-        )
+        return await self._repo.list_popular(limit, genre_filter)
 
-    async def get_track_artists(
-        self, track_id: int
-    ) -> list[Artist]:
-        return await self._repo.get_track_artists(
-            track_id
-        )
+    async def get_track_artists(self, track_id: int) -> list[Artist]:
+        return await self._repo.get_track_artists(track_id)
 
     async def list_artist_tracks(
         self,

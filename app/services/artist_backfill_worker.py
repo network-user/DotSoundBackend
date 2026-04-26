@@ -30,11 +30,9 @@ async def artist_link_backfill_task() -> None:
         ).all()
 
         already_linked: set[int] = set(
-            (
-                await session.execute(
-                    select(TrackArtist.track_id).distinct()
-                )
-            ).scalars().all()
+            (await session.execute(select(TrackArtist.track_id).distinct()))
+            .scalars()
+            .all()
         )
 
         candidates = [
@@ -55,20 +53,26 @@ async def artist_link_backfill_task() -> None:
         failed = 0
         for track_id, artist_str, source_platform in candidates:
             try:
-                await svc.resolve_and_link(
-                    track_id=track_id,
-                    raw_artist_string=artist_str,
-                    source=source_platform or "internal",
-                )
+                async with session.begin_nested():
+                    await svc.resolve_and_link(
+                        track_id=track_id,
+                        raw_artist_string=artist_str,
+                        source=source_platform or "internal",
+                    )
                 ok += 1
                 if ok % 100 == 0:
                     await session.commit()
                     logger.debug("artist_link_backfill_progress", linked=ok)
-            except Exception:
+            except Exception as exc:
                 failed += 1
+                err = str(exc)
+                if len(err) > 400:
+                    err = f"{err[:400]}..."
                 logger.warning(
                     "artist_link_backfill_track_failed",
                     track_id=track_id,
+                    error_type=type(exc).__name__,
+                    error=err,
                 )
 
         await session.commit()
@@ -80,6 +84,4 @@ async def artist_link_backfill_task() -> None:
             updated_by=None,
         )
         await session.commit()
-        logger.info(
-            "artist_link_backfill_done", linked=ok, failed=failed
-        )
+        logger.info("artist_link_backfill_done", linked=ok, failed=failed)

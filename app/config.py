@@ -97,7 +97,8 @@ class AppSettings(BaseSettings):
     # Tor exit-node pool (SoundCloud, Bandcamp — NOT YouTube; Google blocks Tor exits).
     # TOR_POOL_SIZE circuits are kept open and rotated every TOR_CIRCUIT_MAX_AGE_SECONDS.
     # Requires Tor installed: apt install tor  /  Tor Expert Bundle on Windows.
-    tor_pool_enabled: bool = False
+    # Set TOR_POOL_ENABLED=false if Tor is unavailable and you need direct HTTP.
+    tor_pool_enabled: bool = True
     tor_pool_size: int = 10
     tor_socks_base_port: int = 9050
     tor_control_port: int = 9051

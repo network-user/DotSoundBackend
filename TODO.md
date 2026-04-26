@@ -385,6 +385,10 @@
   Taskiq reindex/backfill, `GET /api/v1/search/suggest`, поиск треков
   с `q` через ES + PG fallback, bool/should (strict + fuzzy) для треков/артистов
   и саджеста, counter `elasticsearch_query_total` (op/outcome) в `observability`
+- [x] `artist_link_backfill_task` / `track_artists`: дедуп по
+  `canonical` (PrivateCore + `resolve_and_link`), `ON CONFLICT DO NOTHING`
+  в `link_track`, `begin_nested` + `error`/`error_type` в backfill, уровень
+  `elastic_transport` -> WARNING
 - playable_only фильтр в track listing endpoints
 - internal-token endpoint с полной защитой
 - WebSocket: событие player.state для синхронизации
