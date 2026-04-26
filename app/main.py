@@ -58,6 +58,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         settings.log_level,
         redact=settings.redact_logs,
         json_output=not settings.debug,
+        third_party_level=settings.log_third_party_level,
     )
     loop_type = type(asyncio.get_running_loop()).__name__
     logger.info(

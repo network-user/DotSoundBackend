@@ -71,6 +71,39 @@ _COUNT_KEYS = frozenset(
 
 _REDACT_ENABLED = False
 
+THIRD_PARTY_LOGGER_NAMES: tuple[str, ...] = (
+    "uvicorn.access",
+    "sqlalchemy.engine",
+    "elastic_transport",
+    "elastic_transport.node",
+    "elastic_transport.node_pool",
+    "elastic_transport.transport",
+    "elasticsearch",
+    "opensearch",
+    "urllib3",
+    "urllib3.connectionpool",
+    "httpx",
+    "httpcore",
+    "httpcore.http11",
+    "httpcore.connection",
+    "h11",
+)
+
+
+def _parse_log_level_name(name: str) -> int:
+    key = (name or "WARNING").upper().strip()
+    parsed = getattr(logging, key, None)
+    if isinstance(parsed, int):
+        return parsed
+    return logging.WARNING
+
+
+def apply_third_party_log_levels(third_party_level: str) -> None:
+    """Set levels for noisy stdlib loggers. Idempotent; safe in workers."""
+    n = _parse_log_level_name(third_party_level)
+    for lname in THIRD_PARTY_LOGGER_NAMES:
+        logging.getLogger(lname).setLevel(n)
+
 
 def _mask_value(key: str, value: Any) -> Any:
     if not _REDACT_ENABLED:
@@ -166,6 +199,7 @@ def configure_logging(
     log_level: str = "INFO",
     redact: bool = True,
     json_output: bool = False,
+    third_party_level: str = "WARNING",
 ) -> None:
     global _REDACT_ENABLED
     _REDACT_ENABLED = redact
@@ -210,11 +244,4 @@ def configure_logging(
     # Mirror console to a shared file for local admin log tail (see
     # ``DOTSOUND_DEV_LOG_DIR`` in docs / ``dotsound_dev_log_dir`` in config).
     _attach_dev_file_handler(level)
-
-    for noisy in (
-        "uvicorn.access",
-        "sqlalchemy.engine",
-        "elastic_transport",
-        "elastic_transport.transport",
-    ):
-        logging.getLogger(noisy).setLevel(logging.WARNING)
+    apply_third_party_log_levels(third_party_level)
