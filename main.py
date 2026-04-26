@@ -1,12 +1,7 @@
-import asyncio
 import subprocess
 import sys
 
 import uvicorn
-
-if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-
 
 if __name__ == "__main__":
     worker_proc = subprocess.Popen(

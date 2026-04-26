@@ -7,6 +7,7 @@ from unittest import mock
 import pytest
 
 from app.services.tor_pool import (
+    _resolve_tor_control_port,
     _search_tor_bundles,
     resolve_tor_executable,
 )
@@ -35,6 +36,15 @@ def test_bundle_candidates_not_empty() -> None:
     assert len(paths) > 0
     ex = "tor.exe" if os.name == "nt" else "tor"
     assert all(p.name == ex for p in paths)
+
+
+def test_control_port_moved_out_of_socks_range() -> None:
+    out = _resolve_tor_control_port(9050, 10, 9051)
+    assert out == 9060
+    out2 = _resolve_tor_control_port(9050, 1, 9051)
+    assert out2 == 9051
+    out3 = _resolve_tor_control_port(9050, 10, 10000)
+    assert out3 == 10000
 
 
 def test_desktop_tbb_path_in_candidates(
