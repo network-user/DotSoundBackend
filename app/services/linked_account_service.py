@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -85,7 +85,7 @@ class LinkedAccountService:
     ) -> UserLinkedAccount:
         expires_at: datetime | None = None
         if expires_in is not None:
-            expires_at = datetime.now(timezone.utc) + timedelta(
+            expires_at = datetime.now(UTC) + timedelta(
                 seconds=expires_in
             )
 
@@ -153,7 +153,7 @@ class LinkedAccountService:
     def is_expired(self, account: UserLinkedAccount) -> bool:
         if account.expires_at is None:
             return False
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Refresh 60 seconds early to avoid clock skew
         return account.expires_at <= now + timedelta(seconds=60)
 

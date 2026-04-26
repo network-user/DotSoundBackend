@@ -2,7 +2,6 @@ import structlog
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.track import Track
 from app.repositories.dislike import DislikeRepository
 from app.repositories.like import LikeRepository
 from app.repositories.track import TrackRepository

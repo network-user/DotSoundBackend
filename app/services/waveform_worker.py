@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import struct
 import tempfile
-import os
 
 import structlog
 from sqlalchemy import select, update

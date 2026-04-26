@@ -12,7 +12,7 @@ import hashlib
 import hmac
 import secrets
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from dotsound_private_core.services.network_policy import (
@@ -76,7 +76,7 @@ def _signature_payload(
     return (
         f"{method.upper()}\n{path}\n{timestamp}\n{nonce}\n"
         f"{body_sha}"
-    ).encode("utf-8")
+    ).encode()
 
 
 def _compute_signature(
@@ -148,7 +148,7 @@ async def _log_audit(
         job_id=job_id,
         status_code=status_code,
         meta=meta,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     session.add(entry)
     try:
@@ -288,7 +288,7 @@ async def verify_worker_request(
     ):
         raise WorkerAuthError("ip_not_allowed")
 
-    now_dt = datetime.now(timezone.utc)
+    now_dt = datetime.now(UTC)
     if (
         worker.suspended_until is not None
         and worker.suspended_until > now_dt
@@ -315,7 +315,7 @@ async def claim_next_job(
     Atomic ordering uses ``FOR UPDATE SKIP LOCKED`` on PostgreSQL;
     SQLite tests fall back to plain SELECT (single-threaded).
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if worker.revoked_at is not None:
         return None
     if (
@@ -397,7 +397,7 @@ async def mark_job_result(
     duration_ms: int,
 ) -> None:
     job.status = "done"
-    job.finished_at = datetime.now(timezone.utc)
+    job.finished_at = datetime.now(UTC)
     job.duration_ms = int(duration_ms)
     attempts = list(job.tier_attempts or [])
     if attempts:
@@ -434,7 +434,7 @@ async def mark_job_failed(
     reason: str,
 ) -> None:
     job.status = "failed"
-    job.finished_at = datetime.now(timezone.utc)
+    job.finished_at = datetime.now(UTC)
     job.error = (reason or "")[:1024]
     try:
         from app.core.observability import (
@@ -446,7 +446,7 @@ async def mark_job_failed(
             started = job.started_at
             if started.tzinfo is None:
                 started = started.replace(
-                    tzinfo=timezone.utc
+                    tzinfo=UTC
                 )
             duration_seconds = (
                 job.finished_at - started

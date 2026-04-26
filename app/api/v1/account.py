@@ -13,7 +13,6 @@ from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.account import (
-    LinkConflictResponse,
     LinkEmailRequest,
     LinkEmailVerifyRequest,
     LinkStatusResponse,

@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import httpx
@@ -115,7 +115,7 @@ async def _heartbeat_loop(
                     stop_event.wait(), timeout=interval
                 )
                 break
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             elapsed = f"{time.monotonic() - t0:.1f}s"
             await log_fn(
@@ -385,7 +385,7 @@ class ArtistEnrichmentService:
         self, artist: Artist, status_value: str
     ) -> None:
         artist.enrichment_status = status_value
-        artist.enriched_at = datetime.now(timezone.utc)
+        artist.enriched_at = datetime.now(UTC)
         await self._session.commit()
 
     async def _collect_hints(self, artist: Artist) -> dict:

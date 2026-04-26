@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs
 
 import structlog
@@ -68,7 +68,7 @@ def verify_telegram_init_data(
         try:
             auth_ts = int(auth_date_str)
             now_ts = int(
-                datetime.now(timezone.utc).timestamp()
+                datetime.now(UTC).timestamp()
             )
             max_age = AUTH_DATE_MAX_AGE
             if now_ts - auth_ts > max_age:
@@ -88,7 +88,7 @@ def verify_telegram_init_data(
 def create_access_token(
     user_id: int, is_admin: bool
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
+    expire = datetime.now(UTC) + timedelta(
         days=settings.jwt_expire_days
     )
     payload: dict[str, object] = {
@@ -110,7 +110,7 @@ def create_scoped_token(
     scope: str,
     ttl_minutes: int = 15,
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
+    expire = datetime.now(UTC) + timedelta(
         minutes=ttl_minutes
     )
     payload: dict[str, object] = {
@@ -144,7 +144,7 @@ def create_admin_token(
     scope: str = "admin",
     extra: dict[str, object] | None = None,
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
+    expire = datetime.now(UTC) + timedelta(
         seconds=ttl_seconds
     )
     payload: dict[str, object] = {

@@ -1,6 +1,4 @@
 from app.models.account_merge import AccountMerge
-from app.models.artist_supplemental_info import ArtistSupplementalInfo
-from app.models.track_info import TrackInfo
 from app.models.admin_action_log import AdminActionLog
 from app.models.admin_capability import AdminCapability
 from app.models.admin_device import AdminDevice
@@ -9,21 +7,22 @@ from app.models.admin_login_attempt import (
 )
 from app.models.admin_session import AdminSession
 from app.models.album import Album
-from app.models.audio_blob import AudioBlob
-from app.models.image_blob import ImageBlob
-from app.models.video_blob import VideoBlob
 from app.models.app_setting import AppSetting
 from app.models.artist import Artist, TrackArtist
+from app.models.artist_features import ArtistFeatures
+from app.models.artist_similarity import ArtistSimilarity
+from app.models.artist_supplemental_info import ArtistSupplementalInfo
+from app.models.audio_blob import AudioBlob
 from app.models.block import UserBlock
 from app.models.co_listen import CoListenRoom
-from app.models.compute_job import ComputeJob
-from app.models.compute_worker import ComputeWorker
 from app.models.comment import (
     CommentHide,
     CommentVote,
     TrackComment,
 )
 from app.models.complaint import Complaint
+from app.models.compute_job import ComputeJob
+from app.models.compute_worker import ComputeWorker
 from app.models.conversation import (
     Conversation,
     ConversationMember,
@@ -33,6 +32,7 @@ from app.models.encryption_key import EncryptionKey
 from app.models.eq_settings import UserEqSettings
 from app.models.follow import UserFollow
 from app.models.genre_sample import GenreSample
+from app.models.image_blob import ImageBlob
 from app.models.import_job import ImportJob
 from app.models.like import Like
 from app.models.listen_event import ListenEvent
@@ -55,13 +55,17 @@ from app.models.recommendation_impression import (
 )
 from app.models.search_event import SearchEvent
 from app.models.track import Track
+from app.models.track_audio_features import TrackAudioFeatures
+from app.models.track_info import TrackInfo
 from app.models.track_preview_clip import TrackPreviewClip
+from app.models.track_similarity import TrackSimilarity
 from app.models.track_snippet import TrackSnippet
 from app.models.upload_meta import TrackUploadMeta
 from app.models.user import User
 from app.models.user_linked_account import UserLinkedAccount
 from app.models.user_preference import UserPreference
 from app.models.user_track_library import UserTrackLibrary
+from app.models.video_blob import VideoBlob
 from app.models.worker_audit import WorkerAuditLog
 
 __all__ = [
@@ -79,6 +83,8 @@ __all__ = [
     "VideoBlob",
     "AppSetting",
     "Artist",
+    "ArtistFeatures",
+    "ArtistSimilarity",
     "CommentHide",
     "CoListenRoom",
     "CommentVote",
@@ -106,7 +112,9 @@ __all__ = [
     "RecommendationImpression",
     "SearchEvent",
     "Track",
+    "TrackAudioFeatures",
     "TrackPreviewClip",
+    "TrackSimilarity",
     "TrackSnippet",
     "TrackArtist",
     "TrackComment",

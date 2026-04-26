@@ -1,0 +1,464 @@
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime
+from typing import Any
+
+import structlog
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse, Response
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.v1.internal.worker_request import (
+    client_ip,
+    verify_worker_hmac_request,
+)
+from app.core import s3
+from app.dependencies import get_db
+from app.models.compute_job import ComputeJob
+from app.models.track import Track
+from app.repositories.audio_compute import (
+    AudioComputeRepository,
+)
+from app.services import compute_queue_service as q
+from app.services import compute_results_router as crr
+from app.services import compute_worker_service as cws
+from app.services import worker_rate_limit as rl
+
+log: structlog.stdlib.BoundLogger = structlog.get_logger(
+    __name__
+)
+
+router = APIRouter(
+    prefix="/internal/compute",
+    tags=["internal-compute"],
+)
+
+
+async def _enforce_rate_limit(
+    request: Request,
+    session: AsyncSession,
+    *,
+    worker_id: str,
+    action: str,
+) -> None:
+    try:
+        await rl.check_and_consume(
+            session,
+            worker_id=worker_id,
+            action=action,
+            audit_ip=client_ip(request),
+        )
+    except rl.WorkerRateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=429
+        ) from exc
+
+
+@router.post("/workers/heartbeat")
+async def heartbeat(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    worker, _ = await verify_worker_hmac_request(
+        request,
+        session,
+    )
+    await _enforce_rate_limit(
+        request,
+        session,
+        worker_id=worker.id,
+        action="heartbeat",
+    )
+    await cws._log_audit(
+        session,
+        worker_id=worker.id,
+        ip=client_ip(request),
+        action="heartbeat",
+        status_code=200,
+    )
+    await session.commit()
+    return {
+        "status": "ok",
+        "server_time": int(
+            datetime.now(UTC).timestamp()
+        ),
+    }
+
+
+@router.post(
+    "/jobs/claim",
+    response_model=None,
+)
+async def claim(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+) -> Response:
+    worker, body = await verify_worker_hmac_request(
+        request,
+        session,
+    )
+    await _enforce_rate_limit(
+        request,
+        session,
+        worker_id=worker.id,
+        action="claim",
+    )
+    try:
+        spec = json.loads(body or b"{}")
+    except (TypeError, ValueError) as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=400
+        ) from exc
+    job_types = spec.get("job_types")
+    if not isinstance(job_types, list) or not all(
+        isinstance(t, str) for t in job_types
+    ):
+        await session.rollback()
+        raise HTTPException(
+            status_code=400
+        ) from None
+    if not job_types:
+        await session.rollback()
+        raise HTTPException(
+            status_code=400
+        ) from None
+    job = await q.claim_next(
+        session,
+        worker_id=worker.id,
+        job_types=job_types,
+    )
+    if job is None:
+        await cws._log_audit(
+            session,
+            worker_id=worker.id,
+            ip=client_ip(request),
+            action="compute_claim_empty",
+            status_code=204,
+        )
+        await session.commit()
+        return Response(
+            status_code=204
+        )
+    out: dict[str, Any] = {
+        "job_id": job.id,
+        "job_type": job.job_type,
+        "target_kind": job.target_kind,
+        "target_id": job.target_id,
+        "payload": job.payload,
+        "feature_version": job.feature_version,
+        "claim_deadline_at": job.claim_deadline_at.isoformat()
+        if job.claim_deadline_at
+        else None,
+    }
+    if job.job_type == q.JOB_TRACK_AUDIO_FEATURES:
+        token = cws.generate_single_use_token(
+            job.id, worker.id
+        )
+        out["audio_url"] = (
+            f"/api/v1/internal/compute/jobs/{job.id}/audio"
+            f"?ott={token}"
+        )
+    await cws._log_audit(
+        session,
+        worker_id=worker.id,
+        ip=client_ip(request),
+        action="compute_claim_ok",
+        job_id=job.id,
+        status_code=200,
+    )
+    await session.commit()
+    return JSONResponse(
+        status_code=200,
+        content=out,
+        headers={"X-Correlation-Id": job.id},
+    )
+
+
+@router.get("/jobs/{job_id}/audio")
+async def download_job_audio(
+    job_id: str,
+    ott: str,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+) -> JSONResponse:
+    worker_id = request.headers.get("X-Worker-Id", "")
+    if not worker_id or not ott:
+        raise HTTPException(status_code=404)
+
+    try:
+        await rl.check_and_consume(
+            session,
+            worker_id=worker_id,
+            action="audio",
+            audit_ip=client_ip(request),
+        )
+    except rl.WorkerRateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=429
+        ) from exc
+
+    job = await session.get(ComputeJob, job_id)
+    if (
+        job is None
+        or job.claimed_by != worker_id
+        or job.status != q.STATUS_CLAIMED
+        or job.job_type != q.JOB_TRACK_AUDIO_FEATURES
+    ):
+        raise HTTPException(status_code=404)
+    if job.target_kind != q.TARGET_KIND_TRACK or not job.target_id:
+        raise HTTPException(status_code=404)
+    try:
+        track_id = int(job.target_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=404
+        ) from exc
+    track = await session.get(Track, track_id)
+    if not track or not track.file_key:
+        raise HTTPException(status_code=404)
+    repo = AudioComputeRepository(session)
+    wrow = await repo.get_worker(worker_id)
+    pinned_ip = wrow.last_ip if wrow else None
+    exp = await cws.validate_ott_token(
+        ott,
+        job.id,
+        worker_id,
+        client_ip=client_ip(request),
+        expected_ip=pinned_ip,
+    )
+    if exp is None:
+        await cws._log_audit(
+            session,
+            worker_id=worker_id,
+            ip=client_ip(request),
+            action="ott_fail",
+            job_id=job.id,
+            status_code=404,
+        )
+        await session.commit()
+        raise HTTPException(status_code=404)
+    try:
+        presigned = await s3.get_presigned_url(
+            track.file_key
+        )
+    except Exception as exc:
+        log.warning(
+            "compute_job_audio_presign_failed",
+            job_id=job_id,
+            track_id=track_id,
+            err=str(exc),
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=503
+        ) from exc
+    if not await cws.consume_ott_by_exp(
+        exp, job.id, worker_id
+    ):
+        await cws._log_audit(
+            session,
+            worker_id=worker_id,
+            ip=client_ip(request),
+            action="ott_fail",
+            job_id=job.id,
+            status_code=404,
+        )
+        await session.commit()
+        raise HTTPException(status_code=404)
+    return JSONResponse(
+        status_code=200,
+        content={"url": presigned},
+    )
+
+
+@router.post("/jobs/{job_id}/progress")
+async def job_progress(
+    job_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    worker, _ = await verify_worker_hmac_request(
+        request,
+        session,
+    )
+    await _enforce_rate_limit(
+        request,
+        session,
+        worker_id=worker.id,
+        action="progress",
+    )
+    j = await crr.get_compute_job_for_worker(
+        session,
+        job_id,
+        worker.id,
+    )
+    if j is None:
+        raise HTTPException(status_code=404)
+    await cws._log_audit(
+        session,
+        worker_id=worker.id,
+        ip=client_ip(request),
+        action="compute_progress",
+        job_id=job_id,
+        status_code=200,
+    )
+    await session.commit()
+    return {"status": "ok"}
+
+
+@router.post("/jobs/{job_id}/result")
+async def job_result(
+    job_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    worker, body = await verify_worker_hmac_request(
+        request,
+        session,
+    )
+    await _enforce_rate_limit(
+        request,
+        session,
+        worker_id=worker.id,
+        action="result",
+    )
+    j = await crr.get_compute_job_for_worker(
+        session,
+        job_id,
+        worker.id,
+    )
+    if j is None:
+        raise HTTPException(status_code=404)
+    if j.status != q.STATUS_CLAIMED:
+        raise HTTPException(status_code=409)
+    try:
+        payload = json.loads(body or b"{}")
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400
+        ) from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422)
+    try:
+        await crr.persist_result(
+            session,
+            job=j,
+            result=payload,
+        )
+    except ValueError as exc:
+        await cws._log_audit(
+            session,
+            worker_id=worker.id,
+            ip=client_ip(request),
+            action="compute_result_invalid",
+            job_id=job_id,
+            status_code=422,
+            meta={"reason": str(exc)},
+        )
+        await session.commit()
+        raise HTTPException(
+            status_code=422
+        ) from exc
+    await q.mark_succeeded(
+        session,
+        job=j,
+        result=payload,
+    )
+    await cws._log_audit(
+        session,
+        worker_id=worker.id,
+        ip=client_ip(request),
+        action="compute_result_ok",
+        job_id=job_id,
+        status_code=200,
+    )
+    await session.commit()
+    return {"status": "ok"}
+
+
+@router.post("/jobs/{job_id}/fail")
+async def job_fail(
+    job_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    worker, body = await verify_worker_hmac_request(
+        request,
+        session,
+    )
+    await _enforce_rate_limit(
+        request,
+        session,
+        worker_id=worker.id,
+        action="fail",
+    )
+    j = await crr.get_compute_job_for_worker(
+        session,
+        job_id,
+        worker.id,
+    )
+    if j is None:
+        raise HTTPException(status_code=404)
+    if j.status != q.STATUS_CLAIMED:
+        raise HTTPException(status_code=409)
+    try:
+        event = json.loads(body or b"{}")
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400
+        ) from exc
+    r = event.get("reason")
+    reason: str = (
+        r
+        if isinstance(
+            r,
+            str,
+        )
+        and r
+        else "job_failed"
+    )
+    await q.mark_failed(
+        session,
+        job=j,
+        reason=reason,
+    )
+    await cws._log_audit(
+        session,
+        worker_id=worker.id,
+        ip=client_ip(request),
+        action="compute_fail",
+        job_id=job_id,
+        status_code=200,
+        meta={"reason": reason},
+    )
+    await session.commit()
+    return {"status": "ok"}
+
+
+@router.get("/status")
+async def compute_status(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    worker, _body = await verify_worker_hmac_request(
+        request,
+        session,
+    )
+    await _enforce_rate_limit(
+        request,
+        session,
+        worker_id=worker.id,
+        action="status",
+    )
+    snap = await q.queue_health_snapshot(session)
+    await cws._log_audit(
+        session,
+        worker_id=worker.id,
+        ip=client_ip(request),
+        action="compute_status",
+        status_code=200,
+    )
+    await session.commit()
+    return snap

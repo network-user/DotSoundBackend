@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import structlog
 from datetime import datetime
+
+import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 

@@ -1,5 +1,5 @@
 import pytest
-from dirty_equals import IsInstance, IsInt, IsPartialDict
+from dirty_equals import IsInstance, IsPartialDict
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 

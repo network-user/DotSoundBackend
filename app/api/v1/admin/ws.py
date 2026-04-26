@@ -35,6 +35,7 @@ from fastapi import status as ws_status
 from sqlalchemy import desc, select
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
+from app.config import settings
 from app.core.auth import (
     AuthError,
     decode_admin_token,
@@ -57,7 +58,6 @@ from app.services.admin_dashboard_service import (
 from app.services.container_health_service import (
     get_container_summary,
 )
-from app.config import settings
 from app.services.local_dev_log_service import (
     is_local_dev_logs_enabled,
     query_dev_logs,

@@ -7,7 +7,6 @@ from unittest.mock import (
 )
 
 import pytest
-
 from dotsound_private_core.services.abuse import (
     TOR_REDIS_KEY,
 )

@@ -11,15 +11,19 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core import s3
+from app.api.v1.internal.worker_request import (
+    client_ip,
+    verify_worker_hmac_request,
+)
 from app.config import settings
+from app.core import s3
 from app.dependencies import get_db
 from app.models.track import Track
 from app.repositories.audio_compute import (
@@ -44,12 +48,6 @@ router = APIRouter(
 )
 
 
-def _client_ip(request: Request) -> str | None:
-    return (
-        request.client.host if request.client else None
-    )
-
-
 async def _enforce_rate_limit(
     request: Request,
     session: AsyncSession,
@@ -63,60 +61,10 @@ async def _enforce_rate_limit(
             session,
             worker_id=worker_id,
             action=action,
-            audit_ip=_client_ip(request),
+            audit_ip=client_ip(request),
         )
     except rl.WorkerRateLimitExceeded:
         raise HTTPException(status_code=429)
-
-
-async def _verify(
-    request: Request, session: AsyncSession
-) -> "tuple[object, bytes]":
-    body = await request.body()
-    try:
-        worker = await cws.verify_worker_request(
-            session,
-            worker_id=request.headers.get(
-                "X-Worker-Id", ""
-            ),
-            timestamp=request.headers.get(
-                "X-Timestamp", ""
-            ),
-            nonce=request.headers.get("X-Nonce", ""),
-            signature_hex=request.headers.get(
-                "X-Worker-Signature", ""
-            ),
-            method=request.method,
-            path=request.url.path,
-            body=body,
-            client_ip=_client_ip(request),
-            signature_version=request.headers.get(
-                "X-Worker-Signature-Version"
-            ),
-        )
-    except cws.WorkerNotFoundError:
-        await cws._log_audit(
-            session,
-            worker_id=request.headers.get("X-Worker-Id"),
-            ip=_client_ip(request),
-            action="auth_fail",
-            status_code=404,
-        )
-        await session.commit()
-        raise HTTPException(status_code=404)
-    except cws.WorkerAuthError as exc:
-        await cws._log_audit(
-            session,
-            worker_id=request.headers.get("X-Worker-Id"),
-            ip=_client_ip(request),
-            action="auth_fail",
-            status_code=401,
-            meta={"reason": str(exc)},
-        )
-        await session.commit()
-        raise HTTPException(status_code=401)
-
-    return worker, body
 
 
 @router.post("/workers/heartbeat")
@@ -124,7 +72,7 @@ async def heartbeat(
     request: Request,
     session: AsyncSession = Depends(get_db),
 ) -> dict:
-    worker, _ = await _verify(request, session)
+    worker, _ = await verify_worker_hmac_request(request, session)
     await _enforce_rate_limit(
         request,
         session,
@@ -134,7 +82,7 @@ async def heartbeat(
     await cws._log_audit(
         session,
         worker_id=worker.id,
-        ip=_client_ip(request),
+        ip=client_ip(request),
         action="heartbeat",
         status_code=200,
     )
@@ -142,7 +90,7 @@ async def heartbeat(
     return {
         "status": "ok",
         "server_time": int(
-            datetime.now(timezone.utc).timestamp()
+            datetime.now(UTC).timestamp()
         ),
     }
 
@@ -155,7 +103,7 @@ async def claim(
     request: Request,
     session: AsyncSession = Depends(get_db),
 ) -> Response:
-    worker, _ = await _verify(request, session)
+    worker, _ = await verify_worker_hmac_request(request, session)
     await _enforce_rate_limit(
         request,
         session,
@@ -167,7 +115,7 @@ async def claim(
         await cws._log_audit(
             session,
             worker_id=worker.id,
-            ip=_client_ip(request),
+            ip=client_ip(request),
             action="claim_empty",
             status_code=204,
         )
@@ -198,7 +146,7 @@ async def claim(
     await cws._log_audit(
         session,
         worker_id=worker.id,
-        ip=_client_ip(request),
+        ip=client_ip(request),
         action="claim_ok",
         job_id=job.id,
         status_code=200,
@@ -217,7 +165,7 @@ async def job_progress(
     request: Request,
     session: AsyncSession = Depends(get_db),
 ) -> dict:
-    worker, body = await _verify(request, session)
+    worker, body = await verify_worker_hmac_request(request, session)
     await _enforce_rate_limit(
         request,
         session,
@@ -260,7 +208,7 @@ async def job_progress(
     await cws._log_audit(
         session,
         worker_id=worker.id,
-        ip=_client_ip(request),
+        ip=client_ip(request),
         action="progress",
         job_id=job.id,
         status_code=200,
@@ -275,7 +223,7 @@ async def job_result(
     request: Request,
     session: AsyncSession = Depends(get_db),
 ) -> dict:
-    worker, body = await _verify(request, session)
+    worker, body = await verify_worker_hmac_request(request, session)
     await _enforce_rate_limit(
         request,
         session,
@@ -299,7 +247,7 @@ async def job_result(
             await cws._log_audit(
                 session,
                 worker_id=worker.id,
-                ip=_client_ip(request),
+                ip=client_ip(request),
                 action="audio_sha_mismatch",
                 job_id=job.id,
                 status_code=400,
@@ -313,7 +261,7 @@ async def job_result(
         await cws._log_audit(
             session,
             worker_id=worker.id,
-            ip=_client_ip(request),
+            ip=client_ip(request),
             action="result_invalid",
             job_id=job.id,
             status_code=422,
@@ -435,11 +383,11 @@ async def job_result(
         started_aware = started
         if started_aware.tzinfo is None:
             started_aware = started_aware.replace(
-                tzinfo=timezone.utc
+                tzinfo=UTC
             )
         duration_ms = int(
             (
-                datetime.now(timezone.utc)
+                datetime.now(UTC)
                 - started_aware
             ).total_seconds()
             * 1000
@@ -483,7 +431,7 @@ async def job_result(
     await cws._log_audit(
         session,
         worker_id=worker.id,
-        ip=_client_ip(request),
+        ip=client_ip(request),
         action="result_ok",
         job_id=job.id,
         status_code=200,
@@ -498,7 +446,7 @@ async def job_fail(
     request: Request,
     session: AsyncSession = Depends(get_db),
 ) -> dict:
-    worker, body = await _verify(request, session)
+    worker, body = await verify_worker_hmac_request(request, session)
     await _enforce_rate_limit(
         request,
         session,
@@ -540,7 +488,7 @@ async def job_fail(
     await cws._log_audit(
         session,
         worker_id=worker.id,
-        ip=_client_ip(request),
+        ip=client_ip(request),
         action="result_fail",
         job_id=job.id,
         status_code=200,
@@ -572,7 +520,7 @@ async def download_audio(
             session,
             worker_id=worker_id,
             action="audio",
-            audit_ip=_client_ip(request),
+            audit_ip=client_ip(request),
         )
     except rl.WorkerRateLimitExceeded:
         raise HTTPException(status_code=429)
@@ -595,14 +543,14 @@ async def download_audio(
         ott,
         job.id,
         worker_id,
-        client_ip=_client_ip(request),
+        client_ip=client_ip(request),
         expected_ip=pinned_ip,
     )
     if exp is None:
         await cws._log_audit(
             session,
             worker_id=worker_id,
-            ip=_client_ip(request),
+            ip=client_ip(request),
             action="ott_fail",
             job_id=job.id,
             status_code=404,
@@ -690,7 +638,7 @@ async def download_audio(
         await cws._log_audit(
             session,
             worker_id=worker_id,
-            ip=_client_ip(request),
+            ip=client_ip(request),
             action="ott_fail",
             job_id=job.id,
             status_code=404,

@@ -1,14 +1,14 @@
 from datetime import UTC, datetime
 
 import structlog
+from dotsound_private_core.services.signal_policy import (
+    classify_listen,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.signal import (
     ListenEventRepository,
     SearchEventRepository,
-)
-from dotsound_private_core.services.signal_policy import (
-    classify_listen,
 )
 
 logger = structlog.get_logger(__name__)

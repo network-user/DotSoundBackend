@@ -16,7 +16,6 @@ from app.core.s3 import (
     get_presigned_url,
     put_cas_audio,
     upload_audio,
-    upload_cover,
     upload_object,
     upload_voice,
 )

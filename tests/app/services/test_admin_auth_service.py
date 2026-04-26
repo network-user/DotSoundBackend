@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pyotp
 import pytest
@@ -12,11 +12,10 @@ from app.models.user import User
 from app.services import admin_auth_service
 from app.services.admin_auth_service import (
     AdminAuthError,
+    confirm_admin_init,
     consume_backup_code,
     consume_step_up,
-    confirm_admin_init,
     is_locked_out,
-    issue_admin_session,
     metadata_summary,
     regenerate_backup_codes,
     release_lockout,

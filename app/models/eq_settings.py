@@ -1,7 +1,7 @@
 from sqlalchemy import (
+    JSON,
     BigInteger,
     ForeignKey,
-    JSON,
     String,
 )
 from sqlalchemy.orm import Mapped, mapped_column

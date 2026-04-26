@@ -51,9 +51,9 @@ async def fetch_track_info_task(track_id: int) -> dict:
         repo = TrackInfoRepository(session)
 
         from sqlalchemy import select
+
+        from app.models.artist import Artist, TrackArtist
         from app.models.track import Track
-        from app.models.artist import Artist
-        from app.models.artist import TrackArtist
 
         result = await session.execute(
             select(Track).where(Track.id == track_id)
@@ -90,7 +90,7 @@ async def fetch_track_info_task(track_id: int) -> dict:
                 ),
                 timeout=_PROVIDER_TIMEOUT_SECONDS,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 "track_info_provider_timeout",
                 track_id=track_id,

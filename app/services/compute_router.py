@@ -11,7 +11,7 @@ DB-backed AppSettings store.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from dotsound_private_core.services.asr_policy import (
     DEFAULT_CASCADE,
@@ -103,7 +103,7 @@ async def any_worker_online(
     profile: str,
 ) -> bool:
     heartbeat_timeout = await get_heartbeat_timeout(session)
-    cutoff = datetime.now(timezone.utc) - timedelta(
+    cutoff = datetime.now(UTC) - timedelta(
         seconds=heartbeat_timeout
     )
     result = await session.execute(

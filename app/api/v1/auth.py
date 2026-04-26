@@ -1,5 +1,5 @@
 import hmac
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -18,7 +18,6 @@ from dotsound_private_core.services.auth_policy import (
     CODE_PREFIX,
     CODE_TTL,
     COOLDOWN_PREFIX,
-    COOLDOWN_TTL,
     INTERNAL_TOKEN_SCOPE,
     INTERNAL_TOKEN_TTL_MIN,
     is_internal_ip,
@@ -262,7 +261,7 @@ async def verify_telegram_code(
     user_agent = request.headers.get(
         "user-agent", ""
     )
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     try:
         async with httpx.AsyncClient(

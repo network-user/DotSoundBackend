@@ -8,7 +8,7 @@ the file exists.
 
 from __future__ import annotations
 
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 from fastapi import Response
 from starlette.middleware.base import BaseHTTPMiddleware

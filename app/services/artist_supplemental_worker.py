@@ -17,7 +17,9 @@ from app.config import settings
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.repositories.app_settings import AppSettingsRepository
-from app.repositories.artist_supplemental_info import ArtistSupplementalInfoRepository
+from app.repositories.artist_supplemental_info import (
+    ArtistSupplementalInfoRepository,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -73,6 +75,7 @@ async def enrich_artist_supplemental_task(
                 return {"status": "cached"}
 
         from sqlalchemy import select
+
         from app.models.artist import Artist
 
         result = await session.execute(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -214,8 +214,8 @@ async def test_mark_failed_retries_with_backoff(db_session):
     # backoff bumps next_attempt_at into the future
     next_at = refreshed.next_attempt_at
     if next_at.tzinfo is None:
-        next_at = next_at.replace(tzinfo=timezone.utc)
-    assert next_at > datetime.now(timezone.utc)
+        next_at = next_at.replace(tzinfo=UTC)
+    assert next_at > datetime.now(UTC)
 
 
 async def test_mark_failed_terminal_after_max_attempts(
@@ -244,7 +244,7 @@ async def test_mark_failed_terminal_after_max_attempts(
 
     # bypass backoff so the next claim is eligible
     await db_session.refresh(claimed)
-    claimed.next_attempt_at = datetime.now(timezone.utc)
+    claimed.next_attempt_at = datetime.now(UTC)
     await db_session.commit()
 
     # attempt 2: claim + fail (terminal)
@@ -284,7 +284,7 @@ async def test_requeue_stale_claims_recovers_expired_leases(
     assert claimed is not None
     # simulate expired lease
     claimed.claim_deadline_at = datetime.now(
-        timezone.utc
+        UTC
     ) - timedelta(minutes=5)
     await db_session.commit()
 

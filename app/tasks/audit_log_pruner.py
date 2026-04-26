@@ -12,7 +12,7 @@ plain Taskiq task; production deployments enqueue it from
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 
@@ -32,7 +32,7 @@ DEFAULT_RETENTION_DAYS = 90
 async def prune_once(
     retention_days: int = DEFAULT_RETENTION_DAYS,
 ) -> int:
-    cutoff = datetime.now(timezone.utc) - timedelta(
+    cutoff = datetime.now(UTC) - timedelta(
         days=int(retention_days)
     )
     async with AsyncSessionLocal() as session:

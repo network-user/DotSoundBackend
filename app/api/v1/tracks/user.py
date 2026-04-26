@@ -1,5 +1,4 @@
 import mimetypes
-import uuid
 
 import structlog
 from fastapi import (

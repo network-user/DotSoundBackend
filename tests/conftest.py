@@ -1,19 +1,19 @@
-from io import BytesIO
 import importlib
 import sys
 import types
+from io import BytesIO
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import BigInteger, Boolean, event
-from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.ext.compiler import compiles
 
 import app.models  # noqa: F401
 from app.dependencies import get_db

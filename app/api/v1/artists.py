@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -49,7 +49,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 def _compute_age(birth: date | None) -> int | None:
     if birth is None:
         return None
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(UTC).date()
     years = today.year - birth.year
     if (today.month, today.day) < (birth.month, birth.day):
         years -= 1

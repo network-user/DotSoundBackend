@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db, get_optional_user
@@ -16,7 +17,6 @@ from app.models.user import User
 from app.repositories.track import TrackRepository
 from app.schemas.card import TrackCardResponse
 from app.schemas.share import ShareResponse
-from app.config import settings
 from app.schemas.snippet import SnippetCreateRequest, SnippetOut
 from app.schemas.track import (
     AdjacentTracksResponse,
@@ -29,10 +29,10 @@ from app.schemas.track import (
 )
 from app.services.card_service import CardService
 from app.services.radio_service import RadioService
-from app.services.snippet_service import SnippetService
 from app.services.search_playcount_drain import (
     mark_playcount_dirty_async,
 )
+from app.services.snippet_service import SnippetService
 from app.services.track_service import TrackService
 
 router = APIRouter()

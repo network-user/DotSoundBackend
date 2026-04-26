@@ -13,9 +13,9 @@
 
 ## Цель
 
-- Пакет **`worker/handlers/`** с регистром `HANDLERS[job_type]` → async обработчики; типы из B1 (audio features, artist features, similarity, catalog normalize).
-- Расширение **`worker/backend_client.py`**: методы claim/result/fail/progress к **новому** base path `/api/v1/internal/compute/...` с тем же HMAC, что audio-compute (копировать схему подписи из существующего клиента).
-- **`worker/main.py`:** второй asyncio-task — цикл claim для generic jobs; флаги `worker_handles_asr`, `worker_handles_compute`, `compute_concurrency_limit` в **`worker/config.py`**.
+- Пакет `**worker/handlers/`** с регистром `HANDLERS[job_type]` → async обработчики; типы из B1 (audio features, artist features, similarity, catalog normalize).
+- Расширение `**worker/backend_client.py`**: методы claim/result/fail/progress к **новому** base path `/api/v1/internal/compute/...` с тем же HMAC, что audio-compute (копировать схему подписи из существующего клиента).
+- `**worker/main.py`:** второй asyncio-task — цикл claim для generic jobs; флаги `worker_handles_asr`, `worker_handles_compute`, `compute_concurrency_limit` в `**worker/config.py`**.
 - Неизвестный `job_type` → fail с понятной причиной.
 - Тесты: `tests/handlers/` или зеркало под структуру репо.
 

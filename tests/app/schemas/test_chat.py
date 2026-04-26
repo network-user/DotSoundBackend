@@ -9,8 +9,8 @@ from app.schemas.chat import (
     MarkReadRequest,
     ReactionRequest,
     ReadNotificationsRequest,
-    UnreadNotificationRequest,
     SendMessageRequest,
+    UnreadNotificationRequest,
     VoteRequest,
 )
 
