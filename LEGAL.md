@@ -25,6 +25,14 @@
 - `docs/legal/SOUNDCLOUD_TERMS_REVIEW.md` — source-specific internal
   review для текущей SoundCloud integration.
 
+## Backlog: 152-ФЗ и функционал
+
+По мере приближения к публичному запуску — **согласовать** с юристом/ДПО
+и при необходимости **изменить** функционал (данные, сроки, внешние
+сервисы) под требования к ПДн. Трекер задач: `TODO.md`, раздел
+**«Соответствие 152-ФЗ / ПДн»**; контекст для агентов: `AGENTS.md`
+(Legal readiness), `docs/project_context.md` (раздел compliance).
+
 ## Как использовать
 
 - Для любого изменения в `upload`, `import`, `playback`,

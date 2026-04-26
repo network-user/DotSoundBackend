@@ -8,6 +8,7 @@ import {
 import type { ColumnDef } from '@tanstack/react-table'
 import { Press } from '@/components/ui/Press'
 import { adminApi } from '../lib/adminApi'
+import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 
@@ -21,8 +22,17 @@ interface UserRow {
   created_at: string
 }
 
+function userDisplayName(u: UserRow): string {
+  return (
+    u.username ??
+    u.email ??
+    `#${u.id}`
+  )
+}
+
 export function UsersRoute() {
   const { t } = useTranslation()
+  const { showConfirm, showAlert } = useAdminPrompt()
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -59,13 +69,23 @@ export function UsersRoute() {
     qc.invalidateQueries({ queryKey: ['admin', 'users'] })
 
   const handleBan = async (u: UserRow) => {
-    if (!window.confirm(`Забанить пользователя ${u.username ?? u.id}?`)) return
+    const ok = await showConfirm(
+      t('admin.users.confirmBan', {
+        name: userDisplayName(u),
+      }),
+      { danger: true },
+    )
+    if (!ok) return
     setBusyId(u.id)
     try {
       await adminApi.banUser(u.id)
       refresh()
     } catch (err) {
-      alert('Ошибка: ' + (err as Error).message)
+      await showAlert(
+        t('admin.common.errorWithMessage', {
+          message: (err as Error).message,
+        }),
+      )
     } finally {
       setBusyId(null)
     }
@@ -77,27 +97,37 @@ export function UsersRoute() {
       await adminApi.unbanUser(u.id)
       refresh()
     } catch (err) {
-      alert('Ошибка: ' + (err as Error).message)
+      await showAlert(
+        t('admin.common.errorWithMessage', {
+          message: (err as Error).message,
+        }),
+      )
     } finally {
       setBusyId(null)
     }
   }
 
   const handleForceLogout = async (u: UserRow) => {
-    if (
-      !window.confirm(
-        `Принудительно завершить все сессии пользователя ${u.username ?? u.id}?`,
-      )
+    const ok = await showConfirm(
+      t('admin.users.confirmForceLogout', {
+        name: userDisplayName(u),
+      }),
     )
-      return
+    if (!ok) return
     setBusyId(u.id)
     try {
       const res = await adminApi.forceLogoutUser(u.id)
-      alert(
-        `Отозвано admin-сессий: ${res.admin_sessions_revoked}. Пользовательский revoke-маркер установлен.`,
+      await showAlert(
+        t('admin.users.forceLogoutResult', {
+          adminCount: res.admin_sessions_revoked,
+        }),
       )
     } catch (err) {
-      alert('Ошибка: ' + (err as Error).message)
+      await showAlert(
+        t('admin.common.errorWithMessage', {
+          message: (err as Error).message,
+        }),
+      )
     } finally {
       setBusyId(null)
     }
@@ -114,7 +144,11 @@ export function UsersRoute() {
       setMessageTarget(null)
       setMessageText('')
     } catch (err) {
-      alert('Ошибка: ' + (err as Error).message)
+      await showAlert(
+        t('admin.common.errorWithMessage', {
+          message: (err as Error).message,
+        }),
+      )
     } finally {
       setBusyId(null)
     }
@@ -122,7 +156,7 @@ export function UsersRoute() {
 
   const columns: ColumnDef<UserRow>[] = [
     {
-      header: 'ID',
+      header: t('admin.users.colId'),
       accessorKey: 'id',
       cell: (i) => (
         <span className="admin-mono">
@@ -131,33 +165,42 @@ export function UsersRoute() {
       ),
     },
     {
-      header: 'Username',
+      header: t('admin.users.colUsername'),
       accessorKey: 'username',
     },
     {
-      header: 'Email',
+      header: t('admin.users.colEmail'),
       accessorKey: 'email',
     },
     {
-      header: 'Status',
+      header: t('admin.users.colStatus'),
+      accessorKey: 'is_active',
       cell: (i) =>
         i.row.original.is_active ? (
-          <StatusPill kind="ok">active</StatusPill>
+          <StatusPill kind="ok">
+            {t('admin.users.active')}
+          </StatusPill>
         ) : (
-          <StatusPill kind="error">banned</StatusPill>
+          <StatusPill kind="error">
+            {t('admin.users.banned')}
+          </StatusPill>
         ),
     },
     {
-      header: 'Admin',
+      header: t('admin.users.colAdmin'),
+      accessorKey: 'is_admin',
       cell: (i) =>
         i.row.original.is_admin ? (
-          <StatusPill kind="warn">admin</StatusPill>
+          <StatusPill kind="warn">
+            {t('admin.users.admin')}
+          </StatusPill>
         ) : (
           '–'
         ),
     },
     {
-      header: 'Created',
+      header: t('admin.users.colCreated'),
+      accessorKey: 'created_at',
       cell: (i) =>
         new Date(
           i.row.original.created_at,
@@ -166,6 +209,7 @@ export function UsersRoute() {
     {
       header: '',
       id: 'actions',
+      enableSorting: false,
       cell: (i) => {
         const u = i.row.original
         const busy = busyId === u.id
@@ -183,7 +227,7 @@ export function UsersRoute() {
                 disabled={busy}
                 onClick={() => handleBan(u)}
               >
-                Бан
+                {t('admin.users.actionBan')}
               </Press>
             ) : (
               <Press
@@ -191,7 +235,7 @@ export function UsersRoute() {
                 disabled={busy}
                 onClick={() => handleUnban(u)}
               >
-                Разбан
+                {t('admin.users.actionUnban')}
               </Press>
             )}
             <Press
@@ -199,7 +243,7 @@ export function UsersRoute() {
               disabled={busy}
               onClick={() => handleForceLogout(u)}
             >
-              Logout
+              {t('admin.users.actionLogout')}
             </Press>
             <Press
               variant="ghost"
@@ -209,7 +253,7 @@ export function UsersRoute() {
                 setMessageText('')
               }}
             >
-              Сообщение
+              {t('admin.users.actionMessage')}
             </Press>
           </div>
         )
@@ -264,6 +308,7 @@ export function UsersRoute() {
       <DataTable
         columns={columns}
         rows={(data?.items || []) as unknown as UserRow[]}
+        enableSorting
       />
       <div className="admin-pagination">
         <Press
@@ -301,10 +346,9 @@ export function UsersRoute() {
         >
           <div className="admin-modal">
             <h3>
-              Сообщение для{' '}
-              {messageTarget.username ??
-                messageTarget.email ??
-                `#${messageTarget.id}`}
+              {t('admin.users.messageTitle', {
+                name: userDisplayName(messageTarget),
+              })}
             </h3>
             <div className="admin-dm-templates">
               {DM_TEMPLATES.map((tpl) => (
@@ -313,11 +357,11 @@ export function UsersRoute() {
                   type="button"
                   className="admin-dm-template-btn"
                   onClick={() =>
-                    setMessageText(tpl.text)
+                    setMessageText(t(tpl.textKey))
                   }
-                  title={tpl.text}
+                  title={t(tpl.textKey)}
                 >
-                  {tpl.label}
+                  {t(tpl.labelKey)}
                 </button>
               ))}
             </div>
@@ -328,12 +372,16 @@ export function UsersRoute() {
               onChange={(e) =>
                 setMessageText(e.target.value)
               }
-              placeholder="Текст сообщения…"
+              placeholder={t(
+                'admin.users.messageBodyPlaceholder',
+              )}
               style={{ width: '100%', resize: 'vertical' }}
             />
             {messageText.trim() && (
               <div className="admin-dm-preview">
-                <strong>Команда .sound:</strong>
+                <strong>
+                  {t('admin.users.messageAsTeam')}
+                </strong>
                 <br />
                 {messageText}
               </div>
@@ -353,7 +401,7 @@ export function UsersRoute() {
                   setMessageText('')
                 }}
               >
-                Отмена
+                {t('admin.users.messageCancel')}
               </Press>
               <Press
                 variant="primary"
@@ -361,17 +409,15 @@ export function UsersRoute() {
                   !messageText.trim() ||
                   busyId === messageTarget.id
                 }
-                onClick={() => {
-                  if (
-                    !window.confirm(
-                      'Отправить сообщение пользователю как «Команда .sound»?',
-                    )
+                onClick={async () => {
+                  const ok = await showConfirm(
+                    t('admin.users.sendMessageConfirm'),
                   )
-                    return
+                  if (!ok) return
                   handleSendMessage()
                 }}
               >
-                Отправить
+                {t('admin.users.messageSend')}
               </Press>
             </div>
           </div>
@@ -383,37 +429,27 @@ export function UsersRoute() {
 
 const DM_TEMPLATES: Array<{
   id: string
-  label: string
-  text: string
+  labelKey: string
+  textKey: string
 }> = [
   {
     id: 'welcome',
-    label: 'Приветствие',
-    text:
-      'Здравствуйте! Спасибо, что пользуетесь .sound. ' +
-      'Если возникнут вопросы — напишите в этот чат.',
+    labelKey: 'admin.users.dmTemplateWelcomeLabel',
+    textKey: 'admin.users.dmTemplateWelcomeText',
   },
   {
     id: 'warning',
-    label: 'Предупреждение',
-    text:
-      'Здравствуйте. Просим обратить внимание на правила платформы: ' +
-      'https://dotsound.app/legal/terms. Повторное нарушение может ' +
-      'привести к ограничению доступа.',
+    labelKey: 'admin.users.dmTemplateWarningLabel',
+    textKey: 'admin.users.dmTemplateWarningText',
   },
   {
     id: 'rights',
-    label: 'Жалоба правообладателя',
-    text:
-      'На один из ваших треков поступила жалоба правообладателя. ' +
-      'Мы временно ограничили доступ. Подробнее: ' +
-      'https://dotsound.app/legal/copyright',
+    labelKey: 'admin.users.dmTemplateRightsLabel',
+    textKey: 'admin.users.dmTemplateRightsText',
   },
   {
     id: 'restored',
-    label: 'Восстановление',
-    text:
-      'Доступ к вашему аккаунту восстановлен. ' +
-      'Спасибо за терпение.',
+    labelKey: 'admin.users.dmTemplateRestoredLabel',
+    textKey: 'admin.users.dmTemplateRestoredText',
   },
 ]

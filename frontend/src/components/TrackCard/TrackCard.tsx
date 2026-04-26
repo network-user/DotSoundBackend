@@ -1,4 +1,5 @@
 import { useRef, useState, type MouseEvent } from 'react'
+import { useTranslation } from 'react-i18next'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
@@ -32,6 +33,7 @@ function getCatalogLabel(track: Track): string | null {
 }
 
 export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
+  const { t } = useTranslation()
   const { isLiked, toggleLike } = useLikes()
   const { track: currentTrack } = usePlayerMeta()
   const { playTrack, addToQueue } = usePlayerActions()
@@ -47,7 +49,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
       longPressFiredRef.current = true
       haptic('medium')
       addToQueue(track)
-      toast.success('Добавлено в очередь')
+      toast.success(t('trackCard.queued'))
     }, 550)
   }
 
@@ -120,7 +122,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
             {isOwner && !track.is_active && (
               <span
                 className="track-badge track-badge-hidden"
-                title="Скрыто модератором"
+                title={t('trackCard.hiddenByMod')}
               >
                 MOD
               </span>
@@ -131,7 +133,9 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
             {track.source === 'telegram' && <span className="track-badge track-badge-tg">TG</span>}
             {catalogLabel && <span className="track-badge">{catalogLabel}</span>}
           </div>
-          <p className="track-card-artist">{track.artist ?? 'Неизвестный исполнитель'}</p>
+          <p className="track-card-artist">
+            {track.artist ?? t('trackCard.unknownArtist')}
+          </p>
           <p className="track-card-meta">
             <Icon name="play" size={11} className="meta-icon" />
             {' '}{track.play_count}
@@ -139,7 +143,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
           </p>
           {(track.source_url || track.sc_url) && (
             <span className="track-source">
-              внешний источник:{' '}
+              {t('search.extSourceLabel')}{' '}
               <a
                 href={track.source_url || track.sc_url || '#'}
                 target="_blank"
@@ -152,26 +156,40 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
             </span>
           )}
           {track.access_mode === 'third_party_stream' && (
-            <span className="track-source">режим доступа: внешний поток стороннего сервиса</span>
+            <span className="track-source">
+              {t('trackCard.accessStream')}
+            </span>
           )}
           {track.catalog_type === 'ugc' && (
-            <span className="track-source">тип каталога: пользовательская загрузка</span>
+            <span className="track-source">
+              {t('trackCard.catUgc')}
+            </span>
           )}
           {track.catalog_type === 'licensed' && (
-            <span className="track-source">тип каталога: лицензированный материал</span>
+            <span className="track-source">
+              {t('trackCard.catLicensed')}
+            </span>
           )}
           {track.catalog_type === 'external_reference' && (
-            <span className="track-source">тип каталога: внешний reference</span>
+            <span className="track-source">
+              {t('trackCard.catRef')}
+            </span>
           )}
           {!track.source_url && !track.sc_url && track.source === 'telegram' && (
-            <span className="track-source">источник: Telegram</span>
+            <span className="track-source">
+              {t('trackCard.sourceTg')}
+            </span>
           )}
         </div>
         <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
           <button
             className={`track-card-like${liked ? ' liked spring' : ''}`}
-            title="Лайк"
-            aria-label={liked ? 'Убрать лайк' : 'Поставить лайк'}
+            title={t('trackCard.like')}
+            aria-label={
+              liked
+                ? t('trackCard.unlike')
+                : t('trackCard.like')
+            }
             aria-pressed={liked}
             onClick={handleLike}
           >
@@ -181,14 +199,22 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
             <>
               <button
                 className="track-card-visibility"
-                title={track.is_public ? 'Сделать приватным' : 'Сделать публичным'}
+                title={
+                  track.is_public
+                    ? t('trackCard.private')
+                    : t('trackCard.public')
+                }
                 onClick={handleToggleVisibility}
               >
                 <Icon name={track.is_public ? 'eye' : 'lock'} size={16} />
               </button>
               <button
                 className={`track-card-delete${confirmingDelete ? ' danger' : ''}`}
-                title={confirmingDelete ? 'Нажмите ещё раз для удаления' : 'Удалить трек'}
+                title={
+                  confirmingDelete
+                    ? t('trackCard.deleteConfirm')
+                    : t('trackCard.delete')
+                }
                 onClick={handleDelete}
               >
                 <Icon name={confirmingDelete ? 'check' : 'trash'} size={16} />

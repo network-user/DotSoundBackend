@@ -2,7 +2,11 @@ import { NavLink } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { useAdminMenu } from '@/components/Admin/AdminContext'
 
-export function AdminMenu() {
+export function AdminMenu({
+  onNavigate,
+}: {
+  onNavigate?: () => void
+} = {}) {
   const items = useAdminMenu()
   if (!items.length) {
     return null
@@ -17,6 +21,7 @@ export function AdminMenu() {
           key={item.id}
           to={item.route}
           end
+          onClick={onNavigate}
           className={({ isActive }) =>
             isActive
               ? 'admin-menu__item is-active'

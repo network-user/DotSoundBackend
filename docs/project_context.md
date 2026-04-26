@@ -1,4 +1,4 @@
-# DotSound — Project Context (auto-generated 2026-04-16, обновлено 2026-04-24)
+# DotSound — Project Context (auto-generated 2026-04-16, обновлено 2026-04-26)
 
 > Открывать при каждом новом сеансе. Обновлять при архитектурных изменениях.
 
@@ -13,13 +13,14 @@
 
 ## Четыре репозитория
 
+Пути в таблице — **относительно корня клона DotSoundBackend** (соседние репозитории лежат в одном каталоге с `DotSoundBackend`).
 
-| Репо                      | Путь                                                  | Роль                                                                                                                                                    |
-| ------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **DotSoundBackend**       | `C:\Users\User\PycharmProjects\DotSoundBackend`       | FastAPI + React + PostgreSQL + Redis + MinIO; опционально **Elasticsearch 8** для полнотекстового поиска и suggest. Hub: оркестрация, БД, очередь jobs. |
-| **DotSoundBot**           | `C:\Users\User\PycharmProjects\DotSoundBot`           | Telegram-бот (aiogram 3). Только UI.                                                                                                                    |
-| **DotSoundPrivateCore**   | `C:\Users\User\PycharmProjects\DotSoundPrivateCore`   | Чистый Python, без фреймворков. Алгоритмы, константы, политики.                                                                                         |
-| **DotSoundComputeWorker** | `C:\Users\User\PycharmProjects\DotSoundComputeWorker` | Pull-based ASR-воркер (faster-whisper + опциональный Demucs). Дёргает Backend по HMAC, делает тяжёлый compute, отдаёт результат.                        |
+| Репо                      | Расположение (от корня DotSoundBackend) | Роль                                                                                                                                                    |
+| ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **DotSoundBackend**       | `.`                                      | FastAPI + React + PostgreSQL + Redis + MinIO; опционально **Elasticsearch 8** для полнотекстового поиска и suggest. Hub: оркестрация, БД, очередь jobs.   |
+| **DotSoundBot**           | `../DotSoundBot`                         | Telegram-бот (aiogram 3). Только UI.                                                                                                                    |
+| **DotSoundPrivateCore**   | `../DotSoundPrivateCore`                 | Чистый Python, без фреймворков. Алгоритмы, константы, политики.                                                                                          |
+| **DotSoundComputeWorker** | `../DotSoundComputeWorker`               | Pull-based ASR-воркер (faster-whisper + опциональный Demucs). Дёргает Backend по HMAC, делает тяжёлый compute, отдаёт результат.                         |
 
 
 **Правила:**
@@ -310,4 +311,12 @@ WebSocket на Redis, статистика для владельца трека,
 - `DotSoundPrivateCore/docs/ai-boundary-policy.md` — то же с примерами
 - `DotSoundPrivateCore/agents.md` — правила для AI-агентов в PrivateCore
 - `DotSoundBackend/agents.md` — правила для AI-агентов в Backend
+
+## Соответствие 152-ФЗ / ПДн (backlog)
+
+До публичного релиза: по заключению юриста/ДПО **привести продукт и
+код** (сбор, хранение, логи, интеграции, сроки) в соответствие с
+требованиями к обработке ПДн. Список задач — `TODO.md`, раздел
+**«Соответствие 152-ФЗ / ПДн»**; юридический пакет — `LEGAL.md`,
+`docs/legal/PRIVACY_POLICY.md`.
 

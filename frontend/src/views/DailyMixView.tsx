@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { Icon } from '@/components/Icon/Icon'
@@ -6,6 +7,7 @@ import { api } from '@/lib/api'
 import type { DailyPlaylistResponse } from '@/types/api'
 
 export function DailyMixView() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [data, setData] = useState<DailyPlaylistResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -47,14 +49,16 @@ export function DailyMixView() {
           <Icon name="chevron" size={20} className="back-chevron" />
         </button>
         <div style={{ flex: 1 }}>
-          <h2>Плейлист дня</h2>
-          <span className="hint">Подборка на основе ваших предпочтений</span>
+          <h2>{t('dailyMix.title')}</h2>
+          <span className="hint">
+            {t('dailyMix.hint')}
+          </span>
         </div>
         <button
           className="icon-btn"
           onClick={handleRefresh}
           disabled={refreshing || loading}
-          aria-label="Обновить плейлист"
+          aria-label={t('dailyMix.refreshAria')}
         >
           <Icon
             name="refresh"
@@ -66,13 +70,15 @@ export function DailyMixView() {
 
       <TrackList
         tracks={internalTracks}
-        emptyMessage="Недостаточно данных для создания плейлиста"
+        emptyMessage={t('dailyMix.empty')}
       />
 
       {!loading && externalTracks.length > 0 && (
         <>
           <div className="section-header">
-            <span className="section-title">Открытия</span>
+            <span className="section-title">
+              {t('dailyMix.discoveries')}
+            </span>
           </div>
           <TrackList
             tracks={externalTracks}

@@ -49,8 +49,15 @@ export function HomeView() {
       >
         <div style={{ fontSize: 32, lineHeight: 1 }}>📅</div>
         <div style={{ flex: 1, textAlign: 'left' }}>
-          <div style={{ fontWeight: 600, fontSize: 15 }}>Плейлист дня</div>
-          <div className="hint" style={{ fontSize: 12 }}>Персональная подборка + открытия</div>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>
+            {t('home.dayPlaylistTitle')}
+          </div>
+          <div
+            className="hint"
+            style={{ fontSize: 12 }}
+          >
+            {t('home.dayPlaylistHint')}
+          </div>
         </div>
         <Icon name="chevron" size={18} className="text-secondary" />
       </button>

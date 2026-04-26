@@ -1,0 +1,142 @@
+{
+  "app": {
+    "errorTitle": "Something went wrong",
+    "tryAgain": "Try again",
+    "sectionLoadError": "Could not load this section",
+    "reload": "Reload"
+  },
+  "common": {
+    "back": "Back",
+    "close": "Close"
+  },
+  "home": {
+    "dayPlaylistTitle": "Day playlist",
+    "dayPlaylistHint": "Personal blend + new picks"
+  },
+  "dailyMix": {
+    "title": "Day playlist",
+    "hint": "Based on your taste",
+    "refreshAria": "Refresh playlist",
+    "empty": "Not enough data to build the playlist",
+    "discoveries": "New picks"
+  },
+  "library": {
+    "tabLiked": "Favorites",
+    "tabPlaylists": "Playlists",
+    "tabOffline": "Downloads",
+    "tabHistory": "History"
+  },
+  "admin": {
+    "users": {
+      "dmTemplateWelcomeLabel": "Welcome",
+      "dmTemplateWelcomeText": "Hi! Thank you for using .sound. If you have any questions, reply in this chat.",
+      "dmTemplateWarningLabel": "Warning",
+      "dmTemplateWarningText": "Hi. Please review the platform terms: https://dotsound.app/legal/terms. Repeated violations may result in access restrictions.",
+      "dmTemplateRightsLabel": "Rights holder complaint",
+      "dmTemplateRightsText": "We received a report about one of your tracks. We have temporarily restricted access. Read more: https://dotsound.app/legal/copyright",
+      "dmTemplateRestoredLabel": "Restored",
+      "dmTemplateRestoredText": "Your account access has been restored. Thank you for your patience."
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "eq": "Equalizer",
+    "video": "Video clips",
+    "monochrome": "Monochrome",
+    "pwaInstallHint": "Open the browser menu and choose “Install” or “Add to Home screen”. If the option is missing, the app is already installed.",
+    "linked": "Linked accounts",
+    "openInBrowser": "Open in browser",
+    "installAsApp": "Install as app",
+    "lockScreenHint": "To control music from the lock screen, open .sound in a browser",
+    "soundQuality": "Sound quality",
+    "comingSoon": "soon",
+    "aboutApp": "About the app",
+    "logOut": "Log out"
+  },
+  "pwa": {
+    "installed": "App installed",
+    "safari": "In Safari, tap Share, then “Add to Home screen”.",
+    "ios": "Tap Share (⋯) in the toolbar, then “Add to Home screen”.",
+    "other": "Use the browser menu: “Install” or “Add to Home (screen)”.",
+    "valueProp": "Open the player from the home screen in one tap.",
+    "installLabel": "Install .sound",
+    "installCta": "Install",
+    "ok": "OK",
+    "closeAria": "Close"
+  },
+  "search": {
+    "placeholder": "Track or artist…",
+    "hint": "Type a track or artist",
+    "recent": "Recent",
+    "onPlatform": "On platform",
+    "artists": "Artists",
+    "artistsRowAria": "Artist matches",
+    "emptyForQuery": "Nothing in the catalog for this query—try YouTube, Bandcamp, or SoundCloud below.",
+    "youtube": "YouTube",
+    "bandcamp": "Bandcamp",
+    "sc": "SoundCloud",
+    "external": "· external",
+    "afterAddStream": "After adding, the track plays as a stream from a third party.",
+    "addAndLike": "Add and like",
+    "addAndPlay": "Add and play",
+    "ytSection": "YouTube · external",
+    "bcSection": "Bandcamp · external",
+    "scSection": "SoundCloud · external",
+    "extSourceLabel": "External source:",
+    "emptyCatalogHint": "Nothing in the catalog for this query—try YouTube, Bandcamp, and SoundCloud below."
+  },
+  "trackCard": {
+    "queued": "Added to queue",
+    "hiddenByMod": "Hidden by moderation",
+    "unknownArtist": "Unknown artist",
+    "extSource": "external",
+    "accessStream": "Access: third-party stream",
+    "catUgc": "Catalog: user upload",
+    "catLicensed": "Catalog: licensed",
+    "catRef": "Catalog: external reference",
+    "sourceTg": "source: Telegram",
+    "unlike": "Remove like",
+    "like": "Like",
+    "public": "Make public",
+    "private": "Make private",
+    "deleteConfirm": "Tap again to delete the track",
+    "delete": "Delete track"
+  },
+  "upload": {
+    "urlTrack": "Track link",
+    "urlVideo": "Video link",
+    "public": "Public",
+    "getInfo": "Get info",
+    "loading": "Loading…",
+    "addAndPlay": "Add and play",
+    "errBandcamp": {
+      "400": "Invalid link. Use a track URL on bandcamp.com",
+      "402": "This track must be purchased on Bandcamp and is not available for streaming",
+      "404": "Track not found or removed",
+      "422": "Could not get track data. The link should point to a single track.",
+      "def": "Error. Check the link."
+    },
+    "errYoutube": {
+      "400": "Invalid link. Use a youtube.com or youtu.be video URL",
+      "404": "Video not found or unavailable",
+      "422": "Could not get the audio stream. The video may be restricted.",
+      "503": "YouTube is temporarily unavailable. Try again later.",
+      "def": "Error. Check the link."
+    }
+  },
+  "lyrics": {
+    "editor": {
+      "enterText": "Enter text",
+      "saveError": "Failed to save",
+      "titleEdit": "Edit lyrics",
+      "titleAdd": "Add lyrics",
+      "placeholder": "Paste song lyrics.\nEach line is a separate verse.",
+      "saveText": "Save lyrics",
+      "addTimecodes": "Add timecodes",
+      "timecodeModeAria": "Set timecodes",
+      "tapToMark": "Tap to set marks",
+      "noTimecodes": "No timecodes",
+      "save": "Save"
+    }
+  }
+}

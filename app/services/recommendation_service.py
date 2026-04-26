@@ -2,9 +2,11 @@ import json
 from datetime import UTC, datetime, timedelta, timezone
 
 import structlog
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_client
+from app.models.listen_event import ListenEvent as ListenEventModel
 from app.models.track import Track
 from app.repositories.preference import (
     PreferenceRepository,
@@ -16,6 +18,12 @@ from app.repositories.signal import (
     ListenEventRepository,
 )
 from app.schemas.track import TrackResponse
+from app.services.recsys_telemetry import (
+    RecsysTelemetryService,
+)
+from app.services.track_features_builder import (
+    build_track_features,
+)
 from dotsound_private_core.services.recommendation_engine import (
     ListenEvent as RecListenEvent,
     ScoredTrack,
@@ -31,11 +39,17 @@ from dotsound_private_core.services.recommendation_engine import (
 from dotsound_private_core.services.scoring import (
     determine_maturity,
 )
+from dotsound_private_core.services.signal_policy import (
+    IMPLICIT_DISLIKE_MIN_OCCURRENCES,
+    IMPLICIT_DISLIKE_QUICK_SKIP_SECONDS,
+    IMPLICIT_DISLIKE_WINDOW_DAYS,
+)
 
 _DAILY_SIZE = 30
 _WEEKLY_SIZE = 50
-_EXTERNAL_RATIO = 0.7
 _GLOBAL_TOP_SIZE = 20
+_UNSEEN_POOL_LIMIT = 100
+_RADIO_CACHE_TTL = 30 * 60
 
 
 def _midnight_ttl() -> int:
@@ -70,6 +84,9 @@ class RecommendationService:
         self._listen_repo = ListenEventRepository(
             session
         )
+        self._telemetry = RecsysTelemetryService(
+            session
+        )
         self._session = session
 
     async def _build_user_prefs(
@@ -85,7 +102,6 @@ class RecommendationService:
         )
 
         from app.models.dislike import Dislike
-        from sqlalchemy import select
 
         dislike_result = (
             await self._session.execute(
@@ -96,6 +112,12 @@ class RecommendationService:
         )
         disliked_ids = set(
             dislike_result.scalars().all()
+        )
+
+        implicit_disliked_ids = (
+            await self._get_implicit_dislike_ids(
+                user_id
+            )
         )
 
         return UserPrefs(
@@ -116,7 +138,42 @@ class RecommendationService:
             ),
             liked_track_ids=liked_ids,
             disliked_track_ids=disliked_ids,
+            implicit_dislike_track_ids=implicit_disliked_ids,
         )
+
+    async def _get_implicit_dislike_ids(
+        self, user_id: int
+    ) -> set[int]:
+        cutoff = datetime.now(
+            timezone.utc
+        ) - timedelta(
+            days=IMPLICIT_DISLIKE_WINDOW_DAYS
+        )
+        stmt = (
+            select(
+                ListenEventModel.track_id,
+                func.count(
+                    ListenEventModel.id
+                ).label("c"),
+            )
+            .where(
+                ListenEventModel.user_id == user_id,
+                ListenEventModel.skipped.is_(True),
+                ListenEventModel.duration_listened_seconds
+                < IMPLICIT_DISLIKE_QUICK_SKIP_SECONDS,
+                ListenEventModel.created_at
+                >= cutoff,
+            )
+            .group_by(ListenEventModel.track_id)
+            .having(
+                func.count(ListenEventModel.id)
+                >= IMPLICIT_DISLIKE_MIN_OCCURRENCES
+            )
+        )
+        rows = (
+            await self._session.execute(stmt)
+        ).all()
+        return {tid for tid, _ in rows}
 
     async def _build_listen_history(
         self, user_id: int
@@ -132,6 +189,10 @@ class RecommendationService:
                 completed=e.completed,
                 skipped=e.skipped,
                 created_at=e.created_at,
+                duration_listened_seconds=float(
+                    e.duration_listened_seconds or 0
+                ),
+                source_context=e.source_context,
             )
             for e in events
         ]
@@ -139,25 +200,26 @@ class RecommendationService:
     async def _tracks_to_features(
         self, tracks: list[Track]
     ) -> list[TrackFeatures]:
-        track_ids = [t.id for t in tracks]
-        artist_map = (
-            await self._rec_repo.get_track_artist_map(
-                track_ids
+        return await build_track_features(
+            self._session, tracks
+        )
+
+    async def _get_unseen_candidates(
+        self,
+        user_id: int,
+        limit: int = _UNSEEN_POOL_LIMIT,
+        genre_filter: list[str] | None = None,
+    ) -> list[Track]:
+        listened = (
+            await self._rec_repo.get_listened_track_ids(
+                user_id
             )
         )
-        return [
-            TrackFeatures(
-                track_id=t.id,
-                genre=t.genre,
-                artist_ids=artist_map.get(
-                    t.id, []
-                ),
-                play_count=t.play_count,
-                created_at=t.created_at,
-                source=t.source,
-            )
-            for t in tracks
-        ]
+        return await self._rec_repo.get_candidate_tracks(
+            limit=limit,
+            genre_filter=genre_filter,
+            exclude_ids=listened,
+        )
 
     async def _import_external_candidates(
         self,
@@ -429,19 +491,47 @@ class RecommendationService:
         if not candidates:
             return []
 
-        features = await self._tracks_to_features(
-            candidates
+        unseen = await self._get_unseen_candidates(
+            user_id
         )
+        all_tracks = candidates + [
+            t
+            for t in unseen
+            if t.id
+            not in {c.id for c in candidates}
+        ]
+        features = await self._tracks_to_features(
+            all_tracks
+        )
+        feat_by_id = {f.track_id: f for f in features}
+        cand_features = [
+            feat_by_id[t.id] for t in candidates
+        ]
+        unseen_features = [
+            feat_by_id[t.id]
+            for t in unseen
+            if t.id in feat_by_id
+        ]
         scored = build_daily_mix(
-            user_prefs, history, features, size
+            user_prefs,
+            history,
+            cand_features,
+            size,
+            unseen_candidates=unseen_features,
         )
 
-        track_map = {t.id: t for t in candidates}
-        return [
+        track_map = {t.id: t for t in all_tracks}
+        result = [
             track_map[s.track_id]
             for s in scored
             if s.track_id in track_map
         ]
+        await self._telemetry.record_impressions(
+            user_id=user_id,
+            surface="daily_mix",
+            track_ids=[t.id for t in result],
+        )
+        return result
 
     async def get_radio(
         self,
@@ -452,6 +542,19 @@ class RecommendationService:
         from app.repositories.track import (
             TrackRepository,
         )
+
+        redis = get_redis_client()
+        cache_key = (
+            f"rec:radio:{user_id}:{seed_track_id}"
+            if user_id
+            else None
+        )
+        if cache_key:
+            cached = await redis.get(cache_key)
+            if cached:
+                return await self._rec_repo.get_tracks_by_ids(
+                    json.loads(cached)
+                )
 
         track_repo = TrackRepository(self._session)
         seed = await track_repo.get_by_id(
@@ -468,11 +571,39 @@ class RecommendationService:
         if not candidates:
             return []
 
-        all_tracks = [seed] + candidates
+        unseen: list[Track] = []
+        if user_id:
+            unseen = await self._get_unseen_candidates(
+                user_id
+            )
+
+        all_tracks = [seed] + candidates + [
+            t
+            for t in unseen
+            if t.id != seed.id
+            and t.id
+            not in {c.id for c in candidates}
+        ]
         features = await self._tracks_to_features(
             all_tracks
         )
-        seed_feat = features[0]
+        feat_by_id = {f.track_id: f for f in features}
+        seed_feat = feat_by_id[seed.id]
+        cand_features = [
+            feat_by_id[t.id]
+            for t in candidates
+            if t.id != seed.id
+        ]
+        unseen_features = (
+            [
+                feat_by_id[t.id]
+                for t in unseen
+                if t.id in feat_by_id
+                and t.id != seed.id
+            ]
+            if unseen
+            else None
+        )
 
         history: list[RecListenEvent] = []
         if user_id:
@@ -485,16 +616,30 @@ class RecommendationService:
         scored = build_radio_queue(
             seed_feat,
             history,
-            features[1:],
+            cand_features,
             queue_size,
+            unseen_candidates=unseen_features,
         )
 
-        track_map = {t.id: t for t in candidates}
-        return [
+        track_map = {t.id: t for t in all_tracks}
+        result = [
             track_map[s.track_id]
             for s in scored
             if s.track_id in track_map
         ]
+        if cache_key and result:
+            await redis.setex(
+                cache_key,
+                _RADIO_CACHE_TTL,
+                json.dumps([t.id for t in result]),
+            )
+        if user_id and result:
+            await self._telemetry.record_impressions(
+                user_id=user_id,
+                surface="radio",
+                track_ids=[t.id for t in result],
+            )
+        return result
 
     async def get_global_top(
         self, limit: int = _GLOBAL_TOP_SIZE
@@ -536,11 +681,33 @@ class RecommendationService:
                 limit=200
             )
         )
-        features = await self._tracks_to_features(
-            candidates
+        unseen = await self._get_unseen_candidates(
+            user_id
         )
+        all_tracks = candidates + [
+            t
+            for t in unseen
+            if t.id
+            not in {c.id for c in candidates}
+        ]
+        features = await self._tracks_to_features(
+            all_tracks
+        )
+        feat_by_id = {f.track_id: f for f in features}
+        cand_features = [
+            feat_by_id[t.id] for t in candidates
+        ]
+        unseen_features = [
+            feat_by_id[t.id]
+            for t in unseen
+            if t.id in feat_by_id
+        ]
         scored = build_daily_mix(
-            user_prefs, history, features, _DAILY_SIZE
+            user_prefs,
+            history,
+            cand_features,
+            _DAILY_SIZE,
+            unseen_candidates=unseen_features,
         )
 
         from app.services.external_discovery_service import (
@@ -551,10 +718,10 @@ class RecommendationService:
             self._session
         ).discover(user_prefs.preferred_genres)
         int_scored, ext_picked = merge_hybrid_playlist(
-            scored, external, _DAILY_SIZE, _EXTERNAL_RATIO
+            scored, external, _DAILY_SIZE
         )
 
-        track_map = {t.id: t for t in candidates}
+        track_map = {t.id: t for t in all_tracks}
         internal_ids = [
             s.track_id
             for s in int_scored
@@ -563,6 +730,12 @@ class RecommendationService:
         global_top = await self.get_global_top()
         external_track_ids = await self._import_external_candidates(
             ext_picked, user_id
+        )
+        await self._telemetry.record_impressions(
+            user_id=user_id,
+            surface="daily_playlist",
+            track_ids=internal_ids
+            + external_track_ids,
         )
 
         ttl = _midnight_ttl()
@@ -603,11 +776,33 @@ class RecommendationService:
                 limit=300
             )
         )
-        features = await self._tracks_to_features(
-            candidates
+        unseen = await self._get_unseen_candidates(
+            user_id, limit=150
         )
+        all_tracks = candidates + [
+            t
+            for t in unseen
+            if t.id
+            not in {c.id for c in candidates}
+        ]
+        features = await self._tracks_to_features(
+            all_tracks
+        )
+        feat_by_id = {f.track_id: f for f in features}
+        cand_features = [
+            feat_by_id[t.id] for t in candidates
+        ]
+        unseen_features = [
+            feat_by_id[t.id]
+            for t in unseen
+            if t.id in feat_by_id
+        ]
         scored = build_weekly_mix(
-            user_prefs, history, features, _WEEKLY_SIZE
+            user_prefs,
+            history,
+            cand_features,
+            _WEEKLY_SIZE,
+            unseen_candidates=unseen_features,
         )
 
         from app.services.external_discovery_service import (
@@ -624,10 +819,9 @@ class RecommendationService:
             scored,
             external,
             _WEEKLY_SIZE,
-            _EXTERNAL_RATIO,
         )
 
-        track_map = {t.id: t for t in candidates}
+        track_map = {t.id: t for t in all_tracks}
         internal_ids = [
             s.track_id
             for s in int_scored
@@ -635,6 +829,12 @@ class RecommendationService:
         ]
         external_track_ids = await self._import_external_candidates(
             ext_picked, user_id
+        )
+        await self._telemetry.record_impressions(
+            user_id=user_id,
+            surface="weekly_playlist",
+            track_ids=internal_ids
+            + external_track_ids,
         )
 
         ttl = _weekly_ttl()

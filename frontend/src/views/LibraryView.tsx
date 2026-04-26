@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { LikedView } from '@/views/LikedView'
 import { PlaylistsView } from '@/views/PlaylistsView'
@@ -11,11 +12,14 @@ type Tab = 'liked' | 'playlists' | 'offline' | 'history'
 
 const STORAGE_KEY = 'library-tab'
 
-const TABS: Array<{ id: Tab; label: string }> = [
-  { id: 'liked', label: 'Любимое' },
-  { id: 'playlists', label: 'Плейлисты' },
-  { id: 'offline', label: 'Скачанные' },
-  { id: 'history', label: 'История' },
+const TABS: Array<{
+  id: Tab
+  labelKey: string
+}> = [
+  { id: 'liked', labelKey: 'library.tabLiked' },
+  { id: 'playlists', labelKey: 'library.tabPlaylists' },
+  { id: 'offline', labelKey: 'library.tabOffline' },
+  { id: 'history', labelKey: 'library.tabHistory' },
 ]
 
 function isTab(s: string | null): s is Tab {
@@ -40,6 +44,7 @@ function tabFromStorageDefault(): Tab {
 }
 
 export function LibraryView() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] =
     useSearchParams()
@@ -92,22 +97,29 @@ export function LibraryView() {
         >
           <div style={{ fontSize: 32, lineHeight: 1 }}>📅</div>
           <div style={{ flex: 1, textAlign: 'left' }}>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>Плейлист дня</div>
-            <div className="hint" style={{ fontSize: 12 }}>Персональная подборка + открытия</div>
+            <div style={{ fontWeight: 600, fontSize: 15 }}>
+              {t('home.dayPlaylistTitle')}
+            </div>
+            <div
+              className="hint"
+              style={{ fontSize: 12 }}
+            >
+              {t('home.dayPlaylistHint')}
+            </div>
           </div>
           <Icon name="chevron" size={18} />
         </button>
       </div>
 
       <div className="library-tabs">
-        {TABS.map((t) => (
+        {TABS.map((row) => (
           <button
-            key={t.id}
+            key={row.id}
             type="button"
-            className={`library-tab${tab === t.id ? ' active' : ''}`}
-            onClick={() => handleTab(t.id)}
+            className={`library-tab${tab === row.id ? ' active' : ''}`}
+            onClick={() => handleTab(row.id)}
           >
-            {t.label}
+            {t(row.labelKey)}
           </button>
         ))}
       </div>

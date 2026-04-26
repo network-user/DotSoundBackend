@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { api } from '@/lib/api'
 import { usePlayer } from '@/store/PlayerContext'
@@ -36,6 +37,7 @@ export function LyricsEditor({
   onSaved,
   onCancel,
 }: Props) {
+  const { t } = useTranslation()
   const {
     currentTime,
     duration,
@@ -191,7 +193,7 @@ export function LyricsEditor({
 
   const handleSaveText = async () => {
     if (!plainText.trim()) {
-      setError('Введите текст')
+      setError(t('lyrics.editor.enterText'))
       return
     }
     if (localAudioUrl) {
@@ -214,7 +216,7 @@ export function LyricsEditor({
       )
       onSaved(saved)
     } catch {
-      setError('Ошибка сохранения')
+      setError(t('lyrics.editor.saveError'))
     } finally {
       setSaving(false)
     }
@@ -248,7 +250,7 @@ export function LyricsEditor({
       )
       onSaved(saved)
     } catch {
-      setError('Ошибка сохранения')
+      setError(t('lyrics.editor.saveError'))
     } finally {
       setSaving(false)
     }
@@ -260,8 +262,8 @@ export function LyricsEditor({
         <div className="le-header">
           <span className="le-title">
             {existingLyrics
-              ? 'Редактировать текст'
-              : 'Добавить текст'}
+              ? t('lyrics.editor.titleEdit')
+              : t('lyrics.editor.titleAdd')}
           </span>
           <button
             className="icon-btn"
@@ -274,10 +276,7 @@ export function LyricsEditor({
           className="form-input le-textarea"
           rows={10}
           maxLength={10000}
-          placeholder={
-            'Вставьте текст песни\n' +
-            'Каждая строка — отдельная строфа'
-          }
+          placeholder={t('lyrics.editor.placeholder')}
           value={plainText}
           onChange={(e) =>
             setPlainText(e.target.value)
@@ -292,7 +291,7 @@ export function LyricsEditor({
             onClick={handleSaveText}
             disabled={saving || !plainText.trim()}
           >
-            Сохранить текст
+            {t('lyrics.editor.saveText')}
           </button>
           {plainText.trim() && (
             <button
@@ -300,7 +299,7 @@ export function LyricsEditor({
               onClick={enterSync}
               disabled={saving}
             >
-              Добавить таймкоды
+              {t('lyrics.editor.addTimecodes')}
             </button>
           )}
         </div>
@@ -317,7 +316,7 @@ export function LyricsEditor({
       className="le-fullscreen le-fullscreen--portal"
       role="dialog"
       aria-modal="true"
-      aria-label="Расстановка таймкодов"
+      aria-label={t('lyrics.editor.timecodeModeAria')}
     >
       <div className="le-fs-header">
         <button
@@ -385,7 +384,7 @@ export function LyricsEditor({
           {lines[currentLine] || '—'}
         </p>
         <p className="le-fs-hint">
-          Тапни чтобы отметить
+          {t('lyrics.editor.tapToMark')}
         </p>
       </div>
 
@@ -427,18 +426,18 @@ export function LyricsEditor({
           disabled={saving}
           style={{ flex: 1 }}
         >
-          Без таймкодов
+          {t('lyrics.editor.noTimecodes')}
         </button>
         <button
           className="btn-primary"
           onClick={handleSaveSync}
           disabled={
             saving ||
-            timecodes.every((t) => t === null)
+            timecodes.every((tc) => tc === null)
           }
           style={{ flex: 1 }}
         >
-          Сохранить
+          {t('lyrics.editor.save')}
         </button>
       </div>
     </div>

@@ -7,6 +7,7 @@ import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 import { useStepUp } from '../components/auth/StepUpDialog'
+import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { useCapability } from '../hooks/useCapability'
 
 interface DeviceRow {
@@ -28,6 +29,7 @@ interface FlagRow {
 
 export function SettingsRoute() {
   const { t } = useTranslation()
+  const { showConfirm, showAlert } = useAdminPrompt()
   const stepUp = useStepUp()
   const canManageFlags = useCapability(
     'feature_flags.manage',
@@ -60,8 +62,12 @@ export function SettingsRoute() {
       )
       flags.refetch()
     } catch (err) {
-      alert(
-        (err as Error).message || 'failed',
+      await showAlert(
+        t('admin.common.operationFailed', {
+          message:
+            (err as Error).message ||
+            t('admin.common.unknownError'),
+        }),
       )
     } finally {
       setBusyFlag(null)
@@ -69,18 +75,20 @@ export function SettingsRoute() {
   }
 
   async function revokeDevice(id: number) {
-    if (
-      !window.confirm(
-        t('admin.settings.revokeConfirm'),
-      )
+    const ok = await showConfirm(
+      t('admin.settings.revokeConfirm'),
     )
-      return
+    if (!ok) return
     try {
       await adminApi.revokeDevice(id)
       devices.refetch()
     } catch (err) {
-      alert(
-        (err as Error).message || 'failed',
+      await showAlert(
+        t('admin.common.operationFailed', {
+          message:
+            (err as Error).message ||
+            t('admin.common.unknownError'),
+        }),
       )
     }
   }
@@ -241,6 +249,7 @@ export function SettingsRoute() {
 
 function AiEnrichmentSettings() {
   const { t } = useTranslation()
+  const { showAlert } = useAdminPrompt()
   const canManage = useCapability('settings.manage')
   const [trackTtl, setTrackTtl] = useState<string>('')
   const [artistTtl, setArtistTtl] = useState<string>('')
@@ -266,11 +275,15 @@ function AiEnrichmentSettings() {
     const trackDays = parseInt(trackTtl, 10)
     const artistDays = parseInt(artistTtl, 10)
     if (!Number.isFinite(trackDays) || trackDays < 1) {
-      alert('Track TTL must be >= 1')
+      await showAlert(
+        t('admin.settings.ttlTrackInvalid'),
+      )
       return
     }
     if (!Number.isFinite(artistDays) || artistDays < 1) {
-      alert('Artist TTL must be >= 1')
+      await showAlert(
+        t('admin.settings.ttlArtistInvalid'),
+      )
       return
     }
     setBusy(true)
@@ -284,7 +297,13 @@ function AiEnrichmentSettings() {
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err) {
-      alert((err as Error).message || 'failed')
+      await showAlert(
+        t('admin.common.operationFailed', {
+          message:
+            (err as Error).message ||
+            t('admin.common.unknownError'),
+        }),
+      )
     } finally {
       setBusy(false)
     }
@@ -334,6 +353,7 @@ function AiEnrichmentSettings() {
 
 function BackupsSection() {
   const { t } = useTranslation()
+  const { showAlert } = useAdminPrompt()
   const stepUp = useStepUp()
   const canRun = useCapability('backups.run')
   const canView = useCapability('backups.view')
@@ -354,12 +374,20 @@ function BackupsSection() {
     setBusy(true)
     try {
       const out = await adminApi.runBackup(kind)
-      alert(
-        `Backup queued: task ${out.task_id || '?'}`,
+      await showAlert(
+        t('admin.settings.backupQueued', {
+          taskId: String(out.task_id ?? '?'),
+        }),
       )
       list.refetch()
     } catch (err) {
-      alert((err as Error).message || 'failed')
+      await showAlert(
+        t('admin.common.operationFailed', {
+          message:
+            (err as Error).message ||
+            t('admin.common.unknownError'),
+        }),
+      )
     } finally {
       setBusy(false)
     }
@@ -467,6 +495,8 @@ function FeatureFlagCreator({
   onCreated: () => void
   stepUp: ReturnType<typeof useStepUp>
 }) {
+  const { t } = useTranslation()
+  const { showAlert } = useAdminPrompt()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -486,8 +516,12 @@ function FeatureFlagCreator({
       setName('')
       onCreated()
     } catch (err) {
-      alert(
-        (err as Error).message || 'failed',
+      await showAlert(
+        t('admin.common.operationFailed', {
+          message:
+            (err as Error).message ||
+            t('admin.common.unknownError'),
+        }),
       )
     } finally {
       setBusy(false)
@@ -498,7 +532,9 @@ function FeatureFlagCreator({
     <div className="admin-toolbar">
       <input
         type="text"
-        placeholder="new feature flag name"
+        placeholder={t(
+          'admin.settings.newFlagPlaceholder',
+        )}
         value={name}
         onChange={(e) => setName(e.target.value)}
         maxLength={64}
@@ -508,7 +544,9 @@ function FeatureFlagCreator({
         onClick={handleCreate}
         disabled={!name || busy}
       >
-        {busy ? 'Creating…' : 'Create'}
+        {busy
+          ? t('admin.settings.creatingFlag')
+          : t('admin.settings.createFlag')}
       </Press>
     </div>
   )

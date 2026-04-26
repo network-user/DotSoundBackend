@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { TrackCard } from '@/components/TrackCard/TrackCard'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
@@ -51,6 +52,7 @@ function mergeTracksBySuggestOrder(
 }
 
 export function SearchView({ onOpenArtist }: SearchViewProps) {
+  const { t } = useTranslation()
   const { playTrack } = usePlayer()
   const { toggleLike } = useLikes()
   const [query, setQuery] = useState('')
@@ -279,7 +281,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
           id="search-input"
           type="search"
           enterKeyHint="search"
-          placeholder="Трек или исполнитель…"
+          placeholder={t('search.placeholder')}
           autoComplete="off"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -293,13 +295,15 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
       {tracks === 'idle' && history.length === 0 && (
         <div className="search-idle-hint">
           <Icon name="search" size={32} />
-          <p>Начните вводить название трека или исполнителя</p>
+          <p>{t('search.hint')}</p>
         </div>
       )}
 
       {tracks === 'idle' && history.length > 0 && (
         <div className="search-history">
-          <p className="search-section-label">Недавние</p>
+          <p className="search-section-label">
+            {t('search.recent')}
+          </p>
           {history.map((h) => (
             <div key={h} className="search-history-item" onClick={() => setQuery(h)}>
               <Icon name="search" size={14} />
@@ -317,7 +321,9 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
 
       {tracks === null && (
         <div className="search-section">
-          <p className="search-section-label">На платформе</p>
+          <p className="search-section-label">
+            {t('search.onPlatform')}
+          </p>
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="track-card-skeleton shimmer" />
           ))}
@@ -328,11 +334,13 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
         <>
           {suggestArtists.length > 0 && (
             <div className="search-section search-artist-suggest">
-              <p className="search-section-label">Артисты</p>
+              <p className="search-section-label">
+                {t('search.artists')}
+              </p>
               <div
                 className="search-artist-chips"
                 role="list"
-                aria-label="Совпадения по артистам"
+                aria-label={t('search.artistsRowAria')}
               >
                 {suggestArtists.map((a) => (
                   <button
@@ -352,13 +360,14 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
           )}
 
           <div className="search-section">
-            <p className="search-section-label">На платформе</p>
+            <p className="search-section-label">
+              {t('search.onPlatform')}
+            </p>
             {tracks.length > 0 ? (
               <TrackList tracks={tracks} emptyMessage="" />
             ) : (
               <p className="search-catalog-empty">
-                В каталоге пусто по этому запросу — смотрите
-                внешний поиск YouTube, Bandcamp и SoundCloud ниже.
+                {t('search.emptyCatalogHint')}
               </p>
             )}
           </div>
@@ -370,7 +379,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
           {ytResults.length > 0 && (
             <div className="search-section">
               <p className="search-section-label">
-                YouTube · внешний источник
+                {t('search.ytSection')}
               </p>
               {ytResults.map((r) => {
                 const imported = importedYT[r.video_id]
@@ -414,7 +423,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         )}
                       </p>
                       <span className="track-source">
-                        внешний источник:{' '}
+                        {t('search.extSourceLabel')}{' '}
                         <a
                           href={r.watch_url}
                           target="_blank"
@@ -426,8 +435,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         </a>
                       </span>
                       <span className="track-source">
-                        после добавления трек будет доступен как
-                        внешний поток стороннего сервиса
+                        {t('search.afterAddStream')}
                       </span>
                     </div>
                     <div
@@ -436,7 +444,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                     >
                       <button
                         className="track-card-like"
-                        title="Добавить и лайкнуть"
+                        title={t('search.addAndLike')}
                         onClick={(e) => handleLikeYT(e, r)}
                         disabled={importingYt === r.video_id}
                         type="button"
@@ -446,7 +454,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                       <span className="sc-play-hint sc-play-hint--yt">
                         {importingYt === r.video_id
                           ? '...'
-                          : 'Добавить и слушать'}
+                          : t('search.addAndPlay')}
                       </span>
                     </div>
                   </div>
@@ -458,7 +466,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
           {bcResults.length > 0 && (
             <div className="search-section">
               <p className="search-section-label">
-                Bandcamp · внешний источник
+                {t('search.bcSection')}
               </p>
               {bcResults.map((r) => {
                 const imported = importedBC[r.track_url]
@@ -502,7 +510,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         )}
                       </p>
                       <span className="track-source">
-                        внешний источник:{' '}
+                        {t('search.extSourceLabel')}{' '}
                         <a
                           href={r.track_url}
                           target="_blank"
@@ -514,8 +522,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         </a>
                       </span>
                       <span className="track-source">
-                        после добавления трек будет доступен как
-                        внешний поток стороннего сервиса
+                        {t('search.afterAddStream')}
                       </span>
                     </div>
                     <div
@@ -524,7 +531,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                     >
                       <button
                         className="track-card-like"
-                        title="Добавить и лайкнуть"
+                        title={t('search.addAndLike')}
                         onClick={(e) => handleLikeBC(e, r)}
                         disabled={importingBc === r.track_url}
                         type="button"
@@ -534,7 +541,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                       <span className="sc-play-hint sc-play-hint--bc">
                         {importingBc === r.track_url
                           ? '...'
-                          : 'Добавить и слушать'}
+                          : t('search.addAndPlay')}
                       </span>
                     </div>
                   </div>
@@ -546,7 +553,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
           {scResults.length > 0 && (
             <div className="search-section">
               <p className="search-section-label">
-                SoundCloud · внешний источник
+                {t('search.scSection')}
               </p>
               {scResults.map((r) => {
                 const imported = importedSC[r.sc_url]
@@ -576,7 +583,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         )}
                       </p>
                       <span className="track-source">
-                        внешний источник:{' '}
+                        {t('search.extSourceLabel')}{' '}
                         <a
                           href={r.sc_url}
                           target="_blank"
@@ -588,21 +595,22 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         </a>
                       </span>
                       <span className="track-source">
-                        после добавления трек будет доступен как
-                        внешний поток стороннего сервиса
+                        {t('search.afterAddStream')}
                       </span>
                     </div>
                     <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
                       <button
                         className="track-card-like"
-                        title="Добавить и лайкнуть"
+                        title={t('search.addAndLike')}
                         onClick={(e) => handleLikeSC(e, r)}
                         disabled={importing === r.sc_url}
                       >
                         <Icon name="heart-outline" size={18} />
                       </button>
                       <span className="sc-play-hint">
-                        {importing === r.sc_url ? '...' : 'Добавить и слушать'}
+                        {importing === r.sc_url
+                          ? '...'
+                          : t('search.addAndPlay')}
                       </span>
                     </div>
                   </div>
@@ -619,7 +627,9 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
         ytResults.length === 0 &&
         bcResults.length === 0 &&
         suggestArtists.length === 0 && (
-        <p className="empty-hint">Ничего не найдено</p>
+        <p className="empty-hint">
+          {t('search.notFound')}
+        </p>
       )}
     </section>
   )

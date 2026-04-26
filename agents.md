@@ -65,6 +65,11 @@ DotSound — музыкальная платформа в Telegram (SoundCloud-s
   документы в `docs/legal/`.
 - Собственный playback поверх stream URL стороннего сервиса считать
   high-risk моделью и не расширять без отдельной юридической оценки.
+- До публичного релиза: **backlog** по 152-ФЗ — приведение
+  **функционала** (ПДн, сроки, субпроцессоры, логи) в соответствие с
+  требованиями к обработке после консультации с юристом; трекер —
+  `TODO.md` (раздел «Соответствие 152-ФЗ / ПДн»), кратко —
+  `docs/project_context.md`, `LEGAL.md`.
 
 ### Как классифицировать код
 
@@ -343,10 +348,12 @@ npm run dev
 Mini App доступен на http://localhost:5173/mini_app/
 
 ### 6. Бот (отдельный репозиторий DotSoundBot, терминал 3)
+Из корня **этого** репозитория (DotSoundBackend):
 ```bash
-cd C:\Users\User\PycharmProjects\DotSoundBot
+cd ../DotSoundBot
 python main.py
 ```
+(В PowerShell: `cd ..\\DotSoundBot` или `Set-Location ..\\DotSoundBot`.)
 
 ### Быстрый запуск через Makefile
 ```bash

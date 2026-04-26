@@ -120,10 +120,9 @@ export function SettingsSheet({
   const toast = useToast()
   const installable = canInstallPwa()
   const handleInstallHint = () => {
-    toast.info(
-      'Откройте меню браузера и выберите «Установить приложение». Если кнопки нет — приложение уже установлено.',
-      { duration: 7000 },
-    )
+    toast.info(t('settings.pwaInstallHint'), {
+      duration: 7000,
+    })
   }
 
   return (
@@ -140,7 +139,7 @@ export function SettingsSheet({
           <button
             className="settings-back"
             onClick={onClose}
-            aria-label={t('common.back', { defaultValue: 'Назад' })}
+            aria-label={t('common.back')}
           >
             <Icon
               name="chevron"
@@ -148,16 +147,16 @@ export function SettingsSheet({
               className="back-chevron"
             />
             <span className="settings-back-label">
-              {t('common.back', { defaultValue: 'Назад' })}
+              {t('common.back')}
             </span>
           </button>
           <span className="settings-title">
-            {t('settings.title', { defaultValue: 'Настройки' })}
+            {t('settings.title')}
           </span>
           <button
             className="icon-btn settings-close"
             onClick={onClose}
-            aria-label={t('common.close', { defaultValue: 'Закрыть' })}
+            aria-label={t('common.close')}
           >
             <Icon name="x" size={18} />
           </button>
@@ -169,7 +168,7 @@ export function SettingsSheet({
             onClick={handleEq}
           >
             <Icon name="eq" size={20} />
-            <span>Эквалайзер</span>
+            <span>{t('settings.eq')}</span>
             <Icon
               name="chevron"
               size={16}
@@ -182,7 +181,7 @@ export function SettingsSheet({
             onClick={handleVideoToggle}
           >
             <Icon name="video" size={20} />
-            <span>Видеоклипы</span>
+            <span>{t('settings.video')}</span>
             <div
               className={`settings-toggle${videoEnabled ? ' on' : ''}`}
             >
@@ -195,7 +194,7 @@ export function SettingsSheet({
             onClick={handleMonoToggle}
           >
             <Icon name="moon" size={20} />
-            <span>Монохром</span>
+            <span>{t('settings.monochrome')}</span>
             <div
               className={`settings-toggle${monoEnabled ? ' on' : ''}`}
             >
@@ -221,7 +220,9 @@ export function SettingsSheet({
             onClick={handleOpenBrowser}
           >
             <Icon name="maximize" size={20} />
-            <span>Открыть в браузере</span>
+            <span>
+              {t('settings.openInBrowser')}
+            </span>
             <Icon
               name="chevron"
               size={16}
@@ -235,7 +236,9 @@ export function SettingsSheet({
               onClick={handleInstallHint}
             >
               <Icon name="install" size={20} />
-              <span>Установить как приложение</span>
+              <span>
+                {t('settings.installAsApp')}
+              </span>
               <Icon
                 name="chevron"
                 size={16}
@@ -245,9 +248,7 @@ export function SettingsSheet({
           )}
 
           <div className="settings-hint">
-            Для управления музыкой с экрана
-            блокировки откройте .sound в
-            браузере
+            {t('settings.lockScreenHint')}
           </div>
 
           <LinkedAccounts />
@@ -265,15 +266,17 @@ export function SettingsSheet({
               name="volume-high"
               size={20}
             />
-            <span>Качество звука</span>
+            <span>{t('settings.soundQuality')}</span>
             <span className="settings-badge">
-              скоро
+              {t('settings.comingSoon')}
             </span>
           </button>
 
           <button className="settings-item">
             <Icon name="info" size={20} />
-            <span>О приложении</span>
+            <span>
+              {t('settings.aboutApp')}
+            </span>
             <span className="settings-version">
               v0.1.0
             </span>
@@ -286,7 +289,7 @@ export function SettingsSheet({
             onClick={onLogout}
           >
             <Icon name="log-out" size={18} />
-            Выйти
+            {t('settings.logOut')}
           </button>
         </div>
       </div>

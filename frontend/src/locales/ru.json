@@ -104,7 +104,12 @@
     "shell": {
       "title": "Админ-панель",
       "brandTag": "admin",
-      "signOut": "Выйти"
+      "signOut": "Выйти",
+      "openMenu": "Открыть меню",
+      "closeMenu": "Закрыть меню"
+    },
+    "prompt": {
+      "dialogLabel": "Сообщение"
     },
     "auth": {
       "checking": "Проверка сессии…",
@@ -173,13 +178,46 @@
       "filterBanned": "Заблокированные",
       "active": "активный",
       "banned": "заблокирован",
-      "admin": "админ"
+      "admin": "админ",
+      "colId": "ID",
+      "colUsername": "Имя",
+      "colEmail": "Email",
+      "colStatus": "Статус",
+      "colAdmin": "Админ",
+      "colCreated": "Создан",
+      "actionBan": "Бан",
+      "actionUnban": "Разбан",
+      "actionLogout": "Сессии",
+      "actionMessage": "Сообщение",
+      "confirmBan": "Забанить пользователя {{name}}?",
+      "confirmForceLogout": "Принудительно завершить все сессии пользователя {{name}}?",
+      "forceLogoutResult": "Отозвано admin-сессий: {{adminCount}}. Пользовательский revoke-маркер установлен.",
+      "messageTitle": "Сообщение для {{name}}",
+      "messageBodyPlaceholder": "Текст сообщения…",
+      "messageAsTeam": "Команда .sound (превью):",
+      "messageCancel": "Отмена",
+      "messageSend": "Отправить",
+      "sendMessageConfirm": "Отправить это сообщение пользователю как «Команда .sound»?"
     },
     "tracks": {
       "title": "Треки",
       "searchPlaceholder": "Поиск по названию/исполнителю…",
       "visible": "виден",
-      "hidden": "скрыт"
+      "hidden": "скрыт",
+      "colId": "ID",
+      "colTitle": "Название",
+      "colArtist": "Артист",
+      "colSource": "Источник",
+      "colStatus": "Статус",
+      "colUploaded": "Загружен",
+      "actionShow": "Показать",
+      "actionHide": "Скрыть",
+      "actionOpen": "Открыть",
+      "actionDelete": "Удалить",
+      "actionPlay": "▶",
+      "actionPause": "⏸",
+      "confirmDelete": "Удалить трек «{{title}}» (id={{id}})? Это действие необратимо.",
+      "deleteFailed": "Не удалось удалить трек: {{message}}"
     },
     "complaints": {
       "title": "Жалобы",
@@ -193,7 +231,9 @@
       "enrich": "Обогатить",
       "enriching": "Обогащение…",
       "empty": "Артистов пока нет",
-      "noEnrichment": "нет"
+      "noEnrichment": "нет",
+      "confirmDelete": "Удалить артиста «{{name}}» (id={{id}})? Связи track_artist будут удалены.",
+      "actionDelete": "Удалить"
     },
     "audioCompute": {
       "title": "Вычисления",
@@ -393,6 +433,9 @@
       "title": "Задачи",
       "queues": "Очереди",
       "lyricsJobs": "Задачи lyrics (последние 50)",
+      "cancelAllConfirm": "Отменить все {{count}} задач в очереди?",
+      "cancelQueueButton": "Отменить очередь ({{count}})",
+      "cancelRow": "Отменить",
       "detail": {
         "eyebrow": "Lyrics job",
         "openHint": "Кликните по ID задачи, чтобы открыть детальный вид с live-логами и возможностью отмены.",
@@ -453,7 +496,8 @@
       "lockedUsers": "Заблокированные пользователи",
       "release": "Снять блокировку",
       "success": "успех",
-      "fail": "сбой"
+      "fail": "сбой",
+      "releaseFailed": "Не удалось снять блокировку: {{message}}"
     },
     "settings": {
       "title": "Настройки",
@@ -478,7 +522,13 @@
       "aiEnrichment": "ИИ-обогащение",
       "aiEnrichmentDesc": "Настройте TTL кэша для AI-сгенерированной информации. После истечения следующий запрос запустит новое получение.",
       "trackInfoTtl": "Кэш инфо о треках (дней)",
-      "artistSupplementalTtl": "Кэш доп. инфо артиста (дней)"
+      "artistSupplementalTtl": "Кэш доп. инфо артиста (дней)",
+      "ttlTrackInvalid": "TTL трека должен быть не меньше 1 дня.",
+      "ttlArtistInvalid": "TTL артиста должен быть не меньше 1 дня.",
+      "backupQueued": "Резервная копия поставлена в очередь: задача {{taskId}}",
+      "newFlagPlaceholder": "имя нового feature-флага",
+      "createFlag": "Создать",
+      "creatingFlag": "Создание…"
     },
     "common": {
       "prev": "Назад",
@@ -488,7 +538,11 @@
       "save": "Сохранить",
       "cancel": "Отмена",
       "confirm": "Подтвердить",
-      "retry": "Попробовать снова"
+      "ok": "OK",
+      "retry": "Попробовать снова",
+      "errorWithMessage": "Ошибка: {{message}}",
+      "operationFailed": "Сбой операции: {{message}}",
+      "unknownError": "Неизвестная ошибка"
     },
     "status": {
       "ok": "ок",

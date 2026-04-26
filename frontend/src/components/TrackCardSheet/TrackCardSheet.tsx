@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { CSSProperties } from 'react'
 import { api } from '@/lib/api'
 import {
@@ -102,6 +103,7 @@ export function TrackCardSheet({
     setAbB,
     clearAbLoop,
   } = usePlayer()
+  const { t } = useTranslation()
   const toast = useToast()
   const videoRef = useRef<HTMLVideoElement>(null)
   const {
@@ -318,7 +320,7 @@ export function TrackCardSheet({
         await api.getShareLinks(track.id)
       tg.openTelegramLink(telegram_share_url)
     } catch {
-      tg.showAlert('Не удалось получить ссылку')
+      tg.showAlert(t('trackSheet.shareError'))
     }
   }
 
@@ -485,7 +487,7 @@ export function TrackCardSheet({
       await removeTrack(track.id)
       setDownloadState('idle')
       setDownloadPct(0)
-      toast.info('Удалено из скачанных')
+      toast.info(t('trackSheet.removedFromDownloads'))
       return
     }
     setDownloadState('downloading')
@@ -500,13 +502,15 @@ export function TrackCardSheet({
       })
       setDownloadState('cached')
       hapticNotification('success')
-      toast.success('Трек доступен офлайн')
+      toast.success(
+        t('trackSheet.offlineReady'),
+      )
     } catch (e) {
       setDownloadState('idle')
       const msg =
         e instanceof Error
           ? e.message
-          : 'Ошибка скачивания'
+          : t('trackSheet.downloadError')
       toast.error(msg)
     }
   }
@@ -547,7 +551,7 @@ export function TrackCardSheet({
         <button
           className="tcs-close"
           onClick={closeCard}
-          aria-label="Закрыть"
+          aria-label={t('trackSheet.close')}
         >
           <Icon name="x" size={22} />
         </button>
@@ -591,12 +595,12 @@ export function TrackCardSheet({
                     }
                   } catch {
                     toast.warning(
-                      'PiP недоступен в этом браузере',
+                      t('trackSheet.pipUnavailable'),
                     )
                   }
                 }}
-                aria-label="Картинка-в-картинке"
-                title="Картинка-в-картинке"
+                aria-label={t('trackSheet.pipAria')}
+                title={t('trackSheet.pipTitle')}
               >
                 <Icon name="pip" size={16} />
               </button>
@@ -784,18 +788,18 @@ export function TrackCardSheet({
           )}
           <p className="tcs-meta">
             {track.catalog_type === 'ugc' &&
-              'Каталог: пользовательская загрузка'}
+              t('trackSheet.catUgc')}
             {track.catalog_type === 'licensed' &&
-              'Каталог: лицензированный материал'}
+              t('trackSheet.catLicensed')}
             {track.catalog_type ===
               'external_reference' &&
-              'Каталог: внешний reference'}
+              t('trackSheet.catRef')}
           </p>
           {card?.author && (
             <div
               className="tcs-author-row"
               onClick={handleUploader}
-              title="Перейти к загрузчику"
+              title={t('trackSheet.goUploader')}
             >
               <div className="tcs-author-avatar">
                 {authorAvatarUrl ? (
@@ -813,7 +817,7 @@ export function TrackCardSheet({
               <span className="tcs-author-name">
                 {card.author.display_name ||
                   card.author.username ||
-                  'Загрузчик'}
+                  t('trackSheet.uploader')}
               </span>
               <Icon
                 name="chevron"
@@ -858,8 +862,8 @@ export function TrackCardSheet({
             <button
               className="ctrl-btn"
               onClick={() => skipBackward(15)}
-              aria-label="Назад 15 секунд"
-              title="−15 с"
+              aria-label={t('trackSheet.seekBack')}
+              title={t('trackSheet.seekBackTitle')}
             >
               <Icon
                 name="rewind-5"
@@ -898,8 +902,8 @@ export function TrackCardSheet({
             <button
               className="ctrl-btn"
               onClick={() => skipForward(15)}
-              aria-label="Вперёд 15 секунд"
-              title="+15 с"
+              aria-label={t('trackSheet.seekForward')}
+              title={t('trackSheet.seekForwardTitle')}
             >
               <Icon
                 name="forward-5"
@@ -922,10 +926,10 @@ export function TrackCardSheet({
               aria-controls={
                 extrasOpen ? 'tcs-extras-menu' : undefined
               }
-              aria-label="Скорость, очередь, AB-цикл"
+              aria-label={t('trackSheet.moreMenu')}
             >
               <Icon name="settings" size={18} />
-              Ещё
+              {t('trackSheet.more')}
             </button>
             {extrasOpen && (
               <div
@@ -942,13 +946,13 @@ export function TrackCardSheet({
                       setExtrasOpen(false)
                       openQueue()
                     }}
-                    aria-label="Очередь"
+                    aria-label={t('trackSheet.queue')}
                   >
                     <Icon
                       name="queue"
                       size={14}
                     />
-                    Очередь
+                    {t('trackSheet.queue')}
                   </button>
                   {SPEED_OPTIONS.map((rate) => (
                     <button
@@ -971,7 +975,7 @@ export function TrackCardSheet({
                     className={`pb-extras-btn${abLoop.a !== null ? ' active' : ''}`}
                     role="menuitem"
                     onClick={() => setAbA()}
-                    title="Точка A"
+                    title={t('trackSheet.abA')}
                   >
                     <Icon name="loop" size={14} />A
                     {abLoop.a !== null
@@ -983,7 +987,7 @@ export function TrackCardSheet({
                     className={`pb-extras-btn${abLoop.b !== null ? ' active' : ''}`}
                     role="menuitem"
                     onClick={() => setAbB()}
-                    title="Точка B"
+                    title={t('trackSheet.abB')}
                     disabled={abLoop.a === null}
                   >
                     <Icon name="loop" size={14} />B
@@ -998,7 +1002,7 @@ export function TrackCardSheet({
                       className="pb-extras-btn"
                       role="menuitem"
                       onClick={clearAbLoop}
-                      title="Сбросить AB-цикл"
+                      title={t('trackSheet.abReset')}
                     >
                       ×
                     </button>
@@ -1023,7 +1027,7 @@ export function TrackCardSheet({
               size={20}
             />
             <span className="tcs-action-label">
-              Лайк
+              {t('trackSheet.like')}
             </span>
           </button>
 
@@ -1038,7 +1042,7 @@ export function TrackCardSheet({
               size={20}
             />
             <span className="tcs-action-label">
-              Дизлайк
+              {t('trackSheet.dislike')}
             </span>
           </button>
 
@@ -1054,7 +1058,7 @@ export function TrackCardSheet({
           >
             <Icon name="text" size={20} />
             <span className="tcs-action-label">
-              Текст
+              {t('trackSheet.lyrics')}
             </span>
           </button>
 
@@ -1073,10 +1077,10 @@ export function TrackCardSheet({
             />
             <span className="tcs-action-label">
               {downloadState === 'cached'
-                ? 'Скачано'
+                ? t('trackSheet.downloaded')
                 : downloadState === 'downloading'
                   ? `${downloadPct}%`
-                  : 'Скачать'}
+                  : t('trackSheet.download')}
             </span>
           </button>
 
@@ -1087,7 +1091,7 @@ export function TrackCardSheet({
           >
             <Icon name="user" size={20} />
             <span className="tcs-action-label">
-              К автору
+              {t('trackSheet.toAuthor')}
             </span>
           </button>
 
@@ -1100,7 +1104,7 @@ export function TrackCardSheet({
             >
               <Icon name="edit" size={20} />
               <span className="tcs-action-label">
-                Редактировать
+                {t('trackSheet.edit')}
               </span>
             </button>
           )}
@@ -1112,7 +1116,7 @@ export function TrackCardSheet({
           >
             <Icon name="flag" size={20} />
             <span className="tcs-action-label">
-              Жалоба
+              {t('trackSheet.complaint')}
             </span>
           </button>
         </div>
@@ -1120,7 +1124,7 @@ export function TrackCardSheet({
         {showEdit && isOwner && (
           <div className="tcs-edit-panel">
             <div className="tcs-edit-title">
-              Редактирование
+              {t('trackSheet.editing')}
             </div>
             <div className="tcs-edit-actions">
               {track.source === 'internal' && (
@@ -1134,7 +1138,7 @@ export function TrackCardSheet({
                       name="image"
                       size={18}
                     />
-                    Обложка
+                    {t('trackSheet.cover')}
                   </button>
                   <button
                     className="tcs-edit-btn"
@@ -1148,8 +1152,10 @@ export function TrackCardSheet({
                       size={18}
                     />
                     {genCooldown > 0
-                      ? `${genCooldown}с`
-                      : 'Генерация'}
+                      ? t('trackSheet.seconds', {
+                        n: genCooldown,
+                      })
+                      : t('trackSheet.generate')}
                   </button>
                 </>
               )}
@@ -1163,7 +1169,7 @@ export function TrackCardSheet({
                     name="image"
                     size={18}
                   />
-                  Восстановить обложку
+                  {t('trackSheet.coverRestore')}
                 </button>
               )}
               {(track.catalog_type !== 'external_reference' ||
@@ -1178,7 +1184,7 @@ export function TrackCardSheet({
                   name="text"
                   size={18}
                 />
-                Текст
+                {t('trackSheet.lyricsNoun')}
               </button>
               )}
               <button
@@ -1189,7 +1195,7 @@ export function TrackCardSheet({
                   name="video"
                   size={18}
                 />
-                Видео
+                {t('trackSheet.video')}
               </button>
               {track.video_key && (
                 <button
@@ -1200,7 +1206,7 @@ export function TrackCardSheet({
                     name="x"
                     size={18}
                   />
-                  Удалить видео
+                  {t('trackSheet.removeVideo')}
                 </button>
               )}
             </div>
@@ -1229,7 +1235,7 @@ export function TrackCardSheet({
               }
             >
               <Icon name="x" size={16} />
-              Закрыть редактор
+              {t('trackSheet.closeEditor')}
             </button>
           </div>
         )}
@@ -1237,7 +1243,7 @@ export function TrackCardSheet({
         {(track.source_url || track.sc_url) && (
           <div className="tcs-source-info">
             <span className="tcs-source-label">
-              Источник:{' '}
+              {t('trackSheet.source')}{' '}
               <a
                 href={track.source_url || track.sc_url || '#'}
                 target="_blank"
@@ -1248,15 +1254,17 @@ export function TrackCardSheet({
             </span>
             <p className="tcs-disclaimer">
               {track.access_mode === 'third_party_stream'
-                ? 'Внешний трек: аудиофайл не хранится в хранилище DotSound. Воспроизведение выполняется через поток стороннего сервиса внутри интерфейса DotSound. Правообладатель может направить уведомление через форму жалобы.'
-                : 'Внешний трек: DotSound хранит метаданные и ссылку на оригинальный источник, но не размещает этот аудиофайл в собственном хранилище. Правообладатель может направить уведомление через форму жалобы.'}
+                ? t('trackSheet.disclaimerStream')
+                : t('trackSheet.disclaimerMeta')}
             </p>
           </div>
         )}
 
         {similarTracks.length > 0 && (
           <div className="tcs-similar-section">
-            <h3 className="tcs-similar-title">Похожие треки</h3>
+            <h3 className="tcs-similar-title">
+              {t('trackSheet.similar')}
+            </h3>
             <div className="tcs-similar-list">
               {similarTracks.slice(0, 5).map((st) => (
                 <div
@@ -1287,7 +1295,7 @@ export function TrackCardSheet({
           <div className="tcs-info-section">
             <div className="tcs-info-section-header">
               <h3 className="tcs-info-section-title">
-                О треке
+                {t('trackSheet.aboutTrack')}
               </h3>
             </div>
             {isAdmin && (
@@ -1303,19 +1311,19 @@ export function TrackCardSheet({
                     className={trackInfoRefreshing ? 'tcs-spin' : undefined}
                   />
                   {trackInfoRefreshing
-                    ? 'Запрос в работе…'
-                    : 'DEBUG: перезапросить (bypass cache)'}
+                    ? t('trackSheet.debugLoading')
+                    : t('trackSheet.debugBypass')}
                 </button>
                 <div className="tcs-info-debug-meta">
                   <span>
-                    статус:{' '}
+                    {t('trackSheet.status')}{' '}
                     <b>
                       {trackInfo?.status ?? '—'}
                     </b>
                   </span>
                   {trackInfo?.fetched_at && (
                     <span>
-                      обновлено:{' '}
+                      {t('trackSheet.updated')}{' '}
                       {new Date(
                         trackInfo.fetched_at,
                       ).toLocaleString()}
@@ -1323,7 +1331,8 @@ export function TrackCardSheet({
                   )}
                   {trackInfo?.content && (
                     <span>
-                      символов: {trackInfo.content.length}
+                      {t('trackSheet.chars')}{' '}
+                      {trackInfo.content.length}
                     </span>
                   )}
                 </div>
@@ -1333,7 +1342,7 @@ export function TrackCardSheet({
               trackInfo?.status === 'pending' ||
               trackInfoRefreshing) && (
               <p className="tcs-info-placeholder">
-                Готовим информацию о треке…
+                {t('trackSheet.preparingInfo')}
               </p>
             )}
             {trackInfo?.status === 'done' && trackInfo.content && (
@@ -1347,12 +1356,12 @@ export function TrackCardSheet({
             )}
             {trackInfo?.status === 'not_found' && (
               <p className="tcs-info-placeholder">
-                Информация не найдена.
+                {t('trackSheet.infoNotFound')}
               </p>
             )}
             {trackInfo?.status === 'failed' && (
               <p className="tcs-info-placeholder">
-                Не удалось получить информацию.
+                {t('trackSheet.infoError')}
               </p>
             )}
           </div>
