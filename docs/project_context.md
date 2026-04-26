@@ -109,6 +109,7 @@ src/dotsound_private_core/
     lyrics_provider.py        ← автоопределение текста (внутренняя реализация)
     artist_normalizer.py      ← парсинг "Kai Angel & 9mice", fuzzy match
     recommendation_engine.py  ← скоринг треков, daily mix, radio
+    recommendation_language_policy.py ← эвристики языка (opaque), RU-boost
     auth_policy.py            ← TTL, IP-диапазоны, burn/cooldown
     upload_policy.py          ← разрешённые MIME, опасные расширения
     abuse.py                  ← disposable email, Tor exit nodes

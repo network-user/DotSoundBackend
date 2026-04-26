@@ -144,3 +144,29 @@ async def test_discover_limits_to_two_genres(
         )
 
     assert mock_svc.search.call_count == 2
+
+
+async def test_discover_russian_extra_queries(
+    session: AsyncSession,
+) -> None:
+    mock_svc = AsyncMock()
+    mock_svc.get_trending = AsyncMock(return_value=[])
+    mock_svc.search = AsyncMock(return_value=[])
+
+    with (
+        patch(f"{_MOD}.settings") as mock_settings,
+        patch(
+            f"{_MOD}.SoundCloudService",
+            return_value=mock_svc,
+        ),
+    ):
+        mock_settings.sc_client_id = "test_id"
+        svc = ExternalDiscoveryService(session)
+        await svc.discover(
+            ["rock", "pop"],
+            limit_per_source=5,
+            language_affinity={"ru": 0.5, "en": 0.1},
+            user_locale=None,
+        )
+
+    assert mock_svc.search.call_count == 5

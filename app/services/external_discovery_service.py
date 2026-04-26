@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import structlog
+from dotsound_private_core.services.recommendation_engine import (
+    ExternalTrackCandidate,
+)
+from dotsound_private_core.services.recommendation_language_policy import (
+    should_boost_russian_discovery,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.services.soundcloud_service import SoundCloudService
-from dotsound_private_core.services.recommendation_engine import (
-    ExternalTrackCandidate,
-)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__
@@ -22,6 +25,8 @@ class ExternalDiscoveryService:
         self,
         preferred_genres: list[str],
         limit_per_source: int = 15,
+        language_affinity: dict[str, float] | None = None,
+        user_locale: str | None = None,
     ) -> list[ExternalTrackCandidate]:
         """Fetch external track candidates: trending + genre search."""
         if not settings.sc_client_id:
@@ -43,7 +48,10 @@ class ExternalDiscoveryService:
                 error=str(exc),
             )
 
-        genres_to_search = (preferred_genres or [])[:2] or ["popular", "new"]
+        genres_to_search = (preferred_genres or [])[:2] or [
+            "popular",
+            "new",
+        ]
         for genre in genres_to_search:
             try:
                 raw += await svc.search(
@@ -55,6 +63,26 @@ class ExternalDiscoveryService:
                     genre=genre,
                     error=str(exc),
                 )
+
+        if should_boost_russian_discovery(
+            language_affinity,
+            user_locale,
+        ):
+            for term in (
+                "russian",
+                "russian hip hop",
+                "russian pop",
+            ):
+                try:
+                    raw += await svc.search(
+                        term, limit=limit_per_source
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "discovery_ru_search_failed",
+                        term=term,
+                        error=str(exc),
+                    )
 
         seen: set[str] = set()
         candidates: list[ExternalTrackCandidate] = []

@@ -43,6 +43,13 @@ export interface DailyPlaylistResponse {
   expires_at: string
 }
 
+export interface WeeklyPlaylistResponse {
+  internal_tracks: Track[]
+  external_tracks: Track[]
+  generated_at: string
+  expires_at: string
+}
+
 export interface SearchSuggestItem {
   kind: 'track' | 'artist'
   id: number

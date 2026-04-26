@@ -34,6 +34,15 @@ which parts are owned by `DotSoundPrivateCore`.
 - Production-only risk and moderation heuristics.
 - Additional internal admin automation with privileged side effects.
 
+## Recsys (listening language)
+
+- Heuristics and score weights for listening-language affinity live in
+  `DotSoundPrivateCore` (`recommendation_language_policy`,
+  `recommendation_engine`, `scoring`).
+- Backend supplies track metadata, aggregates `language_affinity` from
+  history and `users.locale`, runs SQL candidate pools, and issues
+  external discovery search queries.
+
 ## Non-Goals For Slice-1
 
 - No migration of websocket manager and realtime orchestration.

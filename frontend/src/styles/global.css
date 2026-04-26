@@ -1106,6 +1106,57 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
 /* ── Playlists view ── */
 .playlist-list { padding: 0 16px; }
 
+.home-radio-play {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: calc(100% - 32px);
+  margin: 8px 16px 12px;
+  padding: 16px 18px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.home-radio-play:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.home-radio-play:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+}
+.home-radio-play__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+.home-radio-play__text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.home-radio-play__title {
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.25;
+}
+.home-radio-play__hint {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .playlist-card {
   display: flex;
   align-items: center;

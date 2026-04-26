@@ -11,13 +11,26 @@
   },
   "home": {
     "dayPlaylistTitle": "Day playlist",
-    "dayPlaylistHint": "Personal blend + new picks"
+    "dayPlaylistHint": "Personal blend + new picks",
+    "weekPlaylistTitle": "Week playlist",
+    "weekPlaylistHint": "A longer mix shaped for you",
+    "playRadio": "Play",
+    "playRadioHint": "Starts with your day playlist, then similar tracks",
+    "playRadioAria": "Start endless playback from your day playlist",
+    "playEmpty": "Your day playlist has no tracks to play yet",
+    "playError": "Could not start playback"
   },
   "dailyMix": {
     "title": "Day playlist",
     "hint": "Based on your taste",
     "refreshAria": "Refresh playlist",
     "empty": "Not enough data to build the playlist",
+    "discoveries": "New picks"
+  },
+  "weeklyMix": {
+    "title": "Week playlist",
+    "hint": "A weekly blend based on your taste",
+    "empty": "Not enough data to build the week playlist",
     "discoveries": "New picks"
   },
   "library": {

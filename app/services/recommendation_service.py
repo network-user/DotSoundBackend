@@ -1,32 +1,12 @@
 import json
-from datetime import UTC, datetime, timedelta, timezone
+from collections import defaultdict
+from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core.redis import get_redis_client
-from app.models.listen_event import ListenEvent as ListenEventModel
-from app.models.track import Track
-from app.repositories.preference import (
-    PreferenceRepository,
-)
-from app.repositories.recommendation import (
-    RecommendationRepository,
-)
-from app.repositories.signal import (
-    ListenEventRepository,
-)
-from app.schemas.track import TrackResponse
-from app.services.recsys_telemetry import (
-    RecsysTelemetryService,
-)
-from app.services.track_features_builder import (
-    build_track_features,
-)
 from dotsound_private_core.services.recommendation_engine import (
     ListenEvent as RecListenEvent,
-    ScoredTrack,
+)
+from dotsound_private_core.services.recommendation_engine import (
     TrackFeatures,
     UserPrefs,
     build_daily_mix,
@@ -36,6 +16,11 @@ from dotsound_private_core.services.recommendation_engine import (
     score_tracks_for_user,
     select_similar_tracks,
 )
+from dotsound_private_core.services.recommendation_language_policy import (
+    LOCALE_RU_BONUS,
+    infer_listening_language_code,
+    should_boost_russian_discovery,
+)
 from dotsound_private_core.services.scoring import (
     determine_maturity,
 )
@@ -43,6 +28,28 @@ from dotsound_private_core.services.signal_policy import (
     IMPLICIT_DISLIKE_MIN_OCCURRENCES,
     IMPLICIT_DISLIKE_QUICK_SKIP_SECONDS,
     IMPLICIT_DISLIKE_WINDOW_DAYS,
+)
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.redis import get_redis_client
+from app.models.listen_event import ListenEvent as ListenEventModel
+from app.models.track import Track
+from app.models.user import User
+from app.repositories.preference import (
+    PreferenceRepository,
+)
+from app.repositories.recommendation import (
+    RecommendationRepository,
+)
+from app.repositories.signal import (
+    ListenEventRepository,
+)
+from app.services.recsys_telemetry import (
+    RecsysTelemetryService,
+)
+from app.services.track_features_builder import (
+    build_track_features,
 )
 
 _DAILY_SIZE = 30
@@ -53,7 +60,7 @@ _RADIO_CACHE_TTL = 30 * 60
 
 
 def _midnight_ttl() -> int:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     tomorrow = (now + timedelta(days=1)).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
@@ -61,7 +68,7 @@ def _midnight_ttl() -> int:
 
 
 def _weekly_ttl() -> int:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     days_ahead = (7 - now.weekday()) % 7 or 7
     next_monday = (
         now + timedelta(days=days_ahead)
@@ -89,9 +96,70 @@ class RecommendationService:
         )
         self._session = session
 
+    async def _merge_language_affinity(
+        self,
+        user_id: int,
+    ) -> tuple[dict[str, float], str | None]:
+        row = await self._session.get(
+            User, user_id
+        )
+        locale = row.locale if row else None
+        events = await self._listen_repo.get_recent(
+            user_id, limit=200
+        )
+        tids = {e.track_id for e in events}
+        if not tids:
+            if (
+                locale
+                and str(locale).lower().startswith("ru")
+            ):
+                return ({"ru": 0.65, "en": 0.35}, locale)
+            return ({}, locale)
+        tracks = await self._rec_repo.get_tracks_by_ids(
+            list(tids)
+        )
+        by_id = {t.id: t for t in tracks}
+        raw: dict[str, float] = defaultdict(float)
+        for e in events:
+            t = by_id.get(e.track_id)
+            if not t:
+                continue
+            code = infer_listening_language_code(
+                t.title, t.artist
+            )
+            if not code:
+                continue
+            w = 1.0
+            if e.completed:
+                w += 0.5
+            dur = float(
+                e.duration_listened_seconds or 0
+            )
+            w += min(1.0, dur / 180.0) * 0.25
+            raw[code] += w
+        if (
+            locale
+            and str(locale).lower().startswith("ru")
+        ):
+            raw["ru"] = (
+                raw.get("ru", 0.0) + LOCALE_RU_BONUS
+            )
+        total = sum(raw.values())
+        if total <= 0:
+            if (
+                locale
+                and str(locale).lower().startswith("ru")
+            ):
+                return ({"ru": 0.65, "en": 0.35}, locale)
+            return ({}, locale)
+        return (
+            {k: v / total for k, v in raw.items()},
+            locale,
+        )
+
     async def _build_user_prefs(
         self, user_id: int
-    ) -> UserPrefs:
+    ) -> tuple[UserPrefs, str | None]:
         pref = await self._pref_repo.get_by_user_id(
             user_id
         )
@@ -119,33 +187,66 @@ class RecommendationService:
                 user_id
             )
         )
+        (
+            language_aff,
+            locale,
+        ) = await self._merge_language_affinity(
+            user_id
+        )
 
-        return UserPrefs(
-            preferred_genres=(
-                pref.preferred_genres or []
-                if pref
-                else []
+        return (
+            UserPrefs(
+                preferred_genres=(
+                    pref.preferred_genres or []
+                    if pref
+                    else []
+                ),
+                preferred_artist_ids=(
+                    (pref.preferred_artist_ids or [])
+                    if pref
+                    else []
+                ),
+                preferred_moods=(
+                    pref.preferred_moods or []
+                    if pref
+                    else []
+                ),
+                liked_track_ids=liked_ids,
+                disliked_track_ids=disliked_ids,
+                implicit_dislike_track_ids=implicit_disliked_ids,
+                onboarding_genre_preview_taps=[],
+                language_affinity=language_aff,
             ),
-            preferred_artist_ids=(
-                pref.preferred_artist_ids or []
-                if pref
-                else []
-            ),
-            preferred_moods=(
-                pref.preferred_moods or []
-                if pref
-                else []
-            ),
-            liked_track_ids=liked_ids,
-            disliked_track_ids=disliked_ids,
-            implicit_dislike_track_ids=implicit_disliked_ids,
+            locale,
+        )
+
+    async def _scoring_candidate_tracks(
+        self,
+        user_id: int,
+        limit: int,
+        genre_filter: list[str] | None,
+        user_prefs: UserPrefs,
+        user_locale: str | None,
+    ) -> list[Track]:
+        strat = should_boost_russian_discovery(
+            user_prefs.language_affinity,
+            user_locale,
+        )
+        if strat:
+            return await self._rec_repo.get_candidate_tracks_stratified(
+                total_limit=limit,
+                genre_filter=genre_filter,
+            )
+        return await self._rec_repo.get_candidate_tracks(
+            limit=limit,
+            genre_filter=genre_filter,
         )
 
     async def _get_implicit_dislike_ids(
         self, user_id: int
     ) -> set[int]:
         cutoff = datetime.now(
-            timezone.utc
+            UTC
         ) - timedelta(
             days=IMPLICIT_DISLIKE_WINDOW_DAYS
         )
@@ -209,16 +310,31 @@ class RecommendationService:
         user_id: int,
         limit: int = _UNSEEN_POOL_LIMIT,
         genre_filter: list[str] | None = None,
+        user_prefs: UserPrefs | None = None,
+        user_locale: str | None = None,
     ) -> list[Track]:
         listened = (
             await self._rec_repo.get_listened_track_ids(
                 user_id
             )
         )
+        ex = listened
+        strat = should_boost_russian_discovery(
+            user_prefs.language_affinity
+            if user_prefs
+            else None,
+            user_locale,
+        )
+        if strat:
+            return await self._rec_repo.get_candidate_tracks_stratified(
+                total_limit=limit,
+                genre_filter=genre_filter,
+                exclude_ids=ex,
+            )
         return await self._rec_repo.get_candidate_tracks(
             limit=limit,
             genre_filter=genre_filter,
-            exclude_ids=listened,
+            exclude_ids=ex,
         )
 
     async def _import_external_candidates(
@@ -240,15 +356,25 @@ class RecommendationService:
             if not c.external_url:
                 continue
             try:
+                dur_ms = (
+                    c.duration_seconds * 1000
+                    if c.duration_seconds
+                    else None
+                )
+                sc_uri = (
+                    f"soundcloud:tracks:{c.external_id}"
+                    if c.external_id
+                    else None
+                )
                 sc_data = {
                     "permalink_url": c.external_url,
                     "title": c.title,
                     "user": {"username": c.artist or ""},
-                    "duration": (c.duration_seconds * 1000) if c.duration_seconds else None,
+                    "duration": dur_ms,
                     "artwork_url": c.cover_url,
                     "genre": c.genre,
                     "id": c.external_id,
-                    "uri": f"soundcloud:tracks:{c.external_id}" if c.external_id else None,
+                    "uri": sc_uri,
                 }
                 track = await sc_svc.import_or_get_track(
                     sc_data, uploader_id=user_id
@@ -304,7 +430,10 @@ class RecommendationService:
                 }
             )
 
-        user_prefs = await self._build_user_prefs(
+        (
+            user_prefs,
+            user_locale,
+        ) = await self._build_user_prefs(
             user_id
         )
         history = (
@@ -318,11 +447,12 @@ class RecommendationService:
             if pref and pref.preferred_genres
             else None
         )
-        candidates = (
-            await self._rec_repo.get_candidate_tracks(
-                limit=200,
-                genre_filter=genre_filter,
-            )
+        candidates = await self._scoring_candidate_tracks(
+            user_id,
+            200,
+            genre_filter,
+            user_prefs,
+            user_locale,
         )
 
         if candidates:
@@ -474,7 +604,10 @@ class RecommendationService:
     async def get_daily_mix(
         self, user_id: int, size: int = 30
     ) -> list[Track]:
-        user_prefs = await self._build_user_prefs(
+        (
+            user_prefs,
+            user_locale,
+        ) = await self._build_user_prefs(
             user_id
         )
         history = (
@@ -483,16 +616,20 @@ class RecommendationService:
             )
         )
 
-        candidates = (
-            await self._rec_repo.get_candidate_tracks(
-                limit=200
-            )
+        candidates = await self._scoring_candidate_tracks(
+            user_id,
+            200,
+            None,
+            user_prefs,
+            user_locale,
         )
         if not candidates:
             return []
 
         unseen = await self._get_unseen_candidates(
-            user_id
+            user_id,
+            user_prefs=user_prefs,
+            user_locale=user_locale,
         )
         all_tracks = candidates + [
             t
@@ -563,18 +700,37 @@ class RecommendationService:
         if not seed:
             return []
 
-        candidates = (
-            await self._rec_repo.get_candidate_tracks(
-                limit=200
+        user_locale: str | None = None
+        user_prefs: UserPrefs | None = None
+        if user_id:
+            (
+                user_prefs,
+                user_locale,
+            ) = await self._build_user_prefs(user_id)
+
+        if user_id and user_prefs is not None:
+            candidates = await self._scoring_candidate_tracks(
+                user_id,
+                200,
+                None,
+                user_prefs,
+                user_locale,
             )
-        )
+        else:
+            candidates = (
+                await self._rec_repo.get_candidate_tracks(
+                    limit=200
+                )
+            )
         if not candidates:
             return []
 
         unseen: list[Track] = []
-        if user_id:
+        if user_id and user_prefs is not None:
             unseen = await self._get_unseen_candidates(
-                user_id
+                user_id,
+                user_prefs=user_prefs,
+                user_locale=user_locale,
             )
 
         all_tracks = [seed] + candidates + [
@@ -670,19 +826,26 @@ class RecommendationService:
         if cached:
             return json.loads(cached)
 
-        user_prefs = await self._build_user_prefs(
+        (
+            user_prefs,
+            user_locale,
+        ) = await self._build_user_prefs(
             user_id
         )
         history = await self._build_listen_history(
             user_id
         )
-        candidates = (
-            await self._rec_repo.get_candidate_tracks(
-                limit=200
-            )
+        candidates = await self._scoring_candidate_tracks(
+            user_id,
+            200,
+            None,
+            user_prefs,
+            user_locale,
         )
         unseen = await self._get_unseen_candidates(
-            user_id
+            user_id,
+            user_prefs=user_prefs,
+            user_locale=user_locale,
         )
         all_tracks = candidates + [
             t
@@ -716,7 +879,11 @@ class RecommendationService:
 
         external = await ExternalDiscoveryService(
             self._session
-        ).discover(user_prefs.preferred_genres)
+        ).discover(
+            user_prefs.preferred_genres,
+            language_affinity=user_prefs.language_affinity,
+            user_locale=user_locale,
+        )
         int_scored, ext_picked = merge_hybrid_playlist(
             scored, external, _DAILY_SIZE
         )
@@ -739,7 +906,7 @@ class RecommendationService:
         )
 
         ttl = _midnight_ttl()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         payload: dict = {
             "internal_track_ids": internal_ids,
             "external_track_ids": external_track_ids,
@@ -765,19 +932,27 @@ class RecommendationService:
         if cached:
             return json.loads(cached)
 
-        user_prefs = await self._build_user_prefs(
+        (
+            user_prefs,
+            user_locale,
+        ) = await self._build_user_prefs(
             user_id
         )
         history = await self._build_listen_history(
             user_id
         )
-        candidates = (
-            await self._rec_repo.get_candidate_tracks(
-                limit=300
-            )
+        candidates = await self._scoring_candidate_tracks(
+            user_id,
+            300,
+            None,
+            user_prefs,
+            user_locale,
         )
         unseen = await self._get_unseen_candidates(
-            user_id, limit=150
+            user_id,
+            limit=150,
+            user_prefs=user_prefs,
+            user_locale=user_locale,
         )
         all_tracks = candidates + [
             t
@@ -814,6 +989,8 @@ class RecommendationService:
         ).discover(
             user_prefs.preferred_genres,
             limit_per_source=20,
+            language_affinity=user_prefs.language_affinity,
+            user_locale=user_locale,
         )
         int_scored, ext_picked = merge_hybrid_playlist(
             scored,
@@ -838,7 +1015,7 @@ class RecommendationService:
         )
 
         ttl = _weekly_ttl()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         payload = {
             "internal_track_ids": internal_ids,
             "external_track_ids": external_track_ids,

@@ -12,10 +12,13 @@ interface Props {
 const REDUCED_MOTION_QUERY =
   '(prefers-reduced-motion: reduce)'
 
+/** ~30 fps cap: decorative spectrum only; eases iGPU load. */
+const SPECTRUM_MIN_FRAME_MS = 1000 / 30
+
 /**
  * Realtime audio spectrum bars driven by the shared
- * AnalyserNode in PlayerContext. Cheap canvas render,
- * pauses when audio is not playing and respects
+ * AnalyserNode in PlayerContext. Canvas render only while
+ * `isPlaying`; idle bars when paused. Respects
  * prefers-reduced-motion.
  */
 export function Waveform({
@@ -38,22 +41,15 @@ export function Waveform({
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const dpr = window.devicePixelRatio || 1
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect()
-      canvas.width = Math.floor(rect.width * dpr)
-      canvas.height = Math.floor(rect.height * dpr)
-    }
-    resize()
-    const ro = new ResizeObserver(resize)
-    ro.observe(canvas)
-
     const idleColor = overlay
       ? 'rgba(255,255,255,0.12)'
       : 'rgba(255,255,255,0.15)'
     const playColor = overlay
       ? 'rgba(255,255,255,0.5)'
       : 'rgba(255,255,255,0.85)'
+
+    const dpr = window.devicePixelRatio || 1
+    let lastSpectrumAt = 0
 
     const drawIdle = () => {
       const w = canvas.width
@@ -70,15 +66,15 @@ export function Waveform({
       }
     }
 
-    const draw = () => {
+    const drawSpectrum = () => {
       const analyser = getAnalyser()
       const w = canvas.width
       const h = canvas.height
-      ctx.clearRect(0, 0, w, h)
       if (!analyser || !isPlaying) {
         drawIdle()
         return
       }
+      ctx.clearRect(0, 0, w, h)
       const data = new Uint8Array(
         analyser.frequencyBinCount,
       )
@@ -100,15 +96,41 @@ export function Waveform({
       }
     }
 
-    const tick = () => {
-      draw()
-      rafRef.current = window.requestAnimationFrame(tick)
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect()
+      canvas.width = Math.floor(rect.width * dpr)
+      canvas.height = Math.floor(rect.height * dpr)
+      if (reduced) {
+        drawIdle()
+        return
+      }
+      if (!isPlaying) {
+        drawIdle()
+        return
+      }
+      lastSpectrumAt = 0
+      drawSpectrum()
     }
+    resize()
+    const ro = new ResizeObserver(resize)
+    ro.observe(canvas)
 
     if (reduced) {
       drawIdle()
-    } else {
+    } else if (isPlaying) {
+      const tick = (t: number) => {
+        if (t - lastSpectrumAt < SPECTRUM_MIN_FRAME_MS) {
+          rafRef.current =
+            window.requestAnimationFrame(tick)
+          return
+        }
+        lastSpectrumAt = t
+        drawSpectrum()
+        rafRef.current = window.requestAnimationFrame(tick)
+      }
       rafRef.current = window.requestAnimationFrame(tick)
+    } else {
+      drawIdle()
     }
 
     return () => {
