@@ -105,7 +105,10 @@ class AppSettings(BaseSettings):
     tor_pool_enabled: bool = True
     tor_pool_size: int = 10
     tor_socks_base_port: int = 9050
-    tor_control_port: int = 9051
+    # If this falls into [``TOR_SOCKS_BASE_PORT``,
+    # ``TOR_SOCKS_BASE_PORT`` + ``TOR_POOL_SIZE``) it is moved at runtime
+    # (it must not double as a SOCKS listener).
+    tor_control_port: int = 9151
     # Plain-text password for Tor ControlPort; leave empty to use CookieAuthentication.
     tor_control_password: str = ""
     # Path to tor/tor.exe binary; leave empty to use system PATH.

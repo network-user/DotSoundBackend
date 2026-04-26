@@ -91,9 +91,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             try:
                 await init_elasticsearch_starter()
             except Exception as exc:  # noqa: BLE001
-                logger.exception(
-                    "elasticsearch_init_failed", error=str(exc)
-                )
+                logger.exception("elasticsearch_init_failed", error=str(exc))
             if settings.elasticsearch_backfill_on_empty or (
                 settings.elasticsearch_dev_bootstrap
             ):
@@ -128,9 +126,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             await artist_backfill_worker.artist_link_backfill_task.kiq()
             logger.info("artist_link_backfill_enqueued")
     except Exception as exc:
-        logger.warning(
-            "artist_link_backfill_enqueue_failed", error=str(exc)
-        )
+        logger.warning("artist_link_backfill_enqueue_failed", error=str(exc))
 
     try:
         from app.core.db import AsyncSessionLocal as _ASL
@@ -158,7 +154,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             logger.error(
                 "tor_pool_start_failed",
                 error=str(_exc),
-                hint="Is Tor installed? apt install tor / Tor Expert Bundle on Windows.",
+                hint="Install Tor (apt) or Tor Browser/Expert (Windows).",
             )
 
     yield
@@ -174,9 +170,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     if play_stop is not None and drain_task is not None:
         play_stop.set()
         try:
-            await asyncio.wait_for(
-                drain_task, timeout=10.0
-            )
+            await asyncio.wait_for(drain_task, timeout=10.0)
         except TimeoutError:
             logger.warning("elasticsearch_drain_task_timeout")
     if (
@@ -219,9 +213,7 @@ def create_app() -> FastAPI:
     application.add_middleware(SecureStaticMiddleware)
     application.add_middleware(AdminSecurityMiddleware)
     application.add_middleware(SecurityHeadersMiddleware)
-    application.add_middleware(
-        InternalApiAllowlistMiddleware
-    )
+    application.add_middleware(InternalApiAllowlistMiddleware)
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(
         CORSMiddleware,

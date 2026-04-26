@@ -43,6 +43,20 @@ def _tbb_nest_parts(executable: str) -> tuple[str, ...]:
     )
 
 
+def _resolve_tor_control_port(
+    base: int, pool_size: int, requested: int
+) -> int:
+    """Socks use ``[base, base+pool_size)``; control must be outside
+    (same failure as: ``Failed to bind one of the listener ports`` if it
+    overlaps a SocksPort). Default 9051 collides when pool is >1.
+    """
+    lo = base
+    hi = base + max(pool_size, 0)
+    if not (lo <= requested < hi):
+        return requested
+    return hi
+
+
 def _dedupe_path_order(paths: list[Path]) -> list[Path]:
     seen: set[str] = set()
     out: list[Path] = []
@@ -160,7 +174,17 @@ class TorPool:
         s = self._settings
         base_port: int = s.tor_socks_base_port
         pool_size: int = s.tor_pool_size
-        control_port: int = s.tor_control_port
+        requested = int(s.tor_control_port)
+        control_port = _resolve_tor_control_port(
+            base_port, pool_size, requested
+        )
+        if control_port != requested:
+            logger.warning(
+                "tor_control_port_moved",
+                from_port=requested,
+                to_port=control_port,
+                reason="Control port cannot overlap SOCKS range",
+            )
 
         self._circuits = [
             TorCircuit(index=i, socks_port=base_port + i)
