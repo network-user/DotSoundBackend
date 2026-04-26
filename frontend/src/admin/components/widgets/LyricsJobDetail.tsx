@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query'
 import { Press } from '@/components/ui/Press'
 import { Icon } from '@/components/Icon/Icon'
+import { useAdminPrompt } from '../layout/AdminPromptContext'
 import { adminApi } from '../../lib/adminApi'
 import { StatusPill } from './StatusPill'
 
@@ -54,6 +55,7 @@ export function LyricsJobDetail({
   onClose,
 }: Props) {
   const { t } = useTranslation()
+  const { showConfirm } = useAdminPrompt()
   const queryClient = useQueryClient()
   const logTailRef = useRef<HTMLDivElement>(null)
 
@@ -332,16 +334,15 @@ export function LyricsJobDetail({
                 <Press
                   className="admin-jobdetail-cancel-btn"
                   disabled={cancelMutation.isPending}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        t(
-                          'admin.tasks.detail.confirmCancel',
-                        ),
-                      )
-                    ) {
-                      cancelMutation.mutate()
-                    }
+                  onClick={async () => {
+                    const ok = await showConfirm(
+                      t(
+                        'admin.tasks.detail.confirmCancel',
+                      ),
+                      { danger: true },
+                    )
+                    if (!ok) return
+                    cancelMutation.mutate()
                   }}
                 >
                   {cancelMutation.isPending

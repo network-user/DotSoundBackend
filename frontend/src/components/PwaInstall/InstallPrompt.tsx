@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { useToast } from '@/components/ui/Toast'
 import {
@@ -99,6 +100,7 @@ function bumpVisits(): number {
 }
 
 export function InstallPrompt() {
+  const { t } = useTranslation()
   const [visible, setVisible] = useState(false)
   const [panelMode, setPanelMode] = useState<PanelMode | null>(
     null,
@@ -140,7 +142,7 @@ export function InstallPrompt() {
       } catch {
         /* ignore */
       }
-      toast.success('Приложение установлено')
+      toast.success(t('pwa.installed'))
       hapticNotification('success')
     }
 
@@ -186,7 +188,7 @@ export function InstallPrompt() {
         onInstalled,
       )
     }
-  }, [toast])
+  }, [toast, t])
 
   if (!visible || panelMode === null) {
     return null
@@ -228,35 +230,14 @@ export function InstallPrompt() {
   const hint = () => {
     switch (panelMode) {
       case 'ios_safari':
-        return (
-          <>
-            Откройте «Поделиться» в Safari и выберите
-            «На экран «Домой»».
-          </>
-        )
+        return t('pwa.safari')
       case 'ios_other':
-        return (
-          <>
-            Нажмите «Поделиться» или кнопку «⋯» в
-            панели браузера, затем «На экран «Домой»».
-          </>
-        )
+        return t('pwa.ios')
       case 'menu_hint':
-        return (
-          <>
-            Установка через меню браузера: ищите пункт
-            «Установить приложение» или «Добавить на
-            экран (Домой)».
-          </>
-        )
+        return t('pwa.other')
       case 'bip':
       default:
-        return (
-          <>
-            Получайте плеер в одно касание с рабочего
-            стола.
-          </>
-        )
+        return t('pwa.valueProp')
     }
   }
 
@@ -267,14 +248,14 @@ export function InstallPrompt() {
     <div
       className="install-prompt"
       role="dialog"
-      aria-label="Установить .sound"
+      aria-label={t('pwa.installLabel')}
     >
       <div className="install-prompt__icon">
         <Icon name="install" size={22} />
       </div>
       <div className="install-prompt__body">
         <div className="install-prompt__title">
-          Установить .sound
+          {t('pwa.installLabel')}
         </div>
         <div className="install-prompt__hint">
           {hint()}
@@ -287,7 +268,7 @@ export function InstallPrompt() {
             onClick={install}
             type="button"
           >
-            Установить
+            {t('pwa.installCta')}
           </button>
         ) : (
           <button
@@ -295,13 +276,13 @@ export function InstallPrompt() {
             onClick={() => dismiss(true)}
             type="button"
           >
-            Понятно
+            {t('pwa.ok')}
           </button>
         )}
         <button
           className="install-prompt__btn"
           onClick={() => dismiss(true)}
-          aria-label="Закрыть"
+          aria-label={t('pwa.closeAria')}
           type="button"
         >
           <Icon name="x" size={16} />

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api, getApiErrorMessage } from '@/lib/api'
 import type { Track } from '@/types/api'
 
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export function UploadYouTubeTab({ onSuccess }: Props) {
+  const { t } = useTranslation()
   const [ytUrl, setYtUrl] = useState('')
   const [preview, setPreview] = useState<Track | null>(null)
   const [loading, setLoading] = useState(false)
@@ -25,13 +27,14 @@ export function UploadYouTubeTab({ onSuccess }: Props) {
       const msg = err instanceof Error ? err.message : ''
       const isCode = /^[1-5]\d{2}$/.test(msg)
       setError(
-        isCode ? (
-          msg === '400' ? 'Неверная ссылка. Вставьте URL видео с youtube.com или youtu.be' :
-          msg === '404' ? 'Видео не найдено или недоступно' :
-          msg === '422' ? 'Не удалось получить аудио-поток. Возможно, видео ограничено.' :
-          msg === '503' ? 'YouTube временно недоступен. Попробуйте позже.' :
-          'Ошибка. Проверьте ссылку.'
-        ) : getApiErrorMessage(err, 'Ошибка. Проверьте ссылку.'),
+        isCode
+          ? t(`upload.errYoutube.${msg}`, {
+            defaultValue: t('upload.errYoutube.def'),
+          })
+          : getApiErrorMessage(
+            err,
+            t('upload.errYoutube.def'),
+          ),
       )
     } finally {
       setLoading(false)
@@ -49,7 +52,9 @@ export function UploadYouTubeTab({ onSuccess }: Props) {
   return (
     <div className="sc-import-form">
       <div className="form-group">
-        <label className="form-label">Ссылка на видео</label>
+        <label className="form-label">
+          {t('upload.urlVideo')}
+        </label>
         <input
           className="form-input"
           type="url"
@@ -64,7 +69,9 @@ export function UploadYouTubeTab({ onSuccess }: Props) {
       </div>
 
       <div className="form-group form-group-row">
-        <label className="form-label">Публичный</label>
+        <label className="form-label">
+          {t('upload.public')}
+        </label>
         <input
           type="checkbox"
           checked={isPublic}
@@ -77,7 +84,9 @@ export function UploadYouTubeTab({ onSuccess }: Props) {
         onClick={handlePreview}
         disabled={loading || !ytUrl.trim()}
       >
-        {loading ? 'Загрузка…' : 'Получить информацию'}
+        {loading
+          ? t('upload.loading')
+          : t('upload.getInfo')}
       </button>
 
       {error && <div className="form-error">{error}</div>}
@@ -96,7 +105,7 @@ export function UploadYouTubeTab({ onSuccess }: Props) {
             <p className="sc-preview-artist">{preview.artist}</p>
           </div>
           <button className="btn-primary" onClick={handleAdd}>
-            Добавить и слушать
+            {t('upload.addAndPlay')}
           </button>
         </div>
       )}

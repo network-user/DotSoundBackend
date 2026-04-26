@@ -9,6 +9,7 @@ import {
 import type { ColumnDef } from '@tanstack/react-table'
 import { Press } from '@/components/ui/Press'
 import { api } from '@/lib/api'
+import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 
@@ -93,6 +94,7 @@ function fmtArtistUpdated(row: ArtistRow): string {
 
 export function ArtistsRoute() {
   const { t } = useTranslation()
+  const { showConfirm } = useAdminPrompt()
   const qc = useQueryClient()
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
@@ -132,13 +134,18 @@ export function ArtistsRoute() {
     enrichMutation.mutate(id)
   }
 
-  function handleDelete(id: number, name: string) {
-    if (
-      !window.confirm(
-        `Удалить артиста «${name}» (id=${id})? Связи track_artist будут удалены.`,
-      )
+  async function handleDelete(
+    id: number,
+    name: string,
+  ) {
+    const ok = await showConfirm(
+      t('admin.artists.confirmDelete', {
+        id,
+        name,
+      }),
+      { danger: true },
     )
-      return
+    if (!ok) return
     setBusyId(id)
     deleteMutation.mutate(id)
   }
@@ -159,6 +166,7 @@ export function ArtistsRoute() {
     },
     {
       header: 'Name',
+      accessorKey: 'name',
       cell: (info) => (
         <button
           type="button"
@@ -177,6 +185,7 @@ export function ArtistsRoute() {
     },
     {
       header: 'Enrichment',
+      accessorKey: 'enrichment_status',
       cell: (info) => {
         const status =
           info.row.original.enrichment_status
@@ -207,6 +216,7 @@ export function ArtistsRoute() {
     },
     {
       header: 'Confidence',
+      accessorKey: 'enrichment_confidence',
       cell: (info) => {
         const c =
           info.row.original.enrichment_confidence
@@ -216,11 +226,13 @@ export function ArtistsRoute() {
     },
     {
       header: 'Updated',
+      accessorKey: 'updated_at',
       cell: (info) => fmtArtistUpdated(info.row.original),
     },
     {
       header: '',
       id: 'actions',
+      enableSorting: false,
       cell: (info) => {
         const { id, name } = info.row.original
         const busy = busyId === id
@@ -248,7 +260,7 @@ export function ArtistsRoute() {
                 handleDelete(id, name)
               }
             >
-              Удалить
+              {t('admin.artists.actionDelete')}
             </Press>
           </div>
         )
@@ -289,6 +301,7 @@ export function ArtistsRoute() {
           (list.data?.items as ArtistRow[]) || []
         }
         emptyHint={t('admin.artists.empty')}
+        enableSorting
       />
       <div className="admin-pagination">
         <Press

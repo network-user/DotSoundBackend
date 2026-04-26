@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import type { ImportAudioInfo, ImportJobResponse } from '@/types/api'
 import { ImportSourcePicker } from './ImportSourcePicker'
@@ -28,6 +29,7 @@ type Phase =
 const MAX_FILE_SIZE = 20 * 1024 * 1024
 
 export function ImportView({ active }: { active: boolean }) {
+  const { t } = useTranslation()
   const [phase, setPhase] = useState<Phase>('pick')
   const [job, setJob] = useState<ImportJobData | null>(null)
   const [audios, setAudios] = useState<AudioInfo[]>([])
@@ -80,7 +82,7 @@ export function ImportView({ active }: { active: boolean }) {
       pollCountRef.current++
       if (pollCountRef.current > MAX_POLLS) {
         clearInterval(interval)
-        setError('Импорт занял слишком много времени. Попробуйте позже.')
+        setError(t('import.jobTimeout'))
         setPhase('pick')
         return
       }
@@ -98,7 +100,7 @@ export function ImportView({ active }: { active: boolean }) {
       } catch {}
     }, 2000)
     return () => clearInterval(interval)
-  }, [phase, job?.id])
+  }, [phase, job?.id, t])
 
   const applyScanResult = useCallback((j: ImportJobData): boolean => {
     setJob(j)
@@ -122,17 +124,17 @@ export function ImportView({ active }: { active: boolean }) {
   const extScanError = useCallback(
     (code: string | undefined) => {
       if (code === 'not_found') {
-        return 'Плейлист или страница не найдены'
+        return t('import.listNotFound')
       }
       if (code === 'private') {
-        return 'Содержимое недоступно (закрыто или нужен вход в сервис)'
+        return t('import.listPrivate')
       }
       if (code === 'invalid_url') {
-        return 'Ссылка не распознана или в неверном формате'
+        return t('import.listBadUrl')
       }
-      return 'Не удалось получить список треков. Попробуйте позже.'
+      return t('import.listGeneric')
     },
-    [],
+    [t],
   )
 
   const handleSourceSelect = useCallback(async (sourceId: string) => {
@@ -158,14 +160,14 @@ export function ImportView({ active }: { active: boolean }) {
     try {
       const j = await api.startTelegramImport()
       if (!applyScanResult(j)) {
-        setError('Не удалось получить треки из профиля')
+        setError(t('import.profileTracksFail'))
         setPhase('pick')
       }
     } catch {
-      setError('Ошибка подключения к боту')
+      setError(t('import.botError'))
       setPhase('pick')
     }
-  }, [applyScanResult])
+  }, [applyScanResult, t])
 
   const handleYandexScan = useCallback(async (url: string) => {
     setError(null)
@@ -176,12 +178,12 @@ export function ImportView({ active }: { active: boolean }) {
         const code = j.tracks_data?.error_code
         const msg =
           code === 'not_found'
-            ? 'Плейлист или альбом не найден'
+            ? t('import.yandexScanNotFound')
             : code === 'private'
-              ? 'Плейлист закрыт или требует авторизации'
+              ? t('import.yandexScanPrivate')
               : code === 'invalid_url'
-                ? 'Ссылка не распознана как плейлист Яндекс Музыки'
-                : 'Не удалось получить список треков. Попробуйте позже.'
+                ? t('import.yandexScanBadUrl')
+                : t('import.yandexScanGeneric')
         setPhase('pick')
         throw new Error(msg)
       }
@@ -191,7 +193,7 @@ export function ImportView({ active }: { active: boolean }) {
       setPhase('pick')
       throw e
     }
-  }, [applyScanResult])
+  }, [applyScanResult, t])
 
   const handleVkScan = useCallback(
     async (url: string) => {
@@ -203,12 +205,12 @@ export function ImportView({ active }: { active: boolean }) {
           const code = j.tracks_data?.error_code
           const msg =
             code === 'not_found'
-              ? 'Плейлист или страница не найдены'
+              ? t('import.vkNotFound')
               : code === 'private'
-                ? 'Содержимое недоступно (закрыто или нужен вход в VK)'
+                ? t('import.vkPrivate')
                 : code === 'invalid_url'
-                  ? 'Ссылка не похожа на поддерживаемую страницу VK'
-                  : 'Не удалось получить список треков. Попробуйте позже.'
+                  ? t('import.vkBadUrl')
+                  : t('import.vkGeneric')
           setPhase('pick')
           throw new Error(msg)
         }
@@ -219,7 +221,7 @@ export function ImportView({ active }: { active: boolean }) {
         throw e
       }
     },
-    [applyScanResult],
+    [applyScanResult, t],
   )
 
   const handleSoundCloudScan = useCallback(
@@ -240,7 +242,7 @@ export function ImportView({ active }: { active: boolean }) {
         throw e
       }
     },
-    [applyScanResult, extScanError],
+    [applyScanResult, extScanError, t],
   )
 
   const handleSpotifyScan = useCallback(
@@ -261,7 +263,7 @@ export function ImportView({ active }: { active: boolean }) {
         throw e
       }
     },
-    [applyScanResult, extScanError],
+    [applyScanResult, extScanError, t],
   )
 
   const applyAccountImportJob = useCallback(
@@ -272,16 +274,16 @@ export function ImportView({ active }: { active: boolean }) {
         setPhase('pick')
         setError(
           extScanError(code) ||
-            'Не удалось получить треки из аккаунта. Попробуйте по ссылке.',
+            t('import.accountTracks'),
         )
         return
       }
       if (!applyScanResult(j)) {
-        setError('Не удалось получить треки из аккаунта')
+        setError(t('import.accountTracksShort'))
         setPhase('pick')
       }
     },
-    [applyScanResult, extScanError],
+    [applyScanResult, extScanError, t],
   )
 
   const toggleTrack = (idx: number) => {
@@ -310,7 +312,7 @@ export function ImportView({ active }: { active: boolean }) {
       setJob(updated)
       setPhase(updated.status === 'queued' ? 'queued' : 'importing')
     } catch {
-      setError('Не удалось запустить импорт')
+      setError(t('import.importStartFail'))
     }
   }
 
@@ -331,7 +333,7 @@ export function ImportView({ active }: { active: boolean }) {
       setCancelConfirmOpen(false)
       handleReset()
     } catch {
-      setError('Не удалось отменить импорт')
+      setError(t('import.importCancelFail'))
       setCancelConfirmOpen(false)
     } finally {
       setCancelling(false)
@@ -360,19 +362,35 @@ export function ImportView({ active }: { active: boolean }) {
       {phase === 'select' && (
         <div className="import-select">
           <div className="view-header">
-            <h2>Найдено треков: {audios.length}</h2>
-            <span className="hint">Выбери треки для импорта</span>
+            <h2>
+              {t('import.foundCount', {
+                count: audios.length,
+              })}
+            </h2>
+            <span className="hint">
+              {t('import.selectHint')}
+            </span>
           </div>
 
           <div className="import-select-actions">
-            <button className="btn-secondary" onClick={selectAll}>Выбрать все</button>
-            <button className="btn-secondary" onClick={deselectAll}>Снять все</button>
+            <button
+              className="btn-secondary"
+              onClick={selectAll}
+            >
+              {t('import.selectAll')}
+            </button>
+            <button
+              className="btn-secondary"
+              onClick={deselectAll}
+            >
+              {t('import.deselectAll')}
+            </button>
             <button
               className="btn-secondary"
               onClick={() => setCancelConfirmOpen(true)}
               style={{ marginLeft: 'auto' }}
             >
-              Отменить
+              {t('playlists.cancel')}
             </button>
           </div>
 
@@ -393,12 +411,14 @@ export function ImportView({ active }: { active: boolean }) {
                   <div className="import-track-info">
                     <span className="import-track-title">{audio.title}</span>
                     <span className="import-track-meta">
-                      {audio.performer || 'Неизвестный'}
+                      {audio.performer || t('trackCard.unknownArtist')}
                       {audio.duration ? ` · ${fmtDuration(audio.duration)}` : ''}
                       {audio.file_size ? ` · ${fmtSize(audio.file_size)}` : ''}
                     </span>
                     {tooBig && (
-                      <span className="import-track-warning">Файл слишком большой (макс. 20 МБ)</span>
+                      <span className="import-track-warning">
+                        {t('import.fileTooBig')}
+                      </span>
                     )}
                   </div>
                 </label>
@@ -412,7 +432,9 @@ export function ImportView({ active }: { active: boolean }) {
               disabled={selected.size === 0}
               onClick={handleStartImport}
             >
-              Импортировать ({selected.size})
+              {t('import.importBtn', {
+                count: selected.size,
+              })}
             </button>
           </div>
         </div>
@@ -421,11 +443,13 @@ export function ImportView({ active }: { active: boolean }) {
       {phase === 'queued' && job && (
         <div className="import-queued">
           <div className="view-header">
-            <h2>В очереди</h2>
+            <h2>{t('import.queueTitle')}</h2>
             <span className="hint">
               {job.queue_position
-                ? `Позиция: ${job.queue_position}`
-                : 'Ожидание свободного слота...'}
+                ? t('import.queuePos', {
+                  pos: job.queue_position,
+                })
+                : t('import.queueWait')}
             </span>
           </div>
           <div
@@ -445,7 +469,7 @@ export function ImportView({ active }: { active: boolean }) {
               className="empty-hint"
               style={{ margin: 0 }}
             >
-              Импорт начнётся автоматически. Можно закрыть окно.
+              {t('import.queueMsg')}
             </p>
           </div>
           <div style={{ padding: '16px' }}>
@@ -455,7 +479,7 @@ export function ImportView({ active }: { active: boolean }) {
               disabled={cancelling}
               style={{ width: '100%' }}
             >
-              Отменить
+              {t('playlists.cancel')}
             </button>
           </div>
         </div>
@@ -464,7 +488,7 @@ export function ImportView({ active }: { active: boolean }) {
       {phase === 'importing' && job && (
         <div className="import-progress">
           <div className="view-header">
-            <h2>Импорт...</h2>
+            <h2>{t('import.importing')}</h2>
             <span className="hint">
               {job.completed_tracks + job.failed_tracks} / {job.total_tracks}
             </span>
@@ -497,10 +521,13 @@ export function ImportView({ active }: { active: boolean }) {
             </div>
           </div>
           <p className="progress-label">
-            Загружено: {job.completed_tracks} · Ошибок: {job.failed_tracks}
+            {t('import.progressLine', {
+              done: job.completed_tracks,
+              failed: job.failed_tracks,
+            })}
           </p>
           <p className="empty-hint">
-            Можно закрыть окно — импорт продолжится в фоне
+            {t('import.importBackground')}
           </p>
           <div style={{ padding: '0 16px 16px' }}>
             <button
@@ -509,7 +536,7 @@ export function ImportView({ active }: { active: boolean }) {
               disabled={cancelling}
               style={{ width: '100%' }}
             >
-              Отменить импорт
+              {t('import.cancelImport')}
             </button>
           </div>
         </div>
@@ -518,21 +545,28 @@ export function ImportView({ active }: { active: boolean }) {
       {phase === 'done' && job && (
         <div className="import-done">
           <div className="view-header">
-            <h2>Готово!</h2>
+            <h2>{t('import.doneTitle')}</h2>
             <span className="hint">
-              Импортировано {job.completed_tracks} из {job.total_tracks} треков
-              {job.failed_tracks > 0 && ` (ошибок: ${job.failed_tracks})`}
+              {t('import.doneStats', {
+                done: job.completed_tracks,
+                total: job.total_tracks,
+              })}
+              {job.failed_tracks > 0
+                ? t('import.doneFailed', {
+                  n: job.failed_tracks,
+                })
+                : ''}
             </span>
           </div>
           <p
             className="empty-hint"
             style={{ margin: '0 16px 12px' }}
           >
-            Треки добавлены в вашу библиотеку (профиль).
+            {t('import.doneBody')}
           </p>
           <div style={{ padding: '0 16px' }}>
             <button className="btn-primary" onClick={handleReset}>
-              Импортировать ещё
+              {t('import.importMore')}
             </button>
           </div>
         </div>
@@ -589,12 +623,10 @@ export function ImportView({ active }: { active: boolean }) {
         >
           <div className="modal-content">
             <div className="modal-header">
-              <h3>Отменить импорт?</h3>
+              <h3>{t('import.cancelDialogTitle')}</h3>
             </div>
             <p className="modal-hint">
-              Найденные треки будут отброшены. Это действие
-              нельзя отменить, но вы сможете запустить импорт
-              заново.
+              {t('import.cancelDialogBody')}
             </p>
             <div
               style={{
@@ -609,7 +641,7 @@ export function ImportView({ active }: { active: boolean }) {
                 disabled={cancelling}
                 style={{ flex: 1 }}
               >
-                Продолжить импорт
+                {t('import.continueImport')}
               </button>
               <button
                 className="btn-primary"
@@ -617,7 +649,9 @@ export function ImportView({ active }: { active: boolean }) {
                 disabled={cancelling}
                 style={{ flex: 1 }}
               >
-                {cancelling ? 'Отмена...' : 'Да, отменить'}
+                {cancelling
+                  ? t('import.cancelling')
+                  : t('import.confirmCancel')}
               </button>
             </div>
           </div>

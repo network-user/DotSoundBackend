@@ -14,6 +14,22 @@
 
 ---
 
+## Соответствие 152-ФЗ / ПДн (backlog, продукт + инженерия)
+
+- [ ] Перед публичным запуском: **согласовать с юристом/ДПО** фактическую
+  обработку ПДн с требованиями 152-ФЗ (и смежное): основания, при
+  необходимости уведомительный/регистрационный контур, субпроцессоры
+  (email, observability, ASR-облака, бэкапы), трансгран, сроки хранения,
+  запросы субъектов, реагирование на инциденты. Опора на `LEGAL.md`,
+  `docs/legal/PRIVACY_POLICY.md` (сейчас draft).
+- [ ] **Скорректировать функционал** по итогам: ретеншн/удаление,
+  минимизация полей, kill-switch внешних API, согласованность логов и
+  бэкапов с политикой. Не полагаться на внутренние id вместо
+  `telegram_id` как на «анонимизацию», устраняющую операторские
+  обязанности.
+- См. также: `docs/project_context.md` (compliance), `AGENTS.md` (Legal
+  readiness).
+
 ## Критичные / Инфраструктура
 
 - Система бэкапов: PostgreSQL + Redis + configs (локально)
@@ -57,6 +73,10 @@
   Query/Table, Zustand stores, semantic state-tokens только
   для StatusPill (см. design-system.md)
   - Документация: `docs/admin/{README,security,onboarding,testing,nginx-example.conf}`
+- UX (2026-04): `AdminPromptProvider` (модалки вместо `alert`/`confirm`),
+  i18n для строк админки, динамический заголовок раздела в topbar,
+  выдвижное меню на «узком» вьюпорте (≤720px), сортировка колонок
+  в `DataTable` на Users/Tracks/Tasks/Artists/queues
 - Перенести admin-security policy в PrivateCore (см. выше)
 - WebAuthn/Passkey как опциональный второй фактор
 

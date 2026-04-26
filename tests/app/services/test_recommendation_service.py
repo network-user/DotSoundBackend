@@ -169,7 +169,7 @@ async def test_refresh_daily_playlist_deletes_keys(
             return_value=mock_rec_repo,
         ),
         patch(
-            "app.services.recommendation_service.ExternalDiscoveryService",
+            "app.services.external_discovery_service.ExternalDiscoveryService",
             return_value=mock_discovery,
         ),
         patch(
@@ -180,10 +180,6 @@ async def test_refresh_daily_playlist_deletes_keys(
             "app.services.recommendation_service.merge_hybrid_playlist",
             return_value=([], []),
         ),
-        patch(
-            "app.models.dislike.Dislike",
-            create=True,
-        ),
     ):
         svc = RecommendationService(session)
         svc._session = AsyncMock()
@@ -191,7 +187,8 @@ async def test_refresh_daily_playlist_deletes_keys(
             return_value=MagicMock(
                 scalars=MagicMock(
                     return_value=MagicMock(all=MagicMock(return_value=[]))
-                )
+                ),
+                all=MagicMock(return_value=[]),
             )
         )
         await svc.refresh_daily_playlist(user_id=1)

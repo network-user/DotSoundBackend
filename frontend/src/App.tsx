@@ -8,6 +8,8 @@ import {
   type ReactNode,
   type ErrorInfo,
 } from 'react'
+import { useTranslation } from 'react-i18next'
+import i18n from '@/lib/i18n'
 
 class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
@@ -20,8 +22,14 @@ class ErrorBoundary extends Component<
     if (this.state.hasError) {
       return this.props.fallback ?? (
         <div className="error-boundary-fallback">
-          <p>Что-то пошло не так</p>
-          <button onClick={() => this.setState({ hasError: false })}>Попробовать снова</button>
+          <p>{i18n.t('app.errorTitle')}</p>
+          <button
+            onClick={() =>
+              this.setState({ hasError: false })
+            }
+          >
+            {i18n.t('app.tryAgain')}
+          </button>
         </div>
       )
     }
@@ -34,6 +42,7 @@ function RouteFallback({
 }: {
   timeoutMs?: number
 }) {
+  const { t } = useTranslation()
   const [stuck, setStuck] = useState(false)
   useEffect(() => {
     const id = window.setTimeout(
@@ -45,11 +54,11 @@ function RouteFallback({
   if (stuck) {
     return (
       <div className="error-boundary-fallback">
-        <p>Не удалось загрузить раздел</p>
+        <p>{t('app.sectionLoadError')}</p>
         <button
           onClick={() => window.location.reload()}
         >
-          Перезагрузить
+          {t('app.reload')}
         </button>
       </div>
     )

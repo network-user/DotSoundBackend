@@ -16,6 +16,7 @@ from app.models.app_setting import AppSetting
 from app.models.artist import Artist, TrackArtist
 from app.models.block import UserBlock
 from app.models.co_listen import CoListenRoom
+from app.models.compute_job import ComputeJob
 from app.models.compute_worker import ComputeWorker
 from app.models.comment import (
     CommentHide,
@@ -48,6 +49,9 @@ from app.models.playlist_collab import (
     PlaylistCollaborator,
     PlaylistInviteToken,
 )
+from app.models.recommendation_impression import (
+    RecommendationImpression,
+)
 from app.models.search_event import SearchEvent
 from app.models.track import Track
 from app.models.track_snippet import TrackSnippet
@@ -77,6 +81,7 @@ __all__ = [
     "CoListenRoom",
     "CommentVote",
     "Complaint",
+    "ComputeJob",
     "ComputeWorker",
     "Conversation",
     "ConversationMember",
@@ -95,6 +100,7 @@ __all__ = [
     "PlaylistInviteToken",
     "PlaylistTrack",
     "PlaylistCollaborator",
+    "RecommendationImpression",
     "SearchEvent",
     "Track",
     "TrackSnippet",

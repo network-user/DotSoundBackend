@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Press } from '@/components/ui/Press'
 import { adminApi } from '../lib/adminApi'
+import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { LyricsJobDetail } from '../components/widgets/LyricsJobDetail'
 import { StatusPill } from '../components/widgets/StatusPill'
@@ -51,6 +52,7 @@ function jobKind(
 function buildJobColumns(
   onOpen: (id: string) => void,
   onCancel: (id: string) => void,
+  cancelLabel: string,
 ): ColumnDef<JobRow>[] {
   return [
   {
@@ -76,6 +78,7 @@ function buildJobColumns(
   },
   {
     header: 'Status',
+    accessorKey: 'status',
     cell: (i) => (
       <StatusPill
         kind={jobKind(i.row.original.status)}
@@ -98,6 +101,7 @@ function buildJobColumns(
   },
   {
     header: 'Duration',
+    accessorKey: 'duration_ms',
     cell: (i) =>
       i.row.original.duration_ms
         ? `${(
@@ -108,6 +112,7 @@ function buildJobColumns(
   {
     id: 'actions',
     header: '',
+    enableSorting: false,
     cell: (i) => {
       const { id, status } = i.row.original
       const cancellable =
@@ -122,7 +127,7 @@ function buildJobColumns(
             onCancel(id)
           }}
         >
-          Отменить
+          {cancelLabel}
         </button>
       )
     },
@@ -132,6 +137,7 @@ function buildJobColumns(
 
 export function TasksRoute() {
   const { t } = useTranslation()
+  const { showConfirm } = useAdminPrompt()
   const qc = useQueryClient()
   const [activeJobId, setActiveJobId] = useState<
     string | null
@@ -169,12 +175,13 @@ export function TasksRoute() {
 
   const handleCancelAll = async () => {
     if (bulkBusy) return
-    if (
-      !window.confirm(
-        `Отменить все ${queuedCount} задач в очереди?`,
-      )
+    const ok = await showConfirm(
+      t('admin.tasks.cancelAllConfirm', {
+        count: queuedCount,
+      }),
+      { danger: true },
     )
-      return
+    if (!ok) return
     setBulkBusy(true)
     try {
       await adminApi.cancelAllQueuedLyricsJobs()
@@ -190,6 +197,7 @@ export function TasksRoute() {
   const jobColumns = buildJobColumns(
     (id) => setActiveJobId(id),
     handleCancelOne,
+    t('admin.tasks.cancelRow'),
   )
 
   return (
@@ -203,6 +211,7 @@ export function TasksRoute() {
             (queues.data?.items as QueueRow[]) ||
             []
           }
+          enableSorting
         />
       </section>
       <section className="admin-card">
@@ -216,11 +225,17 @@ export function TasksRoute() {
               onClick={handleCancelAll}
               disabled={bulkBusy}
             >
-              Отменить очередь ({queuedCount})
+              {t('admin.tasks.cancelQueueButton', {
+                count: queuedCount,
+              })}
             </Press>
           )}
         </div>
-        <DataTable columns={jobColumns} rows={rows} />
+        <DataTable
+          columns={jobColumns}
+          rows={rows}
+          enableSorting
+        />
         <p className="admin-card__sub">
           {t('admin.tasks.detail.openHint')}
         </p>

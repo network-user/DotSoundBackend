@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api, getApiErrorMessage } from '@/lib/api'
 import type { Track } from '@/types/api'
 
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export function UploadBandcampTab({ onSuccess }: Props) {
+  const { t } = useTranslation()
   const [bcUrl, setBcUrl] = useState('')
   const [preview, setPreview] = useState<Track | null>(null)
   const [loading, setLoading] = useState(false)
@@ -25,13 +27,14 @@ export function UploadBandcampTab({ onSuccess }: Props) {
       const msg = err instanceof Error ? err.message : ''
       const isCode = /^[1-5]\d{2}$/.test(msg)
       setError(
-        isCode ? (
-          msg === '400' ? 'Неверная ссылка. Вставьте URL трека с bandcamp.com' :
-          msg === '402' ? 'Этот трек требует покупки на Bandcamp и недоступен для стриминга' :
-          msg === '404' ? 'Трек не найден или удалён' :
-          msg === '422' ? 'Не удалось получить данные трека. Проверьте, что ссылка ведёт на отдельный трек.' :
-          'Ошибка. Проверьте ссылку.'
-        ) : getApiErrorMessage(err, 'Ошибка. Проверьте ссылку.'),
+        isCode
+          ? t(`upload.errBandcamp.${msg}`, {
+            defaultValue: t('upload.errBandcamp.def'),
+          })
+          : getApiErrorMessage(
+            err,
+            t('upload.errBandcamp.def'),
+          ),
       )
     } finally {
       setLoading(false)
@@ -49,7 +52,9 @@ export function UploadBandcampTab({ onSuccess }: Props) {
   return (
     <div className="sc-import-form">
       <div className="form-group">
-        <label className="form-label">Ссылка на трек</label>
+        <label className="form-label">
+          {t('upload.urlTrack')}
+        </label>
         <input
           className="form-input"
           type="url"
@@ -64,7 +69,9 @@ export function UploadBandcampTab({ onSuccess }: Props) {
       </div>
 
       <div className="form-group form-group-row">
-        <label className="form-label">Публичный</label>
+        <label className="form-label">
+          {t('upload.public')}
+        </label>
         <input
           type="checkbox"
           checked={isPublic}
@@ -77,7 +84,9 @@ export function UploadBandcampTab({ onSuccess }: Props) {
         onClick={handlePreview}
         disabled={loading || !bcUrl.trim()}
       >
-        {loading ? 'Загрузка…' : 'Получить информацию'}
+        {loading
+          ? t('upload.loading')
+          : t('upload.getInfo')}
       </button>
 
       {error && <div className="form-error">{error}</div>}
@@ -96,7 +105,7 @@ export function UploadBandcampTab({ onSuccess }: Props) {
             <p className="sc-preview-artist">{preview.artist}</p>
           </div>
           <button className="btn-primary" onClick={handleAdd}>
-            Добавить и слушать
+            {t('upload.addAndPlay')}
           </button>
         </div>
       )}

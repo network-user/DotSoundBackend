@@ -112,6 +112,16 @@ class RecommendationRepository:
         )
         return set(result.scalars().all())
 
+    async def get_listened_track_ids(
+        self, user_id: int
+    ) -> set[int]:
+        result = await self._session.execute(
+            select(ListenEvent.track_id)
+            .where(ListenEvent.user_id == user_id)
+            .distinct()
+        )
+        return set(result.scalars().all())
+
     async def get_incomplete_listens(
         self,
         user_id: int,

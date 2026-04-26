@@ -20,7 +20,7 @@
     "empty": "No tracks yet. Upload the first one!"
   },
   "search": {
-    "placeholder": "Track or artistвЂ¦",
+    "placeholder": "Track or artist…",
     "startTyping": "Start typing a name",
     "onPlatform": "On platform",
     "notFound": "Nothing found"
@@ -57,7 +57,7 @@
   },
   "settings": {
     "language": "Language",
-    "languageRu": "Р СѓСЃСЃРєРёР№",
+    "languageRu": "Русский",
     "languageEn": "English"
   },
   "lyrics": {
@@ -92,7 +92,7 @@
       "hideDetails": "Hide details",
       "copyLogs": "Copy logs",
       "doneTitle": "Done",
-      "partialHint": "Found lyrics вЂ” aligning timecodes...",
+      "partialHint": "Found lyrics — aligning timecodes...",
       "notFoundTitle": "No lyrics",
       "retry": "Try again",
       "manualEntry": "Enter manually",
@@ -104,19 +104,24 @@
     "shell": {
       "title": "Admin Panel",
       "brandTag": "admin",
-      "signOut": "Sign out"
+      "signOut": "Sign out",
+      "openMenu": "Open menu",
+      "closeMenu": "Close menu"
+    },
+    "prompt": {
+      "dialogLabel": "Notification"
     },
     "auth": {
-      "checking": "Checking sessionвЂ¦",
+      "checking": "Checking session…",
       "adminOnly": "Admin only",
       "adminOnlyHint": "This area is for accounts with the admin flag. Sign in to your account first, then return here.",
       "sessionExpired": "Session expired, please sign in again",
       "signInTitle": "Admin sign-in",
       "signInHint": "Open your authenticator app and enter the current 6-digit code for DotSound.",
-      "signingIn": "Signing inвЂ¦",
+      "signingIn": "Signing in…",
       "signIn": "Sign in",
       "confirm": "Confirm",
-      "confirming": "ConfirmingвЂ¦"
+      "confirming": "Confirming…"
     },
     "init": {
       "title": "Set up admin authenticator",
@@ -137,12 +142,12 @@
       "deviceLabel": "Device label",
       "deviceLabelPlaceholder": "e.g. desktop-firefox",
       "approve": "Approve device",
-      "approving": "ApprovingвЂ¦",
+      "approving": "Approving…",
       "noPending": "No pending device."
     },
     "dashboard": {
       "title": "Dashboard",
-      "loading": "Loading dashboardвЂ¦",
+      "loading": "Loading dashboard…",
       "loadFailed": "Failed",
       "kpi": {
         "onlineNow": "Online now",
@@ -167,19 +172,52 @@
     },
     "users": {
       "title": "Users",
-      "searchPlaceholder": "Search by name/emailвЂ¦",
+      "searchPlaceholder": "Search by name/email…",
       "filterAll": "All",
       "filterActive": "Active",
       "filterBanned": "Banned",
       "active": "active",
       "banned": "banned",
-      "admin": "admin"
+      "admin": "admin",
+      "colId": "ID",
+      "colUsername": "Username",
+      "colEmail": "Email",
+      "colStatus": "Status",
+      "colAdmin": "Admin",
+      "colCreated": "Created",
+      "actionBan": "Ban",
+      "actionUnban": "Unban",
+      "actionLogout": "Logout",
+      "actionMessage": "Message",
+      "confirmBan": "Ban user {{name}}?",
+      "confirmForceLogout": "Force sign-out of all sessions for {{name}}?",
+      "forceLogoutResult": "Admin sessions revoked: {{adminCount}}. User revoke marker is set.",
+      "messageTitle": "Message for {{name}}",
+      "messageBodyPlaceholder": "Message text…",
+      "messageAsTeam": "As .sound team (preview):",
+      "messageCancel": "Cancel",
+      "messageSend": "Send",
+      "sendMessageConfirm": "Send this to the user as the “.sound team” message?"
     },
     "tracks": {
       "title": "Tracks",
-      "searchPlaceholder": "Search by title/artistвЂ¦",
+      "searchPlaceholder": "Search by title/artist…",
       "visible": "visible",
-      "hidden": "hidden"
+      "hidden": "hidden",
+      "colId": "ID",
+      "colTitle": "Title",
+      "colArtist": "Artist",
+      "colSource": "Source",
+      "colStatus": "Status",
+      "colUploaded": "Uploaded",
+      "actionShow": "Show",
+      "actionHide": "Hide",
+      "actionOpen": "Open",
+      "actionDelete": "Delete",
+      "actionPlay": "Play",
+      "actionPause": "Pause",
+      "confirmDelete": "Delete “{{title}}” (id={{id}})? This cannot be undone.",
+      "deleteFailed": "Could not delete the track: {{message}}"
     },
     "complaints": {
       "title": "Complaints",
@@ -189,11 +227,13 @@
     },
     "artists": {
       "title": "Artists",
-      "searchPlaceholder": "Search by nameвЂ¦",
+      "searchPlaceholder": "Search by name…",
       "enrich": "Enrich",
-      "enriching": "EnrichingвЂ¦",
+      "enriching": "Enriching…",
       "empty": "No artists yet",
-      "noEnrichment": "none"
+      "noEnrichment": "none",
+      "confirmDelete": "Delete artist “{{name}}” (id={{id}})? track_artist links will be removed.",
+      "actionDelete": "Delete"
     },
     "audioCompute": {
       "title": "Compute",
@@ -393,10 +433,13 @@
       "title": "Tasks",
       "queues": "Queues",
       "lyricsJobs": "Lyrics jobs (last 50)",
+      "cancelAllConfirm": "Cancel all {{count}} queued jobs?",
+      "cancelQueueButton": "Cancel queue ({{count}})",
+      "cancelRow": "Cancel",
       "detail": {
         "eyebrow": "Lyrics job",
         "openHint": "Click a job ID to open the detail view with live logs and a cancel button.",
-        "loading": "LoadingвЂ¦",
+        "loading": "Loading…",
         "loadFailed": "Failed to load job details",
         "status": "Status",
         "track": "Track",
@@ -410,10 +453,10 @@
         "errorTitle": "Job error",
         "liveStage": "Current stage",
         "logsTitle": "Live logs",
-        "noLogs": "No logs yet вЂ” the job may have just started or the Redis progress TTL has expired.",
+        "noLogs": "No logs yet — the job may have just started or the Redis progress TTL has expired.",
         "close": "Close",
         "cancel": "Cancel job",
-        "cancelling": "CancellingвЂ¦",
+        "cancelling": "Cancelling…",
         "confirmCancel": "Cancel this job? The worker will stop at the next safe checkpoint and mark it as cancelled.",
         "cancelRequested": "Cancel signal sent"
       }
@@ -424,7 +467,7 @@
       "switchLive": "Switch to live tail",
       "containerPlaceholder": "container",
       "anyLevel": "any level",
-      "containsPlaceholder": "containsвЂ¦",
+      "containsPlaceholder": "contains…",
       "refresh": "Refresh",
       "pause": "Pause",
       "resume": "Resume",
@@ -453,7 +496,8 @@
       "lockedUsers": "Locked users",
       "release": "Release",
       "success": "success",
-      "fail": "fail"
+      "fail": "fail",
+      "releaseFailed": "Could not release lockout: {{message}}"
     },
     "settings": {
       "title": "Settings",
@@ -478,17 +522,27 @@
       "aiEnrichment": "AI Enrichment",
       "aiEnrichmentDesc": "Configure cache TTL for AI-generated information. After expiry, next request triggers a fresh fetch.",
       "trackInfoTtl": "Track info cache (days)",
-      "artistSupplementalTtl": "Artist supplemental cache (days)"
+      "artistSupplementalTtl": "Artist supplemental cache (days)",
+      "ttlTrackInvalid": "Track TTL must be at least 1 day.",
+      "ttlArtistInvalid": "Artist TTL must be at least 1 day.",
+      "backupQueued": "Backup queued: task {{taskId}}",
+      "newFlagPlaceholder": "new feature flag name",
+      "createFlag": "Create",
+      "creatingFlag": "Creating…"
     },
     "common": {
       "prev": "Prev",
       "next": "Next",
       "total": "{{count}} total",
-      "loading": "LoadingвЂ¦",
+      "loading": "Loading…",
       "save": "Save",
       "cancel": "Cancel",
       "confirm": "Confirm",
-      "retry": "Retry"
+      "ok": "OK",
+      "retry": "Retry",
+      "errorWithMessage": "Error: {{message}}",
+      "operationFailed": "Operation failed: {{message}}",
+      "unknownError": "Unknown error"
     },
     "status": {
       "ok": "ok",
@@ -511,13 +565,13 @@
     "tracks_title": "Tracks on the platform",
     "tracks_empty": "No tracks from this artist yet",
     "enrich_button": "Identify artist",
-    "enrich_loading": "IdentifyingвЂ¦",
+    "enrich_loading": "Identifying…",
     "enrich_failed": "Couldn't identify artist",
-    "enrichment_pending": "Loading dataвЂ¦",
+    "enrichment_pending": "Loading data…",
     "debug_toggle": "Debug",
     "debug_stage": "Stage",
     "debug_run": "Run with logs",
-    "debug_running": "RunningвЂ¦",
+    "debug_running": "Running…",
     "debug_empty": "Press \"Run with logs\" to see pipeline stages",
     "discography_title": "Discography",
     "sources_label": "Data source",

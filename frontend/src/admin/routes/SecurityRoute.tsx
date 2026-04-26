@@ -7,6 +7,7 @@ import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 import { useStepUp } from '../components/auth/StepUpDialog'
+import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { useCapability } from '../hooks/useCapability'
 
 interface AttemptRow {
@@ -51,6 +52,7 @@ const attemptColumns: ColumnDef<AttemptRow>[] = [
 
 export function SecurityRoute() {
   const { t } = useTranslation()
+  const { showAlert } = useAdminPrompt()
   const stepUp = useStepUp()
   const canRelease = useCapability(
     'security.release_lockout',
@@ -89,9 +91,12 @@ export function SecurityRoute() {
       await adminApi.releaseLockout(userId)
       locked.refetch()
     } catch (err) {
-      alert(
-        (err as Error).message ||
-          'release failed',
+      await showAlert(
+        t('admin.security.releaseFailed', {
+          message:
+            (err as Error).message ||
+            t('admin.common.unknownError'),
+        }),
       )
     }
   }

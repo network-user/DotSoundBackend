@@ -8,6 +8,7 @@ import {
 import type { ColumnDef } from '@tanstack/react-table'
 import { Press } from '@/components/ui/Press'
 import { adminApi } from '../lib/adminApi'
+import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 
@@ -23,6 +24,7 @@ interface TrackRow {
 
 export function TracksRoute() {
   const { t } = useTranslation()
+  const { showConfirm, showAlert } = useAdminPrompt()
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
@@ -52,20 +54,20 @@ export function TracksRoute() {
     })
 
   const handleDelete = async (id: number, title: string) => {
-    if (
-      !window.confirm(
-        `Удалить трек «${title}» (id=${id})? Это действие необратимо.`,
-      )
+    const ok = await showConfirm(
+      t('admin.tracks.confirmDelete', { id, title }),
+      { danger: true },
     )
-      return
+    if (!ok) return
     setBusyId(id)
     try {
       await adminApi.deleteTrack(id)
       refresh()
     } catch (err) {
-      alert(
-        'Не удалось удалить трек: ' +
-          (err as Error).message,
+      await showAlert(
+        t('admin.tracks.deleteFailed', {
+          message: (err as Error).message,
+        }),
       )
     } finally {
       setBusyId(null)
@@ -96,7 +98,7 @@ export function TracksRoute() {
 
   const columns: ColumnDef<TrackRow>[] = [
     {
-      header: 'ID',
+      header: t('admin.tracks.colId'),
       accessorKey: 'id',
       cell: (i) => (
         <span className="admin-mono">
@@ -105,7 +107,8 @@ export function TracksRoute() {
       ),
     },
     {
-      header: 'Title',
+      header: t('admin.tracks.colTitle'),
+      accessorKey: 'title',
       cell: (i) => (
         <button
           type="button"
@@ -116,19 +119,31 @@ export function TracksRoute() {
         </button>
       ),
     },
-    { header: 'Artist', accessorKey: 'artist' },
-    { header: 'Source', accessorKey: 'source' },
     {
-      header: 'Status',
+      header: t('admin.tracks.colArtist'),
+      accessorKey: 'artist',
+    },
+    {
+      header: t('admin.tracks.colSource'),
+      accessorKey: 'source',
+    },
+    {
+      header: t('admin.tracks.colStatus'),
+      accessorKey: 'is_active',
       cell: (i) =>
         i.row.original.is_active ? (
-          <StatusPill kind="ok">visible</StatusPill>
+          <StatusPill kind="ok">
+            {t('admin.tracks.visible')}
+          </StatusPill>
         ) : (
-          <StatusPill kind="warn">hidden</StatusPill>
+          <StatusPill kind="warn">
+            {t('admin.tracks.hidden')}
+          </StatusPill>
         ),
     },
     {
-      header: 'Uploaded',
+      header: t('admin.tracks.colUploaded'),
+      accessorKey: 'created_at',
       cell: (i) =>
         new Date(
           i.row.original.created_at,
@@ -137,6 +152,7 @@ export function TracksRoute() {
     {
       header: '',
       id: 'actions',
+      enableSorting: false,
       cell: (i) => {
         const { id, title, is_active } = i.row.original
         const busy = busyId === id
@@ -155,7 +171,9 @@ export function TracksRoute() {
               onClick={() => handleTogglePlay(id)}
               disabled={busy}
             >
-              {isPlaying ? '⏸' : '▶'}
+              {isPlaying
+                ? t('admin.tracks.actionPause')
+                : t('admin.tracks.actionPlay')}
             </Press>
             {isPlaying && (
               <audio
@@ -172,21 +190,23 @@ export function TracksRoute() {
               }
               disabled={busy}
             >
-              {is_active ? 'Скрыть' : 'Показать'}
+              {is_active
+                ? t('admin.tracks.actionHide')
+                : t('admin.tracks.actionShow')}
             </Press>
             <Press
               variant="ghost"
               onClick={() => handleOpen(id)}
               disabled={busy}
             >
-              Открыть
+              {t('admin.tracks.actionOpen')}
             </Press>
             <Press
               variant="ghost"
               onClick={() => handleDelete(id, title)}
               disabled={busy}
             >
-              Удалить
+              {t('admin.tracks.actionDelete')}
             </Press>
           </div>
         )
@@ -212,6 +232,7 @@ export function TracksRoute() {
       <DataTable
         columns={columns}
         rows={(data?.items || []) as unknown as TrackRow[]}
+        enableSorting
       />
       <div className="admin-pagination">
         <Press

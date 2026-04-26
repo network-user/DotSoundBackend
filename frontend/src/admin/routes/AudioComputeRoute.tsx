@@ -17,6 +17,7 @@ import { adminApi, adminFetch } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 import { WorkerDetailDrawer } from '../components/widgets/WorkerDetailDrawer'
+import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { WorkerOnboarding } from '../components/widgets/WorkerOnboarding'
 
 interface WorkerRow {
@@ -161,6 +162,7 @@ function tierBadgeKind(
 
 export function AudioComputeRoute() {
   const { t } = useTranslation()
+  const { showConfirm } = useAdminPrompt()
   const qc = useQueryClient()
 
   const workers = useQuery({
@@ -648,16 +650,14 @@ export function AudioComputeRoute() {
           return (
             <Press
               variant="ghost"
-              onClick={() => {
-                if (
-                  !window.confirm(
-                    t(
-                      'admin.audioCompute.jobTable.cancelConfirm',
-                    ),
-                  )
-                ) {
-                  return
-                }
+              onClick={async () => {
+                const ok = await showConfirm(
+                  t(
+                    'admin.audioCompute.jobTable.cancelConfirm',
+                  ),
+                  { danger: true },
+                )
+                if (!ok) return
                 cancelJobMutation.mutate(
                   i.row.original.id,
                 )
@@ -690,7 +690,7 @@ export function AudioComputeRoute() {
         ),
       },
     ],
-    [t, cancelJobMutation],
+    [t, cancelJobMutation, showConfirm],
   )
 
   const auditColumns: ColumnDef<AuditRow>[] =
@@ -1231,21 +1231,20 @@ export function AudioComputeRoute() {
                     {row.revoked_at && (
                       <Press
                         variant="ghost"
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              t(
-                                'admin.audioCompute.workerForm.deleteFromListConfirm',
-                                {
-                                  name: row.name,
-                                },
-                              ),
-                            )
-                          ) {
-                            deleteRevokedWorker.mutate(
-                              row.id,
-                            )
-                          }
+                        onClick={async () => {
+                          const ok = await showConfirm(
+                            t(
+                              'admin.audioCompute.workerForm.deleteFromListConfirm',
+                              {
+                                name: row.name,
+                              },
+                            ),
+                            { danger: true },
+                          )
+                          if (!ok) return
+                          deleteRevokedWorker.mutate(
+                            row.id,
+                          )
                         }}
                         disabled={
                           deleteRevokedWorker.isPending

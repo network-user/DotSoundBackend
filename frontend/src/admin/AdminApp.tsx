@@ -10,6 +10,7 @@ import { AdminInit } from './components/auth/AdminInit'
 import { AdminLogin } from './components/auth/AdminLogin'
 import { DeviceApproval } from './components/auth/DeviceApproval'
 import { StepUpProvider } from './components/auth/StepUpDialog'
+import { AdminPromptProvider } from './components/layout/AdminPromptContext'
 import { AdminShell } from './components/layout/AdminShell'
 import { adminApi } from './lib/adminApi'
 import { setUserTokenProvider } from './lib/adminApi'
@@ -166,7 +167,8 @@ export function AdminApp() {
     <QueryClientProvider client={queryClient}>
       <AuthGate>
         <StepUpProvider>
-          <AdminShell>
+          <AdminPromptProvider>
+            <AdminShell>
             {/* Mounted under outer <Route path="/admin/*">,
               * so all paths here are relative — the /admin
               * prefix is consumed by the parent route. */}
@@ -224,7 +226,8 @@ export function AdminApp() {
                 element={<SettingsRoute />}
               />
             </Routes>
-          </AdminShell>
+            </AdminShell>
+          </AdminPromptProvider>
         </StepUpProvider>
       </AuthGate>
     </QueryClientProvider>
