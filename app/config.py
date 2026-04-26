@@ -101,11 +101,11 @@ class AppSettings(BaseSettings):
     # Set YOUTUBE_ENABLED=true only after a residential proxy pool is wired up.
     youtube_enabled: bool = False
 
-    # Tor exit-node pool (SoundCloud, Bandcamp — NOT YouTube; Google blocks Tor exits).
-    # TOR_POOL_SIZE circuits are kept open and rotated every TOR_CIRCUIT_MAX_AGE_SECONDS.
-    # Requires Tor installed: apt install tor  /  Tor Expert Bundle on Windows.
-    # Set TOR_POOL_ENABLED=false if Tor is unavailable and you need direct HTTP.
-    tor_pool_enabled: bool = True
+    # Tor exit-node pool (SoundCloud, Bandcamp — NOT YouTube; Google blocks
+    # Tor exits). Off by default; set TOR_POOL_ENABLED=true in .env to start
+    # a subprocess. TOR_POOL_SIZE circuits, TOR_CIRCUIT_MAX_AGE_SECONDS.
+    # Requires: apt install tor / Tor Expert Bundle on Windows.
+    tor_pool_enabled: bool = False
     tor_pool_size: int = 10
     tor_socks_base_port: int = 9050
     # If this falls into [``TOR_SOCKS_BASE_PORT``,
