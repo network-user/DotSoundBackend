@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-import platform
+import contextlib
+import os
+import shutil
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import httpx
 import structlog
@@ -28,6 +31,98 @@ def get_outbound_proxy(service: str = "") -> str | None:
     if pool is None:
         return None
     return pool.get_proxy(service)
+
+
+def _tbb_nest_parts(executable: str) -> tuple[str, ...]:
+    return (
+        "Tor Browser",
+        "Browser",
+        "TorBrowser",
+        "Tor",
+        executable,
+    )
+
+
+def _dedupe_path_order(paths: list[Path]) -> list[Path]:
+    seen: set[str] = set()
+    out: list[Path] = []
+    for p in paths:
+        key = str(p)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(p)
+    return out
+
+
+def _windows_program_files_tor_paths() -> list[Path]:
+    out: list[Path] = []
+    tbb = _tbb_nest_parts("tor.exe")
+    for env_key in ("PROGRAMFILES", "PROGRAMFILES(X86)"):
+        base = os.environ.get(env_key)
+        if not base:
+            continue
+        b = Path(base)
+        out.append(b / "Tor" / "tor" / "tor.exe")
+        out.append(b.joinpath(*tbb))
+    return out
+
+
+def _user_folder_tor_bundles(executable: str) -> list[Path]:
+    home = Path.home()
+    tbb = _tbb_nest_parts(executable)
+    paths: list[Path] = []
+    for base in (
+        home / "Desktop",
+        home / "Downloads",
+        home / "OneDrive" / "Desktop",
+    ):
+        paths.append(base.joinpath(*tbb))
+    return paths
+
+
+def _search_tor_bundles() -> list[Path]:
+    if os.name == "nt":
+        w = _windows_program_files_tor_paths() + _user_folder_tor_bundles(
+            "tor.exe"
+        )
+        return _dedupe_path_order(w)
+    u = _user_folder_tor_bundles("tor")
+    return _dedupe_path_order(u)
+
+
+def resolve_tor_executable(
+    tor_bin_path: str,
+) -> str:
+    """Path to the Tor binary; falls back to ``tor[.exe]`` name."""
+    raw = (tor_bin_path or "").strip()
+    if raw:
+        p = Path(os.path.expanduser(os.path.expandvars(raw)))
+        if p.is_file():
+            return str(p.resolve())
+        if p.is_dir():
+            ex = p / "tor.exe" if os.name == "nt" else p / "tor"
+            if ex.is_file():
+                return str(ex.resolve())
+        return str(p)
+
+    suffix = "tor.exe" if os.name == "nt" else "tor"
+    w = shutil.which("tor.exe" if os.name == "nt" else "tor")
+    if w:
+        return w
+    for cand in _search_tor_bundles():
+        if cand.is_file():
+            logger.info(
+                "tor_executable_resolved",
+                path=str(cand.resolve()),
+            )
+            return str(cand.resolve())
+    logger.info(
+        "tor_executable_not_in_path",
+        expected=suffix,
+        hint="set TOR_BIN_PATH or add tor to PATH; or put TBB on Desktop",
+    )
+    return suffix
 
 
 @dataclass
@@ -81,9 +176,7 @@ class TorPool:
             "Log": "notice stderr",
         }
 
-        tor_cmd: str = s.tor_bin_path or (
-            "tor.exe" if platform.system() == "Windows" else "tor"
-        )
+        tor_cmd: str = resolve_tor_executable(s.tor_bin_path)
 
         logger.info(
             "tor_pool_starting",
@@ -138,29 +231,23 @@ class TorPool:
         for task in (self._health_task, self._renewal_task):
             if task is not None:
                 task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await task
-                except asyncio.CancelledError:
-                    pass
 
         if self._controller is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._controller.close()  # type: ignore[union-attr]
-            except Exception:
-                pass
             self._controller = None
 
         if self._process is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._process.kill()  # type: ignore[union-attr]
-            except Exception:
-                pass
             self._process = None
 
         logger.info("tor_pool_stopped")
 
     def get_proxy(self, service: str = "") -> str:
-        """Round-robin over healthy circuits; falls back to all if all degraded."""
+        """Round-robin on healthy circuits; if all are degraded, use all."""
         max_fail: float = self._settings.tor_circuit_max_failure_rate
         healthy = [c for c in self._circuits if c.failure_rate < max_fail]
         pool = healthy or self._circuits
@@ -219,9 +306,7 @@ class TorPool:
 
     async def _renewal_loop(self) -> None:
         while True:
-            await asyncio.sleep(
-                self._settings.tor_circuit_max_age_seconds
-            )
+            await asyncio.sleep(self._settings.tor_circuit_max_age_seconds)
             if self._controller is None:
                 logger.warning("tor_renewal_skipped_no_controller")
                 continue

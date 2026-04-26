@@ -387,8 +387,10 @@
   и саджеста, counter `elasticsearch_query_total` (op/outcome) в `observability`
 - [x] `artist_link_backfill_task` / `track_artists`: дедуп по
   `canonical` (PrivateCore + `resolve_and_link`), `ON CONFLICT DO NOTHING`
-  в `link_track`, `begin_nested` + `error`/`error_type` в backfill, уровень
-  `elastic_transport` -> WARNING
+  в `link_track`, `begin_nested` + `error`/`error_type` в backfill
+- [x] `LOG_THIRD_PARTY_LEVEL` / `apply_third_party_log_levels` — уровень
+  ``urllib3``/httpx/ES/SQL-эха отдельно от ``LOG_LEVEL``; Taskiq воркеры
+  тоже при старте
 - playable_only фильтр в track listing endpoints
 - internal-token endpoint с полной защитой
 - WebSocket: событие player.state для синхронизации

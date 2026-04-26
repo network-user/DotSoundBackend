@@ -19,6 +19,10 @@ class AppSettings(BaseSettings):
     minio_bucket: str
     minio_use_ssl: bool = False
     log_level: str = "INFO"
+    # Uvicorn root uses ``LOG_LEVEL``. This caps noisy third-party
+    # loggers (Elasticsearch transport, urllib3, httpx, …). Use DEBUG
+    # when you need to trace a client. Env: ``LOG_THIRD_PARTY_LEVEL``.
+    log_third_party_level: str = "WARNING"
     complaint_threshold: int = 3
     sc_client_id: str = ""
     telegram_bot_token: str = ""

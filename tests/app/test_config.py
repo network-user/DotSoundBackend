@@ -130,11 +130,13 @@ def test_env_overrides_defaults(
         JWT_EXPIRE_DAYS="30",
         DEBUG="true",
         LOG_LEVEL="DEBUG",
+        LOG_THIRD_PARTY_LEVEL="ERROR",
     )
 
     assert cfg.jwt_expire_days == 30
     assert cfg.debug is True
     assert cfg.log_level == "DEBUG"
+    assert cfg.log_third_party_level == "ERROR"
 
 
 def test_allowed_origins_wildcard_default(
