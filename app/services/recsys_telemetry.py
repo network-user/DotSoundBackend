@@ -66,7 +66,7 @@ class RecsysTelemetryService:
         await self._session.flush()
         logger.info(
             "recsys_metric",
-            event="impression_batch",
+            kind="impression_batch",
             user_id=user_id,
             surface=surface,
             algorithm_version=version,
