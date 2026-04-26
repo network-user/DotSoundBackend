@@ -1,5 +1,9 @@
 import structlog
-from sqlalchemy import func, select
+from dotsound_private_core.services.recommendation_language_policy import (
+    RUS_CANDIDATE_CYRILLIC_PATTERN,
+    cyrillic_likely_ru_title_artist,
+)
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist import TrackArtist
@@ -40,6 +44,106 @@ class RecommendationRepository:
         result = await self._session.execute(q)
         return list(result.scalars().all())
 
+    async def get_cyrillic_likely_ru_candidates(
+        self,
+        limit: int = 100,
+        genre_filter: list[str] | None = None,
+        exclude_ids: set[int] | None = None,
+    ) -> list[Track]:
+        q = select(Track).where(
+            Track.is_active.is_(True),
+            Track.is_public.is_(True),
+        )
+        if genre_filter:
+            q = q.where(
+                Track.genre.in_(genre_filter)
+            )
+        if exclude_ids:
+            q = q.where(
+                Track.id.notin_(exclude_ids)
+            )
+        bind = self._session.get_bind()
+        dialect = bind.dialect.name
+        if dialect == "postgresql":
+            pat = RUS_CANDIDATE_CYRILLIC_PATTERN
+            q = q.where(
+                or_(
+                    func.coalesce(Track.title, "").op("~")(
+                        pat
+                    ),
+                    func.coalesce(Track.artist, "").op("~")(
+                        pat
+                    ),
+                )
+            )
+            q = q.order_by(
+                Track.play_count.desc()
+            ).limit(limit)
+        else:
+            cap = min(2000, max(limit * 30, 300))
+            q = q.order_by(
+                Track.play_count.desc()
+            ).limit(cap)
+        result = await self._session.execute(q)
+        rows = list(result.scalars().all())
+        if dialect != "postgresql":
+            rows = [
+                t
+                for t in rows
+                if cyrillic_likely_ru_title_artist(
+                    t.title, t.artist
+                )
+            ][:limit]
+        return rows
+
+    async def get_candidate_tracks_stratified(
+        self,
+        total_limit: int = 200,
+        genre_filter: list[str] | None = None,
+        exclude_ids: set[int] | None = None,
+        cyrillic_strata_ratio: float = 0.4,
+    ) -> list[Track]:
+        n_cyr = int(total_limit * cyrillic_strata_ratio)
+        n_glob = max(0, total_limit - n_cyr)
+        ex0 = set(exclude_ids) if exclude_ids else set()
+        global_tracks: list[Track] = []
+        if n_glob > 0:
+            global_tracks = await self.get_candidate_tracks(
+                limit=n_glob,
+                genre_filter=genre_filter,
+                exclude_ids=ex0,
+            )
+        gids = {t.id for t in global_tracks}
+        cyr_tracks: list[Track] = []
+        if n_cyr > 0:
+            cyr_tracks = await self.get_cyrillic_likely_ru_candidates(
+                limit=n_cyr,
+                genre_filter=genre_filter,
+                exclude_ids=ex0 | gids,
+            )
+        seen: set[int] = set()
+        out: list[Track] = []
+        for t in global_tracks + cyr_tracks:
+            if t.id in seen:
+                continue
+            seen.add(t.id)
+            out.append(t)
+        if len(out) < total_limit:
+            need = total_limit - len(out)
+            more = await self.get_candidate_tracks(
+                limit=need + len(seen) + 50,
+                genre_filter=genre_filter,
+                exclude_ids=seen | ex0,
+            )
+            for t in more:
+                if t.id in seen:
+                    continue
+                seen.add(t.id)
+                out.append(t)
+                if len(out) >= total_limit:
+                    break
+        return out[:total_limit]
+
     async def get_popular_tracks(
         self, limit: int = 20
     ) -> list[Track]:
@@ -59,8 +163,7 @@ class RecommendationRepository:
         days: int = 7,
         limit: int = 20,
     ) -> list[Track]:
-        from datetime import UTC, datetime
-        from datetime import timedelta
+        from datetime import UTC, datetime, timedelta
 
         cutoff = datetime.now(UTC) - timedelta(
             days=days

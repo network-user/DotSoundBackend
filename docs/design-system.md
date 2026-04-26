@@ -132,7 +132,8 @@ Renders a pill banner at the top of the screen whenever
 All icons are defined in `frontend/src/components/Icon/Icon.tsx`,
 stroke-only, sharing the 24×24 view-box. Whenever a component is
 about to use a Unicode glyph or an emoji, replace it with an
-`<Icon name="…" />` call.
+`<Icon name="…" />` call. New glyphs (for example `calendar` for
+date-scoped content) are added to the same `PATHS` map.
 
 ## Status semantics (admin only)
 

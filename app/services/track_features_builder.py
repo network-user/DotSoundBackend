@@ -13,8 +13,14 @@ the ``track_audio_features`` table.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
+from dotsound_private_core.services.recommendation_engine import (
+    TrackFeatures,
+)
+from dotsound_private_core.services.recommendation_language_policy import (
+    infer_listening_language_code,
+)
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,9 +29,6 @@ from app.models.dislike import Dislike
 from app.models.like import Like
 from app.models.listen_event import ListenEvent
 from app.models.track import Track
-from dotsound_private_core.services.recommendation_engine import (
-    TrackFeatures,
-)
 
 WINDOW_DAYS = 7
 
@@ -44,7 +47,7 @@ async def build_track_features(
         return []
 
     track_ids = [t.id for t in tracks]
-    cutoff = datetime.now(timezone.utc) - timedelta(
+    cutoff = datetime.now(UTC) - timedelta(
         days=WINDOW_DAYS
     )
 
@@ -178,6 +181,9 @@ async def build_track_features(
                 ),
                 mood_tags=[],
                 audio_feature_vector=None,
+                language_code=infer_listening_language_code(
+                    t.title, t.artist
+                ),
             )
         )
     return out

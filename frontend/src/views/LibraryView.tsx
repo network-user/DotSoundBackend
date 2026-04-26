@@ -95,7 +95,9 @@ export function LibraryView() {
           style={{ width: '100%' }}
           onClick={() => navigate('/daily-mix')}
         >
-          <div style={{ fontSize: 32, lineHeight: 1 }}>📅</div>
+          <div className="playlist-cover" aria-hidden>
+            <Icon name="calendar" size={26} />
+          </div>
           <div style={{ flex: 1, textAlign: 'left' }}>
             <div style={{ fontWeight: 600, fontSize: 15 }}>
               {t('home.dayPlaylistTitle')}

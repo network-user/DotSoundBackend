@@ -1547,6 +1547,12 @@ export const api = {
     return request('/api/v1/recommendations/daily-playlist')
   },
 
+  getWeeklyPlaylist(): Promise<
+    import('@/types/api').WeeklyPlaylistResponse
+  > {
+    return request('/api/v1/recommendations/weekly-playlist')
+  },
+
   refreshDailyPlaylist(): Promise<void> {
     return request('/api/v1/recommendations/daily-playlist/refresh', { method: 'POST' })
   },

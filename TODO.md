@@ -107,6 +107,11 @@
 
 ## Граница Backend / PrivateCore
 
+- [x] **Рекомендации (2026-04):** приоритет русскоязычного контента —
+  `recommendation_language_policy` (PrivateCore), affiniti из истории
+  + `users.locale`, стратификация пула кандидатов, RU-запросы в
+  external discovery; см. `docs/project_context.md`,
+  `docs/private-boundary-inventory.md`
 - **Immediate: перенести auth/email policy в PrivateCore**
   - `account_linking_service`: `_LINK_TTL`, `_LINK_EMAIL_TYPE`, `_LINK_PREFIX`, `_LINK_TG_PREFIX`
   - `account_linking_service`: импортировать `is_disposable_email` из `dotsound_private_core.services.abuse`
@@ -355,6 +360,9 @@
 
 ## Frontend / Mini App
 
+- [x] Главная: CTA «Слушать/Play» — старт с первого трека плейлиста дня
+  (дальше — существующий radio-prefetch в `PlayerContext`); карточка
+  «плейлист недели» и экран `/weekly-mix` (API `weekly-playlist`).
 - Восстановление позиции воспроизведения при перезапуске
 - Монохром-фильтр в настройках
 - Админ-панель: управление пользователями
@@ -365,6 +373,9 @@
 
 ## Frontend оптимизация
 
+- [x] **Waveform (карточка трека): снижение нагрузки на iGPU** — rAF и
+  отрисовка спектра только при `isPlaying` (не 60 fps в паузе),
+  ~30 fps для декоративного спектра
 - [x] **SearchView: прогрессивная выдача** — `getTracks` / `searchSuggest`
   не ждут YouTube, Bandcamp, SoundCloud; внешние секции обновляются
   по мере ответа и могут отображаться до готовности блока «На платформе»

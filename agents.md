@@ -143,6 +143,10 @@ Backend (file_validator.py):
 - `services/web_auth.py` -- OTP generation, IP masking, UA parsing
 - `services/internal_bridge.py` -- URL/header builders
 - `services/import_rules.py` -- import limits
+- `services/recommendation_engine.py` + `recommendation_language_policy.py` --
+  recsys scoring, listening-language heuristics; питают
+  `app/services/recommendation_service.py` и
+  `app/repositories/recommendation.py` (транспорт/пул)
 - `services/upload_policy.py` -- upload security: MIME allowlists,
   dangerous extensions, size limits, decision functions
 - `services/admin_security_policy.py` -- TTL admin-сессии, окно
