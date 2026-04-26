@@ -243,6 +243,9 @@ const PlayerContext =
 
 const _SAVE_INTERVAL = 5000
 
+/** Min interval between React time updates (progress, lyrics UI). */
+const PLAYER_UI_TIME_MS = 100
+
 function _saveState(t: Track | null, s: number) {
   if (!t) return
   localStorage.setItem(
@@ -465,6 +468,7 @@ export function PlayerProvider({
   const listenSignalSentRef = useRef(false)
   const listenStartTimeRef = useRef(0)
   const restoredRef = useRef(false)
+  const playerTimeUiLastRef = useRef(0)
 
   const applyEqBands = useCallback(
     (
@@ -912,6 +916,8 @@ export function PlayerProvider({
 
     const onPlay = () => {
       setIsPlaying(true)
+      setCurrentTime(audio.currentTime)
+      playerTimeUiLastRef.current = performance.now()
       if ('mediaSession' in navigator)
         navigator.mediaSession.playbackState = 'playing'
       if (audioCtxRef.current?.state === 'suspended')
@@ -933,6 +939,8 @@ export function PlayerProvider({
     }
     const onPause = () => {
       setIsPlaying(false)
+      setCurrentTime(audio.currentTime)
+      playerTimeUiLastRef.current = performance.now()
       if ('mediaSession' in navigator)
         navigator.mediaSession.playbackState = 'paused'
       sendListenSignal()
@@ -1040,8 +1048,18 @@ export function PlayerProvider({
         audio.currentTime >= ab.b
       ) {
         audio.currentTime = ab.a
+        playerTimeUiLastRef.current = 0
       }
-      setCurrentTime(audio.currentTime)
+      const now = performance.now()
+      if (
+        now - playerTimeUiLastRef.current <
+        PLAYER_UI_TIME_MS
+      ) {
+        return
+      }
+      playerTimeUiLastRef.current = now
+      const t = audio.currentTime
+      setCurrentTime(t)
       _updatePositionState(audio)
     }
     const onDur = () =>
@@ -1435,11 +1453,26 @@ export function PlayerProvider({
     } else a.pause()
   }
 
-  const seek = (pct: number) => {
-    const a = audioRef.current
-    if (!a || !a.duration) return
-    a.currentTime = (pct / 100) * a.duration
-  }
+  const flushPlayerTimeUi = useCallback(
+    () => {
+      const a = audioRef.current
+      if (!a) return
+      playerTimeUiLastRef.current = performance.now()
+      setCurrentTime(a.currentTime)
+      _updatePositionState(a)
+    },
+    [],
+  )
+
+  const seek = useCallback(
+    (pct: number) => {
+      const a = audioRef.current
+      if (!a || !a.duration) return
+      a.currentTime = (pct / 100) * a.duration
+      flushPlayerTimeUi()
+    },
+    [flushPlayerTimeUi],
+  )
 
   const stop = () => {
     const a = audioRef.current
@@ -1459,29 +1492,41 @@ export function PlayerProvider({
     _clearState()
   }
 
-  const seekToSeconds = useCallback((sec: number) => {
-    const a = audioRef.current
-    if (!a || !a.duration) return
-    a.currentTime = Math.max(
-      0,
-      Math.min(a.duration, sec),
-    )
-  }, [])
+  const seekToSeconds = useCallback(
+    (sec: number) => {
+      const a = audioRef.current
+      if (!a || !a.duration) return
+      a.currentTime = Math.max(
+        0,
+        Math.min(a.duration, sec),
+      )
+      flushPlayerTimeUi()
+    },
+    [flushPlayerTimeUi],
+  )
 
-  const skipForward = useCallback((s = 15) => {
-    const a = audioRef.current
-    if (!a) return
-    a.currentTime = Math.min(
-      a.duration || 0,
-      a.currentTime + s,
-    )
-  }, [])
+  const skipForward = useCallback(
+    (s = 15) => {
+      const a = audioRef.current
+      if (!a) return
+      a.currentTime = Math.min(
+        a.duration || 0,
+        a.currentTime + s,
+      )
+      flushPlayerTimeUi()
+    },
+    [flushPlayerTimeUi],
+  )
 
-  const skipBackward = useCallback((s = 15) => {
-    const a = audioRef.current
-    if (!a) return
-    a.currentTime = Math.max(0, a.currentTime - s)
-  }, [])
+  const skipBackward = useCallback(
+    (s = 15) => {
+      const a = audioRef.current
+      if (!a) return
+      a.currentTime = Math.max(0, a.currentTime - s)
+      flushPlayerTimeUi()
+    },
+    [flushPlayerTimeUi],
+  )
 
   const setPlaybackRate = useCallback(
     (rate: number) => {

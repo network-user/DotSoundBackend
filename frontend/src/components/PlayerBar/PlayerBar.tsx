@@ -7,7 +7,11 @@ import {
 } from 'react'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
-import { usePlayer } from '@/store/PlayerContext'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+  usePlayerState,
+} from '@/store/PlayerContext'
 import { haptic } from '@/lib/telegram'
 import { useRipple } from '@/components/ui/Ripple'
 
@@ -29,10 +33,17 @@ function fmt(sec: number) {
 
 export function PlayerBar() {
   const {
-    track,
-    isPlaying,
     currentTime,
     duration,
+    isPlaying,
+  } = usePlayerState()
+  const {
+    track,
+    repeatMode,
+    shuffleOn,
+    hlsError,
+  } = usePlayerMeta()
+  const {
     togglePlay,
     seek,
     playNext,
@@ -41,13 +52,10 @@ export function PlayerBar() {
     openEq,
     openQueue,
     stop,
-    repeatMode,
-    shuffleOn,
-    hlsError,
     toggleRepeat,
     toggleShuffle,
     clearHlsError,
-  } = usePlayer()
+  } = usePlayerActions()
   const { isLiked, toggleLike } = useLikes()
   const [likeBurst, setLikeBurst] =
     useState(false)

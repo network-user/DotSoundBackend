@@ -29,6 +29,7 @@ from app.api.v1 import (
     search,
     signals,
     soundcloud,
+    track_preview,
     tracks,
     users,
     ws,
@@ -48,6 +49,7 @@ api_router.include_router(likes.router)
 api_router.include_router(dislikes.router)
 api_router.include_router(playlists.router)
 api_router.include_router(soundcloud.router)
+api_router.include_router(track_preview.router)
 api_router.include_router(youtube.router)
 api_router.include_router(bandcamp.router)
 api_router.include_router(complaints.router, tags=["complaints"])

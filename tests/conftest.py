@@ -339,3 +339,22 @@ async def admin_bearer_for_user(
         ttl_seconds=ADMIN_SESSION_TTL_SECONDS,
     )
     return {"Authorization": f"Bearer {token}"}
+
+
+async def grant_admin_capability(
+    db_session: AsyncSession,
+    user_id: int,
+    capability: str,
+) -> None:
+    from datetime import UTC, datetime
+
+    from app.models.admin_capability import AdminCapability
+
+    db_session.add(
+        AdminCapability(
+            user_id=user_id,
+            capability=capability,
+            granted_at=datetime.now(UTC),
+        )
+    )
+    await db_session.commit()

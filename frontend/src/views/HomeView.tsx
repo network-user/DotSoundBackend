@@ -7,7 +7,7 @@ import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { Icon } from '@/components/Icon/Icon'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { firstTrackFromDailyPlaylist } from '@/lib/playlistFirstTrack'
-import { usePlayer } from '@/store/PlayerContext'
+import { usePlayerActions } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
 
 interface HomeSection {
@@ -20,7 +20,7 @@ export function HomeView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const toast = useToast()
-  const { playTrack } = usePlayer()
+  const { playTrack } = usePlayerActions()
   const [sections, setSections] = useState<HomeSection[] | null>(null)
   const [fallbackTracks, setFallbackTracks] = useState<
     Track[] | null

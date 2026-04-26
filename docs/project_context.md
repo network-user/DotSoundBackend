@@ -64,6 +64,8 @@ frontend/src/
   lib/ws.ts        ← WebSocket с авто-реконнектом
 ```
 
+**Онбординг — превью по жанру (recsys):** таблицы `genre_samples` и `track_preview_clips` (миграция `0059`), `GenreSamplesService`, публичные `GET /api/v1/onboarding/genres/{genre}/preview-queue` (требуется JWT) и `GET /api/v1/track-preview/{track_id}/segment.mp4` (15s AAC в fMP4). Кураторский список: `GET/POST/DELETE /api/v1/admin/genre-samples` с capability `recsys.genre_samples.manage`.
+
 ---
 
 ## Поиск: Elasticsearch (опционально)
@@ -303,6 +305,15 @@ WebSocket на Redis, статистика для владельца трека,
 - Архитектура: `api/v1/` → `services/` → `repositories/` → `models/`
 - Правило: route handlers не делают DB-запросы напрямую
 - Правило: security constants только из PrivateCore
+
+---
+
+## Recsys (параллельные чаты / handoff) — временно
+
+После завершения треков A / B-pre / B1 / B2 удалить эту секцию и каталог `docs/recsys-parallel/` (см. [`docs/recsys-parallel/README.md`](recsys-parallel/README.md) → «Уборка»).
+
+- Индекс треков и файлы с промптами: [`docs/recsys-parallel/README.md`](recsys-parallel/README.md)
+- Исторический диалог: [`.cursor/rules/context_delete.txt`](../.cursor/rules/context_delete.txt)
 
 ---
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { usePlayer } from '@/store/PlayerContext'
+import { usePlayerActions } from '@/store/PlayerContext'
 import { UploadFileTab } from '@/components/Upload/UploadFileTab'
 import { UploadSoundCloudTab } from '@/components/Upload/UploadSoundCloudTab'
 import { UploadYouTubeTab } from '@/components/Upload/UploadYouTubeTab'
@@ -11,7 +11,7 @@ type Tab = 'file' | 'soundcloud' | 'youtube' | 'bandcamp'
 
 export function UploadView() {
   const navigate = useNavigate()
-  const { playTrack } = usePlayer()
+  const { playTrack } = usePlayerActions()
   const [tab, setTab] = useState<Tab>('file')
 
   const handleSuccess = async (track: Track) => {

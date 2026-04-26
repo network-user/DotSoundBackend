@@ -4,7 +4,7 @@ import { TrackList } from '@/components/TrackList/TrackList'
 import { TrackCard } from '@/components/TrackCard/TrackCard'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { api } from '@/lib/api'
-import { usePlayer } from '@/store/PlayerContext'
+import { usePlayerActions } from '@/store/PlayerContext'
 import { useLikes } from '@/store/LikesContext'
 import { useDebounce } from '@/hooks/useDebounce'
 import { Icon } from '@/components/Icon/Icon'
@@ -53,7 +53,7 @@ function mergeTracksBySuggestOrder(
 
 export function SearchView({ onOpenArtist }: SearchViewProps) {
   const { t } = useTranslation()
-  const { playTrack } = usePlayer()
+  const { playTrack } = usePlayerActions()
   const { toggleLike } = useLikes()
   const [query, setQuery] = useState('')
   const [tracks, setTracks] = useState<Track[] | null | 'idle'>('idle')

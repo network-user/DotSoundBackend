@@ -112,6 +112,11 @@
   + `users.locale`, стратификация пула кандидатов, RU-запросы в
   external discovery; см. `docs/project_context.md`,
   `docs/private-boundary-inventory.md`
+- [x] **recsys-parallel — Track A / Phase 1 (2026-04):** гибрид
+  `genre_samples` + очередь 15s превью, `GET .../preview-queue`,
+  `GET /api/v1/track-preview/{id}/segment.mp4`, админ-CRUD и capability
+  `recsys.genre_samples.manage` — см.
+  `docs/recsys-parallel/01-track-a-phase1.md`
 - **Immediate: перенести auth/email policy в PrivateCore**
   - `account_linking_service`: `_LINK_TTL`, `_LINK_EMAIL_TYPE`, `_LINK_PREFIX`, `_LINK_TG_PREFIX`
   - `account_linking_service`: импортировать `is_disposable_email` из `dotsound_private_core.services.abuse`
@@ -376,6 +381,10 @@
 - [x] **Waveform (карточка трека): снижение нагрузки на iGPU** — rAF и
   отрисовка спектра только при `isPlaying` (не 60 fps в паузе),
   ~30 fps для декоративного спектра
+- [x] **PlayerContext: CPU** — throttling обновлений `currentTime` в React
+  (~10/s), flush при play/pause/seek/skip; вьюхи и экраны без таймера
+  переведены с `usePlayer()` на `usePlayerActions` / `usePlayerMeta`, чтобы
+  не перерисовываться на каждый тик
 - [x] **SearchView: прогрессивная выдача** — `getTracks` / `searchSuggest`
   не ждут YouTube, Bandcamp, SoundCloud; внешние секции обновляются
   по мере ответа и могут отображаться до готовности блока «На платформе»

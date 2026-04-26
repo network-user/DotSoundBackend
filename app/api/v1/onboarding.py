@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
+from app.schemas.genre_samples import GenrePreviewQueueResponse
 from app.schemas.onboarding import (
     ArtistBriefResponse,
     CalibrationRequest,
@@ -10,6 +11,7 @@ from app.schemas.onboarding import (
     OnboardingStatusResponse,
 )
 from app.schemas.track import TrackResponse
+from app.services.genre_samples_service import GenreSamplesService
 from app.services.onboarding_service import (
     OnboardingService,
 )
@@ -49,6 +51,24 @@ async def get_genres(
 ):
     svc = OnboardingService(db)
     return await svc.get_available_genres()
+
+
+@router.get(
+    "/genres/{genre}/preview-queue",
+    response_model=GenrePreviewQueueResponse,
+)
+async def get_genre_preview_queue(
+    genre: str,
+    limit: int = 10,
+    _user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GenrePreviewQueueResponse:
+    cap = max(1, min(limit, 10))
+    svc = GenreSamplesService(db)
+    tracks = await svc.get_preview_queue(genre, cap)
+    return GenrePreviewQueueResponse(
+        items=[TrackResponse.model_validate(t) for t in tracks],
+    )
 
 
 @router.get(

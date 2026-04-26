@@ -3931,6 +3931,36 @@ html.le-lyrics-sync-open body {
   justify-content: center;
 }
 
+.onboarding-genre-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.onboarding-genre-preview {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.onboarding-audio {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .onboarding-chip {
   padding: 8px 16px;
   border-radius: 20px;

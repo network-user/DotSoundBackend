@@ -6,7 +6,11 @@ import {
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
 import { api } from '@/lib/api'
-import { usePlayer } from '@/store/PlayerContext'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+  usePlayerState,
+} from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import type {
   LyricsResponse,
@@ -38,15 +42,14 @@ export function LyricsEditor({
   onCancel,
 }: Props) {
   const { t } = useTranslation()
+  const { currentTime, duration, isPlaying } =
+    usePlayerState()
+  const { track } = usePlayerMeta()
   const {
-    currentTime,
-    duration,
-    isPlaying,
-    track,
     playTrack,
     togglePlay,
     seek,
-  } = usePlayer()
+  } = usePlayerActions()
 
   const [step, setStep] = useState<Step>('text')
   const [plainText, setPlainText] = useState(

@@ -1,7 +1,10 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { api } from '@/lib/api'
 import { tg } from '@/lib/telegram'
-import { usePlayer } from '@/store/PlayerContext'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+} from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { useToast } from '@/components/ui/Toast'
@@ -15,8 +18,8 @@ type ReasonType =
 type ComplaintMode = 'user' | 'rightsholder'
 
 export function ComplaintModal() {
-  const { track, isComplaintOpen, closeComplaint, stop } =
-    usePlayer()
+  const { track, isComplaintOpen } = usePlayerMeta()
+  const { closeComplaint, stop } = usePlayerActions()
   const [reason, setReason] = useState('')
   const [mode, setMode] =
     useState<ComplaintMode>('user')

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
-import { usePlayer } from '@/store/PlayerContext'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+  usePlayerState,
+} from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import type { Track } from '@/types/api'
@@ -24,20 +28,22 @@ const PRESETS: Record<string, number[]> = {
 const PRESET_NAMES = Object.keys(PRESETS)
 
 export function Equalizer() {
+  const { isPlaying } = usePlayerState()
   const {
     isEqOpen,
-    closeEq,
+    track,
     eqBands,
     eqPreset,
     eqBypassed,
+  } = usePlayerMeta()
+  const {
+    closeEq,
     setEqBand,
     setEqPreset,
     toggleEqBypass,
     resetEq,
-    track,
-    isPlaying,
     playTrack,
-  } = usePlayer()
+  } = usePlayerActions()
 
   const [previewTracks, setPreviewTracks] =
     useState<Track[]>([])
