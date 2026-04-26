@@ -7,7 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
-from app.schemas.follow import FollowListResponse, FollowToggleResponse, FollowerResponse
+from app.schemas.follow import (
+    FollowerResponse,
+    FollowListResponse,
+    FollowToggleResponse,
+)
 from app.services.follow_service import FollowService
 
 router = APIRouter(prefix="/users", tags=["follows"])

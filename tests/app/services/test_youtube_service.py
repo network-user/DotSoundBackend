@@ -1,5 +1,7 @@
-from app.services.youtube_service import _yt_is_bot_gate_error
-from app.services.youtube_service import _yt_pick_stream_url
+from app.services.youtube_service import (
+    _yt_is_bot_gate_error,
+    _yt_pick_stream_url,
+)
 
 
 def test_yt_pick_skips_top_level_m3u8_uses_format_list() -> None:

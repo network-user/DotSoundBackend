@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, ForeignKey, Integer, JSON, String
+from sqlalchemy import JSON, BigInteger, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin

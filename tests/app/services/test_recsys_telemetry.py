@@ -1,4 +1,7 @@
 import pytest
+from dotsound_private_core.services.recommendation_engine import (
+    get_algorithm_version,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,9 +12,6 @@ from app.models.track import Track
 from app.models.user import User
 from app.services.recsys_telemetry import (
     RecsysTelemetryService,
-)
-from dotsound_private_core.services.recommendation_engine import (
-    get_algorithm_version,
 )
 
 pytestmark = pytest.mark.anyio

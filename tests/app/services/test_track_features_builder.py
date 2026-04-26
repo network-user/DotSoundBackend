@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,7 +71,7 @@ async def _add_listen(
     skipped: bool = False,
     created_at: datetime | None = None,
 ) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     event = ListenEvent(
         user_id=user_id,
         track_id=track_id,
@@ -204,7 +204,7 @@ async def test_old_listens_excluded_from_window(
     track = await _make_track(session)
     u1 = await _make_user(session, 20)
 
-    old = datetime.now(timezone.utc) - timedelta(
+    old = datetime.now(UTC) - timedelta(
         days=WINDOW_DAYS + 1
     )
     await _add_listen(

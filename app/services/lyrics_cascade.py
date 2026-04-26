@@ -14,7 +14,7 @@ itself is immutable here.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog  # noqa: F401  -- kept for explicit BoundLogger annotation
@@ -51,7 +51,7 @@ TIER_PROFILE_MAP: dict[str, str] = {
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _now_iso() -> str:
@@ -347,7 +347,7 @@ async def _advance_to_next_tier(
                 if started_aware.tzinfo is None:
                     started_aware = (
                         started_aware.replace(
-                            tzinfo=timezone.utc
+                            tzinfo=UTC
                         )
                     )
                 duration = (

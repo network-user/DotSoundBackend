@@ -19,7 +19,7 @@ Hooks in two places today:
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from dotsound_private_core.services.compute_anomaly_policy import (
@@ -122,7 +122,7 @@ async def _maybe_auto_suspend(
         threshold=DEFAULT_FLAG_THRESHOLD,
     ):
         return
-    until = datetime.now(timezone.utc) + timedelta(
+    until = datetime.now(UTC) + timedelta(
         minutes=DEFAULT_AUTO_SUSPEND_MINUTES
     )
     repo = AudioComputeRepository(session)

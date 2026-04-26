@@ -4,15 +4,15 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
 from jose import jwt
 
 from app.core.auth import (
-    AuthError,
     _ALGORITHM,
+    AuthError,
     create_access_token,
     decode_access_token,
     verify_telegram_init_data,
@@ -111,10 +111,10 @@ class TestCreateAccessToken:
             algorithms=[_ALGORITHM],
         )
         exp_dt = datetime.fromtimestamp(
-            payload["exp"], tz=timezone.utc
+            payload["exp"], tz=UTC
         )
         expected_min = datetime.now(
-            timezone.utc
+            UTC
         ) + timedelta(days=2, hours=23)
         assert exp_dt > expected_min
 
@@ -136,7 +136,7 @@ class TestDecodeAccessToken:
                     {
                         "sub": "1",
                         "admin": False,
-                        "exp": datetime.now(timezone.utc)
+                        "exp": datetime.now(UTC)
                         - timedelta(hours=1),
                     },
                     _JWT_SECRET,
@@ -154,7 +154,7 @@ class TestDecodeAccessToken:
                         "sub": "1",
                         "admin": False,
                         "exp": datetime.now(
-                            timezone.utc
+                            UTC
                         )
                         + timedelta(days=1),
                     },

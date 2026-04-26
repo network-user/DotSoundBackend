@@ -12,10 +12,10 @@ if TYPE_CHECKING:
     from redis.asyncio.client import PubSub
 
 
-_clients: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, Redis]" = (
+_clients: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, Redis] = (
     weakref.WeakKeyDictionary()
 )
-_pools: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, ConnectionPool]" = (
+_pools: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, ConnectionPool] = (
     weakref.WeakKeyDictionary()
 )
 
@@ -47,7 +47,7 @@ def get_redis_client() -> Redis:
     return client
 
 
-async def get_pubsub() -> "PubSub":
+async def get_pubsub() -> PubSub:
     return get_redis_client().pubsub()
 
 

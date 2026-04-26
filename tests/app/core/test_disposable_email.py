@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import dotsound_private_core.services.abuse as abuse_mod
 import pytest
 
-import dotsound_private_core.services.abuse as abuse_mod
 from app.core.disposable_email import (
     is_disposable_email,
 )

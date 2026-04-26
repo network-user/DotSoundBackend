@@ -1,7 +1,8 @@
+from unittest.mock import patch
+
 import pytest
 from dirty_equals import IsPartialDict
 from httpx import AsyncClient
-from unittest.mock import patch
 
 from tests.conftest import auth_headers, create_test_user
 

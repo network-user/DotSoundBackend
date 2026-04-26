@@ -141,8 +141,9 @@ class OnboardingService:
             else None
         )
 
-        from app.models.track import Track
         from sqlalchemy import func, select
+
+        from app.models.track import Track
 
         q = select(Track).where(
             Track.is_active.is_(True),
@@ -186,11 +187,11 @@ class OnboardingService:
             user_id=user_id,
             calibration_completed=True,
         )
-        from app.repositories.like import (
-            LikeRepository,
-        )
         from app.repositories.dislike import (
             DislikeRepository,
+        )
+        from app.repositories.like import (
+            LikeRepository,
         )
 
         like_repo = LikeRepository(self._session)

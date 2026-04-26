@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -63,7 +63,7 @@ class SpeechKitBudgetExhausted(SpeechKitError):
 
 
 def _bucket() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m")
+    return datetime.now(UTC).strftime("%Y%m")
 
 
 def _spent_key() -> str:

@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
@@ -133,7 +133,7 @@ class UserRepository(BaseRepository[User]):
         user = await self.get_by_id(user_id)
         if not user:
             return None
-        user.deleted_at = datetime.now(timezone.utc)
+        user.deleted_at = datetime.now(UTC)
         user.is_active = False
         await self._session.flush()
         return user

@@ -9,7 +9,7 @@ via `AudioComputeRepository.suspend_worker_until`.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,7 +76,7 @@ async def check_and_consume(
         return
 
     redis = get_redis_client()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     bucket = now.strftime("%Y%m%d%H%M")
     key = (
         f"{LIMIT_KEY_PREFIX}{worker_id}:{action}:{bucket}"

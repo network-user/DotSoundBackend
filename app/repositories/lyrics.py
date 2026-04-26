@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
@@ -29,9 +31,9 @@ class LyricsRepository:
         source_name: str | None = None,
         sync_source_name: str | None = None,
     ) -> TrackLyrics:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         update_values: dict = {
             "plain_text": plain_text,
             "source": source,

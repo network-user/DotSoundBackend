@@ -140,6 +140,19 @@ class UploadService:
             has_cover=cover_key is not None,
         )
 
+        from app.services import compute_queue_service as cqs
+
+        await cqs.enqueue_track_audio_features(
+            self._session,
+            track_id=track.id,
+            priority=10,
+        )
+        await cqs.enqueue_catalog_ingest_normalize(
+            self._session,
+            track_id=track.id,
+            priority=5,
+        )
+
         # Сохраняем оригинальный файл во временное хранилище S3 для обработки воркером
         # Это позволяет передать задачу в другой контейнер без передачи огромных байтов в памяти
         import re

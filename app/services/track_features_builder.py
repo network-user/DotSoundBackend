@@ -13,6 +13,7 @@ the ``track_audio_features`` table.
 
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime, timedelta
 
 from dotsound_private_core.services.recommendation_engine import (
@@ -29,6 +30,7 @@ from app.models.dislike import Dislike
 from app.models.like import Like
 from app.models.listen_event import ListenEvent
 from app.models.track import Track
+from app.models.track_audio_features import TrackAudioFeatures
 
 WINDOW_DAYS = 7
 
@@ -146,6 +148,17 @@ async def build_track_features(
         tid: int(c) for tid, c in dislike_rows
     }
 
+    taf_rows = (
+        await session.execute(
+            select(TrackAudioFeatures).where(
+                TrackAudioFeatures.track_id.in_(track_ids)
+            )
+        )
+    ).scalars()
+    taf_by_track: dict[int, TrackAudioFeatures] = {
+        r.track_id: r for r in taf_rows
+    }
+
     out: list[TrackFeatures] = []
     for t in tracks:
         agg = listen_map.get(t.id, {})
@@ -160,6 +173,30 @@ async def build_track_features(
             if total > 0
             else None
         )
+        taf = taf_by_track.get(t.id)
+        mood_tags: list[str] = []
+        audio_v: list[float] | None = None
+        if taf is not None and taf.mood_tags is not None:
+            for x in taf.mood_tags:
+                if isinstance(x, str):
+                    mood_tags.append(x)
+        if (
+            taf is not None
+            and taf.feature_vector is not None
+            and isinstance(
+                taf.feature_vector,
+                list,
+            )
+        ):
+            out_vec: list[float] = []
+            for x in taf.feature_vector:
+                with contextlib.suppress(
+                    TypeError,
+                    ValueError,
+                ):
+                    out_vec.append(float(x))
+            if out_vec:
+                audio_v = out_vec
         out.append(
             TrackFeatures(
                 track_id=t.id,
@@ -179,8 +216,8 @@ async def build_track_features(
                 dislike_count=dislike_map.get(
                     t.id, 0
                 ),
-                mood_tags=[],
-                audio_feature_vector=None,
+                mood_tags=mood_tags,
+                audio_feature_vector=audio_v,
                 language_code=infer_listening_language_code(
                     t.title, t.artist
                 ),

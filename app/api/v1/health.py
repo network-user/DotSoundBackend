@@ -77,8 +77,8 @@ async def _ping_redis() -> ComponentHealth:
 async def _ping_s3() -> ComponentHealth:
     start = time.perf_counter()
     try:
-        from app.core.s3 import get_s3_client
         from app.config import settings
+        from app.core.s3 import get_s3_client
 
         async with get_s3_client() as client:
             await client.head_bucket(

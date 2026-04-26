@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import secrets
 from collections.abc import Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import structlog
 from sqlalchemy import func, select, update
@@ -43,9 +44,28 @@ STATUS_SUCCEEDED = "succeeded"
 STATUS_FAILED = "failed"
 TERMINAL_STATUSES = {STATUS_SUCCEEDED, STATUS_FAILED}
 
+JOB_TRACK_AUDIO_FEATURES = "track_audio_features"
+JOB_ARTIST_FEATURES_UPDATE = "artist_features_update"
+JOB_ARTIST_SIMILARITY_INDEX = "artist_similarity_index"
+JOB_TRACK_SIMILARITY_INDEX = "track_similarity_index"
+JOB_CATALOG_INGEST_NORMALIZE = "catalog_ingest_normalize"
+
+TARGET_KIND_TRACK = "track"
+TARGET_KIND_ARTIST = "artist"
+
+KNOWN_JOB_TYPES: frozenset[str] = frozenset(
+    {
+        JOB_TRACK_AUDIO_FEATURES,
+        JOB_ARTIST_FEATURES_UPDATE,
+        JOB_ARTIST_SIMILARITY_INDEX,
+        JOB_TRACK_SIMILARITY_INDEX,
+        JOB_CATALOG_INGEST_NORMALIZE,
+    }
+)
+
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _new_job_id() -> str:
@@ -399,8 +419,135 @@ async def oldest_pending_age_seconds(
     if oldest is None:
         return None
     if oldest.tzinfo is None:
-        oldest = oldest.replace(tzinfo=timezone.utc)
+        oldest = oldest.replace(tzinfo=UTC)
     return max(0.0, (_now() - oldest).total_seconds())
+
+
+async def enqueue_track_audio_features(
+    session: AsyncSession,
+    *,
+    track_id: int,
+    feature_version: str = DEFAULT_FEATURE_VERSION,
+    priority: int = 0,
+    payload: dict | None = None,
+    max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+) -> ComputeJob:
+    return await enqueue(
+        session,
+        job_type=JOB_TRACK_AUDIO_FEATURES,
+        target_kind=TARGET_KIND_TRACK,
+        target_id=track_id,
+        feature_version=feature_version,
+        priority=priority,
+        payload=payload,
+        max_attempts=max_attempts,
+    )
+
+
+async def enqueue_artist_features(
+    session: AsyncSession,
+    *,
+    artist_id: int,
+    feature_version: str = DEFAULT_FEATURE_VERSION,
+    priority: int = 0,
+    payload: dict | None = None,
+    max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+) -> ComputeJob:
+    return await enqueue(
+        session,
+        job_type=JOB_ARTIST_FEATURES_UPDATE,
+        target_kind=TARGET_KIND_ARTIST,
+        target_id=artist_id,
+        feature_version=feature_version,
+        priority=priority,
+        payload=payload,
+        max_attempts=max_attempts,
+    )
+
+
+async def enqueue_artist_similarity_index(
+    session: AsyncSession,
+    *,
+    artist_id: int,
+    feature_version: str = DEFAULT_FEATURE_VERSION,
+    priority: int = 0,
+    payload: dict | None = None,
+    max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+) -> ComputeJob:
+    return await enqueue(
+        session,
+        job_type=JOB_ARTIST_SIMILARITY_INDEX,
+        target_kind=TARGET_KIND_ARTIST,
+        target_id=artist_id,
+        feature_version=feature_version,
+        priority=priority,
+        payload=payload,
+        max_attempts=max_attempts,
+    )
+
+
+async def enqueue_track_similarity_index(
+    session: AsyncSession,
+    *,
+    track_id: int,
+    feature_version: str = DEFAULT_FEATURE_VERSION,
+    priority: int = 0,
+    payload: dict | None = None,
+    max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+) -> ComputeJob:
+    return await enqueue(
+        session,
+        job_type=JOB_TRACK_SIMILARITY_INDEX,
+        target_kind=TARGET_KIND_TRACK,
+        target_id=track_id,
+        feature_version=feature_version,
+        priority=priority,
+        payload=payload,
+        max_attempts=max_attempts,
+    )
+
+
+async def enqueue_catalog_ingest_normalize(
+    session: AsyncSession,
+    *,
+    track_id: int,
+    feature_version: str = DEFAULT_FEATURE_VERSION,
+    priority: int = 0,
+    payload: dict | None = None,
+    max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+) -> ComputeJob:
+    return await enqueue(
+        session,
+        job_type=JOB_CATALOG_INGEST_NORMALIZE,
+        target_kind=TARGET_KIND_TRACK,
+        target_id=track_id,
+        feature_version=feature_version,
+        priority=priority,
+        payload=payload,
+        max_attempts=max_attempts,
+    )
+
+
+async def queue_health_snapshot(
+    session: AsyncSession,
+) -> dict[str, Any]:
+    by_type: dict[str, dict[str, int]] = {}
+    oldest: dict[str, float] = {}
+    for jt in sorted(KNOWN_JOB_TYPES):
+        by_type[jt] = await queue_depth(
+            session,
+            job_type=jt,
+        )
+        age = await oldest_pending_age_seconds(
+            session,
+            job_type=jt,
+        )
+        if age is not None:
+            oldest[jt] = age
+    return {
+        "by_type": by_type,
+        "oldest_pending_sec": oldest,
+    }
 
 
 __all__ = [
@@ -412,12 +559,26 @@ __all__ = [
     "STATUS_PENDING",
     "STATUS_SUCCEEDED",
     "TERMINAL_STATUSES",
+    "JOB_ARTIST_FEATURES_UPDATE",
+    "JOB_ARTIST_SIMILARITY_INDEX",
+    "JOB_CATALOG_INGEST_NORMALIZE",
+    "JOB_TRACK_AUDIO_FEATURES",
+    "JOB_TRACK_SIMILARITY_INDEX",
+    "KNOWN_JOB_TYPES",
+    "TARGET_KIND_ARTIST",
+    "TARGET_KIND_TRACK",
     "claim_next",
     "dead_letter_jobs",
     "enqueue",
+    "enqueue_artist_features",
+    "enqueue_artist_similarity_index",
+    "enqueue_catalog_ingest_normalize",
+    "enqueue_track_audio_features",
+    "enqueue_track_similarity_index",
     "mark_failed",
     "mark_succeeded",
     "oldest_pending_age_seconds",
     "queue_depth",
+    "queue_health_snapshot",
     "requeue_stale_claims",
 ]

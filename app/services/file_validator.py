@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import structlog
-from fastapi import HTTPException, status
-
 from dotsound_private_core.services.upload_policy import (
     is_audio_mime_allowed,
     is_extension_dangerous,
     is_image_mime_allowed,
     is_video_mime_allowed,
 )
+from fastapi import HTTPException, status
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__

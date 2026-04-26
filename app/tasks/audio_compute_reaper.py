@@ -13,7 +13,7 @@ or by enqueueing ``reap_expired_jobs_task`` on a Taskiq schedule.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 
@@ -37,7 +37,7 @@ async def reap_once() -> int:
     handled = 0
     async with AsyncSessionLocal() as session:
         repo = AudioComputeRepository(session)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expired = await repo.list_expired_running_jobs(
             now=now, limit=REAP_BATCH_LIMIT
         )

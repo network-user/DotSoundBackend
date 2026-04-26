@@ -117,6 +117,13 @@
   `GET /api/v1/track-preview/{id}/segment.mp4`, админ-CRUD и capability
   `recsys.genre_samples.manage` — см.
   `docs/recsys-parallel/01-track-a-phase1.md`
+- [x] **recsys-parallel — Track B1 / Phase 5 Backend (2026-04):**
+  миграция `0060` (таблицы features/similarity), internal API
+  `/api/v1/internal/compute/*` (HMAC), `compute_results_router`,
+  post-upload enqueue, CLI `python -m app.cli.compute_backfill`,
+  `track_features_builder` + тесты; контракт для B2 — в
+  `docs/recsys-parallel/03-track-b-phase5-backend.md` (секция
+  «Зафиксированный контракт API»).
 - **Immediate: перенести auth/email policy в PrivateCore**
   - `account_linking_service`: `_LINK_TTL`, `_LINK_EMAIL_TYPE`, `_LINK_PREFIX`, `_LINK_TG_PREFIX`
   - `account_linking_service`: импортировать `is_disposable_email` из `dotsound_private_core.services.abuse`

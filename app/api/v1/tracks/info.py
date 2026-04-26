@@ -37,6 +37,7 @@ async def get_track_info(
     user: User | None = Depends(get_optional_user),
 ) -> TrackInfoResponse:
     from sqlalchemy import select
+
     from app.models.track import Track
 
     result = await db.execute(
@@ -70,6 +71,7 @@ async def refresh_track_info(
     user: User = Depends(get_current_user),
 ) -> TrackInfoResponse:
     from sqlalchemy import select
+
     from app.models.track import Track
 
     result = await db.execute(

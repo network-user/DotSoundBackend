@@ -8,13 +8,13 @@ from fastapi import (
     Request,
     status,
 )
-from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.dependencies import get_db
 from app.core.observability import elasticsearch_query_observed
 from app.core.rate_limit import limiter
+from app.dependencies import get_db
 from app.schemas.search_suggest import (
     SuggestItemResponse,
     SuggestListResponse,

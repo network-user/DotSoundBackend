@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
 )
 
-
 pytestmark = pytest.mark.anyio
 
 

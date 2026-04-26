@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,7 +43,7 @@ class AudioComputeRepository:
             .values(
                 active=False,
                 suspended_reason="revoked",
-                revoked_at=datetime.now(timezone.utc),
+                revoked_at=datetime.now(UTC),
             )
             .execution_options(
                 synchronize_session="fetch"

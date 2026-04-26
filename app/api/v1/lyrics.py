@@ -445,11 +445,12 @@ async def trigger_debug_lyrics(
         track_id=track_id, user_id=current_user.id
     )
 
+    import uuid
+
     from app.services.lyrics_worker import (
         generate_lyrics_debug_task,
         set_lyrics_progress,
     )
-    import uuid
 
     progress_id = uuid.uuid4().hex
     task = await generate_lyrics_debug_task.kiq(

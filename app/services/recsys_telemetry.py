@@ -15,13 +15,13 @@ from __future__ import annotations
 import uuid
 
 import structlog
+from dotsound_private_core.services.recommendation_engine import (
+    get_algorithm_version,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.recommendation_impression import (
     RecommendationImpression,
-)
-from dotsound_private_core.services.recommendation_engine import (
-    get_algorithm_version,
 )
 
 logger = structlog.get_logger(__name__)

@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import base64
-from unittest.mock import patch
 
-import pyotp
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import update

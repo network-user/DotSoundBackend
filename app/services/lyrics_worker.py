@@ -10,16 +10,17 @@ import tempfile
 import time
 import unicodedata
 import uuid
+from datetime import UTC
 
 import structlog
 from sqlalchemy import select
 from taskiq import TaskiqEvents, TaskiqState
 
+from app.config import settings
 from app.core import s3
 from app.core.db import AsyncSessionLocal
 from app.core.redis import get_redis_client
 from app.core.tkq import broker
-from app.config import settings
 from app.models.track import Track
 from app.repositories.lyrics import LyricsRepository
 
@@ -512,6 +513,7 @@ async def _fetch_audio_to_file(
     if getattr(track, "sc_url", None):
         try:
             import httpx
+
             from app.services.soundcloud_service import (
                 SoundCloudService,
             )
@@ -574,7 +576,7 @@ async def _heartbeat_loop(
             try:
                 await asyncio.wait_for(stop_event.wait(), timeout=interval)
                 break
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pass
             elapsed_s = time.monotonic() - t0
             elapsed = f"{elapsed_s:.0f}s"
@@ -1126,7 +1128,7 @@ async def _generate_lyrics_task_impl(
                             settings.lyrics_provider_timeout_seconds
                         ),
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     _stop_evt.set()
                     _hb_task.cancel()
                     redis = get_redis_client()
@@ -1511,9 +1513,9 @@ def _close_job_attempt(job, *, status: str, error: str | None = None) -> None:
         return
     last = dict(raw[-1])
     if last.get("status") in {"queued", "running"}:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        last["finished_at"] = datetime.now(timezone.utc).isoformat()
+        last["finished_at"] = datetime.now(UTC).isoformat()
         last["status"] = status
         if error is not None:
             last["error"] = (error or "")[:512]
@@ -1529,7 +1531,7 @@ async def _save_catalog_result_and_close(
     progress_id: str,
     with_sync: bool,
 ) -> None:
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from app.core.observability import lyrics_job_observed
 
@@ -1548,14 +1550,14 @@ async def _save_catalog_result_and_close(
     )
     _close_job_attempt(job, status="success")
     job.status = "done"
-    job.finished_at = datetime.now(timezone.utc)
+    job.finished_at = datetime.now(UTC)
     started = job.started_at or job.created_at
     duration_seconds = 0.0
     if started:
         if started.tzinfo is None:
-            started = started.replace(tzinfo=timezone.utc)
+            started = started.replace(tzinfo=UTC)
         duration_seconds = (
-            datetime.now(timezone.utc) - started
+            datetime.now(UTC) - started
         ).total_seconds()
         job.duration_ms = int(duration_seconds * 1000)
     try:
@@ -1712,7 +1714,7 @@ async def catalog_only_lyrics_task(
                     ),
                     timeout=float(settings.lyrics_provider_timeout_seconds),
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 gen_result = None
                 logger.warning(
                     "catalog_only_timeout",
@@ -1929,6 +1931,8 @@ async def speechkit_lyrics_task(
         SpeechKitBudgetExhausted,
         SpeechKitDisabled,
         SpeechKitError,
+    )
+    from app.services.asr_speechkit_adapter import (
         transcribe as speechkit_transcribe,
     )
 
@@ -2112,19 +2116,19 @@ async def speechkit_lyrics_task(
             sync_profile=result.get("sync_profile"),
         )
         if job is not None:
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             _close_job_attempt(job, status="success")
             job.status = "done"
-            job.finished_at = datetime.now(timezone.utc)
+            job.finished_at = datetime.now(UTC)
             started = job.started_at or job.created_at
             if started:
                 if started.tzinfo is None:
                     started = started.replace(
-                        tzinfo=timezone.utc
+                        tzinfo=UTC
                     )
                 duration = (
-                    datetime.now(timezone.utc) - started
+                    datetime.now(UTC) - started
                 ).total_seconds()
                 job.duration_ms = int(duration * 1000)
                 try:

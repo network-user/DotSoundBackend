@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.track import Track
 from app.models.user import User
 from app.services.track_fallback_service import (
-    TrackFallbackService,
     _BLOCK_PREFIX,
+    TrackFallbackService,
 )
 
 pytestmark = pytest.mark.anyio

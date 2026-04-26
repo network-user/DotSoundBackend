@@ -1,8 +1,6 @@
 import pytest
 from httpx import AsyncClient
 
-from tests.conftest import auth_headers, create_test_user
-
 pytestmark = pytest.mark.anyio
 
 

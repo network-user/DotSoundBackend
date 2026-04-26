@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.image_blob import ImageBlob
 from app.models.track import Track
 from app.models.user import User
 from app.models.video_blob import VideoBlob
