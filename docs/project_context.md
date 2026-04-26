@@ -36,6 +36,7 @@
 - **Очередь:** Redis + Taskiq (воркеры: transcoding, lyrics, cover, import, ES reindex)
 - **Поиск (опц.):** Elasticsearch 8 (`elasticsearch` PyPI, async), индексы `dotsound_tracks` / `dotsound_artists`; при пустом `ELASTICSEARCH_URL` — только PostgreSQL
 - **Хранилище:** MinIO (S3-совместимый)
+- **Исходящий Tor (опц.):** по умолчанию выкл. (`TOR_POOL_ENABLED` в `.env`); пул SOCKS в `app.services.tor_pool` для отдельных внешних API (см. `.env.example`)
 - **Аутентификация:** JWT + Telegram HMAC + Email (magic link) + TOTP 2FA
 - **Real-time:** WebSocket (Redis Pub/Sub), присутствие, typing indicators
 - **Фронтенд:** React 18 + TypeScript + Vite, CSS custom properties (без Tailwind)
