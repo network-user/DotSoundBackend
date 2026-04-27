@@ -660,6 +660,26 @@ export const adminApi = {
       method: 'POST',
       body: {},
     }),
+  reapExpiredLyricsLeases: () =>
+    adminFetch<{
+      status: string
+      expired_leases_handled: number
+    }>(
+      '/audio-compute/operations/reap-expired-leases',
+      {
+        method: 'POST',
+        body: {},
+      },
+    ),
+  cancelComputeJobByProgress: (progressId: string) =>
+    adminFetch<{
+      status: string
+      job_status?: string
+      job_id: string
+    }>('/audio-compute/jobs/cancel-by-progress', {
+      method: 'POST',
+      body: { progress_id: progressId },
+    }),
   cancelAllQueuedLyricsJobs: () =>
     adminFetch<{
       cancelled: number

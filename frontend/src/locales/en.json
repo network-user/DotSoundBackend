@@ -334,7 +334,17 @@
         "close": "Close",
         "error": "Error",
         "currentTier": "current tier",
-        "status": "Status"
+        "status": "Status",
+        "toolbarHint": "Stuck with an expired lease but no Taskiq reaper? Run “Reap expired leases” once. To cancel by Mini App progress id, paste it below.",
+        "reapLeases": "Reap expired leases",
+        "reapLeasesConfirm": "Process running jobs past their lease deadline? They will advance in the cascade or become terminal.",
+        "reapLeasesResult": "Reaper handled {{count}} job(s).",
+        "cancelByProgressLabel": "progress_id",
+        "progressPlaceholder": "hex from DevTools (e.g. 32 chars)",
+        "cancelByProgress": "Cancel by progress",
+        "traceProgressId": "Progress id",
+        "traceStarted": "Started",
+        "traceDeadline": "Deadline"
       },
       "auditSection": {
         "title": "Worker audit (last 200)",
@@ -355,6 +365,8 @@
         "attempts": "Attempts",
         "worker": "Worker",
         "duration": "Duration",
+        "progress": "Progress",
+        "deadline": "Deadline",
         "when": "When",
         "action": "Action",
         "job": "Job",

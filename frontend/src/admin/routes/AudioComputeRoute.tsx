@@ -46,6 +46,7 @@ interface TierAttempt {
 
 interface JobRow {
   id: string
+  progress_id?: string
   track_id: number
   status: string
   profile: string
@@ -57,6 +58,8 @@ interface JobRow {
   duration_ms: number | null
   error: string | null
   created_at: string
+  deadline_at?: string | null
+  started_at?: string | null
 }
 
 interface AuditRow {
@@ -185,6 +188,38 @@ export function AudioComputeRoute() {
     mutationFn: (id: string) =>
       adminApi.cancelComputeJob(id),
     onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'compute', 'jobs'],
+      })
+    },
+  })
+  const reapLeasesMutation = useMutation({
+    mutationFn: () => adminApi.reapExpiredLyricsLeases(),
+    onSuccess: (data) => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'compute', 'jobs'],
+      })
+      setReapNotice(
+        String(
+          data.expired_leases_handled ?? 0,
+        ),
+      )
+    },
+    onError: () => {
+      setReapNotice(null)
+    },
+  })
+  const [progressToCancel, setProgressToCancel] = useState('')
+  const [reapNotice, setReapNotice] = useState<
+    string | null
+  >(null)
+  const cancelByProgressMutation = useMutation({
+    mutationFn: (pid: string) =>
+      adminApi.cancelComputeJobByProgress(
+        pid.trim(),
+      ),
+    onSuccess: () => {
+      setProgressToCancel('')
       qc.invalidateQueries({
         queryKey: ['admin', 'compute', 'jobs'],
       })
@@ -546,6 +581,26 @@ export function AudioComputeRoute() {
         ),
       },
       {
+        header: t(
+          'admin.audioCompute.table.progress',
+        ),
+        cell: (i) => {
+          const p = i.row.original
+            .progress_id
+          if (!p) {
+            return '–'
+          }
+          return (
+            <span
+              className="admin-mono"
+              title={p}
+            >
+              {p.slice(0, 8)}
+            </span>
+          )
+        },
+      },
+      {
         header: t('admin.audioCompute.table.track'),
         accessorKey: 'track_id',
       },
@@ -626,6 +681,21 @@ export function AudioComputeRoute() {
             )
           },
         },
+      {
+        header: t(
+          'admin.audioCompute.table.deadline',
+        ),
+        cell: (i) => {
+          const d = i.row.original
+            .deadline_at
+          if (!d) {
+            return '–'
+          }
+          return new Date(
+            d,
+          ).toLocaleString()
+        },
+      },
       {
         header: t(
           'admin.audioCompute.table.duration',
@@ -1272,6 +1342,96 @@ export function AudioComputeRoute() {
         <h2>
           {t('admin.audioCompute.jobs')}
         </h2>
+        <p className="admin-card__sub">
+          {t(
+            'admin.audioCompute.jobTable.toolbarHint',
+          )}
+        </p>
+        <div
+          className="admin-toolbar"
+          style={{
+            marginBottom: '1rem',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+          }}
+        >
+          <Press
+            variant="default"
+            onClick={async () => {
+              const ok = await showConfirm(
+                t(
+                  'admin.audioCompute.jobTable.reapLeasesConfirm',
+                ),
+                { danger: true },
+              )
+              if (!ok) return
+              reapLeasesMutation.mutate()
+            }}
+            disabled={reapLeasesMutation.isPending}
+          >
+            {t(
+              'admin.audioCompute.jobTable.reapLeases',
+            )}
+          </Press>
+          {reapNotice !== null && (
+            <span className="admin-card__sub">
+              {t(
+                'admin.audioCompute.jobTable.reapLeasesResult',
+                {
+                  count: Number(reapNotice),
+                },
+              )}
+            </span>
+          )}
+        </div>
+        <div
+          className="admin-toolbar"
+          style={{
+            marginBottom: '1.25rem',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: '0.5rem',
+          }}
+        >
+          <label
+            htmlFor="ac-progress-cancel"
+            style={{ margin: 0 }}
+          >
+            {t(
+              'admin.audioCompute.jobTable.cancelByProgressLabel',
+            )}
+          </label>
+          <input
+            id="ac-progress-cancel"
+            type="text"
+            value={progressToCancel}
+            onChange={(e) =>
+              setProgressToCancel(
+                e.target.value,
+              )
+            }
+            placeholder={t(
+              'admin.audioCompute.jobTable.progressPlaceholder',
+            )}
+            style={{ minWidth: 220 }}
+          />
+          <Press
+            variant="default"
+            onClick={() => {
+              const p = progressToCancel.trim()
+              if (p.length < 16) return
+              cancelByProgressMutation.mutate(p)
+            }}
+            disabled={
+              cancelByProgressMutation.isPending ||
+              progressToCancel.trim().length < 16
+            }
+          >
+            {t(
+              'admin.audioCompute.jobTable.cancelByProgress',
+            )}
+          </Press>
+        </div>
         <DataTable
           columns={jobColumns}
           rows={
@@ -1311,6 +1471,49 @@ export function AudioComputeRoute() {
               {traceJob.current_tier || '–'}
             </code>
           </p>
+          {traceJob.progress_id && (
+            <p>
+              {t(
+                'admin.audioCompute.jobTable.traceProgressId',
+              )}
+              :{' '}
+              <code
+                className="admin-mono"
+                style={{
+                  wordBreak: 'break-all',
+                }}
+              >
+                {traceJob.progress_id}
+              </code>
+            </p>
+          )}
+          {(traceJob.deadline_at ||
+            traceJob.started_at) && (
+            <p className="admin-card__sub">
+              {traceJob.started_at && (
+                <>
+                  {t(
+                    'admin.audioCompute.jobTable.traceStarted',
+                  )}
+                  :{' '}
+                  {new Date(
+                    traceJob.started_at,
+                  ).toLocaleString()}{' '}
+                </>
+              )}
+              {traceJob.deadline_at && (
+                <>
+                  {t(
+                    'admin.audioCompute.jobTable.traceDeadline',
+                  )}
+                  :{' '}
+                  {new Date(
+                    traceJob.deadline_at,
+                  ).toLocaleString()}
+                </>
+              )}
+            </p>
+          )}
           {traceJob.error && (
             <p>
               <strong>

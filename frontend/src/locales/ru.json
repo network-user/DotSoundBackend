@@ -334,7 +334,17 @@
         "close": "Закрыть",
         "error": "Ошибка",
         "currentTier": "текущий tier",
-        "status": "Статус"
+        "status": "Статус",
+        "toolbarHint": "Залипло с истекшим lease, а reaper Taskiq не крутится? Один раз нажмите «Собрать истекшие lease». Отмена по id прогресса мини-приложения — вставьте hex ниже.",
+        "reapLeases": "Собрать истекшие lease",
+        "reapLeasesConfirm": "Обработать running-задачи с истекшим deadline? Они пойдут в каскад или в финальную ошибку.",
+        "reapLeasesResult": "Reaper обработал: {{count}}",
+        "cancelByProgressLabel": "progress_id",
+        "progressPlaceholder": "hex из DevTools (например 32 символа)",
+        "cancelByProgress": "Отменить по progress",
+        "traceProgressId": "Progress id",
+        "traceStarted": "Старт",
+        "traceDeadline": "Дедлайн"
       },
       "auditSection": {
         "title": "Аудит воркеров (последние 200)",
@@ -355,6 +365,8 @@
         "attempts": "Попытки",
         "worker": "Воркер",
         "duration": "Длит.",
+        "progress": "Прогр.",
+        "deadline": "Дедлайн",
         "when": "Когда",
         "action": "Действие",
         "job": "Job",

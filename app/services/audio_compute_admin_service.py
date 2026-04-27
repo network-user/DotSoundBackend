@@ -64,6 +64,7 @@ def _serialize_worker(w: ComputeWorker) -> dict[str, Any]:
 def _serialize_job(j: LyricsJob) -> dict[str, Any]:
     return {
         "id": j.id,
+        "progress_id": j.progress_id,
         "track_id": j.track_id,
         "status": j.status,
         "profile": j.profile,
@@ -74,6 +75,16 @@ def _serialize_job(j: LyricsJob) -> dict[str, Any]:
         "attempts": j.attempts,
         "duration_ms": j.duration_ms,
         "error": j.error,
+        "deadline_at": (
+            j.deadline_at.isoformat()
+            if j.deadline_at
+            else None
+        ),
+        "started_at": (
+            j.started_at.isoformat()
+            if j.started_at
+            else None
+        ),
         "created_at": (
             j.created_at.isoformat()
             if j.created_at
