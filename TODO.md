@@ -44,6 +44,11 @@
 - [x] Audio-compute worker download: OTT with `proxy=1` so Backend
   proxies SoundCloud progressive streams (worker no longer GETs
   time-bound CDN URL directly; avoids 403) — 2026-04
+- [x] Lyrics cascade: preserve **root** worker failure in
+  `cascade exhausted` message (not only last tier gate, e.g.
+  `speechkit_disabled`); `lyrics_jobs.request_with_sync` /
+  `request_bypass_cache` for fallback dispatch; log
+  `audio_compute_worker_fail` — 2026-04
 - **Полное копирование аудиофайлов (MinIO) на удалённый backup-VPS**
   - Подключение к отдельному серверу по SSH
   - `mc mirror` MinIO -> remote, инкрементально

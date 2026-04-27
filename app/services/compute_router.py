@@ -71,6 +71,26 @@ async def _cached_setting(
     return value
 
 
+def apply_speechkit_env_to_cascade(
+    cascade: tuple[str, ...],
+) -> tuple[str, ...]:
+    """When Yandex is not configured, drop the paid tier from order.
+
+    Avoids always-gated ``speechkit_paid`` attempts and cleaner
+    terminal errors after ``remote_whisper`` fails.
+    """
+    if settings.yandex_speechkit_enabled:
+        return cascade
+    f = tuple(
+        t
+        for t in cascade
+        if t != TIER_SPEECHKIT_PAID
+    )
+    if not f:
+        return (TIER_CATALOG_ONLY, TIER_REMOTE_WHISPER)
+    return f
+
+
 async def get_routing_mode(session: AsyncSession) -> str:
     raw = await _cached_setting(session, SETTING_ROUTING_MODE)
     if isinstance(raw, dict):
@@ -130,8 +150,10 @@ async def get_cascade_order(
     if isinstance(raw, dict):
         raw = raw.get("value")
     if not isinstance(raw, list):
-        return DEFAULT_CASCADE
-    return normalize_cascade(raw)
+        c = DEFAULT_CASCADE
+    else:
+        c = normalize_cascade(raw)
+    return apply_speechkit_env_to_cascade(c)
 
 
 async def is_tier_available(

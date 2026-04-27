@@ -35,6 +35,9 @@ from app.models.lyrics_job import LyricsJob
 from app.repositories.audio_compute import (
     AudioComputeRepository,
 )
+from app.services.compute_router import (
+    apply_speechkit_env_to_cascade,
+)
 from app.services.lyrics_worker import (
     set_lyrics_progress,
 )
@@ -303,12 +306,13 @@ async def _advance_to_next_tier(
         tier_fallback_observed,
     )
 
-    cascade = (
-        normalize_cascade(job.tiers_planned)
-        if job.tiers_planned
-        else DEFAULT_CASCADE
-    )
+    if job.tiers_planned:
+        _base = normalize_cascade(job.tiers_planned)
+    else:
+        _base = DEFAULT_CASCADE
+    cascade = apply_speechkit_env_to_cascade(_base)
     previous_tier = job.current_tier
+    root_cause: str | None = previous_error
     if previous_status != "queued":
         _close_open_attempt(
             job,
@@ -321,17 +325,28 @@ async def _advance_to_next_tier(
         if next_tier is None:
             job.status = "failed"
             job.finished_at = _now()
-            if previous_error:
-                job.error = previous_error[:1024]
+            detail: str
+            if (
+                root_cause
+                and previous_error
+                and root_cause != previous_error
+            ):
+                detail = f"{root_cause} | then: {previous_error}"
+            else:
+                detail = (
+                    previous_error
+                    or root_cause
+                    or "all tiers failed"
+                )
+            if len(detail) > 1800:
+                detail = detail[:1800] + "..."
+            job.error = detail[:1024]
             await session.flush()
             await set_lyrics_progress(
                 job.progress_id,
                 stage="error",
                 terminal_state="error",
-                log_line=(
-                    "cascade exhausted: "
-                    + (previous_error or "all tiers failed")
-                ),
+                log_line="cascade exhausted: " + detail,
             )
             logger.error(
                 "cascade_exhausted",
@@ -340,6 +355,7 @@ async def _advance_to_next_tier(
                     item.get("tier") for item in attempts
                 ],
                 last_error=previous_error,
+                root_cause=root_cause,
             )
             duration = 0.0
             if job.started_at is not None:
