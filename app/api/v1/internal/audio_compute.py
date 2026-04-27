@@ -503,13 +503,31 @@ async def job_fail(
     if job is None:
         raise HTTPException(status_code=404)
 
+    logger.warning(
+        "audio_compute_worker_fail",
+        job_id=job_id,
+        worker_id=worker.id,
+        reason=reason[:512],
+    )
     try:
         from app.services.lyrics_cascade import (
             handle_tier_failure,
         )
 
         will_fallback = await handle_tier_failure(
-            session, job=job, reason=reason
+            session,
+            job=job,
+            reason=reason,
+            with_sync=bool(
+                getattr(job, "request_with_sync", False)
+            ),
+            bypass_cache=bool(
+                getattr(
+                    job,
+                    "request_bypass_cache",
+                    False,
+                )
+            ),
         )
     except ImportError:
         will_fallback = False

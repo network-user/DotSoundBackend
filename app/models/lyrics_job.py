@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -71,4 +72,14 @@ class LyricsJob(Base, TimestampMixin):
     )
     current_tier: Mapped[str | None] = mapped_column(
         String(32), nullable=True
+    )
+    request_with_sync: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="false",
+    )
+    request_bypass_cache: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="false",
     )

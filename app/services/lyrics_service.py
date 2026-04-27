@@ -161,6 +161,8 @@ class LyricsService:
             requested_by_user_id=user_id,
             profile="catalog_only",
             status="queued",
+            request_with_sync=with_sync,
+            request_bypass_cache=bypass_cache,
         )
         self._session.add(job)
         await self._session.flush()
