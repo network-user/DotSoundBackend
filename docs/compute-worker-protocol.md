@@ -168,7 +168,16 @@ HMAC contract here.
 
 Request body: empty.
 
-Response 204 — no work right now, back off and retry.
+Response 204 — no work right now, back off and retry. If 204s
+continue while the admin UI shows a lyrics task *waiting for a
+remote compute worker*, check the worker row: **remote ASR
+(`remote_whisper`) jobs are enqueued with profile** `gpu_full` (see
+`lyrics_cascade.TIER_PROFILE_MAP`). A worker that only matches
+`cpu_light` (and has no `allowed_profiles` that includes
+`gpu_full`) will not receive those jobs — the queue is not empty
+from a product point of view, but **claim is profile-scoped** on
+the backend. Fix: set the worker to `gpu_full` or add `gpu_full` to
+`allowed_profiles` (see `docs/security/audio_compute_worker_runbook.md`).
 
 Response 200:
 

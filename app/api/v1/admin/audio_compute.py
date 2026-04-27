@@ -20,11 +20,16 @@ router = APIRouter(prefix="/audio-compute", tags=["admin"])
 
 class WorkerCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
+    #: The ``remote_whisper`` tier enqueues ``LyricsJob`` with
+    # profile ``gpu_full`` (``lyrics_cascade.TIER_PROFILE_MAP``). A
+    # worker with only ``cpu_light`` and no ``allowed_profiles``
+    # for ``gpu_full`` never receives those ASR jobs (``claim`` 204).
     profile: str = Field(
+        default="gpu_full",
         pattern=(
             r"^(cpu_light|gpu_full|catalog_only"
             r"|remote_whisper|speechkit_paid)$"
-        )
+        ),
     )
     allowed_ip_cidrs: list[str] = Field(
         default_factory=list,
