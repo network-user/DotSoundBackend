@@ -8,10 +8,12 @@ normal) without standing up Redis or Taskiq.
 
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.services import lyrics_global_orchestrator as lgo_mod
 from app.services.lyrics_global_orchestrator import (
     _deserialize,
     _is_block_signal,
@@ -19,6 +21,7 @@ from app.services.lyrics_global_orchestrator import (
     _QueueItem,
     _serialize,
     enqueue,
+    stop_orchestrator_task,
 )
 
 pytestmark = pytest.mark.anyio
@@ -202,3 +205,35 @@ async def test_process_one_returns_error_on_kiq_failure(
     tag = await _process_one(_QueueItem(track_id=77, with_sync=True))
 
     assert tag == "error"
+
+
+async def test_stop_orchestrator_noop_when_no_task() -> None:
+    lgo_mod._orchestrator_task = None
+    await stop_orchestrator_task()
+    assert lgo_mod._orchestrator_task is None
+
+
+async def test_stop_orchestrator_noop_when_task_done() -> None:
+    async def done_coro() -> None:
+        return
+
+    t = asyncio.create_task(done_coro())
+    await t
+    lgo_mod._orchestrator_task = t
+    await stop_orchestrator_task()
+    assert lgo_mod._orchestrator_task is None
+
+
+async def test_stop_orchestrator_cancels_pending_and_clears() -> None:
+    async def long_sleep() -> None:
+        try:
+            await asyncio.sleep(3600.0)
+        except asyncio.CancelledError:
+            raise
+
+    t = asyncio.create_task(long_sleep())
+    lgo_mod._orchestrator_task = t
+    await stop_orchestrator_task()
+    assert lgo_mod._orchestrator_task is None
+    assert t.done()
+    assert t.cancelled()

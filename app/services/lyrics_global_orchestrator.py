@@ -38,8 +38,9 @@ from app.core.tkq import broker
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
+_WORKER_BG_TASK_STOP_TIMEOUT: float = 15.0
 
-_orchestrator_task: asyncio.Task | None = None
+_orchestrator_task: asyncio.Task[None] | None = None
 
 _BLOCK_MARKERS: tuple[str, ...] = (
     "captcha",
@@ -253,6 +254,23 @@ async def _orchestrator_loop() -> None:
             await asyncio.sleep(0.5)
             continue
         await asyncio.sleep(_pick_delay())
+
+
+async def stop_orchestrator_task() -> None:
+    global _orchestrator_task
+    task = _orchestrator_task
+    if task is None or task.done():
+        _orchestrator_task = None
+        return
+    task.cancel()
+    try:
+        await asyncio.wait_for(task, timeout=_WORKER_BG_TASK_STOP_TIMEOUT)
+    except TimeoutError:
+        logger.warning("lyrics_global_orchestrator_stop_timeout")
+    except asyncio.CancelledError:
+        pass
+    finally:
+        _orchestrator_task = None
 
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)

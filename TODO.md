@@ -36,6 +36,9 @@
 - Система логирования: JSON structlog + Docker log rotation
   (тонкая настройка: `REDACT_LOGS`, `REDACT_LOG_IDENTIFIERS`, `LOG_THIRD_PARTY_LEVEL`)
 - Outbound Tor pool: по умолчанию выкл., `TOR_POOL_ENABLED=true` — opt-in
+- [x] Taskiq worker: graceful shutdown (`WORKER_SHUTDOWN`: cancel
+  `import_queue_dispatcher` / `lyrics_global_orchestrator` background tasks,
+  `close_es` в воркере) — 2026-04
 - **Полное копирование аудиофайлов (MinIO) на удалённый backup-VPS**
   - Подключение к отдельному серверу по SSH
   - `mc mirror` MinIO -> remote, инкрементально

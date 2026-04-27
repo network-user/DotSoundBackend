@@ -30,8 +30,9 @@ from app.services.import_service import EXTERNAL_IMPORT_SOURCES
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
+_WORKER_BG_TASK_STOP_TIMEOUT: float = 15.0
 
-_dispatcher_task: asyncio.Task | None = None
+_dispatcher_task: asyncio.Task[None] | None = None
 
 
 async def _count_active(session: AsyncSession) -> int:
@@ -145,6 +146,23 @@ async def _dispatcher_loop() -> None:
             raise
         except Exception:
             logger.exception("import_dispatcher_failed")
+
+
+async def stop_dispatcher_task() -> None:
+    global _dispatcher_task
+    task = _dispatcher_task
+    if task is None or task.done():
+        _dispatcher_task = None
+        return
+    task.cancel()
+    try:
+        await asyncio.wait_for(task, timeout=_WORKER_BG_TASK_STOP_TIMEOUT)
+    except TimeoutError:
+        logger.warning("import_dispatcher_stop_timeout")
+    except asyncio.CancelledError:
+        pass
+    finally:
+        _dispatcher_task = None
 
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
