@@ -10,9 +10,15 @@ complete before turning a machine into a worker node.
 ## Provisioning a new worker
 
 1. Open the admin panel → **Audio-compute** → **Add worker**.
-2. Fill in a human-readable name and pick the profile
-   (`cpu_light` or `gpu_full`). Only these two values are
-   accepted today.
+2. Fill in a human-readable name and pick the profile. For the
+   standard **remote Whisper** ASR path, the platform enqueues
+   `LyricsJob` rows with profile **`gpu_full`**. A worker that is
+   only `cpu_light` (and has no `allowed_profiles` entry for
+   `gpu_full`) will receive **204** on `POST /jobs/claim` while
+   the UI still shows *waiting for a remote compute worker*. Fix:
+   set the worker to **`gpu_full`**, or set
+   `allowed_profiles` to include `gpu_full` (admin PATCH), or
+   re-create the worker with the right profile.
 3. Backend generates a random secret and shows it **once**. Copy
    it immediately to the target host's OS credential store:
    - Windows: *Credential Manager → Windows Credentials →
