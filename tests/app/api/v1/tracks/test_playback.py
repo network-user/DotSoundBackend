@@ -18,9 +18,7 @@ pytestmark = pytest.mark.anyio
 async def test_stream_track_not_found(
     client: AsyncClient,
 ) -> None:
-    response = await client.get(
-        "/api/v1/tracks/99999/stream"
-    )
+    response = await client.get("/api/v1/tracks/99999/stream")
     assert response.status_code == 404
 
 
@@ -28,14 +26,10 @@ async def test_stream_no_file_key_returns_422(
     client: AsyncClient,
 ) -> None:
     user = await create_test_user(client, 50001)
-    track = await create_test_track(
-        client, "StreamMe", user["id"]
-    )
+    track = await create_test_track(client, "StreamMe", user["id"])
     track_id = track["id"]
 
-    response = await client.get(
-        f"/api/v1/tracks/{track_id}/stream"
-    )
+    response = await client.get(f"/api/v1/tracks/{track_id}/stream")
     assert response.status_code == 422
 
 
@@ -43,29 +37,21 @@ async def test_play_increments_count(
     client: AsyncClient,
 ) -> None:
     user = await create_test_user(client, 50002)
-    track = await create_test_track(
-        client, "PlayMe", user["id"]
-    )
+    track = await create_test_track(client, "PlayMe", user["id"])
     track_id = track["id"]
 
-    r1 = await client.post(
-        f"/api/v1/tracks/{track_id}/play"
-    )
+    r1 = await client.post(f"/api/v1/tracks/{track_id}/play")
     assert r1.status_code == 200
     assert r1.json()["play_count"] >= 0
 
-    r2 = await client.post(
-        f"/api/v1/tracks/{track_id}/play"
-    )
+    r2 = await client.post(f"/api/v1/tracks/{track_id}/play")
     assert r2.status_code == 200
 
 
 async def test_play_not_found(
     client: AsyncClient,
 ) -> None:
-    response = await client.post(
-        "/api/v1/tracks/99999/play"
-    )
+    response = await client.post("/api/v1/tracks/99999/play")
     assert response.status_code == 404
 
 
@@ -73,14 +59,10 @@ async def test_get_track_by_id(
     client: AsyncClient,
 ) -> None:
     user = await create_test_user(client, 50010)
-    track = await create_test_track(
-        client, "GetMe", user["id"]
-    )
+    track = await create_test_track(client, "GetMe", user["id"])
     track_id = track["id"]
 
-    r = await client.get(
-        f"/api/v1/tracks/{track_id}"
-    )
+    r = await client.get(f"/api/v1/tracks/{track_id}")
     assert r.status_code == 200
     assert r.json()["title"] == "GetMe"
 
@@ -95,9 +77,7 @@ async def test_get_track_not_found(
 async def test_get_cover_not_found(
     client: AsyncClient,
 ) -> None:
-    r = await client.get(
-        "/api/v1/tracks/99999/cover"
-    )
+    r = await client.get("/api/v1/tracks/99999/cover")
     assert r.status_code == 404
 
 
@@ -105,22 +85,16 @@ async def test_get_cover_no_cover_key(
     client: AsyncClient,
 ) -> None:
     user = await create_test_user(client, 50011)
-    track = await create_test_track(
-        client, "NoCover", user["id"]
-    )
+    track = await create_test_track(client, "NoCover", user["id"])
 
-    r = await client.get(
-        f"/api/v1/tracks/{track['id']}/cover"
-    )
+    r = await client.get(f"/api/v1/tracks/{track['id']}/cover")
     assert r.status_code == 404
 
 
 async def test_adjacent_not_found(
     client: AsyncClient,
 ) -> None:
-    r = await client.get(
-        "/api/v1/tracks/99999/adjacent"
-    )
+    r = await client.get("/api/v1/tracks/99999/adjacent")
     assert r.status_code == 404
 
 
@@ -128,13 +102,10 @@ async def test_adjacent_sequential(
     client: AsyncClient,
 ) -> None:
     user = await create_test_user(client, 50012)
-    t1 = await create_test_track(
-        client, "Adj1", user["id"]
-    )
+    t1 = await create_test_track(client, "Adj1", user["id"])
 
     r = await client.get(
-        f"/api/v1/tracks/{t1['id']}/adjacent"
-        f"?mode=sequential"
+        f"/api/v1/tracks/{t1['id']}/adjacent" f"?mode=sequential"
     )
     assert r.status_code == 200
     data = r.json()
@@ -146,13 +117,10 @@ async def test_adjacent_repeat_one(
     client: AsyncClient,
 ) -> None:
     user = await create_test_user(client, 50013)
-    t = await create_test_track(
-        client, "Repeat", user["id"]
-    )
+    t = await create_test_track(client, "Repeat", user["id"])
 
     r = await client.get(
-        f"/api/v1/tracks/{t['id']}/adjacent"
-        f"?mode=repeat_one"
+        f"/api/v1/tracks/{t['id']}/adjacent" f"?mode=repeat_one"
     )
     assert r.status_code == 200
     data = r.json()
@@ -164,14 +132,9 @@ async def test_adjacent_shuffle(
     client: AsyncClient,
 ) -> None:
     user = await create_test_user(client, 50014)
-    t = await create_test_track(
-        client, "Shuffle", user["id"]
-    )
+    t = await create_test_track(client, "Shuffle", user["id"])
 
-    r = await client.get(
-        f"/api/v1/tracks/{t['id']}/adjacent"
-        f"?mode=shuffle"
-    )
+    r = await client.get(f"/api/v1/tracks/{t['id']}/adjacent" f"?mode=shuffle")
     assert r.status_code == 200
 
 
@@ -179,13 +142,9 @@ async def test_get_track_card(
     client: AsyncClient,
 ) -> None:
     user = await create_test_user(client, 50015)
-    t = await create_test_track(
-        client, "Card", user["id"]
-    )
+    t = await create_test_track(client, "Card", user["id"])
 
-    r = await client.get(
-        f"/api/v1/tracks/{t['id']}/card"
-    )
+    r = await client.get(f"/api/v1/tracks/{t['id']}/card")
     assert r.status_code == 200
     assert "title" in r.json()
 
@@ -193,9 +152,7 @@ async def test_get_track_card(
 async def test_get_track_card_not_found(
     client: AsyncClient,
 ) -> None:
-    r = await client.get(
-        "/api/v1/tracks/99999/card"
-    )
+    r = await client.get("/api/v1/tracks/99999/card")
     assert r.status_code == 404
 
 
@@ -203,13 +160,9 @@ async def test_get_share_links(
     client: AsyncClient,
 ) -> None:
     user = await create_test_user(client, 50016)
-    t = await create_test_track(
-        client, "Share", user["id"]
-    )
+    t = await create_test_track(client, "Share", user["id"])
 
-    r = await client.get(
-        f"/api/v1/tracks/{t['id']}/share"
-    )
+    r = await client.get(f"/api/v1/tracks/{t['id']}/share")
     assert r.status_code == 200
     data = r.json()
     assert "url" in data
@@ -219,9 +172,7 @@ async def test_get_share_links(
 async def test_get_share_links_not_found(
     client: AsyncClient,
 ) -> None:
-    r = await client.get(
-        "/api/v1/tracks/99999/share"
-    )
+    r = await client.get("/api/v1/tracks/99999/share")
     assert r.status_code == 404
 
 
@@ -232,16 +183,10 @@ async def test_video_proxy_success(
     from io import BytesIO
 
     user = await create_test_user(client, 50020)
-    headers = await auth_headers(
-        client, user["id"]
-    )
-    t = await create_test_track(
-        client, "VidProxy", user["id"]
-    )
+    headers = await auth_headers(client, user["id"])
+    t = await create_test_track(client, "VidProxy", user["id"])
 
-    video_bytes = b"\x00\x00\x00\x1cftypisom" + (
-        b"\x00" * 100
-    )
+    video_bytes = b"\x00\x00\x00\x1cftypisom" + (b"\x00" * 100)
     with (
         patch(
             "app.core.s3.upload_object",
@@ -280,23 +225,16 @@ async def test_video_proxy_success(
         new_callable=AsyncMock,
         return_value=video_bytes,
     ):
-        r = await client.get(
-            f"/api/v1/tracks/{t['id']}/video"
-        )
+        r = await client.get(f"/api/v1/tracks/{t['id']}/video")
     assert r.status_code == 200
     assert r.headers["content-type"] == "video/mp4"
-    assert (
-        r.headers["cache-control"]
-        == "public, max-age=3600"
-    )
+    assert r.headers["cache-control"] == "public, max-age=3600"
 
 
 async def test_video_proxy_not_found(
     client: AsyncClient,
 ) -> None:
-    r = await client.get(
-        "/api/v1/tracks/99999/video"
-    )
+    r = await client.get("/api/v1/tracks/99999/video")
     assert r.status_code == 404
 
 
@@ -304,22 +242,16 @@ async def test_video_proxy_no_video_key(
     client: AsyncClient,
 ) -> None:
     user = await create_test_user(client, 50017)
-    t = await create_test_track(
-        client, "NoVid", user["id"]
-    )
+    t = await create_test_track(client, "NoVid", user["id"])
 
-    r = await client.get(
-        f"/api/v1/tracks/{t['id']}/video"
-    )
+    r = await client.get(f"/api/v1/tracks/{t['id']}/video")
     assert r.status_code == 404
 
 
 async def test_audio_stream_not_found(
     client: AsyncClient,
 ) -> None:
-    r = await client.get(
-        "/api/v1/tracks/99999/audio"
-    )
+    r = await client.get("/api/v1/tracks/99999/audio")
     assert r.status_code == 404
 
 
@@ -327,11 +259,44 @@ async def test_audio_stream_no_file_key(
     client: AsyncClient,
 ) -> None:
     user = await create_test_user(client, 50018)
-    t = await create_test_track(
-        client, "NoAudio", user["id"]
+    t = await create_test_track(client, "NoAudio", user["id"])
+
+    r = await client.get(f"/api/v1/tracks/{t['id']}/audio")
+    assert r.status_code == 422
+
+
+async def test_audio_stream_force_progressive_skips_hls_redirect(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 50021)
+    t = await create_test_track(client, "HlsRedirect", user["id"])
+    track_id = t["id"]
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == track_id)
+        .values(
+            hls_manifest_key="hls/1/master.m3u8",
+            file_key="anon/playback-hls-test.mp3",
+        )
+    )
+    await db_session.commit()
+
+    r302 = await client.get(f"/api/v1/tracks/{track_id}/audio")
+    assert r302.status_code == 302
+    assert r302.headers["location"].endswith(
+        f"/api/v1/tracks/{track_id}/hls/master.m3u8"
     )
 
-    r = await client.get(
-        f"/api/v1/tracks/{t['id']}/audio"
-    )
-    assert r.status_code == 422
+    mp3 = b"\xff\xfb" + b"\x00" * 32
+    with patch(
+        "app.core.s3.download_object_range",
+        new_callable=AsyncMock,
+        return_value=(mp3, len(mp3), None, "audio/mpeg"),
+    ):
+        r = await client.get(
+            f"/api/v1/tracks/{track_id}/audio" f"?force_progressive=true"
+        )
+    assert r.status_code == 200
+    assert r.content == mp3
+    assert r.headers["content-type"] == "audio/mpeg"

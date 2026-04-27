@@ -335,33 +335,20 @@ async def play_track(
             )
         return PlayResponse(
             track_id=track_id,
-            play_count=fresh.play_count
-            or 0,
+            play_count=fresh.play_count or 0,
         )
-    client_ip = (
-        request.client.host
-        if request.client
-        else ""
-    )
-    guest_svc = PublicPlayCountService(
-        session
-    )
-    updated = await guest_svc.bump_guest_from_play(
-        track_id, client_ip
-    )
+    client_ip = request.client.host if request.client else ""
+    guest_svc = PublicPlayCountService(session)
+    updated = await guest_svc.bump_guest_from_play(track_id, client_ip)
     if updated is not None:
-        return PlayResponse(
-            track_id=track_id, play_count=updated
-        )
+        return PlayResponse(track_id=track_id, play_count=updated)
     fresh = await repo.get_by_id(track_id)
     if not fresh:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
-    return PlayResponse(
-        track_id=track_id, play_count=fresh.play_count or 0
-    )
+    return PlayResponse(track_id=track_id, play_count=fresh.play_count or 0)
 
 
 @router.get(
@@ -398,6 +385,14 @@ async def get_cover(
 async def audio_stream(
     request: Request,
     track_id: int,
+    force_progressive: bool = Query(
+        False,
+        description=(
+            "If true, never redirect to HLS; stream the stored file "
+            "(e.g. MP3) with Range. Use when MSE/HLS failed and the "
+            "client needs a plain progressive URL."
+        ),
+    ),
     session: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
 ) -> StreamingResponse | RedirectResponse:
@@ -411,8 +406,7 @@ async def audio_stream(
         )
     _check_access(track, current_user)
 
-    # Prefer HLS adaptive streaming when available
-    if track.hls_manifest_key:
+    if track.hls_manifest_key and not force_progressive:
         return RedirectResponse(
             url=f"/api/v1/tracks/{track_id}/hls/master.m3u8",
             status_code=302,

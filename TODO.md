@@ -44,6 +44,11 @@
 - [x] Audio-compute worker download: OTT with `proxy=1` so Backend
   proxies SoundCloud progressive streams (worker no longer GETs
   time-bound CDN URL directly; avoids 403) — 2026-04
+- [x] Mini App плеер: после сбоя Hls.js fallback `GET /audio` отдавал
+  302 на M3U8, Chrome в `<audio>` M3U8 не декодирует — добавлен
+  `?force_progressive=true` (прокси MP3 с S3) и хелпер
+  `trackProgressiveAudioUrl` в плеере / оффлайн-кэше / админ-превью
+  — 2026-04-27
 - [x] Lyrics cascade: preserve **root** worker failure in
   `cascade exhausted` message (not only last tier gate, e.g.
   `speechkit_disabled`); `lyrics_jobs.request_with_sync` /
