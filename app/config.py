@@ -70,6 +70,16 @@ class AppSettings(BaseSettings):
     lyrics_max_audio_mb: int = 50
     lyrics_search_cache_ttl_seconds: int = 7 * 24 * 3600
     lyrics_progress_ttl_seconds: int = 600
+
+    # Hard ceilings for the audio-compute /audio endpoint that
+    # serves lyrics workers. ``resolve`` covers the SC API hop in
+    # ``SoundCloudService.get_stream_info`` (currently up to 2x
+    # httpx 10s + 30s slot acquire). ``chunk_idle`` aborts the
+    # ``_stream_sc_cdn_to_worker`` proxy if SC stops sending bytes
+    # — without it the proxy can hang on the request thread until
+    # the outer 600s httpx timeout fires.
+    lyrics_audio_resolve_timeout_seconds: float = 45.0
+    lyrics_audio_chunk_idle_seconds: float = 30.0
     lyrics_partial_ttl_seconds: int = 3600
     lyrics_stream_maxlen: int = 500
     lyrics_provider_timeout_seconds: int = 300
