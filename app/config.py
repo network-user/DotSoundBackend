@@ -80,6 +80,15 @@ class AppSettings(BaseSettings):
     # the outer 600s httpx timeout fires.
     lyrics_audio_resolve_timeout_seconds: float = 45.0
     lyrics_audio_chunk_idle_seconds: float = 30.0
+    #: Used only for the internal ``/internal/audio-compute/audio`` proxy
+    #: to ``cf-media.sndcdn.com``. The CDN often returns 403 to
+    #: non-browser ``User-Agent``/missing ``Referer``.
+    lyrics_sc_cdn_user_agent: str = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    )
+    lyrics_sc_cdn_referer: str = "https://soundcloud.com/"
     lyrics_partial_ttl_seconds: int = 3600
     lyrics_stream_maxlen: int = 500
     lyrics_provider_timeout_seconds: int = 300

@@ -13,6 +13,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 import structlog
@@ -38,6 +39,7 @@ from app.repositories.audio_compute import (
 from app.repositories.lyrics import LyricsRepository
 from app.services import compute_worker_service as cws
 from app.services import worker_rate_limit as rl
+from app.services.tor_pool import get_outbound_proxy
 from app.services.lyrics_worker import (
     set_lyrics_progress,
     store_partial_synced,
@@ -50,6 +52,26 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(
 
 _SC_PROXY_CHUNK = 64 * 1024
 _SC_PROXY_LOG_EVERY_BYTES = 1024 * 1024
+
+
+def _sc_cdn_proxy_headers() -> dict[str, str]:
+    """Browser-like request to ``cf-media.sndcdn.com`` (CloudFront).
+
+    A plain server-side GET often gets 403; these headers and the same
+    Tor/proxy as ``SoundCloudService`` help match how the stream URL
+    was minted.
+    """
+    return {
+        "User-Agent": settings.lyrics_sc_cdn_user_agent,
+        "Accept": "audio/mpeg, audio/*;q=0.9, */*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "identity",
+        "Referer": settings.lyrics_sc_cdn_referer,
+        "Origin": "https://soundcloud.com",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "no-cors",
+        "Sec-Fetch-Site": "cross-site",
+    }
 
 
 async def _stream_sc_cdn_to_worker(
@@ -67,23 +89,32 @@ async def _stream_sc_cdn_to_worker(
         else "?"
     )
     started = datetime.now(UTC)
+    out_proxy = get_outbound_proxy("soundcloud")
     logger.info(
         "audio_compute_sc_proxy_started",
         job_id=job_id,
         sc_host=sc_host,
+        tor_outbound=bool(out_proxy),
     )
     try:
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(
+        client_kwargs: dict[str, Any] = {
+            "timeout": httpx.Timeout(
                 connect=30.0,
                 read=chunk_idle_timeout,
                 write=30.0,
                 pool=30.0,
             ),
-            follow_redirects=True,
+            "follow_redirects": True,
+            "trust_env": False,
+        }
+        if out_proxy:
+            client_kwargs["proxy"] = out_proxy
+        async with httpx.AsyncClient(
+            **client_kwargs
         ) as client, client.stream(
             "GET",
             stream_url,
+            headers=_sc_cdn_proxy_headers(),
         ) as r:
             r.raise_for_status()
             iterator = r.aiter_bytes(_SC_PROXY_CHUNK)
@@ -130,10 +161,19 @@ async def _stream_sc_cdn_to_worker(
             bytes=n,
             elapsed_ms=elapsed_ms,
         )
+    except httpx.HTTPStatusError as exc:
+        logger.warning(
+            "audio_compute_sc_proxy_http_status",
+            job_id=job_id,
+            bytes_streamed=n,
+            status=exc.response.status_code if exc.response else None,
+            sc_host=sc_host,
+        )
+        raise
     except (
         httpx.HTTPError,
         ValueError,
-        asyncio.TimeoutError,
+        TimeoutError,
     ) as exc:
         logger.warning(
             "audio_compute_sc_proxy_failed",
@@ -747,7 +787,10 @@ async def download_audio(
         )
         try:
             sc_stream_url, protocol = await asyncio.wait_for(
-                sc.get_stream_info(track.sc_url),
+                sc.get_stream_info(
+                    track.sc_url,
+                    use_cache=False,
+                ),
                 timeout=(
                     settings.lyrics_audio_resolve_timeout_seconds
                 ),
