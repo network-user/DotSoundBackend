@@ -106,7 +106,7 @@ async def enqueue(
         None if target_id is None else str(target_id)
     )
 
-    existing = await _find_existing(
+    existing = await find_existing_job(
         session,
         job_type=job_type,
         target_kind=target_kind,
@@ -143,7 +143,7 @@ async def enqueue(
         # SELECT above and our INSERT. Roll back the failed insert
         # and return the now-visible row.
         await session.rollback()
-        existing = await _find_existing(
+        existing = await find_existing_job(
             session,
             job_type=job_type,
             target_kind=target_kind,
@@ -156,14 +156,22 @@ async def enqueue(
     return job
 
 
-async def _find_existing(
+async def find_existing_job(
     session: AsyncSession,
     *,
     job_type: str,
     target_kind: str | None,
-    target_id: str | None,
-    feature_version: str,
+    target_id: str | int | None,
+    feature_version: str = DEFAULT_FEATURE_VERSION,
 ) -> ComputeJob | None:
+    """Look up a queued job by its idempotency key.
+
+    Returns the row regardless of status (pending, claimed, succeeded,
+    failed). Useful for callers that want to differentiate "newly
+    enqueued" vs "already known" without inserting first.
+    """
+    if target_id is not None and not isinstance(target_id, str):
+        target_id = str(target_id)
     stmt = select(ComputeJob).where(
         ComputeJob.job_type == job_type,
         ComputeJob.feature_version == feature_version,
@@ -575,6 +583,7 @@ __all__ = [
     "enqueue_catalog_ingest_normalize",
     "enqueue_track_audio_features",
     "enqueue_track_similarity_index",
+    "find_existing_job",
     "mark_failed",
     "mark_succeeded",
     "oldest_pending_age_seconds",
