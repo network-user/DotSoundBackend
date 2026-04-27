@@ -252,14 +252,25 @@ class SoundCloudService:
         self,
         sc_url: str,
         prefer_hls: bool = False,
+        *,
+        use_cache: bool = True,
     ) -> tuple[str, str]:
+        """Resolve stream URL. ``use_cache=False`` skips Redis — needed for
+        short-lived ``cf-media.sndcdn.com`` signed URLs (TTL can exceed the
+        signature window).
+        """
         cache_id = f"{sc_url}:{'hls' if prefer_hls else 'progressive'}"
-        cached = await get_cached_stream(CACHE_KEY_SC, cache_id)
-        if cached:
-            logger.debug(
-                "stream_url_cache_hit", service="soundcloud", sc_url=sc_url
+        if use_cache:
+            cached = await get_cached_stream(
+                CACHE_KEY_SC, cache_id
             )
-            return cached
+            if cached:
+                logger.debug(
+                    "stream_url_cache_hit",
+                    service="soundcloud",
+                    sc_url=sc_url,
+                )
+                return cached
 
         sc_data = await self.resolve_url(sc_url)
         transcodings: list[dict] = sc_data.get("media", {}).get(
