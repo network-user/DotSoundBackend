@@ -38,7 +38,8 @@ is a pure-Python decision layer; no I/O or framework code.
 | `services.import_rules` | `app/services/import_*` |
 | `services.moderation` | `app/services/moderation_service.py` |
 | `services.lyrics_provider` | `app/services/lyrics_worker.py` (catalog tier) |
-| `services.signal_policy` | `app/services/recommendation_service.py` |
+| `services.signal_policy` | `app/services/signal_service.py`, `app/services/recommendation_service.py` |
+| `services.playcount_policy` | `app/services/recommendation_service.py`, `app/services/public_playcount_service.py`, `app/api/v1/recommendations.py` |
 
 Symbols renamed or removed from PrivateCore must update this
 table in the same change.

@@ -232,7 +232,7 @@ async def test_get_stream_info_no_transcoding(
 
     with pytest.raises(HTTPException) as exc:
         await svc.get_stream_info(
-            "https://sc.com/x"
+            "https://sc.com/no-transcode-empty"
         )
 
     assert exc.value.status_code == 422
@@ -315,7 +315,7 @@ async def test_get_stream_url(
     stream_resp.status_code = 200
     stream_resp.raise_for_status = MagicMock()
     stream_resp.json.return_value = {
-        "url": "https://cdn/a.mp3"
+        "url": "https://cdn/audio.mp3"
     }
 
     mock_client = AsyncMock()
@@ -332,10 +332,10 @@ async def test_get_stream_url(
 
     svc = SoundCloudService("test_id", session)
     url = await svc.get_stream_url(
-        "https://sc.com/x"
+        "https://sc.com/y-get-stream-url"
     )
 
-    assert url == "https://cdn/a.mp3"
+    assert url == "https://cdn/audio.mp3"
 
 
 @patch(f"{_MOD}.httpx.AsyncClient")

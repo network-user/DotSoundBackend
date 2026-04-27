@@ -670,6 +670,12 @@ export const api = {
     return accessToken
   },
 
+  hasSession(): boolean {
+    const t = accessToken || loadStoredToken()
+    if (!t) return false
+    return !isTokenExpired(t)
+  },
+
   restoreSession():
     | {
         token: string
@@ -1569,6 +1575,14 @@ export const api = {
     import('@/types/api').WeeklyPlaylistResponse
   > {
     return request('/api/v1/recommendations/weekly-playlist')
+  },
+
+  getUserChoicePlaylist(
+    limit = 100,
+  ): Promise<import('@/types/api').UserChoicePlaylistResponse> {
+    return request(
+      `/api/v1/recommendations/user-choice?limit=${limit}`,
+    )
   },
 
   refreshDailyPlaylist(): Promise<void> {

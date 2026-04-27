@@ -147,6 +147,10 @@ Backend (file_validator.py):
   recsys scoring, listening-language heuristics; питают
   `app/services/recommendation_service.py` и
   `app/repositories/recommendation.py` (транспорт/пул)
+- `services/playcount_policy.py` -- публичный учёт
+  прослушиваний (qualify) + ранжирование плейлиста
+  «Выбор пользователей»; `app/services/public_playcount_service.py`,
+  `app/api/v1/recommendations.py`
 - `services/upload_policy.py` -- upload security: MIME allowlists,
   dangerous extensions, size limits, decision functions
 - `services/admin_security_policy.py` -- TTL admin-сессии, окно

@@ -111,6 +111,7 @@ const LegalView = lazy(() => import('@/views/LegalView').then(m => ({ default: m
 const LegalDocView = lazy(() => import('@/views/LegalDocView').then(m => ({ default: m.LegalDocView })))
 const DailyMixView = lazy(() => import('@/views/DailyMixView').then(m => ({ default: m.DailyMixView })))
 const WeeklyMixView = lazy(() => import('@/views/WeeklyMixView').then(m => ({ default: m.WeeklyMixView })))
+const UserChoiceView = lazy(() => import('@/views/UserChoiceView').then(m => ({ default: m.UserChoiceView })))
 const RadioView = lazy(() => import('@/views/RadioView').then(m => ({ default: m.RadioView })))
 const AdminApp = lazy(() =>
   import('@/admin/AdminApp').then((m) => ({
@@ -510,6 +511,10 @@ export function App() {
           <Route path="/legal/:docId" element={<LegalDocView />} />
           <Route path="/daily-mix" element={<DailyMixView />} />
           <Route path="/weekly-mix" element={<WeeklyMixView />} />
+          <Route
+            path="/user-choice"
+            element={<UserChoiceView />}
+          />
           <Route path="/radio" element={<RadioView />} />
           <Route path="/admin/*" element={<AdminApp />} />
         </AnimatedRoutes>

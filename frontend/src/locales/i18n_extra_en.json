@@ -12,6 +12,8 @@
   "home": {
     "dayPlaylistTitle": "Day playlist",
     "dayPlaylistHint": "Personal blend + new picks",
+    "userChoiceTitle": "Users' choice",
+    "userChoiceHint": "Plays and likes this week on the platform",
     "weekPlaylistTitle": "Week playlist",
     "weekPlaylistHint": "A longer mix shaped for you",
     "playRadio": "Play",
@@ -32,6 +34,11 @@
     "hint": "A weekly blend based on your taste",
     "empty": "Not enough data to build the week playlist",
     "discoveries": "New picks"
+  },
+  "userChoice": {
+    "title": "Users' choice",
+    "hint": "Tracks with the strongest plays and likes in the last 7 days",
+    "empty": "Nothing to show yet"
   },
   "library": {
     "tabLiked": "Favorites",

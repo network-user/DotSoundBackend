@@ -82,6 +82,35 @@ async def test_daily_mix(
     assert "generated_at" in data
 
 
+async def test_user_choice_unauthenticated(
+    client: AsyncClient,
+) -> None:
+    r = await client.get(
+        "/api/v1/recommendations/user-choice"
+    )
+    assert r.status_code == 401
+
+
+async def test_user_choice_ok(
+    client: AsyncClient,
+) -> None:
+    await create_test_user(client, 7006)
+    headers = await auth_headers(client, 7006)
+    r = await client.get(
+        "/api/v1/recommendations/user-choice?limit=10",
+        headers=headers,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert "tracks" in data
+    assert "generated_at" in data
+    assert "score_version" in data
+    assert isinstance(
+        data["tracks"],
+        list,
+    )
+
+
 async def test_radio_missing_seed(
     client: AsyncClient,
 ) -> None:

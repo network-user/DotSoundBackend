@@ -10,6 +10,9 @@ from app.repositories.signal import (
     ListenEventRepository,
     SearchEventRepository,
 )
+from app.services.public_playcount_service import (
+    PublicPlayCountService,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -22,6 +25,9 @@ class SignalService:
             session
         )
         self._search_repo = SearchEventRepository(
+            session
+        )
+        self._public_pc = PublicPlayCountService(
             session
         )
 
@@ -46,6 +52,14 @@ class SignalService:
             completed=completed,
             skipped=skipped,
             source_context=source_context,
+        )
+        await self._public_pc.bump_after_qualified_listen(
+            user_id=user_id,
+            track_id=track_id,
+            completed=completed,
+            skipped=skipped,
+            duration_listened=duration_listened,
+            total_duration=total_duration,
         )
         logger.debug(
             "listen_event_recorded",

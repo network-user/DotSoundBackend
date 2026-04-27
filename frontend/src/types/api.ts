@@ -50,6 +50,12 @@ export interface WeeklyPlaylistResponse {
   expires_at: string
 }
 
+export interface UserChoicePlaylistResponse {
+  tracks: Track[]
+  generated_at: string
+  score_version: string
+}
+
 export interface SearchSuggestItem {
   kind: 'track' | 'artist'
   id: number

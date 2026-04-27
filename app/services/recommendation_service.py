@@ -517,6 +517,20 @@ class RecommendationService:
                 }
             )
 
+        user_choice = (
+            await self.get_user_choice_playlist(
+                limit=40
+            )
+        )
+        if user_choice:
+            sections.append(
+                {
+                    "title": "Выбор пользователей",
+                    "section_type": "user_choice",
+                    "tracks": user_choice,
+                }
+            )
+
         if (
             pref
             and pref.preferred_artist_ids
@@ -558,6 +572,40 @@ class RecommendationService:
             "sections": sections,
             "maturity": maturity,
         }
+
+    async def get_user_choice_playlist(
+        self, limit: int = 100
+    ) -> list[Track]:
+        from dotsound_private_core.services.playcount_policy import (
+            UserChoiceTrackInput,
+            rank_user_choice_tracks,
+        )
+
+        pool = (
+            await self._rec_repo.get_user_choice_candidate_pool(
+                400
+            )
+        )
+        if not pool:
+            return []
+        ids = [t.id for t in pool]
+        like_map = await self._rec_repo.get_likes_7d_count_by_track_ids(
+            ids
+        )
+        items: list[UserChoiceTrackInput] = [
+            UserChoiceTrackInput(
+                track_id=t.id,
+                play_count=int(t.play_count or 0),
+                likes_7d=like_map.get(t.id, 0),
+            )
+            for t in pool
+        ]
+        ordered = rank_user_choice_tracks(
+            items, limit=limit
+        )
+        return await self._rec_repo.get_tracks_by_ids(
+            ordered
+        )
 
     async def get_similar(
         self, track_id: int, limit: int = 10

@@ -39,6 +39,8 @@
 - [x] Taskiq worker: graceful shutdown (`WORKER_SHUTDOWN`: cancel
   `import_queue_dispatcher` / `lyrics_global_orchestrator` background tasks,
   `close_es` в воркере) — 2026-04
+- [x] Docker Compose `worker` service: taskiq modules aligned with
+  root `main.py` (imports, lyrics queue, snippets) — 2026-04
 - **Полное копирование аудиофайлов (MinIO) на удалённый backup-VPS**
   - Подключение к отдельному серверу по SSH
   - `mc mirror` MinIO -> remote, инкрементально
@@ -110,6 +112,11 @@
 
 ## Граница Backend / PrivateCore
 
+- [x] **Плейлист «Выбор пользователей» + учёт `play_count` (2026-04-27):**
+  PrivateCore `playcount_policy` (qualify, `rank_user_choice_tracks`);
+  `GET /api/v1/recommendations/user-choice`, секция `user_choice` в
+  `GET /api/v1/recommendations/home`; `PublicPlayCountService` + Redis
+  24h-дедуп; залогиненные — сигнал listen; гость — `POST /api/v1/tracks/{id}/play`
 - [x] **Рекомендации (2026-04):** приоритет русскоязычного контента —
   `recommendation_language_policy` (PrivateCore), affiniti из истории
   + `users.locale`, стратификация пула кандидатов, RU-запросы в
