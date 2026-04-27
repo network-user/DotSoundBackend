@@ -41,6 +41,9 @@
   `close_es` в воркере) — 2026-04
 - [x] Docker Compose `worker` service: taskiq modules aligned with
   root `main.py` (imports, lyrics queue, snippets) — 2026-04
+- [x] Audio-compute worker download: OTT with `proxy=1` so Backend
+  proxies SoundCloud progressive streams (worker no longer GETs
+  time-bound CDN URL directly; avoids 403) — 2026-04
 - **Полное копирование аудиофайлов (MinIO) на удалённый backup-VPS**
   - Подключение к отдельному серверу по SSH
   - `mc mirror` MinIO -> remote, инкрементально

@@ -35,9 +35,20 @@ export function OnboardingGenreScreen({
     a.src = path
     a.volume = 1
     a.crossOrigin = 'anonymous'
-    void a.play().catch(() => {
-      playingRef.current = null
-    })
+    void a
+      .play()
+      .catch((e: unknown) => {
+        if (
+          e &&
+          typeof e === 'object' &&
+          'name' in e &&
+          (e as { name: string }).name ===
+            'AbortError'
+        ) {
+          return
+        }
+        playingRef.current = null
+      })
   }
 
   return (

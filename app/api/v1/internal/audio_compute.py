@@ -11,12 +11,18 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
+import httpx
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import (
+    RedirectResponse,
+    StreamingResponse,
+)
 
 from app.api.v1.internal.worker_request import (
     client_ip,
@@ -41,6 +47,39 @@ from app.services.lyrics_worker import (
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__
 )
+
+_SC_PROXY_CHUNK = 64 * 1024
+
+
+async def _stream_sc_cdn_to_worker(
+    stream_url: str,
+) -> AsyncIterator[bytes]:
+    cap = settings.lyrics_max_audio_mb * 1024 * 1024
+    n = 0
+    try:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(600.0),
+            follow_redirects=True,
+        ) as client, client.stream(
+            "GET",
+            stream_url,
+        ) as r:
+            r.raise_for_status()
+            async for chunk in r.aiter_bytes(
+                _SC_PROXY_CHUNK
+            ):
+                if not chunk:
+                    continue
+                n += len(chunk)
+                if n > cap:
+                    raise ValueError("audio_too_large")
+                yield chunk
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning(
+            "audio_compute_sc_proxy_failed",
+            err=type(exc).__name__,
+        )
+        raise
 
 router = APIRouter(
     prefix="/internal/audio-compute",
@@ -509,8 +548,9 @@ async def download_audio(
     job_id: str,
     ott: str,
     request: Request,
+    proxy: bool = Query(False),
     session: AsyncSession = Depends(get_db),
-) -> JSONResponse:
+) -> Response:
     worker_id = request.headers.get("X-Worker-Id", "")
     if not worker_id or not ott:
         raise HTTPException(status_code=404)
@@ -562,6 +602,8 @@ async def download_audio(
         job.track_id
     )
     payload: dict
+    s3_presigned: str | None = None
+    sc_url_pair: tuple[str, str] | None = None
     if file_key:
         try:
             presigned = await s3.get_presigned_url(
@@ -578,6 +620,7 @@ async def download_audio(
             raise HTTPException(
                 status_code=503
             ) from exc
+        s3_presigned = presigned
         payload = {"url": presigned}
     else:
         track = await session.get(Track, job.track_id)
@@ -610,7 +653,7 @@ async def download_audio(
             settings.sc_client_id, session
         )
         try:
-            stream_url, protocol = await sc.get_stream_info(
+            sc_stream_url, protocol = await sc.get_stream_info(
                 track.sc_url
             )
         except HTTPException:
@@ -627,10 +670,55 @@ async def download_audio(
             raise HTTPException(
                 status_code=503
             ) from exc
+        sc_url_pair = (sc_stream_url, protocol)
         payload = {
-            "url": stream_url,
+            "url": sc_stream_url,
             "stream_protocol": protocol,
         }
+
+    if proxy and s3_presigned is not None:
+        if not await cws.consume_ott_by_exp(
+            exp, job.id, worker_id
+        ):
+            await cws._log_audit(
+                session,
+                worker_id=worker_id,
+                ip=client_ip(request),
+                action="ott_fail",
+                job_id=job.id,
+                status_code=404,
+            )
+            await session.commit()
+            raise HTTPException(status_code=404)
+        return RedirectResponse(
+            url=s3_presigned,
+            status_code=302,
+        )
+
+    if (
+        proxy
+        and sc_url_pair is not None
+        and sc_url_pair[1] == "progressive"
+    ):
+        if not await cws.consume_ott_by_exp(
+            exp, job.id, worker_id
+        ):
+            await cws._log_audit(
+                session,
+                worker_id=worker_id,
+                ip=client_ip(request),
+                action="ott_fail",
+                job_id=job.id,
+                status_code=404,
+            )
+            await session.commit()
+            raise HTTPException(status_code=404)
+        return StreamingResponse(
+            _stream_sc_cdn_to_worker(
+                sc_url_pair[0],
+            ),
+            media_type="application/octet-stream",
+        )
 
     if not await cws.consume_ott_by_exp(
         exp, job.id, worker_id
