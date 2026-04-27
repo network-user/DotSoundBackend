@@ -68,11 +68,13 @@ class GenreSamplesService:
         d = track.duration_seconds
         if d is None or d <= 0:
             raise ValueError("track has no duration for preview")
-        sec = min(15.0, float(d))
+        dur_total = float(d)
+        start_sec = max(0.0, min(30.0, dur_total * 0.3))
+        duration_sec = min(15.0, max(0.1, dur_total - start_sec))
         clip = TrackPreviewClip(
             track_id=track_id,
-            start_sec=0.0,
-            duration_sec=sec,
+            start_sec=start_sec,
+            duration_sec=duration_sec,
             source="fixed_offset",
         )
         self._session.add(clip)

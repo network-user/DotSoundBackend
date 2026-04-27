@@ -124,7 +124,7 @@ async def test_ensure_preview_clip_creates(
     )
     svc = GenreSamplesService(session)
     clip = await svc.ensure_preview_clip(t.id)
-    assert clip.start_sec == 0.0
+    assert clip.start_sec == 30.0
     assert clip.duration_sec == 15.0
     again = await svc.ensure_preview_clip(t.id)
     assert again.track_id == clip.track_id

@@ -151,6 +151,11 @@ class UploadService:
             self._session,
             track_id=track.id,
             priority=5,
+            payload={
+                "title": title,
+                "artist": artist,
+                "genre": genre,
+            },
         )
 
         # Сохраняем оригинальный файл во временное хранилище S3 для обработки воркером
