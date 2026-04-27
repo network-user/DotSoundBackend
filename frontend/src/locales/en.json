@@ -391,6 +391,8 @@
         "id": "ID",
         "profile": "Profile",
         "allowedProfiles": "Allowed profiles",
+        "lyricsProfileHint": "Remote lyrics jobs (remote_whisper) are enqueued with profile \"gpu_full\". If this list does not include it (and the worker is not a gpu_full profile with an empty list), the worker will never get those jobs — /jobs/claim stays 204.",
+        "lyricsProfileFixButton": "Add \"gpu_full\" to allowed profiles",
         "concurrency": "Concurrency",
         "allowedIps": "Allowed IPs",
         "noneCidr": "(none)",

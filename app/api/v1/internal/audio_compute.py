@@ -49,34 +49,96 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(
 )
 
 _SC_PROXY_CHUNK = 64 * 1024
+_SC_PROXY_LOG_EVERY_BYTES = 1024 * 1024
 
 
 async def _stream_sc_cdn_to_worker(
     stream_url: str,
+    *,
+    job_id: str = "",
+    chunk_idle_timeout: float = 30.0,
 ) -> AsyncIterator[bytes]:
     cap = settings.lyrics_max_audio_mb * 1024 * 1024
     n = 0
+    last_logged_at_bytes = 0
+    sc_host = (
+        stream_url.split("://", 1)[-1].split("/", 1)[0]
+        if "://" in stream_url
+        else "?"
+    )
+    started = datetime.now(UTC)
+    logger.info(
+        "audio_compute_sc_proxy_started",
+        job_id=job_id,
+        sc_host=sc_host,
+    )
     try:
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(600.0),
+            timeout=httpx.Timeout(
+                connect=30.0,
+                read=chunk_idle_timeout,
+                write=30.0,
+                pool=30.0,
+            ),
             follow_redirects=True,
         ) as client, client.stream(
             "GET",
             stream_url,
         ) as r:
             r.raise_for_status()
-            async for chunk in r.aiter_bytes(
-                _SC_PROXY_CHUNK
-            ):
+            iterator = r.aiter_bytes(_SC_PROXY_CHUNK)
+            while True:
+                try:
+                    chunk = await asyncio.wait_for(
+                        iterator.__anext__(),
+                        timeout=chunk_idle_timeout,
+                    )
+                except StopAsyncIteration:
+                    break
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "audio_compute_sc_proxy_chunk_idle",
+                        job_id=job_id,
+                        bytes_streamed=n,
+                        idle_timeout_s=chunk_idle_timeout,
+                    )
+                    raise
                 if not chunk:
                     continue
                 n += len(chunk)
                 if n > cap:
                     raise ValueError("audio_too_large")
+                if (
+                    n - last_logged_at_bytes
+                    >= _SC_PROXY_LOG_EVERY_BYTES
+                ):
+                    last_logged_at_bytes = n
+                    logger.info(
+                        "audio_compute_sc_proxy_chunk_progress",
+                        job_id=job_id,
+                        bytes_streamed=n,
+                    )
                 yield chunk
-    except (httpx.HTTPError, ValueError) as exc:
+        elapsed_ms = int(
+            (
+                datetime.now(UTC) - started
+            ).total_seconds() * 1000
+        )
+        logger.info(
+            "audio_compute_sc_proxy_completed",
+            job_id=job_id,
+            bytes=n,
+            elapsed_ms=elapsed_ms,
+        )
+    except (
+        httpx.HTTPError,
+        ValueError,
+        asyncio.TimeoutError,
+    ) as exc:
         logger.warning(
             "audio_compute_sc_proxy_failed",
+            job_id=job_id,
+            bytes_streamed=n,
             err=type(exc).__name__,
         )
         raise
@@ -619,6 +681,13 @@ async def download_audio(
     file_key = await repo.get_track_file_key(
         job.track_id
     )
+    logger.info(
+        "audio_compute_audio_request_start",
+        job_id=job_id,
+        track_id=job.track_id,
+        proxy=proxy,
+        has_file_key=bool(file_key),
+    )
     payload: dict
     s3_presigned: str | None = None
     sc_url_pair: tuple[str, str] | None = None
@@ -640,6 +709,12 @@ async def download_audio(
             ) from exc
         s3_presigned = presigned
         payload = {"url": presigned}
+        logger.info(
+            "audio_compute_audio_resolved",
+            job_id=job_id,
+            track_id=job.track_id,
+            source="s3",
+        )
     else:
         track = await session.get(Track, job.track_id)
         if not track or not getattr(
@@ -671,9 +746,26 @@ async def download_audio(
             settings.sc_client_id, session
         )
         try:
-            sc_stream_url, protocol = await sc.get_stream_info(
-                track.sc_url
+            sc_stream_url, protocol = await asyncio.wait_for(
+                sc.get_stream_info(track.sc_url),
+                timeout=(
+                    settings.lyrics_audio_resolve_timeout_seconds
+                ),
             )
+        except asyncio.TimeoutError as exc:
+            logger.warning(
+                "audio_compute_sc_resolve_timeout",
+                job_id=job_id,
+                track_id=job.track_id,
+                timeout_s=(
+                    settings.lyrics_audio_resolve_timeout_seconds
+                ),
+            )
+            await session.commit()
+            raise HTTPException(
+                status_code=504,
+                detail="SoundCloud resolve timed out",
+            ) from exc
         except HTTPException:
             await session.commit()
             raise
@@ -693,6 +785,13 @@ async def download_audio(
             "url": sc_stream_url,
             "stream_protocol": protocol,
         }
+        logger.info(
+            "audio_compute_audio_resolved",
+            job_id=job_id,
+            track_id=job.track_id,
+            source="sc",
+            protocol=protocol,
+        )
 
     if proxy and s3_presigned is not None:
         if not await cws.consume_ott_by_exp(
@@ -708,6 +807,11 @@ async def download_audio(
             )
             await session.commit()
             raise HTTPException(status_code=404)
+        logger.info(
+            "audio_compute_audio_response_dispatched",
+            job_id=job_id,
+            response="s3_redirect",
+        )
         return RedirectResponse(
             url=s3_presigned,
             status_code=302,
@@ -731,9 +835,18 @@ async def download_audio(
             )
             await session.commit()
             raise HTTPException(status_code=404)
+        logger.info(
+            "audio_compute_audio_response_dispatched",
+            job_id=job_id,
+            response="sc_proxy_stream",
+        )
         return StreamingResponse(
             _stream_sc_cdn_to_worker(
                 sc_url_pair[0],
+                job_id=job_id,
+                chunk_idle_timeout=(
+                    settings.lyrics_audio_chunk_idle_seconds
+                ),
             ),
             media_type="application/octet-stream",
         )
@@ -752,6 +865,11 @@ async def download_audio(
         await session.commit()
         raise HTTPException(status_code=404)
 
+    logger.info(
+        "audio_compute_audio_response_dispatched",
+        job_id=job_id,
+        response="json_url",
+    )
     return JSONResponse(
         status_code=200,
         content=payload,

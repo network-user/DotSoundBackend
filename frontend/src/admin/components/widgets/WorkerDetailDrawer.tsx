@@ -221,6 +221,7 @@ export function WorkerDetailDrawer({
     mutationFn: (payload: {
       allowed_ip_cidrs: string[]
       accept_open_allowlist: boolean
+      allowed_profiles?: string[]
     }) =>
       adminFetch(
         `/audio-compute/workers/${worker.id}/allowlist`,
@@ -260,6 +261,23 @@ WORKER_ASR_DEVICE=auto`,
       setCopied(false)
     }
   }
+
+  const profileFix = useMemo(() => {
+    const cidrs = worker.allowed_ip_cidrs || []
+    const effective: string[] = (
+      (worker.allowed_profiles?.length
+        ? worker.allowed_profiles
+        : [worker.profile]) as string[]
+    ).filter(
+      (p) => typeof p === 'string' && p.length > 0,
+    )
+    return {
+      cidrsForApi: cidrs,
+      hasGpuFull: effective.includes('gpu_full'),
+      merged: [...new Set([...effective, 'gpu_full'])],
+      needsOpenAccept: cidrs.includes('0.0.0.0/0'),
+    }
+  }, [worker])
 
   const livenessLabel = computeWorkerPillLabel(
     worker,
@@ -358,6 +376,32 @@ WORKER_ASR_DEVICE=auto`,
               ).join(', ') || '–'}
             </td>
           </tr>
+          {!profileFix.hasGpuFull && (
+            <tr>
+              <th />
+              <td>
+                <p
+                  className="admin-card__sub"
+                  style={{ margin: '0 0 6px' }}
+                >
+                  {t(`${WD}.lyricsProfileHint`)}
+                </p>
+                <Press
+                  variant="ghost"
+                  disabled={updateAllowlist.isPending}
+                  onClick={() =>
+                    updateAllowlist.mutate({
+                      allowed_ip_cidrs: profileFix.cidrsForApi,
+                      accept_open_allowlist: profileFix.needsOpenAccept,
+                      allowed_profiles: profileFix.merged,
+                    })
+                  }
+                >
+                  {t(`${WD}.lyricsProfileFixButton`)}
+                </Press>
+              </td>
+            </tr>
+          )}
           <tr>
             <th>{t(`${WD}.concurrency`)}</th>
             <td>{worker.max_concurrent_jobs}</td>

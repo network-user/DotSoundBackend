@@ -391,6 +391,8 @@
         "id": "ID",
         "profile": "Профиль",
         "allowedProfiles": "Доп. профили",
+        "lyricsProfileHint": "Задания с текстами (remote_whisper) в очереди с профилем \"gpu_full\". Если его нет в списке, воркер не получит эти job — /jobs/claim остаётся 204.",
+        "lyricsProfileFixButton": "Добавить «gpu_full» в разрешённые профили",
         "concurrency": "Параллелизм",
         "allowedIps": "Разрешённые IP",
         "noneCidr": "(нет)",
