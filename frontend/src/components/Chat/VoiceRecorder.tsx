@@ -5,6 +5,7 @@ import {
   useState,
 } from 'react'
 import { Icon } from '@/components/Icon/Icon'
+import { safePlay } from '@/lib/safePlay'
 
 interface Props {
   onSend: (blob: Blob) => void
@@ -154,7 +155,7 @@ export function VoiceRecorder({
       audioRef.current.pause()
     } else {
       audioRef.current.currentTime = 0
-      audioRef.current.play()
+      void safePlay(audioRef.current)
     }
     setPlaying(!playing)
   }

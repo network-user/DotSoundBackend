@@ -14,6 +14,7 @@ import { getInternalUserId } from '@/lib/telegram'
 import { useToast } from '@/components/ui/Toast'
 import { getCachedAudioUrl } from '@/lib/offlineCache'
 import { queueOrSend } from '@/lib/pendingEvents'
+import { isBenignPlayError, safePlay } from '@/lib/safePlay'
 import type { Track } from '@/types/api'
 
 const EQ_FREQUENCIES = [
@@ -308,11 +309,7 @@ function _updateMediaSession(
     navigator.mediaSession.setActionHandler(
       'play',
       () => {
-        void audio
-          .play()
-          .catch(() => {
-            /* interrupted by pause() or new load — benign */
-          })
+        void safePlay(audio)
       },
     )
     navigator.mediaSession.setActionHandler(
@@ -379,6 +376,7 @@ export function PlayerProvider({
   const streamExpiresAtRef = useRef<number | null>(null)
   const lastStreamUrlRef = useRef<string | null>(null)
   const lastTrackIdRef = useRef<number | null>(null)
+  const playSessionRef = useRef(0)
   const preloadHlsRef = useRef<Hls | null>(null)
   const preloadHlsTrackIdRef = useRef<number | null>(
     null,
@@ -767,7 +765,7 @@ export function PlayerProvider({
       audio.crossOrigin = 'anonymous'
       audio.src = url
       audio.volume = volume
-      await audio.play()
+      await safePlay(audio)
     },
     [volume],
   )
@@ -791,7 +789,7 @@ export function PlayerProvider({
           Hls.Events.MANIFEST_PARSED,
           () => {
             audio.volume = volume
-            if (autoplay) audio.play().catch(() => {})
+            if (autoplay) void safePlay(audio)
             resolve()
           },
         )
@@ -803,7 +801,7 @@ export function PlayerProvider({
             audio.crossOrigin = 'anonymous'
             audio.src = fallbackUrl
             audio.volume = volume
-            if (autoplay) audio.play().catch(() => {})
+            if (autoplay) void safePlay(audio)
           } else {
             setHlsError('Ошибка воспроизведения')
           }
@@ -852,7 +850,7 @@ export function PlayerProvider({
               /* */
             }
           }
-          void audio.play().catch(() => {})
+          void safePlay(audio)
         }
         if (audio.readyState >= 2) {
           afterReady()
@@ -873,7 +871,7 @@ export function PlayerProvider({
               /* */
             }
           }
-          void audio.play().catch(() => {})
+          void safePlay(audio)
         }
         if (audio.readyState >= 2) {
           onReady()
@@ -954,7 +952,7 @@ export function PlayerProvider({
       const audio = audioRef.current
       if (repeatModeRef.current === 'one' && audio) {
         audio.currentTime = 0
-        audio.play().catch(() => {})
+        void safePlay(audio)
         return
       }
       playNext().then((played) => {
@@ -964,8 +962,9 @@ export function PlayerProvider({
           audioRef.current &&
           track
         ) {
-          audioRef.current.currentTime = 0
-          audioRef.current.play().catch(() => {})
+          const cur = audioRef.current
+          cur.currentTime = 0
+          void safePlay(cur)
         }
       })
     }
@@ -1010,7 +1009,7 @@ export function PlayerProvider({
                 const t = a.currentTime
                 a.src = stream.url
                 a.currentTime = t
-                a.play().catch(() => {})
+                void safePlay(a)
                 streamExpiresAtRef.current =
                   stream.expires_in
                     ? Date.now() +
@@ -1120,13 +1119,15 @@ export function PlayerProvider({
       ).catch(() => {})
       return
     }
-    void a.play().catch(() => {})
+    void safePlay(a)
   }, [isCardOpen, track, rebindThirdPartyStream])
 
   const playTrack = async (
     newTrack: Track,
     overrideUrl?: string,
   ) => {
+    const session = ++playSessionRef.current
+    const bail = () => session !== playSessionRef.current
     const audio = audioRef.current
     if (!audio) return
     setTrack((prev) => {
@@ -1147,6 +1148,7 @@ export function PlayerProvider({
     lastStreamUrlRef.current = null
     lastTrackIdRef.current = newTrack.id
     await loadEqSettings()
+    if (bail()) return
     _initAudioCtx()
     if (hlsRef.current) {
       hlsRef.current.destroy()
@@ -1166,8 +1168,10 @@ export function PlayerProvider({
       const cachedUrl = await getCachedAudioUrl(
         newTrack.id,
       )
+      if (bail()) return
       if (cachedUrl) {
         await startDirectPlayback(audio, cachedUrl)
+        if (bail()) return
         _updateMediaSession(
           newTrack,
           audio,
@@ -1181,6 +1185,7 @@ export function PlayerProvider({
         const stream = await api.getStream(
           newTrack.id,
         )
+        if (bail()) return
         lastStreamUrlRef.current = stream.url
         streamExpiresAtRef.current = stream.expires_in
           ? Date.now() + stream.expires_in * 1000
@@ -1199,6 +1204,7 @@ export function PlayerProvider({
             stream.url,
           )
         }
+        if (bail()) return
 
         _updateMediaSession(
           newTrack,
@@ -1211,11 +1217,13 @@ export function PlayerProvider({
 
       if (!newTrack.is_public) {
         const stream = await api.getStream(newTrack.id)
+        if (bail()) return
         lastStreamUrlRef.current = stream.url
         streamExpiresAtRef.current = stream.expires_in
           ? Date.now() + stream.expires_in * 1000
           : null
         await startDirectPlayback(audio, stream.url)
+        if (bail()) return
         _updateMediaSession(newTrack, audio, () => playNext(), () => playPrev())
         return
       }
@@ -1237,7 +1245,7 @@ export function PlayerProvider({
             preloaded.detachMedia()
             preloaded.attachMedia(audio)
             audio.volume = volume
-            await audio.play().catch(() => {})
+            await safePlay(audio)
             hlsRef.current = preloaded
             preloadHlsRef.current = null
             preloadHlsTrackIdRef.current = null
@@ -1261,6 +1269,7 @@ export function PlayerProvider({
           fallback,
         )
       }
+      if (bail()) return
 
       _updateMediaSession(
         newTrack,
@@ -1269,6 +1278,7 @@ export function PlayerProvider({
         () => playPrev(),
       )
     } catch (e) {
+      if (isBenignPlayError(e)) return
       console.error('playTrack error', e)
       toast.error(
         getApiErrorMessage(
@@ -1447,11 +1457,7 @@ export function PlayerProvider({
     await loadEqSettings()
     _initAudioCtx()
     if (a.paused) {
-      void a
-        .play()
-        .catch(() => {
-          /* play() aborted by a quick pause / track switch */
-        })
+      void safePlay(a)
     } else a.pause()
   }
 

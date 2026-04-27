@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { Icon } from '@/components/Icon/Icon'
+import { safePlay } from '@/lib/safePlay'
 
 interface Props {
   fileKey: string
@@ -29,7 +30,7 @@ export function VoicePlayer({ fileKey, duration, waveform }: Props) {
     if (playing) {
       audioRef.current.pause()
     } else {
-      audioRef.current.play()
+      void safePlay(audioRef.current)
     }
     setPlaying(!playing)
   }
