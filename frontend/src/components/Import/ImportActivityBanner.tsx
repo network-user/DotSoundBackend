@@ -57,10 +57,24 @@ export function ImportActivityBanner() {
 
   useEffect(() => {
     if (!api.getToken()) return
+
+    // GET /import/active is 30/min per IP. 5s foreground ≈ 12/min; 30s background
+    // ≈ 2/min so two tabs in the same minute stay under 30. Refresh when tab
+    // becomes visible again.
+    const PERIOD_MS_FOREGROUND = 5000
+    const PERIOD_MS_HIDDEN = 30000
+
+    let intervalId: ReturnType<typeof window.setInterval> | null = null
+
+    const periodMs = () =>
+      document.visibilityState === 'visible'
+        ? PERIOD_MS_FOREGROUND
+        : PERIOD_MS_HIDDEN
+
     const poll = () => {
       api
         .getActiveImport()
-        .then(j => {
+        .then((j) => {
           if (j && ACTIVE.has(j.status)) {
             const stored = readDismissedJobId()
             if (stored != null && j.id !== stored) {
@@ -78,9 +92,32 @@ export function ImportActivityBanner() {
           setJob(null)
         })
     }
+
+    const schedule = () => {
+      if (intervalId != null) {
+        window.clearInterval(intervalId)
+        intervalId = null
+      }
+      intervalId = window.setInterval(poll, periodMs())
+    }
+
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        poll()
+      }
+      schedule()
+    }
+
     poll()
-    const id = window.setInterval(poll, 3000)
-    return () => window.clearInterval(id)
+    schedule()
+    document.addEventListener('visibilitychange', onVis)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      if (intervalId != null) {
+        window.clearInterval(intervalId)
+      }
+    }
   }, [clearDismiss])
 
   const handleDismiss = (e: MouseEvent<HTMLButtonElement>) => {
