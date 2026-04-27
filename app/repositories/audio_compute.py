@@ -175,6 +175,16 @@ class AudioComputeRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_job_by_progress_id(
+        self, progress_id: str
+    ) -> LyricsJob | None:
+        result = await self._session.execute(
+            select(LyricsJob).where(
+                LyricsJob.progress_id == progress_id
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def get_job_for_worker(
         self, job_id: str, worker_id: str
     ) -> LyricsJob | None:

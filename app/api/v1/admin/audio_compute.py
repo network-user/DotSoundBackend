@@ -242,6 +242,71 @@ async def list_jobs(
     return await svc.list_jobs(status_filter=status_filter)
 
 
+class CancelByProgressRequest(BaseModel):
+    progress_id: str = Field(
+        min_length=16, max_length=64
+    )
+
+
+@router.post("/jobs/cancel-by-progress")
+async def cancel_lyrics_job_by_progress(
+    body: CancelByProgressRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(
+        require_capability("audio_compute.manage")
+    ),
+) -> dict:
+    """Cancel by ``progress_id`` from the Mini App / DevTools progress UI."""
+    from app.repositories.audio_compute import (
+        AudioComputeRepository,
+    )
+    from app.services.lyrics_job_cancel import (
+        cancel_lyrics_job_for_admin,
+    )
+
+    repo = AudioComputeRepository(session)
+    row = await repo.get_job_by_progress_id(
+        body.progress_id.strip()
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="job not found for this progress_id",
+        )
+    out = await cancel_lyrics_job_for_admin(
+        session, row.id
+    )
+    if out is None:
+        raise HTTPException(
+            status_code=404, detail="job not found"
+        )
+    result = dict(out)
+    result["job_id"] = row.id
+    return result
+
+
+@router.post("/operations/reap-expired-leases")
+async def reap_expired_lyrics_leases(
+    _admin: User = Depends(
+        require_capability("audio_compute.manage")
+    ),
+) -> dict:
+    """Run lease reaper once: expired ``running`` jobs are advanced.
+
+    For hosts without Taskiq running ``reap_expired_jobs_task`` each
+    minute.
+    """
+    from app.tasks.audio_compute_reaper import (
+        reap_once,
+    )
+
+    n = await reap_once()
+    return {
+        "status": "ok",
+        "expired_leases_handled": int(n),
+    }
+
+
 @router.post("/jobs/{job_id}/cancel")
 async def cancel_lyrics_compute_job(
     job_id: str,

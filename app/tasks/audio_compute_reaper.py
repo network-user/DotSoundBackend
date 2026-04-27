@@ -50,7 +50,22 @@ async def reap_once() -> int:
                 )
 
                 will_fallback = await handle_lease_expired(
-                    session, job=job
+                    session,
+                    job=job,
+                    with_sync=bool(
+                        getattr(
+                            job,
+                            "request_with_sync",
+                            False,
+                        )
+                    ),
+                    bypass_cache=bool(
+                        getattr(
+                            job,
+                            "request_bypass_cache",
+                            False,
+                        )
+                    ),
                 )
             except ImportError:
                 will_fallback = False
