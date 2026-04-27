@@ -43,3 +43,9 @@ class WeeklyPlaylistResponse(BaseModel):
     external_tracks: list[TrackResponse]
     generated_at: str
     expires_at: str
+
+
+class UserChoicePlaylistResponse(BaseModel):
+    tracks: list[TrackResponse]
+    generated_at: str
+    score_version: str

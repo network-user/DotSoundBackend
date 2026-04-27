@@ -28,10 +28,10 @@ from app.schemas.track import (
     TrackResponse,
 )
 from app.services.card_service import CardService
-from app.services.radio_service import RadioService
-from app.services.search_playcount_drain import (
-    mark_playcount_dirty_async,
+from app.services.public_playcount_service import (
+    PublicPlayCountService,
 )
+from app.services.radio_service import RadioService
 from app.services.snippet_service import SnippetService
 from app.services.track_service import TrackService
 
@@ -308,7 +308,7 @@ async def stream_track(
 @router.post(
     "/{track_id}/play",
     response_model=PlayResponse,
-    summary="Increment play count for a track",
+    summary="Play count: guests may bump; signed-in from listen",
 )
 @limiter.limit("20/minute")
 async def play_track(
@@ -326,20 +326,42 @@ async def play_track(
             detail="Track not found",
         )
     _check_access(track, current_user)
-    found = await repo.increment_play_count(track_id)
-    if not found:
+    if current_user is not None:
+        fresh = await repo.get_by_id(track_id)
+        if not fresh:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Track not found",
+            )
+        return PlayResponse(
+            track_id=track_id,
+            play_count=fresh.play_count
+            or 0,
+        )
+    client_ip = (
+        request.client.host
+        if request.client
+        else ""
+    )
+    guest_svc = PublicPlayCountService(
+        session
+    )
+    updated = await guest_svc.bump_guest_from_play(
+        track_id, client_ip
+    )
+    if updated is not None:
+        return PlayResponse(
+            track_id=track_id, play_count=updated
+        )
+    fresh = await repo.get_by_id(track_id)
+    if not fresh:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
-    play_count = (track.play_count or 0) + 1
-    await mark_playcount_dirty_async(track_id)
-    logger.info(
-        "play_count_updated",
-        track_id=track_id,
-        play_count=play_count,
+    return PlayResponse(
+        track_id=track_id, play_count=fresh.play_count or 0
     )
-    return PlayResponse(track_id=track_id, play_count=play_count)
 
 
 @router.get(

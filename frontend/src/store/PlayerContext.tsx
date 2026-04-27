@@ -928,11 +928,13 @@ export function PlayerProvider({
         track.id > 0
       ) {
         playCountSentRef.current = true
-        void queueOrSend(
-          'post-play',
-          `/api/v1/tracks/${track.id}/play`,
-          {},
-        )
+        if (!api.hasSession()) {
+          void queueOrSend(
+            'post-play',
+            `/api/v1/tracks/${track.id}/play`,
+            {},
+          )
+        }
       }
       listenStartTimeRef.current =
         audio.currentTime

@@ -1,4 +1,4 @@
-# DotSound — Project Context (auto-generated 2026-04-16, обновлено 2026-04-26)
+# DotSound — Project Context (auto-generated 2026-04-16, обновлено 2026-04-27)
 
 > Открывать при каждом новом сеансе. Обновлять при архитектурных изменениях.
 
@@ -64,6 +64,8 @@ frontend/src/
   lib/ws.ts        ← WebSocket с авто-реконнектом
 ```
 
+**Плейлист «Выбор пользователей» (recs):** `GET /api/v1/recommendations/user-choice` (JWT) — ранжирование в PrivateCore (`playcount_policy`: смесь `play_count` и лайков за 7 суток); на главной секция `user_choice` из `GET /api/v1/recommendations/home`. Публичный `play_count`: для залогиненных — `POST /api/v1/signals/listen` + политика PrivateCore + дедуп Redis; для гостя — `POST /api/v1/tracks/{id}/play` с дедупом по IP+трек.
+
 **Онбординг — превью по жанру (recsys):** таблицы `genre_samples` и `track_preview_clips` (миграция `0059`), `GenreSamplesService`, публичные `GET /api/v1/onboarding/genres/{genre}/preview-queue` (требуется JWT) и `GET /api/v1/track-preview/{track_id}/segment.mp4` (15s AAC в fMP4). Кураторский список: `GET/POST/DELETE /api/v1/admin/genre-samples` с capability `recsys.genre_samples.manage`.
 
 ---
@@ -111,6 +113,7 @@ src/dotsound_private_core/
     lyrics_provider.py        ← автоопределение текста (внутренняя реализация)
     artist_normalizer.py      ← парсинг "Kai Angel & 9mice", fuzzy match
     recommendation_engine.py  ← скоринг треков, daily mix, radio
+    playcount_policy.py        ← публичный play_count (qualify) + user-choice chart
     recommendation_language_policy.py ← эвристики языка (opaque), RU-boost
     auth_policy.py            ← TTL, IP-диапазоны, burn/cooldown
     upload_policy.py          ← разрешённые MIME, опасные расширения

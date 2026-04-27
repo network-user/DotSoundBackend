@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import structlog
 from dotsound_private_core.services.recommendation_language_policy import (
     RUS_CANDIDATE_CYRILLIC_PATTERN,
@@ -15,9 +17,7 @@ logger = structlog.get_logger(__name__)
 
 
 class RecommendationRepository:
-    def __init__(
-        self, session: AsyncSession
-    ) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def get_candidate_tracks(
@@ -31,16 +31,10 @@ class RecommendationRepository:
             Track.is_public.is_(True),
         )
         if genre_filter:
-            q = q.where(
-                Track.genre.in_(genre_filter)
-            )
+            q = q.where(Track.genre.in_(genre_filter))
         if exclude_ids:
-            q = q.where(
-                Track.id.notin_(exclude_ids)
-            )
-        q = q.order_by(
-            Track.play_count.desc()
-        ).limit(limit)
+            q = q.where(Track.id.notin_(exclude_ids))
+        q = q.order_by(Track.play_count.desc()).limit(limit)
         result = await self._session.execute(q)
         return list(result.scalars().all())
 
@@ -55,44 +49,30 @@ class RecommendationRepository:
             Track.is_public.is_(True),
         )
         if genre_filter:
-            q = q.where(
-                Track.genre.in_(genre_filter)
-            )
+            q = q.where(Track.genre.in_(genre_filter))
         if exclude_ids:
-            q = q.where(
-                Track.id.notin_(exclude_ids)
-            )
+            q = q.where(Track.id.notin_(exclude_ids))
         bind = self._session.get_bind()
         dialect = bind.dialect.name
         if dialect == "postgresql":
             pat = RUS_CANDIDATE_CYRILLIC_PATTERN
             q = q.where(
                 or_(
-                    func.coalesce(Track.title, "").op("~")(
-                        pat
-                    ),
-                    func.coalesce(Track.artist, "").op("~")(
-                        pat
-                    ),
+                    func.coalesce(Track.title, "").op("~")(pat),
+                    func.coalesce(Track.artist, "").op("~")(pat),
                 )
             )
-            q = q.order_by(
-                Track.play_count.desc()
-            ).limit(limit)
+            q = q.order_by(Track.play_count.desc()).limit(limit)
         else:
             cap = min(2000, max(limit * 30, 300))
-            q = q.order_by(
-                Track.play_count.desc()
-            ).limit(cap)
+            q = q.order_by(Track.play_count.desc()).limit(cap)
         result = await self._session.execute(q)
         rows = list(result.scalars().all())
         if dialect != "postgresql":
             rows = [
                 t
                 for t in rows
-                if cyrillic_likely_ru_title_artist(
-                    t.title, t.artist
-                )
+                if cyrillic_likely_ru_title_artist(t.title, t.artist)
             ][:limit]
         return rows
 
@@ -144,9 +124,7 @@ class RecommendationRepository:
                     break
         return out[:total_limit]
 
-    async def get_popular_tracks(
-        self, limit: int = 20
-    ) -> list[Track]:
+    async def get_popular_tracks(self, limit: int = 20) -> list[Track]:
         result = await self._session.execute(
             select(Track)
             .where(
@@ -165,9 +143,7 @@ class RecommendationRepository:
     ) -> list[Track]:
         from datetime import UTC, datetime, timedelta
 
-        cutoff = datetime.now(UTC) - timedelta(
-            days=days
-        )
+        cutoff = datetime.now(UTC) - timedelta(days=days)
         result = await self._session.execute(
             select(Track)
             .where(
@@ -196,28 +172,20 @@ class RecommendationRepository:
             .where(
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
-                TrackArtist.artist_id.in_(
-                    artist_ids
-                ),
+                TrackArtist.artist_id.in_(artist_ids),
             )
             .order_by(Track.created_at.desc())
             .limit(limit)
         )
         return list(result.scalars().all())
 
-    async def get_liked_track_ids(
-        self, user_id: int
-    ) -> set[int]:
+    async def get_liked_track_ids(self, user_id: int) -> set[int]:
         result = await self._session.execute(
-            select(Like.track_id).where(
-                Like.user_id == user_id
-            )
+            select(Like.track_id).where(Like.user_id == user_id)
         )
         return set(result.scalars().all())
 
-    async def get_listened_track_ids(
-        self, user_id: int
-    ) -> set[int]:
+    async def get_listened_track_ids(self, user_id: int) -> set[int]:
         result = await self._session.execute(
             select(ListenEvent.track_id)
             .where(ListenEvent.user_id == user_id)
@@ -233,9 +201,7 @@ class RecommendationRepository:
         subq = (
             select(
                 ListenEvent.track_id,
-                func.max(
-                    ListenEvent.created_at
-                ).label("last_listen"),
+                func.max(ListenEvent.created_at).label("last_listen"),
             )
             .where(
                 ListenEvent.user_id == user_id,
@@ -243,38 +209,26 @@ class RecommendationRepository:
                 ListenEvent.skipped.is_(False),
             )
             .group_by(ListenEvent.track_id)
-            .order_by(
-                func.max(
-                    ListenEvent.created_at
-                ).desc()
-            )
+            .order_by(func.max(ListenEvent.created_at).desc())
             .limit(limit)
             .subquery()
         )
         result = await self._session.execute(
             select(Track)
-            .join(
-                subq, subq.c.track_id == Track.id
-            )
+            .join(subq, subq.c.track_id == Track.id)
             .where(Track.is_active.is_(True))
         )
         return list(result.scalars().all())
 
-    async def get_tracks_by_ids(
-        self, ids: list[int]
-    ) -> list[Track]:
+    async def get_tracks_by_ids(self, ids: list[int]) -> list[Track]:
         if not ids:
             return []
         result = await self._session.execute(
             select(Track).where(Track.id.in_(ids))
         )
-        id_order = {
-            tid: i for i, tid in enumerate(ids)
-        }
+        id_order = {tid: i for i, tid in enumerate(ids)}
         tracks = list(result.scalars().all())
-        tracks.sort(
-            key=lambda t: id_order.get(t.id, 9999)
-        )
+        tracks.sort(key=lambda t: id_order.get(t.id, 9999))
         return tracks
 
     async def get_track_artist_map(
@@ -286,13 +240,39 @@ class RecommendationRepository:
             select(
                 TrackArtist.track_id,
                 TrackArtist.artist_id,
-            ).where(
-                TrackArtist.track_id.in_(track_ids)
-            )
+            ).where(TrackArtist.track_id.in_(track_ids))
         )
         mapping: dict[int, list[int]] = {}
         for row in result.all():
-            mapping.setdefault(
-                row[0], []
-            ).append(row[1])
+            mapping.setdefault(row[0], []).append(row[1])
         return mapping
+
+    async def get_user_choice_candidate_pool(
+        self, limit: int = 400
+    ) -> list[Track]:
+        result = await self._session.execute(
+            select(Track)
+            .where(
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+            )
+            .order_by(Track.play_count.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_likes_7d_count_by_track_ids(
+        self, track_ids: list[int]
+    ) -> dict[int, int]:
+        if not track_ids:
+            return {}
+        cutoff = datetime.now(UTC) - timedelta(days=7)
+        result = await self._session.execute(
+            select(Like.track_id, func.count())
+            .where(
+                Like.track_id.in_(track_ids),
+                Like.created_at >= cutoff,
+            )
+            .group_by(Like.track_id)
+        )
+        return {tid: int(c) for tid, c in result.all()}

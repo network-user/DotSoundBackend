@@ -1,5 +1,8 @@
 from datetime import UTC, datetime
 
+from dotsound_private_core.services.playcount_policy import (
+    USER_CHOICE_SCORE_VERSION,
+)
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +18,7 @@ from app.schemas.recommendation import (
     HomeSectionResponse,
     RadioQueueResponse,
     SimilarTracksResponse,
+    UserChoicePlaylistResponse,
     WeeklyPlaylistResponse,
 )
 from app.schemas.track import TrackResponse
@@ -188,6 +192,31 @@ async def get_weekly_playlist(
         ],
         generated_at=payload["generated_at"],
         expires_at=payload["expires_at"],
+    )
+
+
+@router.get(
+    "/user-choice",
+    response_model=UserChoicePlaylistResponse,
+)
+async def get_user_choice_playlist(
+    _user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(
+        default=100, ge=1, le=200
+    ),
+):
+    svc = RecommendationService(db)
+    tracks = await svc.get_user_choice_playlist(
+        limit=limit
+    )
+    return UserChoicePlaylistResponse(
+        tracks=[
+            TrackResponse.model_validate(t)
+            for t in tracks
+        ],
+        generated_at=datetime.now(UTC).isoformat(),
+        score_version=USER_CHOICE_SCORE_VERSION,
     )
 
 

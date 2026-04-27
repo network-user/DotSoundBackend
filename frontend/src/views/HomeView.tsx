@@ -138,6 +138,33 @@ export function HomeView() {
         <Icon name="chevron" size={18} className="text-secondary" />
       </button>
 
+      <button
+        className="playlist-card"
+        type="button"
+        style={{ margin: '8px 16px 4px', width: 'calc(100% - 32px)' }}
+        onClick={() => navigate('/user-choice')}
+      >
+        <div className="playlist-cover" aria-hidden>
+          <Icon name="heart" size={26} />
+        </div>
+        <div style={{ flex: 1, textAlign: 'left' }}>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>
+            {t('home.userChoiceTitle')}
+          </div>
+          <div
+            className="hint"
+            style={{ fontSize: 12 }}
+          >
+            {t('home.userChoiceHint')}
+          </div>
+        </div>
+        <Icon
+          name="chevron"
+          size={18}
+          className="text-secondary"
+        />
+      </button>
+
       {sections === null && fallbackTracks === null && (
         <div className="loader" />
       )}
