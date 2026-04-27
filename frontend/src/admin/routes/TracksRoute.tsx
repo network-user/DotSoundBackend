@@ -9,6 +9,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { Press } from '@/components/ui/Press'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
+import { trackProgressiveAudioUrl } from '@/lib/offlineCache'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 
@@ -177,7 +178,7 @@ export function TracksRoute() {
             </Press>
             {isPlaying && (
               <audio
-                src={`/api/v1/tracks/${id}/audio`}
+                src={trackProgressiveAudioUrl(id)}
                 controls
                 autoPlay
                 style={{ height: 28, maxWidth: 180 }}

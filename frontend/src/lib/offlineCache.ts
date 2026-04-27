@@ -5,6 +5,15 @@ const DB_NAME = 'dotsound-offline'
 const DB_VERSION = 1
 const STORE = 'tracks'
 
+const LEGACY_AUDIO = (id: number) =>
+  `/api/v1/tracks/${id}/audio`
+
+export function trackProgressiveAudioUrl(
+  id: number,
+): string {
+  return `${LEGACY_AUDIO(id)}?force_progressive=true`
+}
+
 interface OfflineRecord {
   trackId: number
   track: Track
@@ -14,7 +23,7 @@ interface OfflineRecord {
 }
 
 function audioUrlForTrack(track: Track): string {
-  return `/api/v1/tracks/${track.id}/audio`
+  return trackProgressiveAudioUrl(track.id)
 }
 
 async function openDb(): Promise<IDBDatabase> {
@@ -71,8 +80,12 @@ export async function getCachedAudioUrl(
   if (!isSupported()) return null
   try {
     const cache = await caches.open(CACHE_NAME)
-    const url = `/api/v1/tracks/${trackId}/audio`
-    const res = await cache.match(url)
+    let res = await cache.match(
+      trackProgressiveAudioUrl(trackId),
+    )
+    if (!res) {
+      res = await cache.match(LEGACY_AUDIO(trackId))
+    }
     if (!res) return null
     const blob = await res.blob()
     return URL.createObjectURL(blob)
@@ -152,8 +165,9 @@ export async function removeTrack(
   if (!isSupported()) return
   try {
     const cache = await caches.open(CACHE_NAME)
+    await cache.delete(LEGACY_AUDIO(trackId))
     await cache.delete(
-      `/api/v1/tracks/${trackId}/audio`,
+      trackProgressiveAudioUrl(trackId),
     )
     const db = await openDb()
     await new Promise<void>((resolve) => {

@@ -12,7 +12,10 @@ import Hls from 'hls.js'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { useToast } from '@/components/ui/Toast'
-import { getCachedAudioUrl } from '@/lib/offlineCache'
+import {
+  getCachedAudioUrl,
+  trackProgressiveAudioUrl,
+} from '@/lib/offlineCache'
 import { queueOrSend } from '@/lib/pendingEvents'
 import { isBenignPlayError, safePlay } from '@/lib/safePlay'
 import type { Track } from '@/types/api'
@@ -703,7 +706,9 @@ export function PlayerProvider({
           .catch(() => {})
       } else {
         const hlsUrl = `/api/v1/tracks/${saved.track.id}/hls/master.m3u8`
-        const fallback = `/api/v1/tracks/${saved.track.id}/audio`
+        const fallback = trackProgressiveAudioUrl(
+          saved.track.id,
+        )
 
         if (Hls.isSupported()) {
           startHlsPlayback(audio, hlsUrl, fallback, false)
@@ -1231,7 +1236,7 @@ export function PlayerProvider({
       const hlsUrl = `/api/v1/tracks/${newTrack.id}/hls/master.m3u8`
       const fallback =
         overrideUrl ||
-        `/api/v1/tracks/${newTrack.id}/audio`
+        trackProgressiveAudioUrl(newTrack.id)
 
       if (Hls.isSupported()) {
         const preloaded =
@@ -1363,7 +1368,7 @@ export function PlayerProvider({
 
       const pa = new Audio()
       pa.preload = 'auto'
-      pa.src = `/api/v1/tracks/${next.id}/audio`
+      pa.src = trackProgressiveAudioUrl(next.id)
       prefetchAudioRef.current = pa
 
       const canHls =
