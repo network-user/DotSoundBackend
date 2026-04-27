@@ -54,6 +54,7 @@ async def _backfill_tracks(
     ]
     enq = 0
     skip_inel = 0
+    skip_dup = 0
     for tid in tids:
         tr = await session.get(Track, tid)
         if tr is None:
@@ -61,6 +62,16 @@ async def _backfill_tracks(
             continue
         if job_kind == q.JOB_TRACK_AUDIO_FEATURES and tr.file_key is None:
             skip_inel += 1
+            continue
+        existing = await q.find_existing_job(
+            session,
+            job_type=job_kind,
+            target_kind=q.TARGET_KIND_TRACK,
+            target_id=tid,
+            feature_version=feature_version,
+        )
+        if existing is not None:
+            skip_dup += 1
             continue
         if dry_run:
             enq += 1
@@ -85,7 +96,7 @@ async def _backfill_tracks(
     return {
         "enqueued": enq,
         "skipped_ineligible": skip_inel,
-        "skipped_duplicate": 0,
+        "skipped_duplicate": skip_dup,
     }
 
 
@@ -107,7 +118,18 @@ async def _backfill_artists(
         for row in (await session.execute(stmt)).all()
     ]
     enq = 0
+    skip_dup = 0
     for aid in aids:
+        existing = await q.find_existing_job(
+            session,
+            job_type=q.JOB_ARTIST_FEATURES_UPDATE,
+            target_kind=q.TARGET_KIND_ARTIST,
+            target_id=aid,
+            feature_version=feature_version,
+        )
+        if existing is not None:
+            skip_dup += 1
+            continue
         if dry_run:
             enq += 1
             continue
@@ -123,7 +145,7 @@ async def _backfill_artists(
     return {
         "enqueued": enq,
         "skipped_ineligible": 0,
-        "skipped_duplicate": 0,
+        "skipped_duplicate": skip_dup,
     }
 
 
