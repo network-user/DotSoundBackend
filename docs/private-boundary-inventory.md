@@ -38,9 +38,13 @@ which parts are owned by `DotSoundPrivateCore`.
 
 - Heuristics and score weights for listening-language affinity live in
   `DotSoundPrivateCore` (`recommendation_language_policy`,
-  `recommendation_engine`, `scoring`).
+  `recommendation_engine`, `scoring`). Cyrillic strata ratio, cold-start
+  language affinity defaults, and whether Russian discovery boosting is
+  always on are defined there (`RU_STRATIFICATION_ALWAYS`,
+  `DEFAULT_CYRILLIC_STRATA_RATIO`, `cold_start_language_affinity_weights`).
 - Backend supplies track metadata, aggregates `language_affinity` from
-  history and `users.locale`, runs SQL candidate pools, and issues
+  history and `users.locale`, runs SQL candidate pools (including
+  stratified Cyrillic vs global slices where applicable), and issues
   external discovery search queries.
 
 ## Non-Goals For Slice-1
