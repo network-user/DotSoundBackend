@@ -24,15 +24,11 @@ from app.services.notification_service import (
     NotificationService,
 )
 
-logger: structlog.stdlib.BoundLogger = (
-    structlog.get_logger(__name__)
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 class CommentService:
-    def __init__(
-        self, session: AsyncSession
-    ) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self._repo = CommentRepository(session)
         self._block_repo = BlockRepository(session)
         self._user_repo = UserRepository(session)
@@ -56,9 +52,7 @@ class CommentService:
             return joined
         return f"User #{user.id}"
 
-    def _raise_unless_comments_allowed(
-        self, track: Track | None
-    ) -> None:
+    def _raise_unless_comments_allowed(self, track: Track | None) -> None:
         if not track or not track.is_active:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -67,9 +61,7 @@ class CommentService:
         if not track.is_public:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    "Comments not available for private tracks"
-                ),
+                detail=("Comments not available for private tracks"),
             )
         if not track.comments_enabled:
             raise HTTPException(
@@ -82,9 +74,7 @@ class CommentService:
         c: TrackComment,
         users: dict[int, User],
     ) -> dict[str, Any]:
-        likes, dislikes = (
-            await self._repo.get_vote_counts(c.id)
-        )
+        likes, dislikes = await self._repo.get_vote_counts(c.id)
         au = users.get(c.user_id)
         return {
             "id": c.id,
@@ -114,9 +104,7 @@ class CommentService:
             new_comment.user_id, parent_author_id
         ):
             return
-        parent_user = await self._user_repo.get_by_id(
-            parent_author_id
-        )
+        parent_user = await self._user_repo.get_by_id(parent_author_id)
         if not parent_user:
             return
         al = self._author_label(actor)
@@ -155,9 +143,7 @@ class CommentService:
             return
         if comment.is_deleted or comment.is_hidden_by_author:
             return
-        if await self._block_repo.is_blocked(
-            actor_id, owner_id
-        ):
+        if await self._block_repo.is_blocked(actor_id, owner_id):
             return
         owner = await self._user_repo.get_by_id(owner_id)
         if not owner:
@@ -190,25 +176,20 @@ class CommentService:
         text: str,
         parent_id: int | None = None,
     ) -> dict[str, Any]:
-        track = await self._session.get(
-            Track, track_id
-        )
+        track = await self._session.get(Track, track_id)
         self._raise_unless_comments_allowed(track)
         assert track is not None
-        if track.uploaded_by_id:
-            if await self._block_repo.is_blocked(
-                track.uploaded_by_id, user_id
-            ):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Blocked by track owner",
-                )
+        if track.uploaded_by_id and await self._block_repo.is_blocked(
+            track.uploaded_by_id, user_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Blocked by track owner",
+            )
 
         parent_row: TrackComment | None = None
         if parent_id is not None:
-            parent_row = await self._repo.get_by_id(
-                parent_id
-            )
+            parent_row = await self._repo.get_by_id(parent_id)
             if not parent_row:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -219,10 +200,7 @@ class CommentService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid parent comment",
                 )
-            if (
-                parent_row.is_deleted
-                or parent_row.is_hidden_by_author
-            ):
+            if parent_row.is_deleted or parent_row.is_hidden_by_author:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Cannot reply to this comment",
@@ -240,9 +218,7 @@ class CommentService:
             track_id=track_id,
             parent_id=parent_id,
         )
-        author = await self._user_repo.get_by_id(
-            user_id
-        )
+        author = await self._user_repo.get_by_id(user_id)
         author_label = self._author_label(author)
         result = {
             "id": c.id,
@@ -278,21 +254,17 @@ class CommentService:
         limit: int = 20,
         focus_comment_id: int | None = None,
     ) -> list[dict[str, Any]]:
-        track = await self._session.get(
-            Track, track_id
-        )
+        track = await self._session.get(Track, track_id)
         self._raise_unless_comments_allowed(track)
         roots = await self._repo.list_root_comments(
             track_id, user_id, cursor, limit
         )
         extra_root: TrackComment | None = None
         if focus_comment_id is not None:
-            extra_root = (
-                await self._repo.get_root_comment_for_focus(
-                    track_id,
-                    user_id,
-                    focus_comment_id,
-                )
+            extra_root = await self._repo.get_root_comment_for_focus(
+                track_id,
+                user_id,
+                focus_comment_id,
             )
             if extra_root is not None:
                 ids = {r.id for r in roots}
@@ -310,10 +282,8 @@ class CommentService:
         all_flat: list[TrackComment] = []
         frontier = [r.id for r in roots]
         while frontier:
-            batch = (
-                await self._repo.list_replies_for_parents(
-                    track_id, frontier, user_id
-                )
+            batch = await self._repo.list_replies_for_parents(
+                track_id, frontier, user_id
             )
             if not batch:
                 break
@@ -322,9 +292,7 @@ class CommentService:
 
         by_parent: dict[int, list[TrackComment]] = {}
         for node in all_flat:
-            by_parent.setdefault(
-                node.parent_id, []
-            ).append(node)
+            by_parent.setdefault(node.parent_id, []).append(node)
         for pid in by_parent:
             by_parent[pid].sort(
                 key=lambda x: x.created_at,
@@ -335,18 +303,14 @@ class CommentService:
             uid_set.add(x.user_id)
         for x in all_flat:
             uid_set.add(x.user_id)
-        users = await self._user_repo.get_by_ids(
-            list(uid_set)
-        )
+        users = await self._user_repo.get_by_ids(list(uid_set))
 
         async def branch(
             node: TrackComment,
         ) -> dict[str, Any]:
             d = await self._comment_dict(node, users)
             kids = by_parent.get(node.id, [])
-            d["replies"] = [
-                await branch(ch) for ch in kids
-            ]
+            d["replies"] = [await branch(ch) for ch in kids]
             return d
 
         out: list[dict[str, Any]] = []
@@ -354,33 +318,22 @@ class CommentService:
             out.append(await branch(root))
         return out
 
-    async def delete_comment(
-        self, comment_id: int, user_id: int
-    ) -> None:
+    async def delete_comment(self, comment_id: int, user_id: int) -> None:
         c = await self._repo.get_by_id(comment_id)
         if not c:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
             )
-        track = await self._session.get(
-            Track, c.track_id
-        )
-        is_owner = (
-            track
-            and track.uploaded_by_id == user_id
-        )
+        track = await self._session.get(Track, c.track_id)
+        is_owner = track and track.uploaded_by_id == user_id
         if c.user_id != user_id and not is_owner:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not allowed",
             )
         tid = c.track_id
-        deleted_ids = (
-            await self._repo.soft_delete_comment_chain(
-                comment_id
-            )
-        )
+        deleted_ids = await self._repo.soft_delete_comment_chain(comment_id)
         for did in deleted_ids:
             await ws_manager.broadcast_to_online(
                 {
@@ -390,9 +343,7 @@ class CommentService:
                 }
             )
 
-    async def pin_comment(
-        self, comment_id: int, user_id: int
-    ) -> None:
+    async def pin_comment(self, comment_id: int, user_id: int) -> None:
         c = await self._repo.get_by_id(comment_id)
         if not c:
             raise HTTPException(
@@ -404,20 +355,12 @@ class CommentService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Can only pin top-level comments",
             )
-        track = await self._session.get(
-            Track, c.track_id
-        )
+        track = await self._session.get(Track, c.track_id)
         self._raise_unless_comments_allowed(track)
-        await self._ensure_track_owner(
-            c.track_id, user_id
-        )
-        await self._repo.set_pinned(
-            c.track_id, comment_id, True
-        )
+        await self._ensure_track_owner(c.track_id, user_id)
+        await self._repo.set_pinned(c.track_id, comment_id, True)
 
-    async def unpin_comment(
-        self, comment_id: int, user_id: int
-    ) -> None:
+    async def unpin_comment(self, comment_id: int, user_id: int) -> None:
         c = await self._repo.get_by_id(comment_id)
         if not c:
             raise HTTPException(
@@ -429,51 +372,33 @@ class CommentService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Can only unpin top-level comments",
             )
-        track = await self._session.get(
-            Track, c.track_id
-        )
+        track = await self._session.get(Track, c.track_id)
         self._raise_unless_comments_allowed(track)
-        await self._ensure_track_owner(
-            c.track_id, user_id
-        )
-        await self._repo.set_pinned(
-            c.track_id, comment_id, False
-        )
+        await self._ensure_track_owner(c.track_id, user_id)
+        await self._repo.set_pinned(c.track_id, comment_id, False)
 
-    async def hide_for_all(
-        self, comment_id: int, user_id: int
-    ) -> None:
+    async def hide_for_all(self, comment_id: int, user_id: int) -> None:
         c = await self._repo.get_by_id(comment_id)
         if not c:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
             )
-        track = await self._session.get(
-            Track, c.track_id
-        )
+        track = await self._session.get(Track, c.track_id)
         self._raise_unless_comments_allowed(track)
-        await self._ensure_track_owner(
-            c.track_id, user_id
-        )
+        await self._ensure_track_owner(c.track_id, user_id)
         await self._repo.hide_for_all(comment_id)
 
-    async def hide_for_self(
-        self, comment_id: int, user_id: int
-    ) -> None:
+    async def hide_for_self(self, comment_id: int, user_id: int) -> None:
         c = await self._repo.get_by_id(comment_id)
         if not c:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
             )
-        track = await self._session.get(
-            Track, c.track_id
-        )
+        track = await self._session.get(Track, c.track_id)
         self._raise_unless_comments_allowed(track)
-        await self._repo.hide_for_user(
-            comment_id, user_id
-        )
+        await self._repo.hide_for_user(comment_id, user_id)
 
     async def vote(
         self,
@@ -487,24 +412,16 @@ class CommentService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
             )
-        track = await self._session.get(
-            Track, c.track_id
-        )
+        track = await self._session.get(Track, c.track_id)
         self._raise_unless_comments_allowed(track)
         assert track is not None
-        prev: CommentVote | None = (
-            await self._repo.get_vote(comment_id, user_id)
+        prev: CommentVote | None = await self._repo.get_vote(
+            comment_id, user_id
         )
-        await self._repo.vote(
-            comment_id, user_id, is_like
-        )
-        became_like = is_like and (
-            prev is None or not prev.is_like
-        )
+        await self._repo.vote(comment_id, user_id, is_like)
+        became_like = is_like and (prev is None or not prev.is_like)
         if became_like:
-            actor = await self._user_repo.get_by_id(
-                user_id
-            )
+            actor = await self._user_repo.get_by_id(user_id)
             await self._notify_comment_liked(
                 track=track,
                 comment=c,
@@ -512,33 +429,20 @@ class CommentService:
                 actor=actor,
             )
 
-    async def remove_vote(
-        self, comment_id: int, user_id: int
-    ) -> None:
+    async def remove_vote(self, comment_id: int, user_id: int) -> None:
         c = await self._repo.get_by_id(comment_id)
         if not c:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
             )
-        track = await self._session.get(
-            Track, c.track_id
-        )
+        track = await self._session.get(Track, c.track_id)
         self._raise_unless_comments_allowed(track)
-        await self._repo.remove_vote(
-            comment_id, user_id
-        )
+        await self._repo.remove_vote(comment_id, user_id)
 
-    async def _ensure_track_owner(
-        self, track_id: int, user_id: int
-    ) -> None:
-        track = await self._session.get(
-            Track, track_id
-        )
-        if (
-            not track
-            or track.uploaded_by_id != user_id
-        ):
+    async def _ensure_track_owner(self, track_id: int, user_id: int) -> None:
+        track = await self._session.get(Track, track_id)
+        if not track or track.uploaded_by_id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only track owner can do this",

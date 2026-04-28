@@ -12,32 +12,22 @@ from app.models.comment import (
     TrackComment,
 )
 
-logger: structlog.stdlib.BoundLogger = (
-    structlog.get_logger(__name__)
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 class CommentRepository:
-    def __init__(
-        self, session: AsyncSession
-    ) -> None:
+    def __init__(self, session: AsyncSession) -> None:
         self._s = session
 
-    async def create(
-        self, **kwargs: Any
-    ) -> TrackComment:
+    async def create(self, **kwargs: Any) -> TrackComment:
         c = TrackComment(**kwargs)
         self._s.add(c)
         await self._s.flush()
         await self._s.refresh(c)
         return c
 
-    async def get_by_id(
-        self, comment_id: int
-    ) -> TrackComment | None:
-        return await self._s.get(
-            TrackComment, comment_id
-        )
+    async def get_by_id(self, comment_id: int) -> TrackComment | None:
+        return await self._s.get(TrackComment, comment_id)
 
     async def get_root_comment_for_focus(
         self,
@@ -62,10 +52,12 @@ class CommentRepository:
             cur = parent
         root = cur
         hid_row = await self._s.execute(
-            select(CommentHide.comment_id).where(
+            select(CommentHide.comment_id)
+            .where(
                 CommentHide.comment_id == root.id,
                 CommentHide.user_id == user_id,
-            ).limit(1)
+            )
+            .limit(1)
         )
         if hid_row.scalar_one_or_none() is not None:
             return None
@@ -76,9 +68,7 @@ class CommentRepository:
             CommentHide.user_id == user_id
         )
 
-    def _reply_visibility(
-        self, user_id: int
-    ) -> Any:
+    def _reply_visibility(self, user_id: int) -> Any:
         hid = self._hidden_subquery(user_id)
         return or_(
             TrackComment.parent_id.is_(None),
@@ -97,20 +87,16 @@ class CommentRepository:
             TrackComment.track_id == track_id,
             TrackComment.parent_id.is_(None),
             TrackComment.is_deleted.is_(False),
-            TrackComment.is_hidden_by_author.is_(
-                False
-            ),
+            TrackComment.is_hidden_by_author.is_(False),
             TrackComment.id.notin_(hid),
         )
         q = select(TrackComment).where(*cond)
         if cursor:
             q = q.where(TrackComment.id < cursor)
-        q = (
-            q.order_by(
-                TrackComment.is_pinned.desc(),
-                TrackComment.created_at.desc(),
-            ).limit(limit)
-        )
+        q = q.order_by(
+            TrackComment.is_pinned.desc(),
+            TrackComment.created_at.desc(),
+        ).limit(limit)
         rows = await self._s.execute(q)
         return list(rows.scalars().all())
 
@@ -126,15 +112,10 @@ class CommentRepository:
         q = (
             select(TrackComment)
             .where(
-                TrackComment.track_id
-                == track_id,
-                TrackComment.parent_id.in_(
-                    parent_ids
-                ),
+                TrackComment.track_id == track_id,
+                TrackComment.parent_id.in_(parent_ids),
                 TrackComment.is_deleted.is_(False),
-                TrackComment.is_hidden_by_author.is_(
-                    False
-                ),
+                TrackComment.is_hidden_by_author.is_(False),
                 TrackComment.id.notin_(hid),
                 self._reply_visibility(user_id),
             )
@@ -143,9 +124,7 @@ class CommentRepository:
         rows = await self._s.execute(q)
         return list(rows.scalars().all())
 
-    async def subtree_ids(
-        self, comment_id: int
-    ) -> list[int]:
+    async def subtree_ids(self, comment_id: int) -> list[int]:
         root = await self.get_by_id(comment_id)
         if not root:
             return []
@@ -154,9 +133,7 @@ class CommentRepository:
         while frontier:
             r = await self._s.execute(
                 select(TrackComment.id).where(
-                    TrackComment.parent_id.in_(
-                        frontier
-                    )
+                    TrackComment.parent_id.in_(frontier)
                 )
             )
             nxt = [row[0] for row in r.all()]
@@ -166,9 +143,7 @@ class CommentRepository:
             frontier = nxt
         return ids
 
-    async def soft_delete_comment_chain(
-        self, comment_id: int
-    ) -> list[int]:
+    async def soft_delete_comment_chain(self, comment_id: int) -> list[int]:
         ids = await self.subtree_ids(comment_id)
         if not ids:
             return []
@@ -179,9 +154,7 @@ class CommentRepository:
         await self._s.flush()
         return ids
 
-    async def hide_for_all_chain(
-        self, comment_id: int
-    ) -> None:
+    async def hide_for_all_chain(self, comment_id: int) -> None:
         ids = await self.subtree_ids(comment_id)
         if not ids:
             return
@@ -191,12 +164,8 @@ class CommentRepository:
                 row.is_hidden_by_author = True
         await self._s.flush()
 
-    async def soft_delete(
-        self, comment_id: int
-    ) -> None:
-        await self.soft_delete_comment_chain(
-            comment_id
-        )
+    async def soft_delete(self, comment_id: int) -> None:
+        await self.soft_delete_comment_chain(comment_id)
 
     async def set_pinned(
         self,
@@ -207,8 +176,7 @@ class CommentRepository:
         if pinned:
             rows = await self._s.execute(
                 select(TrackComment).where(
-                    TrackComment.track_id
-                    == track_id,
+                    TrackComment.track_id == track_id,
                     TrackComment.is_pinned.is_(True),
                 )
             )
@@ -220,14 +188,10 @@ class CommentRepository:
             c.is_pinned = pinned
             await self._s.flush()
 
-    async def hide_for_all(
-        self, comment_id: int
-    ) -> None:
+    async def hide_for_all(self, comment_id: int) -> None:
         await self.hide_for_all_chain(comment_id)
 
-    async def hide_for_user(
-        self, comment_id: int, user_id: int
-    ) -> None:
+    async def hide_for_user(self, comment_id: int, user_id: int) -> None:
         h = CommentHide(
             comment_id=comment_id,
             user_id=user_id,
@@ -240,9 +204,7 @@ class CommentRepository:
         comment_id: int,
         user_id: int,
     ) -> CommentVote | None:
-        return await self._s.get(
-            CommentVote, (comment_id, user_id)
-        )
+        return await self._s.get(CommentVote, (comment_id, user_id))
 
     async def vote(
         self,
@@ -250,9 +212,7 @@ class CommentRepository:
         user_id: int,
         is_like: bool,
     ) -> None:
-        existing = await self.get_vote(
-            comment_id, user_id
-        )
+        existing = await self.get_vote(comment_id, user_id)
         if existing:
             existing.is_like = is_like
         else:
@@ -264,34 +224,27 @@ class CommentRepository:
             self._s.add(v)
         await self._s.flush()
 
-    async def remove_vote(
-        self, comment_id: int, user_id: int
-    ) -> None:
+    async def remove_vote(self, comment_id: int, user_id: int) -> None:
         await self._s.execute(
             delete(CommentVote).where(
                 and_(
-                    CommentVote.comment_id
-                    == comment_id,
+                    CommentVote.comment_id == comment_id,
                     CommentVote.user_id == user_id,
                 )
             )
         )
         await self._s.flush()
 
-    async def get_vote_counts(
-        self, comment_id: int
-    ) -> tuple[int, int]:
+    async def get_vote_counts(self, comment_id: int) -> tuple[int, int]:
         likes = await self._s.scalar(
             select(func.count()).where(
-                CommentVote.comment_id
-                == comment_id,
+                CommentVote.comment_id == comment_id,
                 CommentVote.is_like.is_(True),
             )
         )
         dislikes = await self._s.scalar(
             select(func.count()).where(
-                CommentVote.comment_id
-                == comment_id,
+                CommentVote.comment_id == comment_id,
                 CommentVote.is_like.is_(False),
             )
         )

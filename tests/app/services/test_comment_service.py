@@ -2,8 +2,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.notification import Notification
 from app.models.track import Track
 from app.models.user import User
 from app.services.comment_service import (
@@ -13,6 +15,10 @@ from app.services.comment_service import (
 pytestmark = pytest.mark.anyio
 
 _WS = "app.core.ws_manager.ws_manager"
+
+_NOTIF_SEND = (
+    "app.services.notification_service.ws_manager.send_to_user"
+)
 
 
 async def _make_user(
@@ -282,3 +288,114 @@ async def test_vote_comment_not_found(
         await svc.vote(9999, 1, True)
 
     assert exc.value.status_code == 404
+
+
+@patch(_NOTIF_SEND, new_callable=AsyncMock)
+@patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
+async def test_vote_like_notifies_comment_author(
+    mock_broadcast: AsyncMock,
+    mock_notif_send: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    author = await _make_user(session, 3101)
+    liker = await _make_user(session, 3102)
+    track = await _make_track(session, author)
+    svc = CommentService(session)
+    c = await svc.add_comment(
+        track.id, author.id, "text"
+    )
+    await svc.vote(c["id"], liker.id, True)
+    q = await session.execute(
+        select(Notification).where(
+            Notification.user_id == author.id,
+            Notification.type == "comment_like",
+        )
+    )
+    row = q.scalar_one_or_none()
+    assert row is not None
+    assert row.data["comment_id"] == c["id"]
+    assert row.data["track_id"] == track.id
+    mock_notif_send.assert_awaited()
+
+
+@patch(_NOTIF_SEND, new_callable=AsyncMock)
+@patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
+async def test_vote_like_skips_self_like(
+    mock_broadcast: AsyncMock,
+    mock_notif_send: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, 3201)
+    track = await _make_track(session, user)
+    svc = CommentService(session)
+    c = await svc.add_comment(track.id, user.id, "solo")
+    await svc.vote(c["id"], user.id, True)
+    q = await session.execute(
+        select(Notification).where(
+            Notification.user_id == user.id,
+            Notification.type == "comment_like",
+        )
+    )
+    assert q.scalar_one_or_none() is None
+    mock_notif_send.assert_not_awaited()
+
+
+@patch(_NOTIF_SEND, new_callable=AsyncMock)
+@patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
+async def test_reply_notifies_parent_author(
+    mock_broadcast: AsyncMock,
+    mock_notif_send: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    parent_user = await _make_user(session, 3301)
+    replier = await _make_user(session, 3302)
+    track = await _make_track(session, parent_user)
+    svc = CommentService(session)
+    root = await svc.add_comment(
+        track.id, parent_user.id, "root"
+    )
+    reply = await svc.add_comment(
+        track.id,
+        replier.id,
+        "child text here",
+        parent_id=root["id"],
+    )
+    q = await session.execute(
+        select(Notification).where(
+            Notification.user_id == parent_user.id,
+            Notification.type == "comment_reply",
+        )
+    )
+    row = q.scalar_one_or_none()
+    assert row is not None
+    assert row.data["comment_id"] == reply["id"]
+    mock_notif_send.assert_awaited()
+
+
+@patch(_NOTIF_SEND, new_callable=AsyncMock)
+@patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
+async def test_get_comments_focus_merges_branch(
+    mock_broadcast: AsyncMock,
+    mock_notif_send: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, 3401)
+    track = await _make_track(session, user)
+    svc = CommentService(session)
+    root = await svc.add_comment(
+        track.id, user.id, "r"
+    )
+    leaf = await svc.add_comment(
+        track.id,
+        user.id,
+        "deep",
+        parent_id=root["id"],
+    )
+    rows = await svc.get_comments(
+        track.id,
+        user.id,
+        focus_comment_id=leaf["id"],
+    )
+    assert len(rows) == 1
+    assert rows[0]["id"] == root["id"]
+    assert rows[0]["replies"][0]["id"] == leaf["id"]
