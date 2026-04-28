@@ -889,7 +889,9 @@ export function TrackCardSheet({
               />
             </button>
             <button
-              className="play-btn"
+              className={`play-btn${
+                isPlaying ? ' play-btn--playing' : ''
+              }`}
               onClick={togglePlay}
             >
               <Icon

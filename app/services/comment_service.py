@@ -126,11 +126,6 @@ class CommentService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid parent comment",
                 )
-            if parent_row.parent_id is not None:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Can only reply to top-level comments",
-                )
             if (
                 parent_row.is_deleted
                 or parent_row.is_hidden_by_author
@@ -190,38 +185,51 @@ class CommentService:
         )
         if not roots:
             return []
-        parent_ids = [r.id for r in roots]
-        replies = (
-            await self._repo.list_replies_for_parents(
-                track_id, parent_ids, user_id
+        all_flat: list[TrackComment] = []
+        frontier = [r.id for r in roots]
+        while frontier:
+            batch = (
+                await self._repo.list_replies_for_parents(
+                    track_id, frontier, user_id
+                )
             )
-        )
+            if not batch:
+                break
+            all_flat.extend(batch)
+            frontier = [b.id for b in batch]
+
         by_parent: dict[int, list[TrackComment]] = {}
-        for r in replies:
+        for node in all_flat:
             by_parent.setdefault(
-                r.parent_id, []
-            ).append(r)
+                node.parent_id, []
+            ).append(node)
+        for pid in by_parent:
+            by_parent[pid].sort(
+                key=lambda x: x.created_at,
+            )
 
         uid_set: set[int] = set()
         for x in roots:
             uid_set.add(x.user_id)
-        for x in replies:
+        for x in all_flat:
             uid_set.add(x.user_id)
         users = await self._user_repo.get_by_ids(
             list(uid_set)
         )
 
+        async def branch(
+            node: TrackComment,
+        ) -> dict[str, Any]:
+            d = await self._comment_dict(node, users)
+            kids = by_parent.get(node.id, [])
+            d["replies"] = [
+                await branch(ch) for ch in kids
+            ]
+            return d
+
         out: list[dict[str, Any]] = []
         for root in roots:
-            root_d = await self._comment_dict(
-                root, users
-            )
-            ch_list = by_parent.get(root.id, [])
-            root_d["replies"] = [
-                await self._comment_dict(ch, users)
-                for ch in ch_list
-            ]
-            out.append(root_d)
+            out.append(await branch(root))
         return out
 
     async def delete_comment(

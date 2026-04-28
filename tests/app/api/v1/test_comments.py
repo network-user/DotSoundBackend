@@ -80,6 +80,30 @@ async def test_reply_to_comment(
     assert len(data[0]["replies"]) == 1
     assert data[0]["replies"][0]["text"] == "reply"
 
+    rid = data[0]["replies"][0]["id"]
+    r = await client.post(
+        f"/api/v1/tracks/{t['id']}/comments",
+        json={
+            "text": "nested",
+            "parent_id": rid,
+        },
+        headers=headers,
+    )
+    assert r.status_code == 200
+
+    r = await client.get(
+        f"/api/v1/tracks/{t['id']}/comments",
+        headers=headers,
+    )
+    data = r.json()
+    assert (
+        len(data[0]["replies"][0]["replies"]) == 1
+    )
+    assert (
+        data[0]["replies"][0]["replies"][0]["text"]
+        == "nested"
+    )
+
 
 async def test_non_owner_cannot_pin(
     client: AsyncClient,

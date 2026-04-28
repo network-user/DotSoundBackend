@@ -363,7 +363,9 @@ export function LyricsEditor({
           <Icon name="rewind-5" size={20} />
         </button>
         <button
-          className="play-btn"
+          className={`play-btn${
+            isPlaying ? ' play-btn--playing' : ''
+          }`}
           onClick={togglePlay}
         >
           <Icon

@@ -2936,12 +2936,15 @@ html.le-lyrics-sync-open body {
   height: 5px;
   background: var(--text-muted);
   border-radius: 50%;
-  will-change: opacity, transform;
-  animation: splashDot 1.4s ease-in-out 0.8s infinite;
+  animation: splashDotOnce 1.4s ease-in-out 0.8s forwards;
   opacity: 0.15;
 }
-.splash-dots span:nth-child(2) { animation-delay: 1s; }
-.splash-dots span:nth-child(3) { animation-delay: 1.2s; }
+.splash-dots span:nth-child(2) {
+  animation-delay: 1s;
+}
+.splash-dots span:nth-child(3) {
+  animation-delay: 1.2s;
+}
 
 @keyframes splashLogoIn {
   0% {
@@ -2959,9 +2962,34 @@ html.le-lyrics-sync-open body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-@keyframes splashDot {
-  0%, 100% { opacity: 0.15; transform: scale(0.7); }
-  50% { opacity: 0.6; transform: scale(1); }
+@keyframes splashDotOnce {
+  0% {
+    opacity: 0.15;
+    transform: scale(0.7);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.38;
+    transform: scale(0.88);
+  }
+}
+
+.home-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 16px;
+}
+.home-loading-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  opacity: 0.45;
 }
 
 .profile-tabs-row {
@@ -5623,4 +5651,58 @@ html.le-lyrics-sync-open body {
   gap: 6px;
   font-size: 12px;
   margin-top: 12px;
+}
+
+html.ds-low-glass #nav {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(16, 16, 16, 0.94);
+}
+html.ds-low-glass #player-bar {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: rgba(16, 16, 16, 0.92);
+}
+html.ds-low-glass .search-sticky {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--glass-bg);
+}
+html.ds-low-glass .author-view-header {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--glass-bg);
+}
+html.ds-low-glass .modal-content,
+html.ds-low-glass .tcs-sheet {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #nav {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(16, 16, 16, 0.94);
+  }
+  #player-bar {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(16, 16, 16, 0.92);
+  }
+  .search-sticky {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--glass-bg);
+  }
+  .author-view-header {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--glass-bg);
+  }
+  .modal-content,
+  .tcs-sheet {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }

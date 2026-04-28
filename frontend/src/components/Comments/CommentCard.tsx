@@ -7,7 +7,6 @@ interface Props {
   comment: TrackComment
   isOwner: boolean
   isMine: boolean
-  isReply: boolean
   onReply?: () => void
   onDelete: (id: number) => void
   onPin: (id: number, pinned: boolean) => void
@@ -20,7 +19,6 @@ export function CommentCard({
   comment,
   isOwner,
   isMine,
-  isReply,
   onReply,
   onDelete,
   onPin,
@@ -30,12 +28,13 @@ export function CommentCard({
 }: Props) {
   const { t } = useTranslation()
   const [showMenu, setShowMenu] = useState(false)
+  const isRootComment = comment.parent_id == null
 
   return (
     <div
-      className={`comment-card fade-in${comment.is_pinned ? ' pinned' : ''}${isReply ? ' is-reply' : ''}`}
+      className={`comment-card fade-in${comment.is_pinned ? ' pinned' : ''}`}
     >
-      {comment.is_pinned && !isReply && (
+      {comment.is_pinned && isRootComment && (
         <div className="comment-pinned-badge">
           <Icon name="pin" size={12} />{' '}
           {t('trackSheet.commentPinned')}
@@ -50,7 +49,7 @@ export function CommentCard({
           {new Date(comment.created_at).toLocaleDateString()}
         </span>
         <div className="comment-header-actions">
-          {onReply && !isReply && (
+          {onReply && (
             <button
               type="button"
               className="comment-reply-link"
@@ -102,7 +101,7 @@ export function CommentCard({
               {t('trackSheet.commentDelete')}
             </button>
           )}
-          {isOwner && !isReply && (
+          {isOwner && isRootComment && (
             <button
               type="button"
               onClick={() => {

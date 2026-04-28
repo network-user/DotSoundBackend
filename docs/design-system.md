@@ -78,7 +78,12 @@ explicit user setting — never enabled automatically.
 
 Surfaces that need an iOS-style frosted look (PlayerBar, BottomNav,
 overflow menu, bottom sheets, modal backdrops) reuse the glass
-tokens with `backdrop-filter: var(--glass-blur) saturate(180%)`.
+tokens from `tokens.css`: fixed strips use `--glass-backdrop-fixed`
+(and `--glass-backdrop-fixed-player` on the player bar); sticky bars
+and sheets combine `--glass-blur-*` with `--glass-saturate`. When
+`prefers-reduced-motion` or `prefers-reduced-data` applies,
+`installGlassPerformanceClass()` adds `ds-low-glass` on
+`<html>` and heavy backdrop filters fall back to opaque surfaces.
 
 ## UI primitives
 
