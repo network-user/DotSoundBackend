@@ -349,6 +349,9 @@ Mini App — секция в `TrackCardSheet` для публичных трек
   `ArtistCatalogReadService`, расширение `ArtistCatalogRepository`,
   схемы `app/schemas/artist_catalog.py`, pytest
   `tests/app/api/v1/test_artist_catalog_releases.py` (без синка и admin)
+- [x] **Каталог дискографии — phase 5 (mini app):** карточки релизов и
+  экран релиза с ordered track list в `ArtistView`, API-клиент и типы;
+  воспроизведение через `TrackList` / `TrackCard` — 2026-04-28
 - Policy-exception для явного source attribution
 (`source_name` + `source_page_url`) зафиксирован в
 `docs/ai-boundary-policy.md` (Backend + PrivateCore)

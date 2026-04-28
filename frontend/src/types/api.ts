@@ -567,6 +567,38 @@ export interface ArtistDetail {
   primary_source_id?: string | null
 }
 
+export interface ArtistCatalogReleaseSummary {
+  id: number
+  title: string
+  release_kind: string | null
+  released_at: string | null
+  display_position: number
+  track_count: number
+  cover_key: string | null
+  cover_url: string | null
+}
+
+export interface ArtistCatalogReleaseListPayload {
+  items: ArtistCatalogReleaseSummary[]
+  total: number
+}
+
+export interface ArtistCatalogReleaseTrackRow {
+  position: number
+  track: Track
+}
+
+export interface ArtistCatalogReleaseDetail {
+  id: number
+  title: string
+  release_kind: string | null
+  released_at: string | null
+  display_position: number
+  cover_key: string | null
+  cover_url: string | null
+  tracks: ArtistCatalogReleaseTrackRow[]
+}
+
 // ── Track Info ────────────────────────────────────────────────────────────
 
 export type TrackInfoStatus = 'pending' | 'fetching' | 'done' | 'not_found' | 'failed'

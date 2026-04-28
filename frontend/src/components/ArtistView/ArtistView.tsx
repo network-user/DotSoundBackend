@@ -2,11 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { ArtistAvatarViewer } from '@/components/ArtistView/ArtistAvatarViewer'
+import { ArtistCatalogReleasePanel } from '@/components/ArtistView/ArtistCatalogReleasePanel'
+import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { api } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
 import type {
+  ArtistCatalogReleaseSummary,
   ArtistDetail,
   ArtistInfo,
   ArtistSourceProfile,
@@ -167,6 +170,12 @@ export function ArtistView({
   const [similarArtists, setSimilarArtists] = useState<
     ArtistInfo[] | null
   >(null)
+  const [catalogReleases, setCatalogReleases] = useState<
+    ArtistCatalogReleaseSummary[] | null
+  >(null)
+  const [selectedReleaseId, setSelectedReleaseId] = useState<
+    number | null
+  >(null)
   const supplementalPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
   const isAdmin = getIsAdmin()
@@ -198,6 +207,8 @@ export function ArtistView({
     setAvatarOpen(false)
     setSupplemental(null)
     setSimilarArtists(null)
+    setCatalogReleases(null)
+    setSelectedReleaseId(null)
 
     api
       .getArtist(artistId)
@@ -234,6 +245,15 @@ export function ArtistView({
       })
       .catch(() => {
         if (!cancelled) setSimilarArtists([])
+      })
+
+    api
+      .listArtistCatalogReleases(artistId)
+      .then((res) => {
+        if (!cancelled) setCatalogReleases(res.items)
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogReleases([])
       })
 
     return () => {
@@ -420,6 +440,17 @@ export function ArtistView({
           />
         </div>
       </div>
+    )
+  }
+
+  if (selectedReleaseId !== null) {
+    return (
+      <ArtistCatalogReleasePanel
+        artistId={artistId}
+        releaseId={selectedReleaseId}
+        artistName={artist.name}
+        onBack={() => setSelectedReleaseId(null)}
+      />
     )
   }
 
@@ -923,6 +954,51 @@ export function ArtistView({
           {t('artist.no_info')}
         </div>
       )}
+
+      {catalogReleases !== null &&
+        catalogReleases.length > 0 && (
+          <div className="artist-catalog-releases">
+            <div className="section-header">
+              <span className="section-title">
+                {t('artist.catalog_releases_title')}{' '}
+                ({catalogReleases.length})
+              </span>
+            </div>
+            <div className="artist-catalog-releases-grid">
+              {catalogReleases.map((r) => {
+                const y = r.released_at?.match(/^(\d{4})/)?.[1]
+                const metaBits: string[] = []
+                if (y) metaBits.push(y)
+                metaBits.push(
+                  t('artist.catalog_release_card_tracks', {
+                    count: r.track_count,
+                  }),
+                )
+                return (
+                  <button
+                    key={r.id}
+                    type="button"
+                    className="artist-catalog-release-card"
+                    onClick={() => {
+                      setAvatarOpen(false)
+                      setSelectedReleaseId(r.id)
+                    }}
+                  >
+                    <CoverImage coverKey={r.cover_key} size={56} />
+                    <div className="artist-catalog-release-card-text">
+                      <div className="artist-catalog-release-card-title">
+                        {r.title}
+                      </div>
+                      <div className="artist-catalog-release-card-meta">
+                        {metaBits.join(' · ')}
+                      </div>
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
       {view.discography.length > 0 && (
         <div className="artist-discography">
