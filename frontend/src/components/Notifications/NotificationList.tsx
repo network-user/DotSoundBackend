@@ -13,6 +13,8 @@ import { useExitTransition } from '@/hooks/useExitTransition'
 import {
   resolveNotificationText,
 } from '@/lib/notificationText'
+import { api } from '@/lib/api'
+import { usePlayerActions } from '@/store/PlayerContext'
 import type { AppNotification } from '@/types/api'
 
 interface Props {
@@ -73,6 +75,8 @@ const KIND_ICON: Record<string, string> = {
   like: 'heart',
   message: 'message-circle',
   comment: 'message-circle',
+  comment_like: 'heart',
+  comment_reply: 'message-circle',
 }
 
 function iconFor(type: string): string {
@@ -116,6 +120,7 @@ export function NotificationList({
   onMutate,
 }: Props) {
   const { t, i18n } = useTranslation()
+  const { openTrackAtComment } = usePlayerActions()
   const exit = useExitTransition(open)
   const [items, setItems] = useState<
     AppNotification[]
@@ -242,10 +247,34 @@ export function NotificationList({
     }
   }
 
-  const handleRowClick = (id: number) => {
+  const handleRowClick = async (n: AppNotification) => {
     setMenuOpenId(null)
     setMenuPos(null)
-    void handleMarkRead(id)
+    void handleMarkRead(n.id)
+    if (
+      (n.type === 'comment_like' ||
+        n.type === 'comment_reply') &&
+      n.data &&
+      typeof n.data === 'object'
+    ) {
+      const raw = n.data as Record<string, unknown>
+      const tid = Number(raw.track_id)
+      const cid = Number(raw.comment_id)
+      if (
+        Number.isFinite(tid) &&
+        tid > 0 &&
+        Number.isFinite(cid) &&
+        cid > 0
+      ) {
+        onClose()
+        try {
+          const tr = await api.getTrack(tid)
+          await openTrackAtComment(tr, cid)
+        } catch {
+          /* noop */
+        }
+      }
+    }
   }
 
   const handleMarkUnread = async (id: number) => {
@@ -423,9 +452,9 @@ export function NotificationList({
                         ? ''
                         : ' unread'
                     }`}
-                    onClick={() =>
-                      handleRowClick(n.id)
-                    }
+                    onClick={() => {
+                      void handleRowClick(n)
+                    }}
                   >
                     <span className="notification-icon">
                       <Icon

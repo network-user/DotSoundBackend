@@ -36,6 +36,7 @@ async def get_comments(
     track_id: int,
     cursor: int | None = None,
     limit: int = 20,
+    focus_comment_id: int | None = None,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
@@ -45,6 +46,7 @@ async def get_comments(
         user.id,
         cursor,
         min(limit, 50),
+        focus_comment_id,
     )
 
 

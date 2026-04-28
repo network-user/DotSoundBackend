@@ -1249,6 +1249,22 @@
   gap: 8px;
 }
 
+.comment-branch-node.comment-highlight-flash {
+  border-radius: 10px;
+  animation: comment-focus-pulse 1.2s ease-out 1;
+}
+
+@keyframes comment-focus-pulse {
+  0% {
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
+  }
+  100% {
+    background: transparent;
+    box-shadow: none;
+  }
+}
+
 .comment-card.is-reply {
   margin-left: 16px;
   padding-left: 14px;

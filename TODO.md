@@ -421,6 +421,11 @@ Mini App — секция в `TrackCardSheet` для публичных трек
 
 ## Frontend оптимизация
 
+- **Mini App (браузер): GPU / композитор** — смягчены токены стекла,
+фикс-панели `#nav` / `#player-bar` на `--glass-backdrop-fixed*`,
+липкий поиск на более лёгком blur; класс `ds-low-glass` при
+`prefers-reduced-motion` / `prefers-reduced-data`; без бесконечных
+splash/home/play-кнопка только при `isPlaying` — 2026-04
 - **Waveform (карточка трека): снижение нагрузки на iGPU** — rAF и
 отрисовка спектра только при `isPlaying` (не 60 fps в паузе),
 ~30 fps для декоративного спектра
@@ -695,7 +700,7 @@ bounded-transport exception
 - Backend: миграция `0045_dedupe_unique_constraints` — partial UNIQUE
 на `tracks.sc_url WHERE sc_url IS NOT NULL` и на
 `(imported_from, external_id) WHERE external_id IS NOT NULL`,
-`Index` объявлены в `app/models/track.py:Track.__table_args_`_
+`Index` объявлены в `app/models/track.py:Track.__table_args`__
 (создаются и для тестовой SQLite-схемы)
 - Backend: `scripts/dedupe_tracks.py` — pre-migration helper, dry-run
 по умолчанию, мерджит дубли по `sc_url` и `(imported_from, external_id)`

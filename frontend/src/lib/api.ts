@@ -1395,10 +1395,18 @@ export const api = {
     })
   },
 
-  getComments(trackId: number, cursor?: number, limit = 20): Promise<TrackComment[]> {
+  getComments(
+    trackId: number,
+    cursor?: number,
+    limit = 20,
+    focusCommentId?: number,
+  ): Promise<TrackComment[]> {
     const sp = new URLSearchParams()
     if (cursor != null) sp.set('cursor', String(cursor))
     sp.set('limit', String(limit))
+    if (focusCommentId != null) {
+      sp.set('focus_comment_id', String(focusCommentId))
+    }
     return request(`/api/v1/tracks/${trackId}/comments?${sp}`)
   },
 

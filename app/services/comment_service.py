@@ -7,7 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ws_manager import ws_manager
-from app.models.comment import TrackComment
+from app.models.comment import CommentVote, TrackComment
 from app.models.track import Track
 from app.models.user import User
 from app.repositories.block import BlockRepository
@@ -15,6 +15,14 @@ from app.repositories.comment import (
     CommentRepository,
 )
 from app.repositories.user import UserRepository
+from app.services.comment_notifications import (
+    comment_like_copy,
+    comment_reply_copy,
+    truncate_preview,
+)
+from app.services.notification_service import (
+    NotificationService,
+)
 
 logger: structlog.stdlib.BoundLogger = (
     structlog.get_logger(__name__)
@@ -91,6 +99,90 @@ class CommentService:
             "author_label": self._author_label(au),
         }
 
+    async def _notify_comment_reply(
+        self,
+        *,
+        track: Track,
+        new_comment: TrackComment,
+        text: str,
+        actor: User | None,
+        parent_author_id: int,
+    ) -> None:
+        if parent_author_id == new_comment.user_id:
+            return
+        if await self._block_repo.is_blocked(
+            new_comment.user_id, parent_author_id
+        ):
+            return
+        parent_user = await self._user_repo.get_by_id(
+            parent_author_id
+        )
+        if not parent_user:
+            return
+        al = self._author_label(actor)
+        title, body = comment_reply_copy(
+            parent_user.locale,
+            al,
+            text,
+            track.title,
+        )
+        notif = NotificationService(self._session)
+        await notif.create(
+            user_id=parent_author_id,
+            ntype="comment_reply",
+            title=title,
+            body=body,
+            data={
+                "track_id": track.id,
+                "comment_id": new_comment.id,
+                "actor_user_id": new_comment.user_id,
+                "actor_label": al,
+                "preview": truncate_preview(text),
+                "track_title": (track.title or "").strip(),
+            },
+        )
+
+    async def _notify_comment_liked(
+        self,
+        *,
+        track: Track,
+        comment: TrackComment,
+        actor_id: int,
+        actor: User | None,
+    ) -> None:
+        owner_id = comment.user_id
+        if owner_id == actor_id:
+            return
+        if comment.is_deleted or comment.is_hidden_by_author:
+            return
+        if await self._block_repo.is_blocked(
+            actor_id, owner_id
+        ):
+            return
+        owner = await self._user_repo.get_by_id(owner_id)
+        if not owner:
+            return
+        al = self._author_label(actor)
+        title, body = comment_like_copy(
+            owner.locale,
+            al,
+            track.title,
+        )
+        notif = NotificationService(self._session)
+        await notif.create(
+            user_id=owner_id,
+            ntype="comment_like",
+            title=title,
+            body=body,
+            data={
+                "track_id": track.id,
+                "comment_id": comment.id,
+                "actor_user_id": actor_id,
+                "actor_label": al,
+                "track_title": (track.title or "").strip(),
+            },
+        )
+
     async def add_comment(
         self,
         track_id: int,
@@ -112,6 +204,7 @@ class CommentService:
                     detail="Blocked by track owner",
                 )
 
+        parent_row: TrackComment | None = None
         if parent_id is not None:
             parent_row = await self._repo.get_by_id(
                 parent_id
@@ -167,6 +260,14 @@ class CommentService:
         await ws_manager.broadcast_to_online(
             {"event": "comment.new", **result}
         )
+        if parent_id is not None and parent_row is not None:
+            await self._notify_comment_reply(
+                track=track,
+                new_comment=c,
+                text=text,
+                actor=author,
+                parent_author_id=parent_row.user_id,
+            )
         return result
 
     async def get_comments(
@@ -175,6 +276,7 @@ class CommentService:
         user_id: int,
         cursor: int | None = None,
         limit: int = 20,
+        focus_comment_id: int | None = None,
     ) -> list[dict[str, Any]]:
         track = await self._session.get(
             Track, track_id
@@ -183,6 +285,26 @@ class CommentService:
         roots = await self._repo.list_root_comments(
             track_id, user_id, cursor, limit
         )
+        extra_root: TrackComment | None = None
+        if focus_comment_id is not None:
+            extra_root = (
+                await self._repo.get_root_comment_for_focus(
+                    track_id,
+                    user_id,
+                    focus_comment_id,
+                )
+            )
+            if extra_root is not None:
+                ids = {r.id for r in roots}
+                if extra_root.id not in ids:
+                    roots = [extra_root, *roots]
+                    roots.sort(
+                        key=lambda r: (
+                            r.is_pinned,
+                            r.created_at,
+                        ),
+                        reverse=True,
+                    )
         if not roots:
             return []
         all_flat: list[TrackComment] = []
@@ -369,9 +491,26 @@ class CommentService:
             Track, c.track_id
         )
         self._raise_unless_comments_allowed(track)
+        assert track is not None
+        prev: CommentVote | None = (
+            await self._repo.get_vote(comment_id, user_id)
+        )
         await self._repo.vote(
             comment_id, user_id, is_like
         )
+        became_like = is_like and (
+            prev is None or not prev.is_like
+        )
+        if became_like:
+            actor = await self._user_repo.get_by_id(
+                user_id
+            )
+            await self._notify_comment_liked(
+                track=track,
+                comment=c,
+                actor_id=user_id,
+                actor=actor,
+            )
 
     async def remove_vote(
         self, comment_id: int, user_id: int
