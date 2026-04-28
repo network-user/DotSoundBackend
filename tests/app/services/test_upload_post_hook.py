@@ -38,11 +38,17 @@ pytestmark = pytest.mark.anyio
     return_value=None,
 )
 @patch(
+    "app.services.track_ingest_schedule_service.LyricsService.enqueue_background_lyrics",
+    new_callable=AsyncMock,
+    return_value=None,
+)
+@patch(
     "app.services.search_index_notify.schedule_reindex_track",
     new_callable=AsyncMock,
     return_value=None,
 )
 async def test_upload_enqueues_feature_jobs(
+    _lb: object,
     _r: object,
     _g: object,
     _t: object,

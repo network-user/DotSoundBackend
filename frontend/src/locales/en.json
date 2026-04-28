@@ -446,7 +446,12 @@
     "tasks": {
       "title": "Tasks",
       "queues": "Queues",
+      "computeJobs": "Compute queue (last 50)",
+      "jobKind": "Job",
+      "computeTarget": "Target",
       "lyricsJobs": "Lyrics jobs (last 50)",
+      "requestedByColumn": "Source",
+      "requestedByAuto": "Automatic ingest",
       "cancelAllConfirm": "Cancel all {{count}} queued jobs?",
       "cancelQueueButton": "Cancel queue ({{count}})",
       "cancelRow": "Cancel",

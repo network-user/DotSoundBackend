@@ -192,6 +192,7 @@ async def process_external_import_job(job_id: int) -> None:
                         sc_data=best_match,
                         uploader_id=job.user_id,
                         is_public=True,
+                        skip_background_lyrics=True,
                     )
                 except IntegrityError as exc:
                     await session.rollback()

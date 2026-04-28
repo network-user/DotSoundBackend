@@ -355,12 +355,30 @@ class SoundCloudService:
         sc_data: dict,
         uploader_id: int,
         is_public: bool = True,
+        *,
+        skip_background_lyrics: bool = False,
     ) -> Track:
         sc_url: str = sc_data.get("permalink_url", "")
         if sc_url:
             existing = await self._fetch_by_sc_url(sc_url)
             if existing:
                 return existing
+
+        async def _ingest_schedule(t: Track) -> None:
+            from app.services.track_ingest_schedule_service import (
+                schedule_new_track_background_jobs,
+            )
+
+            await schedule_new_track_background_jobs(
+                self._session,
+                t.id,
+                skip_lyrics=skip_background_lyrics,
+                catalog_payload={
+                    "title": t.title,
+                    "artist": t.artist,
+                    "genre": t.genre,
+                },
+            )
 
         cover_key: str | None = None
         artwork_url: str | None = sc_data.get("artwork_url")
@@ -449,6 +467,7 @@ class SoundCloudService:
             )
 
             await schedule_reindex_track(track.id)
+            await _ingest_schedule(track)
             return track
 
         track = Track(**new_values)
@@ -465,6 +484,7 @@ class SoundCloudService:
         )
 
         await schedule_reindex_track(track.id)
+        await _ingest_schedule(track)
         return track
 
     async def _fetch_by_sc_url(self, sc_url: str) -> Track | None:

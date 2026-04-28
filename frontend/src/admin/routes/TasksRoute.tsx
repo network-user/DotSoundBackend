@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -24,6 +25,20 @@ interface JobRow {
   duration_ms: number | null
   created_at: string
   error: string | null
+  requested_by_user_id?: number | null
+}
+
+interface ComputeJobRow {
+  id: string
+  job_type: string
+  job_label: string
+  target_kind: string | null
+  target_id: string | null
+  status: string
+  attempts: number
+  last_error: string | null
+  claimed_by: string | null
+  created_at: string
 }
 
 const queueColumns: ColumnDef<QueueRow>[] = [
@@ -49,7 +64,64 @@ function jobKind(
   return 'unknown'
 }
 
+function computeJobKind(
+  status: string,
+): 'ok' | 'warn' | 'error' | 'unknown' {
+  if (status === 'succeeded') return 'ok'
+  if (status === 'failed') return 'error'
+  if (status === 'pending' || status === 'claimed')
+    return 'warn'
+  return 'unknown'
+}
+
+function buildComputeColumns(
+  t: TFunction,
+): ColumnDef<ComputeJobRow>[] {
+  return [
+    {
+      header: 'ID',
+      accessorKey: 'id',
+      cell: (i) => (
+        <span
+          className="admin-mono"
+          title={i.getValue<string>()}
+        >
+          {String(i.getValue<string>()).slice(0, 10)}
+        </span>
+      ),
+    },
+    {
+      header: t('admin.tasks.jobKind'),
+      accessorKey: 'job_label',
+    },
+    {
+      header: t('admin.tasks.computeTarget'),
+      id: 'target',
+      accessorFn: (row) =>
+        `${row.target_kind || '–'} ${row.target_id || ''}`,
+    },
+    {
+      header: t('admin.tasks.detail.status'),
+      accessorKey: 'status',
+      cell: (i) => (
+        <StatusPill
+          kind={computeJobKind(
+            i.row.original.status,
+          )}
+        >
+          {i.row.original.status}
+        </StatusPill>
+      ),
+    },
+    {
+      header: t('admin.tasks.detail.attempts'),
+      accessorKey: 'attempts',
+    },
+  ]
+}
+
 function buildJobColumns(
+  t: TFunction,
   onOpen: (id: string) => void,
   onCancel: (id: string) => void,
   cancelLabel: string,
@@ -73,11 +145,11 @@ function buildJobColumns(
     },
   },
   {
-    header: 'Track',
+    header: t('admin.tasks.detail.track'),
     accessorKey: 'track_id',
   },
   {
-    header: 'Status',
+    header: t('admin.tasks.detail.status'),
     accessorKey: 'status',
     cell: (i) => (
       <StatusPill
@@ -88,19 +160,31 @@ function buildJobColumns(
     ),
   },
   {
-    header: 'Profile',
+    header: t('admin.tasks.detail.profile'),
     accessorKey: 'profile',
   },
   {
-    header: 'Worker',
+    header: t('admin.tasks.requestedByColumn'),
+    id: 'requested_by',
+    accessorKey: 'requested_by_user_id',
+    cell: (i) => {
+      const uid = i.row.original.requested_by_user_id
+      if (uid == null) {
+        return t('admin.tasks.requestedByAuto')
+      }
+      return String(uid)
+    },
+  },
+  {
+    header: t('admin.tasks.detail.worker'),
     accessorKey: 'routed_to_worker',
   },
   {
-    header: 'Attempts',
+    header: t('admin.tasks.detail.attempts'),
     accessorKey: 'attempts',
   },
   {
-    header: 'Duration',
+    header: t('admin.tasks.detail.duration'),
     accessorKey: 'duration_ms',
     cell: (i) =>
       i.row.original.duration_ms
@@ -149,6 +233,16 @@ export function TasksRoute() {
     refetchInterval: 15_000,
     refetchIntervalInBackground: false,
   })
+  const computeJobs = useQuery({
+    queryKey: ['admin', 'tasks', 'compute-jobs'],
+    queryFn: () =>
+      adminApi.listComputeJobs({
+        page: 1,
+        size: 50,
+      }),
+    refetchInterval: activeJobId ? false : 15_000,
+    refetchIntervalInBackground: false,
+  })
   const jobs = useQuery({
     queryKey: ['admin', 'tasks', 'lyrics-jobs'],
     queryFn: () =>
@@ -159,6 +253,9 @@ export function TasksRoute() {
     refetchInterval: activeJobId ? false : 15_000,
     refetchIntervalInBackground: false,
   })
+  const computeRows =
+    (computeJobs.data?.items as ComputeJobRow[] | undefined) ||
+    []
   const rows = ((jobs.data?.items as JobRow[] | undefined) || [])
   const queuedCount = rows.filter(
     (r) => r.status === 'queued',
@@ -194,7 +291,9 @@ export function TasksRoute() {
     }
   }
 
+  const computeColumns = buildComputeColumns(t)
   const jobColumns = buildJobColumns(
+    t,
     (id) => setActiveJobId(id),
     handleCancelOne,
     t('admin.tasks.cancelRow'),
@@ -211,6 +310,14 @@ export function TasksRoute() {
             (queues.data?.items as QueueRow[]) ||
             []
           }
+          enableSorting
+        />
+      </section>
+      <section className="admin-card">
+        <h2>{t('admin.tasks.computeJobs')}</h2>
+        <DataTable
+          columns={computeColumns}
+          rows={computeRows}
           enableSorting
         />
       </section>

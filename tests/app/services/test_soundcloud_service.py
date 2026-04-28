@@ -441,7 +441,13 @@ async def test_get_trending_delegates_to_charts(
     assert result == []
 
 
+@patch(
+    "app.services.track_ingest_schedule_service"
+    ".schedule_new_track_background_jobs",
+    new_callable=AsyncMock,
+)
 async def test_import_or_get_track_sets_provenance(
+    _sched: object,
     session: AsyncSession,
 ) -> None:
     svc = SoundCloudService("test_id", session)
@@ -466,7 +472,13 @@ async def test_import_or_get_track_sets_provenance(
     assert track.source_name == "SoundCloud"
 
 
+@patch(
+    "app.services.track_ingest_schedule_service"
+    ".schedule_new_track_background_jobs",
+    new_callable=AsyncMock,
+)
 async def test_import_or_get_track_dedup_via_unique_index(
+    _sched: object,
     session: AsyncSession,
 ) -> None:
     # Importing the same SC URL twice in a row must return the

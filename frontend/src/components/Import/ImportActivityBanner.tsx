@@ -64,7 +64,7 @@ export function ImportActivityBanner() {
     const PERIOD_MS_FOREGROUND = 5000
     const PERIOD_MS_HIDDEN = 30000
 
-    let intervalId: ReturnType<typeof window.setInterval> | null = null
+    let intervalId: number | null = null
 
     const periodMs = () =>
       document.visibilityState === 'visible'

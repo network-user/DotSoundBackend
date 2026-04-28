@@ -15,12 +15,26 @@ from app.dependencies import (
     require_capability,
     require_step_up,
 )
+from app.models.compute_job import ComputeJob
 from app.models.lyrics_job import LyricsJob
 from app.models.user import User
 from app.models.worker_audit import WorkerAuditLog
+from app.services import compute_queue_service as q
 
 router = APIRouter(prefix="/tasks", tags=["admin-tasks"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+_COMPUTE_JOB_LABELS: dict[str, str] = {
+    q.JOB_TRACK_AUDIO_FEATURES: (
+        "Audio analysis & 15s preview clip"
+    ),
+    q.JOB_CATALOG_INGEST_NORMALIZE: (
+        "Catalog ingest / normalization"
+    ),
+    q.JOB_ARTIST_FEATURES_UPDATE: "Artist audio profile update",
+    q.JOB_ARTIST_SIMILARITY_INDEX: "Artist similarity index",
+    q.JOB_TRACK_SIMILARITY_INDEX: "Track similarity index",
+}
 
 ALLOWED_TASK_NAMES: frozenset[str] = frozenset(
     {
@@ -241,6 +255,62 @@ async def list_lyrics_jobs(
                 "finished_at": row.finished_at,
                 "duration_ms": row.duration_ms,
                 "created_at": row.created_at,
+                "requested_by_user_id": row.requested_by_user_id,
+            }
+            for row in rows
+        ],
+    }
+
+
+@router.get("/compute-jobs")
+async def list_compute_jobs(
+    status: str | None = Query(None, max_length=16),
+    job_type: str | None = Query(None, max_length=48),
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=200),
+    _admin: User = Depends(require_capability("tasks.manage")),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    query = select(ComputeJob)
+    count_query = select(func.count(ComputeJob.id))
+    if status:
+        query = query.where(ComputeJob.status == status)
+        count_query = count_query.where(ComputeJob.status == status)
+    if job_type:
+        query = query.where(ComputeJob.job_type == job_type)
+        count_query = count_query.where(
+            ComputeJob.job_type == job_type
+        )
+    query = (
+        query.order_by(ComputeJob.created_at.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+    )
+    result = await session.execute(query)
+    rows = list(result.scalars().all())
+    total_result = await session.execute(count_query)
+    total = int(total_result.scalar_one())
+    return {
+        "total": total,
+        "page": page,
+        "size": size,
+        "items": [
+            {
+                "id": row.id,
+                "job_type": row.job_type,
+                "job_label": _COMPUTE_JOB_LABELS.get(
+                    row.job_type,
+                    row.job_type,
+                ),
+                "target_kind": row.target_kind,
+                "target_id": row.target_id,
+                "status": row.status,
+                "priority": row.priority,
+                "attempts": row.attempts,
+                "last_error": row.last_error,
+                "claimed_by": row.claimed_by,
+                "created_at": row.created_at,
+                "finished_at": row.finished_at,
             }
             for row in rows
         ],

@@ -621,6 +621,18 @@ export const adminApi = {
       page: number
       size: number
     }>('/tasks/lyrics-jobs', { query: params }),
+  listComputeJobs: (params: {
+    status?: string
+    job_type?: string
+    page?: number
+    size?: number
+  }) =>
+    adminFetch<{
+      items: Array<Record<string, unknown>>
+      total: number
+      page: number
+      size: number
+    }>('/tasks/compute-jobs', { query: params }),
   getLyricsJob: (jobId: string) =>
     adminFetch<{
       id: string

@@ -84,6 +84,23 @@ async def import_soundcloud_track(
         uploader_id=current_user.id,
         is_public=data.is_public,
     )
+    if track.artist:
+        from app.services.artist_service import ArtistService
+
+        artist_svc = ArtistService(session)
+        try:
+            await artist_svc.resolve_and_link(
+                track_id=track.id,
+                raw_artist_string=track.artist,
+                source="soundcloud",
+            )
+            await session.commit()
+        except Exception:
+            logger.warning(
+                "sc_import_artist_link_failed",
+                track_id=track.id,
+            )
+            await session.rollback()
     logger.info(
         "sc_import_endpoint", track_id=track.id, sc_url=data.sc_url
     )
