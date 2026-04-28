@@ -144,6 +144,7 @@ interface PlayerContextValue {
   skipForward: (s?: number) => void
   skipBackward: (s?: number) => void
   setPlaybackRate: (rate: number) => void
+  getPreciseTime: () => number
   playNext: () => Promise<boolean>
   playPrev: () => Promise<void>
   setEqBand: (idx: number, gain: number) => void
@@ -191,6 +192,7 @@ interface PlayerActionsValue {
   skipForward: (s?: number) => void
   skipBackward: (s?: number) => void
   setPlaybackRate: (rate: number) => void
+  getPreciseTime: () => number
   playNext: () => Promise<boolean>
   playPrev: () => Promise<void>
   setVolume: (v: number) => void
@@ -433,6 +435,10 @@ export function PlayerProvider({
   )
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
+  const currentTimeRef = useRef(0)
+  useEffect(() => {
+    currentTimeRef.current = currentTime
+  }, [currentTime])
   const [duration, setDuration] = useState(0)
   const [volume, setVolumeState] = useState(() => {
     const s = localStorage.getItem('player-volume')
@@ -1500,6 +1506,11 @@ export function PlayerProvider({
     [],
   )
 
+  const getPreciseTime = useCallback(
+    () => audioRef.current?.currentTime ?? currentTimeRef.current,
+    [],
+  )
+
   const seek = useCallback(
     (pct: number) => {
       const a = audioRef.current
@@ -1569,9 +1580,12 @@ export function PlayerProvider({
       const r = Math.max(0.25, Math.min(2, rate))
       setPlaybackRateState(r)
       const a = audioRef.current
-      if (a) a.playbackRate = r
+      if (a) {
+        a.playbackRate = r
+        flushPlayerTimeUi()
+      }
     },
-    [],
+    [flushPlayerTimeUi],
   )
 
   const addToQueue = useCallback((t: Track) => {
@@ -1725,6 +1739,7 @@ export function PlayerProvider({
     () => ({
       playTrack, togglePlay, seek, seekToSeconds,
       skipForward, skipBackward, setPlaybackRate,
+      getPreciseTime,
       playNext, playPrev, setVolume, stop,
       setEqBand, setEqPreset, toggleEqBypass, resetEq,
       toggleRepeat, toggleShuffle, clearHlsError,
@@ -1743,6 +1758,7 @@ export function PlayerProvider({
     [
       playTrack, togglePlay, seek, seekToSeconds,
       skipForward, skipBackward, setPlaybackRate,
+      getPreciseTime,
       playNext, playPrev, setVolume, stop,
       setEqBand, setEqPreset, toggleEqBypass, resetEq,
       toggleRepeat, toggleShuffle, clearHlsError,

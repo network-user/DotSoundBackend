@@ -21,7 +21,6 @@ from app.dependencies import (
     require_admin_session,
     require_step_up,
 )
-from app.models.artist import Artist
 from app.models.user import User
 from app.schemas.admin_artist_catalog import (
     AdminArtistCatalogOverviewResponse,
@@ -264,8 +263,8 @@ async def admin_catalog_search_tracks_for_artist(
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
 ) -> AdminTrackListResponse:
-    row = await session.get(Artist, artist_id)
-    if row is None:
+    catalog_svc = AdminArtistCatalogService(session)
+    if not await catalog_svc.artist_exists(artist_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Artist not found",
