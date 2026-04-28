@@ -11,8 +11,13 @@ def truncate_preview(text: str, max_len: int = _PREVIEW_MAX) -> str:
 
 
 def _is_en(locale: str | None) -> bool:
-    return (locale or "ru").strip().lower().startswith(
-        "en",
+    return (
+        (locale or "ru")
+        .strip()
+        .lower()
+        .startswith(
+            "en",
+        )
     )
 
 
