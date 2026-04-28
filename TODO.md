@@ -16,44 +16,44 @@
 
 ## Соответствие 152-ФЗ / ПДн (backlog, продукт + инженерия)
 
-- [ ] Перед публичным запуском: **согласовать с юристом/ДПО** фактическую
-  обработку ПДн с требованиями 152-ФЗ (и смежное): основания, при
-  необходимости уведомительный/регистрационный контур, субпроцессоры
-  (email, observability, ASR-облака, бэкапы), трансгран, сроки хранения,
-  запросы субъектов, реагирование на инциденты. Опора на `LEGAL.md`,
-  `docs/legal/PRIVACY_POLICY.md` (сейчас draft).
-- [ ] **Скорректировать функционал** по итогам: ретеншн/удаление,
-  минимизация полей, kill-switch внешних API, согласованность логов и
-  бэкапов с политикой. Не полагаться на внутренние id вместо
-  `telegram_id` как на «анонимизацию», устраняющую операторские
-  обязанности.
+- Перед публичным запуском: **согласовать с юристом/ДПО** фактическую
+обработку ПДн с требованиями 152-ФЗ (и смежное): основания, при
+необходимости уведомительный/регистрационный контур, субпроцессоры
+(email, observability, ASR-облака, бэкапы), трансгран, сроки хранения,
+запросы субъектов, реагирование на инциденты. Опора на `LEGAL.md`,
+`docs/legal/PRIVACY_POLICY.md` (сейчас draft).
+- **Скорректировать функционал** по итогам: ретеншн/удаление,
+минимизация полей, kill-switch внешних API, согласованность логов и
+бэкапов с политикой. Не полагаться на внутренние id вместо
+`telegram_id` как на «анонимизацию», устраняющую операторские
+обязанности.
 - См. также: `docs/project_context.md` (compliance), `AGENTS.md` (Legal
-  readiness).
+readiness).
 
 ## Критичные / Инфраструктура
 
 - Система бэкапов: PostgreSQL + Redis + configs (локально)
 - Система логирования: JSON structlog + Docker log rotation
-  (тонкая настройка: `REDACT_LOGS`, `REDACT_LOG_IDENTIFIERS`, `LOG_THIRD_PARTY_LEVEL`)
+(тонкая настройка: `REDACT_LOGS`, `REDACT_LOG_IDENTIFIERS`, `LOG_THIRD_PARTY_LEVEL`)
 - Outbound Tor pool: по умолчанию выкл., `TOR_POOL_ENABLED=true` — opt-in
-- [x] Taskiq worker: graceful shutdown (`WORKER_SHUTDOWN`: cancel
-  `import_queue_dispatcher` / `lyrics_global_orchestrator` background tasks,
-  `close_es` в воркере) — 2026-04
-- [x] Docker Compose `worker` service: taskiq modules aligned with
-  root `main.py` (imports, lyrics queue, snippets) — 2026-04
-- [x] Audio-compute worker download: OTT with `proxy=1` so Backend
-  proxies SoundCloud progressive streams (worker no longer GETs
-  time-bound CDN URL directly; avoids 403) — 2026-04
-- [x] Mini App плеер: после сбоя Hls.js fallback `GET /audio` отдавал
-  302 на M3U8, Chrome в `<audio>` M3U8 не декодирует — добавлен
-  `?force_progressive=true` (прокси MP3 с S3) и хелпер
-  `trackProgressiveAudioUrl` в плеере / оффлайн-кэше / админ-превью
-  — 2026-04-27
-- [x] Lyrics cascade: preserve **root** worker failure in
-  `cascade exhausted` message (not only last tier gate, e.g.
-  `speechkit_disabled`); `lyrics_jobs.request_with_sync` /
-  `request_bypass_cache` for fallback dispatch; log
-  `audio_compute_worker_fail` — 2026-04
+- Taskiq worker: graceful shutdown (`WORKER_SHUTDOWN`: cancel
+`import_queue_dispatcher` / `lyrics_global_orchestrator` background tasks,
+`close_es` в воркере) — 2026-04
+- Docker Compose `worker` service: taskiq modules aligned with
+root `main.py` (imports, lyrics queue, snippets) — 2026-04
+- Audio-compute worker download: OTT with `proxy=1` so Backend
+proxies SoundCloud progressive streams (worker no longer GETs
+time-bound CDN URL directly; avoids 403) — 2026-04
+- Mini App плеер: после сбоя Hls.js fallback `GET /audio` отдавал
+302 на M3U8, Chrome в `<audio>` M3U8 не декодирует — добавлен
+`?force_progressive=true` (прокси MP3 с S3) и хелпер
+`trackProgressiveAudioUrl` в плеере / оффлайн-кэше / админ-превью
+— 2026-04-27
+- Lyrics cascade: preserve **root** worker failure in
+`cascade exhausted` message (not only last tier gate, e.g.
+`speechkit_disabled`); `lyrics_jobs.request_with_sync` /
+`request_bypass_cache` for fallback dispatch; log
+`audio_compute_worker_fail` — 2026-04
 - **Полное копирование аудиофайлов (MinIO) на удалённый backup-VPS**
   - Подключение к отдельному серверу по SSH
   - `mc mirror` MinIO -> remote, инкрементально
@@ -92,13 +92,13 @@
   для StatusPill (см. design-system.md)
   - Документация: `docs/admin/{README,security,onboarding,testing,nginx-example.conf}`
 - UX (2026-04): `AdminPromptProvider` (модалки вместо `alert`/`confirm`),
-  i18n для строк админки, динамический заголовок раздела в topbar,
-  выдвижное меню на «узком» вьюпорте (≤720px), сортировка колонок
-  в `DataTable` на Users/Tracks/Tasks/Artists/queues
-- [x] Post-ingest фон: enqueue compute + lyrics cascade при новом треке
-  (upload / SC import / telegram import); массовый SC — paced lyrics
-  без дубля; админ Tasks — таблица compute + источник lyrics job
-  — 2026-04
+i18n для строк админки, динамический заголовок раздела в topbar,
+выдвижное меню на «узком» вьюпорте (≤720px), сортировка колонок
+в `DataTable` на Users/Tracks/Tasks/Artists/queues
+- Post-ingest фон: enqueue compute + lyrics cascade при новом треке
+(upload / SC import / telegram import); массовый SC — paced lyrics
+без дубля; админ Tasks — таблица compute + источник lyrics job
+— 2026-04
 - Перенести admin-security policy в PrivateCore (см. выше)
 - WebAuthn/Passkey как опциональный второй фактор
 
@@ -129,29 +129,29 @@
 
 ## Граница Backend / PrivateCore
 
-- [x] **Плейлист «Выбор пользователей» + учёт `play_count` (2026-04-27):**
-  PrivateCore `playcount_policy` (qualify, `rank_user_choice_tracks`);
-  `GET /api/v1/recommendations/user-choice`, секция `user_choice` в
-  `GET /api/v1/recommendations/home`; `PublicPlayCountService` + Redis
-  24h-дедуп; залогиненные — сигнал listen; гость — `POST /api/v1/tracks/{id}/play`
-- [x] **Рекомендации (2026-04 / RU-first для всех):**
-  `recommendation_language_policy` — `RU_STRATIFICATION_ALWAYS`,
-  `DEFAULT_CYRILLIC_STRATA_RATIO`, cold-start affinity;
-  `_merge_language_affinity` / похожие / fallback home / user-choice —
-  стратифицированные пулы; см. `docs/private-boundary-inventory.md`
-- [x] **Recsys — Track A / Phase 1 (2026-04):** гибрид
-  `genre_samples` + очередь 15s превью, `GET .../preview-queue`,
-  track-preview сегмент, админ-CRUD и capability
-  `recsys.genre_samples.manage`
-- [x] **Recsys — Track B1 / Phase 5 Backend (2026-04):**
-  миграция `0060` (таблицы features/similarity), internal API
-  `/api/v1/internal/compute/*` (HMAC), `compute_results_router`,
-  post-upload enqueue, CLI `python -m app.cli.compute_backfill`,
-  `track_features_builder` + тесты
-- [x] **Recsys handoff (2026-04-27):** удалён каталог
-  `docs/recsys-parallel/`; ссылка в `project_context` убрана; тест
-  `test_backfill_dry_run_uses_patched_session` чинит патч
-  `AsyncSessionLocal` в `app.cli.compute_backfill`
+- **Плейлист «Выбор пользователей» + учёт `play_count` (2026-04-27):**
+PrivateCore `playcount_policy` (qualify, `rank_user_choice_tracks`);
+`GET /api/v1/recommendations/user-choice`, секция `user_choice` в
+`GET /api/v1/recommendations/home`; `PublicPlayCountService` + Redis
+24h-дедуп; залогиненные — сигнал listen; гость — `POST /api/v1/tracks/{id}/play`
+- **Рекомендации (2026-04 / RU-first для всех):**
+`recommendation_language_policy` — `RU_STRATIFICATION_ALWAYS`,
+`DEFAULT_CYRILLIC_STRATA_RATIO`, cold-start affinity;
+`_merge_language_affinity` / похожие / fallback home / user-choice —
+стратифицированные пулы; см. `docs/private-boundary-inventory.md`
+- **Recsys — Track A / Phase 1 (2026-04):** гибрид
+`genre_samples` + очередь 15s превью, `GET .../preview-queue`,
+track-preview сегмент, админ-CRUD и capability
+`recsys.genre_samples.manage`
+- **Recsys — Track B1 / Phase 5 Backend (2026-04):**
+миграция `0060` (таблицы features/similarity), internal API
+`/api/v1/internal/compute/*` (HMAC), `compute_results_router`,
+post-upload enqueue, CLI `python -m app.cli.compute_backfill`,
+`track_features_builder` + тесты
+- **Recsys handoff (2026-04-27):** удалён каталог
+`docs/recsys-parallel/`; ссылка в `project_context` убрана; тест
+`test_backfill_dry_run_uses_patched_session` чинит патч
+`AsyncSessionLocal` в `app.cli.compute_backfill`
 - **Immediate: перенести auth/email policy в PrivateCore**
   - `account_linking_service`: `_LINK_TTL`, `_LINK_EMAIL_TYPE`, `_LINK_PREFIX`, `_LINK_TG_PREFIX`
   - `account_linking_service`: импортировать `is_disposable_email` из `dotsound_private_core.services.abuse`
@@ -178,12 +178,12 @@
 
 ## Продукт: пять спринтов (реализовано в Backend, 2026-04)
 
-- [x] S1 **Radio** — `GET /api/v1/tracks/{id}/radio` (каталог + YouTube mix/search + materialize), флаги `RADIO_*` в `config`, политика `dotsound_private_core.services.radio_policy`
-- [x] S2 **Co-listen** — `co_listen_rooms` + `POST/GET/PATCH /api/v1/colisten/rooms`, `WS /api/v1/colisten/ws/{room_id}` (Redis pub/sub), `dotsound_private_core.services.colisten_policy`
-- [x] S3 **Author stats** — `GET /api/v1/tracks/{id}/author-stats` (владелец), `listen_events` + `play_count` + лайки, `author_stats_policy` (округление)
-- [x] S4 **Плейлисты коллаб** — `playlist_collaborators`, `playlist_invite_tokens`, `POST /playlists/{id}/invites`, `POST /playlists/invites/accept`, правка `PlaylistService` для **editor** коллаб
-- [x] S5 **Сниппеты** — `track_snippets`, `POST /tracks/{id}/snippets`, `snippet_worker` (Taskiq + ffmpeg), `snippet_policy` + gating `catalog_type`
-- [ ] **Follow-up:** Mini App / бот (кнопки radio, colisten, UI статистики, accept invite), e2e-тесты, Prometheus-метрики `radio_*` / runbook; юридический sign-off third-party + сниппетов (см. `LEGAL.md`). Миграция: `alembic upgrade 0056`.
+- S1 **Radio** — `GET /api/v1/tracks/{id}/radio` (каталог + YouTube mix/search + materialize), флаги `RADIO_*` в `config`, политика `dotsound_private_core.services.radio_policy`
+- S2 **Co-listen** — `co_listen_rooms` + `POST/GET/PATCH /api/v1/colisten/rooms`, `WS /api/v1/colisten/ws/{room_id}` (Redis pub/sub), `dotsound_private_core.services.colisten_policy`
+- S3 **Author stats** — `GET /api/v1/tracks/{id}/author-stats` (владелец), `listen_events` + `play_count` + лайки, `author_stats_policy` (округление)
+- S4 **Плейлисты коллаб** — `playlist_collaborators`, `playlist_invite_tokens`, `POST /playlists/{id}/invites`, `POST /playlists/invites/accept`, правка `PlaylistService` для **editor** коллаб
+- S5 **Сниппеты** — `track_snippets`, `POST /tracks/{id}/snippets`, `snippet_worker` (Taskiq + ffmpeg), `snippet_policy` + gating `catalog_type`
+- **Follow-up:** Mini App / бот (кнопки radio, colisten, UI статистики, accept invite), e2e-тесты, Prometheus-метрики `radio_*` / runbook; юридический sign-off third-party + сниппетов (см. `LEGAL.md`). Миграция: `alembic upgrade 0056`.
 
 ## Плеер в боте
 
@@ -223,7 +223,7 @@
 
 ## PWA / Фоновый плеер
 
-- [x] Установка на устройство: `isTelegram()` по `initData` / user; `InstallPrompt` (iOS Safari / прочий iOS, Chromium `beforeinstallprompt`, fallback без BIP); manifest `id`, один `link` manifest
+- Установка на устройство: `isTelegram()` по `initData` / user; `InstallPrompt` (iOS Safari / прочий iOS, Chromium `beforeinstallprompt`, fallback без BIP); manifest `id`, один `link` manifest
 - Media Session API (lock-screen контроли: play/pause/next/prev/seekto)
 - Браузерная версия с email auth + Telegram code auth
 - **PWA-слой поверх текущего SPA**
@@ -297,17 +297,17 @@
   - Backend отправляет аудиофайл во внутренний API PrivateCore,
   а PrivateCore уже сам решает, обрабатывать локально или вызывать внешний GPU-сервис
   - Интеграция через существующий `lyrics_provider` в PrivateCore (внешние детали — внутри чёрного ящика)
-- [ ] **Karaoke после catalog + remote ASR align (пока не делаем):**
-  UI показывает режим «Караоке» только при `word_times` на строках
-  **и** `sync_quality === "word"` (`LyricsPanel.tsx`, `FullscreenLyrics.tsx`).
-  Ветка `POST .../audio-compute/.../result` с
-  `align_text_to_precomputed_asr_timed_words` сейчас пишет в БД
-  **только** line-level строки + `sync_quality=line` — словесные
-  таймкоды с воркера в сохранённый JSON не переносятся. На будущее:
-  после align приклеить/распределить `word_times` к выровненным
-  строкам каталога (из `asr_timed_words` или исходных
-  `synced_lines` воркера) и при успехе выставлять `word`, чтобы
-  караоке снова работал при эталонном тексте.
+- **Karaoke после catalog + remote ASR align (пока не делаем):**
+UI показывает режим «Караоке» только при `word_times` на строках
+**и** `sync_quality === "word"` (`LyricsPanel.tsx`, `FullscreenLyrics.tsx`).
+Ветка `POST .../audio-compute/.../result` с
+`align_text_to_precomputed_asr_timed_words` сейчас пишет в БД
+**только** line-level строки + `sync_quality=line` — словесные
+таймкоды с воркера в сохранённый JSON не переносятся. На будущее:
+после align приклеить/распределить `word_times` к выровненным
+строкам каталога (из `asr_timed_words` или исходных
+`synced_lines` воркера) и при успехе выставлять `word`, чтобы
+караоке снова работал при эталонном тексте.
 - Теги (`tags`, JSONB или отдельная таблица)
 - BPM auto-detection (background task, `librosa` / `essentia`)
   - Извлечение фич/пороги confidence и decision rules в PrivateCore, Taskiq orchestration и запись результата — в Backend
@@ -318,10 +318,10 @@
 - Чат: DM, группы, WebSocket real-time
 - Реакции, вложения, голосовые сообщения, шифрование
 - WebSocket: Redis pub/sub, presence, typing indicators
-- [x] Комментарии к трекам: CRUD, голосование, пин, скрытие;
-  Mini App — секция в `TrackCardSheet` для публичных треков;
-  сервис — комментарии недоступны при `is_public=false`;
-  ответы на комментарии (`parent_id`, дерево вложенности)
+- Комментарии к трекам: CRUD, голосование, пин, скрытие;
+Mini App — секция в `TrackCardSheet` для публичных треков;
+сервис — комментарии недоступны при `is_public=false`;
+ответы на комментарии (`parent_id`, дерево вложенности)
 - [~] Доработки чата (обсудить отдельно)
 
 ## Карточка артиста (multi-source)
@@ -403,14 +403,14 @@
 
 ## Frontend / Mini App
 
-- [x] **Покрытие Backend API клиентом:** инвентарь и приоритеты —
-  `docs/api-frontend-coverage.md`; расширен `frontend/src/lib/api.ts`,
-  исправлен `POST /users/me/avatar`, UI (OAuth disconnect, удаление аккаунта,
-  похожие артисты), `adminApi.metricInstant`; регрессия —
-  `scripts/check_openapi_frontend_coverage.py`
-- [x] Главная: CTA «Слушать/Play» — старт с первого трека плейлиста дня
-  (дальше — существующий radio-prefetch в `PlayerContext`); карточка
-  «плейлист недели» и экран `/weekly-mix` (API `weekly-playlist`).
+- **Покрытие Backend API клиентом:** инвентарь и приоритеты —
+`docs/api-frontend-coverage.md`; расширен `frontend/src/lib/api.ts`,
+исправлен `POST /users/me/avatar`, UI (OAuth disconnect, удаление аккаунта,
+похожие артисты), `adminApi.metricInstant`; регрессия —
+`scripts/check_openapi_frontend_coverage.py`
+- Главная: CTA «Слушать/Play» — старт с первого трека плейлиста дня
+(дальше — существующий radio-prefetch в `PlayerContext`); карточка
+«плейлист недели» и экран `/weekly-mix` (API `weekly-playlist`).
 - Восстановление позиции воспроизведения при перезапуске
 - Монохром-фильтр в настройках
 - Админ-панель: управление пользователями
@@ -421,16 +421,16 @@
 
 ## Frontend оптимизация
 
-- [x] **Waveform (карточка трека): снижение нагрузки на iGPU** — rAF и
-  отрисовка спектра только при `isPlaying` (не 60 fps в паузе),
-  ~30 fps для декоративного спектра
-- [x] **PlayerContext: CPU** — throttling обновлений `currentTime` в React
-  (~10/s), flush при play/pause/seek/skip; вьюхи и экраны без таймера
-  переведены с `usePlayer()` на `usePlayerActions` / `usePlayerMeta`, чтобы
-  не перерисовываться на каждый тик
-- [x] **SearchView: прогрессивная выдача** — `getTracks` / `searchSuggest`
-  не ждут YouTube, Bandcamp, SoundCloud; внешние секции обновляются
-  по мере ответа и могут отображаться до готовности блока «На платформе»
+- **Waveform (карточка трека): снижение нагрузки на iGPU** — rAF и
+отрисовка спектра только при `isPlaying` (не 60 fps в паузе),
+~30 fps для декоративного спектра
+- **PlayerContext: CPU** — throttling обновлений `currentTime` в React
+(~10/s), flush при play/pause/seek/skip; вьюхи и экраны без таймера
+переведены с `usePlayer()` на `usePlayerActions` / `usePlayerMeta`, чтобы
+не перерисовываться на каждый тик
+- **SearchView: прогрессивная выдача** — `getTracks` / `searchSuggest`
+не ждут YouTube, Bandcamp, SoundCloud; внешние секции обновляются
+по мере ответа и могут отображаться до готовности блока «На платформе»
 - **PlayerContext split (производительность)**
   - 3 контекста: `PlayerStateCtx` (currentTime, duration, isPlaying),
   `PlayerActionsCtx` (стабильные callbacks через useCallback),
@@ -460,22 +460,22 @@
 
 ## Backend API
 
-- [x] YouTube import/playback: fallback на auto-выбор формата в
-  `yt-dlp` при `Requested format is not available` (без 422/503 из-за
-  жёсткого format-string)
-- [x] YouTube import/playback: fallback по client-профилям `yt-dlp`
-  при anti-bot (`Sign in to confirm you’re not a bot`) + возврат 503
-  вместо 422 для временной блокировки
-- [x] **Elasticsearch (поиск + suggest)**: индексы треков/артистов,
-  Taskiq reindex/backfill, `GET /api/v1/search/suggest`, поиск треков
-  с `q` через ES + PG fallback, bool/should (strict + fuzzy) для треков/артистов
-  и саджеста, counter `elasticsearch_query_total` (op/outcome) в `observability`
-- [x] `artist_link_backfill_task` / `track_artists`: дедуп по
-  `canonical` (PrivateCore + `resolve_and_link`), `ON CONFLICT DO NOTHING`
-  в `link_track`, `begin_nested` + `error`/`error_type` в backfill
-- [x] `LOG_THIRD_PARTY_LEVEL` / `apply_third_party_log_levels` — уровень
-  ``urllib3``/httpx/ES/SQL-эха отдельно от ``LOG_LEVEL``; Taskiq воркеры
-  тоже при старте
+- YouTube import/playback: fallback на auto-выбор формата в
+`yt-dlp` при `Requested format is not available` (без 422/503 из-за
+жёсткого format-string)
+- YouTube import/playback: fallback по client-профилям `yt-dlp`
+при anti-bot (`Sign in to confirm you’re not a bot`) + возврат 503
+вместо 422 для временной блокировки
+- **Elasticsearch (поиск + suggest)**: индексы треков/артистов,
+Taskiq reindex/backfill, `GET /api/v1/search/suggest`, поиск треков
+с `q` через ES + PG fallback, bool/should (strict + fuzzy) для треков/артистов
+и саджеста, counter `elasticsearch_query_total` (op/outcome) в `observability`
+- `artist_link_backfill_task` / `track_artists`: дедуп по
+`canonical` (PrivateCore + `resolve_and_link`), `ON CONFLICT DO NOTHING`
+в `link_track`, `begin_nested` + `error`/`error_type` в backfill
+- `LOG_THIRD_PARTY_LEVEL` / `apply_third_party_log_levels` — уровень
+`urllib3`/httpx/ES/SQL-эха отдельно от `LOG_LEVEL`; Taskiq воркеры
+тоже при старте
 - playable_only фильтр в track listing endpoints
 - internal-token endpoint с полной защитой
 - WebSocket: событие player.state для синхронизации
@@ -678,126 +678,123 @@ bounded-transport exception
 
 ## Платформы — будущее
 
-- [ ] **Гибридный плеер**: для платформ с официальными embed-виджетами реализовать
-  `access_mode="official_embed"` — хранить embed URL, отрисовывать `<iframe>` вместо
-  нативного плеера, отключить EQ. Приоритет: YouTube (требует TOS раздел 5.D).
-- [ ] **VK Музыка**: OAuth уже реализован (`linked_accounts`, scope `audio`). Нужно добавить
-  `VKStreamService` (получает HLS-URL через `audio.getById` с user OAuth token) и расширить
-  `playback.py`. Отложено — российский сервис.
-- [ ] **Яндекс Музыка**: нужен новый OAuth-провайдер (`Yandex OAuth`, oauth.yandex.ru) +
-  неофициальный API-адаптер. Отложено — российский сервис.
-- [ ] **YouTube TOS compliance**: согласно TOS YouTube раздел 5.D прямой API-стриминг запрещён.
-  Долгосрочно: мигрировать на `access_mode="official_embed"` (iframe-embed), API-стриминг
-  оставить только как dev/fallback.
+- **Гибридный плеер**: для платформ с официальными embed-виджетами реализовать
+`access_mode="official_embed"` — хранить embed URL, отрисовывать `<iframe>` вместо
+нативного плеера, отключить EQ. Приоритет: YouTube (требует TOS раздел 5.D).
+- **VK Музыка**: OAuth уже реализован (`linked_accounts`, scope `audio`). Нужно добавить
+`VKStreamService` (получает HLS-URL через `audio.getById` с user OAuth token) и расширить
+`playback.py`. Отложено — российский сервис.
+- **Яндекс Музыка**: нужен новый OAuth-провайдер (`Yandex OAuth`, oauth.yandex.ru) +
+неофициальный API-адаптер. Отложено — российский сервис.
+- **YouTube TOS compliance**: согласно TOS YouTube раздел 5.D прямой API-стриминг запрещён.
+Долгосрочно: мигрировать на `access_mode="official_embed"` (iframe-embed), API-стриминг
+оставить только как dev/fallback.
 
 ## Sprint concurrency hardening (2026-04-22)
 
 - Backend: миграция `0045_dedupe_unique_constraints` — partial UNIQUE
-  на `tracks.sc_url WHERE sc_url IS NOT NULL` и на
-  `(imported_from, external_id) WHERE external_id IS NOT NULL`,
-  `Index` объявлены в `app/models/track.py:Track.__table_args__`
-  (создаются и для тестовой SQLite-схемы)
+на `tracks.sc_url WHERE sc_url IS NOT NULL` и на
+`(imported_from, external_id) WHERE external_id IS NOT NULL`,
+`Index` объявлены в `app/models/track.py:Track.__table_args_`_
+(создаются и для тестовой SQLite-схемы)
 - Backend: `scripts/dedupe_tracks.py` — pre-migration helper, dry-run
-  по умолчанию, мерджит дубли по `sc_url` и `(imported_from, external_id)`
-  с union-find и FK-redirect для likes/dislikes/playlists/track_artists/
-  track_lyrics/track_info/track_upload_meta/complaints/listen_events/
-  comments/lyrics_jobs/search_events/messages
+по умолчанию, мерджит дубли по `sc_url` и `(imported_from, external_id)`
+с union-find и FK-redirect для likes/dislikes/playlists/track_artists/
+track_lyrics/track_info/track_upload_meta/complaints/listen_events/
+comments/lyrics_jobs/search_events/messages
 - Backend: `SoundCloudService.import_or_get_track` переписан на
-  `INSERT ... ON CONFLICT (sc_url) WHERE sc_url IS NOT NULL DO NOTHING
-  RETURNING` + fallback `SELECT`; `external_import_worker` обёрнут в
-  `try/except IntegrityError` на случай rolldown-сценария
+`INSERT ... ON CONFLICT (sc_url) WHERE sc_url IS NOT NULL DO NOTHING RETURNING` + fallback `SELECT`; `external_import_worker` обёрнут в
+`try/except IntegrityError` на случай rolldown-сценария
 - Backend: миграция `0046_add_lyrics_sync_source_name` —
-  `track_lyrics.sync_source_name VARCHAR(50) NULL`, проброс через
-  `LyricsRepository.create_or_update`, `LyricsResponse` schema,
-  `_result_to_payload(getattr(gen_result, "sync_source_name", None))`
+`track_lyrics.sync_source_name VARCHAR(50) NULL`, проброс через
+`LyricsRepository.create_or_update`, `LyricsResponse` schema,
+`_result_to_payload(getattr(gen_result, "sync_source_name", None))`
 - Backend: `app/services/sc_semaphore.py` — Redis-based counting
-  semaphore (sorted-set + Lua acquire) вокруг SoundCloud `search`/
-  `resolve_url`/`get_stream_info`, env `SOUNDCLOUD_GLOBAL_CONCURRENCY=4`
+semaphore (sorted-set + Lua acquire) вокруг SoundCloud `search`/
+`resolve_url`/`get_stream_info`, env `SOUNDCLOUD_GLOBAL_CONCURRENCY=4`
 - Backend: per-track Redis lock в `lyrics_worker.generate_lyrics_task`
-  (рефакторинг через outer wrapper + `_generate_lyrics_task_impl`),
-  env `LYRICS_PER_TRACK_LOCK_TTL_SECONDS=300`; race-protected
-  через `SET NX EX` + Lua-release-on-match
+(рефакторинг через outer wrapper + `_generate_lyrics_task_impl`),
+env `LYRICS_PER_TRACK_LOCK_TTL_SECONDS=300`; race-protected
+через `SET NX EX` + Lua-release-on-match
 - Backend: `app/services/import_queue_dispatcher.py` — backpressure
-  через статус `"queued"`, env `IMPORT_MAX_CONCURRENT_JOBS=10`,
-  `IMPORT_PER_USER_MAX_CONCURRENT=2`, dispatcher loop запускается
-  в WORKER_STARTUP. `ImportService.start_import` возвращает job
-  с `status="queued"` если глобальный или per-user cap занят;
-  `get_queue_position` для UI; `cancel_job` и `_get_active_job`
-  понимают `"queued"`
+через статус `"queued"`, env `IMPORT_MAX_CONCURRENT_JOBS=10`,
+`IMPORT_PER_USER_MAX_CONCURRENT=2`, dispatcher loop запускается
+в WORKER_STARTUP. `ImportService.start_import` возвращает job
+с `status="queued"` если глобальный или per-user cap занят;
+`get_queue_position` для UI; `cancel_job` и `_get_active_job`
+понимают `"queued"`
 - Backend: `app/services/lyrics_global_orchestrator.py` —
-  единый pacer через `BLPOP lyrics:queue:default`, фичефлаг
-  `LYRICS_GLOBAL_ORCHESTRATOR_ENABLED=true`, заменяет per-job
-  пейсинг в `import_lyrics_worker.process_import_lyrics_task`
-  (legacy mode сохранён, активируется выключением флага). Global
-  circuit-breaker на 5 подряд `captcha|pool_exhaust|exhausted`
-  сигналов из proxy_pool
+единый pacer через `BLPOP lyrics:queue:default`, фичефлаг
+`LYRICS_GLOBAL_ORCHESTRATOR_ENABLED=true`, заменяет per-job
+пейсинг в `import_lyrics_worker.process_import_lyrics_task`
+(legacy mode сохранён, активируется выключением флага). Global
+circuit-breaker на 5 подряд `captcha|pool_exhaust|exhausted`
+сигналов из proxy_pool
 - Backend: API `GET /import/{id}/status` и `/import/active`
-  возвращают `queue_position` для queued джобов
+возвращают `queue_position` для queued джобов
 - Backend: `main.py` зарегистрировал воркеры
-  `app.services.import_queue_dispatcher` и
-  `app.services.lyrics_global_orchestrator`
+`app.services.import_queue_dispatcher` и
+`app.services.lyrics_global_orchestrator`
 - Frontend: `ImportView.tsx` — новая фаза `"queued"` с
-  отображением `queue_position`, polling переключается между
-  `queued <-> importing` без пересоздания интервала
+отображением `queue_position`, polling переключается между
+`queued <-> importing` без пересоздания интервала
 - Frontend: `LyricsPanel.tsx` и `FullscreenLyrics.tsx` — admin-only
-  debug-блок «Источник текста» / «Синхронизовал» в самом конце
-  отображённого текста, гейтится через `getIsAdmin()`; CSS
-  `.lyrics-debug-attribution` (минимализм, монохром, monospace)
+debug-блок «Источник текста» / «Синхронизовал» в самом конце
+отображённого текста, гейтится через `getIsAdmin()`; CSS
+`.lyrics-debug-attribution` (минимализм, монохром, monospace)
 - Docs: `docs/private-core-dependency-policy.md` пополнен таблицей
-  опциональных полей `GenerateResult` (включая новый
-  `sync_source_name` — PrivateCore-side требуется добавить поле,
-  Backend уже forward-compatible через `getattr`)
+опциональных полей `GenerateResult` (включая новый
+`sync_source_name` — PrivateCore-side требуется добавить поле,
+Backend уже forward-compatible через `getattr`)
 - Tests: `test_soundcloud_service::test_import_or_get_track_dedup_via_unique_index`,
-  `test_lyrics_worker::test_sync_source_name_propagates_to_repo`,
-  `test_lyrics_global_orchestrator.py` (новый файл, 7 тестов на
-  serialize/deserialize/process_one), `test_import_service` (3 новых
-  теста на backpressure + queue_position + cancel queued),
-  `test_import_lyrics_worker` autouse-фикстура форсит legacy режим
+`test_lyrics_worker::test_sync_source_name_propagates_to_repo`,
+`test_lyrics_global_orchestrator.py` (новый файл, 7 тестов на
+serialize/deserialize/process_one), `test_import_service` (3 новых
+теста на backpressure + queue_position + cancel queued),
+`test_import_lyrics_worker` autouse-фикстура форсит legacy режим
 
 ## Sprint multi-importer library (2026-04-22)
 
 - Backend: миграция `0047_add_user_track_library` — many-to-many
-  таблица `user_track_library (user_id, track_id, source,
-  imported_at)` с composite PK + индекс `(user_id, imported_at)`.
-  Backfill из `tracks.uploaded_by_id` чтобы существующие треки
-  попали в библиотеку владельца
+таблица `user_track_library (user_id, track_id, source, imported_at)` с composite PK + индекс `(user_id, imported_at)`.
+Backfill из `tracks.uploaded_by_id` чтобы существующие треки
+попали в библиотеку владельца
 - Backend: `app/models/user_track_library.py` (модель) +
-  `app/repositories/user_track_library.py` (`add` идемпотентен
-  через `INSERT ... ON CONFLICT DO NOTHING`, `list_by_user`,
-  `count_by_user`, `has`, `remove`)
+`app/repositories/user_track_library.py` (`add` идемпотентен
+через `INSERT ... ON CONFLICT DO NOTHING`, `list_by_user`,
+`count_by_user`, `has`, `remove`)
 - Backend: auto-link во всех flow создания трека —
-  `external_import_worker.py` (после `import_or_get_track`,
-  включая dedup-resolved случай), `import_worker.py` (telegram),
-  `upload_service.py` (UGC). Идемпотентно — повторный импорт
-  одной песни одним юзером не дублирует
+`external_import_worker.py` (после `import_or_get_track`,
+включая dedup-resolved случай), `import_worker.py` (telegram),
+`upload_service.py` (UGC). Идемпотентно — повторный импорт
+одной песни одним юзером не дублирует
 - Backend: `GET /api/v1/users/me/library` — paginated, ORDER BY
-  `imported_at DESC`, `playable_only` filter; `TrackService.list_library`,
-  `UserTrackLibraryRepository.list_by_user` с JOIN
+`imported_at DESC`, `playable_only` filter; `TrackService.list_library`,
+`UserTrackLibraryRepository.list_by_user` с JOIN
 - Backend: `LyricsService._get_editable_track` — для
-  `catalog_type='external_reference'` редактирование лирики только
-  админом, для UGC оригинальный uploader (как раньше). Все методы
-  `create_or_update`/`update_sync`/`delete_lyrics`/`redefine`/
-  `trigger_auto_generation`/`cancel_auto_generation` переведены
-  на новую проверку
+`catalog_type='external_reference'` редактирование лирики только
+админом, для UGC оригинальный uploader (как раньше). Все методы
+`create_or_update`/`update_sync`/`delete_lyrics`/`redefine`/
+`trigger_auto_generation`/`cancel_auto_generation` переведены
+на новую проверку
 - Backend: defensive `LyricsRepository.get_by_track_id` skip в
-  `lyrics_global_orchestrator._process_one` — закрывает race
-  window между `_enqueue_to_global_queue` и моментом обработки
-  (другой воркер мог уже сохранить лирику)
+`lyrics_global_orchestrator._process_one` — закрывает race
+window между `_enqueue_to_global_queue` и моментом обработки
+(другой воркер мог уже сохранить лирику)
 - Frontend: `api.getMyLibrary(page, size, playableOnly)` метод;
-  `ProfileView` переключён с `getMyTracks` на `getMyLibrary`,
-  пользователь видит и свои аплоады, и импортированные треки
+`ProfileView` переключён с `getMyTracks` на `getMyLibrary`,
+пользователь видит и свои аплоады, и импортированные треки
 - Frontend: `LyricsPanel` принимает `catalogType` prop, кнопки
-  редактирования гейтятся через `canEdit = isExternalRef ?
-  isAdmin : isOwner`. Все 4 точки ownership-gating обновлены.
-  `TrackCardSheet` пробрасывает `catalog_type`, edit-pane lyrics-toggle
-  кнопка скрыта для non-admin на external_reference
+редактирования гейтятся через `canEdit = isExternalRef ? isAdmin : isOwner`. Все 4 точки ownership-gating обновлены.
+`TrackCardSheet` пробрасывает `catalog_type`, edit-pane lyrics-toggle
+кнопка скрыта для non-admin на external_reference
 - Frontend: `ImportView` фаза `done` показывает «Треки добавлены
-  в вашу библиотеку (профиль)»
+в вашу библиотеку (профиль)»
 - Tests: `test_user_track_library.py` (7 кейсов: idempotency,
-  shared-by-two-users, ordering, remove, count, has),
-  `test_external_import_worker::test_two_users_share_track_with_two_library_links`,
-  `test_lyrics_service` (3 новых: external blocks owner, allows admin,
-  ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyrics_already_in_db`
+shared-by-two-users, ordering, remove, count, has),
+`test_external_import_worker::test_two_users_share_track_with_two_library_links`,
+`test_lyrics_service` (3 новых: external blocks owner, allows admin,
+ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyrics_already_in_db`
 
 ## Sprint admin / auth (2026-04-19)
 
