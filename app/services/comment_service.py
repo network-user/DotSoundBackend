@@ -7,6 +7,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.ws_manager import ws_manager
+from app.models.comment import TrackComment
 from app.models.track import Track
 from app.models.user import User
 from app.repositories.block import BlockRepository
@@ -68,11 +69,34 @@ class CommentService:
                 detail="Comments disabled",
             )
 
+    async def _comment_dict(
+        self,
+        c: TrackComment,
+        users: dict[int, User],
+    ) -> dict[str, Any]:
+        likes, dislikes = (
+            await self._repo.get_vote_counts(c.id)
+        )
+        au = users.get(c.user_id)
+        return {
+            "id": c.id,
+            "track_id": c.track_id,
+            "user_id": c.user_id,
+            "parent_id": c.parent_id,
+            "text": c.text,
+            "is_pinned": c.is_pinned,
+            "created_at": c.created_at.isoformat(),
+            "likes": likes,
+            "dislikes": dislikes,
+            "author_label": self._author_label(au),
+        }
+
     async def add_comment(
         self,
         track_id: int,
         user_id: int,
         text: str,
+        parent_id: int | None = None,
     ) -> dict[str, Any]:
         track = await self._session.get(
             Track, track_id
@@ -88,15 +112,45 @@ class CommentService:
                     detail="Blocked by track owner",
                 )
 
+        if parent_id is not None:
+            parent_row = await self._repo.get_by_id(
+                parent_id
+            )
+            if not parent_row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Parent comment not found",
+                )
+            if parent_row.track_id != track_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid parent comment",
+                )
+            if parent_row.parent_id is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Can only reply to top-level comments",
+                )
+            if (
+                parent_row.is_deleted
+                or parent_row.is_hidden_by_author
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot reply to this comment",
+                )
+
         c = await self._repo.create(
             track_id=track_id,
             user_id=user_id,
             text=text,
+            parent_id=parent_id,
         )
         logger.info(
             "comment_added",
             comment_id=c.id,
             track_id=track_id,
+            parent_id=parent_id,
         )
         author = await self._user_repo.get_by_id(
             user_id
@@ -106,12 +160,14 @@ class CommentService:
             "id": c.id,
             "track_id": track_id,
             "user_id": user_id,
+            "parent_id": parent_id,
             "text": text,
             "is_pinned": False,
             "created_at": c.created_at.isoformat(),
             "likes": 0,
             "dislikes": 0,
             "author_label": author_label,
+            "replies": [],
         }
         await ws_manager.broadcast_to_online(
             {"event": "comment.new", **result}
@@ -129,35 +185,44 @@ class CommentService:
             Track, track_id
         )
         self._raise_unless_comments_allowed(track)
-        comments = await self._repo.list_comments(
+        roots = await self._repo.list_root_comments(
             track_id, user_id, cursor, limit
         )
-        author_ids = [c.user_id for c in comments]
-        users = await self._user_repo.get_by_ids(
-            author_ids
+        if not roots:
+            return []
+        parent_ids = [r.id for r in roots]
+        replies = (
+            await self._repo.list_replies_for_parents(
+                track_id, parent_ids, user_id
+            )
         )
-        result: list[dict[str, Any]] = []
-        for c in comments:
-            likes, dislikes = (
-                await self._repo.get_vote_counts(
-                    c.id
-                )
+        by_parent: dict[int, list[TrackComment]] = {}
+        for r in replies:
+            by_parent.setdefault(
+                r.parent_id, []
+            ).append(r)
+
+        uid_set: set[int] = set()
+        for x in roots:
+            uid_set.add(x.user_id)
+        for x in replies:
+            uid_set.add(x.user_id)
+        users = await self._user_repo.get_by_ids(
+            list(uid_set)
+        )
+
+        out: list[dict[str, Any]] = []
+        for root in roots:
+            root_d = await self._comment_dict(
+                root, users
             )
-            au = users.get(c.user_id)
-            result.append(
-                {
-                    "id": c.id,
-                    "track_id": c.track_id,
-                    "user_id": c.user_id,
-                    "text": c.text,
-                    "is_pinned": c.is_pinned,
-                    "created_at": c.created_at.isoformat(),
-                    "likes": likes,
-                    "dislikes": dislikes,
-                    "author_label": self._author_label(au),
-                }
-            )
-        return result
+            ch_list = by_parent.get(root.id, [])
+            root_d["replies"] = [
+                await self._comment_dict(ch, users)
+                for ch in ch_list
+            ]
+            out.append(root_d)
+        return out
 
     async def delete_comment(
         self, comment_id: int, user_id: int
@@ -180,14 +245,20 @@ class CommentService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not allowed",
             )
-        await self._repo.soft_delete(comment_id)
-        await ws_manager.broadcast_to_online(
-            {
-                "event": "comment.deleted",
-                "comment_id": comment_id,
-                "track_id": c.track_id,
-            }
+        tid = c.track_id
+        deleted_ids = (
+            await self._repo.soft_delete_comment_chain(
+                comment_id
+            )
         )
+        for did in deleted_ids:
+            await ws_manager.broadcast_to_online(
+                {
+                    "event": "comment.deleted",
+                    "comment_id": did,
+                    "track_id": tid,
+                }
+            )
 
     async def pin_comment(
         self, comment_id: int, user_id: int
@@ -197,6 +268,11 @@ class CommentService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
+            )
+        if c.parent_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Can only pin top-level comments",
             )
         track = await self._session.get(
             Track, c.track_id
@@ -217,6 +293,11 @@ class CommentService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
+            )
+        if c.parent_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Can only unpin top-level comments",
             )
         track = await self._session.get(
             Track, c.track_id

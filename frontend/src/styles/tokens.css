@@ -58,9 +58,12 @@
   /* Liquid Glass system (iOS 16+ frosted base + iOS 26 accents).
    * Use via GlassSurface primitive or apply tokens directly. */
   --glass-blur-soft:    blur(12px);
-  --glass-blur-medium:  blur(20px);
-  --glass-blur-strong:  blur(32px);
-  --glass-saturate:     saturate(180%);
+  --glass-blur-medium:  blur(18px);
+  --glass-blur-strong:  blur(24px);
+  --glass-saturate:     saturate(150%);
+  --glass-backdrop-fixed: blur(16px) saturate(140%);
+  --glass-backdrop-fixed-player: blur(16px) saturate(140%)
+    brightness(1.04);
   --glass-tint-1:       rgba(20, 20, 20, 0.55);
   --glass-tint-2:       rgba(20, 20, 20, 0.72);
   --glass-tint-3:       rgba(16, 16, 16, 0.82);

@@ -66,6 +66,8 @@ async def test_add_comment(
     assert result["track_id"] == track.id
     assert "author_label" in result
     assert result["author_label"]
+    assert result["parent_id"] is None
+    assert result["replies"] == []
     mock_ws.assert_awaited_once()
 
 
@@ -205,6 +207,60 @@ async def test_vote_comment(
     )
 
     await svc.vote(c["id"], user.id, True)
+
+
+@patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
+async def test_add_reply_to_root(
+    mock_ws: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session)
+    track = await _make_track(session, user)
+    svc = CommentService(session)
+    root = await svc.add_comment(
+        track.id, user.id, "root"
+    )
+    reply = await svc.add_comment(
+        track.id,
+        user.id,
+        "reply",
+        parent_id=root["id"],
+    )
+
+    assert reply["parent_id"] == root["id"]
+    rows = await svc.get_comments(track.id, user.id)
+    assert len(rows) == 1
+    assert len(rows[0]["replies"]) == 1
+    assert rows[0]["replies"][0]["text"] == "reply"
+
+
+@patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
+async def test_reply_to_reply_forbidden(
+    mock_ws: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session)
+    track = await _make_track(session, user)
+    svc = CommentService(session)
+    root = await svc.add_comment(
+        track.id, user.id, "root"
+    )
+    first_reply = await svc.add_comment(
+        track.id,
+        user.id,
+        "r1",
+        parent_id=root["id"],
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.add_comment(
+            track.id,
+            user.id,
+            "r2",
+            parent_id=first_reply["id"],
+        )
+
+    assert exc.value.status_code == 400
 
 
 @patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)

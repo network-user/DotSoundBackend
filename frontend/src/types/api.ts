@@ -464,12 +464,14 @@ export interface TrackComment {
   id: number
   track_id: number
   user_id: number
+  parent_id: number | null
   text: string
   is_pinned: boolean
   created_at: string
   likes: number
   dislikes: number
   author_label?: string
+  replies?: TrackComment[]
 }
 
 // ── Notifications ──────────────────────────────────────────────────────────

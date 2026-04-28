@@ -54,7 +54,16 @@
     "infoNotFound": "Информация не найдена.",
     "infoError": "Не удалось получить информацию.",
     "commentsTitle": "Комментарии",
-    "commentsEmpty": "Нет комментариев"
+    "commentsEmpty": "Нет комментариев",
+    "replyAction": "Ответить",
+    "replyingTo": "Ответ для {{name}}",
+    "replyCancel": "Отмена",
+    "commentPinned": "Закреплено",
+    "commentDelete": "Удалить",
+    "commentPin": "Закрепить",
+    "commentUnpin": "Открепить",
+    "commentHideAll": "Скрыть для всех",
+    "commentHideSelf": "Скрыть для себя"
   },
   "import": {
     "jobTimeout": "Импорт занял слишком много времени. Попробуйте позже.",

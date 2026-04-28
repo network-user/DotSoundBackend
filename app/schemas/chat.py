@@ -39,6 +39,7 @@ class CommentRequest(BaseModel):
     text: str = Field(
         min_length=1, max_length=1000
     )
+    parent_id: int | None = None
 
 
 class ReadNotificationsRequest(BaseModel):

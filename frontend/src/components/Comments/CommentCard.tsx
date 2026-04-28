@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import type { TrackComment } from '@/types/api'
 
@@ -6,6 +7,8 @@ interface Props {
   comment: TrackComment
   isOwner: boolean
   isMine: boolean
+  isReply: boolean
+  onReply?: () => void
   onDelete: (id: number) => void
   onPin: (id: number, pinned: boolean) => void
   onHide: (id: number) => void
@@ -14,15 +17,28 @@ interface Props {
 }
 
 export function CommentCard({
-  comment, isOwner, isMine, onDelete, onPin, onHide, onHideForMe, onVote,
+  comment,
+  isOwner,
+  isMine,
+  isReply,
+  onReply,
+  onDelete,
+  onPin,
+  onHide,
+  onHideForMe,
+  onVote,
 }: Props) {
+  const { t } = useTranslation()
   const [showMenu, setShowMenu] = useState(false)
 
   return (
-    <div className={`comment-card fade-in ${comment.is_pinned ? 'pinned' : ''}`}>
-      {comment.is_pinned && (
+    <div
+      className={`comment-card fade-in${comment.is_pinned ? ' pinned' : ''}${isReply ? ' is-reply' : ''}`}
+    >
+      {comment.is_pinned && !isReply && (
         <div className="comment-pinned-badge">
-          <Icon name="pin" size={12} /> Закреплено
+          <Icon name="pin" size={12} />{' '}
+          {t('trackSheet.commentPinned')}
         </div>
       )}
       <div className="comment-header">
@@ -33,14 +49,30 @@ export function CommentCard({
         <span className="comment-time">
           {new Date(comment.created_at).toLocaleDateString()}
         </span>
-        <button className="comment-menu-btn" onClick={() => setShowMenu(!showMenu)}>
-          <Icon name="info" size={14} />
-        </button>
+        <div className="comment-header-actions">
+          {onReply && !isReply && (
+            <button
+              type="button"
+              className="comment-reply-link"
+              onClick={onReply}
+            >
+              {t('trackSheet.replyAction')}
+            </button>
+          )}
+          <button
+            className="comment-menu-btn"
+            onClick={() => setShowMenu(!showMenu)}
+            type="button"
+          >
+            <Icon name="info" size={14} />
+          </button>
+        </div>
       </div>
       <p className="comment-text">{comment.text}</p>
       <div className="comment-actions">
         <button
           className="comment-vote-btn"
+          type="button"
           onClick={() => onVote(comment.id, true)}
         >
           <Icon name="thumbs-up" size={14} />
@@ -48,6 +80,7 @@ export function CommentCard({
         </button>
         <button
           className="comment-vote-btn"
+          type="button"
           onClick={() => onVote(comment.id, false)}
         >
           <Icon name="thumbs-down" size={14} />
@@ -58,22 +91,52 @@ export function CommentCard({
       {showMenu && (
         <div className="comment-context-menu scale-in">
           {(isMine || isOwner) && (
-            <button onClick={() => { onDelete(comment.id); setShowMenu(false) }}>
-              <Icon name="trash" size={14} /> Удалить
+            <button
+              type="button"
+              onClick={() => {
+                onDelete(comment.id)
+                setShowMenu(false)
+              }}
+            >
+              <Icon name="trash" size={14} />{' '}
+              {t('trackSheet.commentDelete')}
+            </button>
+          )}
+          {isOwner && !isReply && (
+            <button
+              type="button"
+              onClick={() => {
+                onPin(comment.id, comment.is_pinned)
+                setShowMenu(false)
+              }}
+            >
+              <Icon name="pin" size={14} />{' '}
+              {comment.is_pinned
+                ? t('trackSheet.commentUnpin')
+                : t('trackSheet.commentPin')}
             </button>
           )}
           {isOwner && (
-            <>
-              <button onClick={() => { onPin(comment.id, comment.is_pinned); setShowMenu(false) }}>
-                <Icon name="pin" size={14} /> {comment.is_pinned ? 'Открепить' : 'Закрепить'}
-              </button>
-              <button onClick={() => { onHide(comment.id); setShowMenu(false) }}>
-                <Icon name="eye" size={14} /> Скрыть для всех
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => {
+                onHide(comment.id)
+                setShowMenu(false)
+              }}
+            >
+              <Icon name="eye" size={14} />{' '}
+              {t('trackSheet.commentHideAll')}
+            </button>
           )}
-          <button onClick={() => { onHideForMe(comment.id); setShowMenu(false) }}>
-            <Icon name="eye" size={14} /> Скрыть для себя
+          <button
+            type="button"
+            onClick={() => {
+              onHideForMe(comment.id)
+              setShowMenu(false)
+            }}
+          >
+            <Icon name="eye" size={14} />{' '}
+            {t('trackSheet.commentHideSelf')}
           </button>
         </div>
       )}

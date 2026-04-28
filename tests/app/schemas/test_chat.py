@@ -165,6 +165,15 @@ def test_vote_request_missing() -> None:
 def test_comment_request_valid() -> None:
     req = CommentRequest(text="Great track!")
     assert req.text == "Great track!"
+    assert req.parent_id is None
+
+
+def test_comment_request_with_parent() -> None:
+    req = CommentRequest(
+        text="Reply",
+        parent_id=42,
+    )
+    assert req.parent_id == 42
 
 
 @pytest.mark.parametrize(

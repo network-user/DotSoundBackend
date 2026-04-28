@@ -54,7 +54,16 @@
     "infoNotFound": "No information found.",
     "infoError": "Could not load information.",
     "commentsTitle": "Comments",
-    "commentsEmpty": "No comments yet"
+    "commentsEmpty": "No comments yet",
+    "replyAction": "Reply",
+    "replyingTo": "Replying to {{name}}",
+    "replyCancel": "Cancel",
+    "commentPinned": "Pinned",
+    "commentDelete": "Delete",
+    "commentPin": "Pin",
+    "commentUnpin": "Unpin",
+    "commentHideAll": "Hide for everyone",
+    "commentHideSelf": "Hide for me"
   },
   "import": {
     "jobTimeout": "Import is taking too long. Please try again later.",

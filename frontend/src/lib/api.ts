@@ -1377,11 +1377,21 @@ export const api = {
 
   // ── Comments ───────────────────────────────────────
 
-  addComment(trackId: number, text: string): Promise<TrackComment> {
+  addComment(
+    trackId: number,
+    text: string,
+    parentId?: number,
+  ): Promise<TrackComment> {
+    const body: { text: string; parent_id?: number } = {
+      text,
+    }
+    if (parentId != null) {
+      body.parent_id = parentId
+    }
     return request(`/api/v1/tracks/${trackId}/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(body),
     })
   },
 
