@@ -235,7 +235,7 @@ async def test_add_reply_to_root(
 
 
 @patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
-async def test_reply_to_reply_forbidden(
+async def test_reply_to_nested_comment(
     mock_ws: AsyncMock,
     session: AsyncSession,
 ) -> None:
@@ -251,16 +251,24 @@ async def test_reply_to_reply_forbidden(
         "r1",
         parent_id=root["id"],
     )
+    second = await svc.add_comment(
+        track.id,
+        user.id,
+        "r2",
+        parent_id=first_reply["id"],
+    )
 
-    with pytest.raises(HTTPException) as exc:
-        await svc.add_comment(
-            track.id,
-            user.id,
-            "r2",
-            parent_id=first_reply["id"],
-        )
-
-    assert exc.value.status_code == 400
+    assert second["parent_id"] == first_reply["id"]
+    rows = await svc.get_comments(track.id, user.id)
+    assert len(rows) == 1
+    assert len(rows[0]["replies"]) == 1
+    assert (
+        len(rows[0]["replies"][0]["replies"]) == 1
+    )
+    assert (
+        rows[0]["replies"][0]["replies"][0]["text"]
+        == "r2"
+    )
 
 
 @patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)

@@ -16,6 +16,73 @@ interface Props {
   trackOwnerId: number | null
 }
 
+interface BranchProps {
+  comment: TrackComment
+  depth: number
+  isOwner: boolean
+  myId: number | null
+  onPickReply: (c: TrackComment) => void
+  onDelete: (id: number) => void
+  onPin: (id: number, pinned: boolean) => void
+  onHide: (id: number) => void
+  onHideForMe: (id: number) => void
+  onVote: (id: number, isLike: boolean) => void
+}
+
+function CommentBranch({
+  comment,
+  depth,
+  isOwner,
+  myId,
+  onPickReply,
+  onDelete,
+  onPin,
+  onHide,
+  onHideForMe,
+  onVote,
+}: BranchProps) {
+  const nest =
+    depth > 0
+      ? {
+          marginLeft: Math.min(depth, 15) * 12,
+          paddingLeft: 10,
+          borderLeft:
+            '2px solid rgba(255, 255, 255, 0.08)',
+        }
+      : undefined
+
+  return (
+    <div className="comment-branch-node" style={nest}>
+      <CommentCard
+        comment={comment}
+        isOwner={isOwner}
+        isMine={comment.user_id === myId}
+        onReply={() => onPickReply(comment)}
+        onDelete={onDelete}
+        onPin={onPin}
+        onHide={onHide}
+        onHideForMe={onHideForMe}
+        onVote={onVote}
+      />
+      {(comment.replies ?? []).map((ch) => (
+        <CommentBranch
+          key={ch.id}
+          comment={ch}
+          depth={depth + 1}
+          isOwner={isOwner}
+          myId={myId}
+          onPickReply={onPickReply}
+          onDelete={onDelete}
+          onPin={onPin}
+          onHide={onHide}
+          onHideForMe={onHideForMe}
+          onVote={onVote}
+        />
+      ))}
+    </div>
+  )
+}
+
 export function CommentSection({
   trackId,
   trackOwnerId,
@@ -148,32 +215,18 @@ export function CommentSection({
               key={root.id}
               className="comment-thread"
             >
-              <CommentCard
+              <CommentBranch
                 comment={root}
+                depth={0}
                 isOwner={isOwner}
-                isMine={root.user_id === myId}
-                isReply={false}
-                onReply={() => setReplyTo(root)}
+                myId={myId}
+                onPickReply={setReplyTo}
                 onDelete={handleDelete}
                 onPin={handlePin}
                 onHide={handleHide}
                 onHideForMe={handleHideForMe}
                 onVote={handleVote}
               />
-              {(root.replies ?? []).map((r) => (
-                <CommentCard
-                  key={r.id}
-                  comment={r}
-                  isOwner={isOwner}
-                  isMine={r.user_id === myId}
-                  isReply
-                  onDelete={handleDelete}
-                  onPin={handlePin}
-                  onHide={handleHide}
-                  onHideForMe={handleHideForMe}
-                  onVote={handleVote}
-                />
-              ))}
             </div>
           ))}
         </div>

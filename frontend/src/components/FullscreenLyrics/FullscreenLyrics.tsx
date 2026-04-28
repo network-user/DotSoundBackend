@@ -296,7 +296,9 @@ export function FullscreenLyrics() {
               <Icon name="skip-back" size={18} />
             </button>
             <button
-              className="play-btn"
+              className={`play-btn${
+                isPlaying ? ' play-btn--playing' : ''
+              }`}
               onClick={togglePlay}
               aria-label={isPlaying ? 'Пауза' : 'Воспроизвести'}
             >

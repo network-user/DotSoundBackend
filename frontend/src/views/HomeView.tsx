@@ -166,7 +166,15 @@ export function HomeView() {
       </button>
 
       {sections === null && fallbackTracks === null && (
-        <div className="loader" />
+        <div
+          className="home-loading"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <span className="home-loading-dot" />
+          <span className="home-loading-dot" />
+          <span className="home-loading-dot" />
+        </div>
       )}
 
       {sections && sections.map((section, i) => (

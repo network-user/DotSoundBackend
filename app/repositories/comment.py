@@ -111,21 +111,35 @@ class CommentRepository:
         rows = await self._s.execute(q)
         return list(rows.scalars().all())
 
+    async def subtree_ids(
+        self, comment_id: int
+    ) -> list[int]:
+        root = await self.get_by_id(comment_id)
+        if not root:
+            return []
+        ids = [comment_id]
+        frontier = [comment_id]
+        while frontier:
+            r = await self._s.execute(
+                select(TrackComment.id).where(
+                    TrackComment.parent_id.in_(
+                        frontier
+                    )
+                )
+            )
+            nxt = [row[0] for row in r.all()]
+            if not nxt:
+                break
+            ids.extend(nxt)
+            frontier = nxt
+        return ids
+
     async def soft_delete_comment_chain(
         self, comment_id: int
     ) -> list[int]:
-        c = await self.get_by_id(comment_id)
-        if not c:
+        ids = await self.subtree_ids(comment_id)
+        if not ids:
             return []
-        ids: list[int] = [comment_id]
-        if c.parent_id is None:
-            r = await self._s.execute(
-                select(TrackComment.id).where(
-                    TrackComment.parent_id
-                    == comment_id
-                )
-            )
-            ids.extend(row[0] for row in r.all())
         for i in ids:
             row = await self.get_by_id(i)
             if row:
@@ -136,18 +150,9 @@ class CommentRepository:
     async def hide_for_all_chain(
         self, comment_id: int
     ) -> None:
-        c = await self.get_by_id(comment_id)
-        if not c:
+        ids = await self.subtree_ids(comment_id)
+        if not ids:
             return
-        ids: list[int] = [comment_id]
-        if c.parent_id is None:
-            r = await self._s.execute(
-                select(TrackComment.id).where(
-                    TrackComment.parent_id
-                    == comment_id
-                )
-            )
-            ids.extend(row[0] for row in r.all())
         for i in ids:
             row = await self.get_by_id(i)
             if row:

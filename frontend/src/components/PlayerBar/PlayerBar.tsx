@@ -236,7 +236,9 @@ export function PlayerBar() {
           </button>
           <button
             ref={playRef}
-            className="play-btn"
+            className={`play-btn${
+              isPlaying ? ' play-btn--playing' : ''
+            }`}
             onClick={handlePlay}
             aria-label={
               isPlaying ? 'Пауза' : 'Воспроизвести'
