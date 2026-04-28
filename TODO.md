@@ -73,7 +73,7 @@
   - Backend `/api/v1/admin/*`: auth (TOTP onboarding с QR, login,
   device approval, step-up, refresh, logout), dashboard,
   tracks/users/complaints (без inline SQL), tasks (lyrics_jobs +
-  Taskiq queues + worker audit), logs (Loki proxy), metrics
+  compute_jobs + Taskiq queues + worker audit), logs (Loki proxy), metrics
   (Prometheus proxy), system (services health, containers,
   migrations, feature flags на app_settings), audit
   (admin_actions_log + CSV export), security (login attempts,
@@ -95,6 +95,10 @@
   i18n для строк админки, динамический заголовок раздела в topbar,
   выдвижное меню на «узком» вьюпорте (≤720px), сортировка колонок
   в `DataTable` на Users/Tracks/Tasks/Artists/queues
+- [x] Post-ingest фон: enqueue compute + lyrics cascade при новом треке
+  (upload / SC import / telegram import); массовый SC — paced lyrics
+  без дубля; админ Tasks — таблица compute + источник lyrics job
+  — 2026-04
 - Перенести admin-security policy в PrivateCore (см. выше)
 - WebAuthn/Passkey как опциональный второй фактор
 
@@ -396,6 +400,10 @@
 
 ## Frontend / Mini App
 
+- [ ] **Покрытие Backend API клиентом:** инвентарь разрывов и очередь UX —
+  `docs/api-frontend-coverage.md`; следующий шаг — расширить
+  `frontend/src/lib/api.ts`, исправить `POST /users/me/avatar`, точечный UI
+  (OAuth disconnect, удаление аккаунта, похожие артисты), `adminApi.metricInstant`
 - [x] Главная: CTA «Слушать/Play» — старт с первого трека плейлиста дня
   (дальше — существующий radio-prefetch в `PlayerContext`); карточка
   «плейлист недели» и экран `/weekly-mix` (API `weekly-playlist`).

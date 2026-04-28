@@ -446,7 +446,12 @@
     "tasks": {
       "title": "Задачи",
       "queues": "Очереди",
+      "computeJobs": "Очередь compute (последние 50)",
+      "jobKind": "Задача",
+      "computeTarget": "Цель",
       "lyricsJobs": "Задачи lyrics (последние 50)",
+      "requestedByColumn": "Источник",
+      "requestedByAuto": "Авто‑ингест",
       "cancelAllConfirm": "Отменить все {{count}} задач в очереди?",
       "cancelQueueButton": "Отменить очередь ({{count}})",
       "cancelRow": "Отменить",

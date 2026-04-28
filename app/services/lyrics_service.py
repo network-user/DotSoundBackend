@@ -1,5 +1,8 @@
+import uuid
+
 import structlog
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lyrics import TrackLyrics
@@ -131,8 +134,6 @@ class LyricsService:
         with_sync: bool = False,
         bypass_cache: bool = False,
     ) -> str:
-        import uuid
-
         from app.models.lyrics_job import LyricsJob
         from app.services.compute_router import (
             get_routing_mode,
@@ -206,6 +207,112 @@ class LyricsService:
             progress_id=progress_id,
             with_sync=with_sync,
             bypass_cache=bypass_cache,
+        )
+        return progress_id
+
+    async def enqueue_background_lyrics(
+        self,
+        track_id: int,
+        *,
+        requested_by_user_id: int | None,
+        with_sync: bool = True,
+        bypass_cache: bool = False,
+        profile: str = "catalog_only",
+    ) -> str | None:
+        from app.models.lyrics_job import LyricsJob
+        from app.services.compute_router import (
+            get_routing_mode,
+        )
+        from app.services.lyrics_cascade import (
+            start_cascade,
+        )
+        from app.services.lyrics_worker import (
+            set_lyrics_progress,
+        )
+
+        track = await self._track_repo.get_by_id(track_id)
+        if not track or not track.is_active:
+            logger.warning(
+                "lyrics_background_skip_missing_track",
+                track_id=track_id,
+            )
+            return None
+
+        mode = await get_routing_mode(self._session)
+        if mode == "disabled":
+            logger.info(
+                "lyrics_background_skip_routing_disabled",
+                track_id=track_id,
+            )
+            return None
+
+        busy = (
+            await self._session.execute(
+                select(LyricsJob.id).where(
+                    LyricsJob.track_id == track_id,
+                    LyricsJob.status.in_(("queued", "running")),
+                )
+            )
+        ).scalar_one_or_none()
+        if busy is not None:
+            logger.debug(
+                "lyrics_background_skip_active_job",
+                track_id=track_id,
+                existing_job_id=busy,
+            )
+            return None
+
+        progress_id = uuid.uuid4().hex
+        job = LyricsJob(
+            id=f"lj_{uuid.uuid4().hex[:16]}",
+            track_id=track_id,
+            progress_id=progress_id,
+            requested_by_user_id=requested_by_user_id,
+            profile=profile,
+            status="queued",
+            request_with_sync=with_sync,
+            request_bypass_cache=bypass_cache,
+        )
+        self._session.add(job)
+        await self._session.flush()
+
+        active_tier = await start_cascade(
+            self._session,
+            job=job,
+            with_sync=with_sync,
+            bypass_cache=bypass_cache,
+        )
+        await self._session.commit()
+
+        await set_lyrics_progress(
+            progress_id,
+            stage="queued",
+            log_line=(
+                "ingest cascade started, active tier="
+                f"{active_tier}"
+                f" (with_sync={with_sync},"
+                f" bypass_cache={bypass_cache})"
+            ),
+            percent=2,
+        )
+        try:
+            from app.services.lyrics_eta import (
+                publish_initial_eta,
+            )
+
+            await publish_initial_eta(progress_id, job.profile)
+        except Exception:
+            logger.debug(
+                "lyrics_eta_seed_failed",
+                progress_id=progress_id,
+            )
+        logger.info(
+            "lyrics_background_enqueued",
+            track_id=track_id,
+            job_id=job.id,
+            active_tier=active_tier,
+            profile=job.profile,
+            requested_by=requested_by_user_id,
         )
         return progress_id
 

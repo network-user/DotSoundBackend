@@ -377,7 +377,9 @@ class RecommendationService:
                     "uri": sc_uri,
                 }
                 track = await sc_svc.import_or_get_track(
-                    sc_data, uploader_id=user_id
+                    sc_data,
+                    uploader_id=user_id,
+                    skip_background_lyrics=True,
                 )
                 track_ids.append(track.id)
             except Exception as exc:

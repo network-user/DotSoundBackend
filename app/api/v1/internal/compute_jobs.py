@@ -1,18 +1,24 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import RedirectResponse, StreamingResponse
 
+from app.api.v1.internal.audio_compute import (
+    _stream_sc_cdn_to_worker,
+)
 from app.api.v1.internal.worker_request import (
     client_ip,
     verify_worker_hmac_request,
 )
+from app.config import settings
 from app.core import s3
 from app.dependencies import get_db
 from app.models.compute_job import ComputeJob
@@ -24,6 +30,7 @@ from app.services import compute_queue_service as q
 from app.services import compute_results_router as crr
 from app.services import compute_worker_service as cws
 from app.services import worker_rate_limit as rl
+from app.services.soundcloud_service import SoundCloudService
 
 log: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__
@@ -181,8 +188,9 @@ async def download_job_audio(
     job_id: str,
     ott: str,
     request: Request,
+    proxy: bool = Query(False),
     session: AsyncSession = Depends(get_db),
-) -> JSONResponse:
+) -> Response:
     worker_id = request.headers.get("X-Worker-Id", "")
     if not worker_id or not ott:
         raise HTTPException(status_code=404)
@@ -216,7 +224,7 @@ async def download_job_audio(
             status_code=404
         ) from exc
     track = await session.get(Track, track_id)
-    if not track or not track.file_key:
+    if not track:
         raise HTTPException(status_code=404)
     repo = AudioComputeRepository(session)
     wrow = await repo.get_worker(worker_id)
@@ -239,21 +247,132 @@ async def download_job_audio(
         )
         await session.commit()
         raise HTTPException(status_code=404)
-    try:
-        presigned = await s3.get_presigned_url(
-            track.file_key
+
+    if track.file_key:
+        try:
+            presigned = await s3.get_presigned_url(
+                track.file_key
+            )
+        except Exception as exc:
+            log.warning(
+                "compute_job_audio_presign_failed",
+                job_id=job_id,
+                track_id=track_id,
+                err=str(exc),
+            )
+            await session.commit()
+            raise HTTPException(
+                status_code=503
+            ) from exc
+        if proxy:
+            if not await cws.consume_ott_by_exp(
+                exp, job.id, worker_id
+            ):
+                await cws._log_audit(
+                    session,
+                    worker_id=worker_id,
+                    ip=client_ip(request),
+                    action="ott_fail",
+                    job_id=job.id,
+                    status_code=404,
+                )
+                await session.commit()
+                raise HTTPException(status_code=404)
+            return RedirectResponse(
+                url=presigned,
+                status_code=302,
+            )
+        if not await cws.consume_ott_by_exp(
+            exp, job.id, worker_id
+        ):
+            await cws._log_audit(
+                session,
+                worker_id=worker_id,
+                ip=client_ip(request),
+                action="ott_fail",
+                job_id=job.id,
+                status_code=404,
+            )
+            await session.commit()
+            raise HTTPException(status_code=404)
+        return JSONResponse(
+            status_code=200,
+            content={"url": presigned},
         )
-    except Exception as exc:
-        log.warning(
-            "compute_job_audio_presign_failed",
-            job_id=job_id,
-            track_id=track_id,
-            err=str(exc),
-        )
+
+    sc_stream_url: str | None = None
+    stream_protocol: str = ""
+    sc_ref: str | None = getattr(track, "sc_url", None)
+    if sc_ref and settings.sc_client_id:
+        sc = SoundCloudService(settings.sc_client_id, session)
+        try:
+            sc_stream_url, stream_protocol = await asyncio.wait_for(
+                sc.get_stream_info(
+                    sc_ref,
+                    use_cache=False,
+                ),
+                timeout=(
+                    settings.lyrics_audio_resolve_timeout_seconds
+                ),
+            )
+        except TimeoutError as exc:
+            log.warning(
+                "compute_job_audio_sc_resolve_timeout",
+                job_id=job_id,
+                track_id=track_id,
+            )
+            await session.commit()
+            raise HTTPException(
+                status_code=504,
+                detail="SoundCloud resolve timed out",
+            ) from exc
+        except HTTPException:
+            await session.commit()
+            raise
+        except Exception as exc:
+            log.warning(
+                "compute_job_audio_sc_failed",
+                job_id=job_id,
+                track_id=track_id,
+                err=str(exc),
+            )
+            await session.commit()
+            raise HTTPException(
+                status_code=503
+            ) from exc
+    if not sc_stream_url:
         await session.commit()
-        raise HTTPException(
-            status_code=503
-        ) from exc
+        raise HTTPException(status_code=404)
+
+    if (
+        proxy
+        and stream_protocol == "progressive"
+        and sc_stream_url
+    ):
+        if not await cws.consume_ott_by_exp(
+            exp, job.id, worker_id
+        ):
+            await cws._log_audit(
+                session,
+                worker_id=worker_id,
+                ip=client_ip(request),
+                action="ott_fail",
+                job_id=job.id,
+                status_code=404,
+            )
+            await session.commit()
+            raise HTTPException(status_code=404)
+        return StreamingResponse(
+            _stream_sc_cdn_to_worker(
+                sc_stream_url,
+                job_id=job_id,
+                chunk_idle_timeout=(
+                    settings.lyrics_audio_chunk_idle_seconds
+                ),
+            ),
+            media_type="application/octet-stream",
+        )
+
     if not await cws.consume_ott_by_exp(
         exp, job.id, worker_id
     ):
@@ -269,7 +388,10 @@ async def download_job_audio(
         raise HTTPException(status_code=404)
     return JSONResponse(
         status_code=200,
-        content={"url": presigned},
+        content={
+            "url": sc_stream_url,
+            "stream_protocol": stream_protocol,
+        },
     )
 
 

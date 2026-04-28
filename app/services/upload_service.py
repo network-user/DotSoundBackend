@@ -140,18 +140,15 @@ class UploadService:
             has_cover=cover_key is not None,
         )
 
-        from app.services import compute_queue_service as cqs
-
-        await cqs.enqueue_track_audio_features(
-            self._session,
-            track_id=track.id,
-            priority=10,
+        from app.services.track_ingest_schedule_service import (
+            schedule_new_track_background_jobs,
         )
-        await cqs.enqueue_catalog_ingest_normalize(
+
+        await schedule_new_track_background_jobs(
             self._session,
-            track_id=track.id,
-            priority=5,
-            payload={
+            track.id,
+            skip_lyrics=False,
+            catalog_payload={
                 "title": title,
                 "artist": artist,
                 "genre": genre,
