@@ -5,6 +5,8 @@ import {
 } from '@/lib/telegram'
 import type {
   AppNotification,
+  ArtistCatalogReleaseDetail,
+  ArtistCatalogReleaseListPayload,
   ArtistDetail,
   ArtistEnrichStatusResponse,
   ArtistEnrichWatchResponse,
@@ -1671,6 +1673,23 @@ export const api = {
   getArtistTracks(artistId: number, page?: number): Promise<TrackListResponse> {
     const p = page || 1
     return request(`/api/v1/artists/${artistId}/tracks?page=${p}`)
+  },
+
+  listArtistCatalogReleases(
+    artistId: number,
+  ): Promise<ArtistCatalogReleaseListPayload> {
+    return request(
+      `/api/v1/artists/${artistId}/catalog/releases`,
+    )
+  },
+
+  getArtistCatalogRelease(
+    artistId: number,
+    releaseId: number,
+  ): Promise<ArtistCatalogReleaseDetail> {
+    return request(
+      `/api/v1/artists/${artistId}/catalog/releases/${releaseId}`,
+    )
   },
 
   enrichArtist(artistId: number): Promise<ArtistDetail> {
