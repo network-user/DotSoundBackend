@@ -3,12 +3,16 @@ import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
+import { Icon } from '@/components/Icon/Icon'
 import { Press } from '@/components/ui/Press'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { LyricsJobDetail } from '../components/widgets/LyricsJobDetail'
-import { StatusPill } from '../components/widgets/StatusPill'
+import {
+  StatusPill,
+  type StatusKind,
+} from '../components/widgets/StatusPill'
 
 interface QueueRow {
   name: string

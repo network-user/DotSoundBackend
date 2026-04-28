@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -9,6 +10,10 @@ import { getInternalUserId } from '@/lib/telegram'
 import { onWS } from '@/lib/ws'
 import { CommentCard } from '@/components/Comments/CommentCard'
 import { CommentInput } from '@/components/Comments/CommentInput'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+} from '@/store/PlayerContext'
 import type { TrackComment } from '@/types/api'
 
 interface Props {
@@ -52,7 +57,11 @@ function CommentBranch({
       : undefined
 
   return (
-    <div className="comment-branch-node" style={nest}>
+    <div
+      className="comment-branch-node"
+      style={nest}
+      data-comment-id={comment.id}
+    >
       <CommentCard
         comment={comment}
         isOwner={isOwner}
@@ -97,11 +106,26 @@ export function CommentSection({
   const myId = getInternalUserId()
   const isOwner =
     myId !== null && myId === trackOwnerId
+  const { pendingCommentFocus } = usePlayerMeta()
+  const { clearPendingCommentFocus } =
+    usePlayerActions()
+  const pendingRef = useRef(pendingCommentFocus)
+  pendingRef.current = pendingCommentFocus
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await api.getComments(trackId)
+      const p = pendingRef.current
+      const fc =
+        p && p.trackId === trackId
+          ? p.commentId
+          : undefined
+      const data = await api.getComments(
+        trackId,
+        undefined,
+        20,
+        fc,
+      )
       setComments(data)
     } finally {
       setLoading(false)
@@ -111,6 +135,39 @@ export function CommentSection({
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    if (loading) return
+    if (pendingCommentFocus?.trackId !== trackId) {
+      return
+    }
+    const cid = pendingCommentFocus.commentId
+    const el = document.querySelector(
+      `[data-comment-id="${cid}"]`,
+    ) as HTMLElement | null
+    if (el) {
+      el.scrollIntoView({
+        block: 'center',
+        behavior: 'smooth',
+      })
+      el.classList.add('comment-highlight-flash')
+      window.setTimeout(() => {
+        el.classList.remove('comment-highlight-flash')
+      }, 1800)
+      clearPendingCommentFocus()
+      return
+    }
+    const timer = window.setTimeout(() => {
+      clearPendingCommentFocus()
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [
+    loading,
+    comments,
+    trackId,
+    pendingCommentFocus,
+    clearPendingCommentFocus,
+  ])
 
   useEffect(() => {
     const offNew = onWS('comment.new', (data) => {

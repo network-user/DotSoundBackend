@@ -39,6 +39,38 @@ class CommentRepository:
             TrackComment, comment_id
         )
 
+    async def get_root_comment_for_focus(
+        self,
+        track_id: int,
+        user_id: int,
+        focus_comment_id: int,
+    ) -> TrackComment | None:
+        cur = await self.get_by_id(focus_comment_id)
+        if not cur or cur.track_id != track_id:
+            return None
+        if cur.is_deleted or cur.is_hidden_by_author:
+            return None
+        while cur.parent_id is not None:
+            parent = await self.get_by_id(cur.parent_id)
+            if (
+                not parent
+                or parent.track_id != track_id
+                or parent.is_deleted
+                or parent.is_hidden_by_author
+            ):
+                return None
+            cur = parent
+        root = cur
+        hid_row = await self._s.execute(
+            select(CommentHide.comment_id).where(
+                CommentHide.comment_id == root.id,
+                CommentHide.user_id == user_id,
+            ).limit(1)
+        )
+        if hid_row.scalar_one_or_none() is not None:
+            return None
+        return root
+
     def _hidden_subquery(self, user_id: int) -> Any:
         return select(CommentHide.comment_id).where(
             CommentHide.user_id == user_id

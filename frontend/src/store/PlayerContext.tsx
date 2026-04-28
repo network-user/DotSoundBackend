@@ -170,6 +170,11 @@ interface PlayerContextValue {
   stop: () => void
   getAnalyser: () => AnalyserNode | null
   updateTrack: (updated: Partial<Track> & { id: number }) => void
+  clearPendingCommentFocus: () => void
+  openTrackAtComment: (
+    t: Track,
+    commentId: number,
+  ) => Promise<void>
 }
 
 interface PlayerStateValue {
@@ -216,6 +221,11 @@ interface PlayerActionsValue {
   clearAbLoop: () => void
   getAnalyser: () => AnalyserNode | null
   updateTrack: (updated: Partial<Track> & { id: number }) => void
+  clearPendingCommentFocus: () => void
+  openTrackAtComment: (
+    t: Track,
+    commentId: number,
+  ) => Promise<void>
 }
 
 interface PlayerMetaValue {
@@ -236,6 +246,10 @@ interface PlayerMetaValue {
   queue: Track[]
   history: Track[]
   abLoop: { a: number | null; b: number | null }
+  pendingCommentFocus: {
+    trackId: number
+    commentId: number
+  } | null
 }
 
 const PlayerStateCtx = createContext<PlayerStateValue | null>(null)
@@ -431,6 +445,11 @@ export function PlayerProvider({
     useState(false)
   const [isEqOpen, setIsEqOpen] = useState(false)
   const [isQueueOpen, setIsQueueOpen] = useState(false)
+  const [pendingCommentFocus, setPendingCommentFocus] =
+    useState<{
+      trackId: number
+      commentId: number
+    } | null>(null)
   const [playbackRate, setPlaybackRateState] =
     useState(1)
   const [queue, setQueue] = useState<Track[]>([])
@@ -1294,6 +1313,10 @@ export function PlayerProvider({
     }
   }
 
+  const clearPendingCommentFocus = useCallback(() => {
+    setPendingCommentFocus(null)
+  }, [])
+
   const playNext = async (): Promise<boolean> => {
     if (!track) return false
     try {
@@ -1656,6 +1679,19 @@ export function PlayerProvider({
     () => withViewTransition(() => setIsCardOpen(true)),
     [],
   )
+
+  const openTrackAtComment = useCallback(
+    async (t: Track, commentId: number) => {
+      setPendingCommentFocus({
+        trackId: t.id,
+        commentId,
+      })
+      await playTrack(t)
+      openCard()
+    },
+    [playTrack, openCard],
+  )
+
   /* closeCard без View Transitions: иначе во время анимации
    * у предка остаётся transform и ломается position:fixed у
    * ArtistView/AuthorView; в ряде браузеров страдает и <audio>. */
@@ -1701,6 +1737,8 @@ export function PlayerProvider({
       setAbA, setAbB, clearAbLoop,
       getAnalyser,
       updateTrack,
+      clearPendingCommentFocus,
+      openTrackAtComment,
     }),
     [
       playTrack, togglePlay, seek, seekToSeconds,
@@ -1717,6 +1755,8 @@ export function PlayerProvider({
       setAbA, setAbB, clearAbLoop,
       getAnalyser,
       updateTrack,
+      clearPendingCommentFocus,
+      openTrackAtComment,
     ],
   )
 
@@ -1729,6 +1769,7 @@ export function PlayerProvider({
       repeatMode, shuffleOn, hlsError,
       playbackRate, queue, history,
       abLoop,
+      pendingCommentFocus,
     }),
     [
       track, volume,
@@ -1738,6 +1779,7 @@ export function PlayerProvider({
       repeatMode, shuffleOn, hlsError,
       playbackRate, queue, history,
       abLoop,
+      pendingCommentFocus,
     ],
   )
 
