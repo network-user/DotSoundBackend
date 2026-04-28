@@ -9,6 +9,10 @@ from app.models.admin_session import AdminSession
 from app.models.album import Album
 from app.models.app_setting import AppSetting
 from app.models.artist import Artist, TrackArtist
+from app.models.artist_catalog import (
+    ArtistCatalogRelease,
+    ArtistCatalogReleaseTrack,
+)
 from app.models.artist_features import ArtistFeatures
 from app.models.artist_similarity import ArtistSimilarity
 from app.models.artist_supplemental_info import ArtistSupplementalInfo
@@ -83,6 +87,8 @@ __all__ = [
     "VideoBlob",
     "AppSetting",
     "Artist",
+    "ArtistCatalogRelease",
+    "ArtistCatalogReleaseTrack",
     "ArtistFeatures",
     "ArtistSimilarity",
     "CommentHide",

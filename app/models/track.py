@@ -20,6 +20,7 @@ from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.album import Album
+    from app.models.artist_catalog import ArtistCatalogReleaseTrack
     from app.models.audio_blob import AudioBlob
     from app.models.complaint import Complaint
     from app.models.image_blob import ImageBlob
@@ -221,4 +222,10 @@ class Track(Base, TimestampMixin):
         back_populates="track",
         uselist=False,
         cascade="all, delete-orphan",
+    )
+    catalog_release_links: Mapped[list[ArtistCatalogReleaseTrack]] = (
+        relationship(
+            back_populates="track",
+            cascade="all, delete-orphan",
+        )
     )
