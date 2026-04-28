@@ -477,6 +477,7 @@
         }
       },
       "lyricsJobs": "Задачи lyrics (последние 50)",
+      "lyricsJobsHint": "Здесь только каскад lyrics / ASR. Массовый анализ аудио (фичи, превью) — в блоке «Очередь compute» выше.",
       "requestedByColumn": "Источник",
       "requestedByAuto": "Авто‑ингест",
       "cancelAllConfirm": "Отменить все {{count}} задач в очереди?",

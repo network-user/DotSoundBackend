@@ -477,6 +477,7 @@
         }
       },
       "lyricsJobs": "Lyrics jobs (last 50)",
+      "lyricsJobsHint": "These rows are the lyrics / ASR cascade only. Bulk audio analysis (features, preview clip) is listed in Compute queue above.",
       "requestedByColumn": "Source",
       "requestedByAuto": "Automatic ingest",
       "cancelAllConfirm": "Cancel all {{count}} queued jobs?",

@@ -13,7 +13,6 @@ import { useExitTransition } from '@/hooks/useExitTransition'
 import {
   resolveNotificationText,
 } from '@/lib/notificationText'
-import { api } from '@/lib/api'
 import { usePlayerActions } from '@/store/PlayerContext'
 import type { AppNotification } from '@/types/api'
 

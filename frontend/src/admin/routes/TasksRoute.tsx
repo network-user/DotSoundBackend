@@ -68,6 +68,13 @@ function jobKind(
   return 'unknown'
 }
 
+function lyricsProfileKind(profile: string): StatusKind {
+  if (profile === 'gpu_full') return 'warn'
+  if (profile === 'cpu_light') return 'unknown'
+  if (profile === 'catalog_only') return 'ok'
+  return 'unknown'
+}
+
 function computeJobKind(
   status: string,
 ): 'ok' | 'warn' | 'error' | 'unknown' {
@@ -258,6 +265,15 @@ function buildJobColumns(
   {
     header: t('admin.tasks.detail.profile'),
     accessorKey: 'profile',
+    cell: (i) => (
+      <StatusPill
+        kind={lyricsProfileKind(
+          i.row.original.profile,
+        )}
+      >
+        {i.row.original.profile}
+      </StatusPill>
+    ),
   },
   {
     header: t('admin.tasks.requestedByColumn'),
@@ -437,6 +453,9 @@ export function TasksRoute() {
             </Press>
           )}
         </div>
+        <p className="admin-card__sub">
+          {t('admin.tasks.lyricsJobsHint')}
+        </p>
         <DataTable
           columns={jobColumns}
           rows={rows}
