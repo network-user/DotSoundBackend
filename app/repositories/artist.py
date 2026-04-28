@@ -20,6 +20,20 @@ class ArtistRepository(BaseRepository[Artist]):
         )
         return result.scalar_one_or_none()
 
+    async def find_by_soundcloud_user_id(
+        self,
+        soundcloud_user_id: int,
+        *,
+        exclude_artist_id: int | None = None,
+    ) -> Artist | None:
+        q = select(Artist).where(
+            Artist.soundcloud_user_id == soundcloud_user_id
+        )
+        if exclude_artist_id is not None:
+            q = q.where(Artist.id != exclude_artist_id)
+        result = await self._session.execute(q)
+        return result.scalar_one_or_none()
+
     async def get_by_ids_preserve_order(
         self, artist_ids: list[int]
     ) -> list[Artist]:

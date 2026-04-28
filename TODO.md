@@ -333,6 +333,10 @@ Mini App — секция в `TrackCardSheet` для публичных трек
   `0063` — `artist_catalog_releases`, `artist_catalog_release_tracks`,
   `artists.soundcloud_user_id`, `artists.soundcloud_permalink`;
   SQLAlchemy-модели; без HTTP/синка (след. этапы 2–3)
+- [x] **Каталог дискографии — phase 2:** `SoundCloudService.list_user_albums`
+  (пагинация `next_href`), `fetch_track_by_id`, `expand_playlist_stub_tracks`,
+  `ensure_soundcloud_ids_for_artist` + `ArtistRepository.find_by_soundcloud_user_id`;
+  без Taskiq / оркестратора каталога (phase 3)
 - Policy-exception для явного source attribution
 (`source_name` + `source_page_url`) зафиксирован в
 `docs/ai-boundary-policy.md` (Backend + PrivateCore)
