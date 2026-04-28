@@ -1113,24 +1113,19 @@ button.empty-cta:focus-visible {
 .queue-eq-bars span {
   width: 3px;
   background: var(--accent);
-  animation: queue-eq 0.9s ease-in-out infinite;
+  border-radius: 1px;
 }
 .queue-eq-bars span:nth-child(1) {
-  animation-delay: -0.3s;
+  height: 6px;
 }
 .queue-eq-bars span:nth-child(2) {
-  animation-delay: -0.6s;
+  height: 12px;
 }
 .queue-eq-bars span:nth-child(3) {
-  animation-delay: 0s;
-}
-@keyframes queue-eq {
-  0%, 100% { height: 4px; }
-  50% { height: 14px; }
+  height: 8px;
 }
 @media (prefers-reduced-motion: reduce) {
   .queue-eq-bars span {
-    animation: none;
     height: 8px;
   }
 }

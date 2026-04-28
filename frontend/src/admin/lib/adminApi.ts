@@ -653,6 +653,10 @@ export const adminApi = {
       created_at: string
       progress_id: string | null
       requested_by_user_id: number | null
+      current_tier?: string | null
+      tiers_planned?: string[] | null
+      request_with_sync?: boolean
+      request_bypass_cache?: boolean
       live: {
         stage: string | null
         percent: number | null

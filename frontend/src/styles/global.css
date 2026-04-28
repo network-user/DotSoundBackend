@@ -955,15 +955,10 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   box-shadow: 0 2px 12px rgba(255, 255, 255, 0.2);
 }
 .play-btn.play-btn--playing {
-  animation: playPulse 2s ease infinite;
+  box-shadow: 0 2px 16px rgba(255, 255, 255, 0.28);
 }
 .play-btn svg { fill: var(--bg); stroke: none; }
 .play-btn:active { transform: scale(0.92); }
-
-@keyframes playPulse {
-  0%, 100% { box-shadow: 0 2px 12px rgba(255, 255, 255, 0.2); }
-  50%       { box-shadow: 0 2px 20px rgba(255, 255, 255, 0.35); }
-}
 
 .ctrl-btn {
   width: 36px;

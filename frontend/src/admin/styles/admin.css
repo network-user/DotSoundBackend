@@ -449,6 +449,48 @@
   vertical-align: top;
 }
 
+.admin-lyrics-goal {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  max-width: 22rem;
+  padding: 2px 0;
+}
+
+.admin-lyrics-goal__title {
+  font-size: var(--fs-13);
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.admin-lyrics-goal__plan {
+  font-size: var(--fs-11);
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.admin-lyrics-goal__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.admin-lyrics-goal__flag {
+  font-size: var(--fs-11);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.admin-lyrics-goal__flag--muted {
+  opacity: 0.45;
+}
+
+.admin-table td:has(.admin-lyrics-goal) {
+  vertical-align: top;
+}
+
 .admin-table-wrap {
   overflow-x: auto;
   overflow-y: auto;

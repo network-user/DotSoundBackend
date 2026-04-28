@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Icon } from '@/components/Icon/Icon'
 import { Press } from '@/components/ui/Press'
+import { lyricsTierAdminTitle } from '../lib/lyricsAdminLabels'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
@@ -30,6 +31,10 @@ interface JobRow {
   created_at: string
   error: string | null
   requested_by_user_id?: number | null
+  current_tier?: string | null
+  tiers_planned?: string[] | null
+  request_with_sync?: boolean
+  request_bypass_cache?: boolean
 }
 
 interface ComputeJobRow {
@@ -252,6 +257,68 @@ function buildJobColumns(
     accessorKey: 'track_id',
   },
   {
+    header: t('admin.tasks.lyricsPhase'),
+    id: 'lyrics_goal',
+    accessorFn: (row) =>
+      [
+        row.current_tier || '',
+        ...(row.tiers_planned || []),
+      ].join(' '),
+    cell: (i) => {
+      const row = i.row.original
+      const title = lyricsTierAdminTitle(
+        row.current_tier,
+        t,
+      )
+      const planned = row.tiers_planned
+      const planStr =
+        Array.isArray(planned) && planned.length
+          ? planned.join(' → ')
+          : ''
+      const tipLines = [title]
+      if (planStr) {
+        tipLines.push(
+          `${t('admin.tasks.lyricsPipelineHint')}: ${planStr}`,
+        )
+      }
+      return (
+        <div
+          className="admin-lyrics-goal"
+          title={tipLines.join('\n\n')}
+        >
+          <div className="admin-lyrics-goal__title">
+            {title}
+          </div>
+          {planStr ? (
+            <div className="admin-lyrics-goal__plan admin-mono">
+              {planStr}
+            </div>
+          ) : null}
+          <div className="admin-lyrics-goal__flags">
+            {row.request_with_sync ? (
+              <span className="admin-lyrics-goal__flag">
+                {t('admin.tasks.lyricsIntent.sync')}
+              </span>
+            ) : null}
+            {row.request_bypass_cache ? (
+              <span className="admin-lyrics-goal__flag">
+                {t(
+                  'admin.tasks.lyricsIntent.bypass',
+                )}
+              </span>
+            ) : null}
+            {!row.request_with_sync &&
+            !row.request_bypass_cache ? (
+              <span className="admin-lyrics-goal__flag admin-lyrics-goal__flag--muted">
+                –
+              </span>
+            ) : null}
+          </div>
+        </div>
+      )
+    },
+  },
+  {
     header: t('admin.tasks.detail.status'),
     accessorKey: 'status',
     cell: (i) => (
@@ -423,6 +490,7 @@ export function TasksRoute() {
             []
           }
           enableSorting
+          emptyHint={t('admin.tasks.queuesEmpty')}
         />
       </section>
       <section className="admin-card">
@@ -430,10 +498,16 @@ export function TasksRoute() {
         <p className="admin-card__sub">
           {t('admin.tasks.computeJobsHint')}
         </p>
+        {computeJobs.isError && (
+          <p className="admin-error" role="alert">
+            {t('admin.tasks.computeLoadFailed')}
+          </p>
+        )}
         <DataTable
           columns={computeColumns}
           rows={computeRows}
           enableSorting
+          emptyHint={t('admin.tasks.computeQueueEmpty')}
         />
       </section>
       <section className="admin-card">

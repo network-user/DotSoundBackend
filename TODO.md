@@ -428,10 +428,12 @@ Mini App — секция в `TrackCardSheet` для публичных трек
 фикс-панели `#nav` / `#player-bar` на `--glass-backdrop-fixed*`,
 липкий поиск на более лёгком blur; класс `ds-low-glass` при
 `prefers-reduced-motion` / `prefers-reduced-data`; без бесконечных
-splash/home/play-кнопка только при `isPlaying` — 2026-04
-- **Waveform (карточка трека): снижение нагрузки на iGPU** — rAF и
-отрисовка спектра только при `isPlaying` (не 60 fps в паузе),
-~30 fps для декоративного спектра
+splash/home; при play — статичная тень у кнопки play (без `playPulse`),
+статичный EQ в очереди; спектр на canvas ~12 fps, cap DPR, меньше
+столбцов — 2026-04
+- **Waveform (карточка трека): снижение нагрузки на iGPU** —
+`setInterval` ~12 fps вместо RAF на частоте дисплея; буфер FFT без
+аллокаций каждый кадр
 - **PlayerContext: CPU** — throttling обновлений `currentTime` в React
 (~10/s), flush при play/pause/seek/skip; вьюхи и экраны без таймера
 переведены с `usePlayer()` на `usePlayerActions` / `usePlayerMeta`, чтобы

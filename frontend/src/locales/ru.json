@@ -448,6 +448,9 @@
       "queues": "Очереди",
       "computeJobs": "Очередь compute (последние 50)",
       "computeJobsHint": "Цветные теги группируют задачи по типу; строка ниже — полное описание.",
+      "computeQueueEmpty": "Пока пусто. Строки появятся после постановки трека на анализ (загрузка, импорт, backfill), когда воркер заберёт задачи из compute_jobs.",
+      "queuesEmpty": "В Redis нет ключей очередей Taskiq (простой) или список недоступен.",
+      "computeLoadFailed": "Не удалось загрузить compute jobs (проверьте токен и право tasks.manage).",
       "jobKind": "Задача",
       "computeTarget": "Цель",
       "computeTypes": {
@@ -478,6 +481,19 @@
       },
       "lyricsJobs": "Задачи lyrics (последние 50)",
       "lyricsJobsHint": "Здесь только каскад lyrics / ASR. Массовый анализ аудио (фичи, превью) — в блоке «Очередь compute» выше.",
+      "requestOptions": "Флаги запроса",
+      "lyricsPhase": "Цель / этап",
+      "lyricsPipelineHint": "Порядок каскада",
+      "lyricsIntent": {
+        "sync": "С синхронизацией строк",
+        "bypass": "Обход кэша"
+      },
+      "lyricsTier": {
+        "catalog_only": "Поиск текста в каталогах",
+        "remote_whisper": "Распознавание аудио (воркер)",
+        "speechkit_paid": "Облачное распознавание (платный слой)",
+        "speechkit": "Облачное распознавание"
+      },
       "requestedByColumn": "Источник",
       "requestedByAuto": "Авто‑ингест",
       "cancelAllConfirm": "Отменить все {{count}} задач в очереди?",

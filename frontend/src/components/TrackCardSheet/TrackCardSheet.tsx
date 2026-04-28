@@ -662,7 +662,7 @@ export function TrackCardSheet({
               <Waveform
                 overlay
                 height={64}
-                bars={48}
+                bars={36}
                 className="tcs-cover-waveform"
               />
             </div>
