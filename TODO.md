@@ -343,6 +343,12 @@ Mini App — секция в `TrackCardSheet` для публичных трек
   `sync_artist_catalog_release_task`), `catalog_uploader_id`,
   `SoundCloudService.fetch_playlist_by_id` / `download_artwork_as_cover_key`;
   без публичных/admin HTTP-роутов (phase 4–6)
+- [x] **Каталог дискографии — phase 4:** публичное чтение каталога
+  `GET /api/v1/artists/{id}/catalog/releases`,
+  `GET /api/v1/artists/{id}/catalog/releases/{release_id}` —
+  `ArtistCatalogReadService`, расширение `ArtistCatalogRepository`,
+  схемы `app/schemas/artist_catalog.py`, pytest
+  `tests/app/api/v1/test_artist_catalog_releases.py` (без синка и admin)
 - Policy-exception для явного source attribution
 (`source_name` + `source_page_url`) зафиксирован в
 `docs/ai-boundary-policy.md` (Backend + PrivateCore)

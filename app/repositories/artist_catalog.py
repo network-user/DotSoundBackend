@@ -7,6 +7,7 @@ from app.models.artist_catalog import (
     ArtistCatalogRelease,
     ArtistCatalogReleaseTrack,
 )
+from app.models.track import Track
 from app.repositories.base import BaseRepository
 
 
@@ -104,3 +105,72 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
                 )
             )
         await self._session.flush()
+
+    async def list_releases_with_track_counts(
+        self,
+        artist_id: int,
+    ) -> list[tuple[ArtistCatalogRelease, int]]:
+        cnt = func.count(ArtistCatalogReleaseTrack.id).label("track_count")
+        stmt = (
+            select(ArtistCatalogRelease, cnt)
+            .outerjoin(
+                ArtistCatalogReleaseTrack,
+                ArtistCatalogReleaseTrack.release_id
+                == ArtistCatalogRelease.id,
+            )
+            .where(ArtistCatalogRelease.artist_id == artist_id)
+            .group_by(ArtistCatalogRelease.id)
+            .order_by(
+                ArtistCatalogRelease.display_position,
+                ArtistCatalogRelease.id,
+            )
+        )
+        result = await self._session.execute(stmt)
+        return [(row[0], int(row[1])) for row in result.all()]
+
+    async def get_release_for_artist(
+        self,
+        artist_id: int,
+        release_id: int,
+    ) -> ArtistCatalogRelease | None:
+        stmt = select(ArtistCatalogRelease).where(
+            ArtistCatalogRelease.id == release_id,
+            ArtistCatalogRelease.artist_id == artist_id,
+        )
+        row = await self._session.execute(stmt)
+        return row.scalar_one_or_none()
+
+    async def get_release_tracks_ordered(
+        self,
+        release_id: int,
+    ) -> list[tuple[int, Track]]:
+        stmt = (
+            select(
+                ArtistCatalogReleaseTrack.position,
+                Track,
+            )
+            .join(
+                Track,
+                Track.id == ArtistCatalogReleaseTrack.track_id,
+            )
+            .where(
+                ArtistCatalogReleaseTrack.release_id == release_id,
+            )
+            .order_by(ArtistCatalogReleaseTrack.position)
+        )
+        rows = await self._session.execute(stmt)
+        return [(int(p), t) for p, t in rows.all()]
+
+    async def get_release_with_tracks_for_artist(
+        self,
+        artist_id: int,
+        release_id: int,
+    ) -> tuple[ArtistCatalogRelease, list[tuple[int, Track]]] | None:
+        rel = await self.get_release_for_artist(
+            artist_id,
+            release_id,
+        )
+        if rel is None:
+            return None
+        tracks = await self.get_release_tracks_ordered(release_id)
+        return rel, tracks
