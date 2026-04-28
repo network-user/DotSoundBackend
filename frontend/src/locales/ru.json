@@ -447,8 +447,35 @@
       "title": "Задачи",
       "queues": "Очереди",
       "computeJobs": "Очередь compute (последние 50)",
+      "computeJobsHint": "Цветные теги группируют задачи по типу; строка ниже — полное описание.",
       "jobKind": "Задача",
       "computeTarget": "Цель",
+      "computeTypes": {
+        "track_audio_features": {
+          "slug": "Аудио",
+          "hint": "Эмбеддинги, настроение/темп, ~15 с для превью"
+        },
+        "catalog_ingest_normalize": {
+          "slug": "Каталог",
+          "hint": "Нормализация метаданных после попадания в каталог"
+        },
+        "artist_features_update": {
+          "slug": "Артист",
+          "hint": "Обновление агрегированного аудио-профиля артиста"
+        },
+        "artist_similarity_index": {
+          "slug": "SIM артисты",
+          "hint": "Пересборка связей похожести артистов"
+        },
+        "track_similarity_index": {
+          "slug": "SIM треки",
+          "hint": "Пересборка связей похожести треков"
+        },
+        "_fallback": {
+          "slug": "Прочее",
+          "hint": "Compute-задача"
+        }
+      },
       "lyricsJobs": "Задачи lyrics (последние 50)",
       "requestedByColumn": "Источник",
       "requestedByAuto": "Авто‑ингест",

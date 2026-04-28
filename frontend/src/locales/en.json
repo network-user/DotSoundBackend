@@ -447,8 +447,35 @@
       "title": "Tasks",
       "queues": "Queues",
       "computeJobs": "Compute queue (last 50)",
+      "computeJobsHint": "Colored tags group jobs by kind; the title line explains what runs.",
       "jobKind": "Job",
       "computeTarget": "Target",
+      "computeTypes": {
+        "track_audio_features": {
+          "slug": "Audio",
+          "hint": "Embeddings, mood/tempo, ~15s highlight for previews"
+        },
+        "catalog_ingest_normalize": {
+          "slug": "Catalog",
+          "hint": "Normalize title/artist metadata after ingest"
+        },
+        "artist_features_update": {
+          "slug": "Artist",
+          "hint": "Refresh aggregate audio profile for an artist"
+        },
+        "artist_similarity_index": {
+          "slug": "Artists SIM",
+          "hint": "Rebuild artist similarity edges"
+        },
+        "track_similarity_index": {
+          "slug": "Tracks SIM",
+          "hint": "Rebuild track similarity edges"
+        },
+        "_fallback": {
+          "slug": "Other",
+          "hint": "Compute job"
+        }
+      },
       "lyricsJobs": "Lyrics jobs (last 50)",
       "requestedByColumn": "Source",
       "requestedByAuto": "Automatic ingest",

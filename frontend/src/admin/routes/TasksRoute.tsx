@@ -74,6 +74,71 @@ function computeJobKind(
   return 'unknown'
 }
 
+function computeTypeUi(jobType: string): {
+  icon: string
+  pillKind: StatusKind
+  cssMod: string
+} {
+  switch (jobType) {
+    case 'track_audio_features':
+      return {
+        icon: 'eq',
+        pillKind: 'warn',
+        cssMod: 'audio',
+      }
+    case 'catalog_ingest_normalize':
+      return {
+        icon: 'list',
+        pillKind: 'unknown',
+        cssMod: 'catalog',
+      }
+    case 'artist_features_update':
+      return {
+        icon: 'user',
+        pillKind: 'ok',
+        cssMod: 'artist',
+      }
+    case 'artist_similarity_index':
+      return {
+        icon: 'share',
+        pillKind: 'ok',
+        cssMod: 'sim-artist',
+      }
+    case 'track_similarity_index':
+      return {
+        icon: 'link',
+        pillKind: 'warn',
+        cssMod: 'sim-track',
+      }
+    default:
+      return {
+        icon: 'queue',
+        pillKind: 'unknown',
+        cssMod: 'other',
+      }
+  }
+}
+
+function computeTypeTexts(
+  jobType: string,
+  t: TFunction,
+): { slug: string; hint: string } {
+  const slugKey = `admin.tasks.computeTypes.${jobType}.slug`
+  const hintKey = `admin.tasks.computeTypes.${jobType}.hint`
+  const slugTry = t(slugKey)
+  const hintTry = t(hintKey)
+  return {
+    slug:
+      slugTry === slugKey
+        ? t('admin.tasks.computeTypes._fallback.slug')
+        : slugTry,
+    hint:
+      hintTry === hintKey
+        ? t('admin.tasks.computeTypes._fallback.hint')
+        : hintTry,
+  }
+}
+
 function buildComputeColumns(
   t: TFunction,
 ): ColumnDef<ComputeJobRow>[] {
@@ -92,7 +157,34 @@ function buildComputeColumns(
     },
     {
       header: t('admin.tasks.jobKind'),
-      accessorKey: 'job_label',
+      id: 'compute_job_kind',
+      accessorFn: (row) => row.job_label,
+      cell: (i) => {
+        const row = i.row.original
+        const ui = computeTypeUi(row.job_type)
+        const texts = computeTypeTexts(row.job_type, t)
+        return (
+          <div
+            className={`admin-compute-type admin-compute-type--${ui.cssMod}`}
+            title={`${texts.hint}\n${row.job_type}`}
+          >
+            <Icon
+              name={ui.icon}
+              size={18}
+              className="admin-compute-type__icon"
+              aria-hidden
+            />
+            <div className="admin-compute-type__main">
+              <StatusPill kind={ui.pillKind}>
+                {texts.slug}
+              </StatusPill>
+              <div className="admin-compute-type__title">
+                {row.job_label}
+              </div>
+            </div>
+          </div>
+        )
+      },
     },
     {
       header: t('admin.tasks.computeTarget'),
@@ -315,6 +407,9 @@ export function TasksRoute() {
       </section>
       <section className="admin-card">
         <h2>{t('admin.tasks.computeJobs')}</h2>
+        <p className="admin-card__sub">
+          {t('admin.tasks.computeJobsHint')}
+        </p>
         <DataTable
           columns={computeColumns}
           rows={computeRows}

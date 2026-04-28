@@ -203,14 +203,23 @@ class CommentRepository:
         self._s.add(h)
         await self._s.flush()
 
+    async def get_vote(
+        self,
+        comment_id: int,
+        user_id: int,
+    ) -> CommentVote | None:
+        return await self._s.get(
+            CommentVote, (comment_id, user_id)
+        )
+
     async def vote(
         self,
         comment_id: int,
         user_id: int,
         is_like: bool,
     ) -> None:
-        existing = await self._s.get(
-            CommentVote, (comment_id, user_id)
+        existing = await self.get_vote(
+            comment_id, user_id
         )
         if existing:
             existing.is_like = is_like
