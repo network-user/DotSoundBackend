@@ -25,9 +25,13 @@ export function PlaylistsView({ embedded = false }: PlaylistsViewProps) {
 
   const loadPlaylists = () => {
     const uid = getUserId()
-    if (!uid) { setPlaylists([]); return }
+    if (!uid) {
+      setPlaylists([])
+      return
+    }
     setPlaylists(null)
-    api.getPlaylists(uid)
+    api
+      .getPlaylists()
       .then(setPlaylists)
       .catch(() => setPlaylists([]))
   }
@@ -57,7 +61,7 @@ export function PlaylistsView({ embedded = false }: PlaylistsViewProps) {
     if (!newName.trim() || !uid) return
     setLoading(true)
     try {
-      await api.createPlaylist(uid, newName.trim())
+      await api.createPlaylist(newName.trim())
       setNewName('')
       setCreating(false)
       loadPlaylists()

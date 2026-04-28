@@ -124,3 +124,37 @@ async def test_vote_comment(
         headers=headers,
     )
     assert r.status_code == 200
+
+
+async def test_comments_private_track_forbidden(
+    client: AsyncClient,
+) -> None:
+    u = await create_test_user(
+        client, 400030, first_name="PrivateOwner"
+    )
+    t = await create_test_track(
+        client, "PrivateSong", u["id"]
+    )
+    headers = await auth_headers(
+        client, u["id"]
+    )
+
+    r = await client.patch(
+        f"/api/v1/tracks/{t['id']}",
+        json={"is_public": False},
+        headers=headers,
+    )
+    assert r.status_code == 200
+
+    r = await client.post(
+        f"/api/v1/tracks/{t['id']}/comments",
+        json={"text": "nope"},
+        headers=headers,
+    )
+    assert r.status_code == 403
+
+    r = await client.get(
+        f"/api/v1/tracks/{t['id']}/comments",
+        headers=headers,
+    )
+    assert r.status_code == 403

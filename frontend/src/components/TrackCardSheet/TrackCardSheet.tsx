@@ -36,6 +36,7 @@ import type {
   TrackCardResponse,
   TrackInfoResponse,
 } from '@/types/api'
+import { CommentSection } from '@/components/Comments/CommentSection'
 import { LyricsPanel } from './LyricsPanel'
 
 const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5]
@@ -1372,6 +1373,15 @@ export function TrackCardSheet({
                 {t('trackSheet.infoError')}
               </p>
             )}
+          </div>
+        )}
+
+        {track.is_public && (
+          <div className="tcs-comments-section">
+            <CommentSection
+              trackId={track.id}
+              trackOwnerId={track.uploaded_by_id}
+            />
           </div>
         )}
 

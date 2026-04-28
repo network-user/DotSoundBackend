@@ -303,6 +303,65 @@ export interface FollowToggleResponse {
   following: boolean
 }
 
+export interface FollowListUser {
+  id: number
+  username: string | null
+  display_name: string | null
+  avatar_key: string | null
+}
+
+export interface FollowListResponse {
+  items: FollowListUser[]
+  total: number
+}
+
+export interface LinkedPlaylistItem {
+  id: string
+  name: string
+  track_count: number | null
+  description: string | null
+  cover_url: string | null
+}
+
+export interface LinkedPlaylistsResponse {
+  playlists: LinkedPlaylistItem[]
+}
+
+export interface PlaylistInviteOut {
+  token: string
+  expires_at: string
+}
+
+export interface AlbumRecord {
+  id: number
+  title: string
+  description: string | null
+  cover_key: string | null
+  owner_id: number
+  is_public: boolean
+  created_at: string
+}
+
+export interface AlbumWithTracksRecord extends AlbumRecord {
+  tracks: Track[]
+}
+
+export interface ColistenRoomState {
+  id: string
+  host_id: number
+  dj_id: number | null
+  track_id: number
+  position_ms: number
+  is_playing: boolean
+  epoch: number
+  expires_at: string
+}
+
+export interface ArtistListPayload {
+  items: ArtistInfo[]
+  total: number
+}
+
 export interface AuthorProfile {
   id: number
   telegram_id: number | null

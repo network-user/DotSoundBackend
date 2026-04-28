@@ -8,6 +8,7 @@ import { api } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
 import type {
   ArtistDetail,
+  ArtistInfo,
   ArtistSourceProfile,
   ArtistSupplementalResponse,
   DiscographyItem,
@@ -17,6 +18,7 @@ import type {
 interface Props {
   artistId: number
   onClose: () => void
+  onSelectSimilarArtist?: (id: number) => void
 }
 
 interface ArtistViewData {
@@ -131,6 +133,7 @@ const stageProgress: Record<string, number> = {
 export function ArtistView({
   artistId,
   onClose,
+  onSelectSimilarArtist,
 }: Props) {
   const { t } = useTranslation()
   const [artist, setArtist] =
@@ -161,6 +164,9 @@ export function ArtistView({
     useState<ArtistSupplementalResponse | null>(null)
   const [refreshingSupplemental, setRefreshingSupplemental] =
     useState(false)
+  const [similarArtists, setSimilarArtists] = useState<
+    ArtistInfo[] | null
+  >(null)
   const supplementalPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
   const isAdmin = getIsAdmin()
@@ -191,6 +197,7 @@ export function ArtistView({
     setSelectedSourceId(null)
     setAvatarOpen(false)
     setSupplemental(null)
+    setSimilarArtists(null)
 
     api
       .getArtist(artistId)
@@ -219,6 +226,15 @@ export function ArtistView({
         }
       })
       .catch(() => { /* supplemental is optional */ })
+
+    api
+      .listSimilarCatalogArtists(artistId, 10)
+      .then((res) => {
+        if (!cancelled) setSimilarArtists(res.items)
+      })
+      .catch(() => {
+        if (!cancelled) setSimilarArtists([])
+      })
 
     return () => {
       cancelled = true
@@ -963,6 +979,44 @@ export function ArtistView({
               ? t('trackInfo.loading', { defaultValue: 'Обновление...' })
               : t('trackInfo.refresh', { defaultValue: 'Обновить Яндекс' })}
           </button>
+        </div>
+      )}
+
+      {similarArtists &&
+        similarArtists.length > 0 &&
+        onSelectSimilarArtist && (
+        <div
+          style={{
+            padding: '0 16px 16px',
+          }}
+        >
+          <div className="section-header">
+            <span className="section-title">
+              {t('artist.similar_title', {
+                defaultValue: 'Похожие',
+              })}
+            </span>
+          </div>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}
+          >
+            {similarArtists.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                className="btn-secondary"
+                onClick={() =>
+                  onSelectSimilarArtist(a.id)
+                }
+              >
+                {a.name}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

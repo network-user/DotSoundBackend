@@ -532,6 +532,11 @@ export const adminApi = {
         },
       },
     ),
+  metricInstant: (name: string) =>
+    adminFetch<Record<string, unknown>>(
+      '/metrics/instant',
+      { query: { name } },
+    ),
   listUsers: (params: {
     page?: number
     size?: number

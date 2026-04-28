@@ -48,6 +48,13 @@ import type {
   ConnectOAuthResponse,
   AccountImportBody,
   OAuthLinkedProvider,
+  FollowListResponse,
+  LinkedPlaylistsResponse,
+  PlaylistInviteOut,
+  AlbumRecord,
+  AlbumWithTracksRecord,
+  ColistenRoomState,
+  ArtistListPayload,
 } from '@/types/api'
 
 let accessToken: string | null = null
@@ -402,16 +409,16 @@ export const api = {
     })
   },
 
-  getPlaylists(ownerId: number): Promise<Playlist[]> {
-    return request(`/api/v1/playlists?owner_id=${ownerId}`)
+  getPlaylists(): Promise<Playlist[]> {
+    return request('/api/v1/playlists')
   },
 
   getPlaylist(id: number): Promise<PlaylistWithTracks> {
     return request(`/api/v1/playlists/${id}`)
   },
 
-  createPlaylist(ownerId: number, name: string, isPublic = false): Promise<Playlist> {
-    return request(`/api/v1/playlists?owner_id=${ownerId}`, {
+  createPlaylist(name: string, isPublic = false): Promise<Playlist> {
+    return request('/api/v1/playlists', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, is_public: isPublic }),
@@ -421,16 +428,54 @@ export const api = {
   addTrackToPlaylist(
     playlistId: number,
     trackId: number,
-    requesterId: number,
+    position?: number | null,
+  ): Promise<void> {
+    const body: Record<string, unknown> = { track_id: trackId }
+    if (position != null) body.position = position
+    return request(`/api/v1/playlists/${playlistId}/tracks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  },
+
+  updatePlaylist(
+    playlistId: number,
+    body: { name?: string; is_public?: boolean },
+  ): Promise<Playlist> {
+    return request(`/api/v1/playlists/${playlistId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  },
+
+  deletePlaylist(playlistId: number): Promise<void> {
+    return request(`/api/v1/playlists/${playlistId}`, { method: 'DELETE' })
+  },
+
+  removeTrackFromPlaylist(
+    playlistId: number,
+    trackId: number,
   ): Promise<void> {
     return request(
-      `/api/v1/playlists/${playlistId}/tracks?requester_id=${requesterId}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ track_id: trackId }),
-      },
+      `/api/v1/playlists/${playlistId}/tracks/${trackId}`,
+      { method: 'DELETE' },
     )
+  },
+
+  createPlaylistInvite(playlistId: number): Promise<PlaylistInviteOut> {
+    return request(`/api/v1/playlists/${playlistId}/invites`, {
+      method: 'POST',
+    })
+  },
+
+  acceptPlaylistInvite(token: string): Promise<Playlist> {
+    return request('/api/v1/playlists/invites/accept', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
   },
 
   getUserProfile(userId: number): Promise<UserResponse> {
@@ -455,8 +500,8 @@ export const api = {
     })
   },
 
-  uploadAvatar(userId: number, formData: FormData): Promise<AvatarResponse> {
-    return request(`/api/v1/users/${userId}/avatar`, {
+  uploadAvatar(formData: FormData): Promise<AvatarResponse> {
+    return request('/api/v1/users/me/avatar', {
       method: 'POST',
       body: formData,
     })
@@ -1664,5 +1709,169 @@ export const api = {
 
   refreshArtistSupplemental(artistId: number): Promise<ArtistSupplementalResponse> {
     return request(`/api/v1/artists/${artistId}/supplemental/refresh`, { method: 'POST' })
+  },
+
+  requestAccountDeletion(
+    confirmation: string,
+  ): Promise<{ status: string }> {
+    return request('/api/v1/users/me', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirmation }),
+    })
+  },
+
+  restoreAccountAfterDeletion(): Promise<UserResponse> {
+    return request('/api/v1/users/me/restore', { method: 'POST' })
+  },
+
+  getFollowingFeed(page = 1, size = 20): Promise<TrackListResponse> {
+    return request(`/api/v1/users/me/feed?page=${page}&size=${size}`)
+  },
+
+  listFollowers(
+    userId: number,
+    page = 1,
+    size = 20,
+  ): Promise<FollowListResponse> {
+    return request(
+      `/api/v1/users/${userId}/followers?page=${page}&size=${size}`,
+    )
+  },
+
+  listFollowingUsers(
+    userId: number,
+    page = 1,
+    size = 20,
+  ): Promise<FollowListResponse> {
+    return request(
+      `/api/v1/users/${userId}/following?page=${page}&size=${size}`,
+    )
+  },
+
+  getPopularPlatformGenres(limit = 50): Promise<string[]> {
+    return request(`/api/v1/metadata/genres?limit=${limit}`)
+  },
+
+  disconnectLinkedAccount(
+    provider: OAuthLinkedProvider,
+  ): Promise<void> {
+    return request(`/api/v1/linked-accounts/${provider}`, {
+      method: 'DELETE',
+    })
+  },
+
+  getLinkedProviderPlaylists(
+    provider: OAuthLinkedProvider,
+  ): Promise<LinkedPlaylistsResponse> {
+    return request(`/api/v1/linked-accounts/${provider}/playlists`)
+  },
+
+  listUserAlbums(
+    userId: number,
+    page = 1,
+    size = 50,
+  ): Promise<AlbumRecord[]> {
+    return request(
+      `/api/v1/users/${userId}/albums?page=${page}&size=${size}`,
+    )
+  },
+
+  createAlbum(body: {
+    title: string
+    description?: string | null
+    is_public?: boolean
+  }): Promise<AlbumRecord> {
+    return request('/api/v1/albums', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  },
+
+  getAlbum(albumId: number): Promise<AlbumWithTracksRecord> {
+    return request(`/api/v1/albums/${albumId}`)
+  },
+
+  updateAlbum(
+    albumId: number,
+    body: {
+      title?: string | null
+      description?: string | null
+      is_public?: boolean | null
+    },
+  ): Promise<AlbumRecord> {
+    return request(`/api/v1/albums/${albumId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  },
+
+  deleteAlbum(albumId: number): Promise<void> {
+    return request(`/api/v1/albums/${albumId}`, { method: 'DELETE' })
+  },
+
+  addTrackToAlbum(albumId: number, trackId: number): Promise<void> {
+    return request(
+      `/api/v1/albums/${albumId}/tracks/${trackId}`,
+      { method: 'POST' },
+    )
+  },
+
+  removeTrackFromAlbum(albumId: number, trackId: number): Promise<void> {
+    return request(
+      `/api/v1/albums/${albumId}/tracks/${trackId}`,
+      { method: 'DELETE' },
+    )
+  },
+
+  createColistenRoom(trackId: number): Promise<ColistenRoomState> {
+    return request('/api/v1/colisten/rooms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ track_id: trackId }),
+    })
+  },
+
+  getColistenRoom(roomId: string): Promise<ColistenRoomState> {
+    return request(`/api/v1/colisten/rooms/${roomId}`)
+  },
+
+  patchColistenRoom(
+    roomId: string,
+    body: {
+      position_ms?: number | null
+      is_playing?: boolean | null
+      track_id?: number | null
+    },
+  ): Promise<ColistenRoomState> {
+    return request(`/api/v1/colisten/rooms/${roomId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  },
+
+  addChatMember(convId: number, userId: number): Promise<void> {
+    return request(`/api/v1/chats/${convId}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId }),
+    })
+  },
+
+  removeChatMember(convId: number, targetUserId: number): Promise<void> {
+    return request(
+      `/api/v1/chats/${convId}/members/${targetUserId}`,
+      { method: 'DELETE' },
+    )
+  },
+
+  listSimilarCatalogArtists(
+    artistId: number,
+    limit = 10,
+  ): Promise<ArtistListPayload> {
+    return request(`/api/v1/artists/${artistId}/similar?limit=${limit}`)
   },
 }

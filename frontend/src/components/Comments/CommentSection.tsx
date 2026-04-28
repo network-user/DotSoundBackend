@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { onWS } from '@/lib/ws'
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function CommentSection({ trackId, trackOwnerId }: Props) {
+  const { t } = useTranslation()
   const [comments, setComments] = useState<TrackComment[]>([])
   const [loading, setLoading] = useState(true)
   const myId = getInternalUserId()
@@ -86,7 +88,9 @@ export function CommentSection({ trackId, trackOwnerId }: Props) {
 
   return (
     <div className="comment-section slide-up">
-      <h3 className="comment-section-title">Комментарии</h3>
+      <h3 className="comment-section-title">
+        {t('trackSheet.commentsTitle')}
+      </h3>
       <CommentInput onSubmit={handleAdd} />
       {loading ? (
         <div className="comment-skeleton">
@@ -95,7 +99,9 @@ export function CommentSection({ trackId, trackOwnerId }: Props) {
           ))}
         </div>
       ) : comments.length === 0 ? (
-        <div className="empty-state">Нет комментариев</div>
+        <div className="empty-state">
+          {t('trackSheet.commentsEmpty')}
+        </div>
       ) : (
         <div className="comment-list">
           {comments.map((c) => (
