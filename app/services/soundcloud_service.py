@@ -424,6 +424,68 @@ class SoundCloudService:
         )
         return collected
 
+    async def fetch_playlist_by_id(
+        self,
+        playlist_id: int,
+    ) -> dict[str, Any]:
+        if not self._client_id:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="SoundCloud search is not configured",
+            )
+        try:
+            async with (
+                soundcloud_slot(
+                    timeout_seconds=(
+                        settings.soundcloud_slot_acquire_timeout_seconds
+                    ),
+                ),
+                self._sc_client() as client,
+            ):
+                r = await client.get(
+                    f"{_SC_API_BASE}/playlists/{playlist_id}",
+                    params={"client_id": self._client_id},
+                )
+                if r.status_code == 401:
+                    raise HTTPException(
+                        status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
+                        detail=(
+                            "SoundCloud: неверный или устаревший "
+                            "SC_CLIENT_ID. Обновите в .env "
+                            "и перезапустите."
+                        ),
+                    )
+                r.raise_for_status()
+                data = r.json()
+        except SoundCloudSemaphoreTimeout as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="SoundCloud is busy, retry later",
+            ) from exc
+        if not isinstance(data, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Unexpected SoundCloud playlist payload",
+            )
+        return data
+
+    async def download_artwork_as_cover_key(
+        self,
+        artwork_url: str | None,
+        *,
+        uploader_id: int,
+    ) -> str | None:
+        if not artwork_url:
+            return None
+        try:
+            return await self._download_thumbnail(artwork_url, uploader_id)
+        except Exception:
+            logger.warning(
+                "sc_artwork_download_failed",
+                artwork_url=artwork_url,
+            )
+            return None
+
     @staticmethod
     def _track_is_stub(track: dict[str, Any]) -> bool:
         if track.get("permalink_url"):

@@ -102,6 +102,13 @@ backfill). `TrackService.search` и discovery при доступном ES сн�
 `elasticsearch_backfill_on_empty`, `elasticsearch_dev_bootstrap`,
 `elasticsearch_track_fuzziness`, `elasticsearch_fuzzy_max_expansions` — в `app/config.py` и `.env.example`.
 
+**Каталог релизов артиста (SoundCloud sync):** оркестрация в
+`app/services/artist_catalog_sync_service.py` по `artists.soundcloud_user_id`
+(SC `GET …/users/{id}/albums`, импорт треков через `SoundCloudService.import_or_get_track`,
+таблицы `artist_catalog_*`, связи `TrackArtist`). Фоновые задачи Taskiq —
+`app/services/artist_catalog_sync_worker.py`. Конфиг: `catalog_uploader_id`
+(и `CATALOG_UPLOADER_ID` в `.env.example`).
+
 ---
 
 ## Ключевые директории PrivateCore
