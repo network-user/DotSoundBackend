@@ -24,6 +24,7 @@ if __name__ == "__main__":
             "app.services.artist_supplemental_worker",
             "app.services.search_index_worker",
             "app.services.artist_backfill_worker",
+            "app.services.artist_catalog_sync_worker",
             "app.services.waveform_worker",
             "app.services.snippet_worker",
         ],

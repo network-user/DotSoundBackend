@@ -248,6 +248,9 @@ class AppSettings(BaseSettings):
     snippet_ffmpeg_enabled: bool = True
     snippet_external_catalog_allowed: bool = False
 
+    #: ``uploaded_by_id`` for tracks imported during artist catalog sync.
+    catalog_uploader_id: int = 1
+
     # Compute-worker pull API protection. Comma-separated list of
     # CIDRs allowed to hit /api/v1/internal/*. Empty in prod is a
     # configuration error: the model validator below raises so the

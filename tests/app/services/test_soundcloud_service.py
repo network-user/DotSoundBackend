@@ -553,6 +553,32 @@ async def test_list_user_albums_pagination(
 
 
 @patch(f"{_MOD}.httpx.AsyncClient")
+async def test_fetch_playlist_by_id_ok(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = {
+        "id": 9001,
+        "title": "Pl",
+        "user": {"id": 3},
+    }
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    pl = await svc.fetch_playlist_by_id(9001)
+
+    assert pl["id"] == 9001
+    assert pl["title"] == "Pl"
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
 async def test_expand_playlist_stub_tracks(
     mock_client_cls: AsyncMock,
     session: AsyncSession,

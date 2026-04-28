@@ -337,6 +337,12 @@ Mini App — секция в `TrackCardSheet` для публичных трек
   (пагинация `next_href`), `fetch_track_by_id`, `expand_playlist_stub_tracks`,
   `ensure_soundcloud_ids_for_artist` + `ArtistRepository.find_by_soundcloud_user_id`;
   без Taskiq / оркестратора каталога (phase 3)
+- [x] **Каталог дискографии — phase 3:** `ArtistCatalogSyncService`
+  (`sync_full_artist`, `sync_single_release`), `ArtistCatalogRepository`,
+  Taskiq `artist_catalog_sync_worker` (`sync_artist_catalog_task`,
+  `sync_artist_catalog_release_task`), `catalog_uploader_id`,
+  `SoundCloudService.fetch_playlist_by_id` / `download_artwork_as_cover_key`;
+  без публичных/admin HTTP-роутов (phase 4–6)
 - Policy-exception для явного source attribution
 (`source_name` + `source_page_url`) зафиксирован в
 `docs/ai-boundary-policy.md` (Backend + PrivateCore)
