@@ -469,6 +469,7 @@ export interface TrackComment {
   created_at: string
   likes: number
   dislikes: number
+  author_label?: string
 }
 
 // ── Notifications ──────────────────────────────────────────────────────────

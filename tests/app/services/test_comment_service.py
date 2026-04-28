@@ -64,7 +64,27 @@ async def test_add_comment(
 
     assert result["text"] == "Great track!"
     assert result["track_id"] == track.id
+    assert "author_label" in result
+    assert result["author_label"]
     mock_ws.assert_awaited_once()
+
+
+@patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
+async def test_add_comment_author_label_prefers_display_name(
+    mock_ws: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session)
+    user.display_name = "Studio Artist"
+    await session.flush()
+    track = await _make_track(session, user)
+
+    svc = CommentService(session)
+    result = await svc.add_comment(
+        track.id, user.id, "Hi"
+    )
+
+    assert result["author_label"] == "Studio Artist"
 
 
 @patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
