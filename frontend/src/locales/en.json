@@ -233,7 +233,31 @@
       "empty": "No artists yet",
       "noEnrichment": "none",
       "confirmDelete": "Delete artist “{{name}}” (id={{id}})? track_artist links will be removed.",
-      "actionDelete": "Delete"
+      "actionDelete": "Delete",
+      "catalog": {
+        "open": "Catalog",
+        "title": "Catalog — {{name}}",
+        "sheetLabel": "Artist catalog editor",
+        "soundcloud": "SoundCloud binding",
+        "scUserId": "SoundCloud user id",
+        "scPermalink": "Permalink",
+        "saveSoundcloud": "Save SoundCloud fields",
+        "invalidScUserId": "SoundCloud user id must be a number.",
+        "sync": "Background sync",
+        "syncFull": "Resync full catalog (Taskiq)",
+        "syncRelease": "Resync",
+        "syncQueued": "Sync task queued.",
+        "releases": "Releases",
+        "newReleasePlaceholder": "New release title…",
+        "addRelease": "Add release",
+        "deleteRelease": "Delete",
+        "confirmDeleteRelease": "Delete this catalog release?",
+        "releaseEditor": "Release editor",
+        "manualLock": "Manual lock (skip automatic sync overwrite)",
+        "removeTrack": "Remove",
+        "saveTrackOrder": "Save track order",
+        "trackSearchPlaceholder": "Search tracks linked to this artist…"
+      }
     },
     "audioCompute": {
       "title": "Compute",

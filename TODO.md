@@ -348,7 +348,9 @@ Mini App — секция в `TrackCardSheet` для публичных трек
   `GET /api/v1/artists/{id}/catalog/releases/{release_id}` —
   `ArtistCatalogReadService`, расширение `ArtistCatalogRepository`,
   схемы `app/schemas/artist_catalog.py`, pytest
-  `tests/app/api/v1/test_artist_catalog_releases.py` (без синка и admin)
+  `tests/app/api/v1/test_artist_catalog_releases.py`;
+  admin каталог: `app/api/v1/admin/artist_catalog.py`,
+  `tests/app/api/v1/admin/test_admin_artist_catalog.py`
 - [x] **Каталог дискографии — phase 5 (mini app):** карточки релизов и
   экран релиза с ordered track list в `ArtistView`, API-клиент и типы;
   воспроизведение через `TrackList` / `TrackCard` — 2026-04-28

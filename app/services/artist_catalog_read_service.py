@@ -69,5 +69,7 @@ class ArtistCatalogReadService:
             released_at=rel.released_at,
             display_position=rel.display_position,
             cover_key=rel.cover_key,
+            manual_lock=rel.manual_lock,
+            soundcloud_album_id=rel.soundcloud_album_id,
             tracks=track_rows,
         )

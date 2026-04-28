@@ -174,3 +174,70 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
             return None
         tracks = await self.get_release_tracks_ordered(release_id)
         return rel, tracks
+
+    async def create_manual_release(
+        self,
+        artist_id: int,
+        *,
+        title: str,
+        release_kind: str | None,
+        released_at: date | None,
+        soundcloud_album_id: int | None,
+        manual_lock: bool,
+        cover_key: str | None,
+    ) -> ArtistCatalogRelease:
+        now = datetime.now(UTC)
+        pos = await self.next_display_position(artist_id)
+        title_safe = title[:512]
+        kind_safe = (
+            release_kind[:32]
+            if release_kind is not None and release_kind != ""
+            else None
+        )
+        if soundcloud_album_id is not None:
+            clash = await self.get_by_artist_and_sc_album(
+                artist_id,
+                soundcloud_album_id,
+            )
+            if clash is not None:
+                msg = "release with this soundcloud_album_id exists"
+                raise ValueError(msg)
+        rel = ArtistCatalogRelease(
+            artist_id=artist_id,
+            title=title_safe,
+            release_kind=kind_safe,
+            cover_key=cover_key,
+            released_at=released_at,
+            soundcloud_album_id=soundcloud_album_id,
+            display_position=pos,
+            manual_lock=manual_lock,
+            synced_at=now,
+        )
+        self._session.add(rel)
+        await self._session.flush()
+        return rel
+
+    async def delete_release_for_artist(
+        self,
+        artist_id: int,
+        release_id: int,
+    ) -> bool:
+        rel = await self.get_release_for_artist(artist_id, release_id)
+        if rel is None:
+            return False
+        await self._session.delete(rel)
+        await self._session.flush()
+        return True
+
+    async def apply_release_display_order(
+        self,
+        artist_id: int,
+        ordered_release_ids: list[int],
+    ) -> None:
+        for pos, rid in enumerate(ordered_release_ids):
+            rel = await self.get_release_for_artist(artist_id, rid)
+            if rel is None:
+                msg = f"unknown release id {rid}"
+                raise ValueError(msg)
+            rel.display_position = pos
+        await self._session.flush()

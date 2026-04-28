@@ -107,7 +107,9 @@ backfill). `TrackService.search` и discovery при доступном ES сн�
 (SC `GET …/users/{id}/albums`, импорт треков через `SoundCloudService.import_or_get_track`,
 таблицы `artist_catalog_*`, связи `TrackArtist`). Фоновые задачи Taskiq —
 `app/services/artist_catalog_sync_worker.py`. Конфиг: `catalog_uploader_id`
-(и `CATALOG_UPLOADER_ID` в `.env.example`).
+(и `CATALOG_UPLOADER_ID` в `.env.example`). Операторский CRUD и постановка
+синка: `app/api/v1/admin/artist_catalog.py` + `app/services/admin_artist_catalog_service.py`
+(админ-сессия; resync — `require_step_up("catalog.sync.run")`).
 
 ---
 

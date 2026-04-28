@@ -1373,6 +1373,137 @@
   border-top: 1px solid var(--border);
 }
 
+/* ── Artist catalog editor (admin) ── */
+
+.admin-catalog-editor {
+  padding: var(--space-6);
+  max-width: 560px;
+  max-height: min(88vh, 720px);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.admin-catalog-editor h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-20);
+}
+
+.admin-catalog-editor h3 {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--fs-14);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.admin-catalog-section:first-of-type h3 {
+  margin-top: 0;
+}
+
+.admin-catalog-grid {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.admin-catalog-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--fs-13);
+}
+
+.admin-catalog-grid input {
+  font: inherit;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.admin-catalog-new {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.admin-catalog-new input {
+  flex: 1 1 180px;
+  min-width: 0;
+  font: inherit;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.admin-catalog-release-list,
+.admin-catalog-track-list,
+.admin-catalog-hits {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.admin-catalog-release-list li,
+.admin-catalog-track-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-catalog-rel,
+.admin-catalog-rel-selected {
+  flex: 1 1 160px;
+  text-align: left;
+  cursor: pointer;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--text);
+  padding: var(--space-1) 0;
+}
+
+.admin-catalog-rel-selected {
+  font-weight: 600;
+}
+
+.admin-catalog-rel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.admin-catalog-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  font-size: var(--fs-13);
+}
+
+.admin-catalog-search input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: var(--space-2);
+}
+
+.admin-catalog-footer {
+  margin-top: var(--space-6);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
 /* ── Reduced motion: убираем shimmer и lift ── */
 
 @media (prefers-reduced-motion: reduce) {

@@ -165,3 +165,18 @@ class ArtistRepository(BaseRepository[Artist]):
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def update_soundcloud_identity(
+        self,
+        artist_id: int,
+        *,
+        soundcloud_user_id: int | None,
+        soundcloud_permalink: str | None,
+    ) -> Artist | None:
+        artist = await self.get_by_id(artist_id)
+        if artist is None:
+            return None
+        artist.soundcloud_user_id = soundcloud_user_id
+        artist.soundcloud_permalink = soundcloud_permalink
+        await self._session.flush()
+        return artist

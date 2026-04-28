@@ -770,4 +770,184 @@ export const adminApi = {
       method: 'PUT',
       body: data,
     }),
+
+  catalogOverview: (artistId: number) =>
+    adminFetch<{
+      artist_id: number
+      soundcloud_user_id: number | null
+      soundcloud_permalink: string | null
+      releases: Array<{
+        id: number
+        title: string
+        release_kind: string | null
+        released_at: string | null
+        display_position: number
+        track_count: number
+        cover_key: string | null
+        manual_lock: boolean
+        soundcloud_album_id: number | null
+      }>
+      releases_total: number
+    }>(`/artists/${artistId}/catalog/overview`),
+
+  catalogPatchSoundcloud: (
+    artistId: number,
+    body: {
+      soundcloud_user_id?: number | null
+      soundcloud_permalink?: string | null
+    },
+  ) =>
+    adminFetch<{
+      artist_id: number
+      soundcloud_user_id: number | null
+      soundcloud_permalink: string | null
+      releases: Array<{
+        id: number
+        title: string
+        release_kind: string | null
+        released_at: string | null
+        display_position: number
+        track_count: number
+        cover_key: string | null
+        manual_lock: boolean
+        soundcloud_album_id: number | null
+      }>
+      releases_total: number
+    }>(`/artists/${artistId}/catalog/soundcloud`, {
+      method: 'PATCH',
+      body,
+    }),
+
+  catalogReleaseDetail: (artistId: number, releaseId: number) =>
+    adminFetch<{
+      id: number
+      title: string
+      release_kind: string | null
+      released_at: string | null
+      display_position: number
+      cover_key: string | null
+      manual_lock: boolean
+      soundcloud_album_id: number | null
+      tracks: Array<{
+        position: number
+        track: Record<string, unknown>
+      }>
+    }>(`/artists/${artistId}/catalog/releases/${releaseId}`),
+
+  catalogCreateRelease: (
+    artistId: number,
+    body: {
+      title: string
+      release_kind?: string | null
+      released_at?: string | null
+      soundcloud_album_id?: number | null
+      manual_lock?: boolean
+    },
+  ) =>
+    adminFetch<{
+      id: number
+      title: string
+      release_kind: string | null
+      released_at: string | null
+      display_position: number
+      track_count: number
+      cover_key: string | null
+      manual_lock: boolean
+      soundcloud_album_id: number | null
+    }>(`/artists/${artistId}/catalog/releases`, {
+      method: 'POST',
+      body,
+    }),
+
+  catalogPatchRelease: (
+    artistId: number,
+    releaseId: number,
+    body: Record<string, unknown>,
+  ) =>
+    adminFetch<{
+      id: number
+      title: string
+      release_kind: string | null
+      released_at: string | null
+      display_position: number
+      track_count: number
+      cover_key: string | null
+      manual_lock: boolean
+      soundcloud_album_id: number | null
+    }>(
+      `/artists/${artistId}/catalog/releases/${releaseId}`,
+      {
+        method: 'PATCH',
+        body,
+      },
+    ),
+
+  catalogDeleteRelease: (artistId: number, releaseId: number) =>
+    adminFetch<void>(
+      `/artists/${artistId}/catalog/releases/${releaseId}`,
+      { method: 'DELETE' },
+    ),
+
+  catalogReorderReleases: (
+    artistId: number,
+    orderedReleaseIds: number[],
+  ) =>
+    adminFetch<void>(
+      `/artists/${artistId}/catalog/release-display-order`,
+      {
+        method: 'PUT',
+        body: {
+          ordered_release_ids: orderedReleaseIds,
+        },
+      },
+    ),
+
+  catalogSetReleaseTracks: (
+    artistId: number,
+    releaseId: number,
+    trackIds: number[],
+  ) =>
+    adminFetch<{
+      id: number
+      title: string
+      tracks: Array<{
+        position: number
+        track: Record<string, unknown>
+      }>
+    }>(
+      `/artists/${artistId}/catalog/releases/${releaseId}/tracks`,
+      {
+        method: 'PUT',
+        body: { track_ids: trackIds },
+      },
+    ),
+
+  catalogSearchTracks: (
+    artistId: number,
+    params: { search?: string; page?: number; size?: number },
+  ) =>
+    adminFetch<{
+      items: Array<Record<string, unknown>>
+      total: number
+      page: number
+      size: number
+    }>(`/artists/${artistId}/catalog/tracks/search`, {
+      query: params,
+    }),
+
+  catalogSyncFull: (artistId: number) =>
+    adminFetch<{ queued: boolean; task: string }>(
+      `/artists/${artistId}/catalog/sync`,
+      { method: 'POST', body: {} },
+    ),
+
+  catalogSyncRelease: (artistId: number, releaseId: number) =>
+    adminFetch<{
+      queued: boolean
+      task: string
+      soundcloud_album_id: number
+    }>(
+      `/artists/${artistId}/catalog/releases/${releaseId}/sync`,
+      { method: 'POST', body: {} },
+    ),
 }
