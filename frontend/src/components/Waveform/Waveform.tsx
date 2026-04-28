@@ -12,14 +12,16 @@ interface Props {
 const REDUCED_MOTION_QUERY =
   '(prefers-reduced-motion: reduce)'
 
-/** ~30 fps cap: decorative spectrum only; eases iGPU load. */
-const SPECTRUM_MIN_FRAME_MS = 1000 / 30
+/** Decorative spectrum only; low rate limits GPU wakeups vs RAF @ display Hz. */
+const SPECTRUM_INTERVAL_MS = Math.round(1000 / 12)
+
+const MAX_CANVAS_DPR = 1.25
 
 /**
  * Realtime audio spectrum bars driven by the shared
  * AnalyserNode in PlayerContext. Canvas render only while
- * `isPlaying`; idle bars when paused. Respects
- * prefers-reduced-motion.
+ * `isPlaying` at a low fixed rate; idle bars when paused.
+ * Respects prefers-reduced-motion.
  */
 export function Waveform({
   height = 64,
@@ -28,7 +30,10 @@ export function Waveform({
   overlay = false,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const rafRef = useRef<number | null>(null)
+  const freqBufRef = useRef<Uint8Array<ArrayBuffer> | null>(
+    null,
+  )
+  const intervalRef = useRef<number | null>(null)
   const { isPlaying } = usePlayerState()
   const { getAnalyser } = usePlayerActions()
 
@@ -48,8 +53,15 @@ export function Waveform({
       ? 'rgba(255,255,255,0.5)'
       : 'rgba(255,255,255,0.85)'
 
-    const dpr = window.devicePixelRatio || 1
-    let lastSpectrumAt = 0
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect()
+      const dpr = Math.min(
+        window.devicePixelRatio || 1,
+        MAX_CANVAS_DPR,
+      )
+      canvas.width = Math.floor(rect.width * dpr)
+      canvas.height = Math.floor(rect.height * dpr)
+    }
 
     const drawIdle = () => {
       const w = canvas.width
@@ -74,19 +86,26 @@ export function Waveform({
         drawIdle()
         return
       }
+      let buf = freqBufRef.current
+      if (
+        !buf ||
+        buf.length !== analyser.frequencyBinCount
+      ) {
+        buf = new Uint8Array(
+          new ArrayBuffer(analyser.frequencyBinCount),
+        )
+        freqBufRef.current = buf
+      }
       ctx.clearRect(0, 0, w, h)
-      const data = new Uint8Array(
-        analyser.frequencyBinCount,
-      )
-      analyser.getByteFrequencyData(data)
+      analyser.getByteFrequencyData(buf)
       const barW = (w / bars) * 0.6
       const gap = (w / bars) * 0.4
-      const step = Math.floor(data.length / bars)
+      const step = Math.floor(buf.length / bars)
       ctx.fillStyle = playColor
       for (let i = 0; i < bars; i++) {
         let sum = 0
         for (let j = 0; j < step; j++) {
-          sum += data[i * step + j] || 0
+          sum += buf[i * step + j] || 0
         }
         const norm = sum / (step * 255)
         const bh = Math.max(h * 0.05, norm * h)
@@ -96,48 +115,34 @@ export function Waveform({
       }
     }
 
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect()
-      canvas.width = Math.floor(rect.width * dpr)
-      canvas.height = Math.floor(rect.height * dpr)
-      if (reduced) {
-        drawIdle()
-        return
-      }
-      if (!isPlaying) {
-        drawIdle()
-        return
-      }
-      lastSpectrumAt = 0
-      drawSpectrum()
-    }
     resize()
-    const ro = new ResizeObserver(resize)
+    const ro = new ResizeObserver(() => {
+      resize()
+      if (reduced || !isPlaying) {
+        drawIdle()
+      } else {
+        drawSpectrum()
+      }
+    })
     ro.observe(canvas)
 
     if (reduced) {
       drawIdle()
     } else if (isPlaying) {
-      const tick = (t: number) => {
-        if (t - lastSpectrumAt < SPECTRUM_MIN_FRAME_MS) {
-          rafRef.current =
-            window.requestAnimationFrame(tick)
-          return
-        }
-        lastSpectrumAt = t
-        drawSpectrum()
-        rafRef.current = window.requestAnimationFrame(tick)
-      }
-      rafRef.current = window.requestAnimationFrame(tick)
+      drawSpectrum()
+      intervalRef.current = window.setInterval(
+        drawSpectrum,
+        SPECTRUM_INTERVAL_MS,
+      )
     } else {
       drawIdle()
     }
 
     return () => {
       ro.disconnect()
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current)
-        rafRef.current = null
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
       }
     }
   }, [getAnalyser, isPlaying, bars, overlay])

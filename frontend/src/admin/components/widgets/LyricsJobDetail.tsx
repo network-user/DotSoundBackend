@@ -8,6 +8,7 @@ import {
 import { Press } from '@/components/ui/Press'
 import { Icon } from '@/components/Icon/Icon'
 import { useAdminPrompt } from '../layout/AdminPromptContext'
+import { lyricsTierAdminTitle } from '../../lib/lyricsAdminLabels'
 import { adminApi } from '../../lib/adminApi'
 import { StatusPill } from './StatusPill'
 
@@ -200,6 +201,53 @@ export function LyricsJobDetail({
                 </span>
                 <span className="admin-jobdetail-meta-val admin-mono">
                   {data.profile}
+                </span>
+              </div>
+              <div className="admin-jobdetail-meta-row">
+                <span className="admin-jobdetail-meta-key">
+                  {t('admin.tasks.lyricsPhase')}
+                </span>
+                <span className="admin-jobdetail-meta-val">
+                  {lyricsTierAdminTitle(
+                    data.current_tier,
+                    t,
+                  )}
+                </span>
+              </div>
+              {data.tiers_planned &&
+                data.tiers_planned.length > 0 && (
+                  <div className="admin-jobdetail-meta-row">
+                    <span className="admin-jobdetail-meta-key">
+                      {t(
+                        'admin.tasks.lyricsPipelineHint',
+                      )}
+                    </span>
+                    <span className="admin-jobdetail-meta-val admin-mono">
+                      {data.tiers_planned.join(
+                        ' → ',
+                      )}
+                    </span>
+                  </div>
+                )}
+              <div className="admin-jobdetail-meta-row">
+                <span className="admin-jobdetail-meta-key">
+                  {t('admin.tasks.requestOptions')}
+                </span>
+                <span className="admin-jobdetail-meta-val">
+                  {[
+                    data.request_with_sync
+                      ? t(
+                          'admin.tasks.lyricsIntent.sync',
+                        )
+                      : null,
+                    data.request_bypass_cache
+                      ? t(
+                          'admin.tasks.lyricsIntent.bypass',
+                        )
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || '–'}
                 </span>
               </div>
               <div className="admin-jobdetail-meta-row">

@@ -448,6 +448,9 @@
       "queues": "Queues",
       "computeJobs": "Compute queue (last 50)",
       "computeJobsHint": "Colored tags group jobs by kind; the title line explains what runs.",
+      "computeQueueEmpty": "No rows yet. Entries appear after a track is queued for analysis (upload, import, backfill) and a worker claims jobs from the compute_jobs table.",
+      "queuesEmpty": "No Taskiq queue keys in Redis (idle workers), or Redis cannot be listed from here.",
+      "computeLoadFailed": "Could not load compute jobs (check admin token and tasks.manage permission).",
       "jobKind": "Job",
       "computeTarget": "Target",
       "computeTypes": {
@@ -478,6 +481,19 @@
       },
       "lyricsJobs": "Lyrics jobs (last 50)",
       "lyricsJobsHint": "These rows are the lyrics / ASR cascade only. Bulk audio analysis (features, preview clip) is listed in Compute queue above.",
+      "requestOptions": "Request flags",
+      "lyricsPhase": "Goal / pipeline step",
+      "lyricsPipelineHint": "Full cascade order",
+      "lyricsIntent": {
+        "sync": "Timed lyrics",
+        "bypass": "Bypass cache"
+      },
+      "lyricsTier": {
+        "catalog_only": "Catalog lyrics lookup",
+        "remote_whisper": "Audio transcription (worker)",
+        "speechkit_paid": "Cloud speech tier",
+        "speechkit": "Cloud speech"
+      },
       "requestedByColumn": "Source",
       "requestedByAuto": "Automatic ingest",
       "cancelAllConfirm": "Cancel all {{count}} queued jobs?",

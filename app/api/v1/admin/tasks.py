@@ -133,6 +133,10 @@ async def get_lyrics_job(
         "created_at": row.created_at,
         "progress_id": progress_id,
         "requested_by_user_id": row.requested_by_user_id,
+        "current_tier": row.current_tier,
+        "tiers_planned": row.tiers_planned,
+        "request_with_sync": row.request_with_sync,
+        "request_bypass_cache": row.request_bypass_cache,
         "live": progress,
     }
 
@@ -256,6 +260,10 @@ async def list_lyrics_jobs(
                 "duration_ms": row.duration_ms,
                 "created_at": row.created_at,
                 "requested_by_user_id": row.requested_by_user_id,
+                "current_tier": row.current_tier,
+                "tiers_planned": row.tiers_planned,
+                "request_with_sync": row.request_with_sync,
+                "request_bypass_cache": row.request_bypass_cache,
             }
             for row in rows
         ],
