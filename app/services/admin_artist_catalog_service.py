@@ -36,6 +36,9 @@ class AdminArtistCatalogService:
         self._read = ArtistCatalogReadService(session)
         self._admin = AdminService(session)
 
+    async def artist_exists(self, artist_id: int) -> bool:
+        return await self._artists.get_by_id(artist_id) is not None
+
     async def _ensure_catalog_sync_enqueue_allowed(
         self,
         artist_id: int,

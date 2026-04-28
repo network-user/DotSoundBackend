@@ -65,6 +65,7 @@ export function FullscreenLyrics() {
     playNext,
     playPrev,
     seek,
+    getPreciseTime,
   } = usePlayerActions()
 
   const [lyrics, setLyrics] = useState<LyricsResponse | null>(
@@ -74,7 +75,10 @@ export function FullscreenLyrics() {
   const [videoFailed, setVideoFailed] = useState(false)
   const [offsetMs, setOffsetMs] = useState<number>(readOffset)
   const [karaoke, setKaraoke] = useState<boolean>(readKaraoke)
+  const [activeIdx, setActiveIdx] = useState(-1)
+  const [wordIdx, setWordIdx] = useState(-1)
   const activeRef = useRef<HTMLDivElement>(null)
+  const rafIdRef = useRef<number | null>(null)
 
   useEffect(() => {
     if (!isLyricsOpen || !track) {
@@ -89,11 +93,84 @@ export function FullscreenLyrics() {
       .finally(() => setLoading(false))
   }, [isLyricsOpen, track?.id])
 
-  const adjustedMs = currentTime * 1000 + offsetMs
+  const hasWordTimes = !!lyrics?.synced_lines?.some(
+    (l) => l.word_times && l.word_times.length > 0,
+  )
+  const karaokeActive =
+    karaoke && hasWordTimes && lyrics?.sync_quality === 'word'
 
-  const activeIdx = lyrics?.synced_lines?.length
-    ? activeLineIndex(lyrics.synced_lines, adjustedMs)
-    : -1
+  useEffect(() => {
+    const lines = lyrics?.synced_lines
+    if (
+      !isLyricsOpen ||
+      !isPlaying ||
+      !lines ||
+      lines.length === 0
+    ) {
+      return
+    }
+    let cancelled = false
+    const loop = () => {
+      if (cancelled) return
+      const ms = getPreciseTime() * 1000 + offsetMs
+      const nextLine = activeLineIndex(lines, ms)
+      setActiveIdx((prev) =>
+        prev === nextLine ? prev : nextLine,
+      )
+      const nextWord =
+        karaokeActive && nextLine >= 0
+          ? activeWordIndex(lines[nextLine], ms)
+          : -1
+      setWordIdx((prev) =>
+        prev === nextWord ? prev : nextWord,
+      )
+      rafIdRef.current = requestAnimationFrame(loop)
+    }
+    rafIdRef.current = requestAnimationFrame(loop)
+    return () => {
+      cancelled = true
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
+    }
+  }, [
+    isLyricsOpen,
+    isPlaying,
+    lyrics,
+    offsetMs,
+    karaokeActive,
+    getPreciseTime,
+  ])
+
+  useEffect(() => {
+    const lines = lyrics?.synced_lines
+    if (!isLyricsOpen || !lines || lines.length === 0) {
+      setActiveIdx(-1)
+      setWordIdx(-1)
+      return
+    }
+    if (isPlaying) return
+    const ms = currentTime * 1000 + offsetMs
+    const nextLine = activeLineIndex(lines, ms)
+    setActiveIdx((prev) =>
+      prev === nextLine ? prev : nextLine,
+    )
+    const nextWord =
+      karaokeActive && nextLine >= 0
+        ? activeWordIndex(lines[nextLine], ms)
+        : -1
+    setWordIdx((prev) =>
+      prev === nextWord ? prev : nextWord,
+    )
+  }, [
+    isLyricsOpen,
+    isPlaying,
+    lyrics,
+    offsetMs,
+    karaokeActive,
+    currentTime,
+  ])
 
   useEffect(() => {
     if (activeRef.current) {
@@ -135,11 +212,6 @@ export function FullscreenLyrics() {
     } catch {}
   }
 
-  const hasWordTimes = !!lyrics?.synced_lines?.some(
-    (l) => l.word_times && l.word_times.length > 0,
-  )
-  const karaokeActive =
-    karaoke && hasWordTimes && lyrics?.sync_quality === 'word'
   const isAdmin = getIsAdmin()
   const uid = getUserId()
   const isOwner =
@@ -204,10 +276,8 @@ export function FullscreenLyrics() {
         {!loading && lyrics?.synced_lines?.length
           ? lyrics.synced_lines.map((line, i) => {
               const isActive = i === activeIdx
-              const wordIdx =
-                karaokeActive && isActive
-                  ? activeWordIndex(line, adjustedMs)
-                  : -1
+              const lineWordIdx =
+                karaokeActive && isActive ? wordIdx : -1
               return (
                 <div
                   key={i}
@@ -223,7 +293,7 @@ export function FullscreenLyrics() {
                     line.word_times.map((w, j) => (
                       <span
                         key={j}
-                        className={`fl-word${j === wordIdx ? ' fl-word-active' : ''}${isActive && j < wordIdx ? ' fl-word-past' : ''}`}
+                        className={`fl-word${j === lineWordIdx ? ' fl-word-active' : ''}${isActive && j < lineWordIdx ? ' fl-word-past' : ''}`}
                       >
                         {w.text}{' '}
                       </span>
