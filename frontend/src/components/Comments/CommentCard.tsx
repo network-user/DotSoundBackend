@@ -26,7 +26,10 @@ export function CommentCard({
         </div>
       )}
       <div className="comment-header">
-        <span className="comment-author">User #{comment.user_id}</span>
+        <span className="comment-author">
+          {comment.author_label?.trim() ||
+            `User #${comment.user_id}`}
+        </span>
         <span className="comment-time">
           {new Date(comment.created_at).toLocaleDateString()}
         </span>

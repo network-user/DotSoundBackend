@@ -149,6 +149,18 @@ class UserRepository(BaseRepository[User]):
         await self._session.flush()
         return user
 
+    async def get_by_ids(
+        self, ids: list[int]
+    ) -> dict[int, User]:
+        if not ids:
+            return {}
+        uniq = list(dict.fromkeys(ids))
+        result = await self._session.execute(
+            select(User).where(User.id.in_(uniq))
+        )
+        rows = result.scalars().all()
+        return {u.id: u for u in rows}
+
     async def search(
         self, query: str, limit: int = 20
     ) -> list[User]:
