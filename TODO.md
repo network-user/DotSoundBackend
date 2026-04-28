@@ -134,11 +134,11 @@
   `GET /api/v1/recommendations/user-choice`, секция `user_choice` в
   `GET /api/v1/recommendations/home`; `PublicPlayCountService` + Redis
   24h-дедуп; залогиненные — сигнал listen; гость — `POST /api/v1/tracks/{id}/play`
-- [x] **Рекомендации (2026-04):** приоритет русскоязычного контента —
-  `recommendation_language_policy` (PrivateCore), affiniti из истории
-  + `users.locale`, стратификация пула кандидатов, RU-запросы в
-  external discovery; см. `docs/project_context.md`,
-  `docs/private-boundary-inventory.md`
+- [x] **Рекомендации (2026-04 / RU-first для всех):**
+  `recommendation_language_policy` — `RU_STRATIFICATION_ALWAYS`,
+  `DEFAULT_CYRILLIC_STRATA_RATIO`, cold-start affinity;
+  `_merge_language_affinity` / похожие / fallback home / user-choice —
+  стратифицированные пулы; см. `docs/private-boundary-inventory.md`
 - [x] **Recsys — Track A / Phase 1 (2026-04):** гибрид
   `genre_samples` + очередь 15s превью, `GET .../preview-queue`,
   track-preview сегмент, админ-CRUD и capability
@@ -402,10 +402,11 @@
 
 ## Frontend / Mini App
 
-- [ ] **Покрытие Backend API клиентом:** инвентарь разрывов и очередь UX —
-  `docs/api-frontend-coverage.md`; следующий шаг — расширить
-  `frontend/src/lib/api.ts`, исправить `POST /users/me/avatar`, точечный UI
-  (OAuth disconnect, удаление аккаунта, похожие артисты), `adminApi.metricInstant`
+- [x] **Покрытие Backend API клиентом:** инвентарь и приоритеты —
+  `docs/api-frontend-coverage.md`; расширен `frontend/src/lib/api.ts`,
+  исправлен `POST /users/me/avatar`, UI (OAuth disconnect, удаление аккаунта,
+  похожие артисты), `adminApi.metricInstant`; регрессия —
+  `scripts/check_openapi_frontend_coverage.py`
 - [x] Главная: CTA «Слушать/Play» — старт с первого трека плейлиста дня
   (дальше — существующий radio-prefetch в `PlayerContext`); карточка
   «плейлист недели» и экран `/weekly-mix` (API `weekly-playlist`).

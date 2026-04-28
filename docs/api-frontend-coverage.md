@@ -51,7 +51,7 @@
 
 ## UI
 
-- Настройки: [`OAuthImportAccounts.tsx`](../frontend/src/components/Settings/OauthImportAccounts.tsx),
+- Настройки: [`OAuthImportAccounts.tsx`](../frontend/src/components/Settings/OAuthImportAccounts.tsx),
   [`AccountDangerZone.tsx`](../frontend/src/components/Settings/AccountDangerZone.tsx).
 - Карточка артиста: блок «Похожие» — [`ArtistView.tsx`](../frontend/src/components/ArtistView/ArtistView.tsx).
 - Админка: `adminApi.metricInstant` — для опционального вывода на экране
