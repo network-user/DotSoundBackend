@@ -18,12 +18,19 @@ from app.schemas.artist import (
     ArtistResponse,
     ArtistSourceProfileResponse,
 )
+from app.schemas.artist_catalog import (
+    ArtistCatalogReleaseDetailResponse,
+    ArtistCatalogReleaseListResponse,
+)
 from app.schemas.artist_supplemental import ArtistSupplementalResponse
 from app.schemas.track import (
     TrackListResponse,
     TrackResponse,
 )
 from app.services import artist_enrichment_progress as progress
+from app.services.artist_catalog_read_service import (
+    ArtistCatalogReadService,
+)
 from app.services.artist_enrichment_service import (
     ArtistEnrichmentService,
     ArtistNotFound,
@@ -40,9 +47,8 @@ class ArtistEnrichStatusResponse(BaseModel):
     stage: str | None = None
     logs: list[str] = []
 
-router = APIRouter(
-    prefix="/artists", tags=["artists"]
-)
+
+router = APIRouter(prefix="/artists", tags=["artists"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
@@ -62,9 +68,7 @@ async def _build_artist_detail(
     svc = ArtistService(session)
     artist = await svc.get_by_id(artist_id)
     if not artist:
-        raise HTTPException(
-            status_code=404, detail="Artist not found"
-        )
+        raise HTTPException(status_code=404, detail="Artist not found")
 
     repo = ArtistRepository(session)
     track_ids = await repo.get_artist_track_ids(artist_id)
@@ -72,18 +76,14 @@ async def _build_artist_detail(
     image_url: str | None = None
     if artist.image_key:
         try:
-            image_url = await s3.get_presigned_url(
-                artist.image_key
-            )
+            image_url = await s3.get_presigned_url(artist.image_key)
         except Exception:
             logger.exception(
                 "artist_image_presign_failed",
                 artist_id=artist_id,
             )
 
-    source_profiles = _build_source_profiles(
-        artist.source_profiles
-    )
+    source_profiles = _build_source_profiles(artist.source_profiles)
 
     return ArtistDetailResponse(
         id=artist.id,
@@ -117,11 +117,7 @@ def _build_source_profiles(
         if not isinstance(entry, dict):
             continue
         try:
-            out.append(
-                ArtistSourceProfileResponse.model_validate(
-                    entry
-                )
-            )
+            out.append(ArtistSourceProfileResponse.model_validate(entry))
         except Exception:
             logger.info(
                 "artist_source_profile_skipped",
@@ -142,10 +138,7 @@ async def list_artists(
     else:
         artists = await svc.list_popular(limit)
     return ArtistListResponse(
-        items=[
-            ArtistResponse.model_validate(a)
-            for a in artists
-        ],
+        items=[ArtistResponse.model_validate(a) for a in artists],
         total=len(artists),
     )
 
@@ -162,10 +155,44 @@ async def resolve_artist(
     svc = ArtistService(db)
     artist = await svc.find_or_create_by_name(name)
     if artist is None:
-        raise HTTPException(
-            status_code=400, detail="Invalid artist name"
-        )
+        raise HTTPException(status_code=400, detail="Invalid artist name")
     return ArtistResolveResponse(id=artist.id)
+
+
+@router.get(
+    "/{artist_id}/catalog/releases",
+    response_model=ArtistCatalogReleaseListResponse,
+    summary="List synced catalog releases for an artist.",
+)
+async def list_artist_catalog_releases(
+    artist_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ArtistCatalogReleaseListResponse:
+    svc = ArtistCatalogReadService(db)
+    out = await svc.list_releases(artist_id)
+    if out is None:
+        raise HTTPException(status_code=404, detail="Artist not found")
+    return out
+
+
+@router.get(
+    "/{artist_id}/catalog/releases/{release_id}",
+    response_model=ArtistCatalogReleaseDetailResponse,
+    summary="Catalog release detail with ordered tracks.",
+)
+async def get_artist_catalog_release(
+    artist_id: int,
+    release_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ArtistCatalogReleaseDetailResponse:
+    svc = ArtistCatalogReadService(db)
+    out = await svc.get_release_detail(artist_id, release_id)
+    if out is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Artist or catalog release not found",
+        )
+    return out
 
 
 @router.get(
@@ -195,9 +222,7 @@ async def enrich_artist(
     try:
         await enrichment.enrich(artist_id, bypass_cache=True)
     except ArtistNotFound:
-        raise HTTPException(
-            status_code=404, detail="Artist not found"
-        )
+        raise HTTPException(status_code=404, detail="Artist not found")
     return await _build_artist_detail(db, artist_id)
 
 
@@ -217,9 +242,7 @@ async def delete_artist(
 
     from app.models.artist import Artist, TrackArtist
 
-    existing = await db.execute(
-        select(Artist).where(Artist.id == artist_id)
-    )
+    existing = await db.execute(select(Artist).where(Artist.id == artist_id))
     artist = existing.scalar_one_or_none()
     if not artist:
         raise HTTPException(status_code=404, detail="Artist not found")
@@ -251,9 +274,7 @@ async def enrich_artist_watch(
     svc = ArtistService(db)
     artist = await svc.get_by_id(artist_id)
     if not artist:
-        raise HTTPException(
-            status_code=404, detail="Artist not found"
-        )
+        raise HTTPException(status_code=404, detail="Artist not found")
     task_id = uuid.uuid4().hex
     await progress.set_progress(
         task_id, "queued", f"enrichment queued for {artist.name!r}"
@@ -298,9 +319,7 @@ async def enrich_artist_status(
             status="pending", stage="queued", logs=[]
         )
     stage_raw = data.get("stage")
-    stage = (
-        str(stage_raw) if isinstance(stage_raw, str) else None
-    )
+    stage = str(stage_raw) if isinstance(stage_raw, str) else None
     logs_raw = data.get("logs") or []
     logs = [str(x) for x in logs_raw if isinstance(x, str)]
     status_map = {
@@ -329,10 +348,7 @@ async def get_artist_tracks(
         artist_id=artist_id, page=page, size=size
     )
     return TrackListResponse(
-        items=[
-            TrackResponse.model_validate(t)
-            for t in tracks
-        ],
+        items=[TrackResponse.model_validate(t) for t in tracks],
         total=total,
         page=page,
         size=size,
@@ -368,9 +384,7 @@ async def get_artist_supplemental(
         if info.status != "fetching":
             return ArtistSupplementalResponse.model_validate(info)
         if info.fetched_at is not None:
-            age = (
-                datetime.now(UTC) - info.fetched_at
-            ).total_seconds()
+            age = (datetime.now(UTC) - info.fetched_at).total_seconds()
             if age < 180:
                 return ArtistSupplementalResponse.model_validate(info)
 
@@ -478,23 +492,12 @@ async def get_similar_artists(
     svc = ArtistService(db)
     artist = await svc.get_by_id(artist_id)
     if not artist:
-        return ArtistListResponse(
-            items=[], total=0
-        )
+        return ArtistListResponse(items=[], total=0)
 
-    all_artists = await svc.list_popular(
-        limit=limit * 3
-    )
-    similar = [
-        a
-        for a in all_artists
-        if a.id != artist_id
-    ][:limit]
+    all_artists = await svc.list_popular(limit=limit * 3)
+    similar = [a for a in all_artists if a.id != artist_id][:limit]
 
     return ArtistListResponse(
-        items=[
-            ArtistResponse.model_validate(a)
-            for a in similar
-        ],
+        items=[ArtistResponse.model_validate(a) for a in similar],
         total=len(similar),
     )
