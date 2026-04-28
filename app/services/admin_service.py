@@ -46,6 +46,21 @@ class AdminService:
             search=search,
         )
 
+    async def list_tracks_for_artist(
+        self,
+        artist_id: int,
+        *,
+        page: int,
+        size: int,
+        search: str | None = None,
+    ) -> tuple[list[Track], int]:
+        return await self._repo.list_tracks_for_artist(
+            artist_id,
+            page=page,
+            size=size,
+            search=search,
+        )
+
     async def get_track(self, track_id: int) -> Track | None:
         return await self._repo.get_track(track_id)
 

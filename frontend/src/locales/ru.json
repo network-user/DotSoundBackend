@@ -233,7 +233,31 @@
       "empty": "Артистов пока нет",
       "noEnrichment": "нет",
       "confirmDelete": "Удалить артиста «{{name}}» (id={{id}})? Связи track_artist будут удалены.",
-      "actionDelete": "Удалить"
+      "actionDelete": "Удалить",
+      "catalog": {
+        "open": "Каталог",
+        "title": "Каталог — {{name}}",
+        "sheetLabel": "Редактор каталога артиста",
+        "soundcloud": "Привязка SoundCloud",
+        "scUserId": "SoundCloud user id",
+        "scPermalink": "Permalink",
+        "saveSoundcloud": "Сохранить поля SoundCloud",
+        "invalidScUserId": "SoundCloud user id должен быть числом.",
+        "sync": "Фоновая синхронизация",
+        "syncFull": "Полный resync каталога (Taskiq)",
+        "syncRelease": "Resync",
+        "syncQueued": "Задача синка поставлена в очередь.",
+        "releases": "Релизы",
+        "newReleasePlaceholder": "Название нового релиза…",
+        "addRelease": "Добавить релиз",
+        "deleteRelease": "Удалить",
+        "confirmDeleteRelease": "Удалить этот релиз каталога?",
+        "releaseEditor": "Редактор релиза",
+        "manualLock": "Ручная блокировка (не перезаписывать автосинком)",
+        "removeTrack": "Убрать",
+        "saveTrackOrder": "Сохранить порядок треков",
+        "trackSearchPlaceholder": "Поиск треков, привязанных к артисту…"
+      }
     },
     "audioCompute": {
       "title": "Вычисления",

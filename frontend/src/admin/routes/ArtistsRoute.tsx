@@ -9,6 +9,7 @@ import {
 import type { ColumnDef } from '@tanstack/react-table'
 import { Press } from '@/components/ui/Press'
 import { api } from '@/lib/api'
+import { ArtistCatalogEditor } from '../components/ArtistCatalogEditor'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
@@ -101,6 +102,10 @@ export function ArtistsRoute() {
   const [busyId, setBusyId] = useState<
     number | null
   >(null)
+  const [catalogFor, setCatalogFor] = useState<{
+    id: number
+    name: string
+  } | null>(null)
 
   const list = useQuery({
     queryKey: ['admin', 'artists', q, page],
@@ -257,6 +262,15 @@ export function ArtistsRoute() {
               variant="ghost"
               disabled={busy}
               onClick={() =>
+                setCatalogFor({ id, name })
+              }
+            >
+              {t('admin.artists.catalog.open')}
+            </Press>
+            <Press
+              variant="ghost"
+              disabled={busy}
+              onClick={() =>
                 handleDelete(id, name)
               }
             >
@@ -276,6 +290,14 @@ export function ArtistsRoute() {
 
   return (
     <div>
+      {catalogFor && (
+        <ArtistCatalogEditor
+          artistId={catalogFor.id}
+          artistName={catalogFor.name}
+          open
+          onClose={() => setCatalogFor(null)}
+        />
+      )}
       <h1>{t('admin.artists.title')}</h1>
       <div className="admin-toolbar">
         <input

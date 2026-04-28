@@ -45,6 +45,8 @@ class ArtistCatalogReleaseDetailResponse(BaseModel):
     released_at: date | None = None
     display_position: int
     cover_key: str | None = None
+    manual_lock: bool = False
+    soundcloud_album_id: int | None = None
     tracks: list[ArtistCatalogReleaseTrackRowResponse]
 
     @computed_field  # type: ignore[prop-decorator]

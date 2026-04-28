@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.artist import TrackArtist
 from app.models.complaint import Complaint
 from app.models.track import Track
 from app.models.user import User
@@ -41,6 +42,41 @@ class AdminRepository:
             count_query = count_query.where(cond)
         query = (
             query.order_by(Track.created_at.desc())
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+        result = await self._session.execute(query)
+        rows = list(result.scalars().all())
+        total_result = await self._session.execute(count_query)
+        return rows, int(total_result.scalar_one())
+
+    async def list_tracks_for_artist(
+        self,
+        artist_id: int,
+        *,
+        page: int = 1,
+        size: int = 20,
+        search: str | None = None,
+    ) -> tuple[list[Track], int]:
+        base_join = TrackArtist.track_id == Track.id
+        query = (
+            select(Track)
+            .join(TrackArtist, base_join)
+            .where(TrackArtist.artist_id == artist_id)
+        )
+        count_query = (
+            select(func.count(Track.id))
+            .select_from(Track)
+            .join(TrackArtist, base_join)
+            .where(TrackArtist.artist_id == artist_id)
+        )
+        if search:
+            pattern = f"%{search}%"
+            cond = Track.title.ilike(pattern) | Track.artist.ilike(pattern)
+            query = query.where(cond)
+            count_query = count_query.where(cond)
+        query = (
+            query.order_by(desc(Track.created_at))
             .offset((page - 1) * size)
             .limit(size)
         )
