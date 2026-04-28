@@ -39,6 +39,14 @@ class TrackComment(Base, TimestampMixin):
         type_=BigInteger,
         nullable=False,
     )
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "track_comments.id",
+            ondelete="CASCADE",
+        ),
+        type_=BigInteger,
+        nullable=True,
+    )
     text: Mapped[str] = mapped_column(
         Text, nullable=False
     )

@@ -7,6 +7,7 @@ import { LikesProvider } from '@/store/LikesContext'
 import { PlayerProvider } from '@/store/PlayerContext'
 import { ToastProvider } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
+import { installGlassPerformanceClass } from '@/lib/glassPerformance'
 import { installViewportListener } from '@/lib/telegram'
 import { installOnlineFlush } from '@/lib/pendingEvents'
 import { App } from './App'
@@ -15,6 +16,7 @@ import './styles/global.css'
 import './styles/animations.css'
 import './styles/components.css'
 
+installGlassPerformanceClass()
 installViewportListener()
 installOnlineFlush()
 

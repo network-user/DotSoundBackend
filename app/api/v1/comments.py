@@ -24,7 +24,10 @@ async def add_comment(
 ) -> dict[str, Any]:
     svc = CommentService(session)
     return await svc.add_comment(
-        track_id, user.id, body.text
+        track_id,
+        user.id,
+        body.text,
+        body.parent_id,
     )
 
 

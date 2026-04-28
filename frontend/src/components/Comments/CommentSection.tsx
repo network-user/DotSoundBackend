@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
@@ -12,12 +16,20 @@ interface Props {
   trackOwnerId: number | null
 }
 
-export function CommentSection({ trackId, trackOwnerId }: Props) {
+export function CommentSection({
+  trackId,
+  trackOwnerId,
+}: Props) {
   const { t } = useTranslation()
-  const [comments, setComments] = useState<TrackComment[]>([])
+  const [comments, setComments] = useState<
+    TrackComment[]
+  >([])
   const [loading, setLoading] = useState(true)
+  const [replyTo, setReplyTo] =
+    useState<TrackComment | null>(null)
   const myId = getInternalUserId()
-  const isOwner = myId !== null && myId === trackOwnerId
+  const isOwner =
+    myId !== null && myId === trackOwnerId
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -29,32 +41,35 @@ export function CommentSection({ trackId, trackOwnerId }: Props) {
     }
   }, [trackId])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+  }, [load])
 
   useEffect(() => {
     const offNew = onWS('comment.new', (data) => {
       if (data.track_id !== trackId) return
       if (data.user_id === myId) return
-      const c = data as unknown as TrackComment
-      setComments((prev) => {
-        if (prev.some((x) => x.id === c.id)) return prev
-        return [c, ...prev]
-      })
+      load()
     })
     const offDel = onWS('comment.deleted', (data) => {
       if (data.track_id !== trackId) return
-      const id = data.comment_id as number
-      setComments((prev) =>
-        prev.filter((c) => c.id !== id),
-      )
+      load()
     })
-    return () => { offNew(); offDel() }
-  }, [trackId, myId])
+    return () => {
+      offNew()
+      offDel()
+    }
+  }, [trackId, myId, load])
 
   const handleAdd = async (text: string) => {
     try {
-      const c = await api.addComment(trackId, text)
-      setComments((prev) => [c, ...prev])
+      await api.addComment(
+        trackId,
+        text,
+        replyTo?.id,
+      )
+      setReplyTo(null)
+      await load()
     } catch (e) {
       console.error('addComment failed', e)
     }
@@ -62,28 +77,31 @@ export function CommentSection({ trackId, trackOwnerId }: Props) {
 
   const handleDelete = async (id: number) => {
     await api.deleteComment(id)
-    setComments((prev) => prev.filter((c) => c.id !== id))
+    await load()
   }
 
   const handlePin = async (id: number, pinned: boolean) => {
     if (pinned) await api.unpinComment(id)
     else await api.pinComment(id)
-    load()
+    await load()
   }
 
   const handleHide = async (id: number) => {
     await api.hideComment(id)
-    setComments((prev) => prev.filter((c) => c.id !== id))
+    await load()
   }
 
   const handleHideForMe = async (id: number) => {
     await api.hideCommentForMe(id)
-    setComments((prev) => prev.filter((c) => c.id !== id))
+    await load()
   }
 
-  const handleVote = async (id: number, isLike: boolean) => {
+  const handleVote = async (
+    id: number,
+    isLike: boolean,
+  ) => {
     await api.voteComment(id, isLike)
-    load()
+    await load()
   }
 
   return (
@@ -91,11 +109,32 @@ export function CommentSection({ trackId, trackOwnerId }: Props) {
       <h3 className="comment-section-title">
         {t('trackSheet.commentsTitle')}
       </h3>
+      {replyTo && (
+        <div className="comment-reply-context">
+          <span className="comment-reply-label">
+            {t('trackSheet.replyingTo', {
+              name:
+                replyTo.author_label?.trim() ||
+                `User #${replyTo.user_id}`,
+            })}
+          </span>
+          <button
+            type="button"
+            className="comment-reply-cancel"
+            onClick={() => setReplyTo(null)}
+          >
+            {t('trackSheet.replyCancel')}
+          </button>
+        </div>
+      )}
       <CommentInput onSubmit={handleAdd} />
       {loading ? (
         <div className="comment-skeleton">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="skeleton-comment shimmer" />
+            <div
+              key={i}
+              className="skeleton-comment shimmer"
+            />
           ))}
         </div>
       ) : comments.length === 0 ? (
@@ -104,18 +143,38 @@ export function CommentSection({ trackId, trackOwnerId }: Props) {
         </div>
       ) : (
         <div className="comment-list">
-          {comments.map((c) => (
-            <CommentCard
-              key={c.id}
-              comment={c}
-              isOwner={isOwner}
-              isMine={c.user_id === myId}
-              onDelete={handleDelete}
-              onPin={handlePin}
-              onHide={handleHide}
-              onHideForMe={handleHideForMe}
-              onVote={handleVote}
-            />
+          {comments.map((root) => (
+            <div
+              key={root.id}
+              className="comment-thread"
+            >
+              <CommentCard
+                comment={root}
+                isOwner={isOwner}
+                isMine={root.user_id === myId}
+                isReply={false}
+                onReply={() => setReplyTo(root)}
+                onDelete={handleDelete}
+                onPin={handlePin}
+                onHide={handleHide}
+                onHideForMe={handleHideForMe}
+                onVote={handleVote}
+              />
+              {(root.replies ?? []).map((r) => (
+                <CommentCard
+                  key={r.id}
+                  comment={r}
+                  isOwner={isOwner}
+                  isMine={r.user_id === myId}
+                  isReply
+                  onDelete={handleDelete}
+                  onPin={handlePin}
+                  onHide={handleHide}
+                  onHideForMe={handleHideForMe}
+                  onVote={handleVote}
+                />
+              ))}
+            </div>
           ))}
         </div>
       )}

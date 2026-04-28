@@ -32,7 +32,7 @@
 
   /* Glassmorphism */
   --glass-bg:     rgba(16, 16, 16, 0.85);
-  --glass-blur:   blur(20px);
+  --glass-blur:   blur(16px);
   --glass-border: rgba(255, 255, 255, 0.06);
 
   /* Spacing & radius */
@@ -570,8 +570,9 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   z-index: 10;
   width: 100%;
   background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur-soft) saturate(130%);
+  -webkit-backdrop-filter: var(--glass-blur-soft)
+    saturate(130%);
   border-bottom: 1px solid var(--glass-border);
 }
 .search-bar {
@@ -952,6 +953,8 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   justify-content: center;
   transition: transform 0.1s, box-shadow 0.2s;
   box-shadow: 0 2px 12px rgba(255, 255, 255, 0.2);
+}
+.play-btn.play-btn--playing {
   animation: playPulse 2s ease infinite;
 }
 .play-btn svg { fill: var(--bg); stroke: none; }
@@ -1001,10 +1004,8 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   );
   padding-bottom: env(safe-area-inset-bottom, 0px);
   background: var(--glass-tint-3);
-  backdrop-filter: var(--glass-blur-strong)
-    var(--glass-saturate);
-  -webkit-backdrop-filter: var(--glass-blur-strong)
-    var(--glass-saturate);
+  backdrop-filter: var(--glass-backdrop-fixed);
+  -webkit-backdrop-filter: var(--glass-backdrop-fixed);
   border-top: 1px solid var(--glass-edge);
   display: flex;
   z-index: 101;

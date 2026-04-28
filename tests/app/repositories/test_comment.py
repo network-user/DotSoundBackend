@@ -58,8 +58,8 @@ async def test_list_comments(
         text="Second",
     )
 
-    comments = await repo.list_comments(
-        track.id, user.id
+    comments = await repo.list_root_comments(
+        track.id, user.id, None, 50
     )
     assert len(comments) == 2
 
@@ -79,7 +79,7 @@ async def test_soft_delete(
     await session.refresh(comment)
     assert comment.is_deleted is True
 
-    visible = await repo.list_comments(
-        track.id, user.id
+    visible = await repo.list_root_comments(
+        track.id, user.id, None, 50
     )
     assert len(visible) == 0

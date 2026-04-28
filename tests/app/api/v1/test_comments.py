@@ -36,9 +36,49 @@ async def test_add_and_get_comments(
         headers=headers,
     )
     assert r.status_code == 200
+    payload = r.json()
     assert any(
-        c["id"] == comment_id for c in r.json()
+        c["id"] == comment_id for c in payload
     )
+
+
+async def test_reply_to_comment(
+    client: AsyncClient,
+) -> None:
+    u = await create_test_user(
+        client, 400040, first_name="Replier"
+    )
+    t = await create_test_track(
+        client, "Thread", u["id"]
+    )
+    headers = await auth_headers(
+        client, u["id"]
+    )
+
+    r = await client.post(
+        f"/api/v1/tracks/{t['id']}/comments",
+        json={"text": "root"},
+        headers=headers,
+    )
+    root_id = r.json()["id"]
+
+    r = await client.post(
+        f"/api/v1/tracks/{t['id']}/comments",
+        json={"text": "reply", "parent_id": root_id},
+        headers=headers,
+    )
+    assert r.status_code == 200
+    assert r.json()["parent_id"] == root_id
+
+    r = await client.get(
+        f"/api/v1/tracks/{t['id']}/comments",
+        headers=headers,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data) == 1
+    assert len(data[0]["replies"]) == 1
+    assert data[0]["replies"][0]["text"] == "reply"
 
 
 async def test_non_owner_cannot_pin(
