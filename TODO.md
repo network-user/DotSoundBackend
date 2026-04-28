@@ -329,6 +329,10 @@ Mini App — секция в `TrackCardSheet` для публичных трек
 
 ## Карточка артиста (multi-source)
 
+- [x] **Каталог дискографии (SoundCloud) — phase 1:** миграция
+  `0063` — `artist_catalog_releases`, `artist_catalog_release_tracks`,
+  `artists.soundcloud_user_id`, `artists.soundcloud_permalink`;
+  SQLAlchemy-модели; без HTTP/синка (след. этапы 2–3)
 - Policy-exception для явного source attribution
 (`source_name` + `source_page_url`) зафиксирован в
 `docs/ai-boundary-policy.md` (Backend + PrivateCore)

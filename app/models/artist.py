@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Date,
     DateTime,
     Float,
@@ -20,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
+    from app.models.artist_catalog import ArtistCatalogRelease
     from app.models.artist_supplemental_info import ArtistSupplementalInfo
 
 
@@ -78,6 +80,16 @@ class Artist(Base, TimestampMixin):
     enrichment_confidence: Mapped[float | None] = mapped_column(
         Float, nullable=True
     )
+    soundcloud_user_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        nullable=True,
+        index=True,
+    )
+    soundcloud_permalink: Mapped[str | None] = mapped_column(
+        String(256),
+        nullable=True,
+        index=True,
+    )
 
     track_links: Mapped[list[TrackArtist]] = relationship(
         back_populates="artist",
@@ -86,6 +98,10 @@ class Artist(Base, TimestampMixin):
     supplemental_info: Mapped[ArtistSupplementalInfo | None] = relationship(
         back_populates="artist",
         uselist=False,
+        cascade="all, delete-orphan",
+    )
+    catalog_releases: Mapped[list[ArtistCatalogRelease]] = relationship(
+        back_populates="artist",
         cascade="all, delete-orphan",
     )
 
