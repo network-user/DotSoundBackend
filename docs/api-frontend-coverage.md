@@ -1,66 +1,83 @@
 # Покрытие Backend API клиентом Mini App и админки
 
-Документ фиксирует разрыв между эндпоинтами FastAPI и использованием во
-frontend. Обновлять при добавлении крупных фич API или экранов.
+Документ фиксирует разрыв между эндпоинтами FastAPI и клиентом. Обновлять
+при добавлении крупных фич API или экранов.
+
+## Продуктовый приоритет закрытия разрывов
+
+1. **Плейлисты и альбомы** — основной пользовательский контент библиотеки:
+   методы в [`frontend/src/lib/api.ts`](../frontend/src/lib/api.ts); UX
+   редактирования / «добавить в плейлист» из карточки трека — в backlog
+   ниже.
+2. **Аккаунт и связанные OAuth-аккаунты** — настройки: отключение импорта
+   (Spotify / VK / SoundCloud), удаление аккаунта с подтверждением `DELETE`.
+3. **Co-listen** — REST обёртки есть; отдельный экран + WebSocket — позже.
+4. **Лента подписок и списки подписчиков** — методы в `api.ts`; отдельные
+   экраны — позже.
 
 ## Источник клиента
 
 - Mini App: [`frontend/src/lib/api.ts`](../frontend/src/lib/api.ts)
 - Админка: [`frontend/src/admin/lib/adminApi.ts`](../frontend/src/admin/lib/adminApi.ts)
 
-## Цель следующего PR по клиенту (расширение `api.ts` + точечный UI)
+## Реализовано в клиенте (`api.ts`)
 
-После применения патча к клиенту должны появиться обёртки и правки ниже.
+- Учётная запись: `requestAccountDeletion`, `restoreAccountAfterDeletion`,
+  `getFollowingFeed`, `listFollowers`, `listFollowingUsers`.
+- `getPopularPlatformGenres` — `GET /metadata/genres`.
+- Связанные аккаунты: `disconnectLinkedAccount`,
+  `getLinkedProviderPlaylists`.
+- Плейлисты: `getPlaylists` / `createPlaylist` (без лишнего `owner_id`),
+  `updatePlaylist`, `deletePlaylist`, `addTrackToPlaylist` (опционально
+  `position`), `removeTrackFromPlaylist`, `createPlaylistInvite`,
+  `acceptPlaylistInvite`.
+- Альбомы: `listUserAlbums`, `createAlbum`, `getAlbum`, `updateAlbum`,
+  `deleteAlbum`, `addTrackToAlbum`, `removeTrackFromAlbum`.
+- Чаты: `addChatMember`, `removeChatMember`.
+- Co-listen REST: `createColistenRoom`, `getColistenRoom`,
+  `patchColistenRoom`.
+- Артисты: `listSimilarCatalogArtists`.
 
-### Обёртки в `api.ts`
+### Исправление
 
-- Учётная запись: `DELETE /users/me`, `POST /users/me/restore`, лента
-  `GET /users/me/feed`, списки `GET /users/{id}/followers|following`.
-- `GET /metadata/genres` — популярные жанры платформы (отдельно от
-  `/tracks/genres` в онбординге).
-- Связанные аккаунты: `DELETE /linked-accounts/{provider}`, `GET
-  .../{provider}/playlists`.
-- Плейлисты: `PUT`/`DELETE` плейлиста, `DELETE` трека из плейлиста,
-  инвайты коллаборации и accept.
-- Альбомы: полный CRUD и операции с треками в альбоме.
-- Чаты (группы): `POST/DELETE .../chats/{id}/members`.
-- Артисты: `GET /artists/{id}/similar`.
-- Co-listen: REST для комнаты (WS отдельно).
+- Загрузка аватара: `uploadAvatar(formData)` → `POST /users/me/avatar`.
 
-### Исправление бага
+### Типы
 
-- Загрузка аватара: использовать `POST /api/v1/users/me/avatar` (не
-  `POST /users/{id}/avatar` — такого POST на бэкенде нет).
+- См. [`frontend/src/types/api.ts`](../frontend/src/types/api.ts):
+  `FollowListResponse`, `LinkedPlaylistsResponse`, `PlaylistInviteOut`,
+  `AlbumRecord`, `AlbumWithTracksRecord`, `ColistenRoomState`,
+  `ArtistListPayload`.
 
-### Точечный UI
+## UI
 
-- Настройки: блок OAuth (Spotify / VK / SoundCloud) — отключение связи;
-  опасная зона удаления аккаунта с подтверждением словом `DELETE`.
-- Карточка артиста: блок «Похожие» по `/artists/{id}/similar`.
-- Админка: `GET /admin/metrics/instant` — `adminApi.metricInstant`.
+- Настройки: [`OAuthImportAccounts.tsx`](../frontend/src/components/Settings/OauthImportAccounts.tsx),
+  [`AccountDangerZone.tsx`](../frontend/src/components/Settings/AccountDangerZone.tsx).
+- Карточка артиста: блок «Похожие» — [`ArtistView.tsx`](../frontend/src/components/ArtistView/ArtistView.tsx).
+- Админка: `adminApi.metricInstant` — для опционального вывода на экране
+  метрик.
 
-### Очередь без клиентских обёрток в первой итерации
-
-То, что остаётся на потом (есть на бэкенде, нужны экраны или отдельная
-задача):
+## Backlog (методы есть, UX позже)
 
 | Область | Заметка |
 |--------|---------|
-| Альбомы | Полноценный UX после появления методов в `api.ts`. |
-| Co-listen | REST + WebSocket, отдельный продуктовый экран. |
-| Лента подписок | Вкладка / секция на `GET /users/me/feed`. |
+| Альбомы | Полноценные экраны каталога альбомов. |
+| Co-listen | Продуктовый экран + WS. |
+| Лента подписок | Вкладка на `getFollowingFeed`. |
 | Подписчики / подписки | Списки в профиле автора. |
-| Восстановление аккаунта | UI после того, как профиль начнёт отдавать признак pending deletion. |
+| Восстановление аккаунта | UI после признака pending deletion в профиле. |
 | Плейлисты | Добавить трек из карточки; редактирование; коллаборации. |
-| Импорт | Выбор плейлиста провайдера через `.../playlists`. |
+| Импорт | Выбор плейлиста провайдера. |
 | Чаты | UI состава группы. |
+
+## Регрессия покрытия
+
+- Скрипт: [`scripts/check_openapi_frontend_coverage.py`](../scripts/check_openapi_frontend_coverage.py).
 
 ## Не цель Mini App
 
-- `/api/v1/internal/*` — воркеры (ComputeWorker и др.).
-- Служебные `/health/*`, debug `GET /search/_admin/reindex`.
+- `/api/v1/internal/*`, `/health/*`, debug `GET /search/_admin/reindex`.
 
 ## DotSoundBot
 
-Бот использует узкий HTTP-клиент; отличие набора эндпоинтов от Mini App
-ожидаемо.
+Бот использует узкий HTTP-клиент; меньший набор эндпоинтов ожидаем.

@@ -34,12 +34,14 @@ async def _make_track(
     session: AsyncSession,
     owner: User,
     comments_enabled: bool = True,
+    is_public: bool = True,
 ) -> Track:
     track = Track(
         title="T",
         file_key="k",
         uploaded_by_id=owner.id,
         comments_enabled=comments_enabled,
+        is_public=is_public,
     )
     session.add(track)
     await session.flush()
@@ -97,6 +99,44 @@ async def test_add_comment_disabled(
         await svc.add_comment(
             track.id, user.id, "text"
         )
+
+    assert exc.value.status_code == 403
+
+
+@patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
+async def test_add_comment_private_track(
+    mock_ws: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session)
+    track = await _make_track(
+        session, user, is_public=False
+    )
+
+    svc = CommentService(session)
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.add_comment(
+            track.id, user.id, "text"
+        )
+
+    assert exc.value.status_code == 403
+
+
+@patch(f"{_WS}.broadcast_to_online", new_callable=AsyncMock)
+async def test_get_comments_private_track(
+    mock_ws: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session)
+    track = await _make_track(session, user)
+    svc = CommentService(session)
+    await svc.add_comment(track.id, user.id, "x")
+    track.is_public = False
+    await session.flush()
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.get_comments(track.id, user.id)
 
     assert exc.value.status_code == 403
 

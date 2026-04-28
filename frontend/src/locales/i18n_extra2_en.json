@@ -52,7 +52,9 @@
     "chars": "chars:",
     "preparingInfo": "Preparing track information…",
     "infoNotFound": "No information found.",
-    "infoError": "Could not load information."
+    "infoError": "Could not load information.",
+    "commentsTitle": "Comments",
+    "commentsEmpty": "No comments yet"
   },
   "import": {
     "jobTimeout": "Import is taking too long. Please try again later.",

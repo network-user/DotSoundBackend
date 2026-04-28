@@ -26,6 +26,27 @@ class CommentService:
         self._block_repo = BlockRepository(session)
         self._session = session
 
+    def _raise_unless_comments_allowed(
+        self, track: Track | None
+    ) -> None:
+        if not track or not track.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Track not found",
+            )
+        if not track.is_public:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "Comments not available for private tracks"
+                ),
+            )
+        if not track.comments_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Comments disabled",
+            )
+
     async def add_comment(
         self,
         track_id: int,
@@ -35,16 +56,8 @@ class CommentService:
         track = await self._session.get(
             Track, track_id
         )
-        if not track or not track.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Track not found",
-            )
-        if not track.comments_enabled:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Comments disabled",
-            )
+        self._raise_unless_comments_allowed(track)
+        assert track is not None
         if track.uploaded_by_id:
             if await self._block_repo.is_blocked(
                 track.uploaded_by_id, user_id
@@ -86,6 +99,10 @@ class CommentService:
         cursor: int | None = None,
         limit: int = 20,
     ) -> list[dict[str, Any]]:
+        track = await self._session.get(
+            Track, track_id
+        )
+        self._raise_unless_comments_allowed(track)
         comments = await self._repo.list_comments(
             track_id, user_id, cursor, limit
         )
@@ -149,6 +166,10 @@ class CommentService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
             )
+        track = await self._session.get(
+            Track, c.track_id
+        )
+        self._raise_unless_comments_allowed(track)
         await self._ensure_track_owner(
             c.track_id, user_id
         )
@@ -165,6 +186,10 @@ class CommentService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
             )
+        track = await self._session.get(
+            Track, c.track_id
+        )
+        self._raise_unless_comments_allowed(track)
         await self._ensure_track_owner(
             c.track_id, user_id
         )
@@ -181,6 +206,10 @@ class CommentService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
             )
+        track = await self._session.get(
+            Track, c.track_id
+        )
+        self._raise_unless_comments_allowed(track)
         await self._ensure_track_owner(
             c.track_id, user_id
         )
@@ -189,6 +218,16 @@ class CommentService:
     async def hide_for_self(
         self, comment_id: int, user_id: int
     ) -> None:
+        c = await self._repo.get_by_id(comment_id)
+        if not c:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Comment not found",
+            )
+        track = await self._session.get(
+            Track, c.track_id
+        )
+        self._raise_unless_comments_allowed(track)
         await self._repo.hide_for_user(
             comment_id, user_id
         )
@@ -205,6 +244,10 @@ class CommentService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Comment not found",
             )
+        track = await self._session.get(
+            Track, c.track_id
+        )
+        self._raise_unless_comments_allowed(track)
         await self._repo.vote(
             comment_id, user_id, is_like
         )
@@ -212,6 +255,16 @@ class CommentService:
     async def remove_vote(
         self, comment_id: int, user_id: int
     ) -> None:
+        c = await self._repo.get_by_id(comment_id)
+        if not c:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Comment not found",
+            )
+        track = await self._session.get(
+            Track, c.track_id
+        )
+        self._raise_unless_comments_allowed(track)
         await self._repo.remove_vote(
             comment_id, user_id
         )

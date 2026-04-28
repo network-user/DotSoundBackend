@@ -18,6 +18,7 @@ from dotsound_private_core.services.recommendation_engine import (
 )
 from dotsound_private_core.services.recommendation_language_policy import (
     LOCALE_RU_BONUS,
+    cold_start_language_affinity_weights,
     infer_listening_language_code,
     should_boost_russian_discovery,
 )
@@ -109,12 +110,12 @@ class RecommendationService:
         )
         tids = {e.track_id for e in events}
         if not tids:
-            if (
-                locale
-                and str(locale).lower().startswith("ru")
-            ):
-                return ({"ru": 0.65, "en": 0.35}, locale)
-            return ({}, locale)
+            return (
+                cold_start_language_affinity_weights(
+                    locale
+                ),
+                locale,
+            )
         tracks = await self._rec_repo.get_tracks_by_ids(
             list(tids)
         )
@@ -146,12 +147,12 @@ class RecommendationService:
             )
         total = sum(raw.values())
         if total <= 0:
-            if (
-                locale
-                and str(locale).lower().startswith("ru")
-            ):
-                return ({"ru": 0.65, "en": 0.35}, locale)
-            return ({}, locale)
+            return (
+                cold_start_language_affinity_weights(
+                    locale
+                ),
+                locale,
+            )
         return (
             {k: v / total for k, v in raw.items()},
             locale,
@@ -558,8 +559,8 @@ class RecommendationService:
 
         if not sections:
             popular = (
-                await self._rec_repo.get_popular_tracks(
-                    limit=50
+                await self._rec_repo.get_candidate_tracks_stratified(
+                    total_limit=50,
                 )
             )
             sections.append(
@@ -584,8 +585,8 @@ class RecommendationService:
         )
 
         pool = (
-            await self._rec_repo.get_user_choice_candidate_pool(
-                400
+            await self._rec_repo.get_candidate_tracks_stratified(
+                total_limit=400,
             )
         )
         if not pool:
@@ -622,13 +623,14 @@ class RecommendationService:
             return []
 
         candidates = (
-            await self._rec_repo.get_candidate_tracks(
-                limit=100,
+            await self._rec_repo.get_candidate_tracks_stratified(
+                total_limit=100,
                 genre_filter=(
                     [seed.genre]
                     if seed.genre
                     else None
                 ),
+                exclude_ids={seed.id},
             )
         )
         if not candidates:

@@ -10,7 +10,9 @@ import { Icon } from '@/components/Icon/Icon'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { canInstallPwa } from '@/components/PwaInstall/InstallPrompt'
 import { useToast } from '@/components/ui/Toast'
+import { AccountDangerZone } from './AccountDangerZone'
 import { LinkedAccounts } from './LinkedAccounts'
+import { OAuthImportAccounts } from './OAuthImportAccounts'
 import { TwoFASettings } from './TwoFASettings'
 
 interface Props {
@@ -253,6 +255,8 @@ export function SettingsSheet({
 
           <LinkedAccounts />
 
+          <OAuthImportAccounts />
+
           <TwoFASettings
             enabled={twoFAEnabled}
             onToggle={setTwoFAEnabled}
@@ -281,6 +285,8 @@ export function SettingsSheet({
               v0.1.0
             </span>
           </button>
+
+          <AccountDangerZone />
         </div>
 
         <div className="settings-footer">

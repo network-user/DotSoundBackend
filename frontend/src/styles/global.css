@@ -2202,6 +2202,11 @@ textarea.form-input { resize: none; }
   border-color: var(--border-hover);
 }
 
+.tcs-comments-section {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+
 .tcs-volume-section {
   display: flex;
   align-items: center;

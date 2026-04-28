@@ -551,6 +551,9 @@ export function App() {
         <ArtistView
           artistId={artistId}
           onClose={() => setArtistId(null)}
+          onSelectSimilarArtist={(id) =>
+            setArtistId(id)
+          }
         />
       )}
       <BottomNav />
