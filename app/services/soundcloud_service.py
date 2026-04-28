@@ -1,3 +1,5 @@
+from typing import Any
+
 import httpx
 import structlog
 from fastapi import HTTPException, status
@@ -9,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core import s3
 from app.models.track import Track
+from app.repositories.artist import ArtistRepository
 from app.services.sc_semaphore import (
     SoundCloudSemaphoreTimeout,
     soundcloud_slot,
@@ -22,6 +25,23 @@ from app.services.url_cache import (
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _SC_API_BASE = "https://api-v2.soundcloud.com"
+
+
+def normalize_soundcloud_permalink(
+    raw: str | None,
+) -> str | None:
+    if raw is None:
+        return None
+    s = raw.strip()
+    if not s:
+        return None
+    if "soundcloud.com/" in s:
+        tail = s.split("soundcloud.com/", 1)[-1]
+        slug = tail.strip("/").split("/")[0]
+        return slug.lower() if slug else None
+    return s.strip("/").lower() or None
+
+
 _SC_OEMBED_URL = "https://soundcloud.com/oembed"
 
 
@@ -103,9 +123,7 @@ class SoundCloudService:
             "linked_partitioning": 1,
         }
         if genre:
-            params["genre"] = (
-                f"soundcloud:genres:{genre.lower()}"
-            )
+            params["genre"] = f"soundcloud:genres:{genre.lower()}"
         try:
             async with (
                 soundcloud_slot(
@@ -128,9 +146,7 @@ class SoundCloudService:
                 r.raise_for_status()
                 data = r.json()
         except (SoundCloudSemaphoreTimeout, Exception) as exc:
-            logger.warning(
-                "sc_charts_failed", error=str(exc)
-            )
+            logger.warning("sc_charts_failed", error=str(exc))
             return []
         return [
             item["track"]
@@ -139,20 +155,14 @@ class SoundCloudService:
             and item["track"].get("streamable")
         ]
 
-    async def get_trending(
-        self, limit: int = 20
-    ) -> list[dict]:
+    async def get_trending(self, limit: int = 20) -> list[dict]:
         """Global trending tracks via charts or popular search fallback."""
-        result = await self.get_charts(
-            genre="all-music", limit=limit
-        )
+        result = await self.get_charts(genre="all-music", limit=limit)
         if result:
             return result
         return await self._get_popular_fallback(limit)
 
-    async def _get_popular_fallback(
-        self, limit: int = 20
-    ) -> list[dict]:
+    async def _get_popular_fallback(self, limit: int = 20) -> list[dict]:
         """Fallback: search for popular tracks when charts are unavailable."""
         if not self._client_id:
             return []
@@ -185,9 +195,12 @@ class SoundCloudService:
                 error=str(exc),
             )
             return []
-        collection = data if isinstance(data, list) else data.get("collection", [])
+        collection = (
+            data if isinstance(data, list) else data.get("collection", [])
+        )
         return [
-            t for t in collection
+            t
+            for t in collection
             if isinstance(t, dict) and t.get("streamable")
         ][:limit]
 
@@ -261,9 +274,7 @@ class SoundCloudService:
         """
         cache_id = f"{sc_url}:{'hls' if prefer_hls else 'progressive'}"
         if use_cache:
-            cached = await get_cached_stream(
-                CACHE_KEY_SC, cache_id
-            )
+            cached = await get_cached_stream(CACHE_KEY_SC, cache_id)
             if cached:
                 logger.debug(
                     "stream_url_cache_hit",
@@ -349,6 +360,197 @@ class SoundCloudService:
     async def get_hls_url(self, sc_url: str) -> str:
         url, _ = await self.get_stream_info(sc_url, prefer_hls=True)
         return url
+
+    async def list_user_albums(
+        self,
+        soundcloud_user_id: int,
+        *,
+        limit_per_page: int = 50,
+    ) -> list[dict[str, Any]]:
+        if not self._client_id:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="SoundCloud search is not configured",
+            )
+        collected: list[dict[str, Any]] = []
+        next_url: str | None = (
+            f"{_SC_API_BASE}/users/{soundcloud_user_id}/albums"
+        )
+        params: dict[str, str | int] | None = {
+            "client_id": self._client_id,
+            "linked_partitioning": 1,
+            "limit": limit_per_page,
+        }
+        try:
+            while next_url is not None:
+                async with (
+                    soundcloud_slot(
+                        timeout_seconds=(
+                            settings.soundcloud_slot_acquire_timeout_seconds
+                        ),
+                    ),
+                    self._sc_client() as client,
+                ):
+                    if params is not None:
+                        r = await client.get(next_url, params=params)
+                        params = None
+                    else:
+                        r = await client.get(next_url)
+                    if r.status_code == 401:
+                        raise HTTPException(
+                            status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
+                            detail=(
+                                "SoundCloud: неверный или устаревший "
+                                "SC_CLIENT_ID. Обновите в .env "
+                                "и перезапустите."
+                            ),
+                        )
+                    r.raise_for_status()
+                    data = r.json()
+                chunk = data.get("collection", [])
+                if isinstance(chunk, list):
+                    collected.extend([x for x in chunk if isinstance(x, dict)])
+                href = data.get("next_href")
+                next_url = href if isinstance(href, str) else None
+        except SoundCloudSemaphoreTimeout as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="SoundCloud is busy, retry later",
+            ) from exc
+        logger.info(
+            "sc_user_albums_done",
+            soundcloud_user_id=soundcloud_user_id,
+            count=len(collected),
+        )
+        return collected
+
+    @staticmethod
+    def _track_is_stub(track: dict[str, Any]) -> bool:
+        if track.get("permalink_url"):
+            return False
+        return track.get("id") is not None
+
+    async def fetch_track_by_id(
+        self,
+        soundcloud_track_id: int,
+    ) -> dict[str, Any]:
+        if not self._client_id:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="SoundCloud search is not configured",
+            )
+        try:
+            async with (
+                soundcloud_slot(
+                    timeout_seconds=(
+                        settings.soundcloud_slot_acquire_timeout_seconds
+                    ),
+                ),
+                self._sc_client() as client,
+            ):
+                r = await client.get(
+                    f"{_SC_API_BASE}/tracks/{soundcloud_track_id}",
+                    params={"client_id": self._client_id},
+                )
+                if r.status_code == 401:
+                    raise HTTPException(
+                        status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
+                        detail=(
+                            "SoundCloud: неверный или устаревший "
+                            "SC_CLIENT_ID. Обновите в .env "
+                            "и перезапустите."
+                        ),
+                    )
+                r.raise_for_status()
+                data = r.json()
+        except SoundCloudSemaphoreTimeout as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="SoundCloud is busy, retry later",
+            ) from exc
+        if not isinstance(data, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Unexpected SoundCloud track payload",
+            )
+        return data
+
+    async def expand_playlist_stub_tracks(
+        self,
+        playlist: dict[str, Any],
+    ) -> dict[str, Any]:
+        raw_tracks = playlist.get("tracks")
+        if not isinstance(raw_tracks, list):
+            return playlist
+        out: list[Any] = []
+        for item in raw_tracks:
+            if not isinstance(item, dict):
+                out.append(item)
+                continue
+            if self._track_is_stub(item):
+                tid = item.get("id")
+                if tid is None:
+                    out.append(item)
+                    continue
+                full = await self.fetch_track_by_id(int(tid))
+                out.append(full)
+            else:
+                out.append(item)
+        return {**playlist, "tracks": out}
+
+    async def ensure_soundcloud_ids_for_artist(
+        self,
+        artist_id: int,
+        sc_user_id: int,
+        permalink: str | None = None,
+    ) -> bool:
+        repo = ArtistRepository(self._session)
+        artist = await repo.get_by_id(artist_id)
+        if artist is None:
+            logger.warning(
+                "sc_ensure_ids_missing_artist",
+                artist_id=artist_id,
+            )
+            return False
+        norm = normalize_soundcloud_permalink(permalink)
+        other = await repo.find_by_soundcloud_user_id(
+            sc_user_id,
+            exclude_artist_id=artist_id,
+        )
+        if other is not None:
+            logger.warning(
+                "sc_ensure_ids_sc_user_taken",
+                artist_id=artist_id,
+                sc_user_id=sc_user_id,
+                other_artist_id=other.id,
+            )
+            return False
+        existing_uid = artist.soundcloud_user_id
+        if existing_uid is not None:
+            if int(existing_uid) != int(sc_user_id):
+                logger.warning(
+                    "sc_ensure_ids_user_id_mismatch",
+                    artist_id=artist_id,
+                    stored_soundcloud_user_id=int(existing_uid),
+                    requested_soundcloud_user_id=sc_user_id,
+                )
+                return False
+            if norm is not None and artist.soundcloud_permalink != norm:
+                artist.soundcloud_permalink = norm
+                await self._session.commit()
+                await self._session.refresh(artist)
+            return True
+        artist.soundcloud_user_id = sc_user_id
+        if norm is not None:
+            artist.soundcloud_permalink = norm
+        await self._session.commit()
+        await self._session.refresh(artist)
+        logger.info(
+            "sc_ensure_ids_applied",
+            artist_id=artist_id,
+            sc_user_id=sc_user_id,
+        )
+        return True
 
     async def import_or_get_track(
         self,

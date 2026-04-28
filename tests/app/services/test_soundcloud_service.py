@@ -8,8 +8,10 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.artist import Artist
 from app.services.soundcloud_service import (
     SoundCloudService,
+    normalize_soundcloud_permalink,
 )
 
 pytestmark = pytest.mark.anyio
@@ -499,3 +501,174 @@ async def test_import_or_get_track_dedup_via_unique_index(
 
     assert first.id == second.id
     assert first.uploaded_by_id == 1
+
+
+def test_normalize_soundcloud_permalink_slug() -> None:
+    assert (
+        normalize_soundcloud_permalink(
+            "https://soundcloud.com/MyArtist/tracks"
+        )
+        == "myartist"
+    )
+    assert normalize_soundcloud_permalink("PlainSlug") == "plainslug"
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_list_user_albums_pagination(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    resp1 = MagicMock()
+    resp1.status_code = 200
+    resp1.raise_for_status = MagicMock()
+    resp1.json.return_value = {
+        "collection": [{"id": 10, "title": "One"}],
+        "next_href": "https://api-v2.soundcloud.com/page2",
+    }
+    resp2 = MagicMock()
+    resp2.status_code = 200
+    resp2.raise_for_status = MagicMock()
+    resp2.json.return_value = {
+        "collection": [{"id": 11, "title": "Two"}],
+        "next_href": None,
+    }
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        side_effect=[resp1, resp2]
+    )
+    mock_client.__aenter__ = AsyncMock(
+        return_value=mock_client
+    )
+    mock_client.__aexit__ = AsyncMock(
+        return_value=False
+    )
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    albums = await svc.list_user_albums(12345)
+
+    assert len(albums) == 2
+    assert albums[0]["id"] == 10
+    assert albums[1]["id"] == 11
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_expand_playlist_stub_tracks(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    fetch_resp = MagicMock()
+    fetch_resp.status_code = 200
+    fetch_resp.raise_for_status = MagicMock()
+    fetch_resp.json.return_value = {
+        "id": 77,
+        "permalink_url": "https://soundcloud.com/u/full",
+        "title": "Resolved",
+    }
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=fetch_resp)
+    mock_client.__aenter__ = AsyncMock(
+        return_value=mock_client
+    )
+    mock_client.__aexit__ = AsyncMock(
+        return_value=False
+    )
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    result = await svc.expand_playlist_stub_tracks(
+        {"tracks": [{"id": 77}]}
+    )
+
+    assert result["tracks"][0]["title"] == "Resolved"
+
+
+async def test_ensure_soundcloud_ids_applies(
+    session: AsyncSession,
+) -> None:
+    artist = Artist(name="Act", name_normalized="act")
+    session.add(artist)
+    await session.flush()
+
+    svc = SoundCloudService("test_id", session)
+    ok = await svc.ensure_soundcloud_ids_for_artist(
+        artist.id,
+        424242,
+        "https://soundcloud.com/scuser/extra",
+    )
+
+    assert ok is True
+    await session.refresh(artist)
+    assert artist.soundcloud_user_id == 424242
+    assert artist.soundcloud_permalink == "scuser"
+
+
+async def test_ensure_soundcloud_ids_idempotent_same_user(
+    session: AsyncSession,
+) -> None:
+    artist = Artist(
+        name="Act",
+        name_normalized="act2",
+        soundcloud_user_id=99,
+        soundcloud_permalink="oldslug",
+    )
+    session.add(artist)
+    await session.flush()
+
+    svc = SoundCloudService("test_id", session)
+    ok = await svc.ensure_soundcloud_ids_for_artist(
+        artist.id,
+        99,
+        "newslug",
+    )
+
+    assert ok is True
+    await session.refresh(artist)
+    assert artist.soundcloud_permalink == "newslug"
+
+
+async def test_ensure_soundcloud_ids_skips_on_user_mismatch(
+    session: AsyncSession,
+) -> None:
+    artist = Artist(
+        name="Act",
+        name_normalized="act3",
+        soundcloud_user_id=1,
+    )
+    session.add(artist)
+    await session.flush()
+
+    svc = SoundCloudService("test_id", session)
+    ok = await svc.ensure_soundcloud_ids_for_artist(
+        artist.id,
+        2,
+        None,
+    )
+
+    assert ok is False
+    await session.refresh(artist)
+    assert artist.soundcloud_user_id == 1
+
+
+async def test_ensure_soundcloud_ids_skips_when_sc_id_taken(
+    session: AsyncSession,
+) -> None:
+    a1 = Artist(
+        name="First",
+        name_normalized="first",
+        soundcloud_user_id=500,
+    )
+    a2 = Artist(name="Second", name_normalized="second")
+    session.add_all([a1, a2])
+    await session.flush()
+
+    svc = SoundCloudService("test_id", session)
+    ok = await svc.ensure_soundcloud_ids_for_artist(
+        a2.id,
+        500,
+        None,
+    )
+
+    assert ok is False
+    await session.refresh(a2)
+    assert a2.soundcloud_user_id is None
