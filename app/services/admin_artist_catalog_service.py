@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import structlog
+from dotsound_private_core.services.catalog_sync_policy import (
+    catalog_sync_enqueue_cooldown_remaining_seconds,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.artist import ArtistRepository
@@ -22,12 +27,26 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 class AdminArtistCatalogService:
+    COOLDOWN_ENQUEUE_DETAIL = "catalog sync cooldown"
+
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._artists = ArtistRepository(session)
         self._catalog = ArtistCatalogRepository(session)
         self._read = ArtistCatalogReadService(session)
         self._admin = AdminService(session)
+
+    async def _ensure_catalog_sync_enqueue_allowed(
+        self,
+        artist_id: int,
+    ) -> None:
+        last = await self._catalog.latest_synced_at_for_artist(artist_id)
+        rem = catalog_sync_enqueue_cooldown_remaining_seconds(
+            last,
+            datetime.now(UTC),
+        )
+        if rem > 0:
+            raise ValueError(self.COOLDOWN_ENQUEUE_DETAIL)
 
     async def overview(
         self,
@@ -252,6 +271,7 @@ class AdminArtistCatalogService:
         if artist.soundcloud_user_id is None:
             msg = "artist has no soundcloud_user_id"
             raise ValueError(msg)
+        await self._ensure_catalog_sync_enqueue_allowed(artist_id)
         from app.services.artist_catalog_sync_worker import (
             sync_artist_catalog_task,
         )
@@ -284,6 +304,7 @@ class AdminArtistCatalogService:
         if rel.soundcloud_album_id is None:
             msg = "release has no soundcloud_album_id"
             raise ValueError(msg)
+        await self._ensure_catalog_sync_enqueue_allowed(artist_id)
         sc_album = int(rel.soundcloud_album_id)
         from app.services.artist_catalog_sync_worker import (
             sync_artist_catalog_release_task,

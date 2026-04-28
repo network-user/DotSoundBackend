@@ -143,6 +143,9 @@ Backend (file_validator.py):
 - `services/web_auth.py` -- OTP generation, IP masking, UA parsing
 - `services/internal_bridge.py` -- URL/header builders
 - `services/import_rules.py` -- import limits
+- `services/catalog_sync_policy.py` -- caps for external catalog sync runs
+  and admin enqueue cooldown; `app/services/artist_catalog_sync_service.py`,
+  `app/services/admin_artist_catalog_service.py`
 - `services/recommendation_engine.py` + `recommendation_language_policy.py` --
   recsys scoring, listening-language heuristics; питают
   `app/services/recommendation_service.py` и

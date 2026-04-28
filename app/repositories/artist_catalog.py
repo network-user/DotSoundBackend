@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist_catalog import (
@@ -28,6 +28,21 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
             )
         )
         return result.scalar_one_or_none()
+
+    async def latest_synced_at_for_artist(
+        self,
+        artist_id: int,
+    ) -> datetime | None:
+        stmt = select(func.max(ArtistCatalogRelease.synced_at)).where(
+            and_(
+                ArtistCatalogRelease.artist_id == artist_id,
+                ArtistCatalogRelease.soundcloud_album_id.isnot(None),
+            ),
+        )
+        raw = await self._session.scalar(stmt)
+        if raw is None:
+            return None
+        return raw
 
     async def next_display_position(self, artist_id: int) -> int:
         raw = await self._session.scalar(

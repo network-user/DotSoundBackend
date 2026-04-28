@@ -366,13 +366,15 @@ class SoundCloudService:
         soundcloud_user_id: int,
         *,
         limit_per_page: int = 50,
-    ) -> list[dict[str, Any]]:
+        max_total: int | None = None,
+    ) -> tuple[list[dict[str, Any]], bool]:
         if not self._client_id:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="SoundCloud search is not configured",
             )
         collected: list[dict[str, Any]] = []
+        truncated = False
         next_url: str | None = (
             f"{_SC_API_BASE}/users/{soundcloud_user_id}/albums"
         )
@@ -410,6 +412,12 @@ class SoundCloudService:
                 chunk = data.get("collection", [])
                 if isinstance(chunk, list):
                     collected.extend([x for x in chunk if isinstance(x, dict)])
+                if max_total is not None and len(collected) >= max_total:
+                    collected = collected[:max_total]
+                    href = data.get("next_href")
+                    truncated = isinstance(href, str) and bool(href)
+                    next_url = None
+                    break
                 href = data.get("next_href")
                 next_url = href if isinstance(href, str) else None
         except SoundCloudSemaphoreTimeout as exc:
@@ -421,8 +429,9 @@ class SoundCloudService:
             "sc_user_albums_done",
             soundcloud_user_id=soundcloud_user_id,
             count=len(collected),
+            truncated=truncated,
         )
-        return collected
+        return collected, truncated
 
     async def fetch_playlist_by_id(
         self,

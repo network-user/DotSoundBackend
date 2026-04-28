@@ -4,6 +4,13 @@ from datetime import date, datetime
 from typing import Any
 
 import structlog
+from dotsound_private_core.services.catalog_sync_policy import (
+    CATALOG_SYNC_ALBUMS_PAGE_SIZE,
+    CATALOG_SYNC_MAX_RELEASES_PER_FULL_RUN,
+    CATALOG_SYNC_MAX_TRACKS_PER_RELEASE,
+    clip_albums_for_full_sync,
+    clip_tracks_for_release_sync,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -57,11 +64,20 @@ class ArtistCatalogSyncService:
             sc_uid,
             artist.soundcloud_permalink,
         )
-        albums = await sc.list_user_albums(sc_uid)
+        raw_albums, source_truncated = await sc.list_user_albums(
+            sc_uid,
+            limit_per_page=CATALOG_SYNC_ALBUMS_PAGE_SIZE,
+            max_total=CATALOG_SYNC_MAX_RELEASES_PER_FULL_RUN,
+        )
+        albums = clip_albums_for_full_sync(
+            raw_albums,
+            CATALOG_SYNC_MAX_RELEASES_PER_FULL_RUN,
+        )
         stats: dict[str, Any] = {
             "albums_seen": len(albums),
             "albums_synced": 0,
             "skipped_manual": 0,
+            "albums_source_truncated": source_truncated,
         }
         for pos, raw in enumerate(albums):
             if not isinstance(raw, dict):
@@ -198,8 +214,20 @@ class ArtistCatalogSyncService:
         )
         raw_tracks = expanded.get("tracks")
         tracks_list = raw_tracks if isinstance(raw_tracks, list) else []
+        clipped = clip_tracks_for_release_sync(
+            tracks_list,
+            CATALOG_SYNC_MAX_TRACKS_PER_RELEASE,
+        )
+        if len(clipped) < len(tracks_list):
+            logger.warning(
+                "catalog_sync_tracks_capped",
+                artist_id=artist_id,
+                soundcloud_album_id=soundcloud_album_id,
+                kept=len(clipped),
+                dropped=len(tracks_list) - len(clipped),
+            )
         ordered_ids: list[int] = []
-        for idx, tr in enumerate(tracks_list):
+        for idx, tr in enumerate(clipped):
             if not isinstance(tr, dict):
                 continue
             track = await sc.import_or_get_track(
