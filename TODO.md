@@ -354,6 +354,11 @@ Mini App — секция в `TrackCardSheet` для публичных трек
 - [x] **Каталог дискографии — phase 5 (mini app):** карточки релизов и
   экран релиза с ordered track list в `ArtistView`, API-клиент и типы;
   воспроизведение через `TrackList` / `TrackCard` — 2026-04-28
+- [x] **Каталог дискографии — phase 7:** `catalog_sync_policy` (PrivateCore),
+  лимиты в `ArtistCatalogSyncService`, cooldown постановки в очередь в
+  `AdminArtistCatalogService` + 429 в admin API,
+  `ArtistCatalogRepository.latest_synced_at_for_artist`,
+  `SoundCloudService.list_user_albums` → `(albums, truncated)` — 2026-04-28
 - Policy-exception для явного source attribution
 (`source_name` + `source_page_url`) зафиксирован в
 `docs/ai-boundary-policy.md` (Backend + PrivateCore)

@@ -545,11 +545,39 @@ async def test_list_user_albums_pagination(
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
-    albums = await svc.list_user_albums(12345)
+    albums, truncated = await svc.list_user_albums(12345)
 
     assert len(albums) == 2
     assert albums[0]["id"] == 10
     assert albums[1]["id"] == 11
+    assert truncated is False
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_list_user_albums_respects_max_total(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    big = [{"id": i, "title": f"A{i}"} for i in range(5)]
+    resp1 = MagicMock()
+    resp1.status_code = 200
+    resp1.raise_for_status = MagicMock()
+    resp1.json.return_value = {
+        "collection": big,
+        "next_href": "https://api-v2.soundcloud.com/more",
+    }
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=resp1)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    albums, truncated = await svc.list_user_albums(9, max_total=2)
+
+    assert len(albums) == 2
+    assert truncated is True
+    mock_client.get.assert_awaited_once()
 
 
 @patch(f"{_MOD}.httpx.AsyncClient")

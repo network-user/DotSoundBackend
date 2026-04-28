@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -10,6 +11,9 @@ from app.models.artist_catalog import (
     ArtistCatalogReleaseTrack,
 )
 from app.models.track import Track
+from app.services.admin_artist_catalog_service import (
+    AdminArtistCatalogService,
+)
 from tests.conftest import admin_bearer_for_user, create_test_user
 
 pytestmark = pytest.mark.anyio
@@ -179,6 +183,93 @@ async def test_admin_catalog_sync_requires_step_up(
             assert r2.status_code == 200
             assert r2.json()["soundcloud_album_id"] == 999001
             kiq2.assert_awaited_once()
+
+
+async def test_admin_catalog_full_sync_cooldown_429(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 140006)
+    h = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    artist = Artist(
+        name="Cd",
+        name_normalized="cd",
+        soundcloud_user_id=444001,
+    )
+    db_session.add(artist)
+    await db_session.flush()
+    rel = ArtistCatalogRelease(
+        artist_id=artist.id,
+        title="Synced",
+        soundcloud_album_id=444002,
+        display_position=0,
+        synced_at=datetime.now(UTC) - timedelta(seconds=5),
+    )
+    db_session.add(rel)
+    await db_session.commit()
+
+    with patch(
+        "app.services.admin_auth_service.consume_step_up",
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        with patch(
+            "app.services.artist_catalog_sync_worker.sync_artist_catalog_task.kiq",
+            new_callable=AsyncMock,
+        ) as kiq:
+            r = await client.post(
+                f"/api/v1/admin/artists/{artist.id}/catalog/sync",
+                headers=h,
+            )
+            assert r.status_code == 429
+            assert r.json()["detail"] == (
+                AdminArtistCatalogService.COOLDOWN_ENQUEUE_DETAIL
+            )
+            kiq.assert_not_awaited()
+
+
+async def test_admin_catalog_full_sync_after_cooldown_ok(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 140007)
+    h = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    artist = Artist(
+        name="Cd2",
+        name_normalized="cd2",
+        soundcloud_user_id=444010,
+    )
+    db_session.add(artist)
+    await db_session.flush()
+    rel = ArtistCatalogRelease(
+        artist_id=artist.id,
+        title="Old",
+        soundcloud_album_id=444011,
+        display_position=0,
+        synced_at=datetime.now(UTC) - timedelta(hours=2),
+    )
+    db_session.add(rel)
+    await db_session.commit()
+
+    with patch(
+        "app.services.admin_auth_service.consume_step_up",
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        with patch(
+            "app.services.artist_catalog_sync_worker.sync_artist_catalog_task.kiq",
+            new_callable=AsyncMock,
+        ) as kiq:
+            r = await client.post(
+                f"/api/v1/admin/artists/{artist.id}/catalog/sync",
+                headers=h,
+            )
+            assert r.status_code == 200
+            kiq.assert_awaited_once()
 
 
 async def test_admin_catalog_search_tracks(
