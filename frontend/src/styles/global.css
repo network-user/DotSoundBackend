@@ -120,6 +120,9 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   overflow-x: hidden;
 }
 .view.active { display: block; }
+.view.active.not-found-view {
+  display: flex;
+}
 
 #view-search {
   width: 100%;
@@ -5857,10 +5860,11 @@ html.ds-low-glass .tcs-sheet {
   text-align: center;
   width: 100%;
   max-width: 22rem;
+  margin-inline: auto;
   padding: clamp(1.5rem, 4vw, 2.25rem) clamp(1.25rem, 4vw, 1.75rem);
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   gap: 0.75rem;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -5892,6 +5896,7 @@ html.ds-low-glass .tcs-sheet {
   font-variant-numeric: tabular-nums;
 }
 .not-found-home-btn {
+  align-self: center;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -5910,8 +5915,14 @@ html.ds-low-glass .tcs-sheet {
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
 }
+.not-found-home-btn span {
+  color: var(--bg);
+}
 .not-found-home-btn:hover {
   background: var(--accent-hover);
+  color: var(--bg);
+}
+.not-found-home-btn:hover span {
   color: var(--bg);
 }
 .not-found-home-btn:focus-visible {
@@ -5924,4 +5935,29 @@ html.ds-low-glass .tcs-sheet {
 .not-found-home-btn-icon {
   display: inline-flex;
   flex-shrink: 0;
+}
+
+@media (min-width: 900px) {
+  .not-found-view {
+    min-height: min(
+      82vh,
+      calc(100dvh - var(--nav-h) - var(--player-h) - 80px)
+    );
+    padding: 32px 28px 48px;
+  }
+  .not-found-panel {
+    max-width: 28rem;
+    padding: 2.5rem 2.25rem;
+    gap: 1rem;
+  }
+  .not-found-code {
+    font-size: 5rem;
+  }
+  .not-found-title {
+    font-size: 1.35rem;
+    max-width: none;
+  }
+  .not-found-hint {
+    font-size: 0.9375rem;
+  }
 }
