@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi.responses import Response
 from httpx import AsyncClient
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -300,3 +301,131 @@ async def test_audio_stream_force_progressive_skips_hls_redirect(
     assert r.status_code == 200
     assert r.content == mp3
     assert r.headers["content-type"] == "audio/mpeg"
+
+
+async def test_soundcloud_progressive_stream_returns_same_origin_audio(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 50190)
+    t = await create_test_track(client, "ThirdSC", user["id"])
+    tid = t["id"]
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == tid)
+        .values(
+            access_mode="third_party_stream",
+            source_platform="soundcloud",
+            sc_url="https://soundcloud.com/x/y",
+            file_key=None,
+            hls_manifest_key=None,
+        )
+    )
+    await db_session.commit()
+
+    async def fake_resolve(
+        _tr: object,
+        _sess: object,
+    ) -> tuple[str, str]:
+        return "https://media.sndcdn.com/progressive.mp3", "progressive"
+
+    with patch(
+        "app.api.v1.tracks.playback._resolve_third_party_stream",
+        new=fake_resolve,
+    ):
+        r = await client.get(f"/api/v1/tracks/{tid}/stream")
+    assert r.status_code == 200
+    payload = r.json()
+    assert payload["stream_type"] == "direct"
+    assert payload["url"].endswith(
+        f"/api/v1/tracks/{tid}/audio",
+    )
+
+
+async def test_soundcloud_progressive_audio_proxies_upstream(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 50191)
+    t = await create_test_track(client, "ThirdSC2", user["id"])
+    tid = t["id"]
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == tid)
+        .values(
+            access_mode="third_party_stream",
+            source_platform="soundcloud",
+            sc_url="https://soundcloud.com/a/b",
+            file_key=None,
+            hls_manifest_key=None,
+        )
+    )
+    await db_session.commit()
+
+    async def fake_resolve(
+        _tr: object,
+        _sess: object,
+    ) -> tuple[str, str]:
+        return "https://media.sndcdn.com/x.mp3", "progressive"
+
+    stub = Response(
+        content=b"\xff\xfb\x92",
+        media_type="audio/mpeg",
+    )
+
+    with (
+        patch(
+            "app.api.v1.tracks.playback._resolve_third_party_stream",
+            new=fake_resolve,
+        ),
+        patch(
+            "app.api.v1.tracks.playback._http_proxy_range_get",
+            new_callable=AsyncMock,
+            return_value=stub,
+        ),
+    ):
+        r = await client.get(f"/api/v1/tracks/{tid}/audio")
+    assert r.status_code == 200
+    assert r.content == b"\xff\xfb\x92"
+
+
+async def test_soundcloud_hls_stream_and_audio_redirect(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 50192)
+    t = await create_test_track(client, "ThirdSCHls", user["id"])
+    tid = t["id"]
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == tid)
+        .values(
+            access_mode="third_party_stream",
+            source_platform="soundcloud",
+            sc_url="https://soundcloud.com/x/z",
+            file_key=None,
+            hls_manifest_key=None,
+        )
+    )
+    await db_session.commit()
+
+    hls = "https://cf-hls-media.sndcdn.com/hls/123/playlist.m3u8"
+
+    async def fake_resolve(
+        _tr: object,
+        _sess: object,
+    ) -> tuple[str, str]:
+        return hls, "hls"
+
+    with patch(
+        "app.api.v1.tracks.playback._resolve_third_party_stream",
+        new=fake_resolve,
+    ):
+        r = await client.get(f"/api/v1/tracks/{tid}/stream")
+        r2 = await client.get(f"/api/v1/tracks/{tid}/audio")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["stream_type"] == "hls"
+    assert body["url"] == hls
+    assert r2.status_code == 302
+    assert r2.headers["location"] == hls

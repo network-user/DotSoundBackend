@@ -1,12 +1,10 @@
-from __future__ import annotations
-
 import contextlib
 import uuid
-from datetime import datetime
 
 import structlog
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     Query,
     Request,
@@ -14,7 +12,6 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthError, decode_access_token
@@ -22,29 +19,19 @@ from app.core.rate_limit import limiter
 from app.core.redis import get_redis_client
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
+from app.schemas.colisten import (
+    CoListenCreateBody,
+    CoListenPatchBody,
+    CoListenRoomState,
+)
 from app.services.co_listen_service import CoListenService
 
 router = APIRouter(prefix="/colisten", tags=["co-listen"])
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(
+    __name__
+)
 
 _CHANNEL_FMT = "colisten:room:{}"
-
-
-class CoListenRoomState(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    host_id: int
-    dj_id: int | None = None
-    track_id: int
-    position_ms: int
-    is_playing: bool
-    epoch: int
-    expires_at: datetime
-
-
-class CoListenCreateBody(BaseModel):
-    track_id: int = Field(..., ge=1)
 
 
 @router.post(
@@ -55,12 +42,12 @@ class CoListenCreateBody(BaseModel):
 @limiter.limit("30/minute")
 async def create_colisten_room(
     request: Request,
-    body: CoListenCreateBody,
+    payload: CoListenCreateBody = Body(...),
     session: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> CoListenRoomState:
     svc = CoListenService(session)
-    r = await svc.create_room(user, body.track_id)
+    r = await svc.create_room(user, payload.track_id)
     return CoListenRoomState(
         id=str(r.id),
         host_id=int(r.host_id),
@@ -97,12 +84,6 @@ async def get_colisten_room(
     )
 
 
-class CoListenPatchBody(BaseModel):
-    position_ms: int | None = None
-    is_playing: bool | None = None
-    track_id: int | None = None
-
-
 @router.patch(
     "/rooms/{room_id}",
     response_model=CoListenRoomState,
@@ -111,7 +92,7 @@ class CoListenPatchBody(BaseModel):
 async def patch_colisten_room(
     request: Request,
     room_id: uuid.UUID,
-    body: CoListenPatchBody,
+    payload: CoListenPatchBody = Body(...),
     session: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> CoListenRoomState:
@@ -119,9 +100,9 @@ async def patch_colisten_room(
     r = await svc.patch_state(
         room_id,
         user,
-        position_ms=body.position_ms,
-        is_playing=body.is_playing,
-        track_id=body.track_id,
+        position_ms=payload.position_ms,
+        is_playing=payload.is_playing,
+        track_id=payload.track_id,
     )
     return CoListenRoomState(
         id=str(r.id),
@@ -157,7 +138,10 @@ async def colisten_ws(
     try:
         await pubsub.subscribe(ch)
     except Exception as exc:
-        logger.warning("colisten_ws_subscribe_failed", err=str(exc))
+        logger.warning(
+            "colisten_ws_subscribe_failed",
+            err=str(exc),
+        )
         await websocket.close(code=4500)
         return
     try:

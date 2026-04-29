@@ -331,28 +331,9 @@ class SoundCloudService:
         )
         track_auth: str = sc_data.get("track_authorization", "")
 
-        protocols = (
+        protocols_order = (
             ["hls", "progressive"] if prefer_hls else ["progressive", "hls"]
         )
-        selected: dict | None = None
-        for protocol in protocols:
-            selected = next(
-                (
-                    t
-                    for t in transcodings
-                    if t.get("format", {}).get("protocol") == protocol
-                    and not t.get("snipped")
-                ),
-                None,
-            )
-            if selected:
-                break
-
-        if not selected:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="No streamable format found for this SC track",
-            )
 
         params: dict = {"client_id": self._client_id}
         if track_auth:
@@ -367,28 +348,76 @@ class SoundCloudService:
                 ),
                 self._sc_client() as client,
             ):
-                r = await client.get(selected["url"], params=params)
-                if r.status_code in (401, 403):
-                    raise HTTPException(
-                        status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
-                        detail=(
-                            "SoundCloud: неверный или устаревший "
-                            "SC_CLIENT_ID. Обновите в .env и перезапустите."
+                attempted = False
+                saw_manifest_404 = False
+                for protocol in protocols_order:
+                    selected = next(
+                        (
+                            t
+                            for t in transcodings
+                            if t.get("format", {}).get("protocol")
+                            == protocol
+                            and not t.get("snipped")
                         ),
+                        None,
                     )
-                r.raise_for_status()
-                stream_url: str = r.json()["url"]
-                protocol: str = selected.get("format", {}).get(
-                    "protocol", "progressive"
+                    if not selected:
+                        continue
+                    attempted = True
+                    r = await client.get(selected["url"], params=params)
+                    if r.status_code in (401, 403):
+                        raise HTTPException(
+                            status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
+                            detail=(
+                                "SoundCloud: неверный или устаревший "
+                                "SC_CLIENT_ID. Обновите в .env "
+                                "и перезапустите."
+                            ),
+                        )
+                    if r.status_code == 404:
+                        saw_manifest_404 = True
+                        logger.warning(
+                            "soundcloud_transcoding_manifest_404",
+                            protocol=protocol,
+                        )
+                        continue
+                    if not r.is_success:
+                        logger.warning(
+                            "soundcloud_transcoding_http_error",
+                            status_code=r.status_code,
+                            protocol=protocol,
+                        )
+                        raise HTTPException(
+                            status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail="SoundCloud upstream error",
+                        )
+                    stream_url: str = r.json()["url"]
+                    protocol_out: str = selected.get("format", {}).get(
+                        "protocol", protocol
+                    )
+                    await set_cached_stream(
+                        CACHE_KEY_SC,
+                        cache_id,
+                        stream_url,
+                        protocol_out,
+                        settings.stream_url_cache_ttl_soundcloud,
+                    )
+                    return stream_url, protocol_out
+
+                if not attempted:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="No streamable format found for this SC track",
+                    )
+                if saw_manifest_404:
+                    logger.warning(
+                        "soundcloud_stream_unavailable_all_formats",
+                        sc_host="api-v2.soundcloud.com",
+                    )
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="SoundCloud stream unavailable",
                 )
-                await set_cached_stream(
-                    CACHE_KEY_SC,
-                    cache_id,
-                    stream_url,
-                    protocol,
-                    settings.stream_url_cache_ttl_soundcloud,
-                )
-                return stream_url, protocol
         except SoundCloudSemaphoreTimeout as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

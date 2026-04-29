@@ -33,11 +33,11 @@ from app.services.public_playcount_service import (
 )
 from app.services.radio_service import RadioService
 from app.services.snippet_service import SnippetService
-from app.services.track_service import TrackService
 from app.services.track_response_build import (
     build_track_response,
     build_track_responses,
 )
+from app.services.track_service import TrackService
 
 router = APIRouter()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -49,6 +49,13 @@ def _stream_ttl(source_platform: str | None) -> int:
     if source_platform == "bandcamp":
         return 3600  # ~1 hour
     return 300  # SoundCloud default
+
+
+def _third_party_is_soundcloud(tr: object) -> bool:
+    pf = getattr(tr, "source_platform", None)
+    return pf == "soundcloud" or bool(
+        not pf and getattr(tr, "sc_url", None),
+    )
 
 
 async def _resolve_third_party_stream(
@@ -121,6 +128,7 @@ async def _http_proxy_range_get(
     *,
     detail_fail: str,
     detail_error: str,
+    extra_headers: dict[str, str] | None = None,
 ) -> StreamingResponse:
     """Proxy GET + Range: media is same-origin for WebAudio + ``<audio>``."""
     from app.config import settings
@@ -129,6 +137,8 @@ async def _http_proxy_range_get(
     h: dict[str, str] = {
         "User-Agent": settings.outbound_user_agent,
     }
+    if extra_headers:
+        h.update(extra_headers)
     if range_header:
         h["Range"] = range_header
 
@@ -270,9 +280,10 @@ async def stream_track(
             )
         stream_track_id = track_id
         stream_pf = track.source_platform
+        eff_track: object = track
         try:
             stream_url, protocol = await _resolve_third_party_stream(
-                track, session
+                eff_track, session
             )
         except HTTPException as exc:
             if exc.status_code in (403, 404, 410, 503):
@@ -286,6 +297,7 @@ async def stream_track(
                     track
                 )
                 if replacement:
+                    eff_track = replacement
                     stream_url, protocol = await _resolve_third_party_stream(
                         replacement, session
                     )
@@ -295,10 +307,19 @@ async def stream_track(
                     raise
             else:
                 raise
+        if protocol == "hls" or not _third_party_is_soundcloud(
+            eff_track,
+        ):
+            return StreamResponse(
+                track_id=stream_track_id,
+                url=stream_url,
+                stream_type="hls" if protocol == "hls" else "direct",
+                expires_in=_stream_ttl(stream_pf),
+            )
         return StreamResponse(
             track_id=stream_track_id,
-            url=stream_url,
-            stream_type="hls" if protocol == "hls" else "direct",
+            url=f"/api/v1/tracks/{stream_track_id}/audio",
+            stream_type="direct",
             expires_in=_stream_ttl(stream_pf),
         )
     if not track.file_key:
@@ -427,7 +448,20 @@ async def audio_stream(
             return await _proxy_cors_bypass_third_party_audio(
                 request, track, session
             )
-        stream_url, _ = await _resolve_third_party_stream(track, session)
+        stream_url, protocol = await _resolve_third_party_stream(
+            track, session
+        )
+        if _third_party_is_soundcloud(track) and protocol != "hls":
+            return await _http_proxy_range_get(
+                request,
+                stream_url,
+                detail_fail="SoundCloud stream failed",
+                detail_error="SoundCloud stream error",
+                extra_headers={
+                    "User-Agent": settings.lyrics_sc_cdn_user_agent,
+                    "Referer": settings.lyrics_sc_cdn_referer,
+                },
+            )
         return RedirectResponse(url=stream_url, status_code=302)
 
     if not track.file_key:
@@ -677,7 +711,7 @@ async def video_proxy(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Video file not found",
-        )
+        ) from None
     ct = "video/mp4"
     if track.video_key.endswith(".webm"):
         ct = "video/webm"
