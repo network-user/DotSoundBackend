@@ -292,7 +292,7 @@ class ArtistEnrichmentService:
         if isinstance(primary_id, str) and primary_id:
             artist.primary_source_id = primary_id
 
-        if info.image_url:
+        if info.image_url and not artist.image_key:
             await _log("saving", "downloading image")
             try:
                 new_key = await self._download_and_store_image(
@@ -321,6 +321,11 @@ class ArtistEnrichmentService:
                     "saving",
                     "image not available (keeping text)",
                 )
+        elif info.image_url and artist.image_key:
+            await _log(
+                "saving",
+                "skipping image (artist already has image_key)",
+            )
 
         artist.enrichment_confidence = float(info.confidence)
         await self._finalize(artist, "done")

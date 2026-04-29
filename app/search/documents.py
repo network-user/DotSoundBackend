@@ -26,9 +26,11 @@ def track_to_doc(t: Track) -> dict:
 
 
 def artist_to_doc(a: Artist) -> dict:
+    sc_perm = (a.soundcloud_permalink or "").strip().lower()
     return {
         "artist_id": a.id,
         "name": a.name or "",
         "name_sayt": a.name or "",
         "name_normalized": a.name_normalized or "",
+        "soundcloud_permalink": sc_perm,
     }

@@ -90,11 +90,19 @@ async def import_soundcloud_track(
 
         artist_svc = ArtistService(session)
         try:
-            await artist_svc.resolve_and_link(
+            linked = await artist_svc.resolve_and_link(
                 track_id=track.id,
                 raw_artist_string=track.artist,
                 source="soundcloud",
             )
+            if linked:
+                user_payload = sc_data.get("user")
+                if isinstance(user_payload, dict):
+                    await service.sync_artist_soundcloud_uploader_profile(
+                        linked[0].id,
+                        user_payload,
+                        uploader_id=current_user.id,
+                    )
             await session.commit()
         except Exception:
             logger.warning(

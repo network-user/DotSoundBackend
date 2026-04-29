@@ -654,6 +654,83 @@ async def test_ensure_soundcloud_ids_skips_on_user_mismatch(
     assert artist.soundcloud_user_id == 1
 
 
+@patch(
+    f"{_MOD}.s3.upload_image",
+    new_callable=AsyncMock,
+    return_value=(
+        "artists/1/abc.webp",
+        "artists/1/abc_thumb.webp",
+        64,
+        64,
+    ),
+)
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_sync_artist_soundcloud_uploader_profile_avatar(
+    mock_client_cls: AsyncMock,
+    mock_upload_image: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    artist = Artist(name="ScAct", name_normalized="scact")
+    session.add(artist)
+    await session.flush()
+
+    img_resp = MagicMock()
+    img_resp.status_code = 200
+    img_resp.content = b"\xff\xd8\xff\xe0"
+    img_resp.headers = {"content-type": "image/jpeg"}
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=img_resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    await svc.sync_artist_soundcloud_uploader_profile(
+        artist.id,
+        {
+            "id": 90001,
+            "permalink": "scactslug",
+            "avatar_url": "https://i1.sndcdn.com/avatars-000/large.jpg",
+        },
+        uploader_id=1,
+    )
+
+    await session.refresh(artist)
+    assert artist.soundcloud_user_id == 90001
+    assert artist.soundcloud_permalink == "scactslug"
+    assert artist.image_key == "artists/1/abc.webp"
+    mock_upload_image.assert_awaited_once()
+
+
+@patch(f"{_MOD}.s3.upload_image")
+async def test_sync_artist_soundcloud_skips_default_avatar(
+    mock_upload_image: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    artist = Artist(name="NoPic", name_normalized="nopic")
+    session.add(artist)
+    await session.flush()
+
+    svc = SoundCloudService("test_id", session)
+    await svc.sync_artist_soundcloud_uploader_profile(
+        artist.id,
+        {
+            "id": 80002,
+            "permalink": "nopic",
+            "avatar_url": (
+                "https://a1.sndcdn.com/images/default_avatar_large.png"
+            ),
+        },
+        uploader_id=1,
+    )
+
+    await session.refresh(artist)
+    assert artist.soundcloud_user_id == 80002
+    assert artist.image_key is None
+    mock_upload_image.assert_not_called()
+
+
 async def test_ensure_soundcloud_ids_skips_when_sc_id_taken(
     session: AsyncSession,
 ) -> None:

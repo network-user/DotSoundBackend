@@ -199,6 +199,7 @@ async def es_suggest_mixed(
                                 "name_sayt._2gram",
                                 "name_sayt._3gram",
                                 "name",
+                                "soundcloud_permalink",
                             ],
                             "boost": 1.0,
                         }
@@ -207,7 +208,11 @@ async def es_suggest_mixed(
                         "multi_match": {
                             "query": qstrip,
                             "type": "best_fields",
-                            "fields": ["name^2", "name"],
+                            "fields": [
+                                "name^2",
+                                "name",
+                                "soundcloud_permalink",
+                            ],
                             "fuzziness": fuzz,
                             "fuzzy_max_expansions": fmax,
                             "boost": 0.25,
@@ -308,6 +313,7 @@ async def es_search_artists(q: str, *, limit: int = 20) -> list[int] | None:
         "name^2",
         "name_sayt^1.2",
         "name_sayt._2gram",
+        "soundcloud_permalink^1.3",
     ]
     fuzz = settings.elasticsearch_track_fuzziness
     fmax = settings.elasticsearch_fuzzy_max_expansions
