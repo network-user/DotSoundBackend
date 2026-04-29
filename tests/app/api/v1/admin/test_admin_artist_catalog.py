@@ -136,11 +136,16 @@ async def test_admin_catalog_sync_requires_step_up(
     db_session.add(rel)
     await db_session.commit()
 
-    r0 = await client.post(
-        f"/api/v1/admin/artists/{artist.id}/catalog/sync",
-        headers=h,
-    )
-    assert r0.status_code == 403
+    with patch(
+        "app.services.admin_auth_service.consume_step_up",
+        new_callable=AsyncMock,
+        return_value=False,
+    ):
+        r0 = await client.post(
+            f"/api/v1/admin/artists/{artist.id}/catalog/sync",
+            headers=h,
+        )
+        assert r0.status_code == 403
 
     with patch(
         "app.services.admin_auth_service.consume_step_up",

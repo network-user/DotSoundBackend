@@ -344,7 +344,10 @@ Mini App — секция в `TrackCardSheet` для публичных трек
   `SoundCloudService.fetch_playlist_by_id` / `download_artwork_as_cover_key`;
   без публичных/admin HTTP-роутов (phase 4–6); перед синком —
   `try_autofill_soundcloud_user_id_for_artist` (permalink / профильные URL
-  из `source_profiles`, иначе первый хит user search) — 2026-04-28
+  из `source_profiles`, иначе первый хит user search) — 2026-04-28;
+  тот же autofill вызывается из `AdminArtistCatalogService` при постановке
+  full/release sync в очередь (раньше enqueue отсекал `NULL` до воркера)
+  — 2026-04-29
 - [x] **Каталог дискографии — phase 4:** публичное чтение каталога
   `GET /api/v1/artists/{id}/catalog/releases`,
   `GET /api/v1/artists/{id}/catalog/releases/{release_id}` —
