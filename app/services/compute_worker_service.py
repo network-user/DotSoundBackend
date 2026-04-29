@@ -371,6 +371,12 @@ async def claim_next_job(
         1, int(worker.max_concurrent_jobs or 1)
     )
     if in_flight >= max_concurrent:
+        logger.info(
+            "lyrics_claim_skipped_at_capacity",
+            worker_id=worker.id,
+            in_flight=int(in_flight),
+            max_concurrent=max_concurrent,
+        )
         return None
 
     profiles = _expand_profiles_for_lyrics_claim(

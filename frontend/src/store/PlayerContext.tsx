@@ -1166,7 +1166,7 @@ export function PlayerProvider({
     streamExpiresAtRef.current = null
     lastStreamUrlRef.current = null
     lastTrackIdRef.current = newTrack.id
-    await loadEqSettings()
+    void loadEqSettings()
     if (bail()) return
     _initAudioCtx()
     if (hlsRef.current) {
@@ -1474,13 +1474,18 @@ export function PlayerProvider({
     } catch {}
   }
 
-  const togglePlay = async () => {
+  const togglePlay = () => {
     const a = audioRef.current
     if (!a || !track) return
-    await loadEqSettings()
+    void loadEqSettings()
     _initAudioCtx()
     if (a.paused) {
-      void safePlay(a)
+      void safePlay(a, {
+        onNotAllowed: () =>
+          toast.error(
+            'Браузер заблокировал воспроизведение',
+          ),
+      })
     } else a.pause()
   }
 
