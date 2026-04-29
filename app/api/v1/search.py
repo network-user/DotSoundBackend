@@ -12,16 +12,9 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.core import s3
 from app.core.observability import elasticsearch_query_observed
 from app.core.rate_limit import limiter
 from app.dependencies import get_db
-from app.models.user import User
-from app.repositories.user import UserRepository
-from app.schemas.search_author import (
-    PlatformAuthorSearchItem,
-    PlatformAuthorSearchListResponse,
-)
 from app.schemas.search_suggest import (
     SuggestItemResponse,
     SuggestListResponse,
@@ -34,59 +27,6 @@ from app.services.search_index_service import (
 
 router = APIRouter(prefix="/search", tags=["search"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
-
-
-def _platform_author_display_name(user: User) -> str:
-    if user.display_name and user.display_name.strip():
-        return user.display_name.strip()
-    parts = [user.first_name]
-    if user.last_name and user.last_name.strip():
-        parts.append(user.last_name.strip())
-    joined = " ".join(parts).strip()
-    return joined or "—"
-
-
-async def _platform_author_avatar_url(user: User) -> str:
-    if user.avatar_key:
-        return await s3.get_presigned_url(user.avatar_key)
-    seed = user.avatar_seed or (
-        str(user.telegram_id)
-        if user.telegram_id is not None
-        else str(user.id)
-    )
-    return f"https://api.dicebear.com/9.x/identicon/svg?seed={seed}"
-
-
-@router.get(
-    "/authors",
-    response_model=PlatformAuthorSearchListResponse,
-    summary="Search platform users who have public uploads (for catalog search)",
-)
-@limiter.limit("60/minute")
-async def search_platform_authors(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    q: str = Query(
-        min_length=1,
-        max_length=200,
-        description="Match against username, names, display_name",
-    ),
-    limit: int = Query(10, ge=1, le=20),
-) -> PlatformAuthorSearchListResponse:
-    repo = UserRepository(db)
-    users = await repo.search_platform_authors(q.strip(), limit=limit)
-    items: list[PlatformAuthorSearchItem] = []
-    for u in users:
-        avatar_url = await _platform_author_avatar_url(u)
-        items.append(
-            PlatformAuthorSearchItem(
-                id=int(u.id),
-                display_name=_platform_author_display_name(u),
-                username=u.username,
-                avatar_url=avatar_url,
-            )
-        )
-    return PlatformAuthorSearchListResponse(items=items)
 
 
 @router.get(

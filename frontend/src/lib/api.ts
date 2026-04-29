@@ -8,6 +8,7 @@ import type {
   ArtistCatalogReleaseDetail,
   ArtistCatalogReleaseListPayload,
   ArtistDetail,
+  ArtistInfo,
   ArtistEnrichStatusResponse,
   ArtistEnrichWatchResponse,
   ArtistSupplementalResponse,
@@ -30,7 +31,6 @@ import type {
   PlaylistWithTracks,
   SCSearchResult,
   SearchSuggestResponse,
-  PlatformAuthorSearchResponse,
   ShareResponse,
   StreamResponse,
   SyncedLine,
@@ -268,17 +268,6 @@ export const api = {
   ): Promise<SearchSuggestResponse> {
     return request(
       `/api/v1/search/suggest?q=${encodeURIComponent(
-        q,
-      )}&limit=${limit}`,
-    )
-  },
-
-  searchPlatformAuthors(
-    q: string,
-    limit = 10,
-  ): Promise<PlatformAuthorSearchResponse> {
-    return request(
-      `/api/v1/search/authors?q=${encodeURIComponent(
         q,
       )}&limit=${limit}`,
     )
@@ -1685,9 +1674,14 @@ export const api = {
 
   // ── Artists ─────────────────────────────────────
 
-  getArtists(q?: string): Promise<{ items: { id: number; name: string; image_key: string | null; source: string; bio: string | null; created_at: string }[]; total: number }> {
-    const qs = q ? `?q=${encodeURIComponent(q)}` : ''
-    return request(`/api/v1/artists${qs}`)
+  getArtists(
+    q?: string,
+    limit = 20,
+  ): Promise<{ items: ArtistInfo[]; total: number }> {
+    const sp = new URLSearchParams()
+    if (q) sp.set('q', q)
+    sp.set('limit', String(limit))
+    return request(`/api/v1/artists?${sp}`)
   },
 
   getArtist(artistId: number): Promise<ArtistDetail> {

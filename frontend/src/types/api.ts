@@ -79,17 +79,6 @@ export interface SearchSuggestResponse {
   items: SearchSuggestItem[]
 }
 
-export interface PlatformAuthorSearchItem {
-  id: number
-  display_name: string
-  username: string | null
-  avatar_url: string
-}
-
-export interface PlatformAuthorSearchResponse {
-  items: PlatformAuthorSearchItem[]
-}
-
 export interface TrackUploadResponse {
   id: number
   title: string
