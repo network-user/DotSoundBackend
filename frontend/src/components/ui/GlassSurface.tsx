@@ -17,6 +17,8 @@ interface Props
   interactive?: boolean
   bordered?: boolean
   noiseOverlay?: boolean
+  /** Frutiger-Aero top-edge gloss stripe (default: true for medium/strong/liquid) */
+  shine?: boolean
   children?: ReactNode
 }
 
@@ -47,6 +49,7 @@ export const GlassSurface = forwardRef<
     interactive = false,
     bordered = true,
     noiseOverlay = false,
+    shine,
     className,
     children,
     style,
@@ -101,6 +104,9 @@ export const GlassSurface = forwardRef<
     .filter(Boolean)
     .join(' ')
 
+  const showShine =
+    shine ?? (intensity === 'medium' || intensity === 'strong' || intensity === 'liquid')
+
   const merged: CSSProperties = style ?? {}
 
   return (
@@ -110,15 +116,12 @@ export const GlassSurface = forwardRef<
       style={merged}
       {...rest}
     >
-      <span
-        aria-hidden="true"
-        className="glass__highlight"
-      />
+      <span aria-hidden="true" className="glass__highlight" />
+      {showShine && (
+        <span aria-hidden="true" className="glass__shine" />
+      )}
       {noiseOverlay && (
-        <span
-          aria-hidden="true"
-          className="glass__noise"
-        />
+        <span aria-hidden="true" className="glass__noise" />
       )}
       <span className="glass__content">{children}</span>
     </div>
