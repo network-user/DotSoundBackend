@@ -302,6 +302,29 @@ async def verify_worker_request(
     return worker
 
 
+def _expand_profiles_for_lyrics_claim(
+    profiles: list[str],
+) -> list[str]:
+    """Map admin tier-style worker labels onto ``LyricsJob.profile``.
+
+    ``lyrics_cascade.TIER_PROFILE_MAP`` stores ``remote_whisper`` tier
+    jobs under profile ``gpu_full``. Workers may still be registered
+    with ``profile=remote_whisper`` (allowed by admin schema), so we
+    union both spellings for the SQL ``IN`` filter.
+    """
+    from app.services.lyrics_cascade import TIER_PROFILE_MAP
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for w in profiles:
+        mapped = TIER_PROFILE_MAP.get(w, w)
+        for c in (w, mapped):
+            if c not in seen:
+                seen.add(c)
+                out.append(c)
+    return out
+
+
 async def claim_next_job(
     session: AsyncSession,
     *,
@@ -341,8 +364,8 @@ async def claim_next_job(
     if in_flight >= max_concurrent:
         return None
 
-    profiles = list(
-        worker.allowed_profiles or [worker.profile]
+    profiles = _expand_profiles_for_lyrics_claim(
+        list(worker.allowed_profiles or [worker.profile]),
     )
 
     select_stmt = (

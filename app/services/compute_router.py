@@ -126,9 +126,12 @@ async def any_worker_online(
     cutoff = datetime.now(UTC) - timedelta(
         seconds=heartbeat_timeout
     )
+    profiles = [profile]
+    if profile == "gpu_full":
+        profiles.append(TIER_REMOTE_WHISPER)
     result = await session.execute(
         select(ComputeWorker).where(
-            ComputeWorker.profile == profile,
+            ComputeWorker.profile.in_(profiles),
             ComputeWorker.active.is_(True),
             ComputeWorker.revoked_at.is_(None),
             ComputeWorker.last_seen_at.is_not(None),
@@ -163,8 +166,8 @@ async def is_tier_available(
     """True if ``tier`` can accept a job *right now*.
 
     - catalog_only: always available (Backend itself runs the task)
-    - remote_whisper: at least one worker with profile=gpu_full
-      and a fresh heartbeat
+    - remote_whisper: at least one worker with profile ``gpu_full``
+      or ``remote_whisper`` (same ASR pool) and a fresh heartbeat
     - speechkit_paid: feature flag is on AND the monthly budget
       isn't exhausted (cheap pre-check; the per-job soft limit is
       re-evaluated by `lyrics_cascade._dispatch_to_tier`)
