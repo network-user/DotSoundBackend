@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_db, require_admin
@@ -28,12 +29,12 @@ from app.services import artist_enrichment_progress as progress
 from app.services.artist_catalog_read_service import (
     ArtistCatalogReadService,
 )
-from app.services.track_response_build import dedupe_and_build_track_list
 from app.services.artist_enrichment_service import (
     ArtistEnrichmentService,
     ArtistNotFound,
 )
 from app.services.artist_service import ArtistService
+from app.services.track_response_build import dedupe_and_build_track_list
 
 
 class ArtistEnrichWatchResponse(BaseModel):
@@ -201,6 +202,22 @@ async def get_artist(
     artist_id: int,
     db: AsyncSession = Depends(get_db),
 ):
+    if (settings.sc_client_id or "").strip():
+        from app.services.soundcloud_service import SoundCloudService
+
+        svc = ArtistService(db)
+        row = await svc.get_by_id(artist_id)
+        if (
+            row is not None
+            and not row.image_key
+            and row.soundcloud_user_id is not None
+        ):
+            sc = SoundCloudService(settings.sc_client_id, db)
+            await sc.sync_artist_soundcloud_uploader_profile(
+                artist_id,
+                None,
+                uploader_id=None,
+            )
     return await _build_artist_detail(db, artist_id)
 
 

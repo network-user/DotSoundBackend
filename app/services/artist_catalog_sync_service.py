@@ -85,6 +85,14 @@ class ArtistCatalogSyncService:
         skip_background_lyrics: bool = True,
     ) -> dict[str, Any]:
         artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
+        await sc.sync_artist_soundcloud_uploader_profile(
+            artist_id,
+            None,
+            uploader_id=None,
+        )
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None:
+            raise ValueError("artist not found")
         sc_uid = self._soundcloud_user_id_int(artist)
         await sc.ensure_soundcloud_ids_for_artist(
             artist_id,
@@ -197,6 +205,14 @@ class ArtistCatalogSyncService:
         skip_background_lyrics: bool = True,
     ) -> dict[str, Any]:
         artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
+        await sc.sync_artist_soundcloud_uploader_profile(
+            artist_id,
+            None,
+            uploader_id=None,
+        )
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None:
+            raise ValueError("artist not found")
         sc_uid = self._soundcloud_user_id_int(artist)
         await sc.ensure_soundcloud_ids_for_artist(
             artist_id,
@@ -270,6 +286,14 @@ class ArtistCatalogSyncService:
         skip_background_lyrics: bool = True,
     ) -> dict[str, Any]:
         artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
+        await sc.sync_artist_soundcloud_uploader_profile(
+            artist_id,
+            None,
+            uploader_id=None,
+        )
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None:
+            raise ValueError("artist not found")
         sc_uid = self._soundcloud_user_id_int(artist)
         await sc.ensure_soundcloud_ids_for_artist(
             artist_id,

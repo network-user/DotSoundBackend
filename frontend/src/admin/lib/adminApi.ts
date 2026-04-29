@@ -60,7 +60,8 @@ async function rawRequest(
     Accept: 'application/json',
     ...(opts.headers || {}),
   }
-  if (opts.body !== undefined) {
+  const isForm = opts.body instanceof FormData
+  if (opts.body !== undefined && !isForm) {
     headers['Content-Type'] = 'application/json'
   }
   if (
@@ -91,7 +92,9 @@ async function rawRequest(
     body:
       opts.body === undefined
         ? undefined
-        : JSON.stringify(opts.body),
+        : isForm
+          ? (opts.body as FormData)
+          : JSON.stringify(opts.body),
     signal: opts.signal,
   })
 }
@@ -774,6 +777,7 @@ export const adminApi = {
   catalogOverview: (artistId: number) =>
     adminFetch<{
       artist_id: number
+      image_key: string | null
       soundcloud_user_id: number | null
       soundcloud_permalink: string | null
       releases: Array<{
@@ -800,6 +804,42 @@ export const adminApi = {
       catalog_sync_updated_at: string | null
     }>(`/artists/${artistId}/catalog/overview`),
 
+  catalogUploadAvatar: (artistId: number, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return adminFetch<{
+      artist_id: number
+      image_key: string | null
+      soundcloud_user_id: number | null
+      soundcloud_permalink: string | null
+      releases: Array<{
+        id: number
+        title: string
+        release_kind: string | null
+        released_at: string | null
+        display_position: number
+        track_count: number
+        cover_key: string | null
+        manual_lock: boolean
+        soundcloud_album_id: number | null
+      }>
+      releases_total: number
+      catalog_sync_state:
+        | 'idle'
+        | 'running'
+        | 'success'
+        | 'error'
+      catalog_sync_mode: 'full' | 'release' | null
+      catalog_sync_soundcloud_album_id: number | null
+      catalog_sync_error: string | null
+      catalog_sync_detail: Record<string, unknown> | null
+      catalog_sync_updated_at: string | null
+    }>(`/artists/${artistId}/catalog/avatar`, {
+      method: 'POST',
+      body: fd,
+    })
+  },
+
   catalogPatchSoundcloud: (
     artistId: number,
     body: {
@@ -809,6 +849,7 @@ export const adminApi = {
   ) =>
     adminFetch<{
       artist_id: number
+      image_key: string | null
       soundcloud_user_id: number | null
       soundcloud_permalink: string | null
       releases: Array<{

@@ -498,6 +498,15 @@ export function ArtistView({
   const progressPct =
     stageProgress[debugStage ?? ''] ?? 5
   const avatarSrc = view.image_url || artist.image_url
+  const avatarCoverKey =
+    !avatarSrc && artist.image_key ? artist.image_key : null
+  const avatarViewerSrc =
+    avatarSrc ||
+    (avatarCoverKey
+      ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(
+          avatarCoverKey,
+        )}`
+      : null)
   const sourceName =
     view.source_name ??
     primaryProfile?.source_name ??
@@ -522,7 +531,18 @@ export function ArtistView({
       </div>
 
       <div className="author-hero">
-        {avatarSrc ? (
+        {avatarCoverKey ? (
+          <button
+            type="button"
+            className="artist-avatar-button"
+            onClick={() => setAvatarOpen(true)}
+            aria-label={t('artist.avatar_open')}
+          >
+            <div className="profile-avatar profile-avatar--cover">
+              <CoverImage coverKey={avatarCoverKey} size={120} />
+            </div>
+          </button>
+        ) : avatarSrc ? (
           <button
             type="button"
             className="artist-avatar-button"
@@ -1148,9 +1168,9 @@ export function ArtistView({
         emptyMessage={t('artist.tracks_empty')}
       />
 
-      {avatarOpen && avatarSrc && (
+      {avatarOpen && avatarViewerSrc && (
         <ArtistAvatarViewer
-          src={avatarSrc}
+          src={avatarViewerSrc}
           alt={artist.name}
           onClose={() => setAvatarOpen(false)}
         />

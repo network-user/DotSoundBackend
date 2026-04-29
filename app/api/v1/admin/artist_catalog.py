@@ -3,10 +3,12 @@
 from fastapi import (
     APIRouter,
     Depends,
+    File,
     HTTPException,
     Query,
     Request,
     Response,
+    UploadFile,
     status,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,6 +57,54 @@ async def admin_catalog_overview(
 ) -> AdminArtistCatalogOverviewResponse:
     svc = AdminArtistCatalogService(session)
     out = await svc.overview(artist_id)
+    if out is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Artist not found",
+        )
+    return out
+
+
+_MAX_ARTIST_AVATAR_BYTES = 2 * 1024 * 1024
+_ALLOWED_ARTIST_AVATAR_CT = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    }
+)
+
+
+@router.post(
+    "/{artist_id}/catalog/avatar",
+    response_model=AdminArtistCatalogOverviewResponse,
+)
+@limiter.limit("20/minute")
+async def admin_catalog_upload_artist_avatar(
+    request: Request,
+    artist_id: int,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> AdminArtistCatalogOverviewResponse:
+    mime = (file.content_type or "").split(";")[0].strip().lower()
+    if mime not in _ALLOWED_ARTIST_AVATAR_CT:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Avatar must be JPEG, PNG, or WebP",
+        )
+    data = await file.read()
+    if len(data) > _MAX_ARTIST_AVATAR_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Avatar exceeds 2 MB limit",
+        )
+    svc = AdminArtistCatalogService(session)
+    out = await svc.upload_artist_avatar(
+        artist_id,
+        data=data,
+        admin_user_id=admin.id,
+    )
     if out is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
