@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
+import { Icon } from '@/components/Icon/Icon'
+
 const REDIRECT_DELAY = 4
 
 export function NotFoundView() {
@@ -23,8 +25,10 @@ export function NotFoundView() {
 
   return (
     <section id="view-not-found" className="view active not-found-view">
-      <div className="not-found-content">
-        <p className="not-found-code">404</p>
+      <div className="not-found-panel">
+        <p className="not-found-code" aria-hidden="true">
+          404
+        </p>
         <h2 className="not-found-title">
           {t('notFound.title', 'Страница не найдена')}
         </h2>
@@ -34,10 +38,14 @@ export function NotFoundView() {
           })}
         </p>
         <button
+          type="button"
           className="not-found-home-btn"
           onClick={() => navigate('/', { replace: true })}
         >
-          {t('notFound.goHome', 'На главную')}
+          <span className="not-found-home-btn-icon" aria-hidden>
+            <Icon name="home" size={18} />
+          </span>
+          <span>{t('notFound.goHome', 'На главную')}</span>
         </button>
       </div>
     </section>

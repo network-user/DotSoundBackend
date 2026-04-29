@@ -436,6 +436,7 @@ Mini App — секция в `TrackCardSheet` для публичных трек
 
 ## Frontend / Mini App
 
+- [x] Страница 404: контраст CTA, карточка, safe-area / адаптив — 2026-04-29
 - **Покрытие Backend API клиентом:** инвентарь и приоритеты —
 `docs/api-frontend-coverage.md`; расширен `frontend/src/lib/api.ts`,
 исправлен `POST /users/me/avatar`, UI (OAuth disconnect, удаление аккаунта,
