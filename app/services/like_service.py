@@ -1,4 +1,5 @@
 import structlog
+from datetime import datetime
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -64,25 +65,28 @@ class LikeService:
         user_id: int,
         page: int = 1,
         size: int = 20,
-    ) -> tuple[list[Track], int]:
-        # Resolve user_id
+        source_filter: str | None = None,
+    ) -> tuple[list[tuple[Track, datetime]], int]:
         user = await self._user_repo.get_by_id(user_id)
         if not user:
             user = await self._user_repo.get_by_telegram_id(user_id)
-        
+
         if not user:
             return [], 0
 
         offset = (page - 1) * size
-        tracks, total = await self._repo.list_liked_tracks(
-            user_id=user.id, offset=offset, limit=size
+        rows, total = await self._repo.list_liked_tracks(
+            user_id=user.id,
+            offset=offset,
+            limit=size,
+            source_filter=source_filter,
         )
         logger.info(
             "liked_tracks_listed",
             user_id=user.id,
             total=total,
         )
-        return tracks, total
+        return rows, total
 
     async def is_liked(
         self, user_id: int, track_id: int

@@ -1,79 +1,135 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { api } from '@/lib/api'
 import { getUserId } from '@/lib/telegram'
-import type { Track } from '@/types/api'
+import type { LikedTrack, Track } from '@/types/api'
 
 interface LikedViewProps {
-  /** Внутри LibraryView — без дублирующего заголовка */
   embedded?: boolean
 }
 
+type SourceFilter = 'all' | 'platform' | 'soundcloud' | 'other'
+
 const PAGE_SIZE = 20
 
+function formatLikedAt(iso: string): string {
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(new Date(iso))
+}
+
+const SOURCE_FILTERS: { key: SourceFilter; label: string }[] = [
+  { key: 'all', label: 'Все' },
+  { key: 'platform', label: 'Платформа' },
+  { key: 'soundcloud', label: 'SoundCloud' },
+  { key: 'other', label: 'Другие' },
+]
+
 export function LikedView({ embedded = false }: LikedViewProps) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
-  const [tracks, setTracks] = useState<
-    Track[] | null
-  >(null)
+  const [tracks, setTracks] = useState<LikedTrack[] | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [sourceFilter, setSourceFilter] =
+    useState<SourceFilter>('all')
   const pageRef = useRef(1)
 
-  useEffect(() => {
-    const uid = getUserId()
-    if (!uid) {
-      setTracks([])
-      return
-    }
-    setTracks(null)
-    pageRef.current = 1
-    api
-      .getLikedTracks(uid, 1, PAGE_SIZE)
-      .then((data) => {
-        setTracks(data.items)
+  const fetchPage = useCallback(
+    async (page: number, filter: SourceFilter, reset: boolean) => {
+      const uid = getUserId()
+      if (!uid) {
+        setTracks([])
+        return
+      }
+      if (reset) setTracks(null)
+      setLoading(true)
+      try {
+        const data = await api.getLikedTracks(
+          uid,
+          page,
+          PAGE_SIZE,
+          filter !== 'all' ? filter : undefined,
+        )
+        setTracks((prev) =>
+          reset || !prev
+            ? data.items
+            : [...prev, ...data.items],
+        )
         setHasMore(data.has_more)
-        pageRef.current = 1
-      })
-      .catch(() => setTracks([]))
-  }, [])
+        pageRef.current = page
+      } catch {
+        if (reset) setTracks([])
+      } finally {
+        setLoading(false)
+      }
+    },
+    [],
+  )
+
+  useEffect(() => {
+    pageRef.current = 1
+    fetchPage(1, sourceFilter, true)
+  }, [sourceFilter, fetchPage])
 
   const loadMore = useCallback(async () => {
     if (loading || !hasMore) return
-    const uid = getUserId()
-    if (!uid) return
-    setLoading(true)
-    try {
-      const nextPage = pageRef.current + 1
-      const data = await api.getLikedTracks(
-        uid, nextPage, PAGE_SIZE,
-      )
-      setTracks((prev) =>
-        prev ? [...prev, ...data.items] : data.items,
-      )
-      setHasMore(data.has_more)
-      pageRef.current = nextPage
-    } catch {
-      /* keep current state */
-    } finally {
-      setLoading(false)
-    }
-  }, [loading, hasMore])
+    fetchPage(pageRef.current + 1, sourceFilter, false)
+  }, [loading, hasMore, sourceFilter, fetchPage])
+
+  const filterBar = (
+    <div
+      className="liked-source-filter"
+      role="tablist"
+      aria-label={t('liked.sourceFilter', 'Фильтр по источнику')}
+    >
+      {SOURCE_FILTERS.map(({ key, label }) => (
+        <button
+          key={key}
+          role="tab"
+          aria-selected={sourceFilter === key}
+          className={`liked-source-chip${sourceFilter === key ? ' active' : ''}`}
+          onClick={() => {
+            if (sourceFilter !== key) setSourceFilter(key)
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+
+  const renderExtra = useCallback(
+    (track: Track) => {
+      const lt = track as LikedTrack
+      return lt.liked_at ? (
+        <span className="liked-at-date">
+          {formatLikedAt(lt.liked_at)}
+        </span>
+      ) : null
+    },
+    [],
+  )
 
   const list = (
     <>
+      {filterBar}
       <TrackList
         tracks={tracks}
-        emptyMessage="Ты ещё ничего не лайкал"
+        emptyMessage={t('liked.empty', 'Ты ещё ничего не лайкал')}
         emptyCta={
           embedded
             ? {
-                label: 'Найти треки',
+                label: t('liked.findTracks', 'Найти треки'),
                 onClick: () => navigate('/search'),
               }
             : undefined
         }
+        renderExtra={renderExtra}
       />
       {hasMore && (
         <button
@@ -81,23 +137,24 @@ export function LikedView({ embedded = false }: LikedViewProps) {
           onClick={loadMore}
           disabled={loading}
         >
-          {loading ? 'Загрузка...' : 'Показать ещё'}
+          {loading
+            ? t('common.loading', 'Загрузка...')
+            : t('common.showMore', 'Показать ещё')}
         </button>
       )}
     </>
   )
 
   if (embedded) {
-    return <div className="library-embed liked-embed">{list}</div>
+    return (
+      <div className="library-embed liked-embed">{list}</div>
+    )
   }
 
   return (
-    <section
-      id="view-liked"
-      className="view active"
-    >
+    <section id="view-liked" className="view active">
       <div className="view-header">
-        <h2>Мне нравится</h2>
+        <h2>{t('liked.title', 'Мне нравится')}</h2>
       </div>
       {list}
     </section>

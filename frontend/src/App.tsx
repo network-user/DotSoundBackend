@@ -94,6 +94,7 @@ import { ImportActivityBanner } from '@/components/Import/ImportActivityBanner'
 import { TrackCardSheet } from '@/components/TrackCardSheet/TrackCardSheet'
 import { useTrackDeepLink } from '@/hooks/useDeepLink'
 import { HomeView } from '@/views/HomeView'
+import { NotFoundView } from '@/views/NotFoundView'
 import {
   connectWS,
   disconnectWS,
@@ -517,6 +518,7 @@ export function App() {
           />
           <Route path="/radio" element={<RadioView />} />
           <Route path="/admin/*" element={<AdminApp />} />
+          <Route path="*" element={<NotFoundView />} />
         </AnimatedRoutes>
         </Suspense>
         </ErrorBoundary>

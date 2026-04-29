@@ -102,8 +102,12 @@ export interface DislikeToggleResponse {
   disliked: boolean
 }
 
+export interface LikedTrack extends Track {
+  liked_at: string
+}
+
 export interface UserLikesResponse {
-  items: Track[]
+  items: LikedTrack[]
   total: number
   page: number
   has_more: boolean

@@ -1,5 +1,6 @@
 import structlog
-from sqlalchemy import delete, select
+from datetime import datetime
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.like import Like
@@ -57,41 +58,54 @@ class LikeRepository:
         user_id: int,
         offset: int = 0,
         limit: int = 20,
-    ) -> tuple[list[Track], int]:
-        from sqlalchemy import func
+        source_filter: str | None = None,
+    ) -> tuple[list[tuple[Track, datetime]], int]:
+        base_where = self._build_source_filter(
+            source_filter,
+            and_(Like.user_id == user_id, Track.is_active.is_(True)),
+        )
 
         count_result = await self._session.execute(
             select(func.count())
             .select_from(Like)
-            .where(
-                Like.user_id == user_id,
-                Track.is_active.is_(True),
-            )
             .join(Track, Track.id == Like.track_id)
+            .where(base_where)
         )
         total = count_result.scalar_one()
 
         tracks_result = await self._session.execute(
-            select(Track)
+            select(Track, Like.created_at)
             .join(Like, Like.track_id == Track.id)
-            .where(
-                Like.user_id == user_id,
-                Track.is_active.is_(True),
-            )
+            .where(base_where)
             .order_by(Like.created_at.desc())
             .offset(offset)
             .limit(limit)
         )
+        rows = tracks_result.all()
         logger.debug(
             "db_liked_tracks_listed",
             user_id=user_id,
             total=total,
         )
-        return list(tracks_result.scalars().all()), total
+        return [(row[0], row[1]) for row in rows], total
+
+    @staticmethod
+    def _build_source_filter(
+        source_filter: str | None, base_clause: object
+    ) -> object:
+        if source_filter == "platform":
+            return and_(base_clause, Track.catalog_type == "ugc")
+        if source_filter == "soundcloud":
+            return and_(base_clause, Track.source == "soundcloud")
+        if source_filter == "other":
+            return and_(
+                base_clause,
+                Track.catalog_type != "ugc",
+                Track.source != "soundcloud",
+            )
+        return base_clause
 
     async def count_likes_for_user_tracks(self, user_id: int) -> int:
-        from sqlalchemy import func
-
         result = await self._session.execute(
             select(func.count())
             .select_from(Like)
@@ -101,8 +115,6 @@ class LikeRepository:
         return result.scalar_one()
 
     async def count_for_track(self, track_id: int) -> int:
-        from sqlalchemy import func
-
         r = await self._session.execute(
             select(func.count())
             .select_from(Like)

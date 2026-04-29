@@ -5,7 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
-from app.schemas.like import LikeToggleResponse, UserLikesResponse
+from app.schemas.like import (
+    LikedTrackResponse,
+    LikeToggleResponse,
+    UserLikesResponse,
+)
 from app.schemas.track import TrackResponse
 from app.services.like_service import LikeService
 
@@ -58,6 +62,11 @@ async def toggle_like_public(
     return LikeToggleResponse(track_id=track_id, liked=liked)
 
 
+_VALID_SOURCE_FILTERS = frozenset(
+    {"platform", "soundcloud", "other"}
+)
+
+
 @router.get(
     "/{user_id}",
     response_model=UserLikesResponse,
@@ -69,15 +78,29 @@ async def get_user_likes(
     user_id: int,
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=200),
+    source: str | None = Query(None),
     session: AsyncSession = Depends(get_db),
 ) -> UserLikesResponse:
     structlog.contextvars.bind_contextvars(user_id=user_id)
-    service = LikeService(session)
-    tracks, total = await service.list_liked(
-        user_id=user_id, page=page, size=size
+    source_filter = (
+        source if source in _VALID_SOURCE_FILTERS else None
     )
+    service = LikeService(session)
+    rows, total = await service.list_liked(
+        user_id=user_id,
+        page=page,
+        size=size,
+        source_filter=source_filter,
+    )
+    items = [
+        LikedTrackResponse(
+            **TrackResponse.model_validate(track).model_dump(),
+            liked_at=liked_at,
+        )
+        for track, liked_at in rows
+    ]
     return UserLikesResponse(
-        items=[TrackResponse.model_validate(t) for t in tracks],
+        items=items,
         total=total,
         page=page,
         has_more=(page * size) < total,

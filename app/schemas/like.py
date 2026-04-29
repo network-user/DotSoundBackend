@@ -18,8 +18,12 @@ class LikeToggleResponse(BaseModel):
     liked: bool
 
 
+class LikedTrackResponse(TrackResponse):
+    liked_at: datetime
+
+
 class UserLikesResponse(BaseModel):
-    items: list[TrackResponse]
+    items: list[LikedTrackResponse]
     total: int
     page: int = 1
     has_more: bool = False
