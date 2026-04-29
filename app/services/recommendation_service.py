@@ -1,6 +1,7 @@
 import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import structlog
 from dotsound_private_core.services.recommendation_engine import (
@@ -367,7 +368,7 @@ class RecommendationService:
                     if c.external_id
                     else None
                 )
-                sc_data = {
+                sc_data: dict[str, Any] = {
                     "permalink_url": c.external_url,
                     "title": c.title,
                     "user": {"username": c.artist or ""},
@@ -377,6 +378,14 @@ class RecommendationService:
                     "id": c.external_id,
                     "uri": sc_uri,
                 }
+                if c.external_id is not None:
+                    try:
+                        ext_id = int(c.external_id)
+                        full = await sc_svc.fetch_track_by_id(ext_id)
+                        if isinstance(full, dict):
+                            sc_data.update(full)
+                    except Exception:
+                        pass
                 track = await sc_svc.import_or_get_track(
                     sc_data,
                     uploader_id=user_id,

@@ -75,6 +75,7 @@ _ARTISTS_MAPPING = {
             "name_normalized": {
                 "type": "keyword",
             },
+            "soundcloud_permalink": {"type": "text"},
         }
     },
 }

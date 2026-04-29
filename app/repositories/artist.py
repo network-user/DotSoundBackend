@@ -1,5 +1,5 @@
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist import Artist, TrackArtist
@@ -59,7 +59,12 @@ class ArtistRepository(BaseRepository[Artist]):
         pattern = f"%{query.lower()}%"
         result = await self._session.execute(
             select(Artist)
-            .where(Artist.name_normalized.ilike(pattern))
+            .where(
+                or_(
+                    Artist.name_normalized.ilike(pattern),
+                    Artist.soundcloud_permalink.ilike(pattern),
+                )
+            )
             .limit(limit)
         )
         return list(result.scalars().all())

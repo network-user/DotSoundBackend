@@ -1,6 +1,6 @@
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -170,6 +170,41 @@ async def test_enrich_provider_raises_sets_failed(
     await db_session.refresh(artist)
     assert artist.enrichment_status == "failed"
     assert artist.enriched_at is not None
+
+
+async def test_enrich_skips_image_download_when_image_key_set(
+    db_session: AsyncSession,
+) -> None:
+    artist = await _make_artist(db_session)
+    artist.image_key = "artists/1/preset.webp"
+    await db_session.commit()
+    info = _make_info(
+        bio="updated bio",
+        image_url="https://example.com/new-face.jpg",
+        confidence=0.9,
+    )
+    mock_dl = AsyncMock(return_value="artists/1/wrong.webp")
+    with patch.dict(
+        "sys.modules",
+        {
+            "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
+                fetch_artist_info=MagicMock(return_value=info),
+                warmup_artist_info_provider=lambda: None,
+            ),
+        },
+    ), patch.object(
+        ArtistEnrichmentService,
+        "_download_and_store_image",
+        mock_dl,
+    ):
+        svc = ArtistEnrichmentService(db_session)
+        await svc.enrich(artist.id)
+
+    await db_session.refresh(artist)
+    assert artist.enrichment_status == "done"
+    assert artist.bio == "updated bio"
+    assert artist.image_key == "artists/1/preset.webp"
+    mock_dl.assert_not_called()
 
 
 async def test_enrich_image_download_failure_keeps_text(

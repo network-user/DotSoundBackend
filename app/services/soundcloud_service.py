@@ -773,6 +773,118 @@ class SoundCloudService:
         )
         return True
 
+    @staticmethod
+    def _soundcloud_avatar_url_is_placeholder(url: str) -> bool:
+        low = url.lower()
+        return "default_avatar" in low or "default-user" in low
+
+    async def _fetch_soundcloud_cdn_image_bytes(
+        self,
+        url: str,
+    ) -> tuple[bytes, str] | None:
+        large_url = url.replace("-large.jpg", "-t500x500.jpg")
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.get(large_url)
+                if r.status_code != 200:
+                    r2 = await client.get(url)
+                    if r2.status_code != 200:
+                        return None
+                    data = r2.content
+                    ct = r2.headers.get("content-type", "image/jpeg")
+                else:
+                    data = r.content
+                    ct = r.headers.get("content-type", "image/jpeg")
+        except Exception:
+            return None
+        return data, ct.split(";")[0].strip()
+
+    async def sync_artist_soundcloud_uploader_profile(
+        self,
+        artist_id: int,
+        user: dict[str, Any] | None,
+        *,
+        uploader_id: int | None,
+    ) -> None:
+        if not user or not isinstance(user, dict):
+            return
+        repo = ArtistRepository(self._session)
+        artist = await repo.get_by_id(artist_id)
+        if artist is None:
+            return
+        raw_id = user.get("id")
+        uid: int | None
+        if isinstance(raw_id, int):
+            uid = raw_id
+        elif isinstance(raw_id, str) and raw_id.isdigit():
+            uid = int(raw_id)
+        else:
+            uid = None
+        perm_raw = user.get("permalink")
+        perm: str | None = None
+        if isinstance(perm_raw, str):
+            perm = normalize_soundcloud_permalink(perm_raw)
+        ids_linked = False
+        if uid is not None:
+            existing_uid = artist.soundcloud_user_id
+            if existing_uid is not None and int(existing_uid) == uid:
+                ids_linked = True
+            else:
+                ids_linked = await self.ensure_soundcloud_ids_for_artist(
+                    artist_id,
+                    uid,
+                    perm,
+                )
+        elif artist.soundcloud_user_id is not None:
+            ids_linked = True
+        else:
+            return
+        if not ids_linked:
+            return
+        artist = await repo.get_by_id(artist_id)
+        if artist is None or artist.image_key:
+            return
+        av = user.get("avatar_url")
+        if not isinstance(av, str) or not av.strip():
+            return
+        av = av.strip()
+        if self._soundcloud_avatar_url_is_placeholder(av):
+            return
+        fetched = await self._fetch_soundcloud_cdn_image_bytes(av)
+        if fetched is None:
+            logger.warning(
+                "sc_artist_avatar_fetch_failed",
+                artist_id=artist_id,
+            )
+            return
+        data, _ct = fetched
+        try:
+            img_key, _, _, _ = await s3.upload_image(
+                data=data,
+                prefix="artists",
+                max_size=settings.image_avatar_max_size,
+                user_id=uploader_id,
+            )
+        except Exception:
+            logger.exception(
+                "sc_artist_avatar_upload_failed",
+                artist_id=artist_id,
+            )
+            return
+        artist.image_key = img_key
+        await self._session.commit()
+        try:
+            from app.services.search_index_notify import (
+                schedule_reindex_artist,
+            )
+
+            await schedule_reindex_artist(artist_id)
+        except Exception:
+            logger.warning(
+                "sc_artist_avatar_reindex_failed",
+                artist_id=artist_id,
+            )
+
     async def search_users(
         self,
         query: str,
