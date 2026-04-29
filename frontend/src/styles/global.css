@@ -5786,3 +5786,104 @@ html.ds-low-glass .tcs-sheet {
     -webkit-backdrop-filter: none;
   }
 }
+
+/* Liked view — source filter chips */
+.liked-source-filter {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 8px 16px 12px;
+}
+.liked-source-filter::-webkit-scrollbar {
+  display: none;
+}
+.liked-source-chip {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: 100px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s;
+}
+.liked-source-chip:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+.liked-source-chip.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Per-track liked date */
+.liked-at-date {
+  display: block;
+  padding: 2px 16px 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* track-list-item wrapper (used when renderExtra is set) */
+.track-list-item {
+  display: contents;
+}
+
+/* 404 Not Found page */
+.not-found-view {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+}
+.not-found-content {
+  text-align: center;
+  padding: 32px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.not-found-code {
+  font-size: 72px;
+  font-weight: 700;
+  color: var(--text-muted);
+  line-height: 1;
+  margin: 0;
+}
+.not-found-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+.not-found-hint {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+.not-found-home-btn {
+  margin-top: 8px;
+  padding: 10px 24px;
+  border-radius: 100px;
+  background: var(--accent);
+  color: var(--on-accent, #fff);
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+.not-found-home-btn:active {
+  opacity: 0.85;
+}

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { TrackCard } from '@/components/TrackCard/TrackCard'
 import type { Track } from '@/types/api'
 
@@ -8,12 +9,14 @@ interface Props {
     label: string
     onClick: () => void
   }
+  renderExtra?: (track: Track) => ReactNode
 }
 
 export function TrackList({
   tracks,
   emptyMessage = 'Ничего не найдено',
   emptyCta,
+  renderExtra,
 }: Props) {
   if (tracks === null) {
     return (
@@ -45,7 +48,10 @@ export function TrackList({
   return (
     <div className="track-list">
       {tracks.map((t) => (
-        <TrackCard key={t.id} track={t} />
+        <div key={t.id} className="track-list-item">
+          <TrackCard track={t} />
+          {renderExtra?.(t)}
+        </div>
       ))}
     </div>
   )

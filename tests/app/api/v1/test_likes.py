@@ -1,7 +1,9 @@
 import pytest
 from dirty_equals import IsPartialDict
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.track import Track
 from tests.conftest import (
     auth_headers,
     create_test_track,
@@ -131,3 +133,152 @@ async def test_get_user_likes_pagination(
     assert len(data2["items"]) == 1
     assert data2["page"] == 2
     assert data2["has_more"] is False
+
+
+async def test_liked_tracks_includes_liked_at(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 10006)
+    track = await create_test_track(
+        client, "LikedAtTrack", user["id"]
+    )
+    headers = await auth_headers(client, user["id"])
+    await client.post(
+        f"/api/v1/likes/{user['id']}/{track['id']}",
+        headers=headers,
+    )
+    r = await client.get(f"/api/v1/likes/{user['id']}")
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert "liked_at" in items[0]
+    assert items[0]["liked_at"] is not None
+
+
+async def _insert_sc_track(
+    db_session: AsyncSession,
+    title: str,
+    uploader_id: int,
+) -> int:
+    track = Track(
+        title=title,
+        artist="SC Artist",
+        source="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+        play_count=0,
+        is_active=True,
+        is_public=True,
+        uploaded_by_id=uploader_id,
+        sc_url=f"https://soundcloud.com/test/{title}",
+        duration_seconds=180,
+    )
+    db_session.add(track)
+    await db_session.commit()
+    await db_session.refresh(track)
+    return int(track.id)
+
+
+async def test_liked_tracks_source_filter_platform(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 10007)
+    headers = await auth_headers(client, user["id"])
+    ugc_track = await create_test_track(
+        client, "PlatformTrack", user["id"]
+    )
+    sc_id = await _insert_sc_track(
+        db_session, "ScFilterTrack1", user["id"]
+    )
+    for tid in (ugc_track["id"], sc_id):
+        await client.post(
+            f"/api/v1/likes/{user['id']}/{tid}",
+            headers=headers,
+        )
+
+    r = await client.get(
+        f"/api/v1/likes/{user['id']}?source=platform"
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] == 1
+    ids = [it["id"] for it in data["items"]]
+    assert ugc_track["id"] in ids
+    assert sc_id not in ids
+
+
+async def test_liked_tracks_source_filter_soundcloud(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 10008)
+    headers = await auth_headers(client, user["id"])
+    ugc_track = await create_test_track(
+        client, "UgcForScFilter", user["id"]
+    )
+    sc_id = await _insert_sc_track(
+        db_session, "ScFilterTrack2", user["id"]
+    )
+    for tid in (ugc_track["id"], sc_id):
+        await client.post(
+            f"/api/v1/likes/{user['id']}/{tid}",
+            headers=headers,
+        )
+
+    r = await client.get(
+        f"/api/v1/likes/{user['id']}?source=soundcloud"
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] == 1
+    ids = [it["id"] for it in data["items"]]
+    assert sc_id in ids
+    assert ugc_track["id"] not in ids
+
+
+async def test_liked_tracks_source_filter_other(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 10009)
+    headers = await auth_headers(client, user["id"])
+    ugc_track = await create_test_track(
+        client, "UgcForOtherFilter", user["id"]
+    )
+    sc_id = await _insert_sc_track(
+        db_session, "ScFilterTrack3", user["id"]
+    )
+    other_track = Track(
+        title="BandcampTrack",
+        artist="BC Artist",
+        source="bandcamp",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+        play_count=0,
+        is_active=True,
+        is_public=True,
+        uploaded_by_id=user["id"],
+        duration_seconds=200,
+    )
+    db_session.add(other_track)
+    await db_session.commit()
+    await db_session.refresh(other_track)
+    other_id = int(other_track.id)
+
+    for tid in (ugc_track["id"], sc_id, other_id):
+        await client.post(
+            f"/api/v1/likes/{user['id']}/{tid}",
+            headers=headers,
+        )
+
+    r = await client.get(
+        f"/api/v1/likes/{user['id']}?source=other"
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] == 1
+    ids = [it["id"] for it in data["items"]]
+    assert other_id in ids
+    assert ugc_track["id"] not in ids
+    assert sc_id not in ids

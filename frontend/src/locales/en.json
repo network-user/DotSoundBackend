@@ -29,7 +29,14 @@
     "title": "Liked",
     "empty": "You haven't liked anything yet",
     "loadMore": "Load more",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "findTracks": "Find tracks",
+    "sourceFilter": "Filter by source"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "redirect": "Redirecting in {{n}}s…",
+    "goHome": "Go home"
   },
   "upload": {
     "title": "Upload track",

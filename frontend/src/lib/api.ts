@@ -399,8 +399,20 @@ export const api = {
     return request(`/api/v1/dislikes/${userId}/${track_id}`, { method: 'POST' })
   },
 
-  getLikedTracks(userId: number, page = 1, size = 20): Promise<UserLikesResponse> {
-    return request(`/api/v1/likes/${userId}?page=${page}&size=${size}`)
+  getLikedTracks(
+    userId: number,
+    page = 1,
+    size = 20,
+    sourceFilter?: string,
+  ): Promise<UserLikesResponse> {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    })
+    if (sourceFilter && sourceFilter !== 'all') {
+      params.set('source', sourceFilter)
+    }
+    return request(`/api/v1/likes/${userId}?${params}`)
   },
 
   submitComplaint(body: ComplaintCreate): Promise<ComplaintSubmitResponse> {
