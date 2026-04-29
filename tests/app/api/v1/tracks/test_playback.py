@@ -326,6 +326,8 @@ async def test_soundcloud_progressive_stream_returns_same_origin_audio(
     async def fake_resolve(
         _tr: object,
         _sess: object,
+        *,
+        use_cache: bool = True,
     ) -> tuple[str, str]:
         return "https://media.sndcdn.com/progressive.mp3", "progressive"
 
@@ -365,6 +367,8 @@ async def test_soundcloud_progressive_audio_proxies_upstream(
     async def fake_resolve(
         _tr: object,
         _sess: object,
+        *,
+        use_cache: bool = True,
     ) -> tuple[str, str]:
         return "https://media.sndcdn.com/x.mp3", "progressive"
 
@@ -414,6 +418,8 @@ async def test_soundcloud_hls_stream_and_audio_redirect(
     async def fake_resolve(
         _tr: object,
         _sess: object,
+        *,
+        use_cache: bool = True,
     ) -> tuple[str, str]:
         return hls, "hls"
 

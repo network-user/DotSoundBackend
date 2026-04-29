@@ -61,6 +61,8 @@ def _third_party_is_soundcloud(tr: object) -> bool:
 async def _resolve_third_party_stream(
     track: object,
     session: object,
+    *,
+    use_cache: bool = True,
 ) -> tuple[str, str]:
     platform: str | None = getattr(track, "source_platform", None)
 
@@ -76,7 +78,7 @@ async def _resolve_third_party_stream(
         from app.services.soundcloud_service import SoundCloudService
 
         sc_service = SoundCloudService(settings.sc_client_id, session)  # type: ignore[arg-type]
-        return await sc_service.get_stream_info(track.sc_url)  # type: ignore[attr-defined]
+        return await sc_service.get_stream_info(track.sc_url, use_cache=use_cache)  # type: ignore[attr-defined]
 
     if platform == "youtube":
         src: str | None = getattr(track, "source_url", None)
@@ -157,9 +159,23 @@ async def _http_proxy_range_get(
         ) from exc
 
     if resp.status_code not in (200, 206):
-        await resp.aread()
+        body_preview = b""
+        try:
+            body_preview = await resp.aread()
+        except Exception:
+            pass
         await resp.aclose()
         await client.aclose()
+        logger.warning(
+            "proxy_upstream_error",
+            upstream_status=resp.status_code,
+            url_host=(
+                stream_url.split("://", 1)[-1].split("/", 1)[0]
+                if "://" in stream_url
+                else "?"
+            ),
+            body_preview=body_preview[:200].decode("utf-8", errors="replace"),
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=detail_fail,
@@ -449,7 +465,7 @@ async def audio_stream(
                 request, track, session
             )
         stream_url, protocol = await _resolve_third_party_stream(
-            track, session
+            track, session, use_cache=not _third_party_is_soundcloud(track)
         )
         if _third_party_is_soundcloud(track) and protocol != "hls":
             return await _http_proxy_range_get(
