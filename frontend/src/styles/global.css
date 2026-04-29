@@ -1391,6 +1391,17 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
 .profile-action-label { flex: 1; }
 .profile-action-chevron { color: var(--text-muted); font-size: 18px; }
 
+/* Full-screen scrim: opacity only. Do not use the name `fade-in`
+ * from components.css (toast) — it applies translate(-50%, …). */
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 /* ── Complaint modal ── */
 .modal {
   position: fixed;
@@ -1401,7 +1412,7 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-end;
-  animation: fade-in var(--dur-med) var(--ease-standard);
+  animation: overlayFadeIn var(--dur-med) var(--ease-standard);
 }
 .modal.is-closing {
   animation: fade-out var(--dur-med) var(--ease-standard)
@@ -1526,7 +1537,8 @@ textarea.form-input { resize: none; }
   backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-end;
-  animation: fade-in var(--dur-med) var(--ease-standard);
+  isolation: isolate;
+  animation: overlayFadeIn var(--dur-med) var(--ease-standard);
 }
 .tcs-backdrop.is-closing {
   animation: fade-out var(--dur-med) var(--ease-standard)
@@ -1549,14 +1561,12 @@ textarea.form-input { resize: none; }
     box-shadow:
       0 24px 56px rgba(0, 0, 0, 0.5),
       0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+    animation: tcsSheetEnterDesk var(--dur-slow)
+      var(--ease-soft) both;
+    transform-origin: 50% 100%;
   }
   .tcs-backdrop .tcs-cover-wrap {
     max-width: 400px;
-  }
-  .tcs-backdrop .tcs-sheet {
-    animation: tcsSheetEnterDesk var(--dur-slow)
-      var(--ease-soft) both;
-    transform-origin: center center;
   }
   .tcs-backdrop .tcs-sheet.is-closing {
     animation-name: sheet-exit-tcs-desk;
@@ -1566,7 +1576,7 @@ textarea.form-input { resize: none; }
 @keyframes tcsSheetEnter {
   from {
     transform: translate3d(0, 100%, 0);
-    opacity: 0.88;
+    opacity: 0;
   }
   to {
     transform: translate3d(0, 0, 0);
@@ -1577,20 +1587,11 @@ textarea.form-input { resize: none; }
 @keyframes tcsSheetEnterDesk {
   from {
     opacity: 0;
-    transform: scale(0.93) translate3d(0, 18px, 0);
+    transform: translate3d(0, 36px, 0) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: scale(1) translate3d(0, 0, 0);
-  }
-}
-
-@keyframes tcsChromeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
   }
 }
 
@@ -1610,13 +1611,14 @@ textarea.form-input { resize: none; }
   overflow-x: hidden;
   scrollbar-width: none;
   transform-origin: center bottom;
-  animation: tcsSheetEnter var(--dur-slow) var(--ease-standard)
-    both;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  animation: tcsSheetEnter var(--dur-slow) var(--ease-soft) both;
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
 }
 .tcs-sheet.is-closing {
-  animation: sheet-exit-tcs var(--dur-med)
-    var(--ease-standard) forwards;
+  animation: sheet-exit-tcs var(--dur-med) var(--ease-soft)
+    forwards;
 }
 @keyframes sheet-exit-tcs {
   to {
@@ -1650,9 +1652,6 @@ textarea.form-input { resize: none; }
   background: var(--surface-2);
   border-radius: 2px;
   margin: 12px auto 0;
-  animation: tcsChromeIn var(--dur-med) var(--ease-standard)
-    both;
-  animation-delay: 72ms;
 }
 
 .tcs-close {
@@ -1676,9 +1675,6 @@ textarea.form-input { resize: none; }
   border: none;
   cursor: pointer;
   padding: 0;
-  animation: tcsChromeIn var(--dur-med) var(--ease-standard)
-    both;
-  animation-delay: 100ms;
 }
 
 /* Cover — large square */
@@ -1789,27 +1785,9 @@ textarea.form-input { resize: none; }
 .tcs-video-mode {
   max-height: 100dvh;
 }
-.tcs-track-content {
-  animation: tcsTrackIn var(--dur-med) var(--ease-soft) both;
-  animation-delay: 56ms;
-}
-@keyframes tcsTrackIn {
-  from {
-    opacity: 0;
-    transform: scale(0.985) translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .tcs-backdrop,
-  .tcs-sheet,
-  .tcs-handle,
-  .tcs-close,
-  .tcs-track-content {
+  .tcs-sheet {
     animation: none !important;
   }
 }
@@ -3624,7 +3602,7 @@ html.le-lyrics-sync-open body {
   backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-end;
-  animation: fade-in var(--dur-med) var(--ease-standard);
+  animation: overlayFadeIn var(--dur-med) var(--ease-standard);
 }
 .eq-backdrop.is-closing {
   animation: fade-out var(--dur-med) var(--ease-standard)
@@ -3904,7 +3882,7 @@ html.le-lyrics-sync-open body {
   backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-end;
-  animation: fade-in var(--dur-med) var(--ease-standard);
+  animation: overlayFadeIn var(--dur-med) var(--ease-standard);
 }
 .settings-backdrop.is-closing {
   animation: fade-out var(--dur-med) var(--ease-standard)

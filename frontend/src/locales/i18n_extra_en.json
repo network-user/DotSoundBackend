@@ -103,7 +103,9 @@
     "bcSection": "Bandcamp · external",
     "scSection": "SoundCloud · external",
     "extSourceLabel": "External source:",
-    "emptyCatalogHint": "Nothing in the catalog for this query—try YouTube, Bandcamp, and SoundCloud below."
+    "emptyCatalogHint": "Nothing in the catalog for this query—try YouTube, Bandcamp, and SoundCloud below.",
+    "platformAuthorKind": "Author",
+    "platformAuthorRowAria": "Open author profile: {{name}}"
   },
   "trackCard": {
     "queued": "Added to queue",

@@ -24,17 +24,68 @@ const IDLE_FRAC = 0.18
 
 const MIN_PLAY_FRAC = 0.04
 
-const ATTACK_SMOOTH = 0.62
+const ATTACK_SMOOTH = 0.56
 
-const DECAY_SMOOTH = 0.2
+const DECAY_PER_TICK = 0.26
 
-const NORM_GAIN = 1.28
+const DECAY_EASE_MIN = 0.15
 
-const NORM_CURVE_EXP = 0.68
+const DECAY_EASE_RANGE = 0.85
+
+const DECAY_EASE_POWER = 0.5
+
+const NORM_GAIN = 1.08
+
+const NORM_CURVE_EXP = 0.74
+
+const VISUAL_HEIGHT_CAP = 0.78
+
+const BAR_SPREAD_AMP = 0.068
+
+const BAR_SPREAD_SLOW = 0.042
+
+const DITHER_AMP = 0.014
 
 function shapeLevel(norm: number): number {
   const boosted = Math.min(1, norm * NORM_GAIN)
-  return boosted ** NORM_CURVE_EXP
+  const curved = boosted ** NORM_CURVE_EXP
+  return curved * VISUAL_HEIGHT_CAP
+}
+
+function ditherUnit(barIndex: number, tickMs: number): number {
+  const x =
+    Math.imul(barIndex + 41, 1597334677) ^
+    Math.floor(tickMs * 2.17 + barIndex * 13)
+  const u =
+    Math.imul(x ^ (x >>> 16), 2246822519) >>> 0
+  return u / 4294967296 - 0.5
+}
+
+function hash01(i: number): number {
+  const x = Math.imul(i + 1, 0x9e3779b9) >>> 0
+  return x / 0x1_0000_0000
+}
+
+function decaySmoothedTowardIdle(sm: Float32Array, n: number) {
+  const maxSpan = 1 - IDLE_FRAC
+  for (let i = 0; i < n; i++) {
+    const dist = sm[i] - IDLE_FRAC
+    if (dist <= 1e-6) {
+      sm[i] = IDLE_FRAC
+      continue
+    }
+    if (dist < 0) {
+      sm[i] = IDLE_FRAC
+      continue
+    }
+    const distNorm = Math.min(1, dist / maxSpan)
+    const ease =
+      DECAY_EASE_MIN +
+      DECAY_EASE_RANGE * distNorm ** DECAY_EASE_POWER
+    const stagger = 0.85 + 0.3 * hash01(i)
+    const alpha = DECAY_PER_TICK * ease * stagger
+    sm[i] += (IDLE_FRAC - sm[i]) * alpha
+  }
 }
 
 function ensureSmoothed(
@@ -152,10 +203,7 @@ export function Waveform({
       if (isPlaying) {
         const analyser = getAnalyser()
         if (!analyser) {
-          for (let i = 0; i < bars; i++) {
-            sm[i] +=
-              (IDLE_FRAC - sm[i]) * DECAY_SMOOTH
-          }
+          decaySmoothedTowardIdle(sm, bars)
           drawBars(
             ctx,
             w,
@@ -180,6 +228,8 @@ export function Waveform({
         }
         analyser.getByteFrequencyData(buf)
         const step = Math.floor(buf.length / bars)
+        const tickMs = performance.now()
+        const tSec = tickMs * 0.001
         for (let i = 0; i < bars; i++) {
           let sum = 0
           for (let j = 0; j < step; j++) {
@@ -187,11 +237,18 @@ export function Waveform({
           }
           const norm = sum / (step * 255)
           const shaped = shapeLevel(norm)
-          const target = Math.max(
-            MIN_PLAY_FRAC,
-            shaped,
-          )
-          sm[i] += (target - sm[i]) * ATTACK_SMOOTH
+          const spread =
+            (1 +
+              BAR_SPREAD_AMP *
+                Math.sin(i * 0.97 + tSec * 0.72)) *
+            (1 +
+              BAR_SPREAD_SLOW *
+                Math.sin(i * 2.13 - tSec * 0.58))
+          const jitter =
+            DITHER_AMP * ditherUnit(i, tickMs)
+          let raw = shaped * spread + jitter
+          raw = Math.min(1, Math.max(MIN_PLAY_FRAC, raw))
+          sm[i] += (raw - sm[i]) * ATTACK_SMOOTH
         }
         drawBars(
           ctx,
@@ -206,10 +263,7 @@ export function Waveform({
         return
       }
 
-      for (let i = 0; i < bars; i++) {
-        sm[i] +=
-          (IDLE_FRAC - sm[i]) * DECAY_SMOOTH
-      }
+      decaySmoothedTowardIdle(sm, bars)
       drawBars(
         ctx,
         w,

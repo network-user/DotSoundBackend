@@ -30,6 +30,7 @@ import type {
   PlaylistWithTracks,
   SCSearchResult,
   SearchSuggestResponse,
+  PlatformAuthorSearchResponse,
   ShareResponse,
   StreamResponse,
   SyncedLine,
@@ -267,6 +268,17 @@ export const api = {
   ): Promise<SearchSuggestResponse> {
     return request(
       `/api/v1/search/suggest?q=${encodeURIComponent(
+        q,
+      )}&limit=${limit}`,
+    )
+  },
+
+  searchPlatformAuthors(
+    q: string,
+    limit = 10,
+  ): Promise<PlatformAuthorSearchResponse> {
+    return request(
+      `/api/v1/search/authors?q=${encodeURIComponent(
         q,
       )}&limit=${limit}`,
     )

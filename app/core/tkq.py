@@ -20,6 +20,17 @@ redis_broker = taskiq_redis.ListQueueBroker(
 
 broker = redis_broker
 
+# Lifecycle middleware: ties Taskiq executions kicked through
+# ``app.services.background_jobs.enqueue`` to a BackgroundJob row,
+# implements retries with exponential backoff and dead-letters
+# terminal failures with an admin alert. Tasks kicked the legacy
+# way (without bgjob_id label) are passed through untouched.
+from app.core.taskiq_middleware import (  # noqa: E402
+    BackgroundJobLifecycleMiddleware,
+)
+
+broker.add_middlewares(BackgroundJobLifecycleMiddleware())
+
 # Before any other worker module runs (ES warmup, import side-effects),
 # cap urllib3 / elastic_transport / httpx, etc. ``WORKER_STARTUP`` is too
 # late — handlers may already have logged.

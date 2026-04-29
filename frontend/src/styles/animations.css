@@ -1448,7 +1448,7 @@
   background: rgba(0, 0, 0, 0.45);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
-  animation: fade-in var(--dur-med, 220ms)
+  animation: overlayFadeIn var(--dur-med, 220ms)
     cubic-bezier(0.2, 0, 0, 1);
 }
 
