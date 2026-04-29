@@ -198,6 +198,14 @@ Mini App must not pay for.
 - `hapticNotification('success' | 'warning' | 'error')` —
   notification haptics for completed actions.
 
+## Artist catalog (Mini App)
+
+Release cards in `ArtistView` use `.artist-catalog-release-card`.
+SoundCloud artist-station rows add
+`.artist-catalog-release-card-station` and an inline
+`.artist-catalog-release-station-badge` (monochrome caption
+below meta; styles in `frontend/src/styles/global.css`).
+
 ## Migration playbook
 
 1. Replace literal spacing with `--space-*`.

@@ -688,6 +688,7 @@
     "catalog_release_card_tracks_few": "{{count}} трека",
     "catalog_release_card_tracks_many": "{{count}} треков",
     "catalog_release_card_tracks_other": "{{count}} треков",
+    "catalog_release_station_badge": "Станция SoundCloud",
     "sources_label": "Источник данных",
     "source_open": "Открыть источник",
     "source_attribution": "Источник",

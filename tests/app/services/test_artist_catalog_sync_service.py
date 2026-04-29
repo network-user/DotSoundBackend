@@ -10,7 +10,13 @@ from app.models.artist_catalog import (
     ArtistCatalogReleaseTrack,
 )
 from app.models.track import Track
-from app.services.artist_catalog_sync_service import ArtistCatalogSyncService
+from app.services.artist_catalog_sync_service import (
+    DOTSOUND_SC_ARTIST_STATION_RELEASE_KIND,
+    ArtistCatalogSyncService,
+)
+from app.services.soundcloud_service import (
+    synthetic_soundcloud_id_for_artist_station,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -111,6 +117,16 @@ async def test_sync_full_skips_manual_lock(
         ),
     )
     mock_inst.expand_playlist_stub_tracks = AsyncMock(side_effect=lambda x: x)
+    mock_inst.fetch_expanded_artist_station_playlist = AsyncMock(
+        return_value={
+            "id": synthetic_soundcloud_id_for_artist_station(50),
+            "tracks": [],
+            "artwork_url": None,
+        },
+    )
+    mock_inst.download_artwork_as_cover_key = AsyncMock(
+        return_value=None,
+    )
 
     svc = ArtistCatalogSyncService(session)
     stats = await svc.sync_full_artist(artist.id)
@@ -191,11 +207,28 @@ async def test_sync_full_imports_release_and_links(
         return_value=None,
     )
     mock_inst.import_or_get_track = AsyncMock(side_effect=_fake_import)
+    mock_inst.fetch_expanded_artist_station_playlist = AsyncMock(
+        return_value={
+            "id": synthetic_soundcloud_id_for_artist_station(999),
+            "tracks": [
+                {
+                    "id": 202,
+                    "permalink_url": "https://soundcloud.com/act/st",
+                    "title": "Station",
+                    "user": {"username": "Act"},
+                    "duration": 5000,
+                    "uri": "sc:st",
+                },
+            ],
+            "artwork_url": None,
+        },
+    )
 
     svc = ArtistCatalogSyncService(session)
     stats = await svc.sync_full_artist(artist.id)
 
     assert stats["albums_synced"] == 1
+    assert stats.get("station_synced") is True
     rel = (
         await session.execute(
             select(ArtistCatalogRelease).where(
@@ -220,6 +253,18 @@ async def test_sync_full_imports_release_and_links(
     assert len(links) == 1
     assert links[0].position == 0
     assert stats.get("albums_source_truncated") is False
+    assert mock_inst.import_or_get_track.await_count == 2
+    st_rel = (
+        await session.execute(
+            select(ArtistCatalogRelease).where(
+                ArtistCatalogRelease.artist_id == artist.id,
+                ArtistCatalogRelease.release_kind
+                == DOTSOUND_SC_ARTIST_STATION_RELEASE_KIND,
+            )
+        )
+    ).scalar_one()
+    expect_sid = synthetic_soundcloud_id_for_artist_station(999)
+    assert st_rel.soundcloud_album_id == expect_sid
 
 
 @patch(
@@ -259,6 +304,13 @@ async def test_sync_full_caps_releases(
         return_value=None,
     )
     mock_inst.import_or_get_track = AsyncMock()
+    mock_inst.fetch_expanded_artist_station_playlist = AsyncMock(
+        return_value={
+            "id": synthetic_soundcloud_id_for_artist_station(1),
+            "tracks": [],
+            "artwork_url": None,
+        },
+    )
 
     svc = ArtistCatalogSyncService(session)
     stats = await svc.sync_full_artist(artist.id)
@@ -366,3 +418,84 @@ async def test_sync_single_caps_tracks(
         .all()
     )
     assert len(links) == 3
+
+
+@patch(
+    "app.services.artist_catalog_sync_service.SoundCloudService",
+)
+async def test_sync_artist_similar_station_writes_release(
+    mock_sc_cls: MagicMock,
+    session: AsyncSession,
+) -> None:
+    artist = Artist(
+        name="Zed",
+        name_normalized="zed",
+        soundcloud_user_id=12,
+    )
+    session.add(artist)
+    await session.flush()
+
+    async def _fake_import(
+        tr: dict,
+        uid: int,
+        *,
+        skip_background_lyrics: bool = True,
+    ) -> Track:
+        t = Track(
+            title=tr.get("title", "T"),
+            artist="Zed",
+            source="soundcloud",
+            catalog_type="external_reference",
+            access_mode="third_party_stream",
+            imported_from="soundcloud",
+            external_id=str(tr.get("id", "0")),
+            sc_url=str(tr.get("permalink_url", "")),
+            uploaded_by_id=None,
+        )
+        session.add(t)
+        await session.flush()
+        await session.refresh(t)
+        return t
+
+    mock_inst = MagicMock()
+    mock_sc_cls.return_value = mock_inst
+    mock_inst.ensure_soundcloud_ids_for_artist = AsyncMock(
+        return_value=True,
+    )
+    mock_inst.fetch_expanded_artist_station_playlist = AsyncMock(
+        return_value={
+            "id": synthetic_soundcloud_id_for_artist_station(12),
+            "tracks": [
+                {
+                    "id": 9001,
+                    "permalink_url": "https://soundcloud.com/z/s",
+                    "title": "S",
+                    "user": {"username": "Z"},
+                    "duration": 1000,
+                    "uri": "sc:s",
+                },
+            ],
+            "artwork_url": None,
+        },
+    )
+    mock_inst.download_artwork_as_cover_key = AsyncMock(
+        return_value=None,
+    )
+    mock_inst.import_or_get_track = AsyncMock(side_effect=_fake_import)
+
+    svc = ArtistCatalogSyncService(session)
+    out = await svc.sync_artist_similar_station(artist.id)
+
+    assert out["status"] == "ok"
+    sid = synthetic_soundcloud_id_for_artist_station(12)
+    rel = (
+        await session.execute(
+            select(ArtistCatalogRelease).where(
+                ArtistCatalogRelease.artist_id == artist.id,
+                ArtistCatalogRelease.soundcloud_album_id == sid,
+            )
+        )
+    ).scalar_one()
+    assert "Похожее" in rel.title
+    assert "Zed" in rel.title
+    assert rel.release_kind == DOTSOUND_SC_ARTIST_STATION_RELEASE_KIND

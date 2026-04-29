@@ -623,9 +623,7 @@ class SoundCloudService:
             return []
         out: list[dict[str, Any]] = []
         for start in range(0, len(track_ids), _SC_TRACKS_IDS_BATCH_SIZE):
-            chunk = track_ids[
-                start : start + _SC_TRACKS_IDS_BATCH_SIZE
-            ]
+            chunk = track_ids[start : start + _SC_TRACKS_IDS_BATCH_SIZE]
             ids_param = ",".join(str(i) for i in chunk)
             try:
                 async with (
@@ -645,9 +643,7 @@ class SoundCloudService:
                     )
                     if r.status_code == 401:
                         raise HTTPException(
-                            status_code=(
-                                status.HTTP_503_SERVICE_UNAVAILABLE
-                            ),
+                            status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
                             detail=(
                                 "SoundCloud: неверный или устаревший "
                                 "SC_CLIENT_ID. Обновите в .env "
@@ -667,9 +663,7 @@ class SoundCloudService:
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=msg,
                 )
-            out.extend(
-                t for t in payload if isinstance(t, dict)
-            )
+            out.extend(t for t in payload if isinstance(t, dict))
         return out
 
     async def fetch_expanded_artist_station_playlist(

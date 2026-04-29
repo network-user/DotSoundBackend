@@ -104,8 +104,11 @@ backfill). `TrackService.search` и discovery при доступном ES сн�
 
 **Каталог релизов артиста (SoundCloud sync):** оркестрация в
 `app/services/artist_catalog_sync_service.py` по `artists.soundcloud_user_id`
-(SC `GET …/users/{id}/albums`, импорт треков через `SoundCloudService.import_or_get_track`,
-таблицы `artist_catalog_*`, связи `TrackArtist`). Фоновые задачи Taskiq —
+(SC `GET …/users/{id}/albums`, импорт треков через `SoundCloudService.import_or_get_track`;
+плюс релиз «Похожее» из artist station: `GET …/resolve` на
+`soundcloud.com/discover/sets/artist-stations:{id}` и `GET …/tracks?ids=…`,
+`release_kind = dotsound_sc_artist_station`, см. `SoundCloudService`.
+Таблицы `artist_catalog_*`, связи `TrackArtist`. Фоновые задачи Taskiq —
 `app/services/artist_catalog_sync_worker.py`. Конфиг: `catalog_uploader_id`
 (и `CATALOG_UPLOADER_ID` в `.env.example`). Операторский CRUD и постановка
 синка: `app/api/v1/admin/artist_catalog.py` + `app/services/admin_artist_catalog_service.py`
