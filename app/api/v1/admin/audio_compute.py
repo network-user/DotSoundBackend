@@ -42,7 +42,14 @@ class WorkerCreateRequest(BaseModel):
         max_length=8,
     )
     max_concurrent_jobs: int = Field(
-        default=1, ge=1, le=32
+        default=1,
+        ge=1,
+        le=32,
+        description=(
+            "Lyrics pull worker: while this many rows are ``running`` "
+            "for this worker, ``/internal/audio-compute/jobs/claim`` "
+            "returns 204 even when other ``queued`` jobs exist."
+        ),
     )
     accept_open_allowlist: bool = False
 

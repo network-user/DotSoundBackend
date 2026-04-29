@@ -1,5 +1,10 @@
+export type SafePlayOpts = {
+  onNotAllowed?: () => void
+}
+
 export function safePlay(
   audio: HTMLAudioElement,
+  opts?: SafePlayOpts,
 ): Promise<void> {
   return audio.play().catch((e: unknown) => {
     const n =
@@ -10,10 +15,9 @@ export function safePlay(
         'string'
         ? (e as { name: string }).name
         : ''
-    if (
-      n === 'AbortError' ||
-      n === 'NotAllowedError'
-    ) {
+    if (n === 'AbortError') return
+    if (n === 'NotAllowedError') {
+      opts?.onNotAllowed?.()
       return
     }
   })
