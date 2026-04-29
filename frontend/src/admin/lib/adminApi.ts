@@ -719,6 +719,94 @@ export const adminApi = {
         length: number | null
       }>
     }>('/tasks/queues'),
+  listSchedules: () =>
+    adminFetch<{
+      items: Array<{
+        id: string
+        name: string
+        task_name: string
+        queue: string
+        cron: string
+        payload: Record<string, unknown> | null
+        enabled: boolean
+        last_run_at: string | null
+        next_run_at: string | null
+        last_status: string | null
+        last_error: string | null
+        last_job_id: string | null
+        created_at: string
+        updated_at: string
+      }>
+    }>('/tasks/schedules'),
+  createSchedule: (body: {
+    name: string
+    task_name: string
+    cron: string
+    queue?: string
+    payload?: Record<string, unknown> | null
+    enabled?: boolean
+  }) =>
+    adminFetch<Record<string, unknown>>(
+      '/tasks/schedules',
+      { method: 'POST', body },
+    ),
+  updateSchedule: (
+    id: string,
+    body: {
+      cron?: string
+      task_name?: string
+      queue?: string
+      payload?: Record<string, unknown> | null
+      enabled?: boolean
+    },
+  ) =>
+    adminFetch<Record<string, unknown>>(
+      `/tasks/schedules/${id}`,
+      { method: 'PATCH', body },
+    ),
+  deleteSchedule: (id: string) =>
+    adminFetch<{ deleted: string }>(
+      `/tasks/schedules/${id}`,
+      { method: 'DELETE' },
+    ),
+  runScheduleNow: (id: string) =>
+    adminFetch<{ job_id: string; schedule_id: string }>(
+      `/tasks/schedules/${id}/run-now`,
+      { method: 'POST', body: {} },
+    ),
+  listBackgroundJobs: (params: {
+    name?: string
+    queue?: string
+    status?: string
+    page?: number
+    size?: number
+  }) =>
+    adminFetch<{
+      items: Array<Record<string, unknown>>
+      total: number
+      page: number
+      size: number
+    }>('/tasks/jobs', { query: params }),
+  getBackgroundJob: (id: string) =>
+    adminFetch<Record<string, unknown>>(`/tasks/jobs/${id}`),
+  cancelBackgroundJob: (id: string) =>
+    adminFetch<Record<string, unknown>>(
+      `/tasks/jobs/${id}/cancel`,
+      { method: 'POST', body: {} },
+    ),
+  retryBackgroundJob: (id: string) =>
+    adminFetch<{ new_job_id: string; parent_job_id: string }>(
+      `/tasks/jobs/${id}/retry`,
+      { method: 'POST', body: {} },
+    ),
+  tasksOverview: () =>
+    adminFetch<{
+      queues: Array<{ name: string; length: number | null }>
+      background_jobs: Record<string, number>
+      compute_jobs: Record<string, number>
+      lyrics_jobs: Record<string, number>
+      upcoming_schedules: Array<Record<string, unknown>>
+    }>('/tasks/overview'),
   listAudit: (params: {
     user_id?: number
     action?: string
