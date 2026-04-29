@@ -202,11 +202,11 @@
     0 0 0 1px rgba(255, 255, 255, 0.04) inset;
   z-index: var(--z-toast);
   pointer-events: none;
-  animation: fade-in var(--dur-med)
+  animation: toast-pop-in var(--dur-med)
     var(--ease-standard);
 }
 
-@keyframes fade-in {
+@keyframes toast-pop-in {
   from {
     opacity: 0;
     transform: translate(-50%, -8px);
@@ -517,7 +517,7 @@ button.empty-cta:focus-visible {
   align-items: flex-end;
   justify-content: center;
   z-index: var(--z-sheet);
-  animation: fade-in var(--dur-med)
+  animation: overlayFadeIn var(--dur-med)
     var(--ease-standard);
 }
 
@@ -893,7 +893,7 @@ button.empty-cta:focus-visible {
   backdrop-filter: blur(8px);
   display: flex;
   align-items: flex-end;
-  animation: fade-in var(--dur-med) var(--ease-standard);
+  animation: overlayFadeIn var(--dur-med) var(--ease-standard);
 }
 .queue-backdrop.is-closing {
   animation: fade-out var(--dur-med) var(--ease-standard)

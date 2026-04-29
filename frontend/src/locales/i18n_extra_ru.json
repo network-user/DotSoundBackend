@@ -103,7 +103,9 @@
     "bcSection": "Bandcamp · внешний источник",
     "scSection": "SoundCloud · внешний источник",
     "extSourceLabel": "внешний источник:",
-    "emptyCatalogHint": "В каталоге пусто по этому запросу — смотрите внешний поиск YouTube, Bandcamp и SoundCloud ниже."
+    "emptyCatalogHint": "В каталоге пусто по этому запросу — смотрите внешний поиск YouTube, Bandcamp и SoundCloud ниже.",
+    "platformAuthorKind": "Автор",
+    "platformAuthorRowAria": "Открыть профиль автора: {{name}}"
   },
   "trackCard": {
     "queued": "Добавлено в очередь",

@@ -2,9 +2,10 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.track import Track
 from app.models.user import User
 from app.repositories.base import BaseRepository
 
@@ -176,6 +177,32 @@ class UserRepository(BaseRepository[User]):
                     | User.display_name.ilike(
                         pattern
                     )
+                ),
+            )
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def search_platform_authors(
+        self, query: str, limit: int = 10
+    ) -> list[User]:
+        """Active users with ≥1 public active upload matching name fields."""
+        pattern = f"%{query}%"
+        has_public_upload = exists().where(
+            Track.uploaded_by_id == User.id,
+            Track.is_public.is_(True),
+            Track.is_active.is_(True),
+        )
+        result = await self._session.execute(
+            select(User)
+            .where(
+                User.is_active.is_(True),
+                has_public_upload,
+                or_(
+                    User.username.ilike(pattern),
+                    User.first_name.ilike(pattern),
+                    User.last_name.ilike(pattern),
+                    User.display_name.ilike(pattern),
                 ),
             )
             .limit(limit)

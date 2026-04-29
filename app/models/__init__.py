@@ -17,6 +17,7 @@ from app.models.artist_features import ArtistFeatures
 from app.models.artist_similarity import ArtistSimilarity
 from app.models.artist_supplemental_info import ArtistSupplementalInfo
 from app.models.audio_blob import AudioBlob
+from app.models.background_job import BackgroundJob
 from app.models.block import UserBlock
 from app.models.co_listen import CoListenRoom
 from app.models.comment import (
@@ -57,6 +58,7 @@ from app.models.playlist_collab import (
 from app.models.recommendation_impression import (
     RecommendationImpression,
 )
+from app.models.scheduled_job import ScheduledJob
 from app.models.search_event import SearchEvent
 from app.models.track import Track
 from app.models.track_audio_features import TrackAudioFeatures
@@ -83,6 +85,7 @@ __all__ = [
     "AdminSession",
     "Album",
     "AudioBlob",
+    "BackgroundJob",
     "ImageBlob",
     "VideoBlob",
     "AppSetting",
@@ -116,6 +119,7 @@ __all__ = [
     "PlaylistTrack",
     "PlaylistCollaborator",
     "RecommendationImpression",
+    "ScheduledJob",
     "SearchEvent",
     "Track",
     "TrackAudioFeatures",

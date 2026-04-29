@@ -461,6 +461,7 @@ export function App() {
             element={
               <SearchView
                 onOpenArtist={(id) => setArtistId(id)}
+                onOpenAuthor={handleOpenAuthor}
               />
             }
           />

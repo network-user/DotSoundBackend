@@ -10,6 +10,7 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { Icon } from '@/components/Icon/Icon'
 import type {
   BCSearchResult,
+  PlatformAuthorSearchItem,
   SCSearchResult,
   SearchSuggestItem,
   Track,
@@ -18,6 +19,7 @@ import type {
 
 type SearchViewProps = {
   onOpenArtist?: (id: number) => void
+  onOpenAuthor?: (id: number) => void
 }
 
 const SEARCH_DEBOUNCE_MS = 300
@@ -51,7 +53,10 @@ function mergeTracksBySuggestOrder(
   return out
 }
 
-export function SearchView({ onOpenArtist }: SearchViewProps) {
+export function SearchView({
+  onOpenArtist,
+  onOpenAuthor,
+}: SearchViewProps) {
   const { t } = useTranslation()
   const { playTrack } = usePlayerActions()
   const { toggleLike } = useLikes()
@@ -70,6 +75,9 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const [suggestArtists, setSuggestArtists] = useState<SearchSuggestItem[]>(
     [],
   )
+  const [platformAuthors, setPlatformAuthors] = useState<
+    PlatformAuthorSearchItem[]
+  >([])
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -104,6 +112,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
       setYtResults([])
       setBcResults([])
       setSuggestArtists([])
+      setPlatformAuthors([])
       return
     }
     setTracks(null)
@@ -111,6 +120,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     setYtResults([])
     setBcResults([])
     setSuggestArtists([])
+    setPlatformAuthors([])
     saveToHistory(debouncedQuery.trim())
     let cancelled = false
     const q = debouncedQuery
@@ -142,7 +152,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
       })
 
     void (async () => {
-      const [internal, sug] = await Promise.all([
+      const [internal, sug, authorsRes] = await Promise.all([
         api.getTracks({ q, size: 30 }).catch(() => ({
           items: [] as Track[],
           total: 0,
@@ -150,6 +160,9 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
           size: 30,
         })),
         api.searchSuggest(q, 12).catch(() => emptySuggest),
+        api.searchPlatformAuthors(q, 10).catch(() => ({
+          items: [] as PlatformAuthorSearchItem[],
+        })),
       ])
       if (cancelled) return
       const have = new Set(internal.items.map((t) => t.id))
@@ -173,6 +186,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
       setSuggestArtists(
         sug.items.filter((i) => i.kind === 'artist'),
       )
+      setPlatformAuthors(authorsRes.items)
     })()
     return () => {
       cancelled = true
@@ -363,13 +377,48 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
             <p className="search-section-label">
               {t('search.onPlatform')}
             </p>
+            {platformAuthors.map((a) => (
+              <div
+                key={`platform-author-${a.id}`}
+                className="track-card search-platform-author"
+                role="button"
+                tabIndex={0}
+                aria-label={t('search.platformAuthorRowAria', {
+                  name: a.display_name,
+                })}
+                onClick={() => {
+                  onOpenAuthor?.(a.id)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onOpenAuthor?.(a.id)
+                  }
+                }}
+              >
+                <CoverImage
+                  coverKey={null}
+                  externalUrl={a.avatar_url}
+                />
+                <div className="track-card-info">
+                  <div className="track-card-title-row">
+                    <p className="track-card-title">{a.display_name}</p>
+                  </div>
+                  <p className="track-card-artist">
+                    {a.username
+                      ? `@${a.username}`
+                      : t('search.platformAuthorKind')}
+                  </p>
+                </div>
+              </div>
+            ))}
             {tracks.length > 0 ? (
               <TrackList tracks={tracks} emptyMessage="" />
-            ) : (
+            ) : platformAuthors.length === 0 ? (
               <p className="search-catalog-empty">
                 {t('search.emptyCatalogHint')}
               </p>
-            )}
+            ) : null}
           </div>
         </>
       )}
