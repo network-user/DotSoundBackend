@@ -495,6 +495,38 @@
     },
     "tasks": {
       "title": "Tasks",
+      "overview": {
+        "title": "Overview",
+        "hint": "Cross-channel summary: Taskiq queue depths, background jobs via unified enqueue(), ComputeWorker pull-channel and the lyrics cascade.",
+        "queuesTotal": "Items in queues",
+        "bgRunning": "Background (queued+running)",
+        "bgFailed": "Background failed",
+        "computeOpen": "Compute (pending+claimed)",
+        "lyricsOpen": "Lyrics (queued+running)",
+        "upcoming": "Upcoming schedules"
+      },
+      "bg": {
+        "title": "Background jobs (Taskiq)",
+        "hint": "Jobs kicked through unified enqueue(): retries, dead-letter, idempotency. Total under filter: {{total}}.",
+        "empty": "No jobs kicked through unified enqueue() yet. The 16 existing workers migrate to the wrapper incrementally.",
+        "loadFailed": "Failed to load background jobs (need tasks.manage capability).",
+        "filterName": "task name",
+        "filterQueue": "queue",
+        "filterStatus": "status",
+        "detailTitle": "Job detail",
+        "confirmCancel": "Cancel this job?",
+        "confirmRetry": "Re-enqueue this job (retry)?",
+        "cols": {
+          "name": "Task",
+          "queue": "Queue",
+          "created": "Created"
+        },
+        "actions": {
+          "cancel": "Cancel",
+          "retry": "Retry",
+          "close": "Close"
+        }
+      },
       "queues": "Queues",
       "computeJobs": "Compute queue (last 50)",
       "computeJobsHint": "Colored tags group jobs by kind; the title line explains what runs.",
@@ -595,6 +627,49 @@
     },
     "containers": {
       "title": "Containers"
+    },
+    "schedules": {
+      "title": "Background-job schedules",
+      "list": "Schedule list",
+      "hint": "Cron-driven periodic Taskiq jobs. A single leader instance polls the table and kicks tasks through the unified enqueue(); status and last_run update automatically.",
+      "empty": "No schedules yet. Create your first — e.g. a nightly search-index refresh.",
+      "loadFailed": "Failed to load schedules (need tasks.manage capability).",
+      "enabledOn": "on",
+      "enabledOff": "off",
+      "createTitle": "New schedule",
+      "editTitle": "Edit schedule",
+      "confirmDelete": "Delete schedule \u201c{{name}}\u201d?",
+      "cols": {
+        "name": "Name",
+        "task": "Task",
+        "cron": "Cron",
+        "queue": "Queue",
+        "enabled": "Enabled",
+        "lastRun": "Last run",
+        "nextRun": "Next run",
+        "lastStatus": "Status"
+      },
+      "fields": {
+        "name": "Name (unique)",
+        "task": "Taskiq task name",
+        "cron": "Cron (classic 5 fields: m h dom mon dow)",
+        "queue": "Queue",
+        "payload": "Payload (JSON; empty = no kwargs)",
+        "enabled": "Enabled"
+      },
+      "actions": {
+        "create": "New schedule",
+        "save": "Save",
+        "cancel": "Cancel",
+        "edit": "Edit",
+        "delete": "Delete",
+        "runNow": "Run now",
+        "enable": "Enable",
+        "disable": "Disable"
+      },
+      "errors": {
+        "payloadJson": "Payload must be valid JSON or empty."
+      }
     },
     "audit": {
       "title": "Audit log",

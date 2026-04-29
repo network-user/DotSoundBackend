@@ -302,6 +302,14 @@ async def verify_worker_request(
     return worker
 
 
+# Mirrors ``lyrics_cascade.TIER_PROFILE_MAP`` job routing keys only
+# for worker-facing labels (avoid importing ``lyrics_cascade`` here:
+# it pulls ``lyrics_worker`` / Taskiq and can destabilize hot paths).
+_WORKER_LABEL_TO_LYRICS_JOB_PROFILE: dict[str, str] = {
+    "remote_whisper": "gpu_full",
+}
+
+
 def _expand_profiles_for_lyrics_claim(
     profiles: list[str],
 ) -> list[str]:
@@ -312,12 +320,13 @@ def _expand_profiles_for_lyrics_claim(
     with ``profile=remote_whisper`` (allowed by admin schema), so we
     union both spellings for the SQL ``IN`` filter.
     """
-    from app.services.lyrics_cascade import TIER_PROFILE_MAP
-
     out: list[str] = []
     seen: set[str] = set()
     for w in profiles:
-        mapped = TIER_PROFILE_MAP.get(w, w)
+        if not isinstance(w, str) or not w.strip():
+            continue
+        w = w.strip()
+        mapped = _WORKER_LABEL_TO_LYRICS_JOB_PROFILE.get(w, w)
         for c in (w, mapped):
             if c not in seen:
                 seen.add(c)
@@ -367,6 +376,8 @@ async def claim_next_job(
     profiles = _expand_profiles_for_lyrics_claim(
         list(worker.allowed_profiles or [worker.profile]),
     )
+    if not profiles:
+        return None
 
     select_stmt = (
         select(LyricsJob.id)

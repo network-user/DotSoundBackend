@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Icon } from '@/components/Icon/Icon'
 import { Press } from '@/components/ui/Press'
@@ -9,6 +13,7 @@ import { lyricsTierAdminTitle } from '../lib/lyricsAdminLabels'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
+import { JsonViewer } from '../components/widgets/JsonViewer'
 import { LyricsJobDetail } from '../components/widgets/LyricsJobDetail'
 import {
   StatusPill,
@@ -18,6 +23,39 @@ import {
 interface QueueRow {
   name: string
   length: number | null
+}
+
+interface BackgroundJobRow {
+  id: string
+  name: string
+  queue: string
+  status: string
+  attempts: number
+  max_attempts: number
+  duration_ms: number | null
+  scheduled_job_id: string | null
+  parent_job_id: string | null
+  error: string | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+}
+
+function bgJobKind(status: string): StatusKind {
+  if (status === 'done') return 'ok'
+  if (
+    status === 'failed' ||
+    status === 'failed_terminal'
+  )
+    return 'error'
+  if (
+    status === 'queued' ||
+    status === 'running' ||
+    status === 'cancelling'
+  )
+    return 'warn'
+  if (status === 'cancelled') return 'unknown'
+  return 'unknown'
 }
 
 interface JobRow {
@@ -406,6 +444,68 @@ export function TasksRoute() {
     string | null
   >(null)
   const [bulkBusy, setBulkBusy] = useState(false)
+  const [bgFilter, setBgFilter] = useState<{
+    name: string
+    queue: string
+    status: string
+  }>({ name: '', queue: '', status: '' })
+  const [bgDetailId, setBgDetailId] = useState<
+    string | null
+  >(null)
+
+  const overview = useQuery({
+    queryKey: ['admin', 'tasks', 'overview'],
+    queryFn: () => adminApi.tasksOverview(),
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+  })
+  const backgroundJobs = useQuery({
+    queryKey: [
+      'admin',
+      'tasks',
+      'background-jobs',
+      bgFilter,
+    ],
+    queryFn: () =>
+      adminApi.listBackgroundJobs({
+        page: 1,
+        size: 50,
+        name: bgFilter.name || undefined,
+        queue: bgFilter.queue || undefined,
+        status: bgFilter.status || undefined,
+      }),
+    refetchInterval: bgDetailId ? false : 10_000,
+    refetchIntervalInBackground: false,
+  })
+  const bgDetail = useQuery({
+    queryKey: ['admin', 'tasks', 'bg-job', bgDetailId],
+    queryFn: () =>
+      bgDetailId
+        ? adminApi.getBackgroundJob(bgDetailId)
+        : Promise.resolve(null),
+    enabled: !!bgDetailId,
+  })
+
+  const invalidateBg = () => {
+    qc.invalidateQueries({
+      queryKey: ['admin', 'tasks', 'background-jobs'],
+    })
+    qc.invalidateQueries({
+      queryKey: ['admin', 'tasks', 'overview'],
+    })
+  }
+
+  const cancelBg = useMutation({
+    mutationFn: (id: string) =>
+      adminApi.cancelBackgroundJob(id),
+    onSuccess: () => invalidateBg(),
+  })
+  const retryBg = useMutation({
+    mutationFn: (id: string) =>
+      adminApi.retryBackgroundJob(id),
+    onSuccess: () => invalidateBg(),
+  })
+
   const queues = useQuery({
     queryKey: ['admin', 'tasks', 'queues'],
     queryFn: () => adminApi.listQueues(),
@@ -478,9 +578,330 @@ export function TasksRoute() {
     t('admin.tasks.cancelRow'),
   )
 
+  const bgRows =
+    (backgroundJobs.data?.items as
+      | BackgroundJobRow[]
+      | undefined) || []
+  const bgTotal = backgroundJobs.data?.total || 0
+  const bgCounts =
+    (overview.data?.background_jobs as
+      | Record<string, number>
+      | undefined) || {}
+  const computeCounts =
+    (overview.data?.compute_jobs as
+      | Record<string, number>
+      | undefined) || {}
+  const lyricsCounts =
+    (overview.data?.lyrics_jobs as
+      | Record<string, number>
+      | undefined) || {}
+  const upcomingSchedules =
+    (overview.data?.upcoming_schedules as
+      | Array<{
+          name: string
+          task_name: string
+          cron: string
+          next_run_at: string | null
+        }>
+      | undefined) || []
+
+  const handleBgCancel = async (id: string) => {
+    const ok = await showConfirm(
+      t('admin.tasks.bg.confirmCancel'),
+    )
+    if (!ok) return
+    cancelBg.mutate(id)
+  }
+  const handleBgRetry = async (id: string) => {
+    const ok = await showConfirm(
+      t('admin.tasks.bg.confirmRetry'),
+    )
+    if (!ok) return
+    retryBg.mutate(id)
+  }
+
+  const bgColumns: ColumnDef<BackgroundJobRow>[] = [
+    {
+      header: 'ID',
+      accessorKey: 'id',
+      cell: (i) => (
+        <button
+          type="button"
+          className="admin-link admin-mono"
+          title={i.row.original.id}
+          onClick={() => setBgDetailId(i.row.original.id)}
+        >
+          {String(i.row.original.id).slice(0, 8)}
+        </button>
+      ),
+    },
+    {
+      header: t('admin.tasks.bg.cols.name') as string,
+      accessorKey: 'name',
+      cell: (i) => (
+        <span className="admin-mono">
+          {i.getValue<string>()}
+        </span>
+      ),
+    },
+    {
+      header: t('admin.tasks.bg.cols.queue') as string,
+      accessorKey: 'queue',
+    },
+    {
+      header: t('admin.tasks.detail.status') as string,
+      accessorKey: 'status',
+      cell: (i) => (
+        <StatusPill
+          kind={bgJobKind(i.row.original.status)}
+        >
+          {i.row.original.status}
+        </StatusPill>
+      ),
+    },
+    {
+      header: t('admin.tasks.detail.attempts') as string,
+      id: 'attempts',
+      accessorFn: (row) =>
+        `${row.attempts}/${row.max_attempts}`,
+    },
+    {
+      header: t('admin.tasks.detail.duration') as string,
+      accessorKey: 'duration_ms',
+      cell: (i) =>
+        i.row.original.duration_ms
+          ? `${(
+              (i.row.original.duration_ms || 0) / 1000
+            ).toFixed(1)}s`
+          : '–',
+    },
+    {
+      header: t('admin.tasks.bg.cols.created') as string,
+      accessorKey: 'created_at',
+      cell: (i) => {
+        const v = i.getValue<string>()
+        try {
+          return new Date(v).toLocaleString()
+        } catch {
+          return v
+        }
+      },
+    },
+    {
+      id: 'actions',
+      header: '',
+      enableSorting: false,
+      cell: (i) => {
+        const row = i.row.original
+        const cancellable =
+          row.status === 'queued' ||
+          row.status === 'running'
+        const retryable =
+          row.status === 'failed' ||
+          row.status === 'failed_terminal' ||
+          row.status === 'cancelled'
+        return (
+          <div className="admin-toolbar admin-toolbar--compact">
+            {cancellable && (
+              <button
+                type="button"
+                className="admin-link"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleBgCancel(row.id)
+                }}
+              >
+                {t('admin.tasks.bg.actions.cancel')}
+              </button>
+            )}
+            {retryable && (
+              <button
+                type="button"
+                className="admin-link"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleBgRetry(row.id)
+                }}
+              >
+                {t('admin.tasks.bg.actions.retry')}
+              </button>
+            )}
+          </div>
+        )
+      },
+    },
+  ]
+
   return (
     <div>
       <h1>{t('admin.tasks.title')}</h1>
+      <section className="admin-card">
+        <h2>{t('admin.tasks.overview.title')}</h2>
+        <p className="admin-card__sub">
+          {t('admin.tasks.overview.hint')}
+        </p>
+        <div className="admin-kpi-row">
+          <div className="admin-kpi">
+            <div className="admin-kpi__label">
+              {t('admin.tasks.overview.queuesTotal')}
+            </div>
+            <div className="admin-kpi__value">
+              {(overview.data?.queues || []).reduce(
+                (a, q) => a + (q.length || 0),
+                0,
+              )}
+            </div>
+          </div>
+          <div className="admin-kpi">
+            <div className="admin-kpi__label">
+              {t('admin.tasks.overview.bgRunning')}
+            </div>
+            <div className="admin-kpi__value">
+              {(bgCounts.running || 0) +
+                (bgCounts.queued || 0)}
+            </div>
+          </div>
+          <div className="admin-kpi">
+            <div className="admin-kpi__label">
+              {t('admin.tasks.overview.bgFailed')}
+            </div>
+            <div className="admin-kpi__value">
+              {(bgCounts.failed_terminal || 0) +
+                (bgCounts.failed || 0)}
+            </div>
+          </div>
+          <div className="admin-kpi">
+            <div className="admin-kpi__label">
+              {t('admin.tasks.overview.computeOpen')}
+            </div>
+            <div className="admin-kpi__value">
+              {(computeCounts.pending || 0) +
+                (computeCounts.claimed || 0)}
+            </div>
+          </div>
+          <div className="admin-kpi">
+            <div className="admin-kpi__label">
+              {t('admin.tasks.overview.lyricsOpen')}
+            </div>
+            <div className="admin-kpi__value">
+              {(lyricsCounts.queued || 0) +
+                (lyricsCounts.running || 0)}
+            </div>
+          </div>
+        </div>
+        {upcomingSchedules.length > 0 && (
+          <>
+            <h3 style={{ marginTop: '1.2rem' }}>
+              {t('admin.tasks.overview.upcoming')}
+            </h3>
+            <ul className="admin-list">
+              {upcomingSchedules
+                .slice(0, 5)
+                .map((s) => (
+                  <li key={s.name}>
+                    <span className="admin-mono">
+                      {s.name}
+                    </span>{' '}
+                    →{' '}
+                    <span className="admin-mono">
+                      {s.task_name}
+                    </span>{' '}
+                    ({s.cron}) —{' '}
+                    {s.next_run_at
+                      ? new Date(
+                          s.next_run_at,
+                        ).toLocaleString()
+                      : '–'}
+                  </li>
+                ))}
+            </ul>
+          </>
+        )}
+      </section>
+      <section className="admin-card">
+        <div className="admin-toolbar">
+          <h2 style={{ flex: 1 }}>
+            {t('admin.tasks.bg.title')}
+          </h2>
+          <input
+            type="text"
+            placeholder={
+              t('admin.tasks.bg.filterName') as string
+            }
+            value={bgFilter.name}
+            onChange={(e) =>
+              setBgFilter((f) => ({
+                ...f,
+                name: e.target.value,
+              }))
+            }
+          />
+          <input
+            type="text"
+            placeholder={
+              t('admin.tasks.bg.filterQueue') as string
+            }
+            value={bgFilter.queue}
+            onChange={(e) =>
+              setBgFilter((f) => ({
+                ...f,
+                queue: e.target.value,
+              }))
+            }
+          />
+          <input
+            type="text"
+            placeholder={
+              t('admin.tasks.bg.filterStatus') as string
+            }
+            value={bgFilter.status}
+            onChange={(e) =>
+              setBgFilter((f) => ({
+                ...f,
+                status: e.target.value,
+              }))
+            }
+          />
+        </div>
+        <p className="admin-card__sub">
+          {t('admin.tasks.bg.hint', { total: bgTotal })}
+        </p>
+        {backgroundJobs.isError && (
+          <p className="admin-error" role="alert">
+            {t('admin.tasks.bg.loadFailed')}
+          </p>
+        )}
+        <DataTable
+          columns={bgColumns}
+          rows={bgRows}
+          enableSorting
+          emptyHint={t('admin.tasks.bg.empty') as string}
+        />
+        {bgDetailId && (
+          <div className="admin-detail-panel">
+            <div className="admin-toolbar">
+              <h3 style={{ flex: 1 }}>
+                {t('admin.tasks.bg.detailTitle')}
+              </h3>
+              <button
+                type="button"
+                className="admin-link"
+                onClick={() => setBgDetailId(null)}
+              >
+                {t('admin.tasks.bg.actions.close')}
+              </button>
+            </div>
+            {bgDetail.isLoading && (
+              <p>{t('admin.tasks.detail.loading')}</p>
+            )}
+            {bgDetail.data && (
+              <JsonViewer
+                value={bgDetail.data}
+              />
+            )}
+          </div>
+        )}
+      </section>
       <section className="admin-card">
         <h2>{t('admin.tasks.queues')}</h2>
         <DataTable

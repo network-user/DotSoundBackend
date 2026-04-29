@@ -25,6 +25,7 @@ import { LogsRoute } from './routes/LogsRoute'
 import { MetricsRoute } from './routes/MetricsRoute'
 import { SecurityRoute } from './routes/SecurityRoute'
 import { SettingsRoute } from './routes/SettingsRoute'
+import { SchedulesRoute } from './routes/SchedulesRoute'
 import { TasksRoute } from './routes/TasksRoute'
 import { TracksRoute } from './routes/TracksRoute'
 import { UsersRoute } from './routes/UsersRoute'
@@ -200,6 +201,10 @@ export function AdminApp() {
               <Route
                 path="tasks"
                 element={<TasksRoute />}
+              />
+              <Route
+                path="schedules"
+                element={<SchedulesRoute />}
               />
               <Route
                 path="logs"

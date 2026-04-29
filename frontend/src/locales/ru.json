@@ -495,6 +495,38 @@
     },
     "tasks": {
       "title": "Задачи",
+      "overview": {
+        "title": "Обзор",
+        "hint": "Сводка по всем фоновым задачам: глубины очередей Taskiq, фоновые задачи через unified enqueue(), pull-канал ComputeWorker и каскад lyrics.",
+        "queuesTotal": "Всего в очередях",
+        "bgRunning": "Background (queued+running)",
+        "bgFailed": "Background failed",
+        "computeOpen": "Compute (pending+claimed)",
+        "lyricsOpen": "Lyrics (queued+running)",
+        "upcoming": "Ближайшие расписания"
+      },
+      "bg": {
+        "title": "Фоновые задачи (Taskiq)",
+        "hint": "Задачи, поставленные через unified enqueue(): retry, dead-letter, идемпотентность. Всего по фильтру: {{total}}.",
+        "empty": "Пока нет задач, поставленных через unified enqueue(). Существующие 16 воркеров мигрируются на новую обёртку постепенно.",
+        "loadFailed": "Не удалось загрузить background-jobs (нужно право tasks.manage).",
+        "filterName": "имя задачи",
+        "filterQueue": "очередь",
+        "filterStatus": "статус",
+        "detailTitle": "Детали задачи",
+        "confirmCancel": "Отменить эту задачу?",
+        "confirmRetry": "Поставить новую попытку (retry) этой задачи?",
+        "cols": {
+          "name": "Задача",
+          "queue": "Очередь",
+          "created": "Создано"
+        },
+        "actions": {
+          "cancel": "Отменить",
+          "retry": "Retry",
+          "close": "Закрыть"
+        }
+      },
       "queues": "Очереди",
       "computeJobs": "Очередь compute (последние 50)",
       "computeJobsHint": "Цветные теги группируют задачи по типу; строка ниже — полное описание.",
@@ -595,6 +627,49 @@
     },
     "containers": {
       "title": "Контейнеры"
+    },
+    "schedules": {
+      "title": "Расписания фоновых задач",
+      "list": "Список расписаний",
+      "hint": "Cron-расписания периодических Taskiq-задач. Один лидер-инстанс опрашивает таблицу и kick'ает задачи через unified enqueue(); статус и last_run обновляются автоматически.",
+      "empty": "Расписаний пока нет. Создайте первое — например, ночное обновление поискового индекса.",
+      "loadFailed": "Не удалось загрузить расписания (нужно право tasks.manage).",
+      "enabledOn": "вкл",
+      "enabledOff": "выкл",
+      "createTitle": "Новое расписание",
+      "editTitle": "Редактирование расписания",
+      "confirmDelete": "Удалить расписание «{{name}}»?",
+      "cols": {
+        "name": "Имя",
+        "task": "Задача",
+        "cron": "Cron",
+        "queue": "Очередь",
+        "enabled": "Активно",
+        "lastRun": "Последний запуск",
+        "nextRun": "Следующий",
+        "lastStatus": "Статус"
+      },
+      "fields": {
+        "name": "Имя (уникальное)",
+        "task": "Имя Taskiq-задачи",
+        "cron": "Cron (классические 5 полей: m h dom mon dow)",
+        "queue": "Очередь",
+        "payload": "Payload (JSON; пусто = без аргументов)",
+        "enabled": "Включено"
+      },
+      "actions": {
+        "create": "Новое расписание",
+        "save": "Сохранить",
+        "cancel": "Отмена",
+        "edit": "Редактировать",
+        "delete": "Удалить",
+        "runNow": "Запустить сейчас",
+        "enable": "Включить",
+        "disable": "Выключить"
+      },
+      "errors": {
+        "payloadJson": "Payload должен быть валидным JSON или пустым."
+      }
     },
     "audit": {
       "title": "Журнал аудита",

@@ -46,6 +46,8 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__
 )
 
+# When adding tiers, mirror worker-label aliases in
+# ``compute_worker_service._WORKER_LABEL_TO_LYRICS_JOB_PROFILE``.
 TIER_PROFILE_MAP: dict[str, str] = {
     TIER_CATALOG_ONLY: TIER_CATALOG_ONLY,
     TIER_REMOTE_WHISPER: "gpu_full",
