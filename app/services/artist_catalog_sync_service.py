@@ -17,9 +17,14 @@ from app.config import settings
 from app.models.artist import Artist
 from app.repositories.artist import ArtistRepository
 from app.repositories.artist_catalog import ArtistCatalogRepository
-from app.services.soundcloud_service import SoundCloudService
+from app.services.soundcloud_service import (
+    SoundCloudService,
+    synthetic_soundcloud_id_for_artist_station,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+DOTSOUND_SC_ARTIST_STATION_RELEASE_KIND = "dotsound_sc_artist_station"
 
 
 def _parse_optional_date(val: object) -> date | None:
@@ -120,12 +125,96 @@ class ArtistCatalogSyncService:
             )
             stats["albums_synced"] += 1
             await self._session.commit()
+        st = await self._sync_artist_similar_station_core(
+            artist_id,
+            artist,
+            sc,
+            sc_uid,
+            skip_background_lyrics=skip_background_lyrics,
+        )
+        stats["station_synced"] = st.get("synced", False)
+        stats["station_skipped_manual"] = st.get(
+            "skipped_manual",
+            False,
+        )
         logger.info(
             "catalog_sync_full_done",
             artist_id=artist_id,
             **stats,
         )
         return stats
+
+    async def sync_artist_similar_station(
+        self,
+        artist_id: int,
+        *,
+        skip_background_lyrics: bool = True,
+    ) -> dict[str, Any]:
+        artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
+        sc_uid = int(artist.soundcloud_user_id)
+        await sc.ensure_soundcloud_ids_for_artist(
+            artist_id,
+            sc_uid,
+            artist.soundcloud_permalink,
+        )
+        try:
+            core = await self._sync_artist_similar_station_core(
+                artist_id,
+                artist,
+                sc,
+                sc_uid,
+                skip_background_lyrics=skip_background_lyrics,
+            )
+        except Exception as exc:
+            logger.warning(
+                "catalog_sync_station_failed",
+                artist_id=artist_id,
+                error=str(exc),
+            )
+            await self._session.rollback()
+            return {"status": "error", "detail": str(exc)}
+        if core.get("skipped_manual"):
+            await self._session.commit()
+            return {"status": "skipped", "reason": "manual_lock"}
+        await self._session.commit()
+        logger.info(
+            "catalog_sync_station_done",
+            artist_id=artist_id,
+        )
+        return {"status": "ok"}
+
+    async def _sync_artist_similar_station_core(
+        self,
+        artist_id: int,
+        artist: Artist,
+        sc: SoundCloudService,
+        sc_uid: int,
+        *,
+        skip_background_lyrics: bool,
+    ) -> dict[str, Any]:
+        synthetic = synthetic_soundcloud_id_for_artist_station(sc_uid)
+        existing = await self._catalog.get_by_artist_and_sc_album(
+            artist_id,
+            synthetic,
+        )
+        if existing is not None and existing.manual_lock:
+            return {"skipped_manual": True, "synced": False}
+        display_position = (
+            existing.display_position
+            if existing is not None
+            else await self._catalog.next_display_position(artist_id)
+        )
+        expanded = await sc.fetch_expanded_artist_station_playlist(sc_uid)
+        expanded["title"] = f"Похожее: «{artist.name}»"
+        await self._sync_one_album_expanded(
+            sc,
+            artist_id=artist_id,
+            expanded=expanded,
+            display_position=display_position,
+            skip_background_lyrics=skip_background_lyrics,
+            release_kind_override=DOTSOUND_SC_ARTIST_STATION_RELEASE_KIND,
+        )
+        return {"skipped_manual": False, "synced": True}
 
     async def sync_single_release(
         self,
@@ -184,19 +273,23 @@ class ArtistCatalogSyncService:
         expanded: dict[str, Any],
         display_position: int,
         skip_background_lyrics: bool,
+        release_kind_override: str | None = None,
     ) -> None:
         raw_id = expanded.get("id")
         if raw_id is None:
             raise ValueError("album payload missing id")
         soundcloud_album_id = int(raw_id)
         title = str(expanded.get("title") or "Untitled")
-        pt = expanded.get("playlist_type") or expanded.get("set_type")
-        if pt is None:
-            rk = None
-        elif isinstance(pt, str):
-            rk = pt
+        if release_kind_override is not None:
+            rk = release_kind_override
         else:
-            rk = str(pt)
+            pt = expanded.get("playlist_type") or expanded.get("set_type")
+            if pt is None:
+                rk = None
+            elif isinstance(pt, str):
+                rk = pt
+            else:
+                rk = str(pt)
         released_at = _parse_optional_date(
             expanded.get("release_date") or expanded.get("display_date")
         )

@@ -105,7 +105,10 @@
     "extSourceLabel": "External source:",
     "emptyCatalogHint": "Nothing in the catalog for this query—try YouTube, Bandcamp, and SoundCloud below.",
     "platformAuthorKind": "Author",
-    "platformAuthorRowAria": "Open author profile: {{name}}"
+    "platformAuthorRowAria": "Open author profile: {{name}}",
+    "platformAuthors": "Authors",
+    "platformAuthorsEmpty": "No matching authors",
+    "platformTracks": "Tracks"
   },
   "trackCard": {
     "queued": "Added to queue",
