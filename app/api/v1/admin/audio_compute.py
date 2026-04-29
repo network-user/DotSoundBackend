@@ -24,6 +24,8 @@ class WorkerCreateRequest(BaseModel):
     # profile ``gpu_full`` (``lyrics_cascade.TIER_PROFILE_MAP``). A
     # worker with only ``cpu_light`` and no ``allowed_profiles``
     # for ``gpu_full`` never receives those ASR jobs (``claim`` 204).
+    # ``profile=remote_whisper`` is accepted here and matched at
+    # claim time to the same rows as ``gpu_full``.
     profile: str = Field(
         default="gpu_full",
         pattern=(

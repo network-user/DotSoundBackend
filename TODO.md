@@ -44,6 +44,9 @@ root `main.py` (imports, lyrics queue, snippets) — 2026-04
 - Audio-compute worker download: OTT with `proxy=1` so Backend
 proxies SoundCloud progressive streams (worker no longer GETs
 time-bound CDN URL directly; avoids 403) — 2026-04
+- LyricsJob pull claim: admin profile `remote_whisper` now maps to
+  the same queued rows as `gpu_full` (TIER_PROFILE_MAP); tier
+  availability heartbeat counts both — 2026-04-29
 - Mini App плеер: после сбоя Hls.js fallback `GET /audio` отдавал
 302 на M3U8, Chrome в `<audio>` M3U8 не декодирует — добавлен
 `?force_progressive=true` (прокси MP3 с S3) и хелпер
