@@ -329,12 +329,13 @@ class AdminArtistCatalogService:
             sync_artist_catalog_task,
         )
 
-        await sync_artist_catalog_task.kiq(artist_id=artist_id)
         await acsp.set_running(
             artist_id,
             mode="full",
             soundcloud_album_id=None,
+            detail={"phase": "queued"},
         )
+        await sync_artist_catalog_task.kiq(artist_id=artist_id)
         logger.info(
             "admin_catalog_full_sync_queued",
             artist_id=artist_id,
@@ -373,13 +374,17 @@ class AdminArtistCatalogService:
             sync_artist_catalog_release_task,
         )
 
-        await sync_artist_catalog_release_task.kiq(
-            artist_id=artist_id,
-            soundcloud_album_id=sc_album,
-        )
         await acsp.set_running(
             artist_id,
             mode="release",
+            soundcloud_album_id=sc_album,
+            detail={
+                "phase": "queued",
+                "soundcloud_album_id": sc_album,
+            },
+        )
+        await sync_artist_catalog_release_task.kiq(
+            artist_id=artist_id,
             soundcloud_album_id=sc_album,
         )
         logger.info(

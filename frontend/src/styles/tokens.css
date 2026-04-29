@@ -85,11 +85,11 @@
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
 
-  /* Z-index scale */
+  /* Z-index scale (#player-bar / #nav use 165–166 in global.css) */
   --z-nav: 80;
   --z-player: 90;
-  --z-sheet: 110;
-  --z-modal: 130;
+  --z-sheet: 180;
+  --z-modal: 185;
   --z-toast: 200;
   --z-install: 150;
 }
