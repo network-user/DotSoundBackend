@@ -684,6 +684,7 @@
     "catalog_release_load_error": "Could not load this release.",
     "catalog_release_card_tracks_one": "{{count}} track",
     "catalog_release_card_tracks_other": "{{count}} tracks",
+    "catalog_release_station_badge": "SoundCloud station",
     "sources_label": "Data source",
     "source_open": "Open source",
     "source_attribution": "Source",

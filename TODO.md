@@ -54,6 +54,11 @@ time-bound CDN URL directly; avoids 403) — 2026-04
 `speechkit_disabled`); `lyrics_jobs.request_with_sync` /
 `request_bypass_cache` for fallback dispatch; log
 `audio_compute_worker_fail` — 2026-04
+- `[ ]` **Taskiq/cron:** раз в месяц обход релизов каталога с
+`release_kind = dotsound_sc_artist_station` (SoundCloud artist
+station / «Похожее»), у которых `synced_at` старше порога —
+повторный `ArtistCatalogSyncService.sync_artist_similar_station`,
+батчинг и `soundcloud_slot` для лимитов API
 - **Полное копирование аудиофайлов (MinIO) на удалённый backup-VPS**
   - Подключение к отдельному серверу по SSH
   - `mc mirror` MinIO -> remote, инкрементально

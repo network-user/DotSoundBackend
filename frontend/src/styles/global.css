@@ -5245,6 +5245,14 @@ html.le-lyrics-sync-open body {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
+.artist-catalog-release-station-badge {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 .artist-catalog-release-view .artist-catalog-release-hero {
   padding: 8px 16px 20px;
   text-align: center;

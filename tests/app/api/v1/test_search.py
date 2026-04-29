@@ -167,6 +167,43 @@ async def test_authors_includes_user_with_public_track_and_avatar_url(
     assert items[0]["avatar_url"] == "https://signed.example/avatar"
 
 
+async def test_authors_match_via_track_artist_when_profile_name_differs(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Uploader display_name may differ from stage name on tracks."""
+    u = User(
+        telegram_id=88011,
+        first_name="Иван",
+        display_name="Иван Продюсер",
+        username="ivanprod",
+    )
+    db_session.add(u)
+    await db_session.flush()
+    db_session.add(
+        Track(
+            title="Хачапури",
+            artist="Maladoy Prince",
+            duration_seconds=60,
+            source_platform="soundcloud",
+            source_url="https://sc.com/u88011",
+            sc_url="https://soundcloud.com/unique88011",
+            is_active=True,
+            is_public=True,
+            uploaded_by_id=u.id,
+        )
+    )
+    await db_session.commit()
+    r = await client.get(
+        "/api/v1/search/authors",
+        params={"q": "maladoy prince"},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["id"] == u.id
+
+
 async def test_authors_multi_word_query_matches_display_name(
     client: AsyncClient,
     db_session: AsyncSession,

@@ -186,12 +186,16 @@ class UserRepository(BaseRepository[User]):
     async def search_platform_authors(
         self, query: str, limit: int = 10
     ) -> list[User]:
-        """Active users with ≥1 public active upload matching name fields.
+        """Active users with ≥1 public active upload matching search.
 
-        Query is split on whitespace; every token must match at least one of
-        username / first_name / last_name / display_name (so ``maladoy prince``
-        matches ``Maladoy Prince``). ``%`` and ``_`` in tokens are escaped for
-        LIKE.
+        Match if **either**:
+        - every query token hits ``username`` / ``first_name`` / ``last_name`` /
+          ``display_name`` (same user row), **and** the user has such a track; or
+        - the user has a public active track they uploaded where **each** token
+          matches ``track.artist`` or ``track.title`` (so catalog search by
+          stage name like ``Maladoy Prince`` still resolves the uploader).
+
+        ``%`` and ``_`` in tokens are escaped for LIKE.
         """
         parts = [p.strip() for p in query.split() if p.strip()]
         if not parts:
@@ -227,12 +231,36 @@ class UserRepository(BaseRepository[User]):
             Track.is_public.is_(True),
             Track.is_active.is_(True),
         )
+
+        def _token_hits_track_metadata(part: str):
+            pattern = _like(part)
+            artist_hit = and_(
+                Track.artist.isnot(None),
+                Track.artist.ilike(pattern, escape="\\"),
+            )
+            title_hit = Track.title.ilike(pattern, escape="\\")
+            return or_(artist_hit, title_hit)
+
+        track_token_expr = (
+            and_(*[_token_hits_track_metadata(p) for p in parts])
+            if len(parts) > 1
+            else _token_hits_track_metadata(parts[0])
+        )
+        match_via_uploaded_track_metadata = exists().where(
+            Track.uploaded_by_id == User.id,
+            Track.is_public.is_(True),
+            Track.is_active.is_(True),
+            track_token_expr,
+        )
+
+        match_user = and_(has_public_upload, name_match)
+        combined_match = or_(match_user, match_via_uploaded_track_metadata)
+
         result = await self._session.execute(
             select(User)
             .where(
                 User.is_active.is_(True),
-                has_public_upload,
-                name_match,
+                combined_match,
             )
             .limit(limit)
         )

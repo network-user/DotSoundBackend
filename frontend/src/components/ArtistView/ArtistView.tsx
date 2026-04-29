@@ -999,11 +999,17 @@ export function ArtistView({
                       count: r.track_count,
                     }),
                   )
+                  const isScStation =
+                    r.release_kind === 'dotsound_sc_artist_station'
                   return (
                     <button
                       key={r.id}
                       type="button"
-                      className="artist-catalog-release-card"
+                      className={
+                        isScStation
+                          ? 'artist-catalog-release-card artist-catalog-release-card-station'
+                          : 'artist-catalog-release-card'
+                      }
                       onClick={() => {
                         setAvatarOpen(false)
                         setSelectedReleaseId(r.id)
@@ -1017,6 +1023,11 @@ export function ArtistView({
                         <div className="artist-catalog-release-card-meta">
                           {metaBits.join(' · ')}
                         </div>
+                        {isScStation && (
+                          <span className="artist-catalog-release-station-badge">
+                            {t('artist.catalog_release_station_badge')}
+                          </span>
+                        )}
                       </div>
                     </button>
                   )

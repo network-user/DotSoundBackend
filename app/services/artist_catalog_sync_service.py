@@ -69,6 +69,14 @@ class ArtistCatalogSyncService:
             raise ValueError("artist has no soundcloud_user_id")
         return artist, sc
 
+    @staticmethod
+    def _soundcloud_user_id_int(artist: Artist) -> int:
+        raw = artist.soundcloud_user_id
+        if raw is None:
+            msg = "artist has no soundcloud_user_id"
+            raise ValueError(msg)
+        return int(raw)
+
     async def sync_full_artist(
         self,
         artist_id: int,
@@ -76,7 +84,7 @@ class ArtistCatalogSyncService:
         skip_background_lyrics: bool = True,
     ) -> dict[str, Any]:
         artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
-        sc_uid = int(artist.soundcloud_user_id)
+        sc_uid = self._soundcloud_user_id_int(artist)
         await sc.ensure_soundcloud_ids_for_artist(
             artist_id,
             sc_uid,
@@ -125,13 +133,26 @@ class ArtistCatalogSyncService:
             )
             stats["albums_synced"] += 1
             await self._session.commit()
-        st = await self._sync_artist_similar_station_core(
-            artist_id,
-            artist,
-            sc,
-            sc_uid,
-            skip_background_lyrics=skip_background_lyrics,
-        )
+        st: dict[str, bool] = {
+            "synced": False,
+            "skipped_manual": False,
+        }
+        try:
+            st = await self._sync_artist_similar_station_core(
+                artist_id,
+                artist,
+                sc,
+                sc_uid,
+                skip_background_lyrics=skip_background_lyrics,
+            )
+            await self._session.commit()
+        except Exception as exc:
+            logger.warning(
+                "catalog_sync_station_failed",
+                artist_id=artist_id,
+                error=str(exc),
+            )
+            await self._session.rollback()
         stats["station_synced"] = st.get("synced", False)
         stats["station_skipped_manual"] = st.get(
             "skipped_manual",
@@ -151,7 +172,7 @@ class ArtistCatalogSyncService:
         skip_background_lyrics: bool = True,
     ) -> dict[str, Any]:
         artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
-        sc_uid = int(artist.soundcloud_user_id)
+        sc_uid = self._soundcloud_user_id_int(artist)
         await sc.ensure_soundcloud_ids_for_artist(
             artist_id,
             sc_uid,
@@ -224,7 +245,7 @@ class ArtistCatalogSyncService:
         skip_background_lyrics: bool = True,
     ) -> dict[str, Any]:
         artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
-        sc_uid = int(artist.soundcloud_user_id)
+        sc_uid = self._soundcloud_user_id_int(artist)
         await sc.ensure_soundcloud_ids_for_artist(
             artist_id,
             sc_uid,
@@ -294,9 +315,11 @@ class ArtistCatalogSyncService:
             expanded.get("release_date") or expanded.get("display_date")
         )
         cover_key = await sc.download_artwork_as_cover_key(
-            expanded.get("artwork_url")
-            if isinstance(expanded.get("artwork_url"), str)
-            else None,
+            (
+                expanded.get("artwork_url")
+                if isinstance(expanded.get("artwork_url"), str)
+                else None
+            ),
             uploader_id=settings.catalog_uploader_id,
         )
         rel = await self._catalog.upsert_release(

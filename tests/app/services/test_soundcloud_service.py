@@ -14,6 +14,7 @@ from app.services.soundcloud_service import (
     SoundCloudService,
     extract_soundcloud_profile_permalink_from_url,
     normalize_soundcloud_permalink,
+    synthetic_soundcloud_id_for_artist_station,
 )
 
 pytestmark = pytest.mark.anyio
@@ -700,3 +701,86 @@ async def test_try_autofill_applies_first_search_hit(
     assert artist.soundcloud_user_id == 777001
     assert artist.soundcloud_permalink == "uinc"
     mock_search.assert_awaited()
+
+
+def test_synthetic_soundcloud_id_for_artist_station() -> None:
+    uid = 1023668788
+    sid = synthetic_soundcloud_id_for_artist_station(uid)
+    assert sid < 0
+    assert sid == -(10**15 + uid)
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_fetch_tracks_by_ids_bulk_batches(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    responses: list[MagicMock] = []
+
+    def _make_resp(items: list[dict]) -> MagicMock:
+        m = MagicMock()
+        m.status_code = 200
+        m.raise_for_status = MagicMock()
+        m.json.return_value = items
+        return m
+
+    ids_a = [{"id": i, "title": f"t{i}"} for i in range(50)]
+    ids_b = [{"id": 50, "title": "t50"}]
+    responses.append(_make_resp(ids_a))
+    responses.append(_make_resp(ids_b))
+
+    mock_client = AsyncMock()
+
+    async def _get(*_a: object, **_k: object) -> MagicMock:
+        return responses.pop(0)
+
+    mock_client.get = AsyncMock(side_effect=_get)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("cid", session)
+    out = await svc.fetch_tracks_by_ids_bulk(list(range(51)))
+
+    assert len(out) == 51
+    assert mock_client.get.await_count == 2
+
+
+@patch.object(
+    SoundCloudService,
+    "resolve_url",
+    new_callable=AsyncMock,
+)
+@patch.object(
+    SoundCloudService,
+    "fetch_tracks_by_ids_bulk",
+    new_callable=AsyncMock,
+)
+async def test_fetch_expanded_artist_station_playlist(
+    mock_bulk: AsyncMock,
+    mock_resolve: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_resolve.return_value = {
+        "kind": "system-playlist",
+        "id": "soundcloud:system-playlists:artist-stations:7",
+        "title": "Artist",
+        "tracks": [
+            {"id": 11, "kind": "track"},
+            {"id": 12, "kind": "track"},
+        ],
+    }
+    mock_bulk.return_value = [
+        {"id": 11, "title": "A", "permalink_url": "https://sc/a"},
+        {"id": 12, "title": "B", "permalink_url": "https://sc/b"},
+    ]
+
+    svc = SoundCloudService("cid", session)
+    pl = await svc.fetch_expanded_artist_station_playlist(7)
+
+    assert pl["id"] == synthetic_soundcloud_id_for_artist_station(7)
+    assert len(pl["tracks"]) == 2
+    mock_resolve.assert_awaited_once()
+    called_url = mock_resolve.await_args[0][0]
+    assert "artist-stations:7" in called_url
+    mock_bulk.assert_awaited_once_with([11, 12])
