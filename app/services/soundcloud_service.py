@@ -26,6 +26,16 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _SC_API_BASE = "https://api-v2.soundcloud.com"
 
+_SC_STATION_SYNTHETIC_ID_OFFSET = 10**15
+
+_SC_TRACKS_IDS_BATCH_SIZE = 50
+
+
+def synthetic_soundcloud_id_for_artist_station(
+    soundcloud_user_id: int,
+) -> int:
+    return -(_SC_STATION_SYNTHETIC_ID_OFFSET + int(soundcloud_user_id))
+
 
 def normalize_soundcloud_permalink(
     raw: str | None,
@@ -599,6 +609,121 @@ class SoundCloudService:
             else:
                 out.append(item)
         return {**playlist, "tracks": out}
+
+    async def fetch_tracks_by_ids_bulk(
+        self,
+        track_ids: list[int],
+    ) -> list[dict[str, Any]]:
+        if not self._client_id:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="SoundCloud search is not configured",
+            )
+        if not track_ids:
+            return []
+        out: list[dict[str, Any]] = []
+        for start in range(0, len(track_ids), _SC_TRACKS_IDS_BATCH_SIZE):
+            chunk = track_ids[
+                start : start + _SC_TRACKS_IDS_BATCH_SIZE
+            ]
+            ids_param = ",".join(str(i) for i in chunk)
+            try:
+                async with (
+                    soundcloud_slot(
+                        timeout_seconds=(
+                            settings.soundcloud_slot_acquire_timeout_seconds
+                        ),
+                    ),
+                    self._sc_client() as client,
+                ):
+                    r = await client.get(
+                        f"{_SC_API_BASE}/tracks",
+                        params={
+                            "ids": ids_param,
+                            "client_id": self._client_id,
+                        },
+                    )
+                    if r.status_code == 401:
+                        raise HTTPException(
+                            status_code=(
+                                status.HTTP_503_SERVICE_UNAVAILABLE
+                            ),
+                            detail=(
+                                "SoundCloud: неверный или устаревший "
+                                "SC_CLIENT_ID. Обновите в .env "
+                                "и перезапустите."
+                            ),
+                        )
+                    r.raise_for_status()
+                    payload = r.json()
+            except SoundCloudSemaphoreTimeout as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="SoundCloud is busy, retry later",
+                ) from exc
+            if not isinstance(payload, list):
+                msg = "Unexpected SoundCloud tracks batch payload"
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=msg,
+                )
+            out.extend(
+                t for t in payload if isinstance(t, dict)
+            )
+        return out
+
+    async def fetch_expanded_artist_station_playlist(
+        self,
+        soundcloud_user_id: int,
+    ) -> dict[str, Any]:
+        """Discover artist station: resolve URL then /tracks batch.
+
+        Recon (2026-04): GET resolve with discover sets URL returns
+        kind=system-playlist, string urn id, up to 50 stubs
+        (id/kind/monetization_model/policy only). GET /tracks?ids=
+        accepts at most 50 ids per request. /playlists/{encoded urn}
+        returns 500; use resolve + tracks only.
+        """
+        sc_url = (
+            "https://soundcloud.com/discover/sets/"
+            f"artist-stations:{int(soundcloud_user_id)}"
+        )
+        resolved = await self.resolve_url(sc_url)
+        if not isinstance(resolved, dict):
+            msg = "Unexpected SoundCloud resolve payload for artist station"
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=msg,
+            )
+        if resolved.get("kind") != "system-playlist":
+            msg = "SoundCloud resolve is not an artist station playlist"
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=msg,
+            )
+        raw_tracks = resolved.get("tracks")
+        if not isinstance(raw_tracks, list):
+            msg = "Artist station resolve missing tracks"
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=msg,
+            )
+        tids: list[int] = []
+        for item in raw_tracks:
+            if not isinstance(item, dict):
+                continue
+            tid = item.get("id")
+            if tid is not None:
+                tids.append(int(tid))
+        full = await self.fetch_tracks_by_ids_bulk(tids)
+        synthetic = synthetic_soundcloud_id_for_artist_station(
+            soundcloud_user_id,
+        )
+        return {
+            **resolved,
+            "id": synthetic,
+            "tracks": full,
+        }
 
     async def ensure_soundcloud_ids_for_artist(
         self,

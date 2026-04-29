@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import exists, or_, select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
@@ -186,8 +186,42 @@ class UserRepository(BaseRepository[User]):
     async def search_platform_authors(
         self, query: str, limit: int = 10
     ) -> list[User]:
-        """Active users with ≥1 public active upload matching name fields."""
-        pattern = f"%{query}%"
+        """Active users with ≥1 public active upload matching name fields.
+
+        Query is split on whitespace; every token must match at least one of
+        username / first_name / last_name / display_name (so ``maladoy prince``
+        matches ``Maladoy Prince``). ``%`` and ``_`` in tokens are escaped for
+        LIKE.
+        """
+        parts = [p.strip() for p in query.split() if p.strip()]
+        if not parts:
+            return []
+
+        def _like(pat: str) -> str:
+            esc = (
+                pat.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_")
+            )
+            return f"%{esc}%"
+
+        token_clauses = []
+        for part in parts:
+            pattern = _like(part)
+            token_clauses.append(
+                or_(
+                    User.username.ilike(pattern, escape="\\"),
+                    User.first_name.ilike(pattern, escape="\\"),
+                    User.last_name.ilike(pattern, escape="\\"),
+                    User.display_name.ilike(pattern, escape="\\"),
+                )
+            )
+        name_match = (
+            and_(*token_clauses)
+            if len(token_clauses) > 1
+            else token_clauses[0]
+        )
+
         has_public_upload = exists().where(
             Track.uploaded_by_id == User.id,
             Track.is_public.is_(True),
@@ -198,12 +232,7 @@ class UserRepository(BaseRepository[User]):
             .where(
                 User.is_active.is_(True),
                 has_public_upload,
-                or_(
-                    User.username.ilike(pattern),
-                    User.first_name.ilike(pattern),
-                    User.last_name.ilike(pattern),
-                    User.display_name.ilike(pattern),
-                ),
+                name_match,
             )
             .limit(limit)
         )

@@ -167,6 +167,43 @@ async def test_authors_includes_user_with_public_track_and_avatar_url(
     assert items[0]["avatar_url"] == "https://signed.example/avatar"
 
 
+async def test_authors_multi_word_query_matches_display_name(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    u = User(
+        telegram_id=88010,
+        first_name="Stage",
+        display_name="Maladoy Prince",
+        username="mp88010",
+    )
+    db_session.add(u)
+    await db_session.flush()
+    db_session.add(
+        Track(
+            title="Hit",
+            artist="Maladoy Prince",
+            duration_seconds=60,
+            source_platform="soundcloud",
+            source_url="https://sc.com/u88010",
+            sc_url="https://soundcloud.com/unique88010",
+            is_active=True,
+            is_public=True,
+            uploaded_by_id=u.id,
+        )
+    )
+    await db_session.commit()
+    r = await client.get(
+        "/api/v1/search/authors",
+        params={"q": "maladoy prince"},
+    )
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["id"] == u.id
+    assert items[0]["display_name"] == "Maladoy Prince"
+
+
 async def test_authors_dicebear_when_no_avatar_key(
     client: AsyncClient,
     db_session: AsyncSession,

@@ -105,7 +105,10 @@
     "extSourceLabel": "внешний источник:",
     "emptyCatalogHint": "В каталоге пусто по этому запросу — смотрите внешний поиск YouTube, Bandcamp и SoundCloud ниже.",
     "platformAuthorKind": "Автор",
-    "platformAuthorRowAria": "Открыть профиль автора: {{name}}"
+    "platformAuthorRowAria": "Открыть профиль автора: {{name}}",
+    "platformAuthors": "Авторы",
+    "platformAuthorsEmpty": "Авторов не найдено",
+    "platformTracks": "Треки"
   },
   "trackCard": {
     "queued": "Добавлено в очередь",

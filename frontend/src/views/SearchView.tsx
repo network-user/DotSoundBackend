@@ -375,50 +375,62 @@ export function SearchView({
 
           <div className="search-section">
             <p className="search-section-label">
-              {t('search.onPlatform')}
+              {t('search.platformAuthors')}
             </p>
-            {platformAuthors.map((a) => (
-              <div
-                key={`platform-author-${a.id}`}
-                className="track-card search-platform-author"
-                role="button"
-                tabIndex={0}
-                aria-label={t('search.platformAuthorRowAria', {
-                  name: a.display_name,
-                })}
-                onClick={() => {
-                  onOpenAuthor?.(a.id)
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
+            {platformAuthors.length > 0 ? (
+              platformAuthors.map((a) => (
+                <div
+                  key={`platform-author-${a.id}`}
+                  className="track-card search-platform-author"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={t('search.platformAuthorRowAria', {
+                    name: a.display_name,
+                  })}
+                  onClick={() => {
                     onOpenAuthor?.(a.id)
-                  }
-                }}
-              >
-                <CoverImage
-                  coverKey={null}
-                  externalUrl={a.avatar_url}
-                />
-                <div className="track-card-info">
-                  <div className="track-card-title-row">
-                    <p className="track-card-title">{a.display_name}</p>
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onOpenAuthor?.(a.id)
+                    }
+                  }}
+                >
+                  <CoverImage
+                    coverKey={null}
+                    externalUrl={a.avatar_url}
+                  />
+                  <div className="track-card-info">
+                    <div className="track-card-title-row">
+                      <p className="track-card-title">{a.display_name}</p>
+                    </div>
+                    <p className="track-card-artist">
+                      {a.username
+                        ? `@${a.username}`
+                        : t('search.platformAuthorKind')}
+                    </p>
                   </div>
-                  <p className="track-card-artist">
-                    {a.username
-                      ? `@${a.username}`
-                      : t('search.platformAuthorKind')}
-                  </p>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="search-catalog-empty">
+                {t('search.platformAuthorsEmpty')}
+              </p>
+            )}
+          </div>
+
+          <div className="search-section">
+            <p className="search-section-label">
+              {t('search.platformTracks')}
+            </p>
             {tracks.length > 0 ? (
               <TrackList tracks={tracks} emptyMessage="" />
-            ) : platformAuthors.length === 0 ? (
+            ) : (
               <p className="search-catalog-empty">
                 {t('search.emptyCatalogHint')}
               </p>
-            ) : null}
+            )}
           </div>
         </>
       )}
