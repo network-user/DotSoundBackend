@@ -18,6 +18,7 @@ from app.schemas.track import (
     TrackResponse,
 )
 from app.services.track_service import TrackService
+from app.services.track_response_build import dedupe_and_build_track_list
 
 router = APIRouter()
 logger: structlog.stdlib.BoundLogger = (
@@ -55,11 +56,9 @@ async def list_tracks(
             size=size,
             playable_only=playable,
         )
+    items = await dedupe_and_build_track_list(session, tracks)
     return TrackListResponse(
-        items=[
-            TrackResponse.model_validate(t)
-            for t in tracks
-        ],
+        items=items,
         total=total,
         page=page,
         size=size,

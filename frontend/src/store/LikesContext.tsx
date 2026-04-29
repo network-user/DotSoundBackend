@@ -52,17 +52,25 @@ export function LikesProvider({ children }: { children: ReactNode }) {
     const uid = getUserId()
     if (!uid) return
     try {
-      const { liked } = await api.toggleLike(uid, trackId)
+      const { liked, playback_variant_track_ids } =
+        await api.toggleLike(uid, trackId)
+      const ids =
+        playback_variant_track_ids.length > 0
+          ? playback_variant_track_ids
+          : [trackId]
       setLikedIds((prev) => {
         const next = new Set(prev)
-        if (liked) next.add(trackId)
-        else next.delete(trackId)
+        if (liked) {
+          for (const id of ids) next.add(id)
+        } else {
+          for (const id of ids) next.delete(id)
+        }
         return next
       })
       if (liked) {
         setDislikedIds((prev) => {
           const next = new Set(prev)
-          next.delete(trackId)
+          for (const id of ids) next.delete(id)
           return next
         })
       }
@@ -75,17 +83,25 @@ export function LikesProvider({ children }: { children: ReactNode }) {
     const uid = getUserId()
     if (!uid) return
     try {
-      const { disliked } = await api.toggleDislike(uid, trackId)
+      const { disliked, playback_variant_track_ids } =
+        await api.toggleDislike(uid, trackId)
+      const ids =
+        playback_variant_track_ids.length > 0
+          ? playback_variant_track_ids
+          : [trackId]
       setDislikedIds((prev) => {
         const next = new Set(prev)
-        if (disliked) next.add(trackId)
-        else next.delete(trackId)
+        if (disliked) {
+          for (const id of ids) next.add(id)
+        } else {
+          for (const id of ids) next.delete(id)
+        }
         return next
       })
       if (disliked) {
         setLikedIds((prev) => {
           const next = new Set(prev)
-          next.delete(trackId)
+          for (const id of ids) next.delete(id)
           return next
         })
       }

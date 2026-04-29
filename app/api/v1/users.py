@@ -30,7 +30,7 @@ from app.schemas.eq import (
     EqSettingsRequest,
     EqSettingsResponse,
 )
-from app.schemas.track import TrackListResponse, TrackResponse
+from app.schemas.track import TrackListResponse
 from app.schemas.user import (
     AvatarResponse,
     DeleteAccountRequest,
@@ -50,6 +50,7 @@ from app.services.signal_service import (
 )
 from app.services.stats_service import StatsService
 from app.services.track_service import TrackService
+from app.services.track_response_build import dedupe_and_build_track_list
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -309,7 +310,7 @@ async def get_feed(
     structlog.contextvars.bind_contextvars(user_id=current_user.id)
     service = FollowService(session)
     tracks, total = await service.get_feed(current_user.id, page, size)
-    items = [TrackResponse.model_validate(t) for t in tracks]
+    items = await dedupe_and_build_track_list(session, tracks)
     return TrackListResponse(items=items, total=total, page=page, size=size)
 
 
@@ -355,11 +356,8 @@ async def get_my_listen_history(
         )
     )
     by_id = {t.id: t for t in result.scalars().all()}
-    items: list[TrackResponse] = []
-    for tid in track_ids:
-        t = by_id.get(tid)
-        if t:
-            items.append(TrackResponse.model_validate(t))
+    rows = [by_id[tid] for tid in track_ids if tid in by_id]
+    items = await dedupe_and_build_track_list(session, rows)
     return TrackListResponse(
         items=items, total=len(items), page=1, size=len(items)
     )
@@ -417,7 +415,7 @@ async def get_my_library(
         size=size,
         playable_only=playable_only,
     )
-    items = [TrackResponse.model_validate(t) for t in tracks]
+    items = await dedupe_and_build_track_list(session, tracks)
     return TrackListResponse(items=items, total=total, page=page, size=size)
 
 
@@ -437,7 +435,7 @@ async def get_user_tracks(
     structlog.contextvars.bind_contextvars(user_id=user_id)
     service = TrackService(session)
     tracks, total = await service.list_public_by_user(user_id, page, size)
-    items = [TrackResponse.model_validate(t) for t in tracks]
+    items = await dedupe_and_build_track_list(session, tracks)
     return TrackListResponse(items=items, total=total, page=page, size=size)
 
 

@@ -37,3 +37,18 @@ class DislikeRepository(BaseRepository[Dislike]):
         )
         await self._session.flush()
         return result.rowcount > 0
+
+    async def exists_any_for_user_track_ids(
+        self,
+        user_id: int,
+        track_ids: list[int],
+    ) -> bool:
+        if not track_ids:
+            return False
+        r = await self._session.execute(
+            select(Dislike.track_id).where(
+                Dislike.user_id == user_id,
+                Dislike.track_id.in_(track_ids),
+            ).limit(1)
+        )
+        return r.scalar_one_or_none() is not None

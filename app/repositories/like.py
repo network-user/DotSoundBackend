@@ -1,5 +1,6 @@
-import structlog
 from datetime import datetime
+
+import structlog
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -121,3 +122,18 @@ class LikeRepository:
             .where(Like.track_id == track_id)
         )
         return int(r.scalar_one())
+
+    async def exists_any_for_user_track_ids(
+        self,
+        user_id: int,
+        track_ids: list[int],
+    ) -> bool:
+        if not track_ids:
+            return False
+        r = await self._session.execute(
+            select(Like.track_id).where(
+                Like.user_id == user_id,
+                Like.track_id.in_(track_ids),
+            ).limit(1)
+        )
+        return r.scalar_one_or_none() is not None

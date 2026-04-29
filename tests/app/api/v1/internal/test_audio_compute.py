@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -41,16 +40,21 @@ class _StreamCM:
 
 
 class _FakeAsyncClient:
-    def __init__(self, *_a: Any, **_kw: Any) -> None:
+    def __init__(self, *_a: object, **_kw: object) -> None:
         return
 
-    async def __aenter__(self) -> "_FakeAsyncClient":
+    async def __aenter__(self) -> _FakeAsyncClient:
         return self
 
     async def __aexit__(self, *_a: object) -> None:
         return
 
-    def stream(self, _method: str, _url: str) -> _StreamCM:
+    def stream(
+        self,
+        _method: str,
+        _url: str,
+        **_kwargs: object,
+    ) -> _StreamCM:
         return _StreamCM()
 
 

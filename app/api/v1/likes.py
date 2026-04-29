@@ -12,6 +12,7 @@ from app.schemas.like import (
 )
 from app.schemas.track import TrackResponse
 from app.services.like_service import LikeService
+from app.services.track_response_build import build_track_response
 
 router = APIRouter(prefix="/likes", tags=["likes"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -34,9 +35,13 @@ async def toggle_like(
         user_id=current_user.id, track_id=track_id
     )
     service = LikeService(session)
-    liked = await service.toggle(current_user.id, track_id)
+    liked, variant_ids = await service.toggle(current_user.id, track_id)
     logger.info("like_toggle_endpoint", liked=liked)
-    return LikeToggleResponse(track_id=track_id, liked=liked)
+    return LikeToggleResponse(
+        track_id=track_id,
+        liked=liked,
+        playback_variant_track_ids=variant_ids,
+    )
 
 
 @router.post(
@@ -57,9 +62,13 @@ async def toggle_like_public(
         user_id=user_id, track_id=track_id
     )
     service = LikeService(session)
-    liked = await service.toggle(user_id, track_id)
+    liked, variant_ids = await service.toggle(user_id, track_id)
     logger.info("like_toggle_endpoint_public", liked=liked)
-    return LikeToggleResponse(track_id=track_id, liked=liked)
+    return LikeToggleResponse(
+        track_id=track_id,
+        liked=liked,
+        playback_variant_track_ids=variant_ids,
+    )
 
 
 _VALID_SOURCE_FILTERS = frozenset(
@@ -92,13 +101,15 @@ async def get_user_likes(
         size=size,
         source_filter=source_filter,
     )
-    items = [
-        LikedTrackResponse(
-            **TrackResponse.model_validate(track).model_dump(),
-            liked_at=liked_at,
+    items = []
+    for track, liked_at in rows:
+        tr = await build_track_response(session, track)
+        items.append(
+            LikedTrackResponse(
+                **tr.model_dump(),
+                liked_at=liked_at,
+            )
         )
-        for track, liked_at in rows
-    ]
     return UserLikesResponse(
         items=items,
         total=total,

@@ -23,14 +23,12 @@ from app.schemas.artist_catalog import (
     ArtistCatalogReleaseListResponse,
 )
 from app.schemas.artist_supplemental import ArtistSupplementalResponse
-from app.schemas.track import (
-    TrackListResponse,
-    TrackResponse,
-)
+from app.schemas.track import TrackListResponse
 from app.services import artist_enrichment_progress as progress
 from app.services.artist_catalog_read_service import (
     ArtistCatalogReadService,
 )
+from app.services.track_response_build import dedupe_and_build_track_list
 from app.services.artist_enrichment_service import (
     ArtistEnrichmentService,
     ArtistNotFound,
@@ -347,8 +345,9 @@ async def get_artist_tracks(
     tracks, total = await svc.list_artist_tracks(
         artist_id=artist_id, page=page, size=size
     )
+    items = await dedupe_and_build_track_list(db, tracks)
     return TrackListResponse(
-        items=[TrackResponse.model_validate(t) for t in tracks],
+        items=items,
         total=total,
         page=page,
         size=size,

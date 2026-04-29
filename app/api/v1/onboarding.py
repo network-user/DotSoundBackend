@@ -4,16 +4,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.genre_samples import GenrePreviewQueueResponse
+from app.schemas.track import TrackResponse
 from app.schemas.onboarding import (
     ArtistBriefResponse,
     CalibrationRequest,
     OnboardingPreferencesRequest,
     OnboardingStatusResponse,
 )
-from app.schemas.track import TrackResponse
 from app.services.genre_samples_service import GenreSamplesService
 from app.services.onboarding_service import (
     OnboardingService,
+)
+from app.services.track_response_build import (
+    build_track_responses,
+    dedupe_and_build_track_list,
 )
 
 router = APIRouter(
@@ -67,7 +71,7 @@ async def get_genre_preview_queue(
     svc = GenreSamplesService(db)
     tracks = await svc.get_preview_queue(genre, cap)
     return GenrePreviewQueueResponse(
-        items=[TrackResponse.model_validate(t) for t in tracks],
+        items=await dedupe_and_build_track_list(db, tracks),
     )
 
 
@@ -123,10 +127,7 @@ async def get_calibration(
     tracks = await svc.get_calibration_tracks(
         user.id
     )
-    return [
-        TrackResponse.model_validate(t)
-        for t in tracks
-    ]
+    return await build_track_responses(db, tracks)
 
 
 @router.post("/calibration")

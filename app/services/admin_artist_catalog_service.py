@@ -8,6 +8,7 @@ from dotsound_private_core.services.catalog_sync_policy import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.repositories.artist import ArtistRepository
 from app.repositories.artist_catalog import ArtistCatalogRepository
 from app.schemas.admin_artist_catalog import (
@@ -22,6 +23,7 @@ from app.services.admin_service import AdminService
 from app.services.artist_catalog_read_service import (
     ArtistCatalogReadService,
 )
+from app.services.soundcloud_service import SoundCloudService
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -38,6 +40,16 @@ class AdminArtistCatalogService:
 
     async def artist_exists(self, artist_id: int) -> bool:
         return await self._artists.get_by_id(artist_id) is not None
+
+    async def _autofill_soundcloud_user_id_if_missing(
+        self,
+        artist_id: int,
+    ) -> None:
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None or artist.soundcloud_user_id is not None:
+            return
+        sc = SoundCloudService(settings.sc_client_id, self._session)
+        await sc.try_autofill_soundcloud_user_id_for_artist(artist_id)
 
     async def _ensure_catalog_sync_enqueue_allowed(
         self,
@@ -271,6 +283,11 @@ class AdminArtistCatalogService:
         if artist is None:
             msg = "artist not found"
             raise ValueError(msg)
+        await self._autofill_soundcloud_user_id_if_missing(artist_id)
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None:
+            msg = "artist not found"
+            raise ValueError(msg)
         if artist.soundcloud_user_id is None:
             msg = "artist has no soundcloud_user_id"
             raise ValueError(msg)
@@ -290,6 +307,11 @@ class AdminArtistCatalogService:
         artist_id: int,
         release_id: int,
     ) -> int:
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None:
+            msg = "artist not found"
+            raise ValueError(msg)
+        await self._autofill_soundcloud_user_id_if_missing(artist_id)
         artist = await self._artists.get_by_id(artist_id)
         if artist is None:
             msg = "artist not found"

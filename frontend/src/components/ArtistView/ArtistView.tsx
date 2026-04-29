@@ -173,6 +173,8 @@ export function ArtistView({
   const [catalogReleases, setCatalogReleases] = useState<
     ArtistCatalogReleaseSummary[] | null
   >(null)
+  const [catalogReleasesError, setCatalogReleasesError] =
+    useState(false)
   const [selectedReleaseId, setSelectedReleaseId] = useState<
     number | null
   >(null)
@@ -208,6 +210,7 @@ export function ArtistView({
     setSupplemental(null)
     setSimilarArtists(null)
     setCatalogReleases(null)
+    setCatalogReleasesError(false)
     setSelectedReleaseId(null)
 
     api
@@ -250,10 +253,16 @@ export function ArtistView({
     api
       .listArtistCatalogReleases(artistId)
       .then((res) => {
-        if (!cancelled) setCatalogReleases(res.items)
+        if (!cancelled) {
+          setCatalogReleases(res.items)
+          setCatalogReleasesError(false)
+        }
       })
       .catch(() => {
-        if (!cancelled) setCatalogReleases([])
+        if (!cancelled) {
+          setCatalogReleases([])
+          setCatalogReleasesError(true)
+        }
       })
 
     return () => {
@@ -955,50 +964,67 @@ export function ArtistView({
         </div>
       )}
 
-      {catalogReleases !== null &&
-        catalogReleases.length > 0 && (
-          <div className="artist-catalog-releases">
-            <div className="section-header">
-              <span className="section-title">
-                {t('artist.catalog_releases_title')}{' '}
-                ({catalogReleases.length})
-              </span>
-            </div>
-            <div className="artist-catalog-releases-grid">
-              {catalogReleases.map((r) => {
-                const y = r.released_at?.match(/^(\d{4})/)?.[1]
-                const metaBits: string[] = []
-                if (y) metaBits.push(y)
-                metaBits.push(
-                  t('artist.catalog_release_card_tracks', {
-                    count: r.track_count,
-                  }),
-                )
-                return (
-                  <button
-                    key={r.id}
-                    type="button"
-                    className="artist-catalog-release-card"
-                    onClick={() => {
-                      setAvatarOpen(false)
-                      setSelectedReleaseId(r.id)
-                    }}
-                  >
-                    <CoverImage coverKey={r.cover_key} size={56} />
-                    <div className="artist-catalog-release-card-text">
-                      <div className="artist-catalog-release-card-title">
-                        {r.title}
-                      </div>
-                      <div className="artist-catalog-release-card-meta">
-                        {metaBits.join(' · ')}
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+      {catalogReleases !== null && (
+        <div className="artist-catalog-releases">
+          <div className="section-header">
+            <span className="section-title">
+              {t('artist.catalog_releases_title')}{' '}
+              ({catalogReleases.length})
+            </span>
           </div>
-        )}
+          {catalogReleasesError && (
+            <div className="artist-empty-info">
+              {t('artist.catalog_releases_load_error')}
+            </div>
+          )}
+          {!catalogReleasesError &&
+            catalogReleases.length === 0 && (
+              <div className="artist-empty-info">
+                {isAdmin
+                  ? t('artist.catalog_releases_empty_admin')
+                  : t('artist.catalog_releases_empty')}
+              </div>
+            )}
+          {!catalogReleasesError &&
+            catalogReleases.length > 0 && (
+              <div className="artist-catalog-releases-grid">
+                {catalogReleases.map((r) => {
+                  const y = r.released_at?.match(
+                    /^(\d{4})/,
+                  )?.[1]
+                  const metaBits: string[] = []
+                  if (y) metaBits.push(y)
+                  metaBits.push(
+                    t('artist.catalog_release_card_tracks', {
+                      count: r.track_count,
+                    }),
+                  )
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      className="artist-catalog-release-card"
+                      onClick={() => {
+                        setAvatarOpen(false)
+                        setSelectedReleaseId(r.id)
+                      }}
+                    >
+                      <CoverImage coverKey={r.cover_key} size={56} />
+                      <div className="artist-catalog-release-card-text">
+                        <div className="artist-catalog-release-card-title">
+                          {r.title}
+                        </div>
+                        <div className="artist-catalog-release-card-meta">
+                          {metaBits.join(' · ')}
+                        </div>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+        </div>
+      )}
 
       {view.discography.length > 0 && (
         <div className="artist-discography">

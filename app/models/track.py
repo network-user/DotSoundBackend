@@ -189,6 +189,11 @@ class Track(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    composition_group_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+    )
 
     audio_blob: Mapped[AudioBlob | None] = relationship(
         "AudioBlob",

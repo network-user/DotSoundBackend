@@ -14,6 +14,7 @@ from dotsound_private_core.services.catalog_sync_policy import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.artist import Artist
 from app.repositories.artist import ArtistRepository
 from app.repositories.artist_catalog import ArtistCatalogRepository
 from app.services.soundcloud_service import SoundCloudService
@@ -46,19 +47,31 @@ class ArtistCatalogSyncService:
         self._artists = ArtistRepository(session)
         self._catalog = ArtistCatalogRepository(session)
 
+    async def _load_artist_with_autofill_sc_user(
+        self,
+        artist_id: int,
+    ) -> tuple[Artist, SoundCloudService]:
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None:
+            raise ValueError("artist not found")
+        sc = SoundCloudService(settings.sc_client_id, self._session)
+        if artist.soundcloud_user_id is None:
+            await sc.try_autofill_soundcloud_user_id_for_artist(artist_id)
+            artist = await self._artists.get_by_id(artist_id)
+            if artist is None:
+                raise ValueError("artist not found")
+        if artist.soundcloud_user_id is None:
+            raise ValueError("artist has no soundcloud_user_id")
+        return artist, sc
+
     async def sync_full_artist(
         self,
         artist_id: int,
         *,
         skip_background_lyrics: bool = True,
     ) -> dict[str, Any]:
-        artist = await self._artists.get_by_id(artist_id)
-        if artist is None:
-            raise ValueError("artist not found")
-        if artist.soundcloud_user_id is None:
-            raise ValueError("artist has no soundcloud_user_id")
+        artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
         sc_uid = int(artist.soundcloud_user_id)
-        sc = SoundCloudService(settings.sc_client_id, self._session)
         await sc.ensure_soundcloud_ids_for_artist(
             artist_id,
             sc_uid,
@@ -121,13 +134,8 @@ class ArtistCatalogSyncService:
         *,
         skip_background_lyrics: bool = True,
     ) -> dict[str, Any]:
-        artist = await self._artists.get_by_id(artist_id)
-        if artist is None:
-            raise ValueError("artist not found")
-        if artist.soundcloud_user_id is None:
-            raise ValueError("artist has no soundcloud_user_id")
+        artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
         sc_uid = int(artist.soundcloud_user_id)
-        sc = SoundCloudService(settings.sc_client_id, self._session)
         await sc.ensure_soundcloud_ids_for_artist(
             artist_id,
             sc_uid,
@@ -136,11 +144,7 @@ class ArtistCatalogSyncService:
         pl = await sc.fetch_playlist_by_id(soundcloud_album_id)
         expanded = await sc.expand_playlist_stub_tracks(pl)
         user_blob = expanded.get("user")
-        owner_id = (
-            user_blob.get("id")
-            if isinstance(user_blob, dict)
-            else None
-        )
+        owner_id = user_blob.get("id") if isinstance(user_blob, dict) else None
         if owner_id is None or int(owner_id) != sc_uid:
             raise ValueError(
                 "playlist does not belong to this artist's soundcloud_user_id"
@@ -194,8 +198,7 @@ class ArtistCatalogSyncService:
         else:
             rk = str(pt)
         released_at = _parse_optional_date(
-            expanded.get("release_date")
-            or expanded.get("display_date")
+            expanded.get("release_date") or expanded.get("display_date")
         )
         cover_key = await sc.download_artwork_as_cover_key(
             expanded.get("artwork_url")

@@ -76,8 +76,9 @@ async def test_list_liked_tracks_with_data(
     repo = LikeRepository(session)
     await repo.add(user.id, track.id)
 
-    tracks, total = await repo.list_liked_tracks(
+    rows, total = await repo.list_liked_tracks(
         user.id
     )
     assert total == 1
-    assert tracks[0].id == track.id
+    liked_track, _liked_at = rows[0]
+    assert liked_track.id == track.id

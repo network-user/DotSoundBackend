@@ -1,3 +1,4 @@
+from unittest import mock
 from unittest.mock import (
     AsyncMock,
     MagicMock,
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.artist import Artist
 from app.services.soundcloud_service import (
     SoundCloudService,
+    extract_soundcloud_profile_permalink_from_url,
     normalize_soundcloud_permalink,
 )
 
@@ -37,9 +39,7 @@ async def test_search_success(
 ) -> None:
     mock_response = MagicMock()
     mock_response.status_code = 200
-    mock_response.raise_for_status = (
-        MagicMock()
-    )
+    mock_response.raise_for_status = MagicMock()
     mock_response.json.return_value = {
         "collection": [
             {
@@ -55,15 +55,9 @@ async def test_search_success(
     }
 
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        return_value=mock_response
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
@@ -79,9 +73,7 @@ async def test_resolve_url_no_client_id(
     svc = SoundCloudService("", session)
 
     with pytest.raises(HTTPException) as exc:
-        await svc.resolve_url(
-            "https://soundcloud.com/x"
-        )
+        await svc.resolve_url("https://soundcloud.com/x")
 
     assert exc.value.status_code == 503
 
@@ -95,23 +87,15 @@ async def test_resolve_url_not_found(
     mock_response.status_code = 404
 
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        return_value=mock_response
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
 
     with pytest.raises(HTTPException) as exc:
-        await svc.resolve_url(
-            "https://soundcloud.com/x/y"
-        )
+        await svc.resolve_url("https://soundcloud.com/x/y")
 
     assert exc.value.status_code == 404
 
@@ -125,15 +109,9 @@ async def test_search_401_expired_key(
     mock_response.status_code = 401
 
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        return_value=mock_response
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
@@ -153,15 +131,9 @@ async def test_resolve_url_expired_key(
     mock_response.status_code = 401
 
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        return_value=mock_response
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
@@ -186,21 +158,13 @@ async def test_resolve_url_success(
     }
 
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        return_value=mock_response
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
-    result = await svc.resolve_url(
-        "https://sc.com/x"
-    )
+    result = await svc.resolve_url("https://sc.com/x")
 
     assert result["title"] == "Track"
 
@@ -219,23 +183,15 @@ async def test_get_stream_info_no_transcoding(
     }
 
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        return_value=resolve_resp
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(return_value=resolve_resp)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
 
     with pytest.raises(HTTPException) as exc:
-        await svc.get_stream_info(
-            "https://sc.com/no-transcode-empty"
-        )
+        await svc.get_stream_info("https://sc.com/no-transcode-empty")
 
     assert exc.value.status_code == 422
 
@@ -253,9 +209,7 @@ async def test_get_stream_info_success(
             "transcodings": [
                 {
                     "url": "https://api/stream",
-                    "format": {
-                        "protocol": "progressive"
-                    },
+                    "format": {"protocol": "progressive"},
                     "snipped": False,
                 }
             ]
@@ -266,26 +220,16 @@ async def test_get_stream_info_success(
     stream_resp = MagicMock()
     stream_resp.status_code = 200
     stream_resp.raise_for_status = MagicMock()
-    stream_resp.json.return_value = {
-        "url": "https://cdn/audio.mp3"
-    }
+    stream_resp.json.return_value = {"url": "https://cdn/audio.mp3"}
 
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        side_effect=[resolve_resp, stream_resp]
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(side_effect=[resolve_resp, stream_resp])
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
-    url, protocol = await svc.get_stream_info(
-        "https://sc.com/x"
-    )
+    url, protocol = await svc.get_stream_info("https://sc.com/x")
 
     assert url == "https://cdn/audio.mp3"
     assert protocol == "progressive"
@@ -304,9 +248,7 @@ async def test_get_stream_url(
             "transcodings": [
                 {
                     "url": "https://api/s",
-                    "format": {
-                        "protocol": "progressive"
-                    },
+                    "format": {"protocol": "progressive"},
                 }
             ]
         },
@@ -316,26 +258,16 @@ async def test_get_stream_url(
     stream_resp = MagicMock()
     stream_resp.status_code = 200
     stream_resp.raise_for_status = MagicMock()
-    stream_resp.json.return_value = {
-        "url": "https://cdn/audio.mp3"
-    }
+    stream_resp.json.return_value = {"url": "https://cdn/audio.mp3"}
 
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        side_effect=[resolve_resp, stream_resp]
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(side_effect=[resolve_resp, stream_resp])
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
-    url = await svc.get_stream_url(
-        "https://sc.com/y-get-stream-url"
-    )
+    url = await svc.get_stream_url("https://sc.com/y-get-stream-url")
 
     assert url == "https://cdn/audio.mp3"
 
@@ -373,15 +305,9 @@ async def test_get_charts_success(
     }
 
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        return_value=mock_response
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
@@ -400,15 +326,9 @@ async def test_get_charts_error_returns_empty(
     mock_response.status_code = 429
 
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        return_value=mock_response
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
@@ -427,15 +347,9 @@ async def test_get_trending_delegates_to_charts(
     mock_response.json.return_value = {"collection": []}
 
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        return_value=mock_response
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
@@ -513,6 +427,53 @@ def test_normalize_soundcloud_permalink_slug() -> None:
     assert normalize_soundcloud_permalink("PlainSlug") == "plainslug"
 
 
+def test_extract_soundcloud_profile_permalink_from_url() -> None:
+    assert (
+        extract_soundcloud_profile_permalink_from_url(
+            "https://soundcloud.com/DJTest?utm=x"
+        )
+        == "djtest"
+    )
+    assert (
+        extract_soundcloud_profile_permalink_from_url(
+            "https://soundcloud.com/tracks/xyz"
+        )
+        is None
+    )
+    assert extract_soundcloud_profile_permalink_from_url("") is None
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_search_users_filters_non_users(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_response = MagicMock()
+    mock_response.status_code = 200
+    mock_response.raise_for_status = MagicMock()
+    mock_response.json.return_value = {
+        "collection": [
+            {"kind": "track", "id": 1},
+            {
+                "kind": "user",
+                "id": 42,
+                "permalink": "found",
+            },
+        ]
+    }
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("cid", session)
+    users = await svc.search_users("q")
+
+    assert len(users) == 1
+    assert users[0]["id"] == 42
+
+
 @patch(f"{_MOD}.httpx.AsyncClient")
 async def test_list_user_albums_pagination(
     mock_client_cls: AsyncMock,
@@ -533,15 +494,9 @@ async def test_list_user_albums_pagination(
         "next_href": None,
     }
     mock_client = AsyncMock()
-    mock_client.get = AsyncMock(
-        side_effect=[resp1, resp2]
-    )
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.get = AsyncMock(side_effect=[resp1, resp2])
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
@@ -621,18 +576,12 @@ async def test_expand_playlist_stub_tracks(
     }
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(return_value=fetch_resp)
-    mock_client.__aenter__ = AsyncMock(
-        return_value=mock_client
-    )
-    mock_client.__aexit__ = AsyncMock(
-        return_value=False
-    )
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
-    result = await svc.expand_playlist_stub_tracks(
-        {"tracks": [{"id": 77}]}
-    )
+    result = await svc.expand_playlist_stub_tracks({"tracks": [{"id": 77}]})
 
     assert result["tracks"][0]["title"] == "Resolved"
 
@@ -726,3 +675,28 @@ async def test_ensure_soundcloud_ids_skips_when_sc_id_taken(
     assert ok is False
     await session.refresh(a2)
     assert a2.soundcloud_user_id is None
+
+
+@mock.patch.object(SoundCloudService, "search_users", new_callable=AsyncMock)
+async def test_try_autofill_applies_first_search_hit(
+    mock_search: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_search.return_value = [
+        {"kind": "user", "id": 777001, "permalink": "uinc"},
+    ]
+    artist = Artist(
+        name="Unique Sc Autofill",
+        name_normalized="unique-sc-autofill-xyz",
+    )
+    session.add(artist)
+    await session.flush()
+
+    svc = SoundCloudService("test_id", session)
+    ok = await svc.try_autofill_soundcloud_user_id_for_artist(artist.id)
+
+    assert ok is True
+    await session.refresh(artist)
+    assert artist.soundcloud_user_id == 777001
+    assert artist.soundcloud_permalink == "uinc"
+    mock_search.assert_awaited()

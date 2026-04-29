@@ -8,6 +8,7 @@ from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.track import TrackResponse, YTSearchResult
+from app.services.track_response_build import build_track_response
 from app.services.youtube_service import YouTubeService, _extract_video_id
 
 router = APIRouter(prefix="/youtube", tags=["youtube"])
@@ -91,4 +92,4 @@ async def import_youtube_track(
         "yt_import_endpoint",
         track_id=track.id,
     )
-    return TrackResponse.model_validate(track)
+    return await build_track_response(session, track)

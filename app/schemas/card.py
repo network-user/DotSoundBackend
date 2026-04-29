@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.schemas.track import TrackPlaybackVariantBrief
 
 
 class TrackAuthorInfo(BaseModel):
@@ -28,3 +30,6 @@ class TrackCardResponse(BaseModel):
     author: TrackAuthorInfo | None = None
     album: TrackAlbumInfo | None = None
     has_lyrics: bool = False
+    playback_variants: list[TrackPlaybackVariantBrief] = Field(
+        default_factory=list,
+    )

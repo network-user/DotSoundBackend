@@ -5,10 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
 from app.repositories.track import TrackRepository
+from dotsound_private_core.services.playback_variant_policy import (
+    EXTERNAL_SOURCE_PLATFORM_ORDER,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-_PLATFORM_PRIORITY = ("youtube", "soundcloud", "bandcamp")
 _REDIS_BLOCK_TTL = 3600
 _BLOCK_PREFIX = "fallback:block:"
 
@@ -20,7 +22,7 @@ class TrackFallbackService:
         self._session = session
         self._settings = settings
 
-    async def find_and_apply_fallback(
+    async def find_playback_replacement(
         self, track: Track
     ) -> Track | None:
         if track.duration_seconds is None or not track.title:
@@ -37,9 +39,9 @@ class TrackFallbackService:
             )
             return None
 
-        current_platform = track.source_platform or ""
+        current_platform = (track.source_platform or "").strip().lower()
         platforms_to_try = [
-            p for p in _PLATFORM_PRIORITY if p != current_platform
+            p for p in EXTERNAL_SOURCE_PLATFORM_ORDER if p != current_platform
         ]
 
         repo = TrackRepository(self._session)
@@ -51,15 +53,14 @@ class TrackFallbackService:
             )
             if candidates:
                 replacement = candidates[0]
-                await self._apply_replacement(track, replacement)
                 logger.info(
-                    "track_fallback_applied",
+                    "track_fallback_candidate",
                     track_id=track.id,
                     old_platform=current_platform,
                     new_platform=platform,
                     replacement_id=replacement.id,
                 )
-                return track
+                return replacement
 
         await redis.set(block_key, "not_found", ex=_REDIS_BLOCK_TTL)
         logger.info(
@@ -69,15 +70,11 @@ class TrackFallbackService:
         )
         return None
 
-    async def _apply_replacement(
-        self, track: Track, source: Track
-    ) -> None:
-        track.previous_source_url = track.source_url
-        track.source_url = source.source_url
-        track.source_platform = source.source_platform
-        track.external_id = source.external_id
-        track.canonical_source_url = source.canonical_source_url
-        track.sc_url = None
-        await self._session.flush()
-        await self._session.commit()
-        await self._session.refresh(track)
+    async def find_and_apply_fallback(
+        self, track: Track
+    ) -> Track | None:
+        """Return a replacement track for playback without mutating ``track``.
+
+        Legacy name kept for callers; rows are no longer rewritten in-place.
+        """
+        return await self.find_playback_replacement(track)

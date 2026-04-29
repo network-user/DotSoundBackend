@@ -7,12 +7,14 @@ from app.repositories.lyrics import LyricsRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
 from app.schemas.card import TrackAlbumInfo, TrackAuthorInfo, TrackCardResponse
+from app.services.track_response_build import build_track_response
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 class CardService:
     def __init__(self, session: AsyncSession) -> None:
+        self._session = session
         self._track_repo = TrackRepository(session)
         self._user_repo = UserRepository(session)
         self._lyrics_repo = LyricsRepository(session)
@@ -46,7 +48,7 @@ class CardService:
         album_info = None
         if track.album_id:
             from app.repositories.album import AlbumRepository
-            album_repo = AlbumRepository(self._track_repo._session)
+            album_repo = AlbumRepository(self._session)
             album = await album_repo.get_by_id(track.album_id)
             if album:
                 album_info = TrackAlbumInfo(
@@ -62,6 +64,7 @@ class CardService:
             cover_url = f"/api/v1/tracks/cover_proxy?key={quote(track.cover_key, safe='')}"
 
         logger.debug("card_built", track_id=track_id)
+        enriched = await build_track_response(self._session, track)
         return TrackCardResponse(
             id=track.id,
             title=track.title,
@@ -74,4 +77,5 @@ class CardService:
             author=author,
             album=album_info,
             has_lyrics=lyrics is not None,
+            playback_variants=enriched.playback_variants,
         )

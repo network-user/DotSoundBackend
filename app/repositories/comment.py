@@ -31,12 +31,12 @@ class CommentRepository:
 
     async def get_root_comment_for_focus(
         self,
-        track_id: int,
+        track_ids: list[int],
         user_id: int,
         focus_comment_id: int,
     ) -> TrackComment | None:
         cur = await self.get_by_id(focus_comment_id)
-        if not cur or cur.track_id != track_id:
+        if not cur or cur.track_id not in track_ids:
             return None
         if cur.is_deleted or cur.is_hidden_by_author:
             return None
@@ -44,7 +44,7 @@ class CommentRepository:
             parent = await self.get_by_id(cur.parent_id)
             if (
                 not parent
-                or parent.track_id != track_id
+                or parent.track_id not in track_ids
                 or parent.is_deleted
                 or parent.is_hidden_by_author
             ):
@@ -100,6 +100,33 @@ class CommentRepository:
         rows = await self._s.execute(q)
         return list(rows.scalars().all())
 
+    async def list_root_comments_for_tracks(
+        self,
+        track_ids: list[int],
+        user_id: int,
+        cursor: int | None,
+        limit: int,
+    ) -> list[TrackComment]:
+        if not track_ids:
+            return []
+        hid = self._hidden_subquery(user_id)
+        cond = (
+            TrackComment.track_id.in_(track_ids),
+            TrackComment.parent_id.is_(None),
+            TrackComment.is_deleted.is_(False),
+            TrackComment.is_hidden_by_author.is_(False),
+            TrackComment.id.notin_(hid),
+        )
+        q = select(TrackComment).where(*cond)
+        if cursor:
+            q = q.where(TrackComment.id < cursor)
+        q = q.order_by(
+            TrackComment.is_pinned.desc(),
+            TrackComment.created_at.desc(),
+        ).limit(limit)
+        rows = await self._s.execute(q)
+        return list(rows.scalars().all())
+
     async def list_replies_for_parents(
         self,
         track_id: int,
@@ -113,6 +140,30 @@ class CommentRepository:
             select(TrackComment)
             .where(
                 TrackComment.track_id == track_id,
+                TrackComment.parent_id.in_(parent_ids),
+                TrackComment.is_deleted.is_(False),
+                TrackComment.is_hidden_by_author.is_(False),
+                TrackComment.id.notin_(hid),
+                self._reply_visibility(user_id),
+            )
+            .order_by(TrackComment.created_at.asc())
+        )
+        rows = await self._s.execute(q)
+        return list(rows.scalars().all())
+
+    async def list_replies_for_parents_tracks(
+        self,
+        track_ids: list[int],
+        parent_ids: list[int],
+        user_id: int,
+    ) -> list[TrackComment]:
+        if not parent_ids or not track_ids:
+            return []
+        hid = self._hidden_subquery(user_id)
+        q = (
+            select(TrackComment)
+            .where(
+                TrackComment.track_id.in_(track_ids),
                 TrackComment.parent_id.in_(parent_ids),
                 TrackComment.is_deleted.is_(False),
                 TrackComment.is_hidden_by_author.is_(False),

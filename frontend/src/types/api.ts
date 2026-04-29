@@ -1,3 +1,12 @@
+export interface TrackPlaybackVariantBrief {
+  track_id: number
+  source: string
+  catalog_type: string
+  source_platform: string | null
+  source_name: string | null
+  is_primary_for_display: boolean
+}
+
 export interface Track {
   id: number
   title: string
@@ -26,6 +35,7 @@ export interface Track {
   video_key: string | null
   created_at: string
   waveform_data: number[] | null
+  playback_variants?: TrackPlaybackVariantBrief[]
 }
 
 export interface TrackListResponse {
@@ -95,11 +105,13 @@ export interface StreamResponse {
 export interface LikeToggleResponse {
   track_id: number
   liked: boolean
+  playback_variant_track_ids: number[]
 }
 
 export interface DislikeToggleResponse {
   track_id: number
   disliked: boolean
+  playback_variant_track_ids: number[]
 }
 
 export interface LikedTrack extends Track {
@@ -248,6 +260,7 @@ export interface TrackCardResponse {
   author: TrackAuthorInfo | null
   album: TrackAlbumInfo | null
   has_lyrics: boolean
+  playback_variants?: TrackPlaybackVariantBrief[]
 }
 
 // ── Lyrics ──────────────────────────────────────────────────────────────────

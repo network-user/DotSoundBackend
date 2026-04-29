@@ -40,9 +40,9 @@ async def test_toggle_dislike_adds(
     tid = await _make_track(session, uid)
 
     svc = DislikeService(session)
-    result = await svc.toggle(uid, tid)
+    disliked, _ids = await svc.toggle(uid, tid)
 
-    assert result is True
+    assert disliked is True
 
 
 async def test_toggle_dislike_removes(
@@ -53,9 +53,9 @@ async def test_toggle_dislike_removes(
 
     svc = DislikeService(session)
     await svc.toggle(uid, tid)
-    result = await svc.toggle(uid, tid)
+    disliked, _ids = await svc.toggle(uid, tid)
 
-    assert result is False
+    assert disliked is False
 
 
 async def test_toggle_dislike_user_not_found(

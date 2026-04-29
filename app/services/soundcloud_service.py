@@ -42,7 +42,38 @@ def normalize_soundcloud_permalink(
     return s.strip("/").lower() or None
 
 
+def extract_soundcloud_profile_permalink_from_url(
+    url: str | None,
+) -> str | None:
+    if not url or not isinstance(url, str):
+        return None
+    s = url.strip()
+    low = s.lower()
+    if "soundcloud.com/" not in low:
+        return None
+    tail = s.split("soundcloud.com/", 1)[-1]
+    path = tail.split("?", 1)[0].strip("/")
+    if not path:
+        return None
+    slug = path.split("/")[0]
+    noise = frozenset(
+        {
+            "tracks",
+            "likes",
+            "sets",
+            "followers",
+            "following",
+            "popular-tracks",
+        }
+    )
+    if slug.lower() in noise:
+        return None
+    return normalize_soundcloud_permalink(slug)
+
+
 _SC_OEMBED_URL = "https://soundcloud.com/oembed"
+
+_MAX_SC_USER_SEARCH_QUERY_LEN = 120
 
 
 class SoundCloudService:
@@ -622,6 +653,183 @@ class SoundCloudService:
             sc_user_id=sc_user_id,
         )
         return True
+
+    async def search_users(
+        self,
+        query: str,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        if not self._client_id:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="SoundCloud search is not configured",
+            )
+        q = (query or "").strip()
+        if not q:
+            return []
+        q = q[:_MAX_SC_USER_SEARCH_QUERY_LEN]
+        try:
+            async with (
+                soundcloud_slot(
+                    timeout_seconds=(
+                        settings.soundcloud_slot_acquire_timeout_seconds
+                    ),
+                ),
+                self._sc_client() as client,
+            ):
+                r = await client.get(
+                    f"{_SC_API_BASE}/search/users",
+                    params={
+                        "q": q,
+                        "client_id": self._client_id,
+                        "limit": min(limit, 50),
+                        "offset": 0,
+                        "linked_partitioning": 1,
+                    },
+                )
+                if r.status_code == 401:
+                    raise HTTPException(
+                        status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
+                        detail=(
+                            "SoundCloud: неверный или устаревший "
+                            "SC_CLIENT_ID. Обновите в .env и перезапустите."
+                        ),
+                    )
+                r.raise_for_status()
+                data = r.json()
+        except SoundCloudSemaphoreTimeout as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="SoundCloud is busy, retry later",
+            ) from exc
+        coll = data.get("collection", [])
+        if not isinstance(coll, list):
+            return []
+        return [
+            x for x in coll if isinstance(x, dict) and x.get("kind") == "user"
+        ]
+
+    async def _resolve_profile_permalink_to_user(
+        self,
+        permalink: str,
+    ) -> tuple[int, str] | None:
+        norm = normalize_soundcloud_permalink(permalink)
+        if not norm:
+            return None
+        sc_url = f"https://soundcloud.com/{norm}"
+        try:
+            data = await self.resolve_url(sc_url)
+        except HTTPException:
+            return None
+        if not isinstance(data, dict):
+            return None
+        if data.get("kind") != "user":
+            return None
+        uid = data.get("id")
+        if not isinstance(uid, int):
+            return None
+        perm = data.get("permalink")
+        pout = (
+            normalize_soundcloud_permalink(str(perm))
+            if isinstance(perm, str)
+            else norm
+        )
+        if pout is None:
+            pout = norm
+        return uid, pout
+
+    async def try_autofill_soundcloud_user_id_for_artist(
+        self,
+        artist_id: int,
+    ) -> bool:
+        repo = ArtistRepository(self._session)
+        artist = await repo.get_by_id(artist_id)
+        if artist is None:
+            logger.warning(
+                "sc_autofill_missing_artist",
+                artist_id=artist_id,
+            )
+            return False
+        if artist.soundcloud_user_id is not None:
+            return True
+        perm_candidates: list[str] = []
+        seen: set[str] = set()
+        ap = normalize_soundcloud_permalink(artist.soundcloud_permalink)
+        if ap and ap not in seen:
+            seen.add(ap)
+            perm_candidates.append(ap)
+        profiles = artist.source_profiles or []
+        if isinstance(profiles, list):
+            for item in profiles:
+                if not isinstance(item, dict):
+                    continue
+                raw_u = item.get("source_page_url")
+                if not isinstance(raw_u, str):
+                    continue
+                ext = extract_soundcloud_profile_permalink_from_url(
+                    raw_u,
+                )
+                if ext and ext not in seen:
+                    seen.add(ext)
+                    perm_candidates.append(ext)
+        for perm in perm_candidates:
+            resolved = await self._resolve_profile_permalink_to_user(perm)
+            if resolved is None:
+                continue
+            uid, canonical = resolved
+            ok = await self.ensure_soundcloud_ids_for_artist(
+                artist_id,
+                uid,
+                canonical,
+            )
+            if ok:
+                logger.info(
+                    "sc_autofill_from_profile",
+                    artist_id=artist_id,
+                    sc_user_id=uid,
+                )
+                return True
+        name_q = (artist.name or "").strip()[:_MAX_SC_USER_SEARCH_QUERY_LEN]
+        if not name_q:
+            logger.info("sc_autofill_no_name", artist_id=artist_id)
+            return False
+        try:
+            users = await self.search_users(name_q, limit=10)
+        except HTTPException:
+            logger.warning(
+                "sc_autofill_search_users_failed",
+                artist_id=artist_id,
+            )
+            return False
+        if not users:
+            logger.info(
+                "sc_autofill_no_search_hits",
+                artist_id=artist_id,
+            )
+            return False
+        first = users[0]
+        uid = first.get("id")
+        if not isinstance(uid, int):
+            return False
+        perm_raw = first.get("permalink")
+        pl = (
+            normalize_soundcloud_permalink(str(perm_raw))
+            if isinstance(perm_raw, str)
+            else None
+        )
+        ok = await self.ensure_soundcloud_ids_for_artist(
+            artist_id,
+            int(uid),
+            pl,
+        )
+        if ok:
+            logger.warning(
+                "sc_autofill_first_search_hit",
+                artist_id=artist_id,
+                sc_user_id=uid,
+                artist_name=artist.name,
+            )
+        return ok
 
     async def import_or_get_track(
         self,

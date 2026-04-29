@@ -31,6 +31,10 @@ from app.services.cover_worker import (
     generate_and_upload_cover,
 )
 from app.services.track_service import TrackService
+from app.services.track_response_build import (
+    build_track_response,
+    dedupe_and_build_track_list,
+)
 from app.services.upload_service import UploadService
 
 router = APIRouter()
@@ -129,11 +133,9 @@ async def list_my_tracks(
         size=size,
         playable_only=playable,
     )
+    items = await dedupe_and_build_track_list(session, tracks)
     return TrackListResponse(
-        items=[
-            TrackResponse.model_validate(t)
-            for t in tracks
-        ],
+        items=items,
         total=total,
         page=page,
         size=size,
@@ -172,7 +174,7 @@ async def update_track(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found or access denied",
         )
-    return TrackResponse.model_validate(track)
+    return await build_track_response(session, track)
 
 
 @router.delete(
@@ -316,7 +318,7 @@ async def upload_track_cover(
         track_id=track_id,
         cover_key=cover_key,
     )
-    return TrackResponse.model_validate(track)
+    return await build_track_response(session, track)
 
 
 @router.post(
@@ -346,7 +348,7 @@ async def regenerate_track_cover(
         "track_cover_regenerate_queued",
         track_id=track_id,
     )
-    return TrackResponse.model_validate(track)
+    return await build_track_response(session, track)
 
 
 _ALLOWED_VIDEO_MIMES = frozenset(
@@ -419,7 +421,7 @@ async def upload_track_video(
     )
 
     await session.refresh(track)
-    return TrackResponse.model_validate(track)
+    return await build_track_response(session, track)
 
 
 @router.delete(
@@ -500,4 +502,4 @@ async def restore_external_cover(
         track_id=track_id,
         cover_key=cover_key,
     )
-    return TrackResponse.model_validate(track)
+    return await build_track_response(session, track)

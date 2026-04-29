@@ -780,6 +780,22 @@
   gap: var(--space-4);
 }
 
+.admin-auth-card form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.admin-auth-card form > .press {
+  width: 100%;
+}
+
+.admin-auth-card > .press {
+  align-self: stretch;
+  width: 100%;
+}
+
 .admin-auth-card h2 {
   font-size: var(--fs-22);
   font-weight: 700;

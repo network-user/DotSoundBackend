@@ -136,6 +136,10 @@ async def test_discover_limits_to_two_genres(
             f"{_MOD}.SoundCloudService",
             return_value=mock_svc,
         ),
+        patch(
+            f"{_MOD}.should_boost_russian_discovery",
+            return_value=False,
+        ),
     ):
         mock_settings.sc_client_id = "test_id"
         svc = ExternalDiscoveryService(session)
