@@ -1,5 +1,5 @@
 from io import BytesIO
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, UploadFile
@@ -40,6 +40,10 @@ def test_resolve_mime_fallback_to_filename() -> None:
     assert _resolve_mime(f) == "audio/mpeg"
 
 
+@patch(
+    "app.services.lyrics_worker.catalog_only_lyrics_task.kiq",
+    new_callable=AsyncMock,
+)
 @patch(f"{_MOD}.s3.upload_object", new_callable=AsyncMock)
 @patch(f"{_MOD}.transcode_and_upload.kiq", new_callable=AsyncMock)
 @patch(f"{_MOD}.generate_and_upload_cover.kiq", new_callable=AsyncMock)
@@ -47,8 +51,12 @@ async def test_upload_track_success(
     mock_cover: AsyncMock,
     mock_transcode: AsyncMock,
     mock_s3: AsyncMock,
+    mock_lyrics_kiq: AsyncMock,
     session: AsyncSession,
 ) -> None:
+    _t = MagicMock()
+    _t.task_id = "test-lyrics-task"
+    mock_lyrics_kiq.return_value = _t
     from app.repositories.user import (
         UserRepository,
     )

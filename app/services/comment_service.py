@@ -14,7 +14,9 @@ from app.repositories.block import BlockRepository
 from app.repositories.comment import (
     CommentRepository,
 )
+from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
+from app.services.playback_variant_service import PlaybackVariantService
 from app.services.comment_notifications import (
     comment_like_copy,
     comment_reply_copy,
@@ -51,6 +53,20 @@ class CommentService:
         if joined:
             return joined
         return f"User #{user.id}"
+
+    async def _storage_track(self, track: Track) -> Track:
+        pvs = PlaybackVariantService(self._session)
+        repo = TrackRepository(self._session)
+        ids = await pvs.resolve_variant_track_ids(track)
+        rows = await repo.get_by_ids_preserve_order(ids)
+        active = [r for r in rows if r.is_active and r.is_public]
+        if not active:
+            return track
+        return pvs.pick_primary_track(active)
+
+    async def _variant_track_ids(self, track: Track) -> list[int]:
+        pvs = PlaybackVariantService(self._session)
+        return await pvs.resolve_variant_track_ids(track)
 
     def _raise_unless_comments_allowed(self, track: Track | None) -> None:
         if not track or not track.is_active:
@@ -179,8 +195,10 @@ class CommentService:
         track = await self._session.get(Track, track_id)
         self._raise_unless_comments_allowed(track)
         assert track is not None
-        if track.uploaded_by_id and await self._block_repo.is_blocked(
-            track.uploaded_by_id, user_id
+        storage = await self._storage_track(track)
+        variant_ids = await self._variant_track_ids(track)
+        if storage.uploaded_by_id and await self._block_repo.is_blocked(
+            storage.uploaded_by_id, user_id
         ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -195,7 +213,7 @@ class CommentService:
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="Parent comment not found",
                 )
-            if parent_row.track_id != track_id:
+            if parent_row.track_id not in variant_ids:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid parent comment",
@@ -207,7 +225,7 @@ class CommentService:
                 )
 
         c = await self._repo.create(
-            track_id=track_id,
+            track_id=storage.id,
             user_id=user_id,
             text=text,
             parent_id=parent_id,
@@ -215,14 +233,14 @@ class CommentService:
         logger.info(
             "comment_added",
             comment_id=c.id,
-            track_id=track_id,
+            track_id=storage.id,
             parent_id=parent_id,
         )
         author = await self._user_repo.get_by_id(user_id)
         author_label = self._author_label(author)
         result = {
             "id": c.id,
-            "track_id": track_id,
+            "track_id": storage.id,
             "user_id": user_id,
             "parent_id": parent_id,
             "text": text,
@@ -238,7 +256,7 @@ class CommentService:
         )
         if parent_id is not None and parent_row is not None:
             await self._notify_comment_reply(
-                track=track,
+                track=storage,
                 new_comment=c,
                 text=text,
                 actor=author,
@@ -256,13 +274,15 @@ class CommentService:
     ) -> list[dict[str, Any]]:
         track = await self._session.get(Track, track_id)
         self._raise_unless_comments_allowed(track)
-        roots = await self._repo.list_root_comments(
-            track_id, user_id, cursor, limit
+        assert track is not None
+        variant_ids = await self._variant_track_ids(track)
+        roots = await self._repo.list_root_comments_for_tracks(
+            variant_ids, user_id, cursor, limit
         )
         extra_root: TrackComment | None = None
         if focus_comment_id is not None:
             extra_root = await self._repo.get_root_comment_for_focus(
-                track_id,
+                variant_ids,
                 user_id,
                 focus_comment_id,
             )
@@ -282,8 +302,8 @@ class CommentService:
         all_flat: list[TrackComment] = []
         frontier = [r.id for r in roots]
         while frontier:
-            batch = await self._repo.list_replies_for_parents(
-                track_id, frontier, user_id
+            batch = await self._repo.list_replies_for_parents_tracks(
+                variant_ids, frontier, user_id
             )
             if not batch:
                 break

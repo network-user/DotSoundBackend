@@ -15,9 +15,16 @@ from app.services.artist_catalog_sync_service import ArtistCatalogSyncService
 pytestmark = pytest.mark.anyio
 
 
+@patch(
+    "app.services.soundcloud_service.SoundCloudService."
+    "try_autofill_soundcloud_user_id_for_artist",
+    new_callable=AsyncMock,
+)
 async def test_sync_full_requires_soundcloud_user_id(
+    autofill_sc_user: AsyncMock,
     session: AsyncSession,
 ) -> None:
+    autofill_sc_user.return_value = False
     artist = Artist(name="A", name_normalized="a")
     session.add(artist)
     await session.flush()
@@ -25,6 +32,7 @@ async def test_sync_full_requires_soundcloud_user_id(
     svc = ArtistCatalogSyncService(session)
     with pytest.raises(ValueError, match="soundcloud_user_id"):
         await svc.sync_full_artist(artist.id)
+    autofill_sc_user.assert_awaited_once_with(artist.id)
 
 
 async def test_sync_single_wrong_playlist_owner(
@@ -199,12 +207,16 @@ async def test_sync_full_imports_release_and_links(
     assert rel.title == "Album"
     assert rel.release_kind == "album"
     links = (
-        await session.execute(
-            select(ArtistCatalogReleaseTrack).where(
-                ArtistCatalogReleaseTrack.release_id == rel.id,
+        (
+            await session.execute(
+                select(ArtistCatalogReleaseTrack).where(
+                    ArtistCatalogReleaseTrack.release_id == rel.id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(links) == 1
     assert links[0].position == 0
     assert stats.get("albums_source_truncated") is False
@@ -237,8 +249,7 @@ async def test_sync_full_caps_releases(
         return_value=True,
     )
     albums_payload = [
-        {"id": 10 + i, "title": f"R{i}", "tracks": []}
-        for i in range(4)
+        {"id": 10 + i, "title": f"R{i}", "tracks": []} for i in range(4)
     ]
     mock_inst.list_user_albums = AsyncMock(
         return_value=(albums_payload, False),
@@ -344,10 +355,14 @@ async def test_sync_single_caps_tracks(
         )
     ).scalar_one()
     links = (
-        await session.execute(
-            select(ArtistCatalogReleaseTrack).where(
-                ArtistCatalogReleaseTrack.release_id == rel.id,
+        (
+            await session.execute(
+                select(ArtistCatalogReleaseTrack).where(
+                    ArtistCatalogReleaseTrack.release_id == rel.id,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     assert len(links) == 3

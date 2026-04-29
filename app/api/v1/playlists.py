@@ -16,11 +16,11 @@ from app.schemas.playlist_collab import (
     PlaylistInviteAccept,
     PlaylistInviteOut,
 )
-from app.schemas.track import TrackResponse
 from app.services.playlist_collab_service import (
     PlaylistCollabService,
 )
 from app.services.playlist_service import PlaylistService
+from app.services.track_response_build import dedupe_and_build_track_list
 
 router = APIRouter(prefix="/playlists", tags=["playlists"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -104,7 +104,7 @@ async def get_playlist(
         )
     tracks = await service.get_tracks(playlist_id)
     result = PlaylistWithTracksResponse.model_validate(playlist)
-    result.tracks = [TrackResponse.model_validate(t) for t in tracks]
+    result.tracks = await dedupe_and_build_track_list(session, tracks)
     return result
 
 

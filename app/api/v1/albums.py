@@ -13,8 +13,8 @@ from app.schemas.album import (
     AlbumUpdateRequest,
     AlbumWithTracksResponse,
 )
-from app.schemas.track import TrackResponse
 from app.services.album_service import AlbumService
+from app.services.track_response_build import dedupe_and_build_track_list
 
 router = APIRouter(prefix="/albums", tags=["albums"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -71,7 +71,7 @@ async def get_album(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Album not found",
         )
-    tracks = [TrackResponse.model_validate(t) for t in album.tracks]
+    tracks = await dedupe_and_build_track_list(session, list(album.tracks))
     return AlbumWithTracksResponse(
         **AlbumResponse.model_validate(album).model_dump(),
         tracks=tracks,

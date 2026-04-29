@@ -3,7 +3,7 @@ import sys
 import types
 from io import BytesIO
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -182,6 +182,8 @@ def mock_s3():
 
 @pytest.fixture
 def mock_taskiq():
+    _lyrics_kiq = MagicMock()
+    _lyrics_kiq.task_id = "test-lyrics-task"
     with patch(
         "app.services.upload_service"
         ".transcode_and_upload.kiq",
@@ -192,6 +194,10 @@ def mock_taskiq():
         ".generate_and_upload_cover.kiq",
         new_callable=AsyncMock,
         return_value=None,
+    ), patch(
+        "app.services.lyrics_worker.catalog_only_lyrics_task.kiq",
+        new_callable=AsyncMock,
+        return_value=_lyrics_kiq,
     ):
         yield
 
@@ -231,6 +237,8 @@ async def create_test_track(
             client, uploader_id
         )
 
+    _lyrics_kiq = MagicMock()
+    _lyrics_kiq.task_id = "test-lyrics-task"
     with patch(
         "app.core.s3.upload_object",
         new_callable=AsyncMock,
@@ -248,6 +256,10 @@ async def create_test_track(
         ".generate_and_upload_cover.kiq",
         new_callable=AsyncMock,
         return_value=None,
+    ), patch(
+        "app.services.lyrics_worker.catalog_only_lyrics_task.kiq",
+        new_callable=AsyncMock,
+        return_value=_lyrics_kiq,
     ):
         r = await client.post(
             "/api/v1/tracks/upload",

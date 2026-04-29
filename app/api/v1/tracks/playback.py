@@ -34,6 +34,10 @@ from app.services.public_playcount_service import (
 from app.services.radio_service import RadioService
 from app.services.snippet_service import SnippetService
 from app.services.track_service import TrackService
+from app.services.track_response_build import (
+    build_track_response,
+    build_track_responses,
+)
 
 router = APIRouter()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -264,6 +268,8 @@ async def stream_track(
                     "bandcamp" if spf == "bandcamp" else "youtube"
                 ),
             )
+        stream_track_id = track_id
+        stream_pf = track.source_platform
         try:
             stream_url, protocol = await _resolve_third_party_stream(
                 track, session
@@ -276,20 +282,24 @@ async def stream_track(
                 )
 
                 fallback_svc = TrackFallbackService(session, _settings)
-                updated = await fallback_svc.find_and_apply_fallback(track)
-                if updated:
+                replacement = await fallback_svc.find_and_apply_fallback(
+                    track
+                )
+                if replacement:
                     stream_url, protocol = await _resolve_third_party_stream(
-                        updated, session
+                        replacement, session
                     )
+                    stream_track_id = replacement.id
+                    stream_pf = replacement.source_platform
                 else:
                     raise
             else:
                 raise
         return StreamResponse(
-            track_id=track_id,
+            track_id=stream_track_id,
             url=stream_url,
             stream_type="hls" if protocol == "hls" else "direct",
-            expires_in=_stream_ttl(track.source_platform),
+            expires_in=_stream_ttl(stream_pf),
         )
     if not track.file_key:
         raise HTTPException(
@@ -512,7 +522,7 @@ async def get_track_queue(
     repo = TrackRepository(session)
     tracks = await repo.get_next_tracks(track_id, count)
     return TrackQueueResponse(
-        next_tracks=[TrackResponse.model_validate(t) for t in tracks]
+        next_tracks=await build_track_responses(session, tracks),
     )
 
 
@@ -540,7 +550,7 @@ async def get_radio_queue(
     rsvc = RadioService(session, settings)
     nxt, src = await rsvc.build_queue(track, count, current_user)
     return RadioTrackQueueResponse(
-        next_tracks=[TrackResponse.model_validate(t) for t in nxt],
+        next_tracks=await build_track_responses(session, nxt),
         source=src,
     )
 
@@ -699,4 +709,4 @@ async def get_track(
             detail="Track not found",
         )
     _check_access(track, current_user)
-    return TrackResponse.model_validate(track)
+    return await build_track_response(session, track)

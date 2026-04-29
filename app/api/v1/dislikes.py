@@ -29,9 +29,15 @@ async def toggle_dislike(
         user_id=current_user.id, track_id=track_id
     )
     service = DislikeService(session)
-    disliked = await service.toggle(current_user.id, track_id)
+    disliked, variant_ids = await service.toggle(
+        current_user.id, track_id
+    )
     logger.info("dislike_toggle_endpoint", disliked=disliked)
-    return DislikeToggleResponse(track_id=track_id, disliked=disliked)
+    return DislikeToggleResponse(
+        track_id=track_id,
+        disliked=disliked,
+        playback_variant_track_ids=variant_ids,
+    )
 
 
 @router.post(
@@ -52,6 +58,10 @@ async def toggle_dislike_public(
         user_id=user_id, track_id=track_id
     )
     service = DislikeService(session)
-    disliked = await service.toggle(user_id, track_id)
+    disliked, variant_ids = await service.toggle(user_id, track_id)
     logger.info("dislike_toggle_endpoint_public", disliked=disliked)
-    return DislikeToggleResponse(track_id=track_id, disliked=disliked)
+    return DislikeToggleResponse(
+        track_id=track_id,
+        disliked=disliked,
+        playback_variant_track_ids=variant_ids,
+    )

@@ -21,9 +21,11 @@ from app.schemas.recommendation import (
     UserChoicePlaylistResponse,
     WeeklyPlaylistResponse,
 )
-from app.schemas.track import TrackResponse
 from app.services.recommendation_service import (
     RecommendationService,
+)
+from app.services.track_response_build import (
+    dedupe_and_build_track_list,
 )
 
 router = APIRouter(
@@ -41,17 +43,16 @@ async def get_home(
 ):
     svc = RecommendationService(db)
     data = await svc.get_home_sections(user.id)
-    sections = [
-        HomeSectionResponse(
-            title=s["title"],
-            section_type=s["section_type"],
-            tracks=[
-                TrackResponse.model_validate(t)
-                for t in s["tracks"]
-            ],
+    sections = []
+    for s in data["sections"]:
+        tracks_out = await dedupe_and_build_track_list(db, s["tracks"])
+        sections.append(
+            HomeSectionResponse(
+                title=s["title"],
+                section_type=s["section_type"],
+                tracks=tracks_out,
+            )
         )
-        for s in data["sections"]
-    ]
     return HomePageResponse(
         sections=sections,
         maturity=data["maturity"],
@@ -73,10 +74,7 @@ async def get_similar(
     )
     return SimilarTracksResponse(
         seed_track_id=track_id,
-        tracks=[
-            TrackResponse.model_validate(t)
-            for t in tracks
-        ],
+        tracks=await dedupe_and_build_track_list(db, tracks),
     )
 
 
@@ -91,10 +89,7 @@ async def get_daily_mix(
     svc = RecommendationService(db)
     tracks = await svc.get_daily_mix(user.id)
     return DailyMixResponse(
-        tracks=[
-            TrackResponse.model_validate(t)
-            for t in tracks
-        ],
+        tracks=await dedupe_and_build_track_list(db, tracks),
         generated_at=datetime.now(
             UTC
         ).isoformat(),
@@ -119,10 +114,7 @@ async def get_radio(
     return RadioQueueResponse(
         seed_type="track",
         seed_id=str(seed_track_id),
-        tracks=[
-            TrackResponse.model_validate(t)
-            for t in tracks
-        ],
+        tracks=await dedupe_and_build_track_list(db, tracks),
     )
 
 
@@ -147,18 +139,9 @@ async def get_daily_playlist(
         payload.get("global_top_ids", [])
     )
     return DailyPlaylistResponse(
-        internal_tracks=[
-            TrackResponse.model_validate(t)
-            for t in internal
-        ],
-        external_tracks=[
-            TrackResponse.model_validate(t)
-            for t in external
-        ],
-        global_top=[
-            TrackResponse.model_validate(t)
-            for t in global_top
-        ],
+        internal_tracks=await dedupe_and_build_track_list(db, internal),
+        external_tracks=await dedupe_and_build_track_list(db, external),
+        global_top=await dedupe_and_build_track_list(db, global_top),
         generated_at=payload["generated_at"],
         expires_at=payload["expires_at"],
     )
@@ -182,14 +165,8 @@ async def get_weekly_playlist(
         payload.get("external_track_ids", [])
     )
     return WeeklyPlaylistResponse(
-        internal_tracks=[
-            TrackResponse.model_validate(t)
-            for t in internal
-        ],
-        external_tracks=[
-            TrackResponse.model_validate(t)
-            for t in external
-        ],
+        internal_tracks=await dedupe_and_build_track_list(db, internal),
+        external_tracks=await dedupe_and_build_track_list(db, external),
         generated_at=payload["generated_at"],
         expires_at=payload["expires_at"],
     )
@@ -211,10 +188,7 @@ async def get_user_choice_playlist(
         limit=limit
     )
     return UserChoicePlaylistResponse(
-        tracks=[
-            TrackResponse.model_validate(t)
-            for t in tracks
-        ],
+        tracks=await dedupe_and_build_track_list(db, tracks),
         generated_at=datetime.now(UTC).isoformat(),
         score_version=USER_CHOICE_SCORE_VERSION,
     )

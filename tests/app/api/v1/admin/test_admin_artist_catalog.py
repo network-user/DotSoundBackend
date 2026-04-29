@@ -24,9 +24,7 @@ async def test_admin_catalog_overview_404(
     db_session: AsyncSession,
 ) -> None:
     admin = await create_test_user(client, 140001)
-    h = await admin_bearer_for_user(
-        client, db_session, user_id=admin["id"]
-    )
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
     r = await client.get(
         "/api/v1/admin/artists/99991/catalog/overview",
         headers=h,
@@ -39,9 +37,7 @@ async def test_admin_catalog_crud_and_reorder(
     db_session: AsyncSession,
 ) -> None:
     admin = await create_test_user(client, 140002)
-    h = await admin_bearer_for_user(
-        client, db_session, user_id=admin["id"]
-    )
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
     artist = Artist(name="Ac", name_normalized="ac")
     db_session.add(artist)
     await db_session.flush()
@@ -100,9 +96,7 @@ async def test_admin_catalog_soundcloud_patch_duplicate(
     db_session: AsyncSession,
 ) -> None:
     admin = await create_test_user(client, 140003)
-    h = await admin_bearer_for_user(
-        client, db_session, user_id=admin["id"]
-    )
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
     a1 = Artist(
         name="X1",
         name_normalized="x1",
@@ -125,9 +119,7 @@ async def test_admin_catalog_sync_requires_step_up(
     db_session: AsyncSession,
 ) -> None:
     admin = await create_test_user(client, 140004)
-    h = await admin_bearer_for_user(
-        client, db_session, user_id=admin["id"]
-    )
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
     artist = Artist(
         name="SyncMe",
         name_normalized="syncme",
@@ -190,9 +182,7 @@ async def test_admin_catalog_full_sync_cooldown_429(
     db_session: AsyncSession,
 ) -> None:
     admin = await create_test_user(client, 140006)
-    h = await admin_bearer_for_user(
-        client, db_session, user_id=admin["id"]
-    )
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
     artist = Artist(
         name="Cd",
         name_normalized="cd",
@@ -230,14 +220,47 @@ async def test_admin_catalog_full_sync_cooldown_429(
             kiq.assert_not_awaited()
 
 
+async def test_admin_catalog_full_sync_calls_autofill_when_no_sc_user(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 140008)
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
+    artist = Artist(name="NoScYet", name_normalized="noscyet")
+    db_session.add(artist)
+    await db_session.commit()
+
+    with patch(
+        "app.services.admin_auth_service.consume_step_up",
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        with patch(
+            "app.services.artist_catalog_sync_worker.sync_artist_catalog_task.kiq",
+            new_callable=AsyncMock,
+        ) as kiq:
+            with patch(
+                "app.services.soundcloud_service.SoundCloudService."
+                "try_autofill_soundcloud_user_id_for_artist",
+                new_callable=AsyncMock,
+            ) as autofill:
+                autofill.return_value = False
+                r = await client.post(
+                    f"/api/v1/admin/artists/{artist.id}/catalog/sync",
+                    headers=h,
+                )
+                assert r.status_code == 400
+                assert "soundcloud_user_id" in r.json()["detail"]
+                autofill.assert_awaited_once_with(artist.id)
+                kiq.assert_not_awaited()
+
+
 async def test_admin_catalog_full_sync_after_cooldown_ok(
     client: AsyncClient,
     db_session: AsyncSession,
 ) -> None:
     admin = await create_test_user(client, 140007)
-    h = await admin_bearer_for_user(
-        client, db_session, user_id=admin["id"]
-    )
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
     artist = Artist(
         name="Cd2",
         name_normalized="cd2",
@@ -277,9 +300,7 @@ async def test_admin_catalog_search_tracks(
     db_session: AsyncSession,
 ) -> None:
     admin = await create_test_user(client, 140005)
-    h = await admin_bearer_for_user(
-        client, db_session, user_id=admin["id"]
-    )
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
     artist = Artist(name="SearchArt", name_normalized="searchart")
     db_session.add(artist)
     await db_session.flush()

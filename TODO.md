@@ -342,7 +342,9 @@ Mini App — секция в `TrackCardSheet` для публичных трек
   Taskiq `artist_catalog_sync_worker` (`sync_artist_catalog_task`,
   `sync_artist_catalog_release_task`), `catalog_uploader_id`,
   `SoundCloudService.fetch_playlist_by_id` / `download_artwork_as_cover_key`;
-  без публичных/admin HTTP-роутов (phase 4–6)
+  без публичных/admin HTTP-роутов (phase 4–6); перед синком —
+  `try_autofill_soundcloud_user_id_for_artist` (permalink / профильные URL
+  из `source_profiles`, иначе первый хит user search) — 2026-04-28
 - [x] **Каталог дискографии — phase 4:** публичное чтение каталога
   `GET /api/v1/artists/{id}/catalog/releases`,
   `GET /api/v1/artists/{id}/catalog/releases/{release_id}` —
@@ -873,3 +875,16 @@ ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyr
 - **(12)** Lyrics: cache-hit с text-only при `with_sync=true` пре-сохраняет текст в БД и продолжает в audio-based sync flow
 - **(13)** WS: `_is_ws_open()` guard + `try/except (WebSocketDisconnect, RuntimeError)` → ранний выход из `_broadcast_loop`
 - **(14)** Lyrics: `LyricsResponse.source_name` (optional) для UI-attribution + `lyrics_provider_name` / `track_info_provider_name` env-flag selectors; алгоритмика остаётся в PrivateCore
+
+## Playback variants / composition grouping (2026-04-29)
+
+- `[x]` PrivateCore: `playback_variant_policy` (порядок платформ, tolerance)
+- `[x]` Backend: `composition_group_id`, `PlaybackVariantService`,
+  `build_track_response` / `dedupe_and_build_track_list`,
+  `TrackResponse.playback_variants`, лайки/дизлайки по группе,
+  комментарии по `variant_ids`, read-only stream fallback
+- `[x]` Frontend: типы API, `LikesContext` по
+  `playback_variant_track_ids`, переключатель источника в шите
+- `[x]` Tests: mock `catalog_only_lyrics_task.kiq` в
+  `create_test_track` / `mock_taskiq` и в `test_upload_track_success`
+- `[x]` `scripts/backfill_composition_groups.py` (stub)

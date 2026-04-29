@@ -116,7 +116,7 @@ async def test_no_candidates_sets_redis_block(
 
 
 @patch("app.core.redis.get_redis_client")
-async def test_applies_replacement_from_other_platform(
+async def test_returns_replacement_without_mutating_original(
     mock_factory: MagicMock,
     db_session: AsyncSession,
 ) -> None:
@@ -147,19 +147,19 @@ async def test_applies_replacement_from_other_platform(
     result = await svc.find_and_apply_fallback(original)
 
     assert result is not None
+    assert result.id == replacement.id
     assert result.source_platform == "youtube"
-    assert result.source_url == "https://yt.com/new"
-    assert result.previous_source_url == "https://sc.com/old"
-    assert result.sc_url is None
+    await db_session.refresh(original)
+    assert original.source_platform == "soundcloud"
+    assert original.sc_url is not None
     redis.set.assert_not_awaited()
 
 
 @patch("app.core.redis.get_redis_client")
-async def test_apply_replacement_clears_sc_url(
+async def test_falls_through_to_bandcamp_when_youtube_missing(
     mock_factory: MagicMock,
     db_session: AsyncSession,
 ) -> None:
-    """sc_url must be None after replacement to avoid unique constraint violation."""
     redis = _mock_redis()
     mock_factory.return_value = redis
     user = await _make_user(db_session)
@@ -167,7 +167,7 @@ async def test_apply_replacement_clears_sc_url(
     original = await _make_track(
         db_session,
         user,
-        title="Unique Bop",
+        title="Only Bandcamp Match",
         duration_seconds=200,
         source_platform="soundcloud",
         source_url="https://sc.com/bop",
@@ -176,8 +176,8 @@ async def test_apply_replacement_clears_sc_url(
     replacement = await _make_track(
         db_session,
         user,
-        title="Unique Bop",
-        duration_seconds=200,
+        title="Only Bandcamp Match",
+        duration_seconds=205,
         source_platform="bandcamp",
         source_url="https://bc.com/bop",
     )
@@ -187,5 +187,7 @@ async def test_apply_replacement_clears_sc_url(
     result = await svc.find_and_apply_fallback(original)
 
     assert result is not None
-    assert result.sc_url is None
+    assert result.id == replacement.id
     assert result.source_platform == "bandcamp"
+    await db_session.refresh(original)
+    assert original.sc_url is not None

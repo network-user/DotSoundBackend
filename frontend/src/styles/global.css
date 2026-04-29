@@ -4349,6 +4349,32 @@ html.le-lyrics-sync-open body {
   line-height: 1.4;
 }
 
+.tcs-source-variants {
+  padding: 10px 0 4px;
+}
+
+.tcs-variant-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tcs-variant-chip {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.tcs-variant-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+}
+
 /* ── TrackCardSheet: Similar Tracks ─────────── */
 
 .tcs-similar-section {

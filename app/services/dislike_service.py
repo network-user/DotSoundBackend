@@ -6,6 +6,7 @@ from app.repositories.dislike import DislikeRepository
 from app.repositories.like import LikeRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
+from app.services.playback_variant_service import PlaybackVariantService
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -16,21 +17,21 @@ class DislikeService:
         self._like_repo = LikeRepository(session)
         self._track_repo = TrackRepository(session)
         self._user_repo = UserRepository(session)
+        self._session = session
 
     async def toggle(
         self, user_id: int, track_id: int
-    ) -> bool:
-        # Resolve user_id: could be internal ID or Telegram ID
+    ) -> tuple[bool, list[int]]:
         user = await self._user_repo.get_by_id(user_id)
         if not user:
             user = await self._user_repo.get_by_telegram_id(user_id)
-        
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found",
             )
-        
+
         resolved_user_id = user.id
 
         track = await self._track_repo.get_by_id(track_id)
@@ -40,14 +41,22 @@ class DislikeService:
                 detail="Track not found",
             )
 
-        existing = await self._repo.get(resolved_user_id, track_id)
-        if existing:
-            await self._repo.remove(resolved_user_id, track_id)
+        pvs = PlaybackVariantService(self._session)
+        variant_ids = await pvs.resolve_variant_track_ids(track)
+
+        any_disliked = await self._repo.exists_any_for_user_track_ids(
+            resolved_user_id,
+            variant_ids,
+        )
+        if any_disliked:
+            for vid in variant_ids:
+                await self._repo.remove(resolved_user_id, vid)
             disliked = False
         else:
-            # When disliking, remove like if it exists
-            await self._like_repo.remove(resolved_user_id, track_id)
-            await self._repo.add(resolved_user_id, track_id)
+            for vid in variant_ids:
+                await self._like_repo.remove(resolved_user_id, vid)
+            for vid in variant_ids:
+                await self._repo.add(resolved_user_id, vid)
             disliked = True
 
         logger.info(
@@ -55,8 +64,9 @@ class DislikeService:
             user_id=resolved_user_id,
             track_id=track_id,
             disliked=disliked,
+            variant_count=len(variant_ids),
         )
-        return disliked
+        return disliked, variant_ids
 
     async def is_disliked(
         self, user_id: int, track_id: int
@@ -64,9 +74,16 @@ class DislikeService:
         user = await self._user_repo.get_by_id(user_id)
         if not user:
             user = await self._user_repo.get_by_telegram_id(user_id)
-        
+
         if not user:
             return False
-            
-        dislike = await self._repo.get(user.id, track_id)
-        return dislike is not None
+
+        track = await self._track_repo.get_by_id(track_id)
+        if not track:
+            return False
+        pvs = PlaybackVariantService(self._session)
+        variant_ids = await pvs.resolve_variant_track_ids(track)
+        return await self._repo.exists_any_for_user_track_ids(
+            user.id,
+            variant_ids,
+        )

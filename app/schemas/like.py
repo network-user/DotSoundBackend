@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.track import TrackResponse
 
@@ -16,6 +16,7 @@ class LikeResponse(BaseModel):
 class LikeToggleResponse(BaseModel):
     track_id: int
     liked: bool
+    playback_variant_track_ids: list[int] = Field(default_factory=list)
 
 
 class LikedTrackResponse(TrackResponse):
@@ -40,3 +41,4 @@ class DislikeResponse(BaseModel):
 class DislikeToggleResponse(BaseModel):
     track_id: int
     disliked: bool
+    playback_variant_track_ids: list[int] = Field(default_factory=list)

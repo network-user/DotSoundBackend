@@ -9,6 +9,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.track import SCSearchResult, TrackResponse
 from app.services.soundcloud_service import SoundCloudService
+from app.services.track_response_build import build_track_response
 
 router = APIRouter(prefix="/soundcloud", tags=["soundcloud"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -104,4 +105,4 @@ async def import_soundcloud_track(
     logger.info(
         "sc_import_endpoint", track_id=track.id, sc_url=data.sc_url
     )
-    return TrackResponse.model_validate(track)
+    return await build_track_response(session, track)

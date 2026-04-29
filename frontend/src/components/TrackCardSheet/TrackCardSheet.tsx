@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -35,6 +36,7 @@ import type {
   Track,
   TrackCardResponse,
   TrackInfoResponse,
+  TrackPlaybackVariantBrief,
 } from '@/types/api'
 import { CommentSection } from '@/components/Comments/CommentSection'
 import { LyricsPanel } from './LyricsPanel'
@@ -523,6 +525,13 @@ export function TrackCardSheet({
       toast.error(msg)
     }
   }
+
+  const playbackVariants = useMemo((): TrackPlaybackVariantBrief[] => {
+    if (!track) return []
+    const fromTrack = track.playback_variants
+    if (fromTrack && fromTrack.length > 0) return fromTrack
+    return card?.playback_variants ?? []
+  }, [track, card])
 
   if (!exit.mounted || !track) return null
 
@@ -1248,6 +1257,40 @@ export function TrackCardSheet({
               <Icon name="x" size={16} />
               {t('trackSheet.closeEditor')}
             </button>
+          </div>
+        )}
+
+        {playbackVariants.length > 1 && (
+          <div className="tcs-source-variants">
+            <span className="tcs-source-label">
+              {t('trackSheet.playbackSource', 'Источник')}
+            </span>
+            <div className="tcs-variant-chips" role="tablist">
+              {playbackVariants.map((v) => (
+                <button
+                  key={v.track_id}
+                  type="button"
+                  role="tab"
+                  aria-selected={v.track_id === track.id}
+                  className={`tcs-variant-chip${
+                    v.track_id === track.id ? ' active' : ''
+                  }`}
+                  onClick={async () => {
+                    if (v.track_id === track.id) return
+                    try {
+                      const full = await api.getTrack(v.track_id)
+                      playTrack(full)
+                    } catch {
+                      toast.error(t('trackSheet.sourceSwitchError', 'Не удалось переключить'))
+                    }
+                  }}
+                >
+                  {v.source_name ||
+                    v.source_platform ||
+                    v.source}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

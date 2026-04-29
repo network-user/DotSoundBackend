@@ -39,9 +39,9 @@ async def test_toggle_like_adds(
     tid = await _make_track(session, uid)
 
     svc = LikeService(session)
-    result = await svc.toggle(uid, tid)
+    liked, _ids = await svc.toggle(uid, tid)
 
-    assert result is True
+    assert liked is True
 
 
 async def test_toggle_like_removes(
@@ -52,9 +52,9 @@ async def test_toggle_like_removes(
 
     svc = LikeService(session)
     await svc.toggle(uid, tid)
-    result = await svc.toggle(uid, tid)
+    liked, _ids = await svc.toggle(uid, tid)
 
-    assert result is False
+    assert liked is False
 
 
 async def test_toggle_like_user_not_found(
@@ -116,7 +116,7 @@ async def test_list_liked_returns_liked_tracks(
     tracks, total = await svc.list_liked(uid)
 
     assert total >= 1
-    assert any(t.id == tid for t in tracks)
+    assert any(row[0].id == tid for row in tracks)
 
 
 async def test_list_liked_user_not_found(

@@ -9,6 +9,7 @@ from app.schemas.artist_catalog import (
     ArtistCatalogReleaseTrackRowResponse,
 )
 from app.schemas.track import TrackResponse
+from app.services.track_response_build import build_track_response
 
 
 class ArtistCatalogReadService:
@@ -55,13 +56,15 @@ class ArtistCatalogReadService:
         if packed is None:
             return None
         rel, ordered = packed
-        track_rows = [
-            ArtistCatalogReleaseTrackRowResponse(
-                position=pos,
-                track=TrackResponse.model_validate(tr),
+        track_rows = []
+        for pos, tr in ordered:
+            tr_resp = await build_track_response(self._session, tr)
+            track_rows.append(
+                ArtistCatalogReleaseTrackRowResponse(
+                    position=pos,
+                    track=tr_resp,
+                )
             )
-            for pos, tr in ordered
-        ]
         return ArtistCatalogReleaseDetailResponse(
             id=rel.id,
             title=rel.title,

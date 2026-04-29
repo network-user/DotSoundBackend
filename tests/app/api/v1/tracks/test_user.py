@@ -1,5 +1,5 @@
 from io import BytesIO
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -128,6 +128,8 @@ async def test_upload_stores_terms_acceptance(
     headers = await auth_headers(
         client, user["id"]
     )
+    _lyrics_kiq = MagicMock()
+    _lyrics_kiq.task_id = "test-lyrics-task"
     with patch(
         "app.core.s3.upload_object",
         new_callable=AsyncMock,
@@ -142,6 +144,10 @@ async def test_upload_stores_terms_acceptance(
         "app.services.upload_service.generate_and_upload_cover.kiq",
         new_callable=AsyncMock,
         return_value=None,
+    ), patch(
+        "app.services.lyrics_worker.catalog_only_lyrics_task.kiq",
+        new_callable=AsyncMock,
+        return_value=_lyrics_kiq,
     ):
         response = await client.post(
             "/api/v1/tracks/upload",
