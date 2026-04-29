@@ -104,10 +104,9 @@
     "scSection": "SoundCloud · external",
     "extSourceLabel": "External source:",
     "emptyCatalogHint": "Nothing in the catalog for this query—try YouTube, Bandcamp, and SoundCloud below.",
-    "platformAuthorKind": "Author",
-    "platformAuthorRowAria": "Open author profile: {{name}}",
-    "platformAuthors": "Authors",
-    "platformAuthorsEmpty": "No matching authors",
+    "artistsEmpty": "No matching catalog artists",
+    "catalogArtistRowAria": "Open artist profile: {{name}}",
+    "catalogArtistBadge": "Catalog artist",
     "platformTracks": "Tracks"
   },
   "trackCard": {

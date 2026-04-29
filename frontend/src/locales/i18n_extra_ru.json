@@ -104,10 +104,9 @@
     "scSection": "SoundCloud · внешний источник",
     "extSourceLabel": "внешний источник:",
     "emptyCatalogHint": "В каталоге пусто по этому запросу — смотрите внешний поиск YouTube, Bandcamp и SoundCloud ниже.",
-    "platformAuthorKind": "Автор",
-    "platformAuthorRowAria": "Открыть профиль автора: {{name}}",
-    "platformAuthors": "Авторы",
-    "platformAuthorsEmpty": "Авторов не найдено",
+    "artistsEmpty": "Артистов в каталоге не найдено",
+    "catalogArtistRowAria": "Открыть карточку артиста: {{name}}",
+    "catalogArtistBadge": "Артист каталога",
     "platformTracks": "Треки"
   },
   "trackCard": {

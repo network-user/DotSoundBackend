@@ -9,8 +9,8 @@ import { useLikes } from '@/store/LikesContext'
 import { useDebounce } from '@/hooks/useDebounce'
 import { Icon } from '@/components/Icon/Icon'
 import type {
+  ArtistInfo,
   BCSearchResult,
-  PlatformAuthorSearchItem,
   SCSearchResult,
   SearchSuggestItem,
   Track,
@@ -19,7 +19,6 @@ import type {
 
 type SearchViewProps = {
   onOpenArtist?: (id: number) => void
-  onOpenAuthor?: (id: number) => void
 }
 
 const SEARCH_DEBOUNCE_MS = 300
@@ -53,10 +52,7 @@ function mergeTracksBySuggestOrder(
   return out
 }
 
-export function SearchView({
-  onOpenArtist,
-  onOpenAuthor,
-}: SearchViewProps) {
+export function SearchView({ onOpenArtist }: SearchViewProps) {
   const { t } = useTranslation()
   const { playTrack } = usePlayerActions()
   const { toggleLike } = useLikes()
@@ -71,13 +67,8 @@ export function SearchView({
   const [importing, setImporting] = useState<string | null>(null)
   const [importingYt, setImportingYt] = useState<string | null>(null)
   const [importingBc, setImportingBc] = useState<string | null>(null)
-  /** Артисты из suggest — компактный ряд над списком треков */
-  const [suggestArtists, setSuggestArtists] = useState<SearchSuggestItem[]>(
-    [],
-  )
-  const [platformAuthors, setPlatformAuthors] = useState<
-    PlatformAuthorSearchItem[]
-  >([])
+  /** Каталожные артисты (та же сущность, что в карточке трека) */
+  const [catalogArtists, setCatalogArtists] = useState<ArtistInfo[]>([])
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -111,16 +102,14 @@ export function SearchView({
       setSCResults([])
       setYtResults([])
       setBcResults([])
-      setSuggestArtists([])
-      setPlatformAuthors([])
+      setCatalogArtists([])
       return
     }
     setTracks(null)
     setSCResults([])
     setYtResults([])
     setBcResults([])
-    setSuggestArtists([])
-    setPlatformAuthors([])
+    setCatalogArtists([])
     saveToHistory(debouncedQuery.trim())
     let cancelled = false
     const q = debouncedQuery
@@ -152,7 +141,7 @@ export function SearchView({
       })
 
     void (async () => {
-      const [internal, sug, authorsRes] = await Promise.all([
+      const [internal, sug, artistsRes] = await Promise.all([
         api.getTracks({ q, size: 30 }).catch(() => ({
           items: [] as Track[],
           total: 0,
@@ -160,8 +149,9 @@ export function SearchView({
           size: 30,
         })),
         api.searchSuggest(q, 12).catch(() => emptySuggest),
-        api.searchPlatformAuthors(q, 10).catch(() => ({
-          items: [] as PlatformAuthorSearchItem[],
+        api.getArtists(q, 20).catch(() => ({
+          items: [] as ArtistInfo[],
+          total: 0,
         })),
       ])
       if (cancelled) return
@@ -183,10 +173,7 @@ export function SearchView({
       const combined = [...internal.items, ...extra]
       const merged = mergeTracksBySuggestOrder(combined, sug.items)
       setTracks(merged)
-      setSuggestArtists(
-        sug.items.filter((i) => i.kind === 'artist'),
-      )
-      setPlatformAuthors(authorsRes.items)
+      setCatalogArtists(artistsRes.items)
     })()
     return () => {
       cancelled = true
@@ -281,7 +268,7 @@ export function SearchView({
     setSCResults([])
     setYtResults([])
     setBcResults([])
-    setSuggestArtists([])
+    setCatalogArtists([])
     inputRef.current?.focus()
   }
 
@@ -346,76 +333,44 @@ export function SearchView({
 
       {Array.isArray(tracks) && (
         <>
-          {suggestArtists.length > 0 && (
-            <div className="search-section search-artist-suggest">
-              <p className="search-section-label">
-                {t('search.artists')}
-              </p>
-              <div
-                className="search-artist-chips"
-                role="list"
-                aria-label={t('search.artistsRowAria')}
-              >
-                {suggestArtists.map((a) => (
-                  <button
-                    type="button"
-                    key={a.id}
-                    className="search-artist-chip"
-                    role="listitem"
-                    onClick={() => {
-                      onOpenArtist?.(a.id)
-                    }}
-                  >
-                    {a.name ?? '—'}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           <div className="search-section">
             <p className="search-section-label">
-              {t('search.platformAuthors')}
+              {t('search.artists')}
             </p>
-            {platformAuthors.length > 0 ? (
-              platformAuthors.map((a) => (
+            {catalogArtists.length > 0 ? (
+              catalogArtists.map((a) => (
                 <div
-                  key={`platform-author-${a.id}`}
-                  className="track-card search-platform-author"
+                  key={`catalog-artist-${a.id}`}
+                  className="track-card search-catalog-artist"
                   role="button"
                   tabIndex={0}
-                  aria-label={t('search.platformAuthorRowAria', {
-                    name: a.display_name,
+                  aria-label={t('search.catalogArtistRowAria', {
+                    name: a.name,
                   })}
                   onClick={() => {
-                    onOpenAuthor?.(a.id)
+                    onOpenArtist?.(a.id)
                   }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault()
-                      onOpenAuthor?.(a.id)
+                      onOpenArtist?.(a.id)
                     }
                   }}
                 >
-                  <CoverImage
-                    coverKey={null}
-                    externalUrl={a.avatar_url}
-                  />
+                  <CoverImage coverKey={a.image_key} />
                   <div className="track-card-info">
                     <div className="track-card-title-row">
-                      <p className="track-card-title">{a.display_name}</p>
+                      <p className="track-card-title">{a.name}</p>
                     </div>
                     <p className="track-card-artist">
-                      {a.username
-                        ? `@${a.username}`
-                        : t('search.platformAuthorKind')}
+                      {t('search.catalogArtistBadge')}
                     </p>
                   </div>
                 </div>
               ))
             ) : (
               <p className="search-catalog-empty">
-                {t('search.platformAuthorsEmpty')}
+                {t('search.artistsEmpty')}
               </p>
             )}
           </div>
@@ -687,7 +642,7 @@ export function SearchView({
         scResults.length === 0 &&
         ytResults.length === 0 &&
         bcResults.length === 0 &&
-        suggestArtists.length === 0 && (
+        catalogArtists.length === 0 && (
         <p className="empty-hint">
           {t('search.notFound')}
         </p>

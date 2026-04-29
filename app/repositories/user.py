@@ -2,10 +2,9 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import and_, exists, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.track import Track
 from app.models.user import User
 from app.repositories.base import BaseRepository
 
@@ -178,89 +177,6 @@ class UserRepository(BaseRepository[User]):
                         pattern
                     )
                 ),
-            )
-            .limit(limit)
-        )
-        return list(result.scalars().all())
-
-    async def search_platform_authors(
-        self, query: str, limit: int = 10
-    ) -> list[User]:
-        """Active users with ≥1 public active upload matching search.
-
-        Match if **either**:
-        - every query token hits ``username`` / ``first_name`` / ``last_name`` /
-          ``display_name`` (same user row), **and** the user has such a track; or
-        - the user has a public active track they uploaded where **each** token
-          matches ``track.artist`` or ``track.title`` (so catalog search by
-          stage name like ``Maladoy Prince`` still resolves the uploader).
-
-        ``%`` and ``_`` in tokens are escaped for LIKE.
-        """
-        parts = [p.strip() for p in query.split() if p.strip()]
-        if not parts:
-            return []
-
-        def _like(pat: str) -> str:
-            esc = (
-                pat.replace("\\", "\\\\")
-                .replace("%", "\\%")
-                .replace("_", "\\_")
-            )
-            return f"%{esc}%"
-
-        token_clauses = []
-        for part in parts:
-            pattern = _like(part)
-            token_clauses.append(
-                or_(
-                    User.username.ilike(pattern, escape="\\"),
-                    User.first_name.ilike(pattern, escape="\\"),
-                    User.last_name.ilike(pattern, escape="\\"),
-                    User.display_name.ilike(pattern, escape="\\"),
-                )
-            )
-        name_match = (
-            and_(*token_clauses)
-            if len(token_clauses) > 1
-            else token_clauses[0]
-        )
-
-        has_public_upload = exists().where(
-            Track.uploaded_by_id == User.id,
-            Track.is_public.is_(True),
-            Track.is_active.is_(True),
-        )
-
-        def _token_hits_track_metadata(part: str):
-            pattern = _like(part)
-            artist_hit = and_(
-                Track.artist.isnot(None),
-                Track.artist.ilike(pattern, escape="\\"),
-            )
-            title_hit = Track.title.ilike(pattern, escape="\\")
-            return or_(artist_hit, title_hit)
-
-        track_token_expr = (
-            and_(*[_token_hits_track_metadata(p) for p in parts])
-            if len(parts) > 1
-            else _token_hits_track_metadata(parts[0])
-        )
-        match_via_uploaded_track_metadata = exists().where(
-            Track.uploaded_by_id == User.id,
-            Track.is_public.is_(True),
-            Track.is_active.is_(True),
-            track_token_expr,
-        )
-
-        match_user = and_(has_public_upload, name_match)
-        combined_match = or_(match_user, match_via_uploaded_track_metadata)
-
-        result = await self._session.execute(
-            select(User)
-            .where(
-                User.is_active.is_(True),
-                combined_match,
             )
             .limit(limit)
         )
