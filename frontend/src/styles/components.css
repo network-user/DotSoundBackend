@@ -914,14 +914,21 @@ button.empty-cta:focus-visible {
   border-radius: var(--r-xl) var(--r-xl) 0 0;
   display: flex;
   flex-direction: column;
-  animation: sheet-enter var(--dur-med)
-    var(--ease-emph);
+  animation: sheet-enter var(--dur-slow)
+    var(--ease-soft);
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
   padding-bottom: var(--safe-bottom);
 }
 .queue-sheet.is-closing {
   animation: fade-out var(--dur-med)
     var(--ease-standard) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .queue-backdrop,
+  .queue-sheet {
+    animation: none !important;
+  }
 }
 
 .queue-handle {

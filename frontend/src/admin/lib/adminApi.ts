@@ -788,6 +788,16 @@ export const adminApi = {
         soundcloud_album_id: number | null
       }>
       releases_total: number
+      catalog_sync_state:
+        | 'idle'
+        | 'running'
+        | 'success'
+        | 'error'
+      catalog_sync_mode: 'full' | 'release' | null
+      catalog_sync_soundcloud_album_id: number | null
+      catalog_sync_error: string | null
+      catalog_sync_detail: Record<string, unknown> | null
+      catalog_sync_updated_at: string | null
     }>(`/artists/${artistId}/catalog/overview`),
 
   catalogPatchSoundcloud: (
@@ -813,6 +823,16 @@ export const adminApi = {
         soundcloud_album_id: number | null
       }>
       releases_total: number
+      catalog_sync_state:
+        | 'idle'
+        | 'running'
+        | 'success'
+        | 'error'
+      catalog_sync_mode: 'full' | 'release' | null
+      catalog_sync_soundcloud_album_id: number | null
+      catalog_sync_error: string | null
+      catalog_sync_detail: Record<string, unknown> | null
+      catalog_sync_updated_at: string | null
     }>(`/artists/${artistId}/catalog/soundcloud`, {
       method: 'PATCH',
       body,

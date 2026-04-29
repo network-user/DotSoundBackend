@@ -16,7 +16,10 @@ class ArtistRepository(BaseRepository[Artist]):
         self, name_normalized: str
     ) -> Artist | None:
         result = await self._session.execute(
-            select(Artist).where(Artist.name_normalized == name_normalized)
+            select(Artist)
+            .where(Artist.name_normalized == name_normalized)
+            .order_by(Artist.id.asc())
+            .limit(1)
         )
         return result.scalar_one_or_none()
 
@@ -26,8 +29,11 @@ class ArtistRepository(BaseRepository[Artist]):
         *,
         exclude_artist_id: int | None = None,
     ) -> Artist | None:
-        q = select(Artist).where(
-            Artist.soundcloud_user_id == soundcloud_user_id
+        q = (
+            select(Artist)
+            .where(Artist.soundcloud_user_id == soundcloud_user_id)
+            .order_by(Artist.id.asc())
+            .limit(1)
         )
         if exclude_artist_id is not None:
             q = q.where(Artist.id != exclude_artist_id)

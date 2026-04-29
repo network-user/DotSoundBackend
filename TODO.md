@@ -441,6 +441,9 @@ Mini App — секция в `TrackCardSheet` для публичных трек
 
 ## Frontend / Mini App
 
+- [x] Плеер / карточка трека / оверлеи: motion-токены, decay спектра при
+  паузе, enter/exit (в т.ч. FullscreenLyrics), микро-виз в `PlayerBar` —
+  2026-04-29
 - [x] Страница 404: контраст CTA, карточка, safe-area / адаптив — 2026-04-29
 - **Покрытие Backend API клиентом:** инвентарь и приоритеты —
 `docs/api-frontend-coverage.md`; расширен `frontend/src/lib/api.ts`,
@@ -464,7 +467,7 @@ Mini App — секция в `TrackCardSheet` для публичных трек
 фикс-панели `#nav` / `#player-bar` на `--glass-backdrop-fixed*`,
 липкий поиск на более лёгком blur; класс `ds-low-glass` при
 `prefers-reduced-motion` / `prefers-reduced-data`; без бесконечных
-splash/home; при play — статичная тень у кнопки play (без `playPulse`),
+splash/home; при play — лёгкий `pbPlayGlow` (откл. при reduce motion),
 статичный EQ в очереди; спектр на canvas ~12 fps, cap DPR, меньше
 столбцов — 2026-04
 - **Waveform (карточка трека): снижение нагрузки на iGPU** —

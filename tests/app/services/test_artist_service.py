@@ -1,6 +1,7 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.repositories.artist import ArtistRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
 from app.services.artist_service import (
@@ -89,6 +90,30 @@ async def test_resolve_dedup_duplicate_artist_in_one_string(
     assert len(artists) == 1
     tarts = await svc.get_track_artists(tid)
     assert len(tarts) == 1
+
+
+async def test_find_or_create_uses_canonical_row_when_normalized_dupes(
+    db_session: AsyncSession,
+) -> None:
+    repo = ArtistRepository(db_session)
+    first = await repo.create(
+        name="Drake",
+        name_normalized="drake",
+        source="internal",
+        external_id=None,
+    )
+    second = await repo.create(
+        name="DRAKE",
+        name_normalized="drake",
+        source="internal",
+        external_id=None,
+    )
+    assert first.id != second.id
+
+    svc = ArtistService(db_session)
+    got = await svc.find_or_create_by_name("Drake")
+    assert got is not None
+    assert got.id == min(first.id, second.id)
 
 
 async def test_dedup_same_artist(

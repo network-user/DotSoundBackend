@@ -19,6 +19,7 @@ from app.schemas.admin_artist_catalog import (
     AdminCatalogReleaseSummaryResponse,
 )
 from app.schemas.artist_catalog import ArtistCatalogReleaseDetailResponse
+from app.services import artist_catalog_sync_progress as acsp
 from app.services.admin_service import AdminService
 from app.services.artist_catalog_read_service import (
     ArtistCatalogReadService,
@@ -87,12 +88,44 @@ class AdminArtistCatalogService:
             )
             for rel, n in rows
         ]
+        snap = await acsp.get_snapshot(artist_id)
+        cs_state = "idle"
+        cs_mode = None
+        cs_album = None
+        cs_err = None
+        cs_detail = None
+        cs_upd = None
+        if snap:
+            raw_st = snap.get("state")
+            if raw_st in ("running", "success", "error"):
+                cs_state = raw_st
+            raw_md = snap.get("mode")
+            if raw_md in ("full", "release"):
+                cs_mode = raw_md
+            aid = snap.get("soundcloud_album_id")
+            if isinstance(aid, int):
+                cs_album = aid
+            err = snap.get("error")
+            if isinstance(err, str):
+                cs_err = err
+            det = snap.get("detail")
+            if isinstance(det, dict):
+                cs_detail = det
+            upd = snap.get("updated_at")
+            if isinstance(upd, str):
+                cs_upd = upd
         return AdminArtistCatalogOverviewResponse(
             artist_id=artist.id,
             soundcloud_user_id=artist.soundcloud_user_id,
             soundcloud_permalink=artist.soundcloud_permalink,
             releases=items,
             releases_total=len(items),
+            catalog_sync_state=cs_state,
+            catalog_sync_mode=cs_mode,
+            catalog_sync_soundcloud_album_id=cs_album,
+            catalog_sync_error=cs_err,
+            catalog_sync_detail=cs_detail,
+            catalog_sync_updated_at=cs_upd,
         )
 
     async def release_detail(
@@ -297,6 +330,11 @@ class AdminArtistCatalogService:
         )
 
         await sync_artist_catalog_task.kiq(artist_id=artist_id)
+        await acsp.set_running(
+            artist_id,
+            mode="full",
+            soundcloud_album_id=None,
+        )
         logger.info(
             "admin_catalog_full_sync_queued",
             artist_id=artist_id,
@@ -337,6 +375,11 @@ class AdminArtistCatalogService:
 
         await sync_artist_catalog_release_task.kiq(
             artist_id=artist_id,
+            soundcloud_album_id=sc_album,
+        )
+        await acsp.set_running(
+            artist_id,
+            mode="release",
             soundcloud_album_id=sc_album,
         )
         logger.info(

@@ -12,6 +12,7 @@ import {
   usePlayerMeta,
   usePlayerState,
 } from '@/store/PlayerContext'
+import { Waveform } from '@/components/Waveform/Waveform'
 import { haptic } from '@/lib/telegram'
 import { useRipple } from '@/components/ui/Ripple'
 
@@ -176,24 +177,34 @@ export function PlayerBar() {
 
       <div id="pb-row" className="pb-row-v2">
         <div
-          className="pb-cover-img pb-clickable"
+          className="pb-cover-img pb-clickable pb-cover-with-viz"
           onClick={handleOpenCard}
         >
-          {coverSrc ? (
-            <img
-              src={coverSrc}
-              alt=""
-              loading="lazy"
-              className="pb-cover-vt"
-              style={
-                {
-                  viewTransitionName: `cover-t-${track.id}`,
-                } as CSSProperties
-              }
-            />
-          ) : (
-            <Icon name="music" size={18} />
-          )}
+          <div className="pb-cover-inner">
+            {coverSrc ? (
+              <img
+                src={coverSrc}
+                alt=""
+                loading="lazy"
+                className="pb-cover-vt"
+                style={
+                  {
+                    viewTransitionName: `cover-t-${track.id}`,
+                  } as CSSProperties
+                }
+              />
+            ) : (
+              <Icon name="music" size={18} />
+            )}
+            <div className="pb-cover-wave" aria-hidden>
+              <Waveform
+                overlay
+                height={12}
+                bars={14}
+                className="pb-cover-waveform"
+              />
+            </div>
+          </div>
         </div>
 
         <div
@@ -201,10 +212,15 @@ export function PlayerBar() {
           className="pb-clickable"
           onClick={handleOpenCard}
         >
-          <p className="pb-title">{track.title}</p>
-          <p className="pb-artist hint">
-            {track.artist ?? '—'}
-          </p>
+          <div
+            key={track.id}
+            className="pb-info-meta"
+          >
+            <p className="pb-title">{track.title}</p>
+            <p className="pb-artist hint">
+              {track.artist ?? '—'}
+            </p>
+          </div>
           {track.source_platform &&
             track.source_platform !== 'soundcloud' &&
             track.source_url && (
@@ -220,7 +236,10 @@ export function PlayerBar() {
                   name={`source-${track.source_platform}`}
                   size={12}
                 />
-                <span>{PLATFORM_LABELS[track.source_platform] ?? track.source_platform}</span>
+                <span>
+                  {PLATFORM_LABELS[track.source_platform] ??
+                    track.source_platform}
+                </span>
               </a>
             )}
         </div>

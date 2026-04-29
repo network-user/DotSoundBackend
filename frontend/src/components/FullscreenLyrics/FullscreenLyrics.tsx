@@ -8,6 +8,7 @@ import {
   usePlayerState,
 } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { useExitTransition } from '@/hooks/useExitTransition'
 import type { LyricsResponse, SyncedLine } from '@/types/api'
 
 const SYNC_OFFSET_KEY = 'setting-lyrics-sync-offset-ms'
@@ -80,9 +81,13 @@ export function FullscreenLyrics() {
   const activeRef = useRef<HTMLDivElement>(null)
   const rafIdRef = useRef<number | null>(null)
 
+  const exit = useExitTransition(
+    Boolean(isLyricsOpen && track),
+    220,
+  )
+
   useEffect(() => {
     if (!isLyricsOpen || !track) {
-      setLyrics(null)
       return
     }
     setLoading(true)
@@ -92,6 +97,21 @@ export function FullscreenLyrics() {
       .catch(() => setLyrics(null))
       .finally(() => setLoading(false))
   }, [isLyricsOpen, track?.id])
+
+  useEffect(() => {
+    if (exit.mounted) return
+    setLyrics(null)
+  }, [exit.mounted])
+
+  useEffect(() => {
+    if (!isLyricsOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeLyrics()
+    }
+    window.addEventListener('keydown', onKey)
+    return () =>
+      window.removeEventListener('keydown', onKey)
+  }, [isLyricsOpen, closeLyrics])
 
   const hasWordTimes = !!lyrics?.synced_lines?.some(
     (l) => l.word_times && l.word_times.length > 0,
@@ -181,7 +201,7 @@ export function FullscreenLyrics() {
     }
   }, [activeIdx])
 
-  if (!isLyricsOpen || !track) return null
+  if (!exit.mounted || !track) return null
 
   const pct = duration ? (currentTime / duration) * 100 : 0
 
@@ -220,7 +240,7 @@ export function FullscreenLyrics() {
     track.uploaded_by_id === uid
 
   return (
-    <div className="fl-overlay">
+    <div className={`fl-overlay${exit.cls}`}>
       {videoSrc && !videoFailed && (
         <video
           className="fl-video-bg"

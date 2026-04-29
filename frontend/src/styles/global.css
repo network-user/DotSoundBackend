@@ -882,7 +882,50 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   flex-shrink: 0;
   border: 1px solid var(--border);
 }
-.pb-cover-img img { width: 100%; height: 100%; object-fit: cover; }
+.pb-cover-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pb-cover-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.pb-cover-wave {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 14px;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+.pb-cover-waveform {
+  opacity: 0.85;
+}
+@keyframes pbMetaIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.pb-info-meta {
+  animation: pbMetaIn var(--dur-med) var(--ease-soft) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pb-info-meta {
+    animation: none;
+  }
+}
 
 #pb-info { flex: 1; min-width: 0; }
 .pb-title {
@@ -959,6 +1002,25 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
 }
 .play-btn.play-btn--playing {
   box-shadow: 0 2px 16px rgba(255, 255, 255, 0.28);
+  animation: pbPlayGlow 2.8s var(--ease-soft) infinite;
+}
+@keyframes pbPlayGlow {
+  0%,
+  100% {
+    box-shadow:
+      0 2px 14px rgba(255, 255, 255, 0.22),
+      0 0 0 0 rgba(255, 255, 255, 0);
+  }
+  50% {
+    box-shadow:
+      0 2px 18px rgba(255, 255, 255, 0.3),
+      0 0 0 0 rgba(255, 255, 255, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .play-btn.play-btn--playing {
+    animation: none;
+  }
 }
 .play-btn svg { fill: var(--bg); stroke: none; }
 .play-btn:active { transform: scale(0.92); }
@@ -1356,7 +1418,7 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   border-top: 1px solid var(--glass-edge);
   padding: 20px 16px 32px;
-  animation: slideUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: slideUp var(--dur-slow) var(--ease-standard);
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
 }
 .modal.is-closing .modal-content {
@@ -1491,6 +1553,40 @@ textarea.form-input { resize: none; }
   .tcs-backdrop .tcs-cover-wrap {
     max-width: 400px;
   }
+  .tcs-backdrop .tcs-sheet {
+    animation-name: tcsSheetEnterDesk;
+  }
+}
+
+@keyframes tcsSheetEnter {
+  from {
+    transform: translateY(14%) scale(0.98);
+    opacity: 0.94;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes tcsSheetEnterDesk {
+  from {
+    transform: translateY(20px) scale(0.98);
+    opacity: 0.94;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes tcsChromeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .tcs-sheet {
@@ -1508,7 +1604,8 @@ textarea.form-input { resize: none; }
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
-  animation: slideUp 0.3s cubic-bezier(0.34, 1.2, 0.64, 1);
+  animation: tcsSheetEnter var(--dur-slow) var(--ease-standard)
+    both;
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
 }
 .tcs-sheet.is-closing {
@@ -1540,6 +1637,9 @@ textarea.form-input { resize: none; }
   background: var(--surface-2);
   border-radius: 2px;
   margin: 12px auto 0;
+  animation: tcsChromeIn var(--dur-med) var(--ease-standard)
+    both;
+  animation-delay: 72ms;
 }
 
 .tcs-close {
@@ -1563,6 +1663,9 @@ textarea.form-input { resize: none; }
   border: none;
   cursor: pointer;
   padding: 0;
+  animation: tcsChromeIn var(--dur-med) var(--ease-standard)
+    both;
+  animation-delay: 100ms;
 }
 
 /* Cover — large square */
@@ -1674,16 +1777,27 @@ textarea.form-input { resize: none; }
   max-height: 100dvh;
 }
 .tcs-track-content {
-  animation: tcsTrackIn 0.35s ease;
+  animation: tcsTrackIn var(--dur-med) var(--ease-soft) both;
+  animation-delay: 56ms;
 }
 @keyframes tcsTrackIn {
   from {
     opacity: 0;
-    transform: scale(0.97) translateY(8px);
+    transform: scale(0.985) translateY(10px);
   }
   to {
     opacity: 1;
     transform: scale(1) translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tcs-backdrop,
+  .tcs-sheet,
+  .tcs-handle,
+  .tcs-close,
+  .tcs-track-content {
+    animation: none !important;
   }
 }
 .tcs-video-gradient {
@@ -3293,6 +3407,24 @@ html.le-lyrics-sync-open body {
 }
 
 /* ── Fullscreen Lyrics ── */
+@keyframes flOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes flOverlayOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 .fl-overlay {
   position: fixed;
   inset: 0;
@@ -3300,8 +3432,20 @@ html.le-lyrics-sync-open body {
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  animation: fadeIn 0.2s ease;
+  animation: flOverlayIn var(--dur-med) var(--ease-standard)
+    both;
   overflow: hidden;
+}
+
+.fl-overlay.is-closing {
+  animation: flOverlayOut var(--dur-med) var(--ease-standard)
+    forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fl-overlay {
+    animation: none;
+  }
 }
 .fl-video-bg {
   position: absolute;
@@ -3482,13 +3626,21 @@ html.le-lyrics-sync-open body {
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   border-top: 1px solid var(--glass-edge);
   padding: 0 16px calc(var(--nav-h) + var(--player-h) + 16px);
-  animation: slideUp 0.25s cubic-bezier(0.34, 1.2, 0.64, 1);
+  animation: slideUp var(--dur-slow) var(--ease-standard);
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
 }
 .eq-sheet.is-closing {
   animation: sheet-exit-tcs var(--dur-med)
     var(--ease-standard) forwards;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .eq-backdrop,
+  .eq-sheet {
+    animation: none !important;
+  }
+}
+
 .eq-handle {
   width: 40px;
   height: 4px;
@@ -3754,13 +3906,21 @@ html.le-lyrics-sync-open body {
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   border-top: 1px solid var(--glass-edge);
   padding: 0 0 calc(var(--nav-h) + 16px);
-  animation: slideUp 0.25s cubic-bezier(0.34, 1.2, 0.64, 1);
+  animation: slideUp var(--dur-slow) var(--ease-standard);
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
 }
 .settings-sheet.is-closing {
   animation: sheet-exit-tcs var(--dur-med)
     var(--ease-standard) forwards;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-backdrop,
+  .settings-sheet {
+    animation: none !important;
+  }
+}
+
 .settings-handle {
   width: 40px;
   height: 4px;
