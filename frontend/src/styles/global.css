@@ -906,7 +906,7 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
 }
 .pb-cover-waveform {
-  opacity: 0.85;
+  opacity: 0.95;
 }
 @keyframes pbMetaIn {
   from {
@@ -1520,7 +1520,7 @@ textarea.form-input { resize: none; }
 .tcs-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 150;
+  z-index: 170;
   background: rgba(0, 0, 0, 0.55);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
@@ -1554,29 +1554,34 @@ textarea.form-input { resize: none; }
     max-width: 400px;
   }
   .tcs-backdrop .tcs-sheet {
-    animation-name: tcsSheetEnterDesk;
+    animation: tcsSheetEnterDesk var(--dur-slow)
+      var(--ease-soft) both;
+    transform-origin: center center;
+  }
+  .tcs-backdrop .tcs-sheet.is-closing {
+    animation-name: sheet-exit-tcs-desk;
   }
 }
 
 @keyframes tcsSheetEnter {
   from {
-    transform: translateY(14%) scale(0.98);
-    opacity: 0.94;
+    transform: translate3d(0, 100%, 0);
+    opacity: 0.88;
   }
   to {
-    transform: translateY(0) scale(1);
+    transform: translate3d(0, 0, 0);
     opacity: 1;
   }
 }
 
 @keyframes tcsSheetEnterDesk {
   from {
-    transform: translateY(20px) scale(0.98);
-    opacity: 0.94;
+    opacity: 0;
+    transform: scale(0.93) translate3d(0, 18px, 0);
   }
   to {
-    transform: translateY(0) scale(1);
     opacity: 1;
+    transform: scale(1) translate3d(0, 0, 0);
   }
 }
 
@@ -1604,6 +1609,7 @@ textarea.form-input { resize: none; }
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
+  transform-origin: center bottom;
   animation: tcsSheetEnter var(--dur-slow) var(--ease-standard)
     both;
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
@@ -1614,8 +1620,15 @@ textarea.form-input { resize: none; }
 }
 @keyframes sheet-exit-tcs {
   to {
-    transform: translateY(100%);
+    transform: translate3d(0, 100%, 0);
     opacity: 0.2;
+  }
+}
+
+@keyframes sheet-exit-tcs-desk {
+  to {
+    opacity: 0;
+    transform: scale(0.94) translate3d(0, 20px, 0);
   }
 }
 .tcs-sheet > .tcs-handle,
@@ -1722,7 +1735,7 @@ textarea.form-input { resize: none; }
   margin: 0;
   padding: 0 8px 10px;
   box-sizing: border-box;
-  opacity: 0.9;
+  opacity: 0.97;
   mix-blend-mode: screen;
   z-index: 1;
 }

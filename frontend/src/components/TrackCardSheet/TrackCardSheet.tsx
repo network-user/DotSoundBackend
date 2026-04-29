@@ -6,7 +6,6 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { CSSProperties } from 'react'
 import { api } from '@/lib/api'
 import {
   getInternalUserId,
@@ -651,15 +650,10 @@ export function TrackCardSheet({
             )}
             {coverSrc && !coverFailed ? (
               <img
-                className="tcs-cover tcs-cover-vt"
+                className="tcs-cover"
                 src={coverSrc}
                 alt=""
                 onError={() => setCoverFailed(true)}
-                style={
-                  {
-                    viewTransitionName: `cover-t-${track.id}`,
-                  } as CSSProperties
-                }
               />
             ) : (
               <div className="tcs-cover-placeholder">
