@@ -30,6 +30,11 @@ import {
   isCached,
   removeTrack,
 } from '@/lib/offlineCache'
+import {
+  clearThirdPartyStreamOverride,
+  getThirdPartyStreamOverride,
+  setThirdPartyStreamOverride,
+} from '@/lib/streamDebugOverride'
 import { hapticNotification } from '@/lib/telegram'
 import type {
   Track,
@@ -164,6 +169,25 @@ export function TrackCardSheet({
     useRef<HTMLInputElement>(null)
   const extrasWrapRef = useRef<HTMLDivElement>(null)
   const [extrasOpen, setExtrasOpen] = useState(false)
+  const [streamOverrideDraft, setStreamOverrideDraft] =
+    useState('')
+  const streamDebugVisible =
+    (import.meta.env.DEV || isAdmin) &&
+    track != null &&
+    track.access_mode === 'third_party_stream'
+
+  useEffect(() => {
+    if (
+      !isCardOpen ||
+      !track ||
+      track.access_mode !== 'third_party_stream'
+    ) {
+      return
+    }
+    setStreamOverrideDraft(
+      getThirdPartyStreamOverride(track.id) ?? '',
+    )
+  }, [isCardOpen, track?.id, track?.access_mode])
 
   useEffect(() => {
     if (!isCardOpen || !track) {
@@ -1306,6 +1330,72 @@ export function TrackCardSheet({
                 : t('trackSheet.disclaimerMeta')}
             </p>
           </div>
+        )}
+
+        {streamDebugVisible && (
+          <details className="tcs-source-info tcs-stream-debug">
+            <summary>
+              {t('trackSheet.streamDebugTitle')}
+            </summary>
+            <div className="tcs-stream-debug-body">
+              <input
+                type="url"
+                className="tcs-stream-debug-url-input"
+                value={streamOverrideDraft}
+                onChange={(e) =>
+                  setStreamOverrideDraft(e.target.value)
+                }
+                placeholder={t(
+                  'trackSheet.streamDebugPlaceholder',
+                )}
+                spellCheck={false}
+                autoComplete="off"
+              />
+              <div className="tcs-stream-debug-actions">
+                <button
+                  type="button"
+                  className="tcs-edit-btn"
+                  onClick={() => {
+                    const u =
+                      streamOverrideDraft.trim()
+                    if (
+                      !/^https?:\/\//i.test(u)
+                    ) {
+                      toast.error(
+                        t(
+                          'trackSheet.streamDebugInvalid',
+                        ),
+                      )
+                      return
+                    }
+                    setThirdPartyStreamOverride(
+                      track.id,
+                      u,
+                    )
+                    void playTrack(track)
+                  }}
+                >
+                  {t('trackSheet.streamDebugApply')}
+                </button>
+                <button
+                  type="button"
+                  className="tcs-edit-btn"
+                  onClick={() => {
+                    clearThirdPartyStreamOverride(
+                      track.id,
+                    )
+                    setStreamOverrideDraft('')
+                    void playTrack(track)
+                  }}
+                >
+                  {t('trackSheet.streamDebugClear')}
+                </button>
+              </div>
+              <p className="tcs-stream-debug-hint">
+                {t('trackSheet.streamDebugHint')}
+              </p>
+            </div>
+          </details>
         )}
 
         {similarTracks.length > 0 && (

@@ -17,6 +17,10 @@ import {
   trackProgressiveAudioUrl,
 } from '@/lib/offlineCache'
 import { queueOrSend } from '@/lib/pendingEvents'
+import {
+  getThirdPartyStreamOverride,
+  inferStreamTypeFromUrl,
+} from '@/lib/streamDebugOverride'
 import { isBenignPlayError, safePlay } from '@/lib/safePlay'
 import type { Track } from '@/types/api'
 
@@ -384,6 +388,9 @@ export function PlayerProvider({
   const streamExpiresAtRef = useRef<number | null>(null)
   const lastStreamUrlRef = useRef<string | null>(null)
   const lastTrackIdRef = useRef<number | null>(null)
+  const streamLoadFailedTrackIdRef = useRef<
+    number | null
+  >(null)
   const playSessionRef = useRef(0)
   const preloadHlsRef = useRef<Hls | null>(null)
   const preloadHlsTrackIdRef = useRef<number | null>(
@@ -796,7 +803,7 @@ export function PlayerProvider({
       fallbackUrl?: string,
       autoplay = true,
     ) =>
-      new Promise<void>((resolve) => {
+      new Promise<void>((resolve, reject) => {
         const hls = new Hls({
           enableWorker: true,
           startLevel: -1,
@@ -821,10 +828,12 @@ export function PlayerProvider({
             audio.src = fallbackUrl
             audio.volume = volume
             if (autoplay) void safePlay(audio)
+            resolve()
           } else {
-            setHlsError('Ошибка воспроизведения')
+            reject(
+              new Error('HLS playback failed'),
+            )
           }
-          resolve()
         })
       }),
     [volume],
@@ -1166,6 +1175,7 @@ export function PlayerProvider({
     streamExpiresAtRef.current = null
     lastStreamUrlRef.current = null
     lastTrackIdRef.current = newTrack.id
+    streamLoadFailedTrackIdRef.current = null
     void loadEqSettings()
     if (bail()) return
     _initAudioCtx()
@@ -1201,9 +1211,20 @@ export function PlayerProvider({
       }
 
       if (newTrack.access_mode === 'third_party_stream') {
-        const stream = await api.getStream(
+        const ovr = getThirdPartyStreamOverride(
           newTrack.id,
         )
+        const stream =
+          ovr === null
+            ? await api.getStream(newTrack.id)
+            : {
+                track_id: newTrack.id,
+                url: ovr,
+                stream_type: inferStreamTypeFromUrl(
+                  ovr,
+                ),
+                expires_in: 86_400,
+              }
         if (bail()) return
         lastStreamUrlRef.current = stream.url
         streamExpiresAtRef.current = stream.expires_in
@@ -1299,6 +1320,8 @@ export function PlayerProvider({
     } catch (e) {
       if (isBenignPlayError(e)) return
       console.error('playTrack error', e)
+      streamLoadFailedTrackIdRef.current =
+        newTrack.id
       toast.error(
         getApiErrorMessage(
           e,
@@ -1480,6 +1503,13 @@ export function PlayerProvider({
     void loadEqSettings()
     _initAudioCtx()
     if (a.paused) {
+      if (
+        streamLoadFailedTrackIdRef.current ===
+        track.id
+      ) {
+        void playTrack(track)
+        return
+      }
       void safePlay(a, {
         onNotAllowed: () =>
           toast.error(
@@ -1522,6 +1552,7 @@ export function PlayerProvider({
       hlsRef.current.destroy()
       hlsRef.current = null
     }
+    streamLoadFailedTrackIdRef.current = null
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = null
       navigator.mediaSession.playbackState = 'none'

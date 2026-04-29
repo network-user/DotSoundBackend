@@ -41,6 +41,8 @@ readiness).
 `close_es` в воркере) — 2026-04
 - Docker Compose `worker` service: taskiq modules aligned with
 root `main.py` (imports, lyrics queue, snippets) — 2026-04
+- SoundCloud `get_stream_info`: progressive manifest 404 → try HLS
+  transcoding before 502; other upstream HTTP errors → 502 — 2026-04-29
 - Audio-compute worker download: OTT with `proxy=1` so Backend
 proxies SoundCloud progressive streams (worker no longer GETs
 time-bound CDN URL directly; avoids 403) — 2026-04
@@ -48,10 +50,15 @@ time-bound CDN URL directly; avoids 403) — 2026-04
   the same queued rows as `gpu_full` (TIER_PROFILE_MAP); tier
   availability heartbeat counts both — 2026-04-29
 - Mini App плеер: после сбоя Hls.js fallback `GET /audio` отдавал
-302 на M3U8, Chrome в `<audio>` M3U8 не декодирует — добавлен
-`?force_progressive=true` (прокси MP3 с S3) и хелпер
-`trackProgressiveAudioUrl` в плеере / оффлайн-кэше / админ-превью
-— 2026-04-27
+  302 на M3U8, Chrome в `<audio>` M3U8 не декодирует — добавлен
+  `?force_progressive=true` (прокси MP3 с S3) и хелпер
+  `trackProgressiveAudioUrl` в плеере / оффлайн-кэше / админ-превью
+  — 2026-04-27
+- Плеер: после ошибки `getStream` карточка вызывала только
+  `togglePlay` по пустому audio — повторное нажатие Play
+  перезапускает `playTrack`; фатальный HLS без fallback → reject;
+  dev/admin: override URL потока в карточке (sessionStorage)
+  — 2026-04-29
 - Lyrics cascade: preserve **root** worker failure in
 `cascade exhausted` message (not only last tier gate, e.g.
 `speechkit_disabled`); `lyrics_jobs.request_with_sync` /

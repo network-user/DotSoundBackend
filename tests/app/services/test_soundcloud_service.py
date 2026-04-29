@@ -237,6 +237,93 @@ async def test_get_stream_info_success(
 
 
 @patch(f"{_MOD}.httpx.AsyncClient")
+async def test_get_stream_info_progressive_returns_404(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    resolve_resp = MagicMock()
+    resolve_resp.status_code = 200
+    resolve_resp.raise_for_status = MagicMock()
+    resolve_resp.json.return_value = {
+        "media": {
+            "transcodings": [
+                {
+                    "url": "https://api/stream",
+                    "format": {"protocol": "progressive"},
+                    "snipped": False,
+                }
+            ]
+        },
+        "track_authorization": "auth",
+    }
+
+    prog_404 = MagicMock()
+    prog_404.status_code = 404
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(side_effect=[resolve_resp, prog_404])
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.get_stream_info("https://sc.com/x-prog-404-only")
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail == "SoundCloud stream unavailable"
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_get_stream_info_progressive_404_falls_back_to_hls(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    resolve_resp = MagicMock()
+    resolve_resp.status_code = 200
+    resolve_resp.raise_for_status = MagicMock()
+    resolve_resp.json.return_value = {
+        "media": {
+            "transcodings": [
+                {
+                    "url": "https://api/prog",
+                    "format": {"protocol": "progressive"},
+                    "snipped": False,
+                },
+                {
+                    "url": "https://api/hls",
+                    "format": {"protocol": "hls"},
+                    "snipped": False,
+                },
+            ]
+        },
+        "track_authorization": "auth",
+    }
+
+    prog_404 = MagicMock()
+    prog_404.status_code = 404
+    hls_ok = MagicMock()
+    hls_ok.status_code = 200
+    hls_ok.is_success = True
+    hls_ok.json.return_value = {"url": "https://cdn/playlist.m3u8"}
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        side_effect=[resolve_resp, prog_404, hls_ok],
+    )
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    url, protocol = await svc.get_stream_info("https://sc.com/fallback-hls")
+
+    assert url == "https://cdn/playlist.m3u8"
+    assert protocol == "hls"
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
 async def test_get_stream_url(
     mock_client_cls: AsyncMock,
     session: AsyncSession,

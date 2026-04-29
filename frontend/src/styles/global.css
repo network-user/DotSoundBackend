@@ -4551,6 +4551,47 @@ html.le-lyrics-sync-open body {
   line-height: 1.4;
 }
 
+.tcs-stream-debug {
+  margin-top: 10px;
+}
+
+.tcs-stream-debug summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tcs-stream-debug-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tcs-stream-debug-url-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 11px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+}
+
+.tcs-stream-debug-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tcs-stream-debug-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
 .tcs-source-variants {
   padding: 10px 0 4px;
 }
