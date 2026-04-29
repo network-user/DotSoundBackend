@@ -17,6 +17,7 @@ from app.config import settings
 from app.models.artist import Artist
 from app.repositories.artist import ArtistRepository
 from app.repositories.artist_catalog import ArtistCatalogRepository
+from app.services import artist_catalog_sync_progress as acsp
 from app.services.soundcloud_service import (
     SoundCloudService,
     synthetic_soundcloud_id_for_artist_station,
@@ -90,6 +91,10 @@ class ArtistCatalogSyncService:
             sc_uid,
             artist.soundcloud_permalink,
         )
+        await acsp.merge_running_detail(
+            artist_id,
+            {"phase": "list_soundcloud_albums"},
+        )
         raw_albums, source_truncated = await sc.list_user_albums(
             sc_uid,
             limit_per_page=CATALOG_SYNC_ALBUMS_PAGE_SIZE,
@@ -98,6 +103,14 @@ class ArtistCatalogSyncService:
         albums = clip_albums_for_full_sync(
             raw_albums,
             CATALOG_SYNC_MAX_RELEASES_PER_FULL_RUN,
+        )
+        await acsp.merge_running_detail(
+            artist_id,
+            {
+                "phase": "albums",
+                "albums_total": len(albums),
+                "albums_done": 0,
+            },
         )
         stats: dict[str, Any] = {
             "albums_seen": len(albums),
@@ -133,10 +146,22 @@ class ArtistCatalogSyncService:
             )
             stats["albums_synced"] += 1
             await self._session.commit()
+            await acsp.merge_running_detail(
+                artist_id,
+                {
+                    "phase": "albums",
+                    "albums_total": len(albums),
+                    "albums_done": stats["albums_synced"],
+                },
+            )
         st: dict[str, bool] = {
             "synced": False,
             "skipped_manual": False,
         }
+        await acsp.merge_running_detail(
+            artist_id,
+            {"phase": "station_similar"},
+        )
         try:
             st = await self._sync_artist_similar_station_core(
                 artist_id,
@@ -250,6 +275,13 @@ class ArtistCatalogSyncService:
             artist_id,
             sc_uid,
             artist.soundcloud_permalink,
+        )
+        await acsp.merge_running_detail(
+            artist_id,
+            {
+                "phase": "release",
+                "soundcloud_album_id": soundcloud_album_id,
+            },
         )
         pl = await sc.fetch_playlist_by_id(soundcloud_album_id)
         expanded = await sc.expand_playlist_stub_tracks(pl)

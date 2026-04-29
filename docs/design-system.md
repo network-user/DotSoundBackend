@@ -51,11 +51,16 @@ user has `prefers-reduced-motion: reduce`.
 
 ### Z-index scale
 
+`#player-bar` and `#nav` in `global.css` use fixed **165–166** so
+tokenized overlays (`--z-sheet`, `--z-modal`) must sit **above**
+those layers or dialogs (e.g. admin step-up `Sheet`) end up under
+the player.
+
 ```
 --z-nav:    80
 --z-player: 90
---z-sheet:  110
---z-modal:  130
+--z-sheet:  180
+--z-modal:  185
 --z-toast:  200
 ```
 
