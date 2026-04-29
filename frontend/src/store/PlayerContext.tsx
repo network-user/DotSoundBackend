@@ -25,17 +25,6 @@ const EQ_FREQUENCIES = [
 ]
 const EQ_DEFAULT = [0, 0, 0, 0, 0, 0, 0, 0]
 
-function withViewTransition(cb: () => void): void {
-  const d = document as Document & {
-    startViewTransition?: (inner: () => void) => unknown
-  }
-  if (typeof d.startViewTransition === 'function') {
-    d.startViewTransition(cb)
-  } else {
-    cb()
-  }
-}
-
 function _dbToLinear(db: number) {
   return 10 ** (db / 20)
 }
@@ -1689,10 +1678,9 @@ export function PlayerProvider({
   const closeComplaint = useCallback(
     () => setIsComplaintOpen(false), [],
   )
-  const openCard = useCallback(
-    () => withViewTransition(() => setIsCardOpen(true)),
-    [],
-  )
+  const openCard = useCallback(() => {
+    setIsCardOpen(true)
+  }, [])
 
   const openTrackAtComment = useCallback(
     async (t: Track, commentId: number) => {

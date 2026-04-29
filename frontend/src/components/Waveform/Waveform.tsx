@@ -22,11 +22,20 @@ const MAX_CANVAS_DPR = 1.25
 
 const IDLE_FRAC = 0.18
 
-const MIN_PLAY_FRAC = 0.05
+const MIN_PLAY_FRAC = 0.04
 
-const ATTACK_SMOOTH = 0.48
+const ATTACK_SMOOTH = 0.62
 
 const DECAY_SMOOTH = 0.2
+
+const NORM_GAIN = 1.28
+
+const NORM_CURVE_EXP = 0.68
+
+function shapeLevel(norm: number): number {
+  const boosted = Math.min(1, norm * NORM_GAIN)
+  return boosted ** NORM_CURVE_EXP
+}
 
 function ensureSmoothed(
   ref: MutableRefObject<Float32Array | null>,
@@ -51,8 +60,8 @@ function drawBars(
   useIdleTint: boolean,
 ) {
   ctx.clearRect(0, 0, w, h)
-  const barW = (w / bars) * 0.6
-  const gap = (w / bars) * 0.4
+  const barW = (w / bars) * 0.64
+  const gap = (w / bars) * 0.36
   for (let i = 0; i < bars; i++) {
     const frac = heights[i]
     const bh = Math.max(h * MIN_PLAY_FRAC, frac * h)
@@ -76,8 +85,8 @@ function drawIdleBars(
 ) {
   ctx.clearRect(0, 0, w, h)
   ctx.fillStyle = idleColor
-  const barW = (w / bars) * 0.6
-  const gap = (w / bars) * 0.4
+  const barW = (w / bars) * 0.64
+  const gap = (w / bars) * 0.36
   for (let i = 0; i < bars; i++) {
     const x = i * (barW + gap) + gap / 2
     const bh = h * IDLE_FRAC
@@ -114,8 +123,8 @@ export function Waveform({
       ? 'rgba(255,255,255,0.12)'
       : 'rgba(255,255,255,0.15)'
     const playColor = overlay
-      ? 'rgba(255,255,255,0.5)'
-      : 'rgba(255,255,255,0.85)'
+      ? 'rgba(255,255,255,0.78)'
+      : 'rgba(255,255,255,0.98)'
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect()
@@ -177,9 +186,10 @@ export function Waveform({
             sum += buf[i * step + j] || 0
           }
           const norm = sum / (step * 255)
+          const shaped = shapeLevel(norm)
           const target = Math.max(
             MIN_PLAY_FRAC,
-            norm,
+            shaped,
           )
           sm[i] += (target - sm[i]) * ATTACK_SMOOTH
         }

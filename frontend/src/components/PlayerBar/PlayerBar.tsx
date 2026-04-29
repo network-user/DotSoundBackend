@@ -187,11 +187,6 @@ export function PlayerBar() {
                 alt=""
                 loading="lazy"
                 className="pb-cover-vt"
-                style={
-                  {
-                    viewTransitionName: `cover-t-${track.id}`,
-                  } as CSSProperties
-                }
               />
             ) : (
               <Icon name="music" size={18} />

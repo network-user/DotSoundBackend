@@ -337,12 +337,10 @@
   }
 }
 
-/* Shared element: мини-обложка плеера ↔ грид в карточке */
-.pb-cover-vt,
-.tcs-cover-vt {
+/* Мини-обложка в баре: скругление + изоляция слоя */
+.pb-cover-vt {
   border-radius: var(--r-sm);
   contain: paint;
-  will-change: transform, opacity;
 }
 
 /* ---------- Список треков: пустое состояние + CTA ---------- */
