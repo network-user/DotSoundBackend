@@ -18,6 +18,7 @@ class AdminCatalogReleaseSummaryResponse(BaseModel):
 
 class AdminArtistCatalogOverviewResponse(BaseModel):
     artist_id: int
+    image_key: str | None = None
     soundcloud_user_id: int | None = None
     soundcloud_permalink: str | None = None
     releases: list[AdminCatalogReleaseSummaryResponse]

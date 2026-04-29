@@ -9,6 +9,7 @@ from dotsound_private_core.services.catalog_sync_policy import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core import s3
 from app.repositories.artist import ArtistRepository
 from app.repositories.artist_catalog import ArtistCatalogRepository
 from app.schemas.admin_artist_catalog import (
@@ -116,6 +117,7 @@ class AdminArtistCatalogService:
                 cs_upd = upd
         return AdminArtistCatalogOverviewResponse(
             artist_id=artist.id,
+            image_key=artist.image_key,
             soundcloud_user_id=artist.soundcloud_user_id,
             soundcloud_permalink=artist.soundcloud_permalink,
             releases=items,
@@ -174,9 +176,59 @@ class AdminArtistCatalogService:
             soundcloud_permalink=pl,
         )
         await self._session.commit()
+        sc = SoundCloudService(settings.sc_client_id, self._session)
+        await sc.sync_artist_soundcloud_uploader_profile(
+            artist_id,
+            None,
+            uploader_id=None,
+        )
         out = await self.overview(artist_id)
         assert out is not None
         return out
+
+    async def upload_artist_avatar(
+        self,
+        artist_id: int,
+        *,
+        data: bytes,
+        admin_user_id: int,
+    ) -> AdminArtistCatalogOverviewResponse | None:
+        from app.services.file_validator import validate_image
+
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None:
+            return None
+        validate_image(data, filename=None)
+        img_key, _, _, _ = await s3.upload_image(
+            data=data,
+            prefix="artists",
+            max_size=settings.image_avatar_max_size,
+            user_id=admin_user_id,
+        )
+        old_key = artist.image_key
+        artist.image_key = img_key
+        await self._session.commit()
+        if old_key and old_key != img_key:
+            try:
+                await s3.delete_object(old_key)
+            except Exception:
+                logger.exception(
+                    "admin_artist_avatar_old_delete_failed",
+                    artist_id=artist_id,
+                    old_key=old_key,
+                )
+        try:
+            from app.services.search_index_notify import (
+                schedule_reindex_artist,
+            )
+
+            await schedule_reindex_artist(artist_id)
+        except Exception:
+            logger.warning(
+                "admin_artist_avatar_reindex_failed",
+                artist_id=artist_id,
+            )
+        return await self.overview(artist_id)
 
     async def create_release(
         self,

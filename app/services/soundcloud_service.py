@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 import httpx
@@ -778,26 +779,93 @@ class SoundCloudService:
         low = url.lower()
         return "default_avatar" in low or "default-user" in low
 
-    async def _fetch_soundcloud_cdn_image_bytes(
+    @staticmethod
+    def _soundcloud_avatar_url_candidates(url: str) -> list[str]:
+        base = url.split("?", 1)[0].strip()
+        if not base:
+            return []
+        out: list[str] = []
+        seen: set[str] = set()
+
+        def add(u: str) -> None:
+            if u and u not in seen:
+                seen.add(u)
+                out.append(u)
+
+        add(base)
+        add(base.replace("-large.jpg", "-t500x500.jpg"))
+        add(base.replace("-large.png", "-t500x500.png"))
+        add(re.sub(r"-t\d+x\d+", "-t500x500", base))
+        add(base.replace("-small.jpg", "-t500x500.jpg"))
+        add(base.replace("-badge.jpg", "-t500x500.jpg"))
+        add(base.replace("-original.jpg", "-t500x500.jpg"))
+        return out
+
+    async def _fetch_soundcloud_avatar_bytes_cascade(
         self,
         url: str,
     ) -> tuple[bytes, str] | None:
-        large_url = url.replace("-large.jpg", "-t500x500.jpg")
+        candidates = self._soundcloud_avatar_url_candidates(url)
         try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.get(large_url)
-                if r.status_code != 200:
-                    r2 = await client.get(url)
-                    if r2.status_code != 200:
-                        return None
-                    data = r2.content
-                    ct = r2.headers.get("content-type", "image/jpeg")
-                else:
-                    data = r.content
+            async with httpx.AsyncClient(timeout=12) as client:
+                for cand in candidates:
+                    try:
+                        r = await client.get(cand)
+                    except httpx.HTTPError:
+                        continue
+                    if r.status_code != 200:
+                        continue
                     ct = r.headers.get("content-type", "image/jpeg")
+                    return r.content, ct.split(";")[0].strip()
         except Exception:
             return None
-        return data, ct.split(";")[0].strip()
+        return None
+
+    async def fetch_soundcloud_user_by_id(
+        self,
+        soundcloud_user_id: int,
+    ) -> dict[str, Any] | None:
+        if not self._client_id:
+            return None
+        try:
+            async with (
+                soundcloud_slot(
+                    timeout_seconds=(
+                        settings.soundcloud_slot_acquire_timeout_seconds
+                    ),
+                ),
+                self._sc_client() as client,
+            ):
+                r = await client.get(
+                    f"{_SC_API_BASE}/users/{int(soundcloud_user_id)}",
+                    params={"client_id": self._client_id},
+                )
+                if r.status_code in (401, 404):
+                    return None
+                r.raise_for_status()
+                data = r.json()
+        except (SoundCloudSemaphoreTimeout, Exception):
+            return None
+        if not isinstance(data, dict):
+            return None
+        return data
+
+    @staticmethod
+    def _parse_soundcloud_user_id(raw: object) -> int | None:
+        if isinstance(raw, int):
+            return raw
+        if isinstance(raw, str) and raw.isdigit():
+            return int(raw)
+        return None
+
+    @staticmethod
+    def _should_refetch_soundcloud_user(user: dict[str, Any]) -> bool:
+        av = user.get("avatar_url")
+        if not isinstance(av, str) or not av.strip():
+            return True
+        return SoundCloudService._soundcloud_avatar_url_is_placeholder(
+            av.strip()
+        )
 
     async def sync_artist_soundcloud_uploader_profile(
         self,
@@ -806,21 +874,26 @@ class SoundCloudService:
         *,
         uploader_id: int | None,
     ) -> None:
-        if not user or not isinstance(user, dict):
-            return
         repo = ArtistRepository(self._session)
         artist = await repo.get_by_id(artist_id)
         if artist is None:
             return
-        raw_id = user.get("id")
-        uid: int | None
-        if isinstance(raw_id, int):
-            uid = raw_id
-        elif isinstance(raw_id, str) and raw_id.isdigit():
-            uid = int(raw_id)
-        else:
-            uid = None
-        perm_raw = user.get("permalink")
+        merged: dict[str, Any] = {}
+        if isinstance(user, dict):
+            merged = dict(user)
+        uid = self._parse_soundcloud_user_id(
+            merged.get("id"),
+        )
+        if uid is None and artist.soundcloud_user_id is not None:
+            uid = int(artist.soundcloud_user_id)
+            merged.setdefault("id", uid)
+        if uid is None:
+            return
+        if self._should_refetch_soundcloud_user(merged):
+            full = await self.fetch_soundcloud_user_by_id(uid)
+            if isinstance(full, dict):
+                merged = {**merged, **full}
+        perm_raw = merged.get("permalink")
         perm: str | None = None
         if isinstance(perm_raw, str):
             perm = normalize_soundcloud_permalink(perm_raw)
@@ -844,13 +917,17 @@ class SoundCloudService:
         artist = await repo.get_by_id(artist_id)
         if artist is None or artist.image_key:
             return
-        av = user.get("avatar_url")
+        av = merged.get("avatar_url")
         if not isinstance(av, str) or not av.strip():
+            logger.info(
+                "sc_artist_avatar_missing_url",
+                artist_id=artist_id,
+            )
             return
         av = av.strip()
         if self._soundcloud_avatar_url_is_placeholder(av):
             return
-        fetched = await self._fetch_soundcloud_cdn_image_bytes(av)
+        fetched = await self._fetch_soundcloud_avatar_bytes_cascade(av)
         if fetched is None:
             logger.warning(
                 "sc_artist_avatar_fetch_failed",

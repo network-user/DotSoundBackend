@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
+import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Press } from '@/components/ui/Press'
 import { Sheet } from '@/components/ui/Sheet'
 import { useStepUp } from './auth/StepUpDialog'
@@ -65,6 +66,7 @@ export function ArtistCatalogEditor({
   const [pendingTrackIds, setPendingTrackIds] = useState<
     number[] | null
   >(null)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const overview = useQuery({
     queryKey: ['admin', 'catalog', artistId],
@@ -128,6 +130,16 @@ export function ArtistCatalogEditor({
         size: 20,
       }),
     enabled: open && trackSearch.trim().length >= 2,
+  })
+
+  const uploadAvatar = useMutation({
+    mutationFn: (file: File) =>
+      adminApi.catalogUploadAvatar(artistId, file),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'catalog', artistId],
+      })
+    },
   })
 
   const saveSc = useMutation({
@@ -515,6 +527,53 @@ export function ArtistCatalogEditor({
           >
             {t('admin.artists.catalog.saveSoundcloud')}
           </Press>
+        </section>
+        <section className="admin-catalog-section">
+          <h3>{t('admin.artists.catalog.avatar')}</h3>
+          <p className="admin-auth-hint">
+            {t('admin.artists.catalog.avatarHint')}
+          </p>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 16,
+              flexWrap: 'wrap',
+            }}
+          >
+            <CoverImage
+              coverKey={overview.data?.image_key ?? null}
+              size={72}
+            />
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                e.target.value = ''
+                if (!f) return
+                uploadAvatar.mutate(f, {
+                  onError: async (err) => {
+                    await showAlert(
+                      (err as Error).message ||
+                        t('admin.common.unknownError'),
+                    )
+                  },
+                })
+              }}
+            />
+            <Press
+              variant="ghost"
+              disabled={uploadAvatar.isPending}
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              {uploadAvatar.isPending
+                ? t('admin.artists.catalog.avatarUploading')
+                : t('admin.artists.catalog.avatarUpload')}
+            </Press>
+          </div>
         </section>
         <section className="admin-catalog-section">
           <h3>{t('admin.artists.catalog.sync')}</h3>
