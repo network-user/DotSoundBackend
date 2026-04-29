@@ -109,7 +109,9 @@ backfill). `TrackService.search` и discovery при доступном ES сн�
 `app/services/artist_catalog_sync_worker.py`. Конфиг: `catalog_uploader_id`
 (и `CATALOG_UPLOADER_ID` в `.env.example`). Операторский CRUD и постановка
 синка: `app/api/v1/admin/artist_catalog.py` + `app/services/admin_artist_catalog_service.py`
-(админ-сессия; resync — `require_step_up("catalog.sync.run")`).
+(админ-сессия; resync — `require_step_up("catalog.sync.run")`). Статус последнего
+синка для UI: Redis `app/services/artist_catalog_sync_progress.py` (ключ
+`artist_catalog_sync:{artist_id}`), поля в `GET …/catalog/overview`.
 
 ---
 

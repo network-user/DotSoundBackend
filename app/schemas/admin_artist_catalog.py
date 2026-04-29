@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -21,6 +22,17 @@ class AdminArtistCatalogOverviewResponse(BaseModel):
     soundcloud_permalink: str | None = None
     releases: list[AdminCatalogReleaseSummaryResponse]
     releases_total: int
+    catalog_sync_state: Literal[
+        "idle",
+        "running",
+        "success",
+        "error",
+    ] = "idle"
+    catalog_sync_mode: Literal["full", "release"] | None = None
+    catalog_sync_soundcloud_album_id: int | None = None
+    catalog_sync_error: str | None = None
+    catalog_sync_detail: dict[str, Any] | None = None
+    catalog_sync_updated_at: str | None = None
 
 
 class AdminArtistSoundcloudPatch(BaseModel):

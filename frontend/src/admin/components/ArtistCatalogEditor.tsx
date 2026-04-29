@@ -70,6 +70,10 @@ export function ArtistCatalogEditor({
     queryKey: ['admin', 'catalog', artistId],
     queryFn: () => adminApi.catalogOverview(artistId),
     enabled: open,
+    refetchInterval: (q) =>
+      q.state.data?.catalog_sync_state === 'running'
+        ? 2000
+        : false,
   })
 
   useEffect(() => {
@@ -249,11 +253,62 @@ export function ArtistCatalogEditor({
       )
   }, [overview.data])
 
+  const syncStatusBanner = useMemo(() => {
+    const row = overview.data
+    if (!row) return null
+    const st = row.catalog_sync_state
+    if (st === 'idle') return null
+    const mode = row.catalog_sync_mode
+    const modeLine =
+      mode === 'release'
+        ? t('admin.artists.catalog.syncModeRelease')
+        : mode === 'full'
+          ? t('admin.artists.catalog.syncModeFull')
+          : null
+    const err = row.catalog_sync_error
+    const det = row.catalog_sync_detail
+    let detailLine: string | null = null
+    if (st === 'success' && det) {
+      if (typeof det.albums_synced === 'number') {
+        const seen =
+          typeof det.albums_seen === 'number'
+            ? det.albums_seen
+            : det.albums_synced
+        detailLine = t('admin.artists.catalog.syncDetailFull', {
+          synced: det.albums_synced,
+          seen,
+        })
+      } else if (typeof det.soundcloud_album_id === 'number') {
+        detailLine = t('admin.artists.catalog.syncDetailRelease', {
+          id: det.soundcloud_album_id,
+        })
+      }
+    }
+    const updated = row.catalog_sync_updated_at
+    const lines: string[] = []
+    if (st === 'running') {
+      lines.push(t('admin.artists.catalog.syncStateRunning'))
+      if (modeLine) lines.push(modeLine)
+    } else if (st === 'success') {
+      lines.push(t('admin.artists.catalog.syncStateSuccess'))
+      if (modeLine) lines.push(modeLine)
+      if (detailLine) lines.push(detailLine)
+    } else if (st === 'error') {
+      lines.push(t('admin.artists.catalog.syncStateError'))
+      if (err) lines.push(err)
+    }
+    if (updated) lines.push(updated)
+    return { st, lines }
+  }, [overview.data, t])
+
   async function onSyncFull() {
     const ok = await stepUp.request('catalog.sync.run')
     if (!ok) return
     try {
       await adminApi.catalogSyncFull(artistId)
+      void qc.invalidateQueries({
+        queryKey: ['admin', 'catalog', artistId],
+      })
       await showAlert(
         t('admin.artists.catalog.syncQueued'),
       )
@@ -270,6 +325,9 @@ export function ArtistCatalogEditor({
     if (!ok) return
     try {
       await adminApi.catalogSyncRelease(artistId, rid)
+      void qc.invalidateQueries({
+        queryKey: ['admin', 'catalog', artistId],
+      })
       await showAlert(
         t('admin.artists.catalog.syncQueued'),
       )
@@ -407,6 +465,20 @@ export function ArtistCatalogEditor({
         </section>
         <section className="admin-catalog-section">
           <h3>{t('admin.artists.catalog.sync')}</h3>
+          {syncStatusBanner && (
+            <div
+              className={
+                syncStatusBanner.st === 'error'
+                  ? 'admin-error admin-catalog-sync-status'
+                  : 'admin-catalog-sync-status'
+              }
+              data-state={syncStatusBanner.st}
+            >
+              {syncStatusBanner.lines.map((line, i) => (
+                <div key={i}>{line}</div>
+              ))}
+            </div>
+          )}
           <Press variant="ghost" onClick={() => void onSyncFull()}>
             {t('admin.artists.catalog.syncFull')}
           </Press>

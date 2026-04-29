@@ -52,6 +52,7 @@ async def test_admin_catalog_crud_and_reorder(
     )
     assert r0.status_code == 200
     assert r0.json()["releases_total"] == 0
+    assert r0.json()["catalog_sync_state"] == "idle"
 
     r1 = await client.post(
         f"/api/v1/admin/artists/{artist.id}/catalog/releases",
@@ -89,6 +90,42 @@ async def test_admin_catalog_crud_and_reorder(
         headers=h,
     )
     assert r5.status_code == 204
+
+
+async def test_admin_catalog_overview_reflects_redis_sync_snapshot(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = await create_test_user(client, 140009)
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
+    artist = Artist(name="Snap", name_normalized="snap")
+    db_session.add(artist)
+    await db_session.commit()
+
+    async def _snap(_aid: int) -> dict:
+        return {
+            "state": "success",
+            "mode": "full",
+            "soundcloud_album_id": None,
+            "detail": {"albums_synced": 2, "albums_seen": 2},
+            "updated_at": "2026-01-02T00:00:00+00:00",
+        }
+
+    monkeypatch.setattr(
+        "app.services.admin_artist_catalog_service.acsp.get_snapshot",
+        _snap,
+    )
+    r = await client.get(
+        f"/api/v1/admin/artists/{artist.id}/catalog/overview",
+        headers=h,
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["catalog_sync_state"] == "success"
+    assert body["catalog_sync_mode"] == "full"
+    assert body["catalog_sync_detail"]["albums_synced"] == 2
+    assert body["catalog_sync_updated_at"] == "2026-01-02T00:00:00+00:00"
 
 
 async def test_admin_catalog_soundcloud_patch_duplicate(
