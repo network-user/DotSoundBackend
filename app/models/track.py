@@ -194,6 +194,9 @@ class Track(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    audio_cache_status: Mapped[str | None] = mapped_column(
+        String(20), nullable=True, index=True
+    )
 
     audio_blob: Mapped[AudioBlob | None] = relationship(
         "AudioBlob",

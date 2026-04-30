@@ -275,6 +275,16 @@ async def stream_track(
             detail="Track not found",
         )
     _check_access(track, current_user)
+    # Serve from local S3 cache when available — skips external API call.
+    if track.audio_cache_status == "cached" and track.file_key:
+        url = await s3.get_presigned_url(track.file_key)
+        logger.info("stream_url_from_cache", track_id=track_id)
+        return StreamResponse(
+            track_id=track_id,
+            url=url,
+            stream_type="direct",
+            expires_in=3600,
+        )
     if track.access_mode == "third_party_stream":
         spf = getattr(track, "source_platform", None)
         if spf == "youtube" and not settings.youtube_enabled:
@@ -458,6 +468,38 @@ async def audio_stream(
             url=f"/api/v1/tracks/{track_id}/hls/master.m3u8",
             status_code=302,
         )
+
+    # Serve from local S3 cache when available.
+    if (
+        track.audio_cache_status == "cached"
+        and track.file_key
+        and not track.hls_manifest_key
+    ):
+        range_header = request.headers.get("range")
+        try:
+            data, content_length, content_range, content_type = (
+                await s3.download_object_range(track.file_key, range_header)
+            )
+            http_status = 206 if content_range else 200
+            headers: dict[str, str] = {
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(content_length),
+            }
+            if content_range:
+                headers["Content-Range"] = content_range
+            logger.info(
+                "audio_stream_from_cache",
+                track_id=track_id,
+                range=range_header,
+            )
+            return Response(
+                content=data,
+                status_code=http_status,
+                media_type=content_type,
+                headers=headers,
+            )
+        except ClientError:
+            pass  # fall through to live proxy on storage error
 
     if track.access_mode == "third_party_stream":
         if getattr(track, "source_platform", None) in ("bandcamp", "youtube"):

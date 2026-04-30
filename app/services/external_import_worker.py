@@ -1,4 +1,6 @@
+import asyncio
 import difflib
+import random
 
 import structlog
 from sqlalchemy import select
@@ -12,13 +14,65 @@ from app.models.track import Track
 from app.repositories.user_track_library import (
     UserTrackLibraryRepository,
 )
-from app.services.soundcloud_service import SoundCloudService
+from app.services.soundcloud_service import (
+    SoundCloudRateLimitError,
+    SoundCloudService,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _DURATION_TOLERANCE = 0.20
 _MIN_TITLE_SCORE = 0.55
 _SEARCH_LIMIT = 10
+
+
+def _is_slow_mode(selected: list) -> bool:  # type: ignore[type-arg]
+    return len(selected) > settings.import_slow_mode_threshold
+
+
+def _jitter_delay(slow: bool) -> float:
+    if slow:
+        return random.uniform(
+            settings.import_slow_mode_jitter_min_seconds,
+            settings.import_slow_mode_jitter_max_seconds,
+        )
+    return random.uniform(
+        settings.import_track_jitter_min_seconds,
+        settings.import_track_jitter_max_seconds,
+    )
+
+
+async def _search_with_retry(
+    sc_service: SoundCloudService,
+    query: str,
+    *,
+    max_retries: int,
+    base_delay: float,
+    delay_multiplier: float,
+    job_id: int,
+) -> list[dict]:  # type: ignore[type-arg]
+    """Search SC with exponential backoff on rate-limit errors."""
+    for attempt in range(max_retries + 1):
+        try:
+            return await sc_service.search(query, limit=_SEARCH_LIMIT)
+        except SoundCloudRateLimitError as exc:
+            if attempt >= max_retries:
+                raise
+            wait = (
+                exc.retry_after
+                if exc.retry_after
+                else base_delay * (2**attempt) * delay_multiplier
+            )
+            logger.warning(
+                "external_import_rate_limited",
+                job_id=job_id,
+                query=query,
+                attempt=attempt,
+                wait_seconds=wait,
+                http_status=exc.status_code,
+            )
+            await asyncio.sleep(wait)
+    return []
 
 
 def _build_query(title: str, artist: str) -> str:
@@ -98,10 +152,18 @@ async def process_external_import_job(job_id: int) -> None:
         imported: list[dict] = []
         not_matched: list[dict] = []
 
-        for item in selected:
+        slow = _is_slow_mode(selected)
+        consecutive_failures = 0
+        delay_multiplier = 1.0
+
+        for idx, item in enumerate(selected):
             await session.refresh(job)
             if job.status == "cancelled":
                 break
+
+            # Jitter delay between iterations to avoid rapid-fire API calls.
+            if idx > 0:
+                await asyncio.sleep(_jitter_delay(slow) * delay_multiplier)
 
             title = (item.get("title") or "").strip()
             artist = (item.get("artist") or "").strip()
@@ -121,7 +183,44 @@ async def process_external_import_job(job_id: int) -> None:
                 continue
 
             try:
-                results = await sc_service.search(query, limit=_SEARCH_LIMIT)
+                results = await _search_with_retry(
+                    sc_service,
+                    query,
+                    max_retries=settings.import_per_track_max_retries,
+                    base_delay=settings.import_per_track_retry_base_delay_seconds,
+                    delay_multiplier=delay_multiplier,
+                    job_id=job_id,
+                )
+            except SoundCloudRateLimitError as exc:
+                logger.warning(
+                    "external_import_search_rate_limit_exhausted",
+                    job_id=job_id,
+                    query=query,
+                    http_status=exc.status_code,
+                )
+                await session.refresh(job)
+                job.failed_tracks += 1
+                not_matched.append(
+                    {
+                        "title": title,
+                        "artist": artist or None,
+                        "reason": "rate_limited",
+                    }
+                )
+                await session.commit()
+                consecutive_failures += 1
+                if consecutive_failures % settings.import_adaptive_failure_window == 0:
+                    delay_multiplier = min(
+                        delay_multiplier * 2.0,
+                        settings.import_adaptive_delay_multiplier_max,
+                    )
+                    logger.warning(
+                        "external_import_adaptive_throttle",
+                        job_id=job_id,
+                        consecutive_failures=consecutive_failures,
+                        new_multiplier=delay_multiplier,
+                    )
+                continue
             except Exception as exc:
                 logger.error(
                     "external_import_search_failed",
@@ -156,8 +255,13 @@ async def process_external_import_job(job_id: int) -> None:
             # combined query miss.
             if best_match is None and artist and results:
                 try:
-                    results_title_only = await sc_service.search(
-                        title, limit=_SEARCH_LIMIT
+                    results_title_only = await _search_with_retry(
+                        sc_service,
+                        title,
+                        max_retries=settings.import_per_track_max_retries,
+                        base_delay=settings.import_per_track_retry_base_delay_seconds,
+                        delay_multiplier=delay_multiplier,
+                        job_id=job_id,
                     )
                     best_match = _pick_best_sc_match(
                         results_title_only,
@@ -184,6 +288,18 @@ async def process_external_import_job(job_id: int) -> None:
                     }
                 )
                 await session.commit()
+                consecutive_failures += 1
+                if consecutive_failures % settings.import_adaptive_failure_window == 0:
+                    delay_multiplier = min(
+                        delay_multiplier * 2.0,
+                        settings.import_adaptive_delay_multiplier_max,
+                    )
+                    logger.warning(
+                        "external_import_adaptive_throttle",
+                        job_id=job_id,
+                        consecutive_failures=consecutive_failures,
+                        new_multiplier=delay_multiplier,
+                    )
                 continue
 
             try:
@@ -287,6 +403,8 @@ async def process_external_import_job(job_id: int) -> None:
                     track_id=track.id,
                     source=job.source,
                 )
+                consecutive_failures = 0
+                delay_multiplier = max(1.0, delay_multiplier / 2.0)
             except Exception as exc:
                 logger.error(
                     "external_import_track_failed",
@@ -304,6 +422,12 @@ async def process_external_import_job(job_id: int) -> None:
                     }
                 )
                 await session.commit()
+                consecutive_failures += 1
+                if consecutive_failures % settings.import_adaptive_failure_window == 0:
+                    delay_multiplier = min(
+                        delay_multiplier * 2.0,
+                        settings.import_adaptive_delay_multiplier_max,
+                    )
 
         await session.refresh(job)
         if job.status != "cancelled":

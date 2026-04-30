@@ -27,6 +27,33 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _SC_API_BASE = "https://api-v2.soundcloud.com"
 
+
+class SoundCloudRateLimitError(Exception):
+    """Raised on SC 429/503 — caller should back off before retrying."""
+
+    def __init__(
+        self, status_code: int, retry_after: float | None = None
+    ) -> None:
+        super().__init__(f"SC rate limited: HTTP {status_code}")
+        self.status_code = status_code
+        self.retry_after = retry_after
+
+
+async def _maybe_enqueue_audio_cache(track_id: int) -> None:
+    """Enqueue audio caching task when the feature flag is enabled."""
+    if not settings.audio_caching_enabled:
+        return
+    try:
+        from app.services.audio_cache_worker import cache_track_audio
+
+        await cache_track_audio.kiq(track_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "audio_cache_enqueue_failed",
+            track_id=track_id,
+            error=str(exc),
+        )
+
 _SC_STATION_SYNTHETIC_ID_OFFSET = 10**15
 
 _SC_TRACKS_IDS_BATCH_SIZE = 50
@@ -135,6 +162,15 @@ class SoundCloudService:
                             "SC_CLIENT_ID. Обновите в .env и перезапустите."
                         ),
                     )
+                if r.status_code in (429, 503):
+                    raw = r.headers.get("Retry-After")
+                    retry_after: float | None = None
+                    if raw:
+                        try:
+                            retry_after = float(raw)
+                        except ValueError:
+                            pass
+                    raise SoundCloudRateLimitError(r.status_code, retry_after)
                 r.raise_for_status()
                 data = r.json()
         except SoundCloudSemaphoreTimeout as exc:
@@ -1286,6 +1322,7 @@ class SoundCloudService:
 
             await schedule_reindex_track(track.id)
             await _ingest_schedule(track)
+            await _maybe_enqueue_audio_cache(track.id)
             return track
 
         track = Track(**new_values)
@@ -1303,6 +1340,7 @@ class SoundCloudService:
 
         await schedule_reindex_track(track.id)
         await _ingest_schedule(track)
+        await _maybe_enqueue_audio_cache(track.id)
         return track
 
     async def _fetch_by_sc_url(self, sc_url: str) -> Track | None:
