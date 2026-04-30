@@ -56,6 +56,8 @@ class ArtistDetailResponse(ArtistResponse):
         list[ArtistSourceProfileResponse] | None
     ) = None
     primary_source_id: str | None = None
+    follower_count: int = 0
+    monthly_listeners: int = 0
 
 
 class ArtistResolveResponse(BaseModel):

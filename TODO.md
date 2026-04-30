@@ -14,6 +14,36 @@
 
 ---
 
+## Подписки на артистов и статистика (2026-04-30)
+
+- [x] **artist_follows** — миграция `0068`, модель, репозиторий, сервис, API:
+  `POST/GET /artists/{id}/follow`, `GET /artists/{id}/follow/status`.
+  Авто-подписка при онбординге (`save_preferences`).
+  `follower_count` + `monthly_listeners` в `ArtistDetailResponse`.
+- [x] **Рекомендации по подпискам** — `RecommendationService._build_user_prefs`
+  объединяет `preferred_artist_ids` (онбординг) и `followed_artist_ids` (follows)
+  через `dict.fromkeys` (порядок + дедупликация).
+- [x] **Активные слушатели в месяц** — `artist_monthly_stats` таблица,
+  `ArtistStatsRepository.count_active_listeners` (live из `listen_events`),
+  `GET /artists/{id}/stats/listeners` (текущий месяц + история).
+- [x] **Снапшот за прошлый месяц** — Taskiq задача
+  `snapshot_monthly_artist_stats_task` (запускается вручную или
+  через внешний cron `0 2 1 * *`). `ArtistStatsService.snapshot_all_artists`.
+- `[ ]` **Cron-расписание снапшота** — настроить внешний cron (Docker / systemd)
+  или TaskiqScheduler на `0 2 1 * *` (1-е число каждого месяца, 02:00 UTC)
+  для запуска `snapshot_monthly_artist_stats_task`.
+- `[ ]` **Расширить `artist_monthly_stats`** — добавить колонки
+  `total_plays`, `total_likes`, `total_followers` для отображения
+  в графиках по месяцам (потребует миграции и обновления
+  `ArtistStatsRepository.upsert_snapshot` + `snapshot_all_artists`).
+- `[ ]` **Frontend: карточка артиста** — отображать `follower_count`
+  и `monthly_listeners` в `ArtistView`; кнопка «Подписаться» с toggle.
+- `[ ]` **Frontend: графики статистики** — страница `/artist/:id/stats`
+  с recharts-графиком `unique_listeners` по месяцам из
+  `GET /artists/{id}/stats/listeners` (history).
+- `[ ]` **Бот: плеер — источник «Подписки»** — добавить источник
+  `artist_follows` в inline-плеер бота (сейчас: Мои / Лайки / Лента).
+
 ## Соответствие 152-ФЗ / ПДн (backlog, продукт + инженерия)
 
 - Перед публичным запуском: **согласовать с юристом/ДПО** фактическую
