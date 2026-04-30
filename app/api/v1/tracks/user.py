@@ -164,11 +164,17 @@ async def update_track(
             detail="No fields to update",
         )
     service = TrackService(session)
-    track = await service.update_track(
-        track_id=track_id,
-        user_id=current_user.id,
-        **fields,
-    )
+    if current_user.is_admin:
+        track = await service.admin_update_track(
+            track_id=track_id,
+            **fields,
+        )
+    else:
+        track = await service.update_track(
+            track_id=track_id,
+            user_id=current_user.id,
+            **fields,
+        )
     if not track:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -247,10 +253,17 @@ async def _get_owned_track(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
+    if user.is_admin:
+        return track
     if track.uploaded_by_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not the track owner",
+        )
+    if track.catalog_type != "ugc":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot edit imported tracks",
         )
     return track
 
@@ -270,12 +283,6 @@ async def upload_track_cover(
     track = await _get_owned_track(
         track_id, current_user, session
     )
-
-    if track.source != "internal":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cover cannot be changed for external tracks",
-        )
 
     mime = cover.content_type or ""
     if not mime or mime == "application/octet-stream":
@@ -335,12 +342,6 @@ async def regenerate_track_cover(
     track = await _get_owned_track(
         track_id, current_user, session
     )
-
-    if track.source != "internal":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cover cannot be changed for external tracks",
-        )
 
     await generate_and_upload_cover.kiq(track.id)
 

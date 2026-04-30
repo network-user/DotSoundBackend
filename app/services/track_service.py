@@ -213,6 +213,23 @@ class TrackService:
             await schedule_reindex_track(out.id)
         return out
 
+    async def admin_update_track(
+        self,
+        track_id: int,
+        **fields: object,
+    ) -> Track | None:
+        out = await self._repo.admin_update_track(
+            track_id=track_id,
+            **fields,
+        )
+        if out:
+            from app.services.search_index_notify import (
+                schedule_reindex_track,
+            )
+
+            await schedule_reindex_track(out.id)
+        return out
+
     async def delete_by_owner(
         self, track_id: int, user_id: int
     ) -> Track | None:

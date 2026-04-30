@@ -1133,7 +1133,7 @@ export function TrackCardSheet({
             </span>
           </button>
 
-          {isOwner && (
+          {(isAdmin || (isOwner && track.catalog_type === 'ugc')) && (
             <button
               className={`tcs-action-btn${showEdit ? ' active' : ''}`}
               onClick={() =>
@@ -1159,13 +1159,13 @@ export function TrackCardSheet({
           </button>
         </div>
 
-        {showEdit && isOwner && (
+        {showEdit && (isAdmin || (isOwner && track.catalog_type === 'ugc')) && (
           <div className="tcs-edit-panel">
             <div className="tcs-edit-title">
               {t('trackSheet.editing')}
             </div>
             <div className="tcs-edit-actions">
-              {track.source === 'internal' && (
+              {(isAdmin || track.catalog_type === 'ugc') && (
                 <>
                   <button
                     className="tcs-edit-btn"
@@ -1252,9 +1252,7 @@ export function TrackCardSheet({
         )}
 
         {editingLyrics &&
-          (isOwner ||
-            (track.catalog_type === 'external_reference' &&
-              isAdmin)) && (
+          (isOwner || isAdmin) && (
           <div className="tcs-lyrics-edit-inline">
             <LyricsPanel
               trackId={track.id}
