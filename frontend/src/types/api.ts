@@ -582,6 +582,31 @@ export interface ArtistDetail {
   discography?: DiscographyItem[] | null
   source_profiles?: ArtistSourceProfile[] | null
   primary_source_id?: string | null
+  follower_count?: number
+  monthly_listeners?: number
+}
+
+export interface ArtistFollowToggleResponse {
+  artist_id: number
+  following: boolean
+  follower_count: number
+}
+
+export interface ArtistFollowStatusResponse {
+  artist_id: number
+  following: boolean
+}
+
+export interface MonthlyListenersEntry {
+  year: number
+  month: number
+  unique_listeners: number
+}
+
+export interface ArtistListenersResponse {
+  artist_id: number
+  current_month_listeners: number
+  history: MonthlyListenersEntry[]
 }
 
 export interface ArtistCatalogReleaseSummary {
