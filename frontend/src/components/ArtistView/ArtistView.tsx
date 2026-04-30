@@ -7,11 +7,12 @@ import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { api } from '@/lib/api'
-import { getIsAdmin } from '@/lib/telegram'
+import { getIsAdmin, getInternalUserId } from '@/lib/telegram'
 import type {
   ArtistCatalogReleaseSummary,
   ArtistDetail,
   ArtistInfo,
+  ArtistListenersResponse,
   ArtistSourceProfile,
   ArtistSupplementalResponse,
   DiscographyItem,
@@ -35,6 +36,65 @@ interface ArtistViewData {
   image_url: string | null
   website_url: string | null
   discography: DiscographyItem[]
+}
+
+function fmtCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(n)
+}
+
+const MONTH_LABELS = [
+  'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
+  'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек',
+]
+
+function ArtistListenersChart({
+  history,
+}: {
+  history: { year: number; month: number; unique_listeners: number }[]
+}) {
+  const sorted = [...history]
+    .sort((a, b) =>
+      a.year !== b.year
+        ? a.year - b.year
+        : a.month - b.month,
+    )
+    .slice(-12)
+
+  const max = Math.max(
+    1,
+    ...sorted.map((r) => r.unique_listeners),
+  )
+
+  return (
+    <div className="artist-listeners-chart">
+      {sorted.map((r) => (
+        <div
+          key={`${r.year}-${r.month}`}
+          className="artist-listeners-bar-col"
+          title={`${MONTH_LABELS[r.month - 1]} ${r.year}: ${fmtCount(r.unique_listeners)}`}
+        >
+          <div className="artist-listeners-bar-wrap">
+            <div
+              className="artist-listeners-bar"
+              style={{
+                height: `${Math.round(
+                  (r.unique_listeners / max) * 100,
+                )}%`,
+              }}
+            />
+          </div>
+          <span className="artist-listeners-bar-label">
+            {MONTH_LABELS[r.month - 1]}
+          </span>
+          <span className="artist-listeners-bar-value">
+            {fmtCount(r.unique_listeners)}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function hasAnyInfo(view: ArtistViewData): boolean {
@@ -178,9 +238,19 @@ export function ArtistView({
   const [selectedReleaseId, setSelectedReleaseId] = useState<
     number | null
   >(null)
+  const [following, setFollowing] = useState<
+    boolean | null
+  >(null)
+  const [followLoading, setFollowLoading] =
+    useState(false)
+  const [listeners, setListeners] =
+    useState<ArtistListenersResponse | null>(null)
+  const [listenersOpen, setListenersOpen] =
+    useState(false)
   const supplementalPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
   const isAdmin = getIsAdmin()
+  const currentUserId = getInternalUserId()
 
   useEffect(() => {
     if (!debugRunning) return
@@ -212,6 +282,9 @@ export function ArtistView({
     setCatalogReleases(null)
     setCatalogReleasesError(false)
     setSelectedReleaseId(null)
+    setFollowing(null)
+    setListeners(null)
+    setListenersOpen(false)
 
     api
       .getArtist(artistId)
@@ -265,6 +338,24 @@ export function ArtistView({
         }
       })
 
+    if (currentUserId) {
+      api
+        .getArtistFollowStatus(artistId)
+        .then((res) => {
+          if (!cancelled) setFollowing(res.following)
+        })
+        .catch(() => {
+          if (!cancelled) setFollowing(false)
+        })
+    }
+
+    api
+      .getArtistListeners(artistId)
+      .then((res) => {
+        if (!cancelled) setListeners(res)
+      })
+      .catch(() => {})
+
     return () => {
       cancelled = true
       if (supplementalPollRef.current) clearTimeout(supplementalPollRef.current)
@@ -304,6 +395,20 @@ export function ArtistView({
     } catch { /* ignore */ } finally {
       setRefreshingSupplemental(false)
     }
+  }
+
+  const handleFollow = async () => {
+    setFollowLoading(true)
+    try {
+      const res = await api.toggleArtistFollow(artistId)
+      setFollowing(res.following)
+      setArtist((prev) =>
+        prev
+          ? { ...prev, follower_count: res.follower_count }
+          : prev,
+      )
+    } catch {}
+    setFollowLoading(false)
   }
 
   const handleEnrich = async () => {
@@ -567,6 +672,62 @@ export function ArtistView({
         >
           {metaParts.join(' • ')}
         </p>
+
+        {/* Stats: monthly listeners + followers */}
+        {(listeners || artist.follower_count !== undefined) && (
+          <div className="artist-stats-row">
+            {(listeners?.current_month_listeners ?? artist.monthly_listeners) !== undefined && (
+              <span className="artist-stat-chip">
+                <span className="artist-stat-value">
+                  {fmtCount(
+                    listeners?.current_month_listeners ??
+                      artist.monthly_listeners ??
+                      0,
+                  )}
+                </span>
+                <span className="artist-stat-label">
+                  {t('artist.monthly_listeners', {
+                    defaultValue: 'слушателей',
+                  })}
+                </span>
+              </span>
+            )}
+            <span className="artist-stat-chip">
+              <span className="artist-stat-value">
+                {fmtCount(artist.follower_count ?? 0)}
+              </span>
+              <span className="artist-stat-label">
+                {t('artist.followers', {
+                  defaultValue: 'подписчиков',
+                })}
+              </span>
+            </span>
+          </div>
+        )}
+
+        {/* Follow button (only for logged-in users) */}
+        {currentUserId && (
+          <button
+            className={`artist-follow-btn${following === true ? ' artist-follow-btn--active' : ''}`}
+            onClick={handleFollow}
+            disabled={followLoading}
+            aria-pressed={following === true}
+          >
+            <Icon
+              name={following === true ? 'check' : 'bell'}
+              size={14}
+            />
+            {followLoading
+              ? '...'
+              : following === true
+                ? t('artist.following', {
+                    defaultValue: 'Подписан',
+                  })
+                : t('artist.follow', {
+                    defaultValue: 'Подписаться',
+                  })}
+          </button>
+        )}
 
         {(profiles.length > 0 || supplemental?.status === 'done') && (
           <div
@@ -1150,6 +1311,32 @@ export function ArtistView({
               </button>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Monthly listeners history */}
+      {listeners && listeners.history.length > 0 && (
+        <div className="artist-listeners-section">
+          <button
+            className="section-header artist-bio-toggle"
+            onClick={() =>
+              setListenersOpen((v) => !v)
+            }
+          >
+            <span className="section-title">
+              {t('artist.listeners_history_title', {
+                defaultValue: 'Статистика слушателей',
+              })}
+            </span>
+            <span className="artist-bio-chevron">
+              <Icon name="chevron" size={14} />
+            </span>
+          </button>
+          {listenersOpen && (
+            <ArtistListenersChart
+              history={listeners.history}
+            />
+          )}
         </div>
       )}
 

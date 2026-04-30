@@ -8,6 +8,9 @@ import type {
   ArtistCatalogReleaseDetail,
   ArtistCatalogReleaseListPayload,
   ArtistDetail,
+  ArtistFollowToggleResponse,
+  ArtistFollowStatusResponse,
+  ArtistListenersResponse,
   ArtistInfo,
   ArtistEnrichStatusResponse,
   ArtistEnrichWatchResponse,
@@ -1920,6 +1923,30 @@ export const api = {
     return request(
       `/api/v1/chats/${convId}/members/${targetUserId}`,
       { method: 'DELETE' },
+    )
+  },
+
+  toggleArtistFollow(
+    artistId: number,
+  ): Promise<ArtistFollowToggleResponse> {
+    return request(`/api/v1/artists/${artistId}/follow`, {
+      method: 'POST',
+    })
+  },
+
+  getArtistFollowStatus(
+    artistId: number,
+  ): Promise<ArtistFollowStatusResponse> {
+    return request(
+      `/api/v1/artists/${artistId}/follow/status`,
+    )
+  },
+
+  getArtistListeners(
+    artistId: number,
+  ): Promise<ArtistListenersResponse> {
+    return request(
+      `/api/v1/artists/${artistId}/stats/listeners`,
     )
   },
 
