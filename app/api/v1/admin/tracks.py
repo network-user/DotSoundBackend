@@ -19,6 +19,7 @@ from app.dependencies import (
     require_admin_session,
 )
 from app.models.user import User
+from app.schemas.track import TrackUpdateRequest
 from app.services.admin_service import AdminService
 from app.services.transcoding import transcode_hls_only
 
@@ -107,6 +108,40 @@ async def admin_toggle_track_active(
         "admin_track_visibility_changed",
         track_id=track_id,
         is_active=is_active,
+    )
+    return AdminTrackResponse.model_validate(track)
+
+
+@router.patch(
+    "/tracks/{track_id}",
+    response_model=AdminTrackResponse,
+    summary="[Admin] Update track metadata",
+)
+@limiter.limit("60/minute")
+async def admin_update_track(
+    request: Request,
+    track_id: int,
+    data: TrackUpdateRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminTrackResponse:
+    fields = data.model_dump(exclude_none=True)
+    if not fields:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update",
+        )
+    service = AdminService(session)
+    track = await service.update_track(track_id, **fields)
+    if track is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    logger.info(
+        "admin_track_metadata_updated",
+        track_id=track_id,
+        fields=list(fields.keys()),
     )
     return AdminTrackResponse.model_validate(track)
 

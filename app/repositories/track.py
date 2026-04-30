@@ -252,6 +252,31 @@ class TrackRepository(BaseRepository[Track]):
             .where(
                 Track.id == track_id,
                 Track.uploaded_by_id == user_id,
+                Track.catalog_type == "ugc",
+                Track.is_active.is_(True),
+            )
+            .values(**values)
+            .returning(Track)
+        )
+        await self._session.flush()
+        return result.scalar_one_or_none()
+
+    async def admin_update_track(
+        self,
+        track_id: int,
+        **fields: object,
+    ) -> Track | None:
+        values = {
+            k: v
+            for k, v in fields.items()
+            if k in self._UPDATABLE_FIELDS and v is not None
+        }
+        if not values:
+            return None
+        result = await self._session.execute(
+            update(Track)
+            .where(
+                Track.id == track_id,
                 Track.is_active.is_(True),
             )
             .values(**values)

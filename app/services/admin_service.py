@@ -105,6 +105,24 @@ class AdminService:
         await self._session.delete(track)
         return True
 
+    async def update_track(
+        self,
+        track_id: int,
+        **fields: object,
+    ) -> Track | None:
+        from app.repositories.track import TrackRepository
+        from app.services.search_index_notify import (
+            schedule_reindex_track,
+        )
+
+        repo = TrackRepository(self._session)
+        out = await repo.admin_update_track(
+            track_id=track_id, **fields
+        )
+        if out:
+            await schedule_reindex_track(out.id)
+        return out
+
     async def set_track_visibility(
         self, track_id: int, is_active: bool
     ) -> Track | None:
