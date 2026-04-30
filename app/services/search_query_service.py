@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.track import Track
 from app.search.es_client import es_available, get_es
+from app.search.translit import transliterate
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -46,6 +47,8 @@ def _track_multi_match_fields() -> list[str]:
         "artist^2",
         "title_sayt^1.2",
         "artist_sayt^1.2",
+        "title_translit^1.5",
+        "artist_translit^1.5",
         "genre",
     ]
 
@@ -56,7 +59,7 @@ def _track_search_should_clauses(
     fields = _track_multi_match_fields()
     fuzz = settings.elasticsearch_track_fuzziness
     fmax = settings.elasticsearch_fuzzy_max_expansions
-    return [
+    clauses: list[dict[str, Any]] = [
         {
             "multi_match": {
                 "query": q_text,
@@ -76,6 +79,19 @@ def _track_search_should_clauses(
             }
         },
     ]
+    q_translit = transliterate(q_text)
+    if q_translit and q_translit != q_text:
+        clauses.append(
+            {
+                "multi_match": {
+                    "query": q_translit,
+                    "type": "best_fields",
+                    "fields": fields,
+                    "boost": 0.8,
+                }
+            }
+        )
+    return clauses
 
 
 async def es_search_tracks(
@@ -147,37 +163,61 @@ async def es_suggest_mixed(
     per = max(1, min(8, limit // 2 + 1))
     fuzz = settings.elasticsearch_track_fuzziness
     fmax = settings.elasticsearch_fuzzy_max_expansions
+    q_translit = transliterate(qstrip)
+    t_should: list[dict[str, Any]] = [
+        {
+            "multi_match": {
+                "query": qstrip,
+                "type": "bool_prefix",
+                "fields": [
+                    "title_sayt",
+                    "title_sayt._2gram",
+                    "title_sayt._3gram",
+                    "artist_sayt",
+                    "artist_sayt._2gram",
+                    "artist_sayt._3gram",
+                    "title_translit",
+                    "title_translit._2gram",
+                    "artist_translit",
+                    "artist_translit._2gram",
+                ],
+                "boost": 1.0,
+            }
+        },
+        {
+            "multi_match": {
+                "query": qstrip,
+                "type": "best_fields",
+                "fields": ["title^2", "artist^2", "title_translit^1.5", "artist_translit^1.5"],
+                "fuzziness": fuzz,
+                "fuzzy_max_expansions": fmax,
+                "boost": 0.25,
+            }
+        },
+    ]
+    if q_translit and q_translit != qstrip:
+        t_should.append(
+            {
+                "multi_match": {
+                    "query": q_translit,
+                    "type": "bool_prefix",
+                    "fields": [
+                        "title_sayt",
+                        "title_sayt._2gram",
+                        "artist_sayt",
+                        "artist_sayt._2gram",
+                        "title_translit",
+                        "artist_translit",
+                    ],
+                    "boost": 0.8,
+                }
+            }
+        )
     t_body: dict[str, Any] = {
         "query": {
             "bool": {
                 "filter": _base_track_filters(playable_only=False),
-                "should": [
-                    {
-                        "multi_match": {
-                            "query": qstrip,
-                            "type": "bool_prefix",
-                            "fields": [
-                                "title_sayt",
-                                "title_sayt._2gram",
-                                "title_sayt._3gram",
-                                "artist_sayt",
-                                "artist_sayt._2gram",
-                                "artist_sayt._3gram",
-                            ],
-                            "boost": 1.0,
-                        }
-                    },
-                    {
-                        "multi_match": {
-                            "query": qstrip,
-                            "type": "best_fields",
-                            "fields": ["title^2", "artist^2"],
-                            "fuzziness": fuzz,
-                            "fuzzy_max_expansions": fmax,
-                            "boost": 0.25,
-                        }
-                    },
-                ],
+                "should": t_should,
                 "minimum_should_match": 1,
             }
         },
@@ -186,39 +226,57 @@ async def es_suggest_mixed(
             {"play_count": "desc"},
         ],
     }
+    a_should: list[dict[str, Any]] = [
+        {
+            "multi_match": {
+                "query": qstrip,
+                "type": "bool_prefix",
+                "fields": [
+                    "name_sayt",
+                    "name_sayt._2gram",
+                    "name_sayt._3gram",
+                    "name_translit",
+                    "name_translit._2gram",
+                    "name",
+                    "soundcloud_permalink",
+                ],
+                "boost": 1.0,
+            }
+        },
+        {
+            "multi_match": {
+                "query": qstrip,
+                "type": "best_fields",
+                "fields": [
+                    "name^2",
+                    "name_translit^1.5",
+                    "soundcloud_permalink",
+                ],
+                "fuzziness": fuzz,
+                "fuzzy_max_expansions": fmax,
+                "boost": 0.25,
+            }
+        },
+    ]
+    if q_translit and q_translit != qstrip:
+        a_should.append(
+            {
+                "multi_match": {
+                    "query": q_translit,
+                    "type": "bool_prefix",
+                    "fields": [
+                        "name_sayt",
+                        "name_sayt._2gram",
+                        "name_translit",
+                    ],
+                    "boost": 0.8,
+                }
+            }
+        )
     a_body: dict[str, Any] = {
         "query": {
             "bool": {
-                "should": [
-                    {
-                        "multi_match": {
-                            "query": qstrip,
-                            "type": "bool_prefix",
-                            "fields": [
-                                "name_sayt",
-                                "name_sayt._2gram",
-                                "name_sayt._3gram",
-                                "name",
-                                "soundcloud_permalink",
-                            ],
-                            "boost": 1.0,
-                        }
-                    },
-                    {
-                        "multi_match": {
-                            "query": qstrip,
-                            "type": "best_fields",
-                            "fields": [
-                                "name^2",
-                                "name",
-                                "soundcloud_permalink",
-                            ],
-                            "fuzziness": fuzz,
-                            "fuzzy_max_expansions": fmax,
-                            "boost": 0.25,
-                        }
-                    },
-                ],
+                "should": a_should,
                 "minimum_should_match": 1,
             }
         },
@@ -313,33 +371,47 @@ async def es_search_artists(q: str, *, limit: int = 20) -> list[int] | None:
         "name^2",
         "name_sayt^1.2",
         "name_sayt._2gram",
+        "name_translit^1.5",
         "soundcloud_permalink^1.3",
     ]
     fuzz = settings.elasticsearch_track_fuzziness
     fmax = settings.elasticsearch_fuzzy_max_expansions
+    q_translit = transliterate(q_text)
+    artist_should: list[dict[str, Any]] = [
+        {
+            "multi_match": {
+                "query": q_text,
+                "type": "best_fields",
+                "fields": artist_fields,
+                "boost": 1.0,
+            }
+        },
+        {
+            "multi_match": {
+                "query": q_text,
+                "type": "best_fields",
+                "fields": artist_fields,
+                "fuzziness": fuzz,
+                "fuzzy_max_expansions": fmax,
+                "boost": 0.35,
+            }
+        },
+    ]
+    if q_translit and q_translit != q_text:
+        artist_should.append(
+            {
+                "multi_match": {
+                    "query": q_translit,
+                    "type": "best_fields",
+                    "fields": artist_fields,
+                    "boost": 0.8,
+                }
+            }
+        )
     body: dict[str, Any] = {
         "query": {
             "bool": {
-                "should": [
-                    {
-                        "multi_match": {
-                            "query": q_text,
-                            "type": "best_fields",
-                            "fields": artist_fields,
-                            "boost": 1.0,
-                        }
-                    },
-                    {
-                        "multi_match": {
-                            "query": q_text,
-                            "type": "best_fields",
-                            "fields": artist_fields,
-                            "fuzziness": fuzz,
-                            "fuzzy_max_expansions": fmax,
-                            "boost": 0.35,
-                        }
-                    },
-                ],
+                "should": artist_should,
                 "minimum_should_match": 1,
             }
         },

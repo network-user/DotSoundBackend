@@ -158,6 +158,26 @@ class AppSettings(BaseSettings):
     import_per_user_max_concurrent: int = 2
     import_queue_dispatch_interval_seconds: float = 30.0
 
+    # Per-track pacing for external import jobs. Prevents rapid-fire
+    # API calls that trigger platform-side IP bans.
+    # SLOW_MODE kicks in when a job contains more than THRESHOLD tracks.
+    import_track_jitter_min_seconds: float = 0.5
+    import_track_jitter_max_seconds: float = 2.0
+    import_slow_mode_threshold: int = 500
+    import_slow_mode_jitter_min_seconds: float = 3.0
+    import_slow_mode_jitter_max_seconds: float = 8.0
+    import_per_track_max_retries: int = 3
+    import_per_track_retry_base_delay_seconds: float = 5.0
+    import_adaptive_failure_window: int = 5
+    import_adaptive_delay_multiplier_max: float = 4.0
+
+    # Audio caching: download third-party audio to S3 for local serving.
+    # Off by default — enable once storage budget is confirmed.
+    audio_caching_enabled: bool = False
+    audio_cache_max_file_bytes: int = 100 * 1024 * 1024
+    audio_cache_download_timeout_seconds: float = 120.0
+    audio_cache_prefetch_max_ids: int = 20
+
     # Stage 3 global post-import lyrics orchestrator. When the
     # feature flag is True, every external-import job pushes its
     # imported track ids into a shared Redis list and the global

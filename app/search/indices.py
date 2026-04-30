@@ -43,6 +43,14 @@ _TRACKS_MAPPING = {
                 "type": "search_as_you_type",
                 "max_shingle_size": 3,
             },
+            "title_translit": {
+                "type": "search_as_you_type",
+                "max_shingle_size": 3,
+            },
+            "artist_translit": {
+                "type": "search_as_you_type",
+                "max_shingle_size": 3,
+            },
             "genre": {
                 "type": "text",
                 "fields": {
@@ -72,6 +80,10 @@ _ARTISTS_MAPPING = {
             "artist_id": {"type": "integer"},
             "name": {"type": "text"},
             "name_sayt": {"type": "search_as_you_type", "max_shingle_size": 3},
+            "name_translit": {
+                "type": "search_as_you_type",
+                "max_shingle_size": 3,
+            },
             "name_normalized": {
                 "type": "keyword",
             },
@@ -93,7 +105,19 @@ async def ensure_index_exists(
         )
         logger.info("elasticsearch_index_created", index=index_name)
     else:
-        logger.debug("elasticsearch_index_exists", index=index_name)
+        # Additive mapping update — safe for new fields, no downtime.
+        try:
+            await es.indices.put_mapping(
+                index=index_name,
+                body={"properties": mapping["mappings"]["properties"]},
+            )
+            logger.debug("elasticsearch_mapping_updated", index=index_name)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "elasticsearch_mapping_update_failed",
+                index=index_name,
+                error=str(exc),
+            )
 
 
 async def ensure_tracks_artist_indices(es: AsyncElasticsearch) -> None:
