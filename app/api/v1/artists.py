@@ -9,9 +9,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core import s3
 from app.core.rate_limit import limiter
-from app.dependencies import get_db, require_admin
+from app.dependencies import (
+    get_current_user,
+    get_db,
+    require_admin,
+)
 from app.models.user import User
 from app.repositories.artist import ArtistRepository
+from app.repositories.artist_follow import (
+    ArtistFollowRepository,
+)
+from app.schemas.artist_follow import (
+    ArtistFollowStatusResponse,
+    ArtistFollowToggleResponse,
+    ArtistListenersResponse,
+)
+from app.services.artist_follow_service import (
+    ArtistFollowService,
+)
+from app.services.artist_stats_service import (
+    ArtistStatsService,
+)
 from app.schemas.artist import (
     ArtistDetailResponse,
     ArtistListResponse,
@@ -67,7 +85,9 @@ async def _build_artist_detail(
     svc = ArtistService(session)
     artist = await svc.get_by_id(artist_id)
     if not artist:
-        raise HTTPException(status_code=404, detail="Artist not found")
+        raise HTTPException(
+            status_code=404, detail="Artist not found"
+        )
 
     repo = ArtistRepository(session)
     track_ids = await repo.get_artist_track_ids(artist_id)
@@ -75,14 +95,29 @@ async def _build_artist_detail(
     image_url: str | None = None
     if artist.image_key:
         try:
-            image_url = await s3.get_presigned_url(artist.image_key)
+            image_url = await s3.get_presigned_url(
+                artist.image_key
+            )
         except Exception:
             logger.exception(
                 "artist_image_presign_failed",
                 artist_id=artist_id,
             )
 
-    source_profiles = _build_source_profiles(artist.source_profiles)
+    source_profiles = _build_source_profiles(
+        artist.source_profiles
+    )
+
+    follow_repo = ArtistFollowRepository(session)
+    follower_count = await follow_repo.count_followers(
+        artist_id
+    )
+    stats_svc = ArtistStatsService(session)
+    monthly_listeners = (
+        await stats_svc.get_current_month_listeners(
+            artist_id
+        )
+    )
 
     return ArtistDetailResponse(
         id=artist.id,
@@ -103,6 +138,8 @@ async def _build_artist_detail(
         discography=artist.discography,
         source_profiles=source_profiles,
         primary_source_id=artist.primary_source_id,
+        follower_count=follower_count,
+        monthly_listeners=monthly_listeners,
     )
 
 
@@ -511,9 +548,79 @@ async def get_similar_artists(
         return ArtistListResponse(items=[], total=0)
 
     all_artists = await svc.list_popular(limit=limit * 3)
-    similar = [a for a in all_artists if a.id != artist_id][:limit]
+    similar = [
+        a for a in all_artists if a.id != artist_id
+    ][:limit]
 
     return ArtistListResponse(
-        items=[ArtistResponse.model_validate(a) for a in similar],
+        items=[
+            ArtistResponse.model_validate(a) for a in similar
+        ],
         total=len(similar),
     )
+
+
+@router.post(
+    "/{artist_id}/follow",
+    response_model=ArtistFollowToggleResponse,
+    summary="Toggle follow for an artist.",
+)
+@limiter.limit("60/minute")
+async def toggle_artist_follow(
+    request: Request,
+    artist_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ArtistFollowToggleResponse:
+    svc = ArtistFollowService(db)
+    try:
+        result = await svc.toggle_follow(
+            user_id=current_user.id,
+            artist_id=artist_id,
+        )
+        await db.commit()
+    except ValueError:
+        raise HTTPException(
+            status_code=404, detail="Artist not found"
+        )
+    return ArtistFollowToggleResponse(**result)
+
+
+@router.get(
+    "/{artist_id}/follow/status",
+    response_model=ArtistFollowStatusResponse,
+    summary="Check if current user follows an artist.",
+)
+@limiter.limit("120/minute")
+async def artist_follow_status(
+    request: Request,
+    artist_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ArtistFollowStatusResponse:
+    repo = ArtistFollowRepository(db)
+    following = await repo.is_following(
+        current_user.id, artist_id
+    )
+    return ArtistFollowStatusResponse(
+        artist_id=artist_id, following=following
+    )
+
+
+@router.get(
+    "/{artist_id}/stats/listeners",
+    response_model=ArtistListenersResponse,
+    summary="Monthly active listeners for an artist.",
+)
+async def get_artist_listeners(
+    artist_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ArtistListenersResponse:
+    svc = ArtistService(db)
+    artist = await svc.get_by_id(artist_id)
+    if not artist:
+        raise HTTPException(
+            status_code=404, detail="Artist not found"
+        )
+    stats_svc = ArtistStatsService(db)
+    return await stats_svc.get_listeners_response(artist_id)

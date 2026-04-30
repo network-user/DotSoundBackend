@@ -119,6 +119,17 @@ class OnboardingService:
             preferred_moods=moods or None,
             onboarding_completed=True,
         )
+        if artist_ids:
+            from app.services.artist_follow_service import (
+                ArtistFollowService,
+            )
+
+            follow_svc = ArtistFollowService(
+                self._session
+            )
+            await follow_svc.follow_artists_bulk(
+                user_id, artist_ids
+            )
         logger.info(
             "onboarding_preferences_saved",
             user_id=user_id,
