@@ -38,6 +38,9 @@ from app.core.redis import get_redis_client
 from app.models.listen_event import ListenEvent as ListenEventModel
 from app.models.track import Track
 from app.models.user import User
+from app.repositories.artist_catalog import (
+    ArtistCatalogRepository,
+)
 from app.repositories.artist_follow import (
     ArtistFollowRepository,
 )
@@ -97,6 +100,9 @@ class RecommendationService:
             session
         )
         self._follow_repo = ArtistFollowRepository(
+            session
+        )
+        self._catalog_repo = ArtistCatalogRepository(
             session
         )
         self._telemetry = RecsysTelemetryService(
@@ -217,6 +223,13 @@ class RecommendationService:
                 onboarding_artist_ids + followed_artist_ids
             )
         )
+        similar_artist_ids = (
+            await self._catalog_repo.get_similar_artist_ids_from_stations(
+                merged_artist_ids
+            )
+            if merged_artist_ids
+            else []
+        )
 
         return (
             UserPrefs(
@@ -226,6 +239,7 @@ class RecommendationService:
                     else []
                 ),
                 preferred_artist_ids=merged_artist_ids,
+                similar_artist_ids=similar_artist_ids,
                 preferred_moods=(
                     pref.preferred_moods or []
                     if pref

@@ -23,6 +23,13 @@
 - [x] **Рекомендации по подпискам** — `RecommendationService._build_user_prefs`
   объединяет `preferred_artist_ids` (онбординг) и `followed_artist_ids` (follows)
   через `dict.fromkeys` (порядок + дедупликация).
+- [x] **Похожие артисты через SC-станции (2026-05-01)** —
+  `ArtistCatalogRepository.get_similar_artist_ids_from_stations` извлекает
+  artist_ids из треков «Похожее»-станций любимых артистов; передаются в
+  `UserPrefs.similar_artist_ids` (PrivateCore); scoring: 0.5× vs прямых фаворитов.
+  `sync_artist_similar_station_task` + on-follow/onboarding триггер в
+  `ArtistFollowService._enqueue_station_sync_if_stale`
+  (порог `artist_station_stale_threshold_days=7`).
 - [x] **Активные слушатели в месяц** — `artist_monthly_stats` таблица,
   `ArtistStatsRepository.count_active_listeners` (live из `listen_events`),
   `GET /artists/{id}/stats/listeners` (текущий месяц + история).
@@ -94,11 +101,14 @@ time-bound CDN URL directly; avoids 403) — 2026-04
 `speechkit_disabled`); `lyrics_jobs.request_with_sync` /
 `request_bypass_cache` for fallback dispatch; log
 `audio_compute_worker_fail` — 2026-04
-- `[ ]` **Taskiq/cron:** раз в месяц обход релизов каталога с
+- `[~]` **Taskiq/cron:** раз в месяц обход релизов каталога с
 `release_kind = dotsound_sc_artist_station` (SoundCloud artist
 station / «Похожее»), у которых `synced_at` старше порога —
 повторный `ArtistCatalogSyncService.sync_artist_similar_station`,
-батчинг и `soundcloud_slot` для лимитов API
+батчинг и `soundcloud_slot` для лимитов API.
+`sync_artist_similar_station_task` добавлен (2026-05-01);
+on-follow/onboarding триггер реализован в `ArtistFollowService`.
+Остаётся: scheduled weekly batch-обход всех stale-станций.
 - **Полное копирование аудиофайлов (MinIO) на удалённый backup-VPS**
   - Подключение к отдельному серверу по SSH
   - `mc mirror` MinIO -> remote, инкрементально

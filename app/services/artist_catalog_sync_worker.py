@@ -32,6 +32,33 @@ async def sync_artist_catalog_task(artist_id: int) -> dict[str, Any]:
 
 
 @broker.task
+async def sync_artist_similar_station_task(
+    artist_id: int,
+) -> dict[str, Any]:
+    try:
+        async with AsyncSessionLocal() as session:
+            svc = ArtistCatalogSyncService(session)
+            result = await svc.sync_artist_similar_station(
+                artist_id
+            )
+        await acsp.set_success(
+            artist_id,
+            mode="station",
+            soundcloud_album_id=None,
+            detail=result,
+        )
+        return result
+    except Exception as exc:
+        await acsp.set_error(
+            artist_id,
+            mode="station",
+            soundcloud_album_id=None,
+            message=repr(exc),
+        )
+        raise
+
+
+@broker.task
 async def sync_artist_catalog_release_task(
     artist_id: int,
     soundcloud_album_id: int,

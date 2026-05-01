@@ -109,6 +109,7 @@ class AppSettings(BaseSettings):
     # generate_lyrics_task for the same track_id at the same time.
     soundcloud_global_concurrency: int = 4
     soundcloud_slot_acquire_timeout_seconds: float = 30.0
+    artist_station_stale_threshold_days: int = 7
     youtube_concurrency: int = 4
     youtube_slot_acquire_timeout_seconds: float = 30.0
     bandcamp_concurrency: int = 4

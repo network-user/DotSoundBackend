@@ -1,14 +1,17 @@
 from datetime import UTC, date, datetime
 
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.artist import TrackArtist
 from app.models.artist_catalog import (
     ArtistCatalogRelease,
     ArtistCatalogReleaseTrack,
 )
 from app.models.track import Track
 from app.repositories.base import BaseRepository
+
+_ARTIST_STATION_KIND = "dotsound_sc_artist_station"
 
 
 class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
@@ -243,6 +246,49 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
         await self._session.delete(rel)
         await self._session.flush()
         return True
+
+    async def get_station_synced_at(
+        self,
+        artist_id: int,
+    ) -> datetime | None:
+        stmt = select(ArtistCatalogRelease.synced_at).where(
+            ArtistCatalogRelease.artist_id == artist_id,
+            ArtistCatalogRelease.release_kind
+            == _ARTIST_STATION_KIND,
+        )
+        return await self._session.scalar(stmt)
+
+    async def get_similar_artist_ids_from_stations(
+        self,
+        artist_ids: list[int],
+    ) -> list[int]:
+        if not artist_ids:
+            return []
+        stmt = (
+            select(distinct(TrackArtist.artist_id))
+            .join(
+                ArtistCatalogReleaseTrack,
+                ArtistCatalogReleaseTrack.track_id
+                == TrackArtist.track_id,
+            )
+            .join(
+                ArtistCatalogRelease,
+                ArtistCatalogRelease.id
+                == ArtistCatalogReleaseTrack.release_id,
+            )
+            .where(
+                ArtistCatalogRelease.artist_id.in_(
+                    artist_ids
+                ),
+                ArtistCatalogRelease.release_kind
+                == _ARTIST_STATION_KIND,
+                TrackArtist.artist_id.not_in(
+                    artist_ids
+                ),
+            )
+        )
+        rows = await self._session.execute(stmt)
+        return [r for (r,) in rows.all()]
 
     async def apply_release_display_order(
         self,
