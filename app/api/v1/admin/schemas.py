@@ -59,3 +59,39 @@ class AdminComplaintListResponse(BaseModel):
     total: int
     page: int
     size: int
+
+
+class TrackContextResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    track_id: int
+    content: str | None
+    status: str
+    fetched_at: datetime | None
+
+
+class TrackContextUpdateRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=5000)
+
+
+class BatchPromptRequest(BaseModel):
+    track_ids: list[int] = Field(..., min_length=1, max_length=200)
+
+
+class BatchPromptResponse(BaseModel):
+    prompt: str
+    track_count: int
+
+
+class SinglePromptResponse(BaseModel):
+    prompt: str
+    language: str
+
+
+class BatchImportRequest(BaseModel):
+    raw_response: str = Field(..., min_length=2, max_length=500_000)
+
+
+class BatchImportResponse(BaseModel):
+    imported: int
+    errors: list[str]

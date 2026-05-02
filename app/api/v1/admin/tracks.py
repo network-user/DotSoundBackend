@@ -23,9 +23,21 @@ from app.schemas.track import TrackUpdateRequest
 from app.services.admin_service import AdminService
 from app.services.transcoding import transcode_hls_only
 
+from app.services.admin_track_context_service import (
+    AdminTrackContextService,
+    TrackNotFoundError,
+)
+
 from .schemas import (
     AdminTrackListResponse,
     AdminTrackResponse,
+    BatchImportRequest,
+    BatchImportResponse,
+    BatchPromptRequest,
+    BatchPromptResponse,
+    SinglePromptResponse,
+    TrackContextResponse,
+    TrackContextUpdateRequest,
 )
 
 router = APIRouter()
@@ -210,6 +222,130 @@ async def admin_transcode_batch(
         count=len(tracks),
     )
     return {"queued": len(tracks)}
+
+
+@router.post(
+    "/tracks/context/batch-prompt",
+    response_model=BatchPromptResponse,
+    summary="[Admin] Generate batch prompt for selected tracks",
+)
+@limiter.limit("30/minute")
+async def admin_batch_prompt(
+    request: Request,
+    data: BatchPromptRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> BatchPromptResponse:
+    svc = AdminTrackContextService(session)
+    prompt, count = await svc.batch_prompt(data.track_ids)
+    logger.info("admin_batch_prompt_generated", track_count=count)
+    return BatchPromptResponse(prompt=prompt, track_count=count)
+
+
+@router.post(
+    "/tracks/context/batch-import",
+    response_model=BatchImportResponse,
+    summary="[Admin] Import AI JSON response into track contexts",
+)
+@limiter.limit("10/minute")
+async def admin_batch_import(
+    request: Request,
+    data: BatchImportRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> BatchImportResponse:
+    svc = AdminTrackContextService(session)
+    imported, errors = await svc.batch_import(data.raw_response)
+    logger.info(
+        "admin_batch_import_done",
+        imported=imported,
+        error_count=len(errors),
+    )
+    return BatchImportResponse(imported=imported, errors=errors)
+
+
+@router.get(
+    "/tracks/{track_id}/context",
+    response_model=TrackContextResponse,
+    summary="[Admin] Get current track context",
+)
+@limiter.limit("120/minute")
+async def admin_get_track_context(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> TrackContextResponse:
+    svc = AdminTrackContextService(session)
+    row = await svc.get_context(track_id)
+    if row is None:
+        return TrackContextResponse(
+            track_id=track_id,
+            content=None,
+            status="pending",
+            fetched_at=None,
+        )
+    return TrackContextResponse.model_validate(row)
+
+
+@router.patch(
+    "/tracks/{track_id}/context",
+    response_model=TrackContextResponse,
+    summary="[Admin] Manually set track context",
+)
+@limiter.limit("60/minute")
+async def admin_set_track_context(
+    request: Request,
+    track_id: int,
+    data: TrackContextUpdateRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> TrackContextResponse:
+    svc = AdminTrackContextService(session)
+    row = await svc.set_context(track_id, data.content)
+    logger.info("admin_track_context_set", track_id=track_id)
+    return TrackContextResponse.model_validate(row)
+
+
+@router.delete(
+    "/tracks/{track_id}/context",
+    response_model=TrackContextResponse,
+    summary="[Admin] Clear track context",
+)
+@limiter.limit("60/minute")
+async def admin_clear_track_context(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> TrackContextResponse:
+    svc = AdminTrackContextService(session)
+    row = await svc.clear_context(track_id)
+    logger.info("admin_track_context_cleared", track_id=track_id)
+    return TrackContextResponse.model_validate(row)
+
+
+@router.get(
+    "/tracks/{track_id}/prompt",
+    response_model=SinglePromptResponse,
+    summary="[Admin] Generate copy-ready prompt for one track",
+)
+@limiter.limit("60/minute")
+async def admin_get_track_prompt(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> SinglePromptResponse:
+    svc = AdminTrackContextService(session)
+    try:
+        prompt, lang = await svc.single_prompt(track_id)
+    except TrackNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    return SinglePromptResponse(prompt=prompt, language=lang)
 
 
 @router.get(

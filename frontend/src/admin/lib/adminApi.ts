@@ -1099,4 +1099,52 @@ export const adminApi = {
       `/artists/${artistId}/catalog/releases/${releaseId}/sync`,
       { method: 'POST', body: {} },
     ),
+
+  // --- Track Context ---
+
+  getTrackContext: (trackId: number) =>
+    adminFetch<{
+      track_id: number
+      content: string | null
+      status: string
+      fetched_at: string | null
+    }>(`/tracks/${trackId}/context`),
+
+  setTrackContext: (trackId: number, content: string) =>
+    adminFetch<{
+      track_id: number
+      content: string | null
+      status: string
+      fetched_at: string | null
+    }>(`/tracks/${trackId}/context`, {
+      method: 'PATCH',
+      body: { content },
+    }),
+
+  clearTrackContext: (trackId: number) =>
+    adminFetch<{
+      track_id: number
+      content: string | null
+      status: string
+      fetched_at: string | null
+    }>(`/tracks/${trackId}/context`, {
+      method: 'DELETE',
+    }),
+
+  getTrackPrompt: (trackId: number) =>
+    adminFetch<{ prompt: string; language: string }>(
+      `/tracks/${trackId}/prompt`,
+    ),
+
+  batchPrompt: (trackIds: number[]) =>
+    adminFetch<{ prompt: string; track_count: number }>(
+      '/tracks/context/batch-prompt',
+      { method: 'POST', body: { track_ids: trackIds } },
+    ),
+
+  batchImport: (rawResponse: string) =>
+    adminFetch<{ imported: number; errors: string[] }>(
+      '/tracks/context/batch-import',
+      { method: 'POST', body: { raw_response: rawResponse } },
+    ),
 }
