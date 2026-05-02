@@ -52,7 +52,14 @@ const MONTH_LABELS = [
 function ArtistListenersChart({
   history,
 }: {
-  history: { year: number; month: number; unique_listeners: number }[]
+  history: {
+    year: number
+    month: number
+    unique_listeners: number
+    total_plays?: number
+    total_likes?: number
+    total_followers?: number
+  }[]
 }) {
   const sorted = [...history]
     .sort((a, b) =>
@@ -69,30 +76,39 @@ function ArtistListenersChart({
 
   return (
     <div className="artist-listeners-chart">
-      {sorted.map((r) => (
-        <div
-          key={`${r.year}-${r.month}`}
-          className="artist-listeners-bar-col"
-          title={`${MONTH_LABELS[r.month - 1]} ${r.year}: ${fmtCount(r.unique_listeners)}`}
-        >
-          <div className="artist-listeners-bar-wrap">
-            <div
-              className="artist-listeners-bar"
-              style={{
-                height: `${Math.round(
-                  (r.unique_listeners / max) * 100,
-                )}%`,
-              }}
-            />
+      {sorted.map((r) => {
+        const lines = [
+          `${MONTH_LABELS[r.month - 1]} ${r.year}: ${fmtCount(r.unique_listeners)}`,
+          r.total_plays ? `${fmtCount(r.total_plays)} прослушиваний` : null,
+          r.total_likes ? `${fmtCount(r.total_likes)} лайков` : null,
+        ]
+          .filter(Boolean)
+          .join('\n')
+        return (
+          <div
+            key={`${r.year}-${r.month}`}
+            className="artist-listeners-bar-col"
+            title={lines}
+          >
+            <div className="artist-listeners-bar-wrap">
+              <div
+                className="artist-listeners-bar"
+                style={{
+                  height: `${Math.round(
+                    (r.unique_listeners / max) * 100,
+                  )}%`,
+                }}
+              />
+            </div>
+            <span className="artist-listeners-bar-label">
+              {MONTH_LABELS[r.month - 1]}
+            </span>
+            <span className="artist-listeners-bar-value">
+              {fmtCount(r.unique_listeners)}
+            </span>
           </div>
-          <span className="artist-listeners-bar-label">
-            {MONTH_LABELS[r.month - 1]}
-          </span>
-          <span className="artist-listeners-bar-value">
-            {fmtCount(r.unique_listeners)}
-          </span>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

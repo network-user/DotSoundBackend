@@ -601,6 +601,9 @@ export interface MonthlyListenersEntry {
   year: number
   month: number
   unique_listeners: number
+  total_plays: number
+  total_likes: number
+  total_followers: number
 }
 
 export interface ArtistListenersResponse {

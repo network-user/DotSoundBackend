@@ -16,6 +16,9 @@ class MonthlyListenersEntry(BaseModel):
     year: int
     month: int
     unique_listeners: int
+    total_plays: int = 0
+    total_likes: int = 0
+    total_followers: int = 0
 
 
 class ArtistListenersResponse(BaseModel):

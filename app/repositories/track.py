@@ -2,6 +2,7 @@ import structlog
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.artist import TrackArtist
 from app.models.track import Track
 from app.repositories.base import BaseRepository
 
@@ -56,6 +57,39 @@ class TrackRepository(BaseRepository[Track]):
         )
         total = total_result.scalar_one()
 
+        tracks_result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(tracks_result.scalars().all()), total
+
+    async def list_by_artist_ids(
+        self,
+        artist_ids: list[int],
+        offset: int = 0,
+        limit: int = 20,
+        playable_only: bool = False,
+    ) -> tuple[list[Track], int]:
+        if not artist_ids:
+            return [], 0
+        condition = (
+            Track.is_active.is_(True)
+            & Track.is_public.is_(True)
+            & Track.id.in_(
+                select(TrackArtist.track_id).where(
+                    TrackArtist.artist_id.in_(artist_ids)
+                )
+            )
+        )
+        if playable_only:
+            condition = condition & self._playable_filter()
+        total_result = await self._session.execute(
+            select(func.count()).where(condition)
+        )
+        total = int(total_result.scalar_one())
         tracks_result = await self._session.execute(
             select(Track)
             .where(condition)

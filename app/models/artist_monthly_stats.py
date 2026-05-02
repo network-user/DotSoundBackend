@@ -45,6 +45,15 @@ class ArtistMonthlyStats(Base):
     unique_listeners: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
     )
+    total_plays: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    total_likes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    total_followers: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
     snapshotted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
