@@ -90,6 +90,8 @@ class AdminTrackContextService:
         return await self._repo.get_by_track_id(track_id)
 
     async def set_context(self, track_id: int, content: str) -> TrackInfo:
+        if await self._load_track(track_id) is None:
+            raise TrackNotFoundError(track_id)
         return await self._repo.upsert(
             track_id,
             status="done",
@@ -98,6 +100,8 @@ class AdminTrackContextService:
         )
 
     async def clear_context(self, track_id: int) -> TrackInfo:
+        if await self._load_track(track_id) is None:
+            raise TrackNotFoundError(track_id)
         return await self._repo.upsert(
             track_id,
             status="not_found",
