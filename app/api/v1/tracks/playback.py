@@ -312,27 +312,49 @@ async def stream_track(
                 eff_track, session
             )
         except HTTPException as exc:
-            if exc.status_code in (403, 404, 410, 503):
-                from app.config import settings as _settings
-                from app.services.track_fallback_service import (
-                    TrackFallbackService,
-                )
+            if exc.status_code not in (403, 404, 410, 503):
+                raise
+            from app.config import settings as _settings
+            from app.services.track_fallback_service import (
+                TrackFallbackService,
+            )
 
-                fallback_svc = TrackFallbackService(session, _settings)
-                replacement = await fallback_svc.find_and_apply_fallback(
-                    track
+            fallback_svc = TrackFallbackService(session, _settings)
+            resolved = False
+            if (
+                exc.status_code in (404, 410)
+                and _third_party_is_soundcloud(eff_track)
+            ):
+                sc_refreshed = (
+                    await fallback_svc.try_refresh_sc_url(track)
+                )
+                if sc_refreshed:
+                    try:
+                        (
+                            stream_url,
+                            protocol,
+                        ) = await _resolve_third_party_stream(
+                            eff_track, session
+                        )
+                        resolved = True
+                    except HTTPException:
+                        resolved = False
+            if not resolved:
+                replacement = (
+                    await fallback_svc.find_and_apply_fallback(track)
                 )
                 if replacement:
                     eff_track = replacement
-                    stream_url, protocol = await _resolve_third_party_stream(
+                    (
+                        stream_url,
+                        protocol,
+                    ) = await _resolve_third_party_stream(
                         replacement, session
                     )
                     stream_track_id = replacement.id
                     stream_pf = replacement.source_platform
                 else:
                     raise
-            else:
-                raise
         if protocol == "hls" or not _third_party_is_soundcloud(
             eff_track,
         ):

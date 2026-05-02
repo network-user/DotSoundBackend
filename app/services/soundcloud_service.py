@@ -186,6 +186,98 @@ class SoundCloudService:
         logger.info("sc_search_done", query=query, count=len(tracks))
         return tracks
 
+    async def search_best_match(
+        self,
+        title: str,
+        artist: str | None,
+        duration_seconds: int | None = None,
+        *,
+        score_threshold: float = 0.65,
+    ) -> dict[str, Any] | None:
+        import difflib
+
+        def _norm(s: str) -> str:
+            return re.sub(r"\s+", " ", s).strip().lower()
+
+        def _score(cand: dict[str, Any]) -> float:
+            ct = _norm(cand.get("title", ""))
+            cu = _norm(
+                cand.get("user", {}).get("username", "")
+            )
+            cf = _norm(
+                cand.get("user", {}).get("full_name", "")
+            )
+            cd_ms: int = cand.get("duration") or 0
+            tt = _norm(title)
+            ta = _norm(artist or "")
+
+            t_score = difflib.SequenceMatcher(
+                None, tt, ct
+            ).ratio()
+            a_score = 0.0
+            if ta:
+                a_score = max(
+                    difflib.SequenceMatcher(
+                        None, ta, cu
+                    ).ratio(),
+                    difflib.SequenceMatcher(
+                        None, ta, cf
+                    ).ratio(),
+                )
+            d_score = 0.0
+            if duration_seconds and cd_ms:
+                delta = abs(cd_ms / 1000 - duration_seconds)
+                tol = max(10.0, duration_seconds * 0.10) * 3
+                d_score = max(0.0, 1.0 - delta / tol)
+
+            if ta:
+                return (
+                    t_score * 0.5
+                    + a_score * 0.3
+                    + d_score * 0.2
+                )
+            return t_score * 0.7 + d_score * 0.3
+
+        queries: list[str] = []
+        if artist:
+            queries.append(f"{artist} - {title}")
+            queries.append(f"{artist} {title}")
+        queries.append(title)
+        if " - " in title and not artist:
+            parts = title.split(" - ", 1)
+            queries.append(
+                f"{parts[0].strip()} {parts[1].strip()}"
+            )
+
+        seen_ids: set[int] = set()
+        candidates: list[dict[str, Any]] = []
+        for q in queries:
+            try:
+                results = await self.search(q, limit=10)
+            except (HTTPException, SoundCloudRateLimitError):
+                continue
+            for r in results:
+                rid: int | None = r.get("id")
+                if rid is not None and rid not in seen_ids:
+                    seen_ids.add(rid)
+                    candidates.append(r)
+
+        if not candidates:
+            return None
+
+        best = max(candidates, key=_score)
+        best_score = _score(best)
+        logger.info(
+            "sc_search_best_match_result",
+            title=title,
+            artist=artist,
+            match_title=best.get("title"),
+            score=round(best_score, 3),
+        )
+        if best_score < score_threshold:
+            return None
+        return best
+
     async def get_charts(
         self,
         genre: str | None = None,
