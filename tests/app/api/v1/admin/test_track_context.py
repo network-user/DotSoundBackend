@@ -376,6 +376,66 @@ async def test_non_admin_context_rejected(
     assert r.status_code == 401
 
 
+async def test_non_admin_batch_prompt_rejected(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 140016)
+    headers = await auth_headers(client, user["id"])
+
+    r = await client.post(
+        f"{_BASE}/context/batch-prompt",
+        json={"track_ids": [1]},
+        headers=headers,
+    )
+    assert r.status_code == 401
+
+
+async def test_non_admin_batch_import_rejected(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 140017)
+    headers = await auth_headers(client, user["id"])
+
+    r = await client.post(
+        f"{_BASE}/context/batch-import",
+        json={"raw_response": '{"tracks":[]}'},
+        headers=headers,
+    )
+    assert r.status_code == 401
+
+
+async def test_set_context_track_not_found(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 140018)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=user["id"]
+    )
+
+    r = await client.patch(
+        f"{_BASE}/99999/context",
+        json={"content": "Some content"},
+        headers=headers,
+    )
+    assert r.status_code == 404
+
+
+async def test_clear_context_track_not_found(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 140019)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=user["id"]
+    )
+
+    r = await client.delete(
+        f"{_BASE}/99999/context", headers=headers
+    )
+    assert r.status_code == 404
+
+
 # helpers
 
 async def _set_artist(

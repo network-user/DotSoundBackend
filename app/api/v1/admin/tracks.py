@@ -302,7 +302,13 @@ async def admin_set_track_context(
     _admin: User = Depends(require_admin_session),
 ) -> TrackContextResponse:
     svc = AdminTrackContextService(session)
-    row = await svc.set_context(track_id, data.content)
+    try:
+        row = await svc.set_context(track_id, data.content)
+    except TrackNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
     logger.info("admin_track_context_set", track_id=track_id)
     return TrackContextResponse.model_validate(row)
 
@@ -320,7 +326,13 @@ async def admin_clear_track_context(
     _admin: User = Depends(require_admin_session),
 ) -> TrackContextResponse:
     svc = AdminTrackContextService(session)
-    row = await svc.clear_context(track_id)
+    try:
+        row = await svc.clear_context(track_id)
+    except TrackNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
     logger.info("admin_track_context_cleared", track_id=track_id)
     return TrackContextResponse.model_validate(row)
 
