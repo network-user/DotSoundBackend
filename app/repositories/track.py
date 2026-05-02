@@ -319,6 +319,22 @@ class TrackRepository(BaseRepository[Track]):
         await self._session.flush()
         return result.scalar_one_or_none()
 
+    async def update_sc_url(
+        self,
+        track_id: int,
+        sc_url: str,
+        external_id: str | None = None,
+    ) -> None:
+        values: dict[str, object] = {"sc_url": sc_url}
+        if external_id is not None:
+            values["external_id"] = external_id
+        await self._session.execute(
+            update(Track)
+            .where(Track.id == track_id)
+            .values(**values)
+        )
+        await self._session.flush()
+
     async def get_active_by_uploader_and_blob_id(
         self,
         user_id: int,
