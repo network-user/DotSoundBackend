@@ -36,20 +36,20 @@
 - [x] **Снапшот за прошлый месяц** — Taskiq задача
   `snapshot_monthly_artist_stats_task` (запускается вручную или
   через внешний cron `0 2 1 * *`). `ArtistStatsService.snapshot_all_artists`.
-- `[ ]` **Cron-расписание снапшота** — настроить внешний cron (Docker / systemd)
-  или TaskiqScheduler на `0 2 1 * *` (1-е число каждого месяца, 02:00 UTC)
-  для запуска `snapshot_monthly_artist_stats_task`.
-- `[ ]` **Расширить `artist_monthly_stats`** — добавить колонки
-  `total_plays`, `total_likes`, `total_followers` для отображения
-  в графиках по месяцам (потребует миграции и обновления
-  `ArtistStatsRepository.upsert_snapshot` + `snapshot_all_artists`).
-- `[ ]` **Frontend: карточка артиста** — отображать `follower_count`
-  и `monthly_listeners` в `ArtistView`; кнопка «Подписаться» с toggle.
-- `[ ]` **Frontend: графики статистики** — страница `/artist/:id/stats`
-  с recharts-графиком `unique_listeners` по месяцам из
-  `GET /artists/{id}/stats/listeners` (history).
-- `[ ]` **Бот: плеер — источник «Подписки»** — добавить источник
-  `artist_follows` в inline-плеер бота (сейчас: Мои / Лайки / Лента).
+- [x] **Cron-расписание снапшота** — миграция `0069` seed'ит запись
+  в `scheduled_jobs` с cron `0 2 1 * *` (TaskiqScheduler / scheduler_service).
+- [x] **Расширить `artist_monthly_stats`** — миграция `0070`,
+  колонки `total_plays`, `total_likes`, `total_followers`;
+  `ArtistStatsRepository` + `ArtistStatsService` + схема + frontend types.
+  Chart в ArtistView показывает данные в tooltip.
+- [x] **Frontend: карточка артиста** — `follower_count`, `monthly_listeners`
+  и кнопка «Подписаться» уже реализованы в ArtistView (2026-04-30).
+- `[ ]` **Frontend: отдельная страница статистики** — `/artist/:id/stats`
+  с полноценными recharts-графиками (total_plays, total_likes, total_followers
+  по месяцам). Базовый bar-chart unique_listeners уже есть в ArtistView.
+- [x] **Бот: плеер — источник «Подписки»** — источник `follows` добавлен
+  в inline-плеер; `GET /users/me/followed-artists/tracks` (backend),
+  `get_followed_artists_tracks` (bot client), кнопка «🔔 Подписки» в меню.
 
 ## Соответствие 152-ФЗ / ПДн (backlog, продукт + инженерия)
 
@@ -101,14 +101,11 @@ time-bound CDN URL directly; avoids 403) — 2026-04
 `speechkit_disabled`); `lyrics_jobs.request_with_sync` /
 `request_bypass_cache` for fallback dispatch; log
 `audio_compute_worker_fail` — 2026-04
-- `[~]` **Taskiq/cron:** раз в месяц обход релизов каталога с
-`release_kind = dotsound_sc_artist_station` (SoundCloud artist
-station / «Похожее»), у которых `synced_at` старше порога —
-повторный `ArtistCatalogSyncService.sync_artist_similar_station`,
-батчинг и `soundcloud_slot` для лимитов API.
-`sync_artist_similar_station_task` добавлен (2026-05-01);
-on-follow/onboarding триггер реализован в `ArtistFollowService`.
-Остаётся: scheduled weekly batch-обход всех stale-станций.
+- [x] **Taskiq/cron: weekly batch stale station sweep (2026-05-02)** —
+`ArtistCatalogRepository.find_stale_station_artist_ids(threshold_days)`;
+`sync_stale_stations_batch_task` в `artist_catalog_sync_worker`
+(enqueue per-artist `sync_artist_similar_station_task`);
+миграция `0069` seed'ит `scheduled_jobs` с cron `0 3 * * 1` (Пн 03:00 UTC).
 - **Полное копирование аудиофайлов (MinIO) на удалённый backup-VPS**
   - Подключение к отдельному серверу по SSH
   - `mc mirror` MinIO -> remote, инкрементально

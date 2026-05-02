@@ -420,6 +420,32 @@ async def get_my_library(
 
 
 @router.get(
+    "/me/followed-artists/tracks",
+    response_model=TrackListResponse,
+    summary="Tracks from artists the current user follows",
+)
+@limiter.limit("60/minute")
+async def get_followed_artists_tracks(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    playable_only: bool = Query(False),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TrackListResponse:
+    structlog.contextvars.bind_contextvars(user_id=current_user.id)
+    service = TrackService(session)
+    tracks, total = await service.list_by_followed_artists(
+        user_id=current_user.id,
+        page=page,
+        size=size,
+        playable_only=playable_only,
+    )
+    items = await dedupe_and_build_track_list(session, tracks)
+    return TrackListResponse(items=items, total=total, page=page, size=size)
+
+
+@router.get(
     "/{user_id}/tracks",
     response_model=TrackListResponse,
     summary="Get public tracks uploaded by a user",

@@ -43,6 +43,9 @@ class ArtistStatsService:
                 year=r.year,
                 month=r.month,
                 unique_listeners=r.unique_listeners,
+                total_plays=r.total_plays,
+                total_likes=r.total_likes,
+                total_followers=r.total_followers,
             )
             for r in rows
         ]
@@ -56,13 +59,28 @@ class ArtistStatsService:
         self, artist_id: int
     ) -> int:
         year, month = self._prev_ym()
-        count = await self._repo.count_active_listeners(
+        unique_listeners = await self._repo.count_active_listeners(
             artist_id, year, month
         )
-        await self._repo.upsert_snapshot(
-            artist_id, year, month, count
+        total_plays = await self._repo.count_total_plays(
+            artist_id, year, month
         )
-        return count
+        total_likes = await self._repo.count_total_likes(
+            artist_id, year, month
+        )
+        total_followers = await self._repo.count_total_followers(
+            artist_id
+        )
+        await self._repo.upsert_snapshot(
+            artist_id,
+            year,
+            month,
+            unique_listeners,
+            total_plays=total_plays,
+            total_likes=total_likes,
+            total_followers=total_followers,
+        )
+        return unique_listeners
 
     async def snapshot_all_artists(self) -> int:
         ids = await self._repo.list_all_artist_ids()
@@ -70,13 +88,28 @@ class ArtistStatsService:
         saved = 0
         for artist_id in ids:
             try:
-                count = (
+                unique_listeners = (
                     await self._repo.count_active_listeners(
                         artist_id, year, month
                     )
                 )
+                total_plays = await self._repo.count_total_plays(
+                    artist_id, year, month
+                )
+                total_likes = await self._repo.count_total_likes(
+                    artist_id, year, month
+                )
+                total_followers = (
+                    await self._repo.count_total_followers(artist_id)
+                )
                 await self._repo.upsert_snapshot(
-                    artist_id, year, month, count
+                    artist_id,
+                    year,
+                    month,
+                    unique_listeners,
+                    total_plays=total_plays,
+                    total_likes=total_likes,
+                    total_followers=total_followers,
                 )
                 saved += 1
             except Exception:

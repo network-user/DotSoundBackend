@@ -297,6 +297,23 @@ export const api = {
     )
   },
 
+  getFollowedArtistsTracks(
+    page = 1,
+    size = 20,
+    playableOnly = false,
+  ): Promise<TrackListResponse> {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    })
+    if (playableOnly) {
+      params.set('playable_only', 'true')
+    }
+    return request(
+      `/api/v1/users/me/followed-artists/tracks?${params.toString()}`,
+    )
+  },
+
   getListenHistory(
     limit: number = 50,
   ): Promise<TrackListResponse> {

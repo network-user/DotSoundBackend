@@ -178,6 +178,27 @@ class TrackService:
             playable_only=playable_only,
         )
 
+    async def list_by_followed_artists(
+        self,
+        user_id: int,
+        page: int = 1,
+        size: int = 20,
+        playable_only: bool = False,
+    ) -> tuple[list[Track], int]:
+        from app.repositories.artist_follow import ArtistFollowRepository
+
+        follow_repo = ArtistFollowRepository(self._session)
+        artist_ids = await follow_repo.list_followed_artist_ids(user_id)
+        if not artist_ids:
+            return [], 0
+        offset = (page - 1) * size
+        return await self._repo.list_by_artist_ids(
+            artist_ids=artist_ids,
+            offset=offset,
+            limit=size,
+            playable_only=playable_only,
+        )
+
     async def update_visibility(
         self, track_id: int, user_id: int, is_public: bool
     ) -> Track | None:

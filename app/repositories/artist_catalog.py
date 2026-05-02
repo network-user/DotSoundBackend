@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import and_, delete, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -285,6 +285,24 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
                 TrackArtist.artist_id.not_in(
                     artist_ids
                 ),
+            )
+        )
+        rows = await self._session.execute(stmt)
+        return [r for (r,) in rows.all()]
+
+    async def find_stale_station_artist_ids(
+        self,
+        threshold_days: int,
+    ) -> list[int]:
+        """Artist IDs whose station release is stale or has never been synced."""
+        cutoff = datetime.now(UTC) - timedelta(days=threshold_days)
+        stmt = (
+            select(distinct(ArtistCatalogRelease.artist_id))
+            .where(
+                ArtistCatalogRelease.release_kind
+                == _ARTIST_STATION_KIND,
+                (ArtistCatalogRelease.synced_at.is_(None))
+                | (ArtistCatalogRelease.synced_at < cutoff),
             )
         )
         rows = await self._session.execute(stmt)
