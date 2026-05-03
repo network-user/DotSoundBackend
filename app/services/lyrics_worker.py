@@ -1149,6 +1149,10 @@ async def _generate_lyrics_task_impl(
                 finally:
                     _stop_evt.set()
                     _hb_task.cancel()
+                    try:
+                        await _hb_task
+                    except asyncio.CancelledError:
+                        pass
 
                 if current_result is not None:
                     gen_result = current_result

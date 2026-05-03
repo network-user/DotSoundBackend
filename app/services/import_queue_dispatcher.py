@@ -28,6 +28,11 @@ from app.core.tkq import broker
 from app.models.import_job import ImportJob
 from app.services.import_service import EXTERNAL_IMPORT_SOURCES
 
+
+def _supports_skip_locked(session: AsyncSession) -> bool:
+    bind = session.get_bind()
+    return getattr(bind.dialect, "name", "") == "postgresql"
+
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _WORKER_BG_TASK_STOP_TIMEOUT: float = 15.0
@@ -86,12 +91,15 @@ async def dispatch_once() -> int:
         if slots == 0:
             return 0
 
-        candidates_result = await session.execute(
+        candidates_stmt = (
             select(ImportJob)
             .where(ImportJob.status == "queued")
             .order_by(ImportJob.created_at.asc())
             .limit(slots * 4)
         )
+        if _supports_skip_locked(session):
+            candidates_stmt = candidates_stmt.with_for_update(skip_locked=True)
+        candidates_result = await session.execute(candidates_stmt)
         candidates = list(candidates_result.scalars().all())
         if not candidates:
             return 0
@@ -120,9 +128,15 @@ async def dispatch_once() -> int:
                     source=job.source,
                 )
             except Exception as exc:  # noqa: BLE001
-                await session.refresh(job)
-                job.status = "queued"
-                await session.commit()
+                try:
+                    await session.refresh(job)
+                    job.status = "queued"
+                    await session.commit()
+                except Exception:
+                    logger.error(
+                        "import_dispatcher_rollback_failed",
+                        job_id=job.id,
+                    )
                 logger.error(
                     "import_dispatcher_kiq_failed",
                     job_id=job.id,
