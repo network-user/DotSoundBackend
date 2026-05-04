@@ -68,6 +68,11 @@ interface Props {
   onOpenArtist?: (name: string) => void
 }
 
+type ShareEntityType =
+  | 'track'
+  | 'album'
+  | 'playlist'
+
 const GENERATE_COOLDOWN_MS = 20_000
 
 function fmt(sec: number) {
@@ -162,6 +167,11 @@ export function TrackCardSheet({
   const [shareLoading, setShareLoading] = useState(false)
   const [shareSendingConvId, setShareSendingConvId] = useState<number | null>(null)
   const [shareError, setShareError] = useState<string | null>(null)
+  const [sharePayload, setSharePayload] = useState<{
+    id: number
+    type: ShareEntityType
+    title: string
+  } | null>(null)
   const [videoReady, setVideoReady] =
     useState(false)
   const videoEnabled =
@@ -373,7 +383,12 @@ export function TrackCardSheet({
     return `Чат #${item.conversation.id}`
   }, [])
 
-  const openShareModal = useCallback(async () => {
+  const openShareModal = useCallback(async (payload: {
+    id: number
+    type: ShareEntityType
+    title: string
+  }) => {
+    setSharePayload(payload)
     setShareOpen(true)
     setShareLoading(true)
     setShareError(null)
@@ -388,18 +403,31 @@ export function TrackCardSheet({
   }, [])
 
   const handleShareToChat = useCallback(async (conversationId: number) => {
-    if (!track) return
+    if (!sharePayload) return
     setShareSendingConvId(conversationId)
     setShareError(null)
+    const msgTypeMap: Record<ShareEntityType, string> = {
+      track: 'track_share',
+      album: 'album_share',
+      playlist: 'playlist_share',
+    }
+    const opts: {
+      type: string
+      shared_track_id?: number
+      shared_album_id?: number
+      shared_playlist_id?: number
+    } = {
+      type: msgTypeMap[sharePayload.type],
+    }
+    if (sharePayload.type === 'track') {
+      opts.shared_track_id = sharePayload.id
+    } else if (sharePayload.type === 'album') {
+      opts.shared_album_id = sharePayload.id
+    } else {
+      opts.shared_playlist_id = sharePayload.id
+    }
     try {
-      await api.sendMessage(
-        conversationId,
-        '',
-        {
-          type: 'track_share',
-          shared_track_id: track.id,
-        },
-      )
+      await api.sendMessage(conversationId, '', opts)
       setShareOpen(false)
       toast.success('Трек отправлен')
     } catch {
@@ -407,7 +435,7 @@ export function TrackCardSheet({
     } finally {
       setShareSendingConvId(null)
     }
-  }, [track, toast])
+  }, [sharePayload, toast])
 
   const handleAuthor = () => {
     if (track?.artist && onOpenArtist) {
@@ -836,7 +864,11 @@ export function TrackCardSheet({
               <button
                 className="icon-btn"
                 onClick={() => {
-                  void openShareModal()
+                  void openShareModal({
+                    id: track.id,
+                    type: 'track',
+                    title: track.title || 'track',
+                  })
                 }}
               >
                 <Icon name="share" size={18} />
@@ -851,7 +883,11 @@ export function TrackCardSheet({
                 <button
                   className="icon-btn"
                   onClick={() => {
-                    void openShareModal()
+                    void openShareModal({
+                      id: track.id,
+                      type: 'track',
+                      title: track.title || 'track',
+                    })
                   }}
                 >
                   <Icon
@@ -886,6 +922,27 @@ export function TrackCardSheet({
               'external_reference' &&
               t('trackSheet.catRef')}
           </p>
+          {card?.album && (
+            <div className="tcs-share-related-row">
+              <span className="tcs-share-related-title">
+                Альбом: {card.album.title}
+              </span>
+              <button
+                type="button"
+                className="tcs-share-related-btn"
+                onClick={() => {
+                  void openShareModal({
+                    id: card.album!.id,
+                    type: 'album',
+                    title: card.album!.title,
+                  })
+                }}
+              >
+                <Icon name="share" size={14} />
+                Поделиться
+              </button>
+            </div>
+          )}
           {card?.author && (
             <div
               className="tcs-author-row"
@@ -1621,9 +1678,15 @@ export function TrackCardSheet({
             <div className="share-modal scale-in">
               <div className="share-modal-header">
                 <div className="share-modal-title-wrap">
-                  <h3 className="share-modal-title">Поделиться треком</h3>
+                  <h3 className="share-modal-title">
+                    {sharePayload?.type === 'album'
+                      ? 'Поделиться альбомом'
+                      : sharePayload?.type === 'playlist'
+                        ? 'Поделиться плейлистом'
+                        : 'Поделиться треком'}
+                  </h3>
                   <p className="share-modal-subtitle">
-                    Выберите чат для отправки
+                    {sharePayload?.title || 'Выберите чат для отправки'}
                   </p>
                 </div>
                 <button

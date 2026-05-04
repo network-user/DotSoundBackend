@@ -1009,3 +1009,5 @@ ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyr
 ## Chats / Track Share (2026-05-04)
 
 - [x] Share track to chat — modal picker in TrackCardSheet, send via pi.sendMessage(..., { type: 'track_share', shared_track_id }), and shared-track bubble with Play in ChatBubble.
+
+- [x] Chat share: albums and playlists (shared_album_id, shared_playlist_id) + updated Home track/artist card styling for .sound consistency (2026-05-04).

@@ -21,6 +21,8 @@ class SendMessageRequest(BaseModel):
     type: str = "text"
     reply_to_id: int | None = None
     shared_track_id: int | None = None
+    shared_album_id: int | None = None
+    shared_playlist_id: int | None = None
 
 
 class ReactionRequest(BaseModel):

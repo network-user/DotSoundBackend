@@ -4,24 +4,36 @@ import {
   getUserId,
   setBackButton,
 } from '@/lib/telegram'
-import type { Playlist, PlaylistWithTracks } from '@/types/api'
+import type {
+  ChatListItem,
+  Playlist,
+  PlaylistWithTracks,
+} from '@/types/api'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { Icon } from '@/components/Icon/Icon'
 
 interface PlaylistsViewProps {
-  /** Вложено в Library — компактный заголовок */
   embedded?: boolean
 }
 
 type Screen = 'list' | 'detail'
 
-export function PlaylistsView({ embedded = false }: PlaylistsViewProps) {
+export function PlaylistsView({
+  embedded = false,
+}: PlaylistsViewProps) {
   const [screen, setScreen] = useState<Screen>('list')
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null)
-  const [selected, setSelected] = useState<PlaylistWithTracks | null>(null)
+  const [selected, setSelected] =
+    useState<PlaylistWithTracks | null>(null)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareChats, setShareChats] = useState<ChatListItem[]>([])
+  const [shareLoading, setShareLoading] = useState(false)
+  const [shareSendingConvId, setShareSendingConvId] =
+    useState<number | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
 
   const loadPlaylists = () => {
     const uid = getUserId()
@@ -45,6 +57,7 @@ export function PlaylistsView({ embedded = false }: PlaylistsViewProps) {
     return setBackButton(true, () => {
       setScreen('list')
       setSelected(null)
+      setShareOpen(false)
     })
   }, [screen])
 
@@ -53,7 +66,7 @@ export function PlaylistsView({ embedded = false }: PlaylistsViewProps) {
       const detail = await api.getPlaylist(p.id)
       setSelected(detail)
       setScreen('detail')
-    } catch { /* ignore */ }
+    } catch {}
   }
 
   const handleCreate = async () => {
@@ -65,34 +78,182 @@ export function PlaylistsView({ embedded = false }: PlaylistsViewProps) {
       setNewName('')
       setCreating(false)
       loadPlaylists()
-    } catch { /* ignore */ } finally {
+    } finally {
       setLoading(false)
+    }
+  }
+
+  const formatShareChatTitle = (
+    item: ChatListItem,
+  ): string => {
+    if (item.conversation.type === 'saved') {
+      return 'Избранное'
+    }
+    if (item.conversation.title?.trim()) {
+      return item.conversation.title.trim()
+    }
+    const peer = item.peer
+    const name = peer?.display_name || [
+      peer?.first_name,
+      peer?.last_name,
+    ]
+      .filter(Boolean)
+      .join(' ')
+    if (name && name.trim()) return name.trim()
+    if (peer?.username) return `@${peer.username}`
+    return `Чат #${item.conversation.id}`
+  }
+
+  const openShareModal = async () => {
+    if (!selected) return
+    setShareOpen(true)
+    setShareLoading(true)
+    setShareError(null)
+    try {
+      const chats = await api.listChats()
+      setShareChats(chats)
+    } catch {
+      setShareError('Не удалось загрузить чаты')
+    } finally {
+      setShareLoading(false)
+    }
+  }
+
+  const handleShareToChat = async (
+    conversationId: number,
+  ) => {
+    if (!selected) return
+    setShareSendingConvId(conversationId)
+    setShareError(null)
+    try {
+      await api.sendMessage(
+        conversationId,
+        '',
+        {
+          type: 'playlist_share',
+          shared_playlist_id: selected.id,
+        },
+      )
+      setShareOpen(false)
+    } catch {
+      setShareError('Не удалось отправить')
+    } finally {
+      setShareSendingConvId(null)
     }
   }
 
   if (screen === 'detail' && selected) {
     return (
-      <section
-        id="view-playlists"
-        className="view active"
-      >
+      <section id="view-playlists" className="view active">
         <div className="view-header view-header-detail">
           <button
             className="icon-btn back-btn"
-            onClick={() => { setScreen('list'); setSelected(null) }}
+            onClick={() => {
+              setScreen('list')
+              setSelected(null)
+              setShareOpen(false)
+            }}
             aria-label="Назад"
           >
             <Icon name="chevron" size={20} className="back-chevron" />
           </button>
           <div>
             <h2 className="view-detail-title">{selected.name}</h2>
-            <span className="hint">{selected.tracks.length} треков</span>
+            <span className="hint">
+              {selected.tracks.length} треков
+            </span>
           </div>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => {
+              void openShareModal()
+            }}
+            aria-label="Поделиться"
+          >
+            <Icon name="share" size={18} />
+          </button>
         </div>
+
         <TrackList
           tracks={selected.tracks}
           emptyMessage="В этом плейлисте пока нет треков"
         />
+
+        {shareOpen && (
+          <div
+            className="share-modal-overlay fade-in"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShareOpen(false)
+              }
+            }}
+          >
+            <div className="share-modal scale-in">
+              <div className="share-modal-header">
+                <div className="share-modal-title-wrap">
+                  <h3 className="share-modal-title">Поделиться плейлистом</h3>
+                  <p className="share-modal-subtitle">{selected.name}</p>
+                </div>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => setShareOpen(false)}
+                  aria-label="Закрыть"
+                >
+                  <Icon name="x" size={18} />
+                </button>
+              </div>
+              {shareLoading ? (
+                <div className="share-modal-loading">
+                  <div className="loader" />
+                </div>
+              ) : (
+                <div className="share-chat-list">
+                  {shareChats.map((item) => {
+                    const convId = item.conversation.id
+                    const sending = shareSendingConvId === convId
+                    return (
+                      <button
+                        key={convId}
+                        type="button"
+                        className="share-chat-row"
+                        onClick={() => {
+                          void handleShareToChat(convId)
+                        }}
+                        disabled={shareSendingConvId !== null}
+                      >
+                        <span className="share-chat-icon">
+                          <Icon
+                            name={
+                              item.conversation.type === 'group'
+                                ? 'users-following'
+                                : item.conversation.type === 'saved'
+                                  ? 'heart'
+                                  : 'user'
+                            }
+                            size={16}
+                          />
+                        </span>
+                        <span className="share-chat-meta">
+                          <span className="share-chat-title">
+                            {formatShareChatTitle(item)}
+                          </span>
+                        </span>
+                        <span className="share-chat-action">
+                          {sending ? 'Отправка…' : 'Отправить'}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {shareError && (
+                <div className="share-modal-error">{shareError}</div>
+              )}
+            </div>
+          </div>
+        )}
       </section>
     )
   }
@@ -132,7 +293,10 @@ export function PlaylistsView({ embedded = false }: PlaylistsViewProps) {
             <button
               className="btn-secondary"
               style={{ flex: 1 }}
-              onClick={() => { setCreating(false); setNewName('') }}
+              onClick={() => {
+                setCreating(false)
+                setNewName('')
+              }}
             >
               Отмена
             </button>
@@ -164,7 +328,9 @@ export function PlaylistsView({ embedded = false }: PlaylistsViewProps) {
             <div
               key={p.id}
               className="playlist-card"
-              onClick={() => openPlaylist(p)}
+              onClick={() => {
+                void openPlaylist(p)
+              }}
             >
               <div className="playlist-cover">
                 <Icon name="list" size={20} />

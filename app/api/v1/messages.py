@@ -118,6 +118,8 @@ async def send_message(
         body.type,
         body.reply_to_id,
         body.shared_track_id,
+        body.shared_album_id,
+        body.shared_playlist_id,
     )
 
 

@@ -3,7 +3,12 @@ import { Icon } from '@/components/Icon/Icon'
 import { VoicePlayer } from '@/components/Chat/VoicePlayer'
 import { api } from '@/lib/api'
 import { usePlayerActions } from '@/store/PlayerContext'
-import type { ChatMessage, Track } from '@/types/api'
+import type {
+  AlbumWithTracksRecord,
+  ChatMessage,
+  PlaylistWithTracks,
+  Track,
+} from '@/types/api'
 
 interface Props {
   message: ChatMessage & {
@@ -25,6 +30,10 @@ const REACTIONS = [
   'sparkle',
 ]
 const SHARED_TRACK_CACHE = new Map<number, Track>()
+const SHARED_ALBUM_CACHE =
+  new Map<number, AlbumWithTracksRecord>()
+const SHARED_PLAYLIST_CACHE =
+  new Map<number, PlaylistWithTracks>()
 
 export function ChatBubble({
   message,
@@ -40,6 +49,14 @@ export function ChatBubble({
   const [imgLoaded, setImgLoaded] = useState(false)
   const [sharedTrack, setSharedTrack] = useState<Track | null>(null)
   const [sharedTrackLoading, setSharedTrackLoading] = useState(false)
+  const [sharedAlbum, setSharedAlbum] =
+    useState<AlbumWithTracksRecord | null>(null)
+  const [sharedAlbumLoading, setSharedAlbumLoading] =
+    useState(false)
+  const [sharedPlaylist, setSharedPlaylist] =
+    useState<PlaylistWithTracks | null>(null)
+  const [sharedPlaylistLoading, setSharedPlaylistLoading] =
+    useState(false)
   const { playTrack } = usePlayerActions()
 
   const photoAtt = message.attachments?.find(
@@ -110,6 +127,74 @@ export function ChatBubble({
       cancelled = true
     }
   }, [message.shared_track_id])
+
+  useEffect(() => {
+    const sharedAlbumId = message.shared_album_id
+    if (!sharedAlbumId) {
+      setSharedAlbum(null)
+      setSharedAlbumLoading(false)
+      return
+    }
+    const cached = SHARED_ALBUM_CACHE.get(sharedAlbumId)
+    if (cached) {
+      setSharedAlbum(cached)
+      return
+    }
+    let cancelled = false
+    setSharedAlbumLoading(true)
+    api.getAlbum(sharedAlbumId)
+      .then((album) => {
+        if (cancelled) return
+        SHARED_ALBUM_CACHE.set(sharedAlbumId, album)
+        setSharedAlbum(album)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setSharedAlbum(null)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSharedAlbumLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [message.shared_album_id])
+
+  useEffect(() => {
+    const sharedPlaylistId = message.shared_playlist_id
+    if (!sharedPlaylistId) {
+      setSharedPlaylist(null)
+      setSharedPlaylistLoading(false)
+      return
+    }
+    const cached = SHARED_PLAYLIST_CACHE.get(sharedPlaylistId)
+    if (cached) {
+      setSharedPlaylist(cached)
+      return
+    }
+    let cancelled = false
+    setSharedPlaylistLoading(true)
+    api.getPlaylist(sharedPlaylistId)
+      .then((playlist) => {
+        if (cancelled) return
+        SHARED_PLAYLIST_CACHE.set(sharedPlaylistId, playlist)
+        setSharedPlaylist(playlist)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setSharedPlaylist(null)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSharedPlaylistLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [message.shared_playlist_id])
 
   if (isSystem) {
     return (
@@ -236,6 +321,99 @@ export function ChatBubble({
                 {sharedTrackLoading
                   ? 'Загрузка трека…'
                   : `Трек #${message.shared_track_id}`}
+              </div>
+            )}
+          </div>
+        )}
+
+        {message.shared_album_id && (
+          <div className="bubble-track-share slide-in">
+            {sharedAlbum ? (
+              <div className="bubble-track-share-card">
+                <div className="bubble-track-cover-wrap">
+                  {sharedAlbum.cover_key ? (
+                    <img
+                      src={`/api/v1/tracks/cover_proxy?key=${encodeURIComponent(sharedAlbum.cover_key)}`}
+                      alt=""
+                      className="bubble-track-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="bubble-track-cover-placeholder">
+                      <Icon name="list" size={18} />
+                    </span>
+                  )}
+                </div>
+                <div className="bubble-track-main">
+                  <span className="bubble-track-label">Альбом</span>
+                  <span className="bubble-track-title">
+                    {sharedAlbum.title}
+                  </span>
+                  <span className="bubble-track-artist">
+                    {sharedAlbum.tracks.length} треков
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="bubble-track-play"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (sharedAlbum.tracks[0]) {
+                      void playTrack(sharedAlbum.tracks[0])
+                    }
+                  }}
+                >
+                  <Icon name="play" size={14} />
+                  Play
+                </button>
+              </div>
+            ) : (
+              <div className="bubble-track-share-fallback">
+                {sharedAlbumLoading
+                  ? 'Загрузка альбома…'
+                  : `Альбом #${message.shared_album_id}`}
+              </div>
+            )}
+          </div>
+        )}
+
+        {message.shared_playlist_id && (
+          <div className="bubble-track-share slide-in">
+            {sharedPlaylist ? (
+              <div className="bubble-track-share-card">
+                <div className="bubble-track-cover-wrap">
+                  <span className="bubble-track-cover-placeholder">
+                    <Icon name="list" size={18} />
+                  </span>
+                </div>
+                <div className="bubble-track-main">
+                  <span className="bubble-track-label">Плейлист</span>
+                  <span className="bubble-track-title">
+                    {sharedPlaylist.name}
+                  </span>
+                  <span className="bubble-track-artist">
+                    {sharedPlaylist.tracks.length} треков
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="bubble-track-play"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (sharedPlaylist.tracks[0]) {
+                      void playTrack(sharedPlaylist.tracks[0])
+                    }
+                  }}
+                >
+                  <Icon name="play" size={14} />
+                  Play
+                </button>
+              </div>
+            ) : (
+              <div className="bubble-track-share-fallback">
+                {sharedPlaylistLoading
+                  ? 'Загрузка плейлиста…'
+                  : `Плейлист #${message.shared_playlist_id}`}
               </div>
             )}
           </div>
