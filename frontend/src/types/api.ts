@@ -702,6 +702,25 @@ export interface ImportJobResponse {
   queue_position?: number | null
 }
 
+export interface FollowedArtistItem {
+  id: number
+  name: string
+  image_key: string | null
+  source: string
+  bio: string | null
+  track_count: number
+}
+
+export interface GenreMixItem {
+  genre: string
+  title: string
+  tracks: Track[]
+}
+
+export interface GenreMixesResponse {
+  mixes: GenreMixItem[]
+}
+
 export type OAuthLinkedProvider = 'spotify' | 'soundcloud' | 'vk'
 
 export interface LinkedAccountInfo {

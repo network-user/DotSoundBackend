@@ -1687,10 +1687,6 @@ export const api = {
     return request('/api/v1/recommendations/daily-playlist/refresh', { method: 'POST' })
   },
 
-  getRadio(seedTrackId: number, queueSize?: number): Promise<{ seed_type: string; seed_id: string; tracks: Track[] }> {
-    const qs = queueSize ? `&queue_size=${queueSize}` : ''
-    return request(`/api/v1/recommendations/radio?seed_track_id=${seedTrackId}${qs}`)
-  },
 
   // ── Artists ─────────────────────────────────────
 
@@ -1972,5 +1968,29 @@ export const api = {
     limit = 10,
   ): Promise<ArtistListPayload> {
     return request(`/api/v1/artists/${artistId}/similar?limit=${limit}`)
+  },
+
+  getFollowedArtistsList(
+    limit = 50,
+  ): Promise<{ items: import('@/types/api').FollowedArtistItem[]; total: number }> {
+    return request(`/api/v1/artists/followed?limit=${limit}`)
+  },
+
+  getGenreMixes(): Promise<{ mixes: import('@/types/api').GenreMixItem[] }> {
+    return request('/api/v1/recommendations/genre-mixes')
+  },
+
+  getRadio(
+    seedTrackId: number,
+    queueSize?: number,
+    excludeIds?: number[],
+  ): Promise<{ seed_type: string; seed_id: string; tracks: Track[] }> {
+    const qs = new URLSearchParams()
+    qs.set('seed_track_id', String(seedTrackId))
+    if (queueSize) qs.set('queue_size', String(queueSize))
+    if (excludeIds && excludeIds.length > 0) {
+      qs.set('exclude_ids', excludeIds.join(','))
+    }
+    return request(`/api/v1/recommendations/radio?${qs}`)
   },
 }

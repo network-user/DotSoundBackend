@@ -114,6 +114,7 @@ const DailyMixView = lazy(() => import('@/views/DailyMixView').then(m => ({ defa
 const WeeklyMixView = lazy(() => import('@/views/WeeklyMixView').then(m => ({ default: m.WeeklyMixView })))
 const UserChoiceView = lazy(() => import('@/views/UserChoiceView').then(m => ({ default: m.UserChoiceView })))
 const RadioView = lazy(() => import('@/views/RadioView').then(m => ({ default: m.RadioView })))
+const GenreMixView = lazy(() => import('@/views/GenreMixView').then(m => ({ default: m.GenreMixView })))
 const AdminApp = lazy(() =>
   import('@/admin/AdminApp').then((m) => ({
     default: m.AdminApp,
@@ -517,6 +518,7 @@ export function App() {
             element={<UserChoiceView />}
           />
           <Route path="/radio" element={<RadioView />} />
+          <Route path="/genre-mix/:genre" element={<GenreMixView />} />
           <Route path="/admin/*" element={<AdminApp />} />
           <Route path="*" element={<NotFoundView />} />
         </AnimatedRoutes>

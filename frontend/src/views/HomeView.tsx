@@ -1,14 +1,21 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/components/ui/Toast'
-import { TrackList } from '@/components/TrackList/TrackList'
-import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { Icon } from '@/components/Icon/Icon'
+import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { api, getApiErrorMessage } from '@/lib/api'
-import { firstTrackFromDailyPlaylist } from '@/lib/playlistFirstTrack'
+import { getInternalUserId } from '@/lib/telegram'
 import { usePlayerActions } from '@/store/PlayerContext'
-import type { Track } from '@/types/api'
+import type {
+  FollowedArtistItem,
+  GenreMixItem,
+  Track,
+  UserResponse,
+} from '@/types/api'
 
 interface HomeSection {
   title: string
@@ -16,186 +23,480 @@ interface HomeSection {
   tracks: Track[]
 }
 
+function timeGreeting(): string {
+  const h = new Date().getHours()
+  if (h < 6) return 'Доброй ночи'
+  if (h < 12) return 'Доброе утро'
+  if (h < 18) return 'Добрый день'
+  return 'Добрый вечер'
+}
+
+function coverUrl(key: string | null): string | null {
+  if (!key) return null
+  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+}
+
+interface TrackTileProps {
+  track: Track
+  onPlay: (t: Track) => void
+}
+
+function TrackTile({ track, onPlay }: TrackTileProps) {
+  const src = coverUrl(track.cover_key)
+  return (
+    <button
+      type="button"
+      className="home-track-tile"
+      onClick={() => onPlay(track)}
+      title={[track.title, track.artist].filter(Boolean).join(' — ')}
+    >
+      <div className="home-track-tile__cover">
+        {src ? (
+          <img
+            src={src}
+            alt=""
+            width={112}
+            height={112}
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <div className="home-track-tile__cover-placeholder">
+            <Icon name="music" size={28} />
+          </div>
+        )}
+      </div>
+      <div className="home-track-tile__title">
+        {track.title || 'Без названия'}
+      </div>
+      {track.artist && (
+        <div className="home-track-tile__artist">
+          {track.artist}
+        </div>
+      )}
+    </button>
+  )
+}
+
+interface SectionProps {
+  title: string
+  onMore?: () => void
+  tracks: Track[]
+  onPlay: (t: Track) => void
+}
+
+function TrackCarouselSection({
+  title,
+  onMore,
+  tracks,
+  onPlay,
+}: SectionProps) {
+  if (!tracks.length) return null
+  return (
+    <div>
+      <div className="home-section-header">
+        <span className="home-section-header__title">{title}</span>
+        {onMore && (
+          <button
+            type="button"
+            className="home-section-header__link"
+            onClick={onMore}
+          >
+            Все
+          </button>
+        )}
+      </div>
+      <div className="home-carousel">
+        {tracks.map((t) => (
+          <TrackTile key={t.id} track={t} onPlay={onPlay} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+interface GenreCardProps {
+  mix: GenreMixItem
+  onPlay: (tracks: Track[]) => void
+  onOpen: () => void
+}
+
+function GenreMixCard({ mix, onPlay, onOpen }: GenreCardProps) {
+  const covers = mix.tracks
+    .slice(0, 4)
+    .map((t) => coverUrl(t.cover_key))
+    .filter(Boolean) as string[]
+
+  return (
+    <button
+      type="button"
+      className="home-genre-mix-card"
+      onClick={onOpen}
+      title={mix.title}
+    >
+      <div className="home-genre-mix-card__mosaic">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="home-genre-mix-card__mosaic-cell">
+            {covers[i] && (
+              <img
+                src={covers[i]}
+                alt=""
+                loading="lazy"
+                decoding="async"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="home-genre-mix-card__overlay" />
+      <button
+        type="button"
+        className="home-genre-mix-card__play"
+        onClick={(e) => {
+          e.stopPropagation()
+          if (mix.tracks.length) onPlay(mix.tracks)
+        }}
+        aria-label={`Слушать ${mix.title}`}
+      >
+        <Icon name="play" size={14} />
+      </button>
+      <span className="home-genre-mix-card__genre">
+        {mix.genre.charAt(0).toUpperCase() + mix.genre.slice(1)}
+      </span>
+      <span className="home-genre-mix-card__count">
+        {mix.tracks.length} треков
+      </span>
+    </button>
+  )
+}
+
+function SkeletonBlock({ className }: { className: string }) {
+  return <div className={`skeleton ${className}`} />
+}
+
+const QUICK_ITEMS: {
+  label: string
+  icon: string
+  path: string
+}[] = [
+  { label: 'Плейлист дня', icon: 'calendar', path: '/daily-mix' },
+  { label: 'Плейлист недели', icon: 'star', path: '/weekly-mix' },
+  { label: 'Выбор пользователей', icon: 'heart', path: '/user-choice' },
+  { label: 'Библиотека', icon: 'layers', path: '/library' },
+  { label: 'Радио', icon: 'radio', path: '/radio' },
+  { label: 'Подписки', icon: 'users-following', path: '/library?tab=following' },
+]
+
 export function HomeView() {
-  const { t } = useTranslation()
   const navigate = useNavigate()
   const toast = useToast()
   const { playTrack } = usePlayerActions()
+
+  const [me, setMe] = useState<UserResponse | null>(null)
   const [sections, setSections] = useState<HomeSection[] | null>(null)
-  const [fallbackTracks, setFallbackTracks] = useState<
-    Track[] | null
+  const [genreMixes, setGenreMixes] = useState<GenreMixItem[] | null>(null)
+  const [followedArtists, setFollowedArtists] = useState<
+    FollowedArtistItem[] | null
   >(null)
-  const [playLoading, setPlayLoading] = useState(false)
+  const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(null)
 
   useEffect(() => {
-    setSections(null)
+    const uid = getInternalUserId()
+    if (uid) {
+      api.getUserProfile(uid).then(setMe).catch(() => {})
+    }
+
     api
       .getHomeRecommendations()
-      .then((data) => {
-        setSections(data.sections)
-      })
+      .then((data) => setSections(data.sections))
       .catch(() => {
         api
           .getTracks({ size: 50 })
           .then((data) => setFallbackTracks(data.items))
           .catch(() => setFallbackTracks([]))
       })
+
+    api
+      .getGenreMixes()
+      .then((data) => setGenreMixes(data.mixes))
+      .catch(() => setGenreMixes([]))
+
+    api
+      .getFollowedArtistsList(30)
+      .then((data) => setFollowedArtists(data.items))
+      .catch(() => setFollowedArtists([]))
   }, [])
 
-  const handlePlayFromDaily = useCallback(async () => {
-    setPlayLoading(true)
-    try {
-      const d = await api.getDailyPlaylist()
-      const first = firstTrackFromDailyPlaylist(d)
-      if (!first) {
-        toast.error(t('home.playEmpty'))
-        return
+  const handlePlay = useCallback(
+    async (track: Track) => {
+      try {
+        await playTrack(track)
+      } catch (e) {
+        toast.error(getApiErrorMessage(e, 'Ошибка воспроизведения'))
       }
-      await playTrack(first)
-    } catch (e) {
-      toast.error(
-        getApiErrorMessage(
-          e,
-          t('home.playError'),
-        ),
-      )
-    } finally {
-      setPlayLoading(false)
+    },
+    [playTrack, toast],
+  )
+
+  const handlePlayAll = useCallback(
+    async (tracks: Track[]) => {
+      if (!tracks.length) return
+      try {
+        await playTrack(tracks[0])
+      } catch (e) {
+        toast.error(getApiErrorMessage(e, 'Ошибка воспроизведения'))
+      }
+    },
+    [playTrack, toast],
+  )
+
+  const greeting = timeGreeting()
+  const displayName =
+    me?.display_name ||
+    me?.first_name ||
+    me?.username ||
+    null
+
+  const sectionMap = new Map<string, HomeSection>()
+  if (sections) {
+    for (const s of sections) {
+      sectionMap.set(s.section_type, s)
     }
-  }, [playTrack, t, toast])
+  }
 
   return (
     <section id="view-home" className="view active">
-      <div className="view-header view-header-row">
-        <div>
-          <h2>{t('home.title')}</h2>
-          <span className="hint">{t('home.tagline')}</span>
+      {/* Greeting */}
+      <div className="home-greeting">
+        <div className="home-greeting__text">
+          <div className="home-greeting__label">
+            {displayName ? `${greeting}, ${displayName}` : greeting}
+          </div>
+          <div className="home-greeting__sub">DotSound</div>
         </div>
         <NotificationBell />
       </div>
 
-      <button
-        type="button"
-        className="home-radio-play"
-        disabled={playLoading}
-        onClick={handlePlayFromDaily}
-        aria-label={t('home.playRadioAria')}
-      >
-        <span className="home-radio-play__icon" aria-hidden>
-          <Icon name="play" size={28} />
-        </span>
-        <span className="home-radio-play__text">
-          <span className="home-radio-play__title">
-            {t('home.playRadio')}
-          </span>
-          <span className="hint home-radio-play__hint">
-            {t('home.playRadioHint')}
-          </span>
-        </span>
-      </button>
-
-      <button
-        className="playlist-card"
-        style={{ margin: '0 16px 4px', width: 'calc(100% - 32px)' }}
-        onClick={() => navigate('/daily-mix')}
-      >
-        <div className="playlist-cover" aria-hidden>
-          <Icon name="calendar" size={26} />
-        </div>
-        <div style={{ flex: 1, textAlign: 'left' }}>
-          <div style={{ fontWeight: 600, fontSize: 15 }}>
-            {t('home.dayPlaylistTitle')}
-          </div>
-          <div
-            className="hint"
-            style={{ fontSize: 12 }}
+      {/* Quick access grid */}
+      <div className="home-quick-grid">
+        {QUICK_ITEMS.map((item) => (
+          <button
+            key={item.path}
+            type="button"
+            className="home-quick-item"
+            onClick={() => navigate(item.path)}
           >
-            {t('home.dayPlaylistHint')}
-          </div>
-        </div>
-        <Icon name="chevron" size={18} className="text-secondary" />
-      </button>
+            <span className="home-quick-item__icon" aria-hidden>
+              <Icon name={item.icon} size={16} />
+            </span>
+            <span className="home-quick-item__label">
+              {item.label}
+            </span>
+          </button>
+        ))}
+      </div>
 
-      <button
-        className="playlist-card"
-        style={{ margin: '8px 16px 4px', width: 'calc(100% - 32px)' }}
-        onClick={() => navigate('/weekly-mix')}
-      >
-        <div className="playlist-cover" aria-hidden>
-          <Icon name="star" size={26} />
-        </div>
-        <div style={{ flex: 1, textAlign: 'left' }}>
-          <div style={{ fontWeight: 600, fontSize: 15 }}>
-            {t('home.weekPlaylistTitle')}
+      {/* Genre mixes row */}
+      {genreMixes === null ? (
+        <div>
+          <div className="home-section-header">
+            <span className="home-section-header__title">Миксы по жанрам</span>
           </div>
-          <div
-            className="hint"
-            style={{ fontSize: 12 }}
-          >
-            {t('home.weekPlaylistHint')}
+          <div className="home-genre-mix-row home-skeleton-row">
+            {[1, 2, 3].map((i) => (
+              <SkeletonBlock key={i} className="home-skeleton-mix" />
+            ))}
           </div>
         </div>
-        <Icon name="chevron" size={18} className="text-secondary" />
-      </button>
+      ) : genreMixes.length > 0 ? (
+        <div>
+          <div className="home-section-header">
+            <span className="home-section-header__title">Миксы по жанрам</span>
+          </div>
+          <div className="home-genre-mix-row">
+            {genreMixes.map((mix) => (
+              <GenreMixCard
+                key={mix.genre}
+                mix={mix}
+                onPlay={handlePlayAll}
+                onOpen={() =>
+                  navigate(
+                    `/genre-mix/${encodeURIComponent(mix.genre)}`,
+                  )
+                }
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
 
-      <button
-        className="playlist-card"
-        type="button"
-        style={{ margin: '8px 16px 4px', width: 'calc(100% - 32px)' }}
-        onClick={() => navigate('/user-choice')}
-      >
-        <div className="playlist-cover" aria-hidden>
-          <Icon name="heart" size={26} />
-        </div>
-        <div style={{ flex: 1, textAlign: 'left' }}>
-          <div style={{ fontWeight: 600, fontSize: 15 }}>
-            {t('home.userChoiceTitle')}
+      {/* Continue listening */}
+      {sections === null ? (
+        <div>
+          <div className="home-section-header">
+            <span className="home-section-header__title">Продолжить</span>
           </div>
-          <div
-            className="hint"
-            style={{ fontSize: 12 }}
-          >
-            {t('home.userChoiceHint')}
+          <div className="home-carousel home-skeleton-row">
+            {[1, 2, 3, 4].map((i) => (
+              <SkeletonBlock key={i} className="home-skeleton-tile" />
+            ))}
           </div>
         </div>
-        <Icon
-          name="chevron"
-          size={18}
-          className="text-secondary"
-        />
-      </button>
-
-      {sections === null && fallbackTracks === null && (
-        <div
-          className="home-loading"
-          aria-busy="true"
-          aria-live="polite"
-        >
-          <span className="home-loading-dot" />
-          <span className="home-loading-dot" />
-          <span className="home-loading-dot" />
-        </div>
-      )}
-
-      {sections && sections.map((section, i) => (
-        <div key={`${section.section_type}-${i}`} className="home-section">
-          <h3 className="home-section-title">{section.title}</h3>
-          <TrackList
-            tracks={section.tracks}
-            emptyMessage={t('home.empty')}
+      ) : (
+        sectionMap.get('continue') && (
+          <TrackCarouselSection
+            title={sectionMap.get('continue')!.title}
+            tracks={sectionMap.get('continue')!.tracks}
+            onPlay={handlePlay}
           />
-        </div>
-      ))}
-
-      {sections && sections.length === 0 && (
-        <TrackList tracks={[]} emptyMessage={t('home.empty')} />
+        )
       )}
 
-      {!sections && fallbackTracks !== null && (
-        <TrackList
-          tracks={fallbackTracks}
-          emptyMessage={t('home.empty')}
-        />
+      {/* Followed artists strip */}
+      {followedArtists === null ? (
+        <div>
+          <div className="home-section-header">
+            <span className="home-section-header__title">Подписки</span>
+          </div>
+          <div className="home-artist-strip">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <SkeletonBlock key={i} className="home-skeleton-chip" />
+            ))}
+          </div>
+        </div>
+      ) : followedArtists.length > 0 ? (
+        <div>
+          <div className="home-section-header">
+            <span className="home-section-header__title">Подписки</span>
+          </div>
+          <div className="home-artist-strip">
+            {followedArtists.map((artist) => {
+              const src = coverUrl(artist.image_key)
+              return (
+                <button
+                  key={artist.id}
+                  type="button"
+                  className="home-artist-chip"
+                  onClick={() =>
+                    navigate(
+                      `/search?q=${encodeURIComponent(artist.name)}`,
+                    )
+                  }
+                  title={artist.name}
+                >
+                  <div className="home-artist-chip__avatar">
+                    {src ? (
+                      <img
+                        src={src}
+                        alt=""
+                        width={64}
+                        height={64}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ) : (
+                      <div className="home-artist-chip__avatar-placeholder">
+                        <Icon name="user" size={24} />
+                      </div>
+                    )}
+                  </div>
+                  <span className="home-artist-chip__name">
+                    {artist.name}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Personalized / For You */}
+      {sections &&
+        sectionMap.get('personalized') && (
+          <TrackCarouselSection
+            title={sectionMap.get('personalized')!.title}
+            tracks={sectionMap.get('personalized')!.tracks}
+            onPlay={handlePlay}
+          />
+        )}
+
+      {/* New releases */}
+      {sections &&
+        sectionMap.get('new_releases') && (
+          <TrackCarouselSection
+            title={sectionMap.get('new_releases')!.title}
+            tracks={sectionMap.get('new_releases')!.tracks}
+            onPlay={handlePlay}
+            onMore={() => navigate('/search')}
+          />
+        )}
+
+      {/* Genre popular */}
+      {sections &&
+        sectionMap.get('genre_popular') && (
+          <TrackCarouselSection
+            title={sectionMap.get('genre_popular')!.title}
+            tracks={sectionMap.get('genre_popular')!.tracks}
+            onPlay={handlePlay}
+          />
+        )}
+
+      {/* User choice */}
+      {sections &&
+        sectionMap.get('user_choice') && (
+          <TrackCarouselSection
+            title={sectionMap.get('user_choice')!.title}
+            tracks={sectionMap.get('user_choice')!.tracks}
+            onPlay={handlePlay}
+            onMore={() => navigate('/user-choice')}
+          />
+        )}
+
+      {/* Favourite artists */}
+      {sections &&
+        sectionMap.get('fav_artists') && (
+          <TrackCarouselSection
+            title={sectionMap.get('fav_artists')!.title}
+            tracks={sectionMap.get('fav_artists')!.tracks}
+            onPlay={handlePlay}
+          />
+        )}
+
+      {/* Popular fallback */}
+      {sections &&
+        sectionMap.get('popular') && (
+          <TrackCarouselSection
+            title={sectionMap.get('popular')!.title}
+            tracks={sectionMap.get('popular')!.tracks}
+            onPlay={handlePlay}
+          />
+        )}
+
+      {/* Fallback flat list if API failed */}
+      {!sections && fallbackTracks !== null && fallbackTracks.length > 0 && (
+        <div>
+          <div className="home-section-header">
+            <span className="home-section-header__title">Треки</span>
+          </div>
+          <div className="home-carousel">
+            {fallbackTracks.map((t) => (
+              <TrackTile key={t.id} track={t} onPlay={handlePlay} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {sections && sections.length === 0 && !fallbackTracks && (
+        <div
+          style={{
+            padding: '48px 16px',
+            textAlign: 'center',
+            color: 'var(--text-secondary)',
+            fontSize: 14,
+          }}
+        >
+          Послушай что-нибудь, и здесь появятся подборки
+        </div>
       )}
     </section>
   )

@@ -47,6 +47,9 @@ export function BottomNav() {
               active ? 'page' : undefined
             }
           >
+            {active && (
+              <span className="nav-btn__indicator" aria-hidden />
+            )}
             <span className="nav-icon">
               <Icon name={icon} size={20} />
             </span>
