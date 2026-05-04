@@ -583,6 +583,7 @@ export const adminApi = {
     page?: number
     size?: number
     is_active?: boolean
+    without_lyrics?: boolean
     search?: string
   }) =>
     adminFetch<{
@@ -1296,5 +1297,31 @@ export const adminApi = {
     adminFetch<{ imported: number; errors: string[] }>(
       '/tracks/context/batch-import',
       { method: 'POST', body: { raw_response: rawResponse } },
+    ),
+
+  batchLyricsPrompt: (body: {
+    track_ids?: number[]
+    search?: string
+    only_without_lyrics?: boolean
+    limit?: number
+  }) =>
+    adminFetch<{ prompt: string; track_count: number }>(
+      '/tracks/lyrics/batch-prompt',
+      { method: 'POST', body },
+    ),
+
+  batchLyricsImport: (
+    rawResponse: string,
+    skipExisting: boolean = true,
+  ) =>
+    adminFetch<{ imported: number; errors: string[] }>(
+      '/tracks/lyrics/batch-import',
+      {
+        method: 'POST',
+        body: {
+          raw_response: rawResponse,
+          skip_existing: skipExisting,
+        },
+      },
     ),
 }

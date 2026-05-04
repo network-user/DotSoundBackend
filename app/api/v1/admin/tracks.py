@@ -20,22 +20,28 @@ from app.dependencies import (
 )
 from app.models.user import User
 from app.schemas.track import TrackUpdateRequest
+from app.services.admin_lyrics_import_service import (
+    AdminLyricsImportService,
+)
 from app.services.admin_service import AdminService
-from app.services.transcoding import transcode_hls_only
-
 from app.services.admin_track_context_service import (
     AdminTrackContextService,
     TrackNotFoundError,
 )
+from app.services.transcoding import transcode_hls_only
 
 from .schemas import (
+    AdminTrackGenrePatchRequest,
     AdminTrackListResponse,
     AdminTrackResponse,
-    AdminTrackGenrePatchRequest,
     BatchImportRequest,
     BatchImportResponse,
     BatchPromptRequest,
     BatchPromptResponse,
+    LyricsBatchImportRequest,
+    LyricsBatchImportResponse,
+    LyricsBatchPromptRequest,
+    LyricsBatchPromptResponse,
     SinglePromptResponse,
     TrackContextResponse,
     TrackContextUpdateRequest,
@@ -56,6 +62,7 @@ async def admin_list_tracks(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     is_active: bool | None = Query(None),
+    without_lyrics: bool = Query(False),
     search: str | None = Query(None, max_length=128),
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
@@ -65,6 +72,7 @@ async def admin_list_tracks(
         page=page,
         size=size,
         is_active=is_active,
+        without_lyrics=without_lyrics,
         search=search,
     )
     return AdminTrackListResponse(
@@ -293,6 +301,57 @@ async def admin_batch_import(
     return BatchImportResponse(imported=imported, errors=errors)
 
 
+@router.post(
+    "/tracks/lyrics/batch-prompt",
+    response_model=LyricsBatchPromptResponse,
+    summary="[Admin] Generate batch prompt for lyrics import",
+)
+@limiter.limit("20/minute")
+async def admin_batch_lyrics_prompt(
+    request: Request,
+    data: LyricsBatchPromptRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> LyricsBatchPromptResponse:
+    svc = AdminLyricsImportService(session)
+    if data.track_ids:
+        prompt, count = await svc.build_prompt_for_tracks(data.track_ids)
+    else:
+        prompt, count = await svc.build_prompt_for_filtered_tracks(
+            search=data.search,
+            only_without_lyrics=data.only_without_lyrics,
+            limit=data.limit,
+        )
+    logger.info("admin_lyrics_batch_prompt_generated", track_count=count)
+    return LyricsBatchPromptResponse(prompt=prompt, track_count=count)
+
+
+@router.post(
+    "/tracks/lyrics/batch-import",
+    response_model=LyricsBatchImportResponse,
+    summary="[Admin] Import AI response into track lyrics",
+)
+@limiter.limit("10/minute")
+async def admin_batch_lyrics_import(
+    request: Request,
+    data: LyricsBatchImportRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> LyricsBatchImportResponse:
+    svc = AdminLyricsImportService(session)
+    imported, errors = await svc.import_ai_response(
+        raw_response=data.raw_response,
+        skip_existing=data.skip_existing,
+    )
+    logger.info(
+        "admin_lyrics_batch_import_done",
+        imported=imported,
+        error_count=len(errors),
+        skip_existing=data.skip_existing,
+    )
+    return LyricsBatchImportResponse(imported=imported, errors=errors)
+
+
 @router.get(
     "/tracks/{track_id}/context",
     response_model=TrackContextResponse,
@@ -337,7 +396,7 @@ async def admin_set_track_context(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
-        )
+        ) from None
     logger.info("admin_track_context_set", track_id=track_id)
     return TrackContextResponse.model_validate(row)
 
@@ -361,7 +420,7 @@ async def admin_clear_track_context(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
-        )
+        ) from None
     logger.info("admin_track_context_cleared", track_id=track_id)
     return TrackContextResponse.model_validate(row)
 
@@ -385,7 +444,7 @@ async def admin_get_track_prompt(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
-        )
+        ) from None
     return SinglePromptResponse(prompt=prompt, language=lang)
 
 

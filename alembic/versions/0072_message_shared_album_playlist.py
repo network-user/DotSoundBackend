@@ -1,6 +1,6 @@
 """add shared album and playlist ids to messages
 
-Revision ID: 0072_message_shared_album_playlist
+Revision ID: 0072_msg_share_album_playlist
 Revises: 0071
 Create Date: 2026-05-04
 """
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0072_message_shared_album_playlist"
+revision = "0072_msg_share_album_playlist"
 down_revision = "0071"
 branch_labels = None
 depends_on = None
