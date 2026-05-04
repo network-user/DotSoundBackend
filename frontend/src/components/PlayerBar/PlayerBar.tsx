@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type MouseEvent,
 } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
 import {
@@ -33,6 +34,7 @@ function fmt(sec: number) {
 }
 
 export function PlayerBar() {
+  const navigate = useNavigate()
   const {
     currentTime,
     duration,
@@ -56,6 +58,7 @@ export function PlayerBar() {
     toggleRepeat,
     toggleShuffle,
     clearHlsError,
+    radioMode,
   } = usePlayerActions()
   const { isLiked, toggleLike } = useLikes()
   const [likeBurst, setLikeBurst] =
@@ -211,7 +214,35 @@ export function PlayerBar() {
             key={track.id}
             className="pb-info-meta"
           >
-            <p className="pb-title">{track.title}</p>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                minWidth: 0,
+              }}
+            >
+              <p
+                className="pb-title"
+                style={{ flex: 1, minWidth: 0 }}
+              >
+                {track.title}
+              </p>
+              {radioMode && (
+                <button
+                  type="button"
+                  className="player-radio-badge player-radio-badge--active"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    navigate('/radio')
+                  }}
+                  title="Режим радио — нажмите чтобы перейти"
+                >
+                  <span className="player-radio-badge__dot" />
+                  Радио
+                </button>
+              )}
+            </div>
             <p className="pb-artist hint">
               {track.artist ?? '—'}
             </p>

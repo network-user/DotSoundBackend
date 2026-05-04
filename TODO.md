@@ -951,3 +951,30 @@ ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyr
 - `[x]` Tests: mock `catalog_only_lyrics_task.kiq` в
   `create_test_track` / `mock_taskiq` и в `test_upload_track_success`
 - `[x]` `scripts/backfill_composition_groups.py` (stub)
+
+## Home Menu Redesign — v2 (2026-05-04)
+
+- `[x]` **ArtistFollowRepository**: `list_followed_artists(user_id, limit)` → `list[Artist]`
+- `[x]` **Schemas**: `FollowedArtistItem`, `FollowedArtistListResponse` в `artist_follow.py`
+- `[x]` **API**: `GET /api/v1/artists/followed` endpoint
+- `[x]` **PrivateCore**: `build_genre_mixes()`, `GenreMixResult`, `MAX_GENRE_MIXES`, `GENRE_MIX_SIZE`
+  в `recommendation_engine.py`; экспорты в `services/__init__.py`
+- `[x]` **Backend**: `GET /api/v1/recommendations/genre-mixes` (endpoint + `RecommendationService.get_genre_mixes()`)
+- `[x]` **Backend**: `GET /api/v1/recommendations/radio` — добавлен `exclude_ids` query param (max 30)
+- `[x]` **RecommendationService.get_radio**: принимает `exclude_ids: list[int] | None`
+- `[x]` **Schemas**: `GenreMixItemResponse`, `GenreMixesResponse` в `recommendation.py`
+- `[x]` **global.css**: все Home v2 CSS-классы (greeting, quick-grid, carousel, artist-strip, genre-mix-card,
+  player-radio-badge, top nav-indicator)
+- `[x]` **api.ts**: `getFollowedArtistsList()`, `getGenreMixes()`, обновлён `getRadio(excludeIds?)`
+- `[x]` **types/api.ts**: `FollowedArtistItem`, `GenreMixItem`, `GenreMixesResponse`
+- `[x]` **HomeView.tsx**: полный редизайн — приветствие, quick-grid, genre mixes carousel,
+  followed artists strip, секционные карусели треков по section_type
+- `[x]` **BottomNav.tsx**: верхний индикатор (`.nav-btn__indicator`) для активного таба
+- `[x]` **GenreMixView.tsx**: новый view `/genre-mix/:genre`
+- `[x]` **App.tsx**: маршрут `/genre-mix/:genre`; lazy-import `GenreMixView`
+- `[x]` **Icon.tsx**: добавлены иконки `radio`, `users-following`
+- `[x]` **PlayerContext.tsx**: `radioMode`, `radioSeedTrackId`, `startRadio()`, `stopRadio()`;
+  `playNext()` — авто-fetch при пустой очереди в radio-режиме; `played_ids Set` (max 50)
+- `[x]` **RadioView.tsx**: переработан — кнопка «Запустить бесконечное радио», индикатор режима,
+  история прослушивания
+- `[x]` **PlayerBar.tsx**: `.player-radio-badge` при активном `radioMode`; клик → `/radio`

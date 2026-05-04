@@ -169,6 +169,10 @@ interface PlayerContextValue {
     t: Track,
     commentId: number,
   ) => Promise<void>
+  radioMode: boolean
+  radioSeedTrackId: number | null
+  startRadio: (seedTrack: Track) => Promise<void>
+  stopRadio: () => void
 }
 
 interface PlayerStateValue {
@@ -221,6 +225,10 @@ interface PlayerActionsValue {
     t: Track,
     commentId: number,
   ) => Promise<void>
+  radioMode: boolean
+  radioSeedTrackId: number | null
+  startRadio: (seedTrack: Track) => Promise<void>
+  stopRadio: () => void
 }
 
 interface PlayerMetaValue {
@@ -481,6 +489,11 @@ export function PlayerProvider({
     () => localStorage.getItem('player-shuffle') === 'true',
   )
   const [hlsError, setHlsError] = useState<string | null>(null)
+  const [radioMode, setRadioMode] = useState(false)
+  const [radioSeedTrackId, setRadioSeedTrackId] = useState<number | null>(null)
+  const radioModeRef = useRef(false)
+  const radioSeedTrackIdRef = useRef<number | null>(null)
+  const radioPlayedIdsRef = useRef<Set<number>>(new Set())
   const repeatModeRef = useRef<'none' | 'one' | 'all'>(
     (localStorage.getItem('player-repeat') as 'none' | 'one' | 'all') ?? 'none',
   )
@@ -1335,6 +1348,35 @@ export function PlayerProvider({
     setPendingCommentFocus(null)
   }, [])
 
+  const startRadio = async (seedTrack: Track) => {
+    radioModeRef.current = true
+    radioSeedTrackIdRef.current = seedTrack.id
+    radioPlayedIdsRef.current = new Set([seedTrack.id])
+    setRadioMode(true)
+    setRadioSeedTrackId(seedTrack.id)
+    try {
+      const result = await api.getRadio(seedTrack.id, 15)
+      const newTracks = result.tracks.filter(
+        (t) => !radioPlayedIdsRef.current.has(t.id),
+      )
+      for (const t of newTracks) {
+        radioPlayedIdsRef.current.add(t.id)
+      }
+      manualQueueRef.current = [...newTracks]
+      setQueue([...newTracks])
+    } catch {
+      /* best-effort */
+    }
+    await playTrack(seedTrack)
+  }
+
+  const stopRadio = () => {
+    radioModeRef.current = false
+    radioSeedTrackIdRef.current = null
+    setRadioMode(false)
+    setRadioSeedTrackId(null)
+  }
+
   const playNext = async (): Promise<boolean> => {
     if (!track) return false
     try {
@@ -1344,6 +1386,36 @@ export function PlayerProvider({
         await playTrack(next)
         return true
       }
+
+      if (radioModeRef.current && radioSeedTrackIdRef.current) {
+        const seedId = radioSeedTrackIdRef.current
+        const excludeIds = Array.from(
+          radioPlayedIdsRef.current,
+        ).slice(-20)
+        try {
+          const result = await api.getRadio(seedId, 15, excludeIds)
+          const newTracks = result.tracks.filter(
+            (t) => !radioPlayedIdsRef.current.has(t.id),
+          )
+          if (newTracks.length > 0) {
+            const next = newTracks[0]
+            for (const t of newTracks) {
+              radioPlayedIdsRef.current.add(t.id)
+            }
+            if (radioPlayedIdsRef.current.size > 50) {
+              const arr = Array.from(radioPlayedIdsRef.current)
+              radioPlayedIdsRef.current = new Set(arr.slice(-50))
+            }
+            manualQueueRef.current = newTracks.slice(1)
+            setQueue([...manualQueueRef.current])
+            await playTrack(next)
+            return true
+          }
+        } catch {
+          /* continue to adjacent fallback */
+        }
+      }
+
       const cache = prefetchCacheRef.current
       if (
         cache &&
@@ -1778,6 +1850,10 @@ export function PlayerProvider({
       updateTrack,
       clearPendingCommentFocus,
       openTrackAtComment,
+      radioMode,
+      radioSeedTrackId,
+      startRadio,
+      stopRadio,
     }),
     [
       playTrack, togglePlay, seek, seekToSeconds,
@@ -1797,6 +1873,10 @@ export function PlayerProvider({
       updateTrack,
       clearPendingCommentFocus,
       openTrackAtComment,
+      radioMode,
+      radioSeedTrackId,
+      startRadio,
+      stopRadio,
     ],
   )
 

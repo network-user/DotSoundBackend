@@ -910,12 +910,17 @@ class RecommendationService:
                 user_locale=user_locale,
             )
 
-        all_tracks = [seed] + candidates + [
+        exclude_set = set(exclude_ids or [])
+        all_tracks = [seed] + [
+            t for t in candidates
+            if t.id not in exclude_set
+        ] + [
             t
             for t in unseen
             if t.id != seed.id
             and t.id
             not in {c.id for c in candidates}
+            and t.id not in exclude_set
         ]
         features = await self._tracks_to_features(
             all_tracks
