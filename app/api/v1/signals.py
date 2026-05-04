@@ -5,6 +5,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.signal import (
     ListenEventRequest,
+    BatchListenEventRequest,
     SearchClickRequest,
 )
 from app.services.signal_service import (
@@ -14,6 +15,24 @@ from app.services.signal_service import (
 router = APIRouter(
     prefix="/signals", tags=["signals"]
 )
+
+
+@router.post("/listen/batch")
+async def record_listen_batch(
+    body: BatchListenEventRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    svc = SignalService(db)
+    for event in body.events:
+        await svc.record_listen(
+            user_id=user.id,
+            track_id=event.track_id,
+            duration_listened=event.duration_listened,
+            total_duration=event.total_duration,
+            source_context=event.source_context,
+        )
+    return {"status": "ok", "processed": len(body.events)}
 
 
 @router.post("/listen")

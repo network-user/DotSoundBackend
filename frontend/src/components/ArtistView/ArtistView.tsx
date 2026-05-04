@@ -287,6 +287,23 @@ export function ArtistView({
   }, [debugLogs])
 
   useEffect(() => {
+    if (snippetPlaying && audioRef.current && tracks && tracks.length > 0) {
+      audioRef.current.play().catch(() => setSnippetPlaying(false))
+    } else if (!snippetPlaying && audioRef.current) {
+      audioRef.current.pause()
+    }
+  }, [snippetPlaying, snippetIndex, tracks])
+
+  const handleSnippetEnded = () => {
+    if (!tracks) return
+    setSnippetIndex((i) => (i + 1) % tracks.length)
+  }
+
+  const toggleSnippet = () => {
+    setSnippetPlaying(!snippetPlaying)
+  }
+
+  useEffect(() => {
     let cancelled = false
     setArtist(null)
     setTracks(null)
@@ -743,6 +760,28 @@ export function ArtistView({
                     defaultValue: 'Подписаться',
                   })}
           </button>
+        )}
+
+        {/* Listen Snippets Button */}
+        {tracks && tracks.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <button
+              className="btn-primary"
+              onClick={toggleSnippet}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', width: '100%' }}
+            >
+              <Icon name={snippetPlaying ? 'pause' : 'play'} size={16} />
+              {snippetPlaying ? 'Остановить превью' : 'Слушать их песни'}
+            </button>
+            {/* Hidden audio element for snippets */}
+            <audio
+              ref={audioRef}
+              src={`/api/v1/track-preview/${tracks[snippetIndex].id}/segment.m4a`}
+              onEnded={handleSnippetEnded}
+              preload="none"
+              style={{ display: 'none' }}
+            />
+          </div>
         )}
 
         {(profiles.length > 0 || supplemental?.status === 'done') && (

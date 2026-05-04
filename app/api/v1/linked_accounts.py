@@ -23,7 +23,7 @@ from app.services.linked_account_service import LinkedAccountService
 router = APIRouter(prefix="/linked-accounts", tags=["linked-accounts"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-_SUPPORTED_PROVIDERS = frozenset({"spotify", "soundcloud", "vk"})
+_SUPPORTED_PROVIDERS = frozenset({"spotify", "soundcloud"})
 _STATE_PREFIX = "oauth_state:"
 
 

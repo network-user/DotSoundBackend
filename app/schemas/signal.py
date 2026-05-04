@@ -10,6 +10,10 @@ class ListenEventRequest(BaseModel):
     )
 
 
+class BatchListenEventRequest(BaseModel):
+    events: list[ListenEventRequest]
+
+
 class SearchClickRequest(BaseModel):
     query: str = Field(max_length=256)
     results_count: int = Field(default=0, ge=0)

@@ -31,6 +31,7 @@ from app.services.admin_track_context_service import (
 from .schemas import (
     AdminTrackListResponse,
     AdminTrackResponse,
+    AdminTrackGenrePatchRequest,
     BatchImportRequest,
     BatchImportResponse,
     BatchPromptRequest,
@@ -154,6 +155,34 @@ async def admin_update_track(
         "admin_track_metadata_updated",
         track_id=track_id,
         fields=list(fields.keys()),
+    )
+    return AdminTrackResponse.model_validate(track)
+
+
+@router.patch(
+    "/tracks/{track_id}/genre",
+    response_model=AdminTrackResponse,
+    summary="[Admin] Quickly update track genre",
+)
+@limiter.limit("60/minute")
+async def admin_update_track_genre(
+    request: Request,
+    track_id: int,
+    data: AdminTrackGenrePatchRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminTrackResponse:
+    service = AdminService(session)
+    track = await service.update_track(track_id, genre=data.genre)
+    if track is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    logger.info(
+        "admin_track_genre_updated",
+        track_id=track_id,
+        genre=data.genre,
     )
     return AdminTrackResponse.model_validate(track)
 

@@ -845,14 +845,13 @@ export function OnboardingImportStep({ onDone }: Props) {
         <button
           type="button"
           className="onboarding-import-card"
-          onClick={() => setImportMethod('vk')}
-          disabled={busy}
+          disabled={true}
         >
           <span className="onboarding-import-card-icon">
             <Icon name="source-vk" size={24} />
           </span>
           <span className="onboarding-import-card-title">VK Музыка</span>
-          <span className="hint">Ссылка или вход в аккаунт</span>
+          <span className="hint">Временно недоступно</span>
         </button>
 
         <button
