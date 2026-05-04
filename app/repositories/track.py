@@ -1,5 +1,5 @@
 import structlog
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist import TrackArtist
@@ -222,6 +222,49 @@ class TrackRepository(BaseRepository[Track]):
             select(Track)
             .where(condition)
             .order_by(Track.play_count.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def find_by_similar_title(
+        self,
+        *,
+        platform: str,
+        title_queries: list[str],
+        duration_seconds: int | None,
+        duration_window_sec: int = 45,
+        limit: int = 5,
+    ) -> list[Track]:
+        clean = [q.strip() for q in title_queries if q.strip()]
+        if not clean:
+            return []
+        title_cond = or_(*[Track.title.ilike(f"%{q}%") for q in clean])
+        condition = (
+            Track.is_active.is_(True)
+            & Track.is_public.is_(True)
+            & (Track.source_platform == platform)
+            & title_cond
+        )
+        if duration_seconds is not None:
+            low = max(0, duration_seconds - duration_window_sec)
+            high = duration_seconds + duration_window_sec
+            condition = (
+                condition
+                & Track.duration_seconds.isnot(None)
+                & Track.duration_seconds.between(low, high)
+            )
+            duration_diff = func.abs(
+                Track.duration_seconds - duration_seconds
+            )
+        else:
+            duration_diff = case(
+                (Track.duration_seconds.is_(None), 999999),
+                else_=0,
+            )
+        result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(duration_diff.asc(), Track.play_count.desc())
             .limit(limit)
         )
         return list(result.scalars().all())

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import structlog
 from dotsound_private_core.services.playback_variant_policy import (
     EXTERNAL_SOURCE_PLATFORM_ORDER,
@@ -17,6 +18,7 @@ _BLOCK_PREFIX = "fallback:block:"
 _SC_REFRESH_PREFIX = "sc_refresh:no_match:"
 _SC_REFRESH_NO_MATCH_TTL = 86400
 _SC_REFRESH_SAME_URL_TTL = 3600
+_TITLE_WORD_RE = re.compile(r"[a-zA-Zа-яА-Я0-9]+")
 
 
 class TrackFallbackService:
@@ -65,6 +67,23 @@ class TrackFallbackService:
                     replacement_id=replacement.id,
                 )
                 return replacement
+            relaxed = await repo.find_by_similar_title(
+                platform=platform,
+                title_queries=self._title_queries(track.title),
+                duration_seconds=track.duration_seconds,
+                duration_window_sec=45,
+                limit=5,
+            )
+            if relaxed:
+                replacement = relaxed[0]
+                logger.info(
+                    "track_fallback_candidate_relaxed",
+                    track_id=track.id,
+                    old_platform=current_platform,
+                    new_platform=platform,
+                    replacement_id=replacement.id,
+                )
+                return replacement
 
         await redis.set(block_key, "not_found", ex=_REDIS_BLOCK_TTL)
         logger.info(
@@ -73,6 +92,25 @@ class TrackFallbackService:
             tried=platforms_to_try,
         )
         return None
+
+    @staticmethod
+    def _title_queries(title: str) -> list[str]:
+        normalized = " ".join(_TITLE_WORD_RE.findall(title.lower()))
+        if not normalized:
+            return []
+        tokens = [t for t in normalized.split() if len(t) >= 3]
+        if not tokens:
+            return [normalized]
+        full = " ".join(tokens)
+        out: list[str] = [full]
+        out.extend(tokens[:3])
+        seen: set[str] = set()
+        dedup: list[str] = []
+        for item in out:
+            if item and item not in seen:
+                seen.add(item)
+                dedup.append(item)
+        return dedup
 
     async def try_refresh_sc_url(self, track: Track) -> bool:
         if not track.title:
