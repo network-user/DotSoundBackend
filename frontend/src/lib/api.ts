@@ -1339,6 +1339,8 @@ export const api = {
     type?: string
     reply_to_id?: number
     shared_track_id?: number
+    shared_album_id?: number
+    shared_playlist_id?: number
   }): Promise<ChatMessage> {
     return request(`/api/v1/chats/${convId}/messages`, {
       method: 'POST',

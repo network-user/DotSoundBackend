@@ -39,6 +39,10 @@ export function Onboarding({ onComplete }: Props) {
 
   const [playingTrackId, setPlayingTrackId] = useState<number | null>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
+  const loadCalibrationTracks = useCallback(async () => {
+    const tracks = await api.getCalibrationTracks()
+    setCalibrationTracks(tracks)
+  }, [])
 
   const playSnippet = async (trackId: number) => {
     if (playingTrackId === trackId) {
@@ -128,8 +132,7 @@ export function Onboarding({ onComplete }: Props) {
           artist_ids: selectedArtists,
           moods: selectedMoods,
         })
-        const tracks = await api.getCalibrationTracks()
-        setCalibrationTracks(tracks)
+        await loadCalibrationTracks()
         setStep('calibration')
       } catch {
         /* ignore */
@@ -167,6 +170,21 @@ export function Onboarding({ onComplete }: Props) {
     }
     setSaving(false)
   }
+
+  const handleLoadMoreCalibration = useCallback(async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      const next = await api.getCalibrationTracks()
+      setCalibrationTracks(prev => {
+        const seen = new Set(prev.map(t => t.id))
+        return [...prev, ...next.filter(t => !seen.has(t.id))]
+      })
+    } catch {
+      /* ignore */
+    }
+    setSaving(false)
+  }, [saving])
 
   const stepIndex = stepOrder.indexOf(step)
   const dotCount = stepOrder.length
@@ -275,8 +293,8 @@ export function Onboarding({ onComplete }: Props) {
                     <div style={{ position: 'relative' }}>
                       <CoverImage coverKey={t.cover_key} />
                       {playingTrackId === t.id && (
-                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}>
-                          <Icon name="pause" size={24} color="#fff" />
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', color: '#fff' }}>
+                          <Icon name="pause" size={24} />
                         </div>
                       )}
                     </div>

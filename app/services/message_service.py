@@ -40,6 +40,8 @@ class MessageService:
         msg_type: str = "text",
         reply_to_id: int | None = None,
         shared_track_id: int | None = None,
+        shared_album_id: int | None = None,
+        shared_playlist_id: int | None = None,
         broadcast: bool = True,
         sender_role: str | None = None,
     ) -> dict[str, Any]:
@@ -82,6 +84,8 @@ class MessageService:
             content_nonce=nonce,
             reply_to_id=reply_to_id,
             shared_track_id=shared_track_id,
+            shared_album_id=shared_album_id,
+            shared_playlist_id=shared_playlist_id,
         )
 
         result = {
@@ -92,6 +96,8 @@ class MessageService:
             "content": content,
             "reply_to_id": reply_to_id,
             "shared_track_id": shared_track_id,
+            "shared_album_id": shared_album_id,
+            "shared_playlist_id": shared_playlist_id,
             "created_at": msg.created_at.isoformat(),
             "attachments": [],
             "reactions": [],
@@ -350,6 +356,8 @@ class MessageService:
             "content": text,
             "reply_to_id": msg.reply_to_id,
             "shared_track_id": msg.shared_track_id,
+            "shared_album_id": msg.shared_album_id,
+            "shared_playlist_id": msg.shared_playlist_id,
             "created_at": msg.created_at.isoformat(),
             "attachments": [
                 {

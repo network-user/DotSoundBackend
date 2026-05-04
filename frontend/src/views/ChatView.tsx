@@ -84,6 +84,14 @@ export function ChatView() {
         typeof data.shared_track_id === 'number'
           ? data.shared_track_id
           : null,
+      shared_album_id:
+        typeof data.shared_album_id === 'number'
+          ? data.shared_album_id
+          : null,
+      shared_playlist_id:
+        typeof data.shared_playlist_id === 'number'
+          ? data.shared_playlist_id
+          : null,
       created_at: String(data.created_at),
       attachments: Array.isArray(data.attachments)
         ? data.attachments
@@ -420,6 +428,8 @@ export function ChatView() {
       content: caption,
       reply_to_id: null,
       shared_track_id: null,
+      shared_album_id: null,
+      shared_playlist_id: null,
       created_at: new Date().toISOString(),
       attachments: [{
         id: 0,

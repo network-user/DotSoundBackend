@@ -466,10 +466,18 @@ export interface ChatMessage {
   id: number
   conversation_id: number
   sender_id: number
-  type: 'text' | 'photo' | 'voice' | 'track_share'
+  type:
+    | 'text'
+    | 'photo'
+    | 'voice'
+    | 'track_share'
+    | 'album_share'
+    | 'playlist_share'
   content: string
   reply_to_id: number | null
   shared_track_id: number | null
+  shared_album_id: number | null
+  shared_playlist_id: number | null
   created_at: string
   attachments: MessageAttachment[]
   reactions: MessageReaction[]
