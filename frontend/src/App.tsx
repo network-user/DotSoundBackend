@@ -8,6 +8,7 @@ import {
   type ReactNode,
   type ErrorInfo,
 } from 'react'
+import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/lib/i18n'
 
@@ -146,7 +147,9 @@ function AnimatedRoutes({
     }
     if (typeof doc.startViewTransition === 'function') {
       doc.startViewTransition(() => {
-        setDisplayed(location)
+        flushSync(() => {
+          setDisplayed(location)
+        })
       })
     } else {
       setDisplayed(location)

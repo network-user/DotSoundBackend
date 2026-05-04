@@ -661,30 +661,6 @@ export function PlayerProvider({
   ])
 
   useEffect(() => {
-    const flushTelemetry = () => {
-      const events = telemetryQueueRef.current
-      if (events.length === 0) return
-      telemetryQueueRef.current = []
-      
-      const token = localStorage.getItem('auth-token')
-      fetch('/api/v1/signals/listen/batch', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ events })
-      }).catch(() => {})
-    }
-    const interval = setInterval(flushTelemetry, 30_000)
-    window.addEventListener('beforeunload', flushTelemetry)
-    return () => {
-      clearInterval(interval)
-      window.removeEventListener('beforeunload', flushTelemetry)
-    }
-  }, [])
-
-  useEffect(() => {
     void loadEqSettings()
   }, [loadEqSettings])
 
@@ -1537,8 +1513,6 @@ export function PlayerProvider({
         teardownPreloadHls()
       }
     }
-
-    if (preloadTriggerTrackId !== track.id) return
 
     api.getRadio(track.id, 5)
       .then((res) => {

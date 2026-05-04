@@ -745,6 +745,17 @@ export const adminApi = {
         query: { is_active: isActive },
       },
     ),
+  updateTrackGenre: (
+    trackId: number,
+    genre: string | null,
+  ) =>
+    adminFetch<Record<string, unknown>>(
+      `/tracks/${trackId}/genre`,
+      {
+        method: 'PATCH',
+        body: { genre },
+      },
+    ),
   listComplaints: (params: {
     page?: number
     size?: number
