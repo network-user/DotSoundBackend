@@ -184,6 +184,41 @@ class ChatService:
             result.append(item)
         return result
 
+    async def get_chat(
+        self, user_id: int, conv_id: int
+    ) -> dict[str, Any]:
+        conv = await self._repo.get_conversation(conv_id)
+        if not conv:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Chat not found",
+            )
+        member = await self._repo.get_member(conv_id, user_id)
+        if not member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member",
+            )
+        
+        result: dict[str, Any] = {
+            "conversation": _conv_to_dict(conv),
+            "member": _member_to_dict(member),
+            "last_message_at": None,
+        }
+        if conv.type == "dm":
+            peers = await self._repo.get_dm_peers(user_id, [conv_id])
+            peer = peers.get(conv_id)
+            if peer:
+                result["peer"] = {
+                    "id": peer.id,
+                    "first_name": peer.first_name,
+                    "last_name": peer.last_name,
+                    "display_name": peer.display_name,
+                    "username": peer.username,
+                    "avatar_key": peer.avatar_key,
+                }
+        return result
+
     async def pin_chat(
         self, user_id: int, conv_id: int
     ) -> None:

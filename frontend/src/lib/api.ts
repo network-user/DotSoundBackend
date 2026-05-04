@@ -1299,6 +1299,10 @@ export const api = {
     return request('/api/v1/chats')
   },
 
+  getChat(convId: number): Promise<ChatListItem> {
+    return request(`/api/v1/chats/${convId}`)
+  },
+
   searchUsers(q: string, limit = 20): Promise<{
     id: number
     username: string | null

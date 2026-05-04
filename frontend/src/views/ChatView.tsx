@@ -25,6 +25,7 @@ export function ChatView() {
   const active = true
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
+  const [initialLastRead, setInitialLastRead] = useState<number | null>(null)
   const [peerStatus, setPeerStatus] =
     useState<string>('offline')
   const [peerActivity, setPeerActivity] =
@@ -164,7 +165,13 @@ export function ChatView() {
     if (!conversationId) return
     setLoading(true)
     try {
-      const msgs = await api.getMessages(conversationId)
+      const [msgs, chatInfo] = await Promise.all([
+        api.getMessages(conversationId),
+        api.getChat(conversationId).catch(() => null),
+      ])
+      if (chatInfo?.member?.last_read_message_id != null) {
+        setInitialLastRead(chatInfo.member.last_read_message_id)
+      }
       setMessages(msgs.reverse())
     } finally {
       setLoading(false)
@@ -665,21 +672,62 @@ export function ChatView() {
             )}
           </div>
         ) : (
-          messages.map((msg) => (
-            <ChatBubble
-              key={msg.id}
-              message={msg}
-              isMine={msg.sender_id === myId}
-              onDelete={handleDelete}
-              onReaction={handleReaction}
-              onCancelUpload={
-                (msg as any)._uploading
-                  ? handleCancelUpload
-                  : undefined
+          (() => {
+            const items: React.ReactNode[] = []
+            let currentUnreadRendered = false
+            let prevDateStr = ''
+
+            messages.forEach((msg) => {
+              const dateObj = new Date(msg.created_at)
+              const dateStr = dateObj.toLocaleDateString(undefined, {
+                day: 'numeric',
+                month: 'short',
+                year:
+                  dateObj.getFullYear() === new Date().getFullYear()
+                    ? undefined
+                    : 'numeric',
+              })
+
+              if (dateStr !== prevDateStr) {
+                items.push(
+                  <div key={`date-${msg.id}`} className="chat-date-separator">
+                    <span>{dateStr}</span>
+                  </div>
+                )
+                prevDateStr = dateStr
               }
-              onViewPhoto={setViewingPhoto}
-            />
-          ))
+
+              if (
+                !currentUnreadRendered &&
+                initialLastRead !== null &&
+                msg.id > initialLastRead &&
+                msg.sender_id !== myId
+              ) {
+                items.push(
+                  <div key={`unread-${msg.id}`} className="chat-unread-separator">
+                    <span>Новые сообщения</span>
+                  </div>
+                )
+                currentUnreadRendered = true
+              }
+
+              items.push(
+                <ChatBubble
+                  key={msg.id}
+                  message={msg}
+                  isMine={msg.sender_id === myId}
+                  onDelete={handleDelete}
+                  onReaction={handleReaction}
+                  onCancelUpload={
+                    (msg as any)._uploading ? handleCancelUpload : undefined
+                  }
+                  onViewPhoto={setViewingPhoto}
+                />
+              )
+            })
+
+            return items
+          })()
         )}
         {peerActivity && (
           <div className="typing-indicator">

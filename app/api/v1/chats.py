@@ -64,6 +64,16 @@ async def list_chats(
     return await svc.list_chats(user.id)
 
 
+@router.get("/{conv_id}")
+async def get_chat(
+    conv_id: int,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    svc = ChatService(session)
+    return await svc.get_chat(user.id, conv_id)
+
+
 @router.post("/{conv_id}/pin")
 async def pin_chat(
     conv_id: int,
