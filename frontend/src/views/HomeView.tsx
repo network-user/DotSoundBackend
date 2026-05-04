@@ -227,6 +227,90 @@ function CarouselDots({
   )
 }
 
+function CarouselArrows({
+  containerRef,
+}: {
+  containerRef: RefObject<HTMLElement>
+}) {
+  const [canLeft, setCanLeft] = useState(false)
+  const [canRight, setCanRight] = useState(false)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const update = () => {
+      const maxScroll = Math.max(
+        0,
+        el.scrollWidth - el.clientWidth,
+      )
+      if (maxScroll <= 1) {
+        setCanLeft(false)
+        setCanRight(false)
+        return
+      }
+      setCanLeft(el.scrollLeft > 2)
+      setCanRight(el.scrollLeft < maxScroll - 2)
+    }
+
+    update()
+    el.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      el.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [containerRef])
+
+  const scrollByPage = (direction: -1 | 1) => {
+    const el = containerRef.current
+    if (!el) return
+    const distance = Math.max(
+      180,
+      Math.round(el.clientWidth * 0.8),
+    )
+    el.scrollBy({
+      left: distance * direction,
+      behavior: 'smooth',
+    })
+  }
+
+  if (!canLeft && !canRight) return null
+
+  return (
+    <>
+      {canLeft && (
+        <button
+          type="button"
+          className="home-carousel-arrow home-carousel-arrow--left"
+          onClick={() => scrollByPage(-1)}
+          aria-label="Прокрутить влево"
+        >
+          <Icon
+            name="chevron"
+            size={20}
+            className="home-carousel-arrow__icon home-carousel-arrow__icon--left"
+          />
+        </button>
+      )}
+      {canRight && (
+        <button
+          type="button"
+          className="home-carousel-arrow home-carousel-arrow--right"
+          onClick={() => scrollByPage(1)}
+          aria-label="Прокрутить вправо"
+        >
+          <Icon
+            name="chevron"
+            size={20}
+            className="home-carousel-arrow__icon"
+          />
+        </button>
+      )}
+    </>
+  )
+}
+
 function TrackCarouselSection({
   title,
   onMore,
@@ -250,10 +334,13 @@ function TrackCarouselSection({
           </button>
         )}
       </div>
-      <div ref={carouselRef} className="home-carousel">
-        {tracks.map((t) => (
-          <TrackTile key={t.id} track={t} onPlay={onPlay} />
-        ))}
+      <div className="home-carousel-shell">
+        <div ref={carouselRef} className="home-carousel">
+          {tracks.map((t) => (
+            <TrackTile key={t.id} track={t} onPlay={onPlay} />
+          ))}
+        </div>
+        <CarouselArrows containerRef={carouselRef} />
       </div>
       <CarouselDots
         count={tracks.length}
@@ -349,6 +436,8 @@ export function HomeView() {
   >(null)
   const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(null)
   const genreRowRef =
+    useRef<HTMLDivElement>(null)
+  const artistRowRef =
     useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -495,19 +584,22 @@ export function HomeView() {
           <div className="home-section-header">
             <span className="home-section-header__title">Миксы по жанрам</span>
           </div>
-          <div ref={genreRowRef} className="home-genre-mix-row">
-            {genreMixes.map((mix) => (
-              <GenreMixCard
-                key={mix.genre}
-                mix={mix}
-                onPlay={handlePlayAll}
-                onOpen={() =>
-                  navigate(
-                    `/genre-mix/${encodeURIComponent(mix.genre)}`,
-                  )
-                }
-              />
-            ))}
+          <div className="home-carousel-shell">
+            <div ref={genreRowRef} className="home-genre-mix-row">
+              {genreMixes.map((mix) => (
+                <GenreMixCard
+                  key={mix.genre}
+                  mix={mix}
+                  onPlay={handlePlayAll}
+                  onOpen={() =>
+                    navigate(
+                      `/genre-mix/${encodeURIComponent(mix.genre)}`,
+                    )
+                  }
+                />
+              ))}
+            </div>
+            <CarouselArrows containerRef={genreRowRef} />
           </div>
           <CarouselDots
             count={genreMixes.length}
@@ -555,43 +647,46 @@ export function HomeView() {
           <div className="home-section-header">
             <span className="home-section-header__title">Подписки</span>
           </div>
-          <div className="home-artist-strip">
-            {followedArtists.map((artist) => {
-              const src = coverUrl(artist.image_key)
-              return (
-                <button
-                  key={artist.id}
-                  type="button"
-                  className="home-artist-chip"
-                  onClick={() =>
-                    navigate(
-                      `/search?q=${encodeURIComponent(artist.name)}`,
-                    )
-                  }
-                  title={artist.name}
-                >
-                  <div className="home-artist-chip__avatar">
-                    {src ? (
-                      <img
-                        src={src}
-                        alt=""
-                        width={64}
-                        height={64}
-                        loading="lazy"
-                        decoding="async"
-                      />
-                    ) : (
-                      <div className="home-artist-chip__avatar-placeholder">
-                        <Icon name="user" size={24} />
-                      </div>
-                    )}
-                  </div>
-                  <span className="home-artist-chip__name">
-                    {artist.name}
-                  </span>
-                </button>
-              )
-            })}
+          <div className="home-carousel-shell">
+            <div ref={artistRowRef} className="home-artist-strip">
+              {followedArtists.map((artist) => {
+                const src = coverUrl(artist.image_key)
+                return (
+                  <button
+                    key={artist.id}
+                    type="button"
+                    className="home-artist-chip"
+                    onClick={() =>
+                      navigate(
+                        `/search?q=${encodeURIComponent(artist.name)}`,
+                      )
+                    }
+                    title={artist.name}
+                  >
+                    <div className="home-artist-chip__avatar">
+                      {src ? (
+                        <img
+                          src={src}
+                          alt=""
+                          width={64}
+                          height={64}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <div className="home-artist-chip__avatar-placeholder">
+                          <Icon name="user" size={24} />
+                        </div>
+                      )}
+                    </div>
+                    <span className="home-artist-chip__name">
+                      {artist.name}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <CarouselArrows containerRef={artistRowRef} />
           </div>
         </div>
       ) : null}

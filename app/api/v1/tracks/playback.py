@@ -254,6 +254,61 @@ async def _proxy_cors_bypass_third_party_audio(
     )
 
 
+async def _resolve_third_party_stream_with_recovery(
+    track: object,
+    session: AsyncSession,
+    *,
+    use_cache: bool = True,
+) -> tuple[object, str, str]:
+    eff_track: object = track
+    try:
+        stream_url, protocol = await _resolve_third_party_stream(
+            eff_track,
+            session,
+            use_cache=use_cache,
+        )
+        return eff_track, stream_url, protocol
+    except HTTPException as exc:
+        if exc.status_code not in (403, 404, 410, 503):
+            raise
+
+        from app.config import settings as _settings
+        from app.services.track_fallback_service import (
+            TrackFallbackService,
+        )
+
+        fallback_svc = TrackFallbackService(session, _settings)
+        resolved = False
+        if (
+            exc.status_code in (404, 410)
+            and _third_party_is_soundcloud(eff_track)
+        ):
+            sc_refreshed = await fallback_svc.try_refresh_sc_url(track)
+            if sc_refreshed:
+                try:
+                    stream_url, protocol = await _resolve_third_party_stream(
+                        eff_track,
+                        session,
+                        use_cache=use_cache,
+                    )
+                    return eff_track, stream_url, protocol
+                except HTTPException:
+                    resolved = False
+                else:
+                    resolved = True
+        if not resolved:
+            replacement = await fallback_svc.find_and_apply_fallback(track)
+            if replacement:
+                eff_track = replacement
+                stream_url, protocol = await _resolve_third_party_stream(
+                    replacement,
+                    session,
+                    use_cache=use_cache,
+                )
+                return eff_track, stream_url, protocol
+        raise
+
+
 @router.get(
     "/{track_id}/stream",
     response_model=StreamResponse,
@@ -304,57 +359,15 @@ async def stream_track(
                     "bandcamp" if spf == "bandcamp" else "youtube"
                 ),
             )
-        stream_track_id = track_id
-        stream_pf = track.source_platform
-        eff_track: object = track
-        try:
-            stream_url, protocol = await _resolve_third_party_stream(
-                eff_track, session
+        eff_track, stream_url, protocol = (
+            await _resolve_third_party_stream_with_recovery(
+                track,
+                session,
+                use_cache=True,
             )
-        except HTTPException as exc:
-            if exc.status_code not in (403, 404, 410, 503):
-                raise
-            from app.config import settings as _settings
-            from app.services.track_fallback_service import (
-                TrackFallbackService,
-            )
-
-            fallback_svc = TrackFallbackService(session, _settings)
-            resolved = False
-            if (
-                exc.status_code in (404, 410)
-                and _third_party_is_soundcloud(eff_track)
-            ):
-                sc_refreshed = (
-                    await fallback_svc.try_refresh_sc_url(track)
-                )
-                if sc_refreshed:
-                    try:
-                        (
-                            stream_url,
-                            protocol,
-                        ) = await _resolve_third_party_stream(
-                            eff_track, session
-                        )
-                        resolved = True
-                    except HTTPException:
-                        resolved = False
-            if not resolved:
-                replacement = (
-                    await fallback_svc.find_and_apply_fallback(track)
-                )
-                if replacement:
-                    eff_track = replacement
-                    (
-                        stream_url,
-                        protocol,
-                    ) = await _resolve_third_party_stream(
-                        replacement, session
-                    )
-                    stream_track_id = replacement.id
-                    stream_pf = replacement.source_platform
-                else:
-                    raise
+        )
+        stream_track_id = int(getattr(eff_track, "id", track_id))
+        stream_pf = getattr(eff_track, "source_platform", None)
         if protocol == "hls" or not _third_party_is_soundcloud(
             eff_track,
         ):
@@ -524,14 +537,21 @@ async def audio_stream(
             pass  # fall through to live proxy on storage error
 
     if track.access_mode == "third_party_stream":
-        if getattr(track, "source_platform", None) in ("bandcamp", "youtube"):
-            return await _proxy_cors_bypass_third_party_audio(
-                request, track, session
+        eff_track, stream_url, protocol = (
+            await _resolve_third_party_stream_with_recovery(
+                track,
+                session,
+                use_cache=not _third_party_is_soundcloud(track),
             )
-        stream_url, protocol = await _resolve_third_party_stream(
-            track, session, use_cache=not _third_party_is_soundcloud(track)
         )
-        if _third_party_is_soundcloud(track) and protocol != "hls":
+        if getattr(eff_track, "source_platform", None) in (
+            "bandcamp",
+            "youtube",
+        ):
+            return await _proxy_cors_bypass_third_party_audio(
+                request, eff_track, session
+            )
+        if _third_party_is_soundcloud(eff_track) and protocol != "hls":
             return await _http_proxy_range_get(
                 request,
                 stream_url,
