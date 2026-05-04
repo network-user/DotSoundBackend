@@ -1005,3 +1005,7 @@ ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyr
 - `[x]` **RadioView.tsx**: переработан — кнопка «Запустить бесконечное радио», индикатор режима,
   история прослушивания
 - `[x]` **PlayerBar.tsx**: `.player-radio-badge` при активном `radioMode`; клик → `/radio`
+
+## Chats / Track Share (2026-05-04)
+
+- [x] Share track to chat � modal picker in TrackCardSheet, send via pi.sendMessage(..., { type: 'track_share', shared_track_id }), and shared-track bubble with Play in ChatBubble.

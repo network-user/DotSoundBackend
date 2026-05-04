@@ -10,7 +10,6 @@ import { api } from '@/lib/api'
 import {
   getInternalUserId,
   getIsAdmin,
-  tg,
 } from '@/lib/telegram'
 import { useLikes } from '@/store/LikesContext'
 import {
@@ -37,6 +36,7 @@ import {
 } from '@/lib/streamDebugOverride'
 import { hapticNotification } from '@/lib/telegram'
 import type {
+  ChatListItem,
   Track,
   TrackCardResponse,
   TrackInfoResponse,
@@ -157,6 +157,11 @@ export function TrackCardSheet({
   const [coverFailed, setCoverFailed] =
     useState(false)
   const [genCooldown, setGenCooldown] = useState(0)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareChats, setShareChats] = useState<ChatListItem[]>([])
+  const [shareLoading, setShareLoading] = useState(false)
+  const [shareSendingConvId, setShareSendingConvId] = useState<number | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
   const [videoReady, setVideoReady] =
     useState(false)
   const videoEnabled =
@@ -347,16 +352,62 @@ export function TrackCardSheet({
     if (e.target === e.currentTarget) closeCard()
   }
 
-  const handleShare = async () => {
-    if (!track) return
-    try {
-      const { telegram_share_url } =
-        await api.getShareLinks(track.id)
-      tg.openTelegramLink(telegram_share_url)
-    } catch {
-      tg.showAlert(t('trackSheet.shareError'))
+  const formatShareChatTitle = useCallback((item: ChatListItem): string => {
+    if (item.conversation.type === 'saved') {
+      return 'Избранное'
     }
-  }
+    if (item.conversation.title?.trim()) {
+      return item.conversation.title.trim()
+    }
+    const peer = item.peer
+    const name = peer?.display_name
+      || [peer?.first_name, peer?.last_name]
+        .filter(Boolean)
+        .join(' ')
+    if (name && name.trim()) {
+      return name.trim()
+    }
+    if (peer?.username) {
+      return `@${peer.username}`
+    }
+    return `Чат #${item.conversation.id}`
+  }, [])
+
+  const openShareModal = useCallback(async () => {
+    setShareOpen(true)
+    setShareLoading(true)
+    setShareError(null)
+    try {
+      const chats = await api.listChats()
+      setShareChats(chats)
+    } catch {
+      setShareError('Не удалось загрузить чаты')
+    } finally {
+      setShareLoading(false)
+    }
+  }, [])
+
+  const handleShareToChat = useCallback(async (conversationId: number) => {
+    if (!track) return
+    setShareSendingConvId(conversationId)
+    setShareError(null)
+    try {
+      await api.sendMessage(
+        conversationId,
+        '',
+        {
+          type: 'track_share',
+          shared_track_id: track.id,
+        },
+      )
+      setShareOpen(false)
+      toast.success('Трек отправлен')
+    } catch {
+      setShareError('Не удалось отправить трек')
+    } finally {
+      setShareSendingConvId(null)
+    }
+  }, [track, toast])
 
   const handleAuthor = () => {
     if (track?.artist && onOpenArtist) {
@@ -784,9 +835,11 @@ export function TrackCardSheet({
               </div>
               <button
                 className="icon-btn"
-                onClick={handleShare}
+                onClick={() => {
+                  void openShareModal()
+                }}
               >
-                <Icon name="link" size={18} />
+                <Icon name="share" size={18} />
               </button>
             </div>
           ) : (
@@ -797,10 +850,12 @@ export function TrackCardSheet({
                 </h2>
                 <button
                   className="icon-btn"
-                  onClick={handleShare}
+                  onClick={() => {
+                    void openShareModal()
+                  }}
                 >
                   <Icon
-                    name="link"
+                    name="share"
                     size={18}
                   />
                 </button>
@@ -1553,6 +1608,91 @@ export function TrackCardSheet({
           style={{ display: 'none' }}
           onChange={handleVideoSelected}
         />
+
+        {shareOpen && (
+          <div
+            className="share-modal-overlay fade-in"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setShareOpen(false)
+              }
+            }}
+          >
+            <div className="share-modal scale-in">
+              <div className="share-modal-header">
+                <div className="share-modal-title-wrap">
+                  <h3 className="share-modal-title">Поделиться треком</h3>
+                  <p className="share-modal-subtitle">
+                    Выберите чат для отправки
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => setShareOpen(false)}
+                  aria-label="Закрыть"
+                >
+                  <Icon name="x" size={18} />
+                </button>
+              </div>
+
+              {shareLoading ? (
+                <div className="share-modal-loading">
+                  <div className="loader" />
+                </div>
+              ) : shareChats.length === 0 ? (
+                <div className="share-modal-empty">
+                  Нет доступных чатов
+                </div>
+              ) : (
+                <div className="share-chat-list">
+                  {shareChats.map((item) => {
+                    const convId = item.conversation.id
+                    const sending = shareSendingConvId === convId
+                    return (
+                      <button
+                        key={convId}
+                        type="button"
+                        className="share-chat-row"
+                        onClick={() => {
+                          void handleShareToChat(convId)
+                        }}
+                        disabled={shareSendingConvId !== null}
+                      >
+                        <span className="share-chat-icon">
+                          <Icon
+                            name={
+                              item.conversation.type === 'group'
+                                ? 'users-following'
+                                : item.conversation.type === 'saved'
+                                  ? 'heart'
+                                  : 'user'
+                            }
+                            size={16}
+                          />
+                        </span>
+                        <span className="share-chat-meta">
+                          <span className="share-chat-title">
+                            {formatShareChatTitle(item)}
+                          </span>
+                        </span>
+                        <span className="share-chat-action">
+                          {sending ? 'Отправка…' : 'Отправить'}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {shareError && (
+                <div className="share-modal-error">
+                  {shareError}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {loading && !card && (
           <div className="tcs-loader">

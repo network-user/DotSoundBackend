@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '@/components/Icon/Icon'
 import { VoicePlayer } from '@/components/Chat/VoicePlayer'
-import type { ChatMessage } from '@/types/api'
+import { api } from '@/lib/api'
+import { usePlayerActions } from '@/store/PlayerContext'
+import type { ChatMessage, Track } from '@/types/api'
 
 interface Props {
   message: ChatMessage & {
@@ -22,6 +24,7 @@ const REACTIONS = [
   'music',
   'sparkle',
 ]
+const SHARED_TRACK_CACHE = new Map<number, Track>()
 
 export function ChatBubble({
   message,
@@ -35,6 +38,9 @@ export function ChatBubble({
   const [showReactions, setShowReactions] =
     useState(false)
   const [imgLoaded, setImgLoaded] = useState(false)
+  const [sharedTrack, setSharedTrack] = useState<Track | null>(null)
+  const [sharedTrackLoading, setSharedTrackLoading] = useState(false)
+  const { playTrack } = usePlayerActions()
 
   const photoAtt = message.attachments?.find(
     (a) => a.file_type === 'photo',
@@ -70,6 +76,40 @@ export function ChatBubble({
     message.is_system === true ||
     message.sender_role === 'admin' ||
     message.sender_role === 'system'
+
+  useEffect(() => {
+    const sharedTrackId = message.shared_track_id
+    if (!sharedTrackId) {
+      setSharedTrack(null)
+      setSharedTrackLoading(false)
+      return
+    }
+    const cached = SHARED_TRACK_CACHE.get(sharedTrackId)
+    if (cached) {
+      setSharedTrack(cached)
+      return
+    }
+    let cancelled = false
+    setSharedTrackLoading(true)
+    api.getTrack(sharedTrackId)
+      .then((track) => {
+        if (cancelled) return
+        SHARED_TRACK_CACHE.set(sharedTrackId, track)
+        setSharedTrack(track)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setSharedTrack(null)
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setSharedTrackLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [message.shared_track_id])
 
   if (isSystem) {
     return (
@@ -148,6 +188,57 @@ export function ChatBubble({
             }
             waveform={voiceAtt.waveform ?? []}
           />
+        )}
+
+        {message.shared_track_id && (
+          <div className="bubble-track-share slide-in">
+            {sharedTrack ? (
+              <div className="bubble-track-share-card">
+                <div className="bubble-track-cover-wrap">
+                  {sharedTrack.cover_key ? (
+                    <img
+                      src={`/api/v1/tracks/cover_proxy?key=${encodeURIComponent(sharedTrack.cover_key)}`}
+                      alt=""
+                      className="bubble-track-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="bubble-track-cover-placeholder">
+                      <Icon name="music" size={18} />
+                    </span>
+                  )}
+                </div>
+                <div className="bubble-track-main">
+                  <span className="bubble-track-label">
+                    Трек
+                  </span>
+                  <span className="bubble-track-title">
+                    {sharedTrack.title}
+                  </span>
+                  <span className="bubble-track-artist">
+                    {sharedTrack.artist || 'Неизвестный артист'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="bubble-track-play"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void playTrack(sharedTrack)
+                  }}
+                >
+                  <Icon name="play" size={14} />
+                  Play
+                </button>
+              </div>
+            ) : (
+              <div className="bubble-track-share-fallback">
+                {sharedTrackLoading
+                  ? 'Загрузка трека…'
+                  : `Трек #${message.shared_track_id}`}
+              </div>
+            )}
+          </div>
         )}
 
         {message.content && (
