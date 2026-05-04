@@ -15,9 +15,17 @@ export function ProfileActions({ onOpenImport }: ProfileActionsProps) {
         className="profile-action-btn"
         onClick={() => navigate('/upload')}
       >
-        <span className="profile-action-icon">↑</span>
+        <span
+          className="profile-action-icon profile-action-icon-svg"
+        >
+          <Icon name="upload" size={18} />
+        </span>
         <span className="profile-action-label">Загрузить трек</span>
-        <span className="profile-action-chevron">›</span>
+        <Icon
+          name="chevron"
+          size={16}
+          className="profile-action-chevron"
+        />
       </button>
 
       <button
@@ -34,7 +42,11 @@ export function ProfileActions({ onOpenImport }: ProfileActionsProps) {
         <span className="profile-action-label">
           Импортировать песни
         </span>
-        <span className="profile-action-chevron">›</span>
+        <Icon
+          name="chevron"
+          size={16}
+          className="profile-action-chevron"
+        />
       </button>
 
       <button
@@ -42,9 +54,17 @@ export function ProfileActions({ onOpenImport }: ProfileActionsProps) {
         className="profile-action-btn"
         onClick={() => navigate('/library?tab=playlists')}
       >
-        <span className="profile-action-icon">▤</span>
+        <span
+          className="profile-action-icon profile-action-icon-svg"
+        >
+          <Icon name="layers" size={18} />
+        </span>
         <span className="profile-action-label">Мои плейлисты</span>
-        <span className="profile-action-chevron">›</span>
+        <Icon
+          name="chevron"
+          size={16}
+          className="profile-action-chevron"
+        />
       </button>
 
       <button
@@ -52,9 +72,17 @@ export function ProfileActions({ onOpenImport }: ProfileActionsProps) {
         className="profile-action-btn"
         onClick={() => navigate('/library?tab=liked')}
       >
-        <span className="profile-action-icon">♥</span>
+        <span
+          className="profile-action-icon profile-action-icon-svg"
+        >
+          <Icon name="heart" size={18} />
+        </span>
         <span className="profile-action-label">Понравившееся</span>
-        <span className="profile-action-chevron">›</span>
+        <Icon
+          name="chevron"
+          size={16}
+          className="profile-action-chevron"
+        />
       </button>
     </div>
   )

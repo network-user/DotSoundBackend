@@ -1,3 +1,5 @@
+import { Icon } from '@/components/Icon/Icon'
+
 interface Props {
   currentAvatar: string | null
   shownName: string
@@ -51,7 +53,8 @@ export function ProfileHero({
       <div className="profile-edit-controls">
         {!editMode ? (
           <button className="profile-edit-btn" onClick={onEditStart}>
-            ✎ Изменить
+            <Icon name="edit" size={16} />
+            <span>Изменить</span>
           </button>
         ) : (
           <>

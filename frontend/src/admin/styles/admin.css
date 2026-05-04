@@ -8,7 +8,7 @@
 
 .admin-shell {
   display: grid;
-  grid-template-columns: 248px 1fr;
+  grid-template-columns: 232px 1fr;
   min-height: 100vh;
   background: var(--bg);
   color: var(--text);
@@ -25,9 +25,9 @@
 }
 
 .admin-shell__sidebar {
-  background: var(--bg-elevated);
+  background: #0d0d0d;
   border-right: 1px solid var(--border);
-  padding: var(--space-6) var(--space-5);
+  padding: var(--space-5) var(--space-4);
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
@@ -48,9 +48,9 @@
 }
 
 .admin-shell__brand {
-  font-size: var(--fs-22);
+  font-size: var(--fs-18);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -83,7 +83,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-4) var(--space-7);
+  padding: var(--space-3) var(--space-6);
   border-bottom: 1px solid var(--border);
   background: rgba(10, 10, 10, 0.85);
   backdrop-filter: blur(12px);
@@ -103,7 +103,7 @@
 .admin-shell__topbar-title {
   font-weight: 600;
   font-size: var(--fs-15);
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   flex: 1;
   min-width: 0;
   white-space: nowrap;
@@ -129,7 +129,7 @@
 }
 
 .admin-shell__main {
-  padding: var(--space-7) var(--space-7) var(--space-8);
+  padding: var(--space-6) var(--space-6) var(--space-8);
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -159,7 +159,7 @@
 .admin-shell__main h1 {
   font-size: var(--fs-22);
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   margin: 0;
   line-height: var(--lh-tight);
 }
@@ -182,8 +182,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--r-md);
+  padding: 10px var(--space-3);
+  border-radius: 8px;
   color: var(--text-secondary);
   text-decoration: none;
   font-size: var(--fs-14);
@@ -237,10 +237,10 @@
 }
 
 .admin-card {
-  background: var(--surface);
+  background: var(--bg-elevated);
   border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  padding: var(--space-5) var(--space-6);
+  border-radius: 10px;
+  padding: var(--space-4) var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -261,7 +261,7 @@
   font-size: var(--fs-18);
   font-weight: 600;
   margin: 0;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
 }
 
 .admin-card__sub {
@@ -327,7 +327,7 @@
   font-weight: 700;
   line-height: var(--lh-tight);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 
 .kpi-card__hint {
@@ -949,7 +949,7 @@
   font-size: var(--fs-15);
   font-weight: 600;
   margin: 0;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
 }
 
 .admin-section__sub {
@@ -1069,7 +1069,7 @@
   font-family: 'JetBrains Mono',
     ui-monospace, monospace;
   word-break: break-all;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
 }
 
 .admin-jobdetail-close {
@@ -1379,7 +1379,7 @@
 .admin-nav-drawer__brand {
   font-size: var(--fs-22);
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   padding: 0 var(--space-2);
 }
 
@@ -1534,17 +1534,8 @@
   border-top: 1px solid var(--border);
 }
 
-.admin-albums-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
-  gap: var(--space-6);
-  align-items: start;
-}
-
-@media (max-width: 960px) {
-  .admin-albums-layout {
-    grid-template-columns: 1fr;
-  }
+.admin-card--editor {
+  max-width: 880px;
 }
 
 /* ── Reduced motion: убираем shimmer и lift ── */
