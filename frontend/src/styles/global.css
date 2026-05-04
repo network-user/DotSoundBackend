@@ -7070,22 +7070,37 @@ html.ds-low-glass .tcs-sheet {
   display: flex;
   justify-content: center;
   gap: 5px;
-  height: 12px;
+  min-height: 18px;
   margin: 2px 0 0;
+  align-items: center;
 }
 
-.home-carousel-dots span {
+.home-carousel-dot {
+  border: 0;
+  padding: 0;
+  cursor: pointer;
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: var(--text-muted);
   opacity: 0.35;
+  transition:
+    width 220ms ease,
+    opacity 220ms ease,
+    transform 220ms ease,
+    background-color 220ms ease;
 }
 
-.home-carousel-dots span.active {
+.home-carousel-dot:hover {
+  opacity: 0.55;
+  transform: scale(1.08);
+}
+
+.home-carousel-dot.active {
   width: 14px;
   border-radius: 999px;
   opacity: 0.8;
+  background: var(--text);
 }
 
 .home-track-tile,

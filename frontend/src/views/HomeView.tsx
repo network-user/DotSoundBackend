@@ -1,6 +1,8 @@
 ﻿import {
   useCallback,
   useEffect,
+  type RefObject,
+  useRef,
   useState,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -26,10 +28,10 @@ interface HomeSection {
 
 function timeGreeting(): string {
   const h = new Date().getHours()
-  if (h < 6) return 'Р”РѕР±СЂРѕР№ РЅРѕС‡Рё'
-  if (h < 12) return 'Р”РѕР±СЂРѕРµ СѓС‚СЂРѕ'
-  if (h < 18) return 'Р”РѕР±СЂС‹Р№ РґРµРЅСЊ'
-  return 'Р”РѕР±СЂС‹Р№ РІРµС‡РµСЂ'
+  if (h < 6) return 'Доброй ночи'
+  if (h < 12) return 'Доброе утро'
+  if (h < 18) return 'Добрый день'
+  return 'Добрый вечер'
 }
 
 function coverUrl(key: string | null): string | null {
@@ -49,7 +51,7 @@ function TrackTile({ track, onPlay }: TrackTileProps) {
       type="button"
       className="home-track-tile"
       onClick={() => onPlay(track)}
-      title={[track.title, track.artist].filter(Boolean).join(' вЂ” ')}
+      title={[track.title, track.artist].filter(Boolean).join(' — ')}
     >
       <div className="home-track-tile__cover">
         {src ? (
@@ -68,7 +70,7 @@ function TrackTile({ track, onPlay }: TrackTileProps) {
         )}
       </div>
       <div className="home-track-tile__title">
-        {track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'}
+        {track.title || 'Без названия'}
       </div>
       {track.artist && (
         <div className="home-track-tile__artist">
@@ -110,7 +112,7 @@ function FeaturedCard({
         <div className="home-featured__copy">
           <span className="home-featured__eyebrow">{label}</span>
           <strong className="home-featured__title">
-            {track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'}
+            {track.title || 'Без названия'}
           </strong>
           <span className="home-featured__artist">
             {track.artist || brandLabel}
@@ -134,7 +136,7 @@ function FeaturedCard({
         type="button"
         className="home-featured__play"
         onClick={() => onPlay(track)}
-        aria-label={`РЎР»СѓС€Р°С‚СЊ ${track.title || 'С‚СЂРµРє'}`}
+        aria-label={`Слушать ${track.title || 'трек'}`}
       >
         <Icon name="play" size={18} />
       </button>
@@ -142,15 +144,85 @@ function FeaturedCard({
   )
 }
 
-function CarouselDots({ count }: { count: number }) {
-  if (count < 4) return null
+function CarouselDots({
+  count,
+  containerRef,
+}: {
+  count: number
+  containerRef: RefObject<HTMLElement>
+}) {
+  const dotCount = Math.min(4, Math.ceil(count / 2))
+  const [active, setActive] = useState(0)
+  const rafRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const update = () => {
+      const maxScroll = Math.max(
+        0,
+        el.scrollWidth - el.clientWidth,
+      )
+      if (maxScroll <= 0 || dotCount <= 1) {
+        setActive(0)
+        return
+      }
+      const ratio = el.scrollLeft / maxScroll
+      const idx = Math.round(ratio * (dotCount - 1))
+      setActive(Math.max(0, Math.min(dotCount - 1, idx)))
+    }
+
+    const onScroll = () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+      rafRef.current = requestAnimationFrame(update)
+    }
+
+    update()
+    el.addEventListener('scroll', onScroll, {
+      passive: true,
+    })
+    window.addEventListener('resize', update)
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+      el.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', update)
+    }
+  }, [containerRef, dotCount])
+
+  if (dotCount < 2) return null
+
+  const scrollToDot = (idx: number) => {
+    const el = containerRef.current
+    if (!el) return
+    const maxScroll = Math.max(
+      0,
+      el.scrollWidth - el.clientWidth,
+    )
+    if (maxScroll <= 0) return
+    const left =
+      dotCount === 1
+        ? 0
+        : (maxScroll * idx) / (dotCount - 1)
+    el.scrollTo({ left, behavior: 'smooth' })
+  }
+
   return (
-    <div className="home-carousel-dots" aria-hidden>
-      {Array.from({ length: Math.min(4, Math.ceil(count / 2)) }).map(
-        (_, i) => (
-          <span key={i} className={i === 0 ? 'active' : ''} />
-        ),
-      )}
+    <div className="home-carousel-dots">
+      {Array.from({ length: dotCount }).map((_, i) => (
+        <button
+          key={i}
+          type="button"
+          className={`home-carousel-dot${i === active ? ' active' : ''}`}
+          onClick={() => scrollToDot(i)}
+          aria-label={`Slide ${i + 1}`}
+          aria-current={i === active ? 'true' : undefined}
+        />
+      ))}
     </div>
   )
 }
@@ -161,6 +233,8 @@ function TrackCarouselSection({
   tracks,
   onPlay,
 }: SectionProps) {
+  const carouselRef =
+    useRef<HTMLDivElement>(null)
   if (!tracks.length) return null
   return (
     <div>
@@ -172,16 +246,19 @@ function TrackCarouselSection({
             className="home-section-header__link"
             onClick={onMore}
           >
-            Р’СЃРµ
+            Все
           </button>
         )}
       </div>
-      <div className="home-carousel">
+      <div ref={carouselRef} className="home-carousel">
         {tracks.map((t) => (
           <TrackTile key={t.id} track={t} onPlay={onPlay} />
         ))}
       </div>
-      <CarouselDots count={tracks.length} />
+      <CarouselDots
+        count={tracks.length}
+        containerRef={carouselRef}
+      />
     </div>
   )
 }
@@ -227,7 +304,7 @@ function GenreMixCard({ mix, onPlay, onOpen }: GenreCardProps) {
           e.stopPropagation()
           if (mix.tracks.length) onPlay(mix.tracks)
         }}
-        aria-label={`РЎР»СѓС€Р°С‚СЊ ${mix.title}`}
+        aria-label={`Слушать ${mix.title}`}
       >
         <Icon name="play" size={14} />
       </button>
@@ -235,7 +312,7 @@ function GenreMixCard({ mix, onPlay, onOpen }: GenreCardProps) {
         {mix.genre.charAt(0).toUpperCase() + mix.genre.slice(1)}
       </span>
       <span className="home-genre-mix-card__count">
-        {mix.tracks.length} С‚СЂРµРєРѕРІ
+        {mix.tracks.length} треков
       </span>
     </button>
   )
@@ -250,12 +327,12 @@ const QUICK_ITEMS: {
   icon: string
   path: string
 }[] = [
-  { label: 'РџР»РµР№Р»РёСЃС‚ РґРЅСЏ', icon: 'calendar', path: '/daily-mix' },
-  { label: 'РџР»РµР№Р»РёСЃС‚ РЅРµРґРµР»Рё', icon: 'star', path: '/weekly-mix' },
-  { label: 'Р’С‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№', icon: 'heart', path: '/user-choice' },
-  { label: 'Р‘РёР±Р»РёРѕС‚РµРєР°', icon: 'layers', path: '/library' },
-  { label: 'Р Р°РґРёРѕ', icon: 'radio', path: '/radio' },
-  { label: 'РџРѕРґРїРёСЃРєРё', icon: 'users-following', path: '/library?tab=following' },
+  { label: 'Плейлист дня', icon: 'calendar', path: '/daily-mix' },
+  { label: 'Плейлист недели', icon: 'star', path: '/weekly-mix' },
+  { label: 'Выбор пользователей', icon: 'heart', path: '/user-choice' },
+  { label: 'Библиотека', icon: 'layers', path: '/library' },
+  { label: 'Радио', icon: 'radio', path: '/radio' },
+  { label: 'Подписки', icon: 'users-following', path: '/library?tab=following' },
 ]
 
 export function HomeView() {
@@ -271,6 +348,8 @@ export function HomeView() {
     FollowedArtistItem[] | null
   >(null)
   const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(null)
+  const genreRowRef =
+    useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const uid = getInternalUserId()
@@ -304,7 +383,7 @@ export function HomeView() {
       try {
         await playTrack(track)
       } catch (e) {
-        toast.error(getApiErrorMessage(e, 'РћС€РёР±РєР° РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ'))
+        toast.error(getApiErrorMessage(e, 'Ошибка воспроизведения'))
       }
     },
     [playTrack, toast],
@@ -316,7 +395,7 @@ export function HomeView() {
       try {
         await playTrack(tracks[0])
       } catch (e) {
-        toast.error(getApiErrorMessage(e, 'РћС€РёР±РєР° РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ'))
+        toast.error(getApiErrorMessage(e, 'Ошибка воспроизведения'))
       }
     },
     [playTrack, toast],
@@ -346,9 +425,9 @@ export function HomeView() {
     null
   const featuredLabel =
     featuredSource?.section_type === 'continue'
-      ? 'РџСЂРѕРґРѕР»Р¶РёС‚СЊ'
+      ? 'Продолжить'
       : featuredSource?.section_type === 'user_choice'
-        ? 'Р’С‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№'
+        ? 'Выбор пользователей'
         : brandLabel
   const loadingFeatured =
     sections === null && fallbackTracks === null
@@ -403,7 +482,7 @@ export function HomeView() {
       {genreMixes === null ? (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">РњРёРєСЃС‹ РїРѕ Р¶Р°РЅСЂР°Рј</span>
+            <span className="home-section-header__title">Миксы по жанрам</span>
           </div>
           <div className="home-genre-mix-row home-skeleton-row">
             {[1, 2, 3].map((i) => (
@@ -414,9 +493,9 @@ export function HomeView() {
       ) : genreMixes.length > 0 ? (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">РњРёРєСЃС‹ РїРѕ Р¶Р°РЅСЂР°Рј</span>
+            <span className="home-section-header__title">Миксы по жанрам</span>
           </div>
-          <div className="home-genre-mix-row">
+          <div ref={genreRowRef} className="home-genre-mix-row">
             {genreMixes.map((mix) => (
               <GenreMixCard
                 key={mix.genre}
@@ -430,7 +509,10 @@ export function HomeView() {
               />
             ))}
           </div>
-          <CarouselDots count={genreMixes.length} />
+          <CarouselDots
+            count={genreMixes.length}
+            containerRef={genreRowRef}
+          />
         </div>
       ) : null}
 
@@ -438,7 +520,7 @@ export function HomeView() {
       {sections === null ? (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">РџСЂРѕРґРѕР»Р¶РёС‚СЊ</span>
+            <span className="home-section-header__title">Продолжить</span>
           </div>
           <div className="home-carousel home-skeleton-row">
             {[1, 2, 3, 4].map((i) => (
@@ -460,7 +542,7 @@ export function HomeView() {
       {followedArtists === null ? (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">РџРѕРґРїРёСЃРєРё</span>
+            <span className="home-section-header__title">Подписки</span>
           </div>
           <div className="home-artist-strip">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -471,7 +553,7 @@ export function HomeView() {
       ) : followedArtists.length > 0 ? (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">РџРѕРґРїРёСЃРєРё</span>
+            <span className="home-section-header__title">Подписки</span>
           </div>
           <div className="home-artist-strip">
             {followedArtists.map((artist) => {
@@ -580,7 +662,7 @@ export function HomeView() {
       {!sections && fallbackTracks !== null && fallbackTracks.length > 0 && (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">РўСЂРµРєРё</span>
+            <span className="home-section-header__title">Треки</span>
           </div>
           <div className="home-carousel">
             {fallbackTracks.map((t) => (
@@ -599,10 +681,12 @@ export function HomeView() {
             fontSize: 14,
           }}
         >
-          РџРѕСЃР»СѓС€Р°Р№ С‡С‚Рѕ-РЅРёР±СѓРґСЊ, Рё Р·РґРµСЃСЊ РїРѕСЏРІСЏС‚СЃСЏ РїРѕРґР±РѕСЂРєРё
+          Послушай что-нибудь, и здесь появятся подборки
         </div>
       )}
     </section>
   )
 }
+
+
 
