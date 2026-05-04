@@ -70,6 +70,8 @@ class AlbumRepository:
         title: str | None = None,
         description: str | None = None,
         is_public: bool | None = None,
+        cover_key: str | None = None,
+        owner_id: int | None = None,
     ) -> Album:
         if title is not None:
             album.title = title
@@ -77,6 +79,10 @@ class AlbumRepository:
             album.description = description
         if is_public is not None:
             album.is_public = is_public
+        if cover_key is not None:
+            album.cover_key = cover_key
+        if owner_id is not None:
+            album.owner_id = owner_id
         await self._session.flush()
         await self._session.refresh(album)
         return album
@@ -86,10 +92,59 @@ class AlbumRepository:
         await self._session.flush()
         logger.debug("db_album_deleted", album_id=album.id)
 
+    async def _next_album_position(self, album_id: int) -> int:
+        result = await self._session.execute(
+            select(func.coalesce(func.max(Track.album_position), -1)).where(
+                Track.album_id == album_id,
+            )
+        )
+        return int(result.scalar_one()) + 1
+
     async def add_track(self, album_id: int, track: Track) -> None:
         track.album_id = album_id
+        track.album_position = await self._next_album_position(album_id)
         await self._session.flush()
 
     async def remove_track(self, track: Track) -> None:
+        album_id = track.album_id
         track.album_id = None
+        track.album_position = None
+        await self._session.flush()
+        if album_id is not None:
+            await self.compact_album_positions(album_id)
+
+    async def compact_album_positions(self, album_id: int) -> None:
+        result = await self._session.execute(
+            select(Track)
+            .where(Track.album_id == album_id)
+            .order_by(
+                Track.album_position.asc().nulls_last(),
+                Track.id.asc(),
+            )
+        )
+        rows = list(result.scalars().all())
+        for pos, row in enumerate(rows):
+            if row.album_position != pos:
+                row.album_position = pos
+        await self._session.flush()
+
+    async def set_album_track_order(
+        self,
+        album_id: int,
+        ordered_track_ids: list[int],
+    ) -> None:
+        result = await self._session.execute(
+            select(Track).where(Track.album_id == album_id)
+        )
+        rows = {t.id: t for t in result.scalars().all()}
+        if set(ordered_track_ids) != set(rows.keys()):
+            raise ValueError(
+                "track_ids must list every album track exactly once",
+            )
+        if len(ordered_track_ids) != len(rows):
+            raise ValueError(
+                "track_ids must list every album track exactly once",
+            )
+        for pos, tid in enumerate(ordered_track_ids):
+            rows[tid].album_position = pos
         await self._session.flush()

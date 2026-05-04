@@ -20,4 +20,8 @@ class Album(Base, TimestampMixin):
         Boolean, server_default="true", nullable=False
     )
 
-    tracks = relationship("Track", back_populates="album")
+    tracks = relationship(
+        "Track",
+        back_populates="album",
+        order_by="Track.album_position, Track.id",
+    )

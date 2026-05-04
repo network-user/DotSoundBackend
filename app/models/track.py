@@ -52,19 +52,13 @@ class Track(Base, TimestampMixin):
             "uploaded_by_id",
             "blob_id",
             unique=True,
-            postgresql_where=text(
-                "blob_id IS NOT NULL AND is_active IS TRUE"
-            ),
-            sqlite_where=text(
-                "blob_id IS NOT NULL AND is_active = 1"
-            ),
+            postgresql_where=text("blob_id IS NOT NULL AND is_active IS TRUE"),
+            sqlite_where=text("blob_id IS NOT NULL AND is_active = 1"),
         ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    title: Mapped[str] = mapped_column(
-        String(256), index=True, nullable=False
-    )
+    title: Mapped[str] = mapped_column(String(256), index=True, nullable=False)
     artist: Mapped[str | None] = mapped_column(
         String(256), index=True, nullable=True
     )
@@ -80,15 +74,11 @@ class Track(Base, TimestampMixin):
     processing_status: Mapped[str] = mapped_column(
         String(20), server_default="active", nullable=False
     )
-    file_key: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    file_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     play_count: Mapped[int] = mapped_column(
         Integer, server_default="0", nullable=False
     )
-    cover_key: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    cover_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     uploaded_by_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"),
         type_=BigInteger,
@@ -113,39 +103,25 @@ class Track(Base, TimestampMixin):
     source_platform: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )
-    external_id: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
+    external_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     imported_from: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )
-    video_key: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    video_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     video_processing_status: Mapped[str | None] = mapped_column(
         String(20), nullable=True
     )
     video_thumbnail_key: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
-    sc_url: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    sc_uri: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
-    source_url: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    sc_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sc_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     canonical_source_url: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
-    source_name: Mapped[str | None] = mapped_column(
-        String(50), nullable=True
-    )
-    hls_manifest_key: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    source_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    hls_manifest_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_public: Mapped[bool] = mapped_column(
         Boolean, server_default=true(), nullable=False
     )
@@ -153,12 +129,14 @@ class Track(Base, TimestampMixin):
         ForeignKey("albums.id", ondelete="SET NULL"),
         nullable=True,
     )
+    album_position: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
     comments_enabled: Mapped[bool] = mapped_column(
         Boolean, server_default=true(), nullable=False
     )
-    description: Mapped[str | None] = mapped_column(
-        Text, nullable=True
-    )
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     blob_id: Mapped[int | None] = mapped_column(
         ForeignKey("audio_blobs.id", ondelete="SET NULL"),
         nullable=True,

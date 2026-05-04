@@ -44,6 +44,7 @@ class TrackResponse(BaseModel):
     source_name: str | None = None
     uploaded_by_id: int | None = None
     album_id: int | None = None
+    album_position: int | None = None
     created_at: datetime
     waveform_data: list[float] | None = None
     playback_variants: list[TrackPlaybackVariantBrief] = Field(
@@ -55,7 +56,9 @@ class TrackResponse(BaseModel):
     def cover_url(self) -> str | None:
         if not self.cover_key:
             return None
-        return f"/api/v1/tracks/cover_proxy?key={quote(self.cover_key, safe='')}"
+        return (
+            f"/api/v1/tracks/cover_proxy?key={quote(self.cover_key, safe='')}"
+        )
 
 
 class TrackListResponse(BaseModel):
@@ -86,14 +89,10 @@ class TrackUploadResponse(BaseModel):
 
 
 class TrackUpdateRequest(BaseModel):
-    title: str | None = Field(
-        None, max_length=256, min_length=1
-    )
+    title: str | None = Field(None, max_length=256, min_length=1)
     artist: str | None = Field(None, max_length=256)
     genre: str | None = Field(None, max_length=100)
-    description: str | None = Field(
-        None, max_length=2000
-    )
+    description: str | None = Field(None, max_length=2000)
     is_public: bool | None = None
 
 
@@ -104,9 +103,7 @@ class StreamResponse(BaseModel):
         default="direct",
         description="direct or hls",
     )
-    expires_in: int = Field(
-        default=3600, description="URL TTL in seconds"
-    )
+    expires_in: int = Field(default=3600, description="URL TTL in seconds")
 
 
 class PlayResponse(BaseModel):
