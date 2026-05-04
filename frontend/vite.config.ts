@@ -17,10 +17,10 @@ export default defineConfig({
         'icon-maskable-512.png',
       ],
       manifest: {
-        name: '.\u0437\u0432\u0443\u043a вЂ” РјСѓР·С‹РєР°',
+        name: '.\u0437\u0432\u0443\u043a — музыка',
         short_name: '.\u0437\u0432\u0443\u043a',
         description:
-          '.\u0437\u0432\u0443\u043a вЂ” РјСѓР·С‹РєР° Р±РµР· СЂРµРєР»Р°РјС‹, РїР»РµР№Р»РёСЃС‚С‹, РѕС„Р»Р°Р№РЅ-РґРѕСЃС‚СѓРї.',
+          '.\u0437\u0432\u0443\u043a — музыка без рекламы, плейлисты, офлайн-доступ.',
         lang: 'ru',
         dir: 'ltr',
         categories: ['music', 'entertainment'],
@@ -67,18 +67,18 @@ export default defineConfig({
         ],
         shortcuts: [
           {
-            name: 'РџРѕРёСЃРє',
-            short_name: 'РџРѕРёСЃРє',
+            name: 'Поиск',
+            short_name: 'Поиск',
             url: '/mini_app/search',
           },
           {
-            name: 'Р›СЋР±РёРјРѕРµ',
-            short_name: 'Р›СЋР±РёРјРѕРµ',
+            name: 'Любимое',
+            short_name: 'Любимое',
             url: '/mini_app/library?tab=liked',
           },
           {
-            name: 'Р—Р°РіСЂСѓР·РёС‚СЊ С‚СЂРµРє',
-            short_name: 'Р—Р°РіСЂСѓР·РёС‚СЊ',
+            name: 'Загрузить трек',
+            short_name: 'Загрузить',
             url: '/mini_app/upload',
           },
         ],
