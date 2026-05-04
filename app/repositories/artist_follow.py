@@ -1,6 +1,7 @@
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.artist import Artist
 from app.models.artist_follow import ArtistFollow
 
 
@@ -73,5 +74,20 @@ class ArtistFollowRepository:
             select(ArtistFollow.artist_id).where(
                 ArtistFollow.user_id == user_id
             )
+        )
+        return list(result.scalars().all())
+
+    async def list_followed_artists(
+        self, user_id: int, limit: int = 50
+    ) -> list[Artist]:
+        result = await self._session.execute(
+            select(Artist)
+            .join(
+                ArtistFollow,
+                ArtistFollow.artist_id == Artist.id,
+            )
+            .where(ArtistFollow.user_id == user_id)
+            .order_by(ArtistFollow.created_at.desc())
+            .limit(limit)
         )
         return list(result.scalars().all())

@@ -110,6 +110,8 @@ class AppSettings(BaseSettings):
     soundcloud_global_concurrency: int = 4
     soundcloud_slot_acquire_timeout_seconds: float = 30.0
     artist_station_stale_threshold_days: int = 7
+    artist_catalog_full_sync_stale_threshold_days: int = 30
+    artist_catalog_enqueue_lock_ttl_seconds: int = 300
     youtube_concurrency: int = 4
     youtube_slot_acquire_timeout_seconds: float = 30.0
     bandcamp_concurrency: int = 4

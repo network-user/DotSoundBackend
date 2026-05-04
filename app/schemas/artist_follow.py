@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class ArtistFollowToggleResponse(BaseModel):
@@ -25,3 +25,19 @@ class ArtistListenersResponse(BaseModel):
     artist_id: int
     current_month_listeners: int
     history: list[MonthlyListenersEntry]
+
+
+class FollowedArtistItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    image_key: str | None = None
+    source: str = "internal"
+    bio: str | None = None
+    track_count: int = 0
+
+
+class FollowedArtistListResponse(BaseModel):
+    items: list[FollowedArtistItem]
+    total: int

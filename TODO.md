@@ -30,6 +30,11 @@
   `sync_artist_similar_station_task` + on-follow/onboarding триггер в
   `ArtistFollowService._enqueue_station_sync_if_stale`
   (порог `artist_station_stale_threshold_days=7`).
+- [x] **Авто-очередь full catalog sync на follow/onboarding (2026-05-04)** —
+  `ArtistFollowService` теперь ставит `sync_artist_catalog_task` для stale-артистов
+  (порог `artist_catalog_full_sync_stale_threshold_days=30`) и дедупит enqueue
+  через Redis lock (`artist_catalog_enqueue_lock_ttl_seconds`), чтобы не спамить
+  Taskiq при массовых подписках.
 - [x] **Активные слушатели в месяц** — `artist_monthly_stats` таблица,
   `ArtistStatsRepository.count_active_listeners` (live из `listen_events`),
   `GET /artists/{id}/stats/listeners` (текущий месяц + история).

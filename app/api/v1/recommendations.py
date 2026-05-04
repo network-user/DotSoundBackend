@@ -14,6 +14,8 @@ from app.repositories.recommendation import (
 from app.schemas.recommendation import (
     DailyMixResponse,
     DailyPlaylistResponse,
+    GenreMixItemResponse,
+    GenreMixesResponse,
     HomePageResponse,
     HomeSectionResponse,
     RadioQueueResponse,
@@ -97,19 +99,56 @@ async def get_daily_mix(
 
 
 @router.get(
+    "/genre-mixes",
+    response_model=GenreMixesResponse,
+)
+async def get_genre_mixes(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    svc = RecommendationService(db)
+    mixes = await svc.get_genre_mixes(user.id)
+    result = []
+    for mix in mixes:
+        tracks_out = await dedupe_and_build_track_list(
+            db, mix["tracks"]
+        )
+        result.append(
+            GenreMixItemResponse(
+                genre=mix["genre"],
+                title=mix["title"],
+                tracks=tracks_out,
+            )
+        )
+    return GenreMixesResponse(mixes=result)
+
+
+@router.get(
     "/radio", response_model=RadioQueueResponse
 )
 async def get_radio(
     seed_track_id: int = Query(...),
     queue_size: int = Query(default=20, le=50),
+    exclude_ids: str = Query(default=""),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    exclude: list[int] = []
+    if exclude_ids:
+        try:
+            exclude = [
+                int(x)
+                for x in exclude_ids.split(",")
+                if x.strip()
+            ][:30]
+        except ValueError:
+            exclude = []
     svc = RecommendationService(db)
     tracks = await svc.get_radio(
         seed_track_id=seed_track_id,
         queue_size=queue_size,
         user_id=user.id,
+        exclude_ids=exclude,
     )
     return RadioQueueResponse(
         seed_type="track",

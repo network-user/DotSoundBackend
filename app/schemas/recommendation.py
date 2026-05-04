@@ -49,3 +49,13 @@ class UserChoicePlaylistResponse(BaseModel):
     tracks: list[TrackResponse]
     generated_at: str
     score_version: str
+
+
+class GenreMixItemResponse(BaseModel):
+    genre: str
+    title: str
+    tracks: list[TrackResponse]
+
+
+class GenreMixesResponse(BaseModel):
+    mixes: list[GenreMixItemResponse]
