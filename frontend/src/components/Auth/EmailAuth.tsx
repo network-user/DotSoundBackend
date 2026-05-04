@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { setInternalUserId } from '@/lib/telegram'
 import { connectWS } from '@/lib/ws'
+import { useBrandLabel } from '@/lib/brand'
 
 function notifyAuthReady(token: string | null): void {
   if (token) {
@@ -35,6 +36,7 @@ export function EmailAuth({
   onAuth,
   onBack,
 }: Props) {
+  const brandLabel = useBrandLabel()
   const successTimer = useRef<ReturnType<
     typeof setTimeout
   > | null>(null)
@@ -178,7 +180,7 @@ export function EmailAuth({
   return (
     <div className="auth-screen">
       <div className="auth-card">
-        <div className="auth-logo">.sound</div>
+        <div className="auth-logo">{brandLabel}</div>
 
         {step === 'email' && (
           <>
@@ -330,7 +332,7 @@ export function EmailAuth({
               Вход выполнен
             </h2>
             <p className="auth-hint">
-              Добро пожаловать в .sound
+              Добро пожаловать в {brandLabel}
             </p>
           </>
         )}

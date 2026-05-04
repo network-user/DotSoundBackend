@@ -319,6 +319,30 @@ class TrackRepository(BaseRepository[Track]):
         await self._session.flush()
         return result.scalar_one_or_none()
 
+    async def get_track_id_by_sc_url(self, sc_url: str) -> int | None:
+        result = await self._session.execute(
+            select(Track.id).where(Track.sc_url == sc_url).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def other_track_has_imported_external(
+        self,
+        *,
+        imported_from: str,
+        external_id: str,
+        exclude_track_id: int,
+    ) -> bool:
+        result = await self._session.execute(
+            select(Track.id)
+            .where(
+                Track.imported_from == imported_from,
+                Track.external_id == external_id,
+                Track.id != exclude_track_id,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def update_sc_url(
         self,
         track_id: int,

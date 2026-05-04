@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+﻿import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
@@ -17,10 +17,10 @@ export default defineConfig({
         'icon-maskable-512.png',
       ],
       manifest: {
-        name: '.sound — музыка',
-        short_name: '.sound',
+        name: '.\u0437\u0432\u0443\u043a вЂ” РјСѓР·С‹РєР°',
+        short_name: '.\u0437\u0432\u0443\u043a',
         description:
-          '.sound — музыка без рекламы, плейлисты, офлайн-доступ.',
+          '.\u0437\u0432\u0443\u043a вЂ” РјСѓР·С‹РєР° Р±РµР· СЂРµРєР»Р°РјС‹, РїР»РµР№Р»РёСЃС‚С‹, РѕС„Р»Р°Р№РЅ-РґРѕСЃС‚СѓРї.',
         lang: 'ru',
         dir: 'ltr',
         categories: ['music', 'entertainment'],
@@ -67,18 +67,18 @@ export default defineConfig({
         ],
         shortcuts: [
           {
-            name: 'Поиск',
-            short_name: 'Поиск',
+            name: 'РџРѕРёСЃРє',
+            short_name: 'РџРѕРёСЃРє',
             url: '/mini_app/search',
           },
           {
-            name: 'Любимое',
-            short_name: 'Любимое',
+            name: 'Р›СЋР±РёРјРѕРµ',
+            short_name: 'Р›СЋР±РёРјРѕРµ',
             url: '/mini_app/library?tab=liked',
           },
           {
-            name: 'Загрузить трек',
-            short_name: 'Загрузить',
+            name: 'Р—Р°РіСЂСѓР·РёС‚СЊ С‚СЂРµРє',
+            short_name: 'Р—Р°РіСЂСѓР·РёС‚СЊ',
             url: '/mini_app/upload',
           },
         ],
@@ -193,3 +193,4 @@ export default defineConfig({
     },
   },
 })
+

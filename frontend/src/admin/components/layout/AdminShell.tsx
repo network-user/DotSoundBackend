@@ -5,6 +5,7 @@ import {
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useBrandLabel } from '@/lib/brand'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { Press } from '@/components/ui/Press'
@@ -36,6 +37,7 @@ function Clock() {
 
 export function AdminShell({ children }: Props) {
   const { t } = useTranslation()
+  const brandLabel = useBrandLabel()
   const navigate = useNavigate()
   const reset = useAdminAuth((s) => s.reset)
   const sectionLabel = useAdminSectionLabel()
@@ -69,7 +71,7 @@ export function AdminShell({ children }: Props) {
       {!narrow && (
         <aside className="admin-shell__sidebar">
           <div className="admin-shell__brand">
-            .sound{' '}
+            {brandLabel}{' '}
             <span className="admin-shell__brand-tag">
               {t('admin.shell.brandTag')}
             </span>

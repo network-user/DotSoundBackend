@@ -4,6 +4,7 @@ import structlog
 from dotsound_private_core.services.playback_variant_policy import (
     EXTERNAL_SOURCE_PLATFORM_ORDER,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
@@ -134,7 +135,50 @@ class TrackFallbackService:
             str(best["id"]) if best.get("id") else None
         )
         repo = TrackRepository(self._session)
-        await repo.update_sc_url(track.id, new_url, new_ext_id)
+        url_owner = await repo.get_track_id_by_sc_url(new_url)
+        if url_owner is not None:
+            await redis.set(
+                no_match_key,
+                "1",
+                ex=_SC_REFRESH_NO_MATCH_TTL,
+            )
+            logger.info(
+                "sc_url_refresh_url_taken",
+                track_id=track.id,
+                conflict_track_id=url_owner,
+            )
+            return False
+        if new_ext_id is not None and track.imported_from:
+            if await repo.other_track_has_imported_external(
+                imported_from=track.imported_from,
+                external_id=new_ext_id,
+                exclude_track_id=track.id,
+            ):
+                await redis.set(
+                    no_match_key,
+                    "1",
+                    ex=_SC_REFRESH_NO_MATCH_TTL,
+                )
+                logger.info(
+                    "sc_url_refresh_external_id_taken",
+                    track_id=track.id,
+                    external_id=new_ext_id,
+                )
+                return False
+        try:
+            await repo.update_sc_url(track.id, new_url, new_ext_id)
+        except IntegrityError:
+            await self._session.rollback()
+            await redis.set(
+                no_match_key,
+                "1",
+                ex=_SC_REFRESH_NO_MATCH_TTL,
+            )
+            logger.warning(
+                "sc_url_refresh_integrity_error",
+                track_id=track.id,
+            )
+            return False
         track.sc_url = new_url
         if new_ext_id is not None:
             track.external_id = new_ext_id

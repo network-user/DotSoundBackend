@@ -1,4 +1,5 @@
 import { Icon } from '@/components/Icon/Icon'
+import { useBrandLabel } from '@/lib/brand'
 
 interface Props {
   reason?: string | null
@@ -11,6 +12,7 @@ export function BannedScreen({
   onContact,
   onLogout,
 }: Props) {
+  const brandLabel = useBrandLabel()
   return (
     <div
       className="banned-screen"
@@ -25,7 +27,7 @@ export function BannedScreen({
           Аккаунт заблокирован
         </h1>
         <p className="banned-screen__hint">
-          Доступ к .sound временно ограничен
+          Доступ к {brandLabel} временно ограничен
           администрацией.
           {reason ? ` Причина: ${reason}.` : ''}
         </p>

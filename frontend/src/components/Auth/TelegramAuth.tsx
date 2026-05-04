@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import { setInternalUserId } from '@/lib/telegram'
 import { connectWS } from '@/lib/ws'
+import { useBrandLabel } from '@/lib/brand'
 
 type Step = 'welcome' | 'code' | 'success'
 
@@ -14,6 +15,7 @@ export function TelegramAuth({
   onAuth,
   onEmail,
 }: Props) {
+  const brandLabel = useBrandLabel()
   const successTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const params = new URLSearchParams(
     window.location.search,
@@ -116,7 +118,7 @@ export function TelegramAuth({
   return (
     <div className="auth-screen">
       <div className="auth-card">
-        <div className="auth-logo">.sound</div>
+        <div className="auth-logo">{brandLabel}</div>
 
         {step === 'welcome' && (
           <>
@@ -172,7 +174,7 @@ export function TelegramAuth({
               Введите код
             </h2>
             <p className="auth-hint">
-              Откройте бота .sound в Telegram
+              Откройте бота {brandLabel} в Telegram
               <br />и введите полученный код
             </p>
             {popupBlocked &&
@@ -247,7 +249,7 @@ export function TelegramAuth({
               Вход выполнен
             </h2>
             <p className="auth-hint">
-              Добро пожаловать в .sound
+              Добро пожаловать в {brandLabel}
             </p>
           </>
         )}

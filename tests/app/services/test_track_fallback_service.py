@@ -7,6 +7,7 @@ from app.models.track import Track
 from app.models.user import User
 from app.services.track_fallback_service import (
     _BLOCK_PREFIX,
+    _SC_REFRESH_PREFIX,
     TrackFallbackService,
 )
 
@@ -191,3 +192,49 @@ async def test_falls_through_to_bandcamp_when_youtube_missing(
     assert result.source_platform == "bandcamp"
     await db_session.refresh(original)
     assert original.sc_url is not None
+
+
+@patch("app.services.soundcloud_service.SoundCloudService")
+@patch("app.core.redis.get_redis_client")
+async def test_try_refresh_sc_url_noop_when_sc_url_owned_by_other(
+    mock_redis_factory: MagicMock,
+    mock_sc_class: MagicMock,
+    db_session: AsyncSession,
+) -> None:
+    redis = _mock_redis()
+    mock_redis_factory.return_value = redis
+    user = await _make_user(db_session)
+    taken_url = "https://soundcloud.com/artist/taken"
+    await _make_track(
+        db_session,
+        user,
+        title="Holder",
+        sc_url=taken_url,
+        source_url=taken_url,
+    )
+    stale = await _make_track(
+        db_session,
+        user,
+        title="Maladoy Prince - Сасавот",
+        sc_url="https://soundcloud.com/old/broken",
+        source_url="https://soundcloud.com/old/broken",
+    )
+    stale_id = stale.id
+    stale_sc_before = stale.sc_url
+    await db_session.commit()
+
+    mock_instance = MagicMock()
+    mock_instance.search_best_match = AsyncMock(
+        return_value={"permalink_url": taken_url, "id": 999999}
+    )
+    mock_sc_class.return_value = mock_instance
+
+    svc = TrackFallbackService(db_session, _SETTINGS)
+    assert await svc.try_refresh_sc_url(stale) is False
+
+    await db_session.refresh(stale)
+    assert stale.sc_url == stale_sc_before
+    assert stale.id == stale_id
+    mock_instance.search_best_match.assert_awaited_once()
+    redis.set.assert_awaited()
+    assert redis.set.call_args[0][0] == f"{_SC_REFRESH_PREFIX}{stale_id}"

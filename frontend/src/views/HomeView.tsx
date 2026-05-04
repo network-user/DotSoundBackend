@@ -1,4 +1,4 @@
-import {
+﻿import {
   useCallback,
   useEffect,
   useState,
@@ -9,6 +9,7 @@ import { Icon } from '@/components/Icon/Icon'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
+import { useBrandLabel } from '@/lib/brand'
 import { usePlayerActions } from '@/store/PlayerContext'
 import type {
   FollowedArtistItem,
@@ -25,10 +26,10 @@ interface HomeSection {
 
 function timeGreeting(): string {
   const h = new Date().getHours()
-  if (h < 6) return 'Доброй ночи'
-  if (h < 12) return 'Доброе утро'
-  if (h < 18) return 'Добрый день'
-  return 'Добрый вечер'
+  if (h < 6) return 'Р”РѕР±СЂРѕР№ РЅРѕС‡Рё'
+  if (h < 12) return 'Р”РѕР±СЂРѕРµ СѓС‚СЂРѕ'
+  if (h < 18) return 'Р”РѕР±СЂС‹Р№ РґРµРЅСЊ'
+  return 'Р”РѕР±СЂС‹Р№ РІРµС‡РµСЂ'
 }
 
 function coverUrl(key: string | null): string | null {
@@ -48,7 +49,7 @@ function TrackTile({ track, onPlay }: TrackTileProps) {
       type="button"
       className="home-track-tile"
       onClick={() => onPlay(track)}
-      title={[track.title, track.artist].filter(Boolean).join(' — ')}
+      title={[track.title, track.artist].filter(Boolean).join(' вЂ” ')}
     >
       <div className="home-track-tile__cover">
         {src ? (
@@ -67,7 +68,7 @@ function TrackTile({ track, onPlay }: TrackTileProps) {
         )}
       </div>
       <div className="home-track-tile__title">
-        {track.title || 'Без названия'}
+        {track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'}
       </div>
       {track.artist && (
         <div className="home-track-tile__artist">
@@ -88,12 +89,14 @@ interface SectionProps {
 interface FeaturedCardProps {
   track: Track
   label: string
+  brandLabel: string
   onPlay: (t: Track) => void
 }
 
 function FeaturedCard({
   track,
   label,
+  brandLabel,
   onPlay,
 }: FeaturedCardProps) {
   const src = coverUrl(track.cover_key)
@@ -107,10 +110,10 @@ function FeaturedCard({
         <div className="home-featured__copy">
           <span className="home-featured__eyebrow">{label}</span>
           <strong className="home-featured__title">
-            {track.title || 'Без названия'}
+            {track.title || 'Р‘РµР· РЅР°Р·РІР°РЅРёСЏ'}
           </strong>
           <span className="home-featured__artist">
-            {track.artist || '.sound'}
+            {track.artist || brandLabel}
           </span>
         </div>
         <div className="home-featured__cover">
@@ -131,7 +134,7 @@ function FeaturedCard({
         type="button"
         className="home-featured__play"
         onClick={() => onPlay(track)}
-        aria-label={`Слушать ${track.title || 'трек'}`}
+        aria-label={`РЎР»СѓС€Р°С‚СЊ ${track.title || 'С‚СЂРµРє'}`}
       >
         <Icon name="play" size={18} />
       </button>
@@ -169,7 +172,7 @@ function TrackCarouselSection({
             className="home-section-header__link"
             onClick={onMore}
           >
-            Все
+            Р’СЃРµ
           </button>
         )}
       </div>
@@ -224,7 +227,7 @@ function GenreMixCard({ mix, onPlay, onOpen }: GenreCardProps) {
           e.stopPropagation()
           if (mix.tracks.length) onPlay(mix.tracks)
         }}
-        aria-label={`Слушать ${mix.title}`}
+        aria-label={`РЎР»СѓС€Р°С‚СЊ ${mix.title}`}
       >
         <Icon name="play" size={14} />
       </button>
@@ -232,7 +235,7 @@ function GenreMixCard({ mix, onPlay, onOpen }: GenreCardProps) {
         {mix.genre.charAt(0).toUpperCase() + mix.genre.slice(1)}
       </span>
       <span className="home-genre-mix-card__count">
-        {mix.tracks.length} треков
+        {mix.tracks.length} С‚СЂРµРєРѕРІ
       </span>
     </button>
   )
@@ -247,18 +250,19 @@ const QUICK_ITEMS: {
   icon: string
   path: string
 }[] = [
-  { label: 'Плейлист дня', icon: 'calendar', path: '/daily-mix' },
-  { label: 'Плейлист недели', icon: 'star', path: '/weekly-mix' },
-  { label: 'Выбор пользователей', icon: 'heart', path: '/user-choice' },
-  { label: 'Библиотека', icon: 'layers', path: '/library' },
-  { label: 'Радио', icon: 'radio', path: '/radio' },
-  { label: 'Подписки', icon: 'users-following', path: '/library?tab=following' },
+  { label: 'РџР»РµР№Р»РёСЃС‚ РґРЅСЏ', icon: 'calendar', path: '/daily-mix' },
+  { label: 'РџР»РµР№Р»РёСЃС‚ РЅРµРґРµР»Рё', icon: 'star', path: '/weekly-mix' },
+  { label: 'Р’С‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№', icon: 'heart', path: '/user-choice' },
+  { label: 'Р‘РёР±Р»РёРѕС‚РµРєР°', icon: 'layers', path: '/library' },
+  { label: 'Р Р°РґРёРѕ', icon: 'radio', path: '/radio' },
+  { label: 'РџРѕРґРїРёСЃРєРё', icon: 'users-following', path: '/library?tab=following' },
 ]
 
 export function HomeView() {
   const navigate = useNavigate()
   const toast = useToast()
   const { playTrack } = usePlayerActions()
+  const brandLabel = useBrandLabel()
 
   const [me, setMe] = useState<UserResponse | null>(null)
   const [sections, setSections] = useState<HomeSection[] | null>(null)
@@ -300,7 +304,7 @@ export function HomeView() {
       try {
         await playTrack(track)
       } catch (e) {
-        toast.error(getApiErrorMessage(e, 'Ошибка воспроизведения'))
+        toast.error(getApiErrorMessage(e, 'РћС€РёР±РєР° РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ'))
       }
     },
     [playTrack, toast],
@@ -312,7 +316,7 @@ export function HomeView() {
       try {
         await playTrack(tracks[0])
       } catch (e) {
-        toast.error(getApiErrorMessage(e, 'Ошибка воспроизведения'))
+        toast.error(getApiErrorMessage(e, 'РћС€РёР±РєР° РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ'))
       }
     },
     [playTrack, toast],
@@ -342,10 +346,10 @@ export function HomeView() {
     null
   const featuredLabel =
     featuredSource?.section_type === 'continue'
-      ? 'Продолжить'
+      ? 'РџСЂРѕРґРѕР»Р¶РёС‚СЊ'
       : featuredSource?.section_type === 'user_choice'
-        ? 'Выбор пользователей'
-        : 'Сейчас в .sound'
+        ? 'Р’С‹Р±РѕСЂ РїРѕР»СЊР·РѕРІР°С‚РµР»РµР№'
+        : brandLabel
   const loadingFeatured =
     sections === null && fallbackTracks === null
 
@@ -357,7 +361,7 @@ export function HomeView() {
           <div className="home-greeting__label">
             {displayName ? `${greeting}, ${displayName}` : greeting}
           </div>
-          <div className="home-greeting__sub">.sound</div>
+          <div className="home-greeting__sub">{brandLabel}</div>
         </div>
         <NotificationBell />
       </div>
@@ -366,6 +370,7 @@ export function HomeView() {
         <FeaturedCard
           track={featuredTrack}
           label={featuredLabel}
+          brandLabel={brandLabel}
           onPlay={handlePlay}
         />
       ) : loadingFeatured ? (
@@ -398,7 +403,7 @@ export function HomeView() {
       {genreMixes === null ? (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">Миксы по жанрам</span>
+            <span className="home-section-header__title">РњРёРєСЃС‹ РїРѕ Р¶Р°РЅСЂР°Рј</span>
           </div>
           <div className="home-genre-mix-row home-skeleton-row">
             {[1, 2, 3].map((i) => (
@@ -409,7 +414,7 @@ export function HomeView() {
       ) : genreMixes.length > 0 ? (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">Миксы по жанрам</span>
+            <span className="home-section-header__title">РњРёРєСЃС‹ РїРѕ Р¶Р°РЅСЂР°Рј</span>
           </div>
           <div className="home-genre-mix-row">
             {genreMixes.map((mix) => (
@@ -433,7 +438,7 @@ export function HomeView() {
       {sections === null ? (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">Продолжить</span>
+            <span className="home-section-header__title">РџСЂРѕРґРѕР»Р¶РёС‚СЊ</span>
           </div>
           <div className="home-carousel home-skeleton-row">
             {[1, 2, 3, 4].map((i) => (
@@ -455,7 +460,7 @@ export function HomeView() {
       {followedArtists === null ? (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">Подписки</span>
+            <span className="home-section-header__title">РџРѕРґРїРёСЃРєРё</span>
           </div>
           <div className="home-artist-strip">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -466,7 +471,7 @@ export function HomeView() {
       ) : followedArtists.length > 0 ? (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">Подписки</span>
+            <span className="home-section-header__title">РџРѕРґРїРёСЃРєРё</span>
           </div>
           <div className="home-artist-strip">
             {followedArtists.map((artist) => {
@@ -575,7 +580,7 @@ export function HomeView() {
       {!sections && fallbackTracks !== null && fallbackTracks.length > 0 && (
         <div>
           <div className="home-section-header">
-            <span className="home-section-header__title">Треки</span>
+            <span className="home-section-header__title">РўСЂРµРєРё</span>
           </div>
           <div className="home-carousel">
             {fallbackTracks.map((t) => (
@@ -594,9 +599,10 @@ export function HomeView() {
             fontSize: 14,
           }}
         >
-          Послушай что-нибудь, и здесь появятся подборки
+          РџРѕСЃР»СѓС€Р°Р№ С‡С‚Рѕ-РЅРёР±СѓРґСЊ, Рё Р·РґРµСЃСЊ РїРѕСЏРІСЏС‚СЃСЏ РїРѕРґР±РѕСЂРєРё
         </div>
       )}
     </section>
   )
 }
+

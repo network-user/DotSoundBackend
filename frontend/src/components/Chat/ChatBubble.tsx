@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Icon } from '@/components/Icon/Icon'
 import { VoicePlayer } from '@/components/Chat/VoicePlayer'
 import { api } from '@/lib/api'
+import { useBrandLabel } from '@/lib/brand'
 import { usePlayerActions } from '@/store/PlayerContext'
 import type {
   AlbumWithTracksRecord,
@@ -43,6 +44,7 @@ export function ChatBubble({
   onCancelUpload,
   onViewPhoto,
 }: Props) {
+  const brandLabel = useBrandLabel()
   const [showBar, setShowBar] = useState(false)
   const [showReactions, setShowReactions] =
     useState(false)
@@ -205,7 +207,7 @@ export function ChatBubble({
           </span>
           <div className="chat-msg-system-body">
             <span className="chat-msg-system-label">
-              Команда .sound
+              Команда {brandLabel}
             </span>
             {message.content}
           </div>
