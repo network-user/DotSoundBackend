@@ -44,9 +44,9 @@
   --lh-loose: 1.7;
 
   /* Letter-spacing scale */
-  --ls-display: -0.04em;
-  --ls-tight:   -0.025em;
-  --ls-snug:    -0.015em;
+  --ls-display:  0;
+  --ls-tight:    0;
+  --ls-snug:     0;
   --ls-normal:   0em;
   --ls-wide:     0.04em;
   --ls-widest:   0.08em;

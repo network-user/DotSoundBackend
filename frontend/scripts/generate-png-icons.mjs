@@ -21,27 +21,21 @@ mkdirSync(PUBLIC, { recursive: true })
 
 function svgFor(size, padding = 0) {
   const usable = size - padding * 2
-  const radius = Math.round(size * 0.18)
-  const dotR = Math.round(usable * 0.063)
-  const dotCx = Math.round(padding + usable * 0.21)
-  const dotCy = Math.round(padding + usable * 0.665)
-  const textX = Math.round(padding + usable * 0.31)
-  const textY = Math.round(padding + usable * 0.7)
-  const fontSize = Math.round(usable * 0.29)
-  const letterSpacing = Math.max(
-    1,
-    Math.round(fontSize * 0.035),
-  )
+  const radius = Math.round(size * 0.16)
+  const center = size / 2
+  const fontSize = Math.round(usable * 0.24)
   return `
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   <rect width="${size}" height="${size}" rx="${radius}" fill="#000"/>
-  <circle cx="${dotCx}" cy="${dotCy}" r="${dotR}" fill="#fff"/>
-  <text x="${textX}" y="${textY}"
+  <rect x="${padding + usable * 0.16}" y="${padding + usable * 0.34}" width="${usable * 0.68}" height="${usable * 0.32}" rx="${usable * 0.08}" fill="none" stroke="#fff" stroke-width="${Math.max(2, size * 0.014)}" opacity="0.28"/>
+  <text x="${center}" y="${padding + usable * 0.56}"
     font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     font-weight="800"
     font-size="${fontSize}"
     fill="#fff"
-    letter-spacing="-${letterSpacing}">sound</text>
+    text-anchor="middle"
+    dominant-baseline="middle"
+    letter-spacing="0">.sound</text>
 </svg>
 `.trim()
 }

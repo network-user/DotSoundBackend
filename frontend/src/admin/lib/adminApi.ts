@@ -666,6 +666,70 @@ export const adminApi = {
         body: { track_ids: trackIds },
       },
     ),
+  listAdminPlaylists: (params: {
+    page?: number
+    size?: number
+    search?: string
+  }) =>
+    adminFetch<{
+      items: Array<{
+        id: number
+        name: string
+        owner_id: number
+        is_public: boolean
+        created_at: string
+        track_count: number
+      }>
+      total: number
+      page: number
+      size: number
+    }>('/playlists', { query: params }),
+  getAdminPlaylist: (playlistId: number) =>
+    adminFetch<{
+      id: number
+      name: string
+      owner_id: number
+      is_public: boolean
+      created_at: string
+      tracks: Array<{
+        id: number
+        title: string
+        artist: string | null
+      }>
+    }>(`/playlists/${playlistId}`),
+  patchAdminPlaylist: (
+    playlistId: number,
+    body: {
+      name?: string
+      is_public?: boolean
+      owner_id?: number
+    },
+  ) =>
+    adminFetch<Record<string, unknown>>(
+      `/playlists/${playlistId}`,
+      { method: 'PATCH', body },
+    ),
+  addAdminPlaylistTrack: (playlistId: number, trackId: number) =>
+    adminFetch<void>(
+      `/playlists/${playlistId}/tracks/${trackId}`,
+      { method: 'POST' },
+    ),
+  removeAdminPlaylistTrack: (playlistId: number, trackId: number) =>
+    adminFetch<void>(
+      `/playlists/${playlistId}/tracks/${trackId}`,
+      { method: 'DELETE' },
+    ),
+  reorderAdminPlaylistTracks: (
+    playlistId: number,
+    trackIds: number[],
+  ) =>
+    adminFetch<void>(
+      `/playlists/${playlistId}/track-order`,
+      {
+        method: 'PUT',
+        body: { track_ids: trackIds },
+      },
+    ),
   deleteTrack: (trackId: number) =>
     adminFetch<void>(`/tracks/${trackId}`, {
       method: 'DELETE',

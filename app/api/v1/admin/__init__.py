@@ -24,10 +24,14 @@ from . import (
     users_extended,
     ws,
 )
+from . import (
+    playlists as admin_playlists,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 router.include_router(artist_catalog.router)
 router.include_router(admin_albums.router)
+router.include_router(admin_playlists.router)
 router.include_router(tracks.router)
 router.include_router(genre_samples.router)
 router.include_router(users.router)

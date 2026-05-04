@@ -53,5 +53,7 @@ createRoot(document.getElementById('root')!).render(
 )
 
 requestAnimationFrame(() => {
-  window.dispatchEvent(new Event('app-ready'))
+  requestAnimationFrame(() => {
+    window.dispatchEvent(new Event('app-ready'))
+  })
 })

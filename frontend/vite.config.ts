@@ -20,7 +20,7 @@ export default defineConfig({
         name: '.sound — музыка',
         short_name: '.sound',
         description:
-          'DotSound — музыка без рекламы, плейлисты, скачивание для офлайн.',
+          '.sound — музыка без рекламы, плейлисты, офлайн-доступ.',
         lang: 'ru',
         dir: 'ltr',
         categories: ['music', 'entertainment'],

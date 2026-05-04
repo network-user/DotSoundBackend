@@ -85,6 +85,73 @@ interface SectionProps {
   onPlay: (t: Track) => void
 }
 
+interface FeaturedCardProps {
+  track: Track
+  label: string
+  onPlay: (t: Track) => void
+}
+
+function FeaturedCard({
+  track,
+  label,
+  onPlay,
+}: FeaturedCardProps) {
+  const src = coverUrl(track.cover_key)
+  return (
+    <section className="home-featured" aria-label={label}>
+      <button
+        type="button"
+        className="home-featured__main"
+        onClick={() => onPlay(track)}
+      >
+        <div className="home-featured__copy">
+          <span className="home-featured__eyebrow">{label}</span>
+          <strong className="home-featured__title">
+            {track.title || 'Без названия'}
+          </strong>
+          <span className="home-featured__artist">
+            {track.artist || '.sound'}
+          </span>
+        </div>
+        <div className="home-featured__cover">
+          {src ? (
+            <img
+              src={src}
+              alt=""
+              width={132}
+              height={132}
+              decoding="async"
+            />
+          ) : (
+            <Icon name="music" size={36} />
+          )}
+        </div>
+      </button>
+      <button
+        type="button"
+        className="home-featured__play"
+        onClick={() => onPlay(track)}
+        aria-label={`Слушать ${track.title || 'трек'}`}
+      >
+        <Icon name="play" size={18} />
+      </button>
+    </section>
+  )
+}
+
+function CarouselDots({ count }: { count: number }) {
+  if (count < 4) return null
+  return (
+    <div className="home-carousel-dots" aria-hidden>
+      {Array.from({ length: Math.min(4, Math.ceil(count / 2)) }).map(
+        (_, i) => (
+          <span key={i} className={i === 0 ? 'active' : ''} />
+        ),
+      )}
+    </div>
+  )
+}
+
 function TrackCarouselSection({
   title,
   onMore,
@@ -111,6 +178,7 @@ function TrackCarouselSection({
           <TrackTile key={t.id} track={t} onPlay={onPlay} />
         ))}
       </div>
+      <CarouselDots count={tracks.length} />
     </div>
   )
 }
@@ -263,6 +331,23 @@ export function HomeView() {
       sectionMap.set(s.section_type, s)
     }
   }
+  const featuredSource =
+    sectionMap.get('continue') ||
+    sectionMap.get('personalized') ||
+    sectionMap.get('user_choice') ||
+    sectionMap.get('popular')
+  const featuredTrack =
+    featuredSource?.tracks[0] ||
+    fallbackTracks?.[0] ||
+    null
+  const featuredLabel =
+    featuredSource?.section_type === 'continue'
+      ? 'Продолжить'
+      : featuredSource?.section_type === 'user_choice'
+        ? 'Выбор пользователей'
+        : 'Сейчас в .sound'
+  const loadingFeatured =
+    sections === null && fallbackTracks === null
 
   return (
     <section id="view-home" className="view active">
@@ -272,10 +357,23 @@ export function HomeView() {
           <div className="home-greeting__label">
             {displayName ? `${greeting}, ${displayName}` : greeting}
           </div>
-          <div className="home-greeting__sub">DotSound</div>
+          <div className="home-greeting__sub">.sound</div>
         </div>
         <NotificationBell />
       </div>
+
+      {featuredTrack ? (
+        <FeaturedCard
+          track={featuredTrack}
+          label={featuredLabel}
+          onPlay={handlePlay}
+        />
+      ) : loadingFeatured ? (
+        <div className="home-featured home-featured--skeleton">
+          <SkeletonBlock className="home-featured__skeleton-copy" />
+          <SkeletonBlock className="home-featured__skeleton-cover" />
+        </div>
+      ) : null}
 
       {/* Quick access grid */}
       <div className="home-quick-grid">
@@ -327,6 +425,7 @@ export function HomeView() {
               />
             ))}
           </div>
+          <CarouselDots count={genreMixes.length} />
         </div>
       ) : null}
 

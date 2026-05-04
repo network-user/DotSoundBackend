@@ -19,7 +19,11 @@
 - [x] **Admin: редактирование альбомов в UI** — колонка `tracks.album_position`
   (миграция `0071`), порядок треков в публичном `GET /albums/{id}`, API
   `/api/v1/admin/albums` (список, деталь, PATCH, обложка, add/remove/reorder
-  треков), раздел `/admin/albums` в мини-приложении (capability `tracks.manage`).
+  треков), маршруты `/admin/albums` и `/admin/albums/:albumId` (capability
+  `tracks.manage`).
+- [x] **Admin: плейлисты** — API `/api/v1/admin/playlists`, UI `/admin/playlists`
+  и `/admin/playlists/:playlistId` (метаданные, состав, порядок; уплотнение
+  `playlist_tracks.position` после удаления).
 
 ## Подписки на артистов и статистика (2026-04-30)
 

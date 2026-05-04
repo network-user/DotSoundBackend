@@ -137,3 +137,42 @@ class AdminAlbumPatchRequest(BaseModel):
 
 class AdminAlbumReorderRequest(BaseModel):
     track_ids: list[int] = Field(default_factory=list)
+
+
+class AdminPlaylistListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    owner_id: int
+    is_public: bool
+    created_at: datetime
+    track_count: int
+
+
+class AdminPlaylistListResponse(BaseModel):
+    items: list[AdminPlaylistListItem]
+    total: int
+    page: int
+    size: int
+
+
+class AdminPlaylistDetailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    owner_id: int
+    is_public: bool
+    created_at: datetime
+    tracks: list[AdminTrackResponse]
+
+
+class AdminPlaylistPatchRequest(BaseModel):
+    name: str | None = Field(None, max_length=256)
+    is_public: bool | None = None
+    owner_id: int | None = None
+
+
+class AdminPlaylistReorderRequest(BaseModel):
+    track_ids: list[int] = Field(default_factory=list)

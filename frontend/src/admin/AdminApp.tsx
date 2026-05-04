@@ -27,7 +27,10 @@ import { SecurityRoute } from './routes/SecurityRoute'
 import { SettingsRoute } from './routes/SettingsRoute'
 import { SchedulesRoute } from './routes/SchedulesRoute'
 import { TasksRoute } from './routes/TasksRoute'
-import { AlbumsRoute } from './routes/AlbumsRoute'
+import { AlbumDetailRoute } from './routes/AlbumDetailRoute'
+import { AlbumsListRoute } from './routes/AlbumsListRoute'
+import { PlaylistDetailRoute } from './routes/PlaylistDetailRoute'
+import { PlaylistsListRoute } from './routes/PlaylistsListRoute'
 import { TracksRoute } from './routes/TracksRoute'
 import { UsersRoute } from './routes/UsersRoute'
 import './styles/admin.css'
@@ -189,7 +192,19 @@ export function AdminApp() {
               />
               <Route
                 path="albums"
-                element={<AlbumsRoute />}
+                element={<AlbumsListRoute />}
+              />
+              <Route
+                path="albums/:albumId"
+                element={<AlbumDetailRoute />}
+              />
+              <Route
+                path="playlists"
+                element={<PlaylistsListRoute />}
+              />
+              <Route
+                path="playlists/:playlistId"
+                element={<PlaylistDetailRoute />}
               />
               <Route
                 path="complaints"
