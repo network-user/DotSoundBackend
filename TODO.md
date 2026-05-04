@@ -16,6 +16,9 @@
 
 ## Mini App / .sound UI (2026-05-04)
 
+- [x] **View Transitions + React** — `flushSync` в колбэке
+  `startViewTransition` в `App.tsx` (иначе снимок «нового» кадра до коммита
+  React → пустой/чёрный экран при смене вкладок/маршрутов).
 - [x] **Глобальный UI redesign `.sound`** — обновлены splash/loading,
   иконки PWA, домашний экран, поиск, чаты, профиль, admin shell и
   Telegram bot copy/keyboards без изменения backend API, PrivateCore и

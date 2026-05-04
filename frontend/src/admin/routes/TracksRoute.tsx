@@ -18,6 +18,7 @@ interface TrackRow {
   title: string
   artist: string | null
   source: string | null
+  genre?: string | null
   is_active: boolean
   uploaded_by_id: number | null
   created_at: string

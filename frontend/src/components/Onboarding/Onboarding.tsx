@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
@@ -36,6 +36,25 @@ export function Onboarding({ onComplete }: Props) {
     Record<number, boolean>
   >({})
   const [saving, setSaving] = useState(false)
+
+  const [playingTrackId, setPlayingTrackId] = useState<number | null>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
+
+  const playSnippet = async (trackId: number) => {
+    if (playingTrackId === trackId) {
+      if (audioRef.current && !audioRef.current.paused) {
+        audioRef.current.pause()
+      } else if (audioRef.current) {
+        audioRef.current.play().catch(() => {})
+      }
+      return
+    }
+    setPlayingTrackId(trackId)
+    if (audioRef.current) {
+      audioRef.current.src = `/api/v1/track-preview/${trackId}/segment.m4a`
+      audioRef.current.play().catch(() => setPlayingTrackId(null))
+    }
+  }
 
   useEffect(() => {
     api
@@ -240,23 +259,36 @@ export function Onboarding({ onComplete }: Props) {
           <div className="onboarding-step">
             <h2 className="onboarding-title">Оцените треки</h2>
             <p className="onboarding-subtitle">
-              Это поможет подобрать музыку для вас
+              Это поможет подобрать музыку для вас. Нажмите на трек, чтобы прослушать превью.
             </p>
             <div className="onboarding-calibration-list">
               {calibrationTracks.map(t => (
                 <div
                   key={t.id}
-                  className="onboarding-calibration-item"
+                  className={`onboarding-calibration-item${playingTrackId === t.id ? ' playing' : ''}`}
                 >
-                  <CoverImage coverKey={t.cover_key} />
-                  <div className="onboarding-calibration-info">
-                    <span className="onboarding-calibration-title">
-                      {t.title}
-                    </span>
-                    <span className="onboarding-calibration-artist">
-                      {t.artist ?? '—'}
-                    </span>
-                  </div>
+                  <button 
+                    className="onboarding-calibration-play-area"
+                    onClick={() => playSnippet(t.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0 }}
+                  >
+                    <div style={{ position: 'relative' }}>
+                      <CoverImage coverKey={t.cover_key} />
+                      {playingTrackId === t.id && (
+                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px' }}>
+                          <Icon name="pause" size={24} color="#fff" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="onboarding-calibration-info">
+                      <span className="onboarding-calibration-title">
+                        {t.title}
+                      </span>
+                      <span className="onboarding-calibration-artist">
+                        {t.artist ?? '—'}
+                      </span>
+                    </div>
+                  </button>
                   <div className="onboarding-calibration-actions">
                     <button
                       className={`icon-btn${
@@ -292,6 +324,16 @@ export function Onboarding({ onComplete }: Props) {
                 </div>
               ))}
             </div>
+            {calibrationTracks.length > 0 && (
+              <button 
+                className="btn-secondary" 
+                onClick={handleLoadMoreCalibration}
+                disabled={saving}
+                style={{ marginTop: 16, width: '100%' }}
+              >
+                Показать другие треки
+              </button>
+            )}
           </div>
         )}
 
@@ -321,6 +363,7 @@ export function Onboarding({ onComplete }: Props) {
           </div>
         )}
       </div>
+      <audio ref={audioRef} onEnded={() => setPlayingTrackId(null)} preload="none" style={{ display: 'none' }} />
     </div>
   )
 }

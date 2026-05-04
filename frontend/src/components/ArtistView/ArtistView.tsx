@@ -265,6 +265,9 @@ export function ArtistView({
     useState(false)
   const supplementalPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [snippetPlaying, setSnippetPlaying] = useState(false)
+  const [snippetIndex, setSnippetIndex] = useState(0)
   const isAdmin = getIsAdmin()
   const currentUserId = getInternalUserId()
 
@@ -286,21 +289,30 @@ export function ArtistView({
     }
   }, [debugLogs])
 
-  useEffect(() => {
-    if (snippetPlaying && audioRef.current && tracks && tracks.length > 0) {
-      audioRef.current.play().catch(() => setSnippetPlaying(false))
-    } else if (!snippetPlaying && audioRef.current) {
-      audioRef.current.pause()
-    }
-  }, [snippetPlaying, snippetIndex, tracks])
-
   const handleSnippetEnded = () => {
-    if (!tracks) return
-    setSnippetIndex((i) => (i + 1) % tracks.length)
+    if (!tracks || !tracks.length) return
+    const nextIdx = (snippetIndex + 1) % tracks.length
+    setSnippetIndex(nextIdx)
+    // Play next automatically, should be allowed since it's chained from an ended event (user previously interacted)
+    if (audioRef.current) {
+      // Need a slight delay to ensure src updates
+      setTimeout(() => {
+        if (snippetPlaying && audioRef.current) {
+          audioRef.current.play().catch(() => setSnippetPlaying(false))
+        }
+      }, 50)
+    }
   }
 
   const toggleSnippet = () => {
-    setSnippetPlaying(!snippetPlaying)
+    if (!audioRef.current) return
+    if (snippetPlaying) {
+      audioRef.current.pause()
+      setSnippetPlaying(false)
+    } else {
+      setSnippetPlaying(true)
+      audioRef.current.play().catch(() => setSnippetPlaying(false))
+    }
   }
 
   useEffect(() => {
@@ -318,6 +330,13 @@ export function ArtistView({
     setFollowing(null)
     setListeners(null)
     setListenersOpen(false)
+    setSnippetPlaying(false)
+    setSnippetIndex(0)
+    try {
+      audioRef.current?.pause()
+    } catch {
+      /* ignore */
+    }
 
     api
       .getArtist(artistId)
