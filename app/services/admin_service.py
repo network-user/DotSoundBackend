@@ -37,12 +37,14 @@ class AdminService:
         page: int,
         size: int,
         is_active: bool | None = None,
+        without_lyrics: bool = False,
         search: str | None = None,
     ) -> tuple[list[Track], int]:
         return await self._repo.list_tracks(
             page=page,
             size=size,
             is_active=is_active,
+            without_lyrics=without_lyrics,
             search=search,
         )
 

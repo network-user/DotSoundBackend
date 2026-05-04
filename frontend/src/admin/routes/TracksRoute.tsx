@@ -41,6 +41,7 @@ export function TracksRoute() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [withoutLyricsOnly, setWithoutLyricsOnly] = useState(false)
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
 
@@ -51,6 +52,7 @@ export function TracksRoute() {
   const [contextEditValue, setContextEditValue] = useState('')
   const [busyContext, setBusyContext] = useState(false)
   const [batchPromptModal, setBatchPromptModal] = useState<string | null>(null)
+  const [batchLyricsPromptModal, setBatchLyricsPromptModal] = useState<string | null>(null)
   const [importModal, setImportModal] = useState(false)
   const [importText, setImportText] = useState('')
   const [importResult, setImportResult] = useState<{
@@ -61,12 +63,13 @@ export function TracksRoute() {
   const contextTextareaRef = useRef<HTMLTextAreaElement>(null)
 
   const { data, isFetching } = useQuery({
-    queryKey: ['admin', 'tracks', page, search],
+    queryKey: ['admin', 'tracks', page, search, withoutLyricsOnly],
     queryFn: () =>
       adminApi.listTracks({
         page,
         size: 25,
         search: search || undefined,
+        without_lyrics: withoutLyricsOnly || undefined,
       }),
     placeholderData: keepPreviousData,
   })
@@ -197,10 +200,37 @@ export function TracksRoute() {
     }
   }
 
-  const handleImport = async () => {
+  const handleBatchLyricsPromptSelected = async () => {
+    const ids = Array.from(selectedIds)
     try {
-      const res = await adminApi.batchImport(importText)
+      const res = await adminApi.batchLyricsPrompt({
+        track_ids: ids,
+        only_without_lyrics: true,
+      })
+      setBatchLyricsPromptModal(res.prompt)
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
+  }
+
+  const handleBatchLyricsPromptFiltered = async () => {
+    try {
+      const res = await adminApi.batchLyricsPrompt({
+        search: search || undefined,
+        only_without_lyrics: true,
+        limit: 300,
+      })
+      setBatchLyricsPromptModal(res.prompt)
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
+  }
+
+  const handleLyricsImport = async () => {
+    try {
+      const res = await adminApi.batchLyricsImport(importText, true)
       setImportResult(res)
+      refresh()
     } catch (err) {
       await showAlert((err as Error).message)
     }
@@ -403,6 +433,26 @@ export function TracksRoute() {
             setPage(1)
           }}
         />
+        <label
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 13,
+            color: 'var(--text-secondary)',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={withoutLyricsOnly}
+            onChange={(e) => {
+              setWithoutLyricsOnly(e.target.checked)
+              setPage(1)
+              setSelectedIds(new Set())
+            }}
+          />
+          Без текста
+        </label>
         <Press
           variant="ghost"
           disabled={selectedIds.size === 0}
@@ -412,13 +462,26 @@ export function TracksRoute() {
         </Press>
         <Press
           variant="ghost"
+          disabled={selectedIds.size === 0}
+          onClick={handleBatchLyricsPromptSelected}
+        >
+          Lyrics Prompt ({selectedIds.size})
+        </Press>
+        <Press
+          variant="ghost"
+          onClick={handleBatchLyricsPromptFiltered}
+        >
+          Lyrics Prompt (filtered)
+        </Press>
+        <Press
+          variant="ghost"
           onClick={() => {
             setImportText('')
             setImportResult(null)
             setImportModal(true)
           }}
         >
-          Импорт ответа AI
+          Импорт ответа AI (Lyrics)
         </Press>
       </div>
       <DataTable
@@ -603,6 +666,49 @@ export function TracksRoute() {
         </div>
       )}
 
+      {/* Lyrics batch prompt modal */}
+      {batchLyricsPromptModal && (
+        <div
+          className="admin-modal-overlay"
+          onClick={() => setBatchLyricsPromptModal(null)}
+        >
+          <div
+            className="admin-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 760 }}
+          >
+            <h3>Lyrics Batch Prompt</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+              Вставьте этот промпт в нейросеть, затем импортируйте JSON-ответ.
+            </p>
+            <textarea
+              readOnly
+              value={batchLyricsPromptModal}
+              rows={22}
+              style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                resize: 'vertical',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <Press
+                variant="primary"
+                onClick={() =>
+                  navigator.clipboard.writeText(batchLyricsPromptModal)
+                }
+              >
+                Копировать
+              </Press>
+              <Press variant="ghost" onClick={() => setBatchLyricsPromptModal(null)}>
+                Закрыть
+              </Press>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Import modal */}
       {importModal && (
         <div
@@ -614,16 +720,17 @@ export function TracksRoute() {
             onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: 640 }}
           >
-            <h3>Импорт ответа AI</h3>
+            <h3>Импорт ответа AI (Lyrics)</h3>
             <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-              Вставьте JSON-ответ нейросети. Контекст будет распределён по трекам автоматически.
+              Вставьте JSON-ответ нейросети в формате tracks[].id + tracks[].lyrics.
+              Импорт пропускает треки, где текст уже существует.
             </p>
             <textarea
               value={importText}
               onChange={(e) => setImportText(e.target.value)}
               rows={14}
               placeholder={
-                '{"tracks":[{"id":1,"content":"..."},{"id":2,"content":"..."}]}'
+                '{"tracks":[{"id":1,"lyrics":"line 1\\nline 2"},{"id":2,"lyrics":"..."}]}'
               }
               style={{
                 width: '100%',
@@ -656,7 +763,7 @@ export function TracksRoute() {
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <Press
                 variant="primary"
-                onClick={handleImport}
+                onClick={handleLyricsImport}
                 disabled={!importText.trim()}
               >
                 Импортировать

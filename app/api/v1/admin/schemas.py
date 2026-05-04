@@ -100,6 +100,28 @@ class BatchImportResponse(BaseModel):
     errors: list[str]
 
 
+class LyricsBatchPromptRequest(BaseModel):
+    track_ids: list[int] = Field(default_factory=list, max_length=200)
+    search: str | None = Field(default=None, max_length=128)
+    only_without_lyrics: bool = True
+    limit: int = Field(default=200, ge=1, le=500)
+
+
+class LyricsBatchPromptResponse(BaseModel):
+    prompt: str
+    track_count: int
+
+
+class LyricsBatchImportRequest(BaseModel):
+    raw_response: str = Field(..., min_length=2, max_length=800_000)
+    skip_existing: bool = True
+
+
+class LyricsBatchImportResponse(BaseModel):
+    imported: int
+    errors: list[str]
+
+
 class AdminAlbumListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist import TrackArtist
 from app.models.complaint import Complaint
+from app.models.lyrics import TrackLyrics
 from app.models.track import Track
 from app.models.user import User
 
@@ -28,10 +29,18 @@ class AdminRepository:
         page: int = 1,
         size: int = 20,
         is_active: bool | None = None,
+        without_lyrics: bool = False,
         search: str | None = None,
     ) -> tuple[list[Track], int]:
         query = select(Track)
         count_query = select(func.count(Track.id))
+        if without_lyrics:
+            query = query.outerjoin(
+                TrackLyrics, TrackLyrics.track_id == Track.id
+            ).where(TrackLyrics.id.is_(None))
+            count_query = count_query.outerjoin(
+                TrackLyrics, TrackLyrics.track_id == Track.id
+            ).where(TrackLyrics.id.is_(None))
         if is_active is not None:
             query = query.where(Track.is_active.is_(is_active))
             count_query = count_query.where(Track.is_active.is_(is_active))

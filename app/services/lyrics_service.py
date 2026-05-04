@@ -336,22 +336,14 @@ class LyricsService:
         """
         from app.services.lyrics_worker import (
             invalidate_cached_lyrics_for_track,
+            set_cached_lyrics_result,
         )
 
         track = await self._get_owned_track(track_id, user_id)
+        existing = await self._repo.get_by_track_id(track_id)
 
         artist = track.artist or ""
         title = track.title or ""
-
-        await self._repo.delete_by_track_id(track_id)
-        await self._session.commit()
-        logger.info(
-            "lyrics_redefine_deleted",
-            track_id=track_id,
-            artist=artist,
-            title=title,
-            bypass_cache=bypass_cache,
-        )
 
         try:
             await invalidate_cached_lyrics_for_track(artist, title)
@@ -365,17 +357,60 @@ class LyricsService:
                 track_id=track_id,
             )
 
+        use_existing_text_for_sync = bool(
+            with_sync
+            and existing is not None
+            and bool((existing.plain_text or "").strip())
+        )
+
+        if use_existing_text_for_sync:
+            try:
+                await set_cached_lyrics_result(
+                    artist,
+                    title,
+                    {
+                        "text": existing.plain_text,
+                        "synced_lines": None,
+                        "sync_quality": None,
+                        "sync_profile": None,
+                        "source_name": existing.source_name,
+                        "sync_source_name": None,
+                    },
+                )
+                logger.info(
+                    "lyrics_redefine_reuse_existing_text",
+                    track_id=track_id,
+                )
+            except Exception:
+                logger.exception(
+                    "lyrics_redefine_cache_seed_failed",
+                    track_id=track_id,
+                )
+        else:
+            await self._repo.delete_by_track_id(track_id)
+            await self._session.commit()
+            logger.info(
+                "lyrics_redefine_deleted",
+                track_id=track_id,
+                artist=artist,
+                title=title,
+                bypass_cache=bypass_cache,
+            )
+
         progress_id = await self.trigger_auto_generation(
             track_id=track_id,
             user_id=user_id,
             with_sync=with_sync,
-            bypass_cache=bypass_cache,
+            bypass_cache=(
+                False if use_existing_text_for_sync else bypass_cache
+            ),
         )
         logger.info(
             "lyrics_redefine_triggered",
             track_id=track_id,
             progress_id=progress_id,
             bypass_cache=bypass_cache,
+            reused_existing_text=use_existing_text_for_sync,
         )
         return progress_id
 
