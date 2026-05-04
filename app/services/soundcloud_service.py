@@ -1,3 +1,4 @@
+import contextlib
 import re
 from typing import Any
 
@@ -166,10 +167,8 @@ class SoundCloudService:
                     raw = r.headers.get("Retry-After")
                     retry_after: float | None = None
                     if raw:
-                        try:
+                        with contextlib.suppress(ValueError):
                             retry_after = float(raw)
-                        except ValueError:
-                            pass
                     raise SoundCloudRateLimitError(r.status_code, retry_after)
                 r.raise_for_status()
                 data = r.json()
@@ -283,7 +282,11 @@ class SoundCloudService:
         genre: str | None = None,
         limit: int = 20,
     ) -> list[dict]:
-        """Fetch top-chart tracks from the external provider."""
+        """Fetch top-chart tracks from the external provider.
+
+        Raises :class:`SoundCloudRateLimitError` on HTTP 429/503 so
+        callers can apply backoff. Returns ``[]`` on auth errors (401).
+        """
         if not self._client_id:
             return []
         params: dict = {
@@ -294,6 +297,7 @@ class SoundCloudService:
         }
         if genre:
             params["genre"] = f"soundcloud:genres:{genre.lower()}"
+        r = None
         try:
             async with (
                 soundcloud_slot(
@@ -307,17 +311,32 @@ class SoundCloudService:
                     f"{_SC_API_BASE}/charts",
                     params=params,
                 )
-                if r.status_code in (401, 429):
-                    logger.warning(
-                        "sc_charts_error",
-                        status=r.status_code,
-                    )
-                    return []
-                r.raise_for_status()
-                data = r.json()
-        except (SoundCloudSemaphoreTimeout, Exception) as exc:
+        except SoundCloudSemaphoreTimeout as exc:
+            logger.warning(
+                "sc_charts_semaphore_timeout", error=str(exc)
+            )
+            return []
+        except Exception as exc:
             logger.warning("sc_charts_failed", error=str(exc))
             return []
+
+        if r.status_code == 401:
+            logger.warning("sc_charts_auth_error", status=401)
+            return []
+        if r.status_code in (429, 503):
+            retry_after: float | None = None
+            with contextlib.suppress(TypeError, ValueError):
+                retry_after = float(
+                    r.headers.get("Retry-After", "")
+                )
+            logger.warning(
+                "sc_charts_rate_limited",
+                status=r.status_code,
+                retry_after=retry_after,
+            )
+            raise SoundCloudRateLimitError(r.status_code, retry_after)
+        r.raise_for_status()
+        data = r.json()
         return [
             item["track"]
             for item in data.get("collection", [])
@@ -327,7 +346,13 @@ class SoundCloudService:
 
     async def get_trending(self, limit: int = 20) -> list[dict]:
         """Global trending tracks via charts or popular search fallback."""
-        result = await self.get_charts(genre="all-music", limit=limit)
+        try:
+            result = await self.get_charts(
+                genre="all-music", limit=limit
+            )
+        except SoundCloudRateLimitError:
+            logger.warning("sc_trending_charts_rate_limited")
+            return await self._get_popular_fallback(limit)
         if result:
             return result
         return await self._get_popular_fallback(limit)
@@ -1417,10 +1442,53 @@ class SoundCloudService:
             await _maybe_enqueue_audio_cache(track.id)
             return track
 
-        track = Track(**new_values)
-        self._session.add(track)
-        await self._session.commit()
-        await self._session.refresh(track)
+        external_id = new_values.get("external_id")
+        if external_id is not None:
+            stmt = (
+                pg_insert(Track)
+                .values(**new_values)
+                .on_conflict_do_nothing(
+                    index_elements=["imported_from", "external_id"],
+                    index_where=sql_text(
+                        "external_id IS NOT NULL"
+                    ),
+                )
+                .returning(Track)
+            )
+            result = await self._session.execute(stmt)
+            track = result.scalar_one_or_none()
+            await self._session.commit()
+            if track is None:
+                existing_result = await self._session.execute(
+                    select(Track).where(
+                        Track.imported_from
+                        == new_values["imported_from"],
+                        Track.external_id == external_id,
+                    )
+                )
+                existing = existing_result.scalar_one_or_none()
+                if existing is None:
+                    raise RuntimeError(
+                        "external_id ON CONFLICT triggered but "
+                        "row not found on re-select"
+                    )
+                logger.info(
+                    "sc_track_dedup_race_resolved_no_url",
+                    external_id=external_id,
+                    track_id=existing.id,
+                )
+                from app.services.search_index_notify import (
+                    schedule_reindex_track,
+                )
+
+                await schedule_reindex_track(existing.id)
+                return existing
+            await self._session.refresh(track)
+        else:
+            track = Track(**new_values)
+            self._session.add(track)
+            await self._session.commit()
+            await self._session.refresh(track)
         logger.info(
             "sc_track_imported",
             sc_url=sc_url,

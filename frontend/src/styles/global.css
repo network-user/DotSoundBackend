@@ -3335,6 +3335,8 @@ html.le-lyrics-sync-open body {
   align-items: center;
   gap: 16px;
   text-align: center;
+  position: relative;
+  z-index: 10001;
 }
 .auth-logo {
   font-size: 36px;

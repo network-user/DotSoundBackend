@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 
 import httpx
 import structlog
@@ -8,10 +9,11 @@ from dotsound_private_core.services import (
     profile_audios_url,
 )
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.redis import get_redis_client
 from app.models.import_job import ImportJob
 from app.models.user import User
 from app.models.user_linked_account import UserLinkedAccount
@@ -24,6 +26,65 @@ from app.services.external_providers import (
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _BOT_TIMEOUT = 30.0
+_SCAN_CACHE_PREFIX = "import:scan"
+
+
+def _scan_cache_key(user_id: int, source: str, url: str) -> str:
+    digest = hashlib.sha256(
+        f"{source}:{url}".encode()
+    ).hexdigest()
+    return f"{_SCAN_CACHE_PREFIX}:{user_id}:{digest}"
+
+
+async def _get_scan_cache_job_id(
+    user_id: int, source: str, url: str
+) -> int | None:
+    try:
+        key = _scan_cache_key(user_id, source, url)
+        raw = await get_redis_client().get(key)
+        if raw is None:
+            return None
+        return int(raw)
+    except Exception:
+        return None
+
+
+async def _set_scan_cache(
+    user_id: int, source: str, url: str, job_id: int
+) -> None:
+    try:
+        key = _scan_cache_key(user_id, source, url)
+        await get_redis_client().set(
+            key,
+            str(job_id),
+            ex=settings.scan_url_cache_ttl_seconds,
+        )
+    except Exception:
+        pass
+
+
+def _is_postgresql(session: AsyncSession) -> bool:
+    bind = session.get_bind()
+    return getattr(bind.dialect, "name", "") == "postgresql"
+
+
+async def _advisory_lock_user(
+    session: AsyncSession, user_id: int
+) -> None:
+    """Acquire a transaction-level advisory lock keyed on user_id.
+
+    Serializes concurrent start_import calls for the same user to
+    prevent the TOCTOU race in the per-user concurrency cap check.
+    Releases automatically when the transaction ends. No-op on
+    non-PostgreSQL dialects (e.g. SQLite in tests).
+    """
+    if not _is_postgresql(session):
+        return
+    await session.execute(
+        text("SELECT pg_advisory_xact_lock(:key)"),
+        {"key": user_id},
+    )
+
 
 EXTERNAL_IMPORT_SOURCES: frozenset[str] = frozenset(
     {
@@ -121,6 +182,21 @@ class ImportService:
 
         user = await self._resolve_user(user_id)
 
+        cached_job_id = await _get_scan_cache_job_id(
+            user.id, source, url
+        )
+        if cached_job_id is not None:
+            cached_job = await self._session.get(
+                ImportJob, cached_job_id
+            )
+            if cached_job and cached_job.status == "ready":
+                logger.info(
+                    "external_scan_cache_hit",
+                    job_id=cached_job_id,
+                    source=source,
+                )
+                return cached_job
+
         active = await self._get_active_job(user.id)
         if active:
             return active
@@ -178,6 +254,7 @@ class ImportService:
             source=source,
             total=len(tracks),
         )
+        await _set_scan_cache(user.id, source, url, job.id)
         return job
 
     async def scan_account_library(
@@ -314,6 +391,7 @@ class ImportService:
         job.completed_tracks = 0
         job.failed_tracks = 0
 
+        await _advisory_lock_user(self._session, user.id)
         global_active = await self._count_importing_jobs()
         per_user_active = await self._count_importing_jobs(user_id=user.id)
         global_full = global_active >= settings.import_max_concurrent_jobs

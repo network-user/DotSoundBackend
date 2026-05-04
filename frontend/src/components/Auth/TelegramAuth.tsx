@@ -24,6 +24,9 @@ export function TelegramAuth({
     startOnCode ? 'code' : 'welcome',
   )
   const [botUsername, setBotUsername] = useState('')
+  const [configReady, setConfigReady] = useState(false)
+  const [configFailed, setConfigFailed] = useState(false)
+  const [popupBlocked, setPopupBlocked] = useState(false)
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -31,25 +34,46 @@ export function TelegramAuth({
   useEffect(() => {
     api
       .getAuthConfig()
-      .then((cfg) =>
-        setBotUsername(cfg.bot_username),
-      )
-      .catch(() => {})
+      .then((cfg) => {
+        setBotUsername(
+          String(cfg.bot_username ?? '').trim(),
+        )
+        setConfigFailed(false)
+      })
+      .catch(() => {
+        setConfigFailed(true)
+      })
+      .finally(() => setConfigReady(true))
     return () => {
       if (successTimer.current)
         clearTimeout(successTimer.current)
     }
   }, [])
 
+  const botOpenUrl =
+    botUsername.length > 0
+      ? `https://t.me/${botUsername}?start=web_login`
+      : ''
+
   const handleOpenBot = () => {
-    if (!botUsername) {
-      setError('Бот не настроен')
+    if (!configReady) {
       return
     }
-    window.open(
-      `https://t.me/${botUsername}?start=web_login`,
+    if (!botUsername) {
+      setError(
+        configFailed
+          ? 'Не удалось загрузить настройки. Проверьте, что API доступен.'
+          : 'Бот не настроен (telegram_bot_username в бэкенде).',
+      )
+      return
+    }
+    const url = botOpenUrl
+    const opened = window.open(
+      url,
       '_blank',
+      'noopener,noreferrer',
     )
+    setPopupBlocked(!opened)
     setStep('code')
   }
 
@@ -111,10 +135,26 @@ export function TelegramAuth({
             )}
             <button
               className="btn-primary auth-tg-btn"
+              type="button"
               onClick={handleOpenBot}
+              disabled={!configReady}
             >
-              Войти через Telegram
+              {!configReady
+                ? 'Загрузка…'
+                : 'Войти через Telegram'}
             </button>
+            {configReady &&
+              botUsername.length > 0 &&
+              botOpenUrl.length > 0 && (
+                <a
+                  className="auth-link"
+                  href={botOpenUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Открыть бота в новой вкладке
+                </a>
+              )}
             {onEmail && (
               <button
                 className="btn-secondary auth-back"
@@ -135,6 +175,21 @@ export function TelegramAuth({
               Откройте бота .sound в Telegram
               <br />и введите полученный код
             </p>
+            {popupBlocked &&
+              botOpenUrl.length > 0 && (
+                <p className="auth-hint">
+                  Вкладка могла быть заблокирована.
+                  <br />
+                  <a
+                    className="auth-link"
+                    href={botOpenUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Открыть бота вручную
+                  </a>
+                </p>
+              )}
             <input
               className="form-input auth-code-input"
               type="text"
@@ -170,10 +225,12 @@ export function TelegramAuth({
             </button>
             <button
               className="btn-secondary auth-back"
+              type="button"
               onClick={() => {
                 setStep('welcome')
                 setCode('')
                 setError('')
+                setPopupBlocked(false)
               }}
             >
               Назад
