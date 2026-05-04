@@ -105,6 +105,10 @@ class AlbumService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Can only add own tracks to album",
             )
+        if track.album_id == album.id:
+            return
+        if track.album_id is not None:
+            await self._repo.remove_track(track)
         await self._repo.add_track(album.id, track)
         await self._session.commit()
 

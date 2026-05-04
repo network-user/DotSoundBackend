@@ -591,6 +591,81 @@ export const adminApi = {
       page: number
       size: number
     }>('/tracks', { query: params }),
+  listAdminAlbums: (params: {
+    page?: number
+    size?: number
+    search?: string
+  }) =>
+    adminFetch<{
+      items: Array<{
+        id: number
+        title: string
+        owner_id: number
+        is_public: boolean
+        created_at: string
+        track_count: number
+      }>
+      total: number
+      page: number
+      size: number
+    }>('/albums', { query: params }),
+  getAdminAlbum: (albumId: number) =>
+    adminFetch<{
+      id: number
+      title: string
+      description: string | null
+      cover_key: string | null
+      owner_id: number
+      is_public: boolean
+      created_at: string
+      tracks: Array<{
+        id: number
+        title: string
+        artist: string | null
+      }>
+    }>(`/albums/${albumId}`),
+  patchAdminAlbum: (
+    albumId: number,
+    body: {
+      title?: string
+      description?: string | null
+      is_public?: boolean
+      owner_id?: number
+    },
+  ) =>
+    adminFetch<Record<string, unknown>>(
+      `/albums/${albumId}`,
+      { method: 'PATCH', body },
+    ),
+  uploadAdminAlbumCover: (albumId: number, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return adminFetch<Record<string, unknown>>(
+      `/albums/${albumId}/cover`,
+      { method: 'POST', body: fd },
+    )
+  },
+  addAdminAlbumTrack: (albumId: number, trackId: number) =>
+    adminFetch<void>(
+      `/albums/${albumId}/tracks/${trackId}`,
+      { method: 'POST' },
+    ),
+  removeAdminAlbumTrack: (albumId: number, trackId: number) =>
+    adminFetch<void>(
+      `/albums/${albumId}/tracks/${trackId}`,
+      { method: 'DELETE' },
+    ),
+  reorderAdminAlbumTracks: (
+    albumId: number,
+    trackIds: number[],
+  ) =>
+    adminFetch<void>(
+      `/albums/${albumId}/track-order`,
+      {
+        method: 'PUT',
+        body: { track_ids: trackIds },
+      },
+    ),
   deleteTrack: (trackId: number) =>
     adminFetch<void>(`/tracks/${trackId}`, {
       method: 'DELETE',

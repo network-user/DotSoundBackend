@@ -3,6 +3,9 @@
 from fastapi import APIRouter
 
 from . import (
+    albums as admin_albums,
+)
+from . import (
     artist_catalog,
     audio_compute,
     audit,
@@ -24,6 +27,7 @@ from . import (
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 router.include_router(artist_catalog.router)
+router.include_router(admin_albums.router)
 router.include_router(tracks.router)
 router.include_router(genre_samples.router)
 router.include_router(users.router)

@@ -95,3 +95,45 @@ class BatchImportRequest(BaseModel):
 class BatchImportResponse(BaseModel):
     imported: int
     errors: list[str]
+
+
+class AdminAlbumListItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    owner_id: int
+    is_public: bool
+    created_at: datetime
+    track_count: int
+
+
+class AdminAlbumListResponse(BaseModel):
+    items: list[AdminAlbumListItem]
+    total: int
+    page: int
+    size: int
+
+
+class AdminAlbumDetailResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    description: str | None = None
+    cover_key: str | None = None
+    owner_id: int
+    is_public: bool
+    created_at: datetime
+    tracks: list[AdminTrackResponse]
+
+
+class AdminAlbumPatchRequest(BaseModel):
+    title: str | None = Field(None, max_length=255)
+    description: str | None = Field(None, max_length=2000)
+    is_public: bool | None = None
+    owner_id: int | None = None
+
+
+class AdminAlbumReorderRequest(BaseModel):
+    track_ids: list[int] = Field(default_factory=list)

@@ -1534,6 +1534,19 @@
   border-top: 1px solid var(--border);
 }
 
+.admin-albums-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .admin-albums-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Reduced motion: убираем shimmer и lift ── */
 
 @media (prefers-reduced-motion: reduce) {

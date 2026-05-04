@@ -27,6 +27,7 @@ import { SecurityRoute } from './routes/SecurityRoute'
 import { SettingsRoute } from './routes/SettingsRoute'
 import { SchedulesRoute } from './routes/SchedulesRoute'
 import { TasksRoute } from './routes/TasksRoute'
+import { AlbumsRoute } from './routes/AlbumsRoute'
 import { TracksRoute } from './routes/TracksRoute'
 import { UsersRoute } from './routes/UsersRoute'
 import './styles/admin.css'
@@ -185,6 +186,10 @@ export function AdminApp() {
               <Route
                 path="tracks"
                 element={<TracksRoute />}
+              />
+              <Route
+                path="albums"
+                element={<AlbumsRoute />}
               />
               <Route
                 path="complaints"
