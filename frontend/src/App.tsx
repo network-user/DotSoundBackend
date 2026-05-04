@@ -11,6 +11,7 @@ import {
 import { flushSync } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/lib/i18n'
+import { useBrandLabel } from '@/lib/brand'
 
 class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
@@ -162,6 +163,7 @@ function AnimatedRoutes({
 }
 
 export function App() {
+  const brandLabel = useBrandLabel()
   const { reloadLikes } = useLikes()
   const navigate = useNavigate()
   const [authorId, setAuthorId] = useState<
@@ -416,7 +418,7 @@ export function App() {
   if (!isInitialized) {
     return (
       <div className="splash-screen">
-        <div className="splash-logo">.sound</div>
+        <div className="splash-logo">{brandLabel}</div>
         <div className="splash-dots">
           <span />
           <span />

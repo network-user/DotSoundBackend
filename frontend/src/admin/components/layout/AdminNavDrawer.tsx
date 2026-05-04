@@ -5,6 +5,7 @@ import {
 } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useBrandLabel } from '@/lib/brand'
 import { Press } from '@/components/ui/Press'
 import { AdminMenu } from './AdminMenu'
 
@@ -18,6 +19,7 @@ export function AdminNavDrawer({
   onLogout: () => void | Promise<void>
 }) {
   const { t } = useTranslation()
+  const brandLabel = useBrandLabel()
   const { pathname } = useLocation()
   const pathRef = useRef<string | null>(null)
 
@@ -61,7 +63,7 @@ export function AdminNavDrawer({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="admin-nav-drawer__brand">
-          {'.sound '}
+          {`${brandLabel} `}
           <span className="admin-shell__brand-tag">
             {t('admin.shell.brandTag')}
           </span>

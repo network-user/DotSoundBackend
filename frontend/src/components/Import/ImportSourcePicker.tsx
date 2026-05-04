@@ -1,4 +1,5 @@
 import { Icon } from '@/components/Icon/Icon'
+import { useBrandLabel } from '@/lib/brand'
 
 interface Source {
   id: string
@@ -47,12 +48,13 @@ interface Props {
 export function ImportSourcePicker({
   onSelect,
 }: Props) {
+  const brandLabel = useBrandLabel()
   return (
     <div className="import-sources">
       <div className="view-header">
         <h2>Импорт музыки</h2>
         <span className="hint">
-          Перенеси свою музыку в .sound
+          Перенеси свою музыку в {brandLabel}
         </span>
       </div>
       <div className="import-source-list">

@@ -9,6 +9,7 @@ import ruX2 from '@/locales/i18n_extra2_ru.json'
 import enX2 from '@/locales/i18n_extra2_en.json'
 
 type JsonObj = Record<string, unknown>
+const BRAND_RU = '.\u0437\u0432\u0443\u043a'
 
 function isPlainObject(
   v: unknown,
@@ -35,6 +36,23 @@ function deepMerge(
   return out
 }
 
+function localizeRuBrand(v: unknown): unknown {
+  if (typeof v === 'string') {
+    return v.split('.sound').join(BRAND_RU)
+  }
+  if (Array.isArray(v)) {
+    return v.map(localizeRuBrand)
+  }
+  if (isPlainObject(v)) {
+    const out: JsonObj = {}
+    for (const k of Object.keys(v)) {
+      out[k] = localizeRuBrand(v[k])
+    }
+    return out
+  }
+  return v
+}
+
 const enT = deepMerge(
   deepMerge(
     en as unknown as JsonObj,
@@ -42,13 +60,14 @@ const enT = deepMerge(
   ),
   enX2 as unknown as JsonObj,
 )
-const ruT = deepMerge(
+const ruMerged = deepMerge(
   deepMerge(
     ru as unknown as JsonObj,
     ruX1 as unknown as JsonObj,
   ),
   ruX2 as unknown as JsonObj,
 )
+const ruT = localizeRuBrand(ruMerged) as JsonObj
 
 function getTelegramLanguage(): string | undefined {
   try {

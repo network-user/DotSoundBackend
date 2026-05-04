@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -8,14 +8,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content=".sound" />
-  <meta name="application-name" content=".sound" />
-  <meta name="description" content=".sound — музыка без рекламы. Стримы, плейлисты, офлайн-доступ." />
+  <meta name="apple-mobile-web-app-title" content="&#46;&#1079;&#1074;&#1091;&#1082;" />
+  <meta name="application-name" content="&#46;&#1079;&#1074;&#1091;&#1082;" />
+  <meta name="description" content="&#46;&#1079;&#1074;&#1091;&#1082; вЂ” РјСѓР·С‹РєР° Р±РµР· СЂРµРєР»Р°РјС‹. РЎС‚СЂРёРјС‹, РїР»РµР№Р»РёСЃС‚С‹, РѕС„Р»Р°Р№РЅ-РґРѕСЃС‚СѓРї." />
   <link rel="icon" type="image/svg+xml" href="/mini_app/icon-192.svg" />
   <link rel="icon" type="image/png" sizes="192x192" href="/mini_app/icon-192.png" />
   <link rel="icon" type="image/png" sizes="512x512" href="/mini_app/icon-512.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="/mini_app/icon-180.png" />
-  <title>.sound</title>
+  <title>&#46;&#1079;&#1074;&#1091;&#1082;</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     /* Fixed .sound loader */
@@ -76,8 +76,8 @@
 </head>
 <body>
   <div id="ds-loader">
-    <span class="loader-mark" aria-label=".sound">
-      <span class="loader-dot">.</span><span class="loader-text">sound</span>
+    <span class="loader-mark" aria-label="&#46;&#1079;&#1074;&#1091;&#1082;">
+      <span class="loader-dot">.</span><span class="loader-text">&#1079;&#1074;&#1091;&#1082;</span>
     </span>
   </div>
   <div id="root"></div>
@@ -86,7 +86,51 @@
     // Hide loader once the app marks itself as ready, with
     // a hard ceiling so we don't block on slow networks.
     (function () {
+      function detectLanguage() {
+        try {
+          var tg = window.Telegram && window.Telegram.WebApp;
+          var tgLang =
+            tg &&
+            tg.initDataUnsafe &&
+            tg.initDataUnsafe.user &&
+            tg.initDataUnsafe.user.language_code;
+          var stored = localStorage.getItem('i18nextLng');
+          var nav = navigator.language;
+          return String(tgLang || stored || nav || '').toLowerCase();
+        } catch (_e) {
+          return 'ru';
+        }
+      }
+      var brandRu = '.\u0437\u0432\u0443\u043a';
+      var brandEn = '.sound';
+      var language = detectLanguage();
+      var brandLabel =
+        language.indexOf('ru') === 0 ? brandRu : brandEn;
+      var titleNode = document.querySelector('title');
+      if (titleNode) {
+        titleNode.textContent = brandLabel;
+      }
+      var appleTitle = document.querySelector(
+        'meta[name=\"apple-mobile-web-app-title\"]'
+      );
+      if (appleTitle) {
+        appleTitle.setAttribute('content', brandLabel);
+      }
+      var appName = document.querySelector(
+        'meta[name=\"application-name\"]'
+      );
+      if (appName) {
+        appName.setAttribute('content', brandLabel);
+      }
       var loader = document.getElementById('ds-loader');
+      var loaderMark = loader && loader.querySelector('.loader-mark');
+      var loaderText = loader && loader.querySelector('.loader-text');
+      if (loaderMark) {
+        loaderMark.setAttribute('aria-label', brandLabel);
+      }
+      if (loaderText) {
+        loaderText.textContent = brandLabel.slice(1);
+      }
       var done = false;
       function hide() {
         if (done || !loader) return;
@@ -111,3 +155,4 @@
   </script>
 </body>
 </html>
+

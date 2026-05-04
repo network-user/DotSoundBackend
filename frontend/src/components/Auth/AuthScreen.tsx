@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
+import { useBrandLabel } from '@/lib/brand'
 import { EmailAuth } from './EmailAuth'
 import { TelegramAuth } from './TelegramAuth'
 
@@ -79,6 +80,7 @@ export function AuthScreen({
   debugInfo,
 }: Props) {
   const { t } = useTranslation()
+  const brandLabel = useBrandLabel()
   const [showDebug, setShowDebug] =
     useState(import.meta.env.DEV)
 
@@ -130,7 +132,7 @@ export function AuthScreen({
   return (
     <div className="auth-screen">
       <div className="auth-card">
-        <div className="auth-logo">.sound</div>
+        <div className="auth-logo">{brandLabel}</div>
         <h2 className="auth-title">
           {t('auth.welcome')}
         </h2>
