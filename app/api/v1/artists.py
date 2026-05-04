@@ -23,6 +23,8 @@ from app.schemas.artist_follow import (
     ArtistFollowStatusResponse,
     ArtistFollowToggleResponse,
     ArtistListenersResponse,
+    FollowedArtistItem,
+    FollowedArtistListResponse,
 )
 from app.services.artist_follow_service import (
     ArtistFollowService,
@@ -624,3 +626,34 @@ async def get_artist_listeners(
         )
     stats_svc = ArtistStatsService(db)
     return await stats_svc.get_listeners_response(artist_id)
+
+
+@router.get(
+    "/followed",
+    response_model=FollowedArtistListResponse,
+    summary="List artists followed by the current user.",
+)
+@limiter.limit("60/minute")
+async def list_followed_artists(
+    request: Request,
+    limit: int = Query(default=50, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> FollowedArtistListResponse:
+    repo = ArtistFollowRepository(db)
+    artists = await repo.list_followed_artists(
+        current_user.id, limit=limit
+    )
+    items = [
+        FollowedArtistItem(
+            id=a.id,
+            name=a.name,
+            image_key=a.image_key,
+            source=a.source,
+            bio=a.bio,
+        )
+        for a in artists
+    ]
+    return FollowedArtistListResponse(
+        items=items, total=len(items)
+    )

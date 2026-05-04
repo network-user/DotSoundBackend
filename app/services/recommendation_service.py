@@ -8,9 +8,11 @@ from dotsound_private_core.services.recommendation_engine import (
     ListenEvent as RecListenEvent,
 )
 from dotsound_private_core.services.recommendation_engine import (
+    MAX_GENRE_MIXES,
     TrackFeatures,
     UserPrefs,
     build_daily_mix,
+    build_genre_mixes,
     build_radio_queue,
     build_weekly_mix,
     merge_hybrid_playlist,
@@ -763,11 +765,93 @@ class RecommendationService:
         )
         return result
 
+    async def get_genre_mixes(
+        self, user_id: int
+    ) -> list[dict]:
+        (
+            user_prefs,
+            user_locale,
+        ) = await self._build_user_prefs(user_id)
+        history = await self._build_listen_history(
+            user_id
+        )
+
+        genres: list[str] = list(
+            dict.fromkeys(
+                user_prefs.preferred_genres
+                or []
+            )
+        )[:MAX_GENRE_MIXES]
+
+        if not genres:
+            from app.repositories.track import (
+                TrackRepository,
+            )
+
+            track_repo = TrackRepository(
+                self._session
+            )
+            all_genres = (
+                await track_repo.get_unique_genres()
+            )
+            genres = all_genres[:MAX_GENRE_MIXES]
+
+        candidates_by_genre: dict[
+            str, list[TrackFeatures]
+        ] = {}
+        for genre in genres:
+            pool = await self._scoring_candidate_tracks(
+                user_id,
+                100,
+                [genre],
+                user_prefs,
+                user_locale,
+            )
+            if pool:
+                feats = (
+                    await self._tracks_to_features(
+                        pool
+                    )
+                )
+                candidates_by_genre[genre] = feats
+
+        if not candidates_by_genre:
+            return []
+
+        mix_results = build_genre_mixes(
+            user_prefs, history, candidates_by_genre
+        )
+
+        output: list[dict] = []
+        for mix in mix_results:
+            from app.repositories.track import (
+                TrackRepository,
+            )
+
+            track_repo = TrackRepository(
+                self._session
+            )
+            tracks = (
+                await track_repo.get_by_ids_preserve_order(
+                    mix.track_ids
+                )
+            )
+            output.append(
+                {
+                    "genre": mix.genre,
+                    "title": mix.title,
+                    "tracks": tracks,
+                }
+            )
+
+        return output
+
     async def get_radio(
         self,
         seed_track_id: int,
         queue_size: int = 20,
         user_id: int | None = None,
+        exclude_ids: list[int] | None = None,
     ) -> list[Track]:
         from app.repositories.track import (
             TrackRepository,
