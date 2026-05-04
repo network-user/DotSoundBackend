@@ -116,9 +116,10 @@ class AppSettings(BaseSettings):
     bandcamp_slot_acquire_timeout_seconds: float = 30.0
     lyrics_per_track_lock_ttl_seconds: int = 300
 
-    # YouTube — temporarily disabled; proxy support required before re-enabling.
-    # Google blocks direct server-IP requests at scale (bot-gate / 429).
-    # Set YOUTUBE_ENABLED=true only after a residential proxy pool is wired up.
+    # YouTube — temporarily disabled; proxy support required before
+    # re-enabling. Google blocks direct server-IP requests at scale
+    # (bot-gate / 429). Set YOUTUBE_ENABLED=true only after a
+    # residential proxy pool is wired up.
     youtube_enabled: bool = False
 
     # Tor exit-node pool (SoundCloud, Bandcamp — NOT YouTube; Google blocks
@@ -132,7 +133,8 @@ class AppSettings(BaseSettings):
     # ``TOR_SOCKS_BASE_PORT`` + ``TOR_POOL_SIZE``) it is moved at runtime
     # (it must not double as a SOCKS listener).
     tor_control_port: int = 9151
-    # Plain-text password for Tor ControlPort; leave empty to use CookieAuthentication.
+    # Plain-text password for Tor ControlPort; leave empty to use
+    # CookieAuthentication.
     tor_control_password: str = ""
     # Path to tor/tor.exe binary; leave empty to use system PATH.
     tor_bin_path: str = ""
@@ -194,6 +196,21 @@ class AppSettings(BaseSettings):
 
     track_info_ttl_days: int = 30
     artist_supplemental_ttl_days: int = 30
+
+    # Redis TTL for scan URL deduplication cache: (user_id, source, url)
+    # → job_id. Prevents redundant provider calls when a user rescans
+    # the same playlist URL within the TTL window.
+    scan_url_cache_ttl_seconds: int = 3600
+
+    # Redis TTL for SoundCloud search result cache: query → SC results.
+    # Shared across all users; reduces SC API quota consumption when
+    # multiple users import overlapping libraries.
+    sc_search_cache_ttl_seconds: int = 3600
+
+    # Max threads dedicated to blocking yt-dlp playlist scan calls.
+    # Prevents exhausting the default ThreadPoolExecutor under load
+    # (100 concurrent scans × 1 thread each = thread starvation).
+    scan_executor_max_workers: int = 8
 
     # Public selector forwarded into PrivateCore to pick the
     # lyrics provider. Internals of each provider remain opaque

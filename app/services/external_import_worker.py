@@ -1,5 +1,8 @@
 import asyncio
+import contextlib
 import difflib
+import hashlib
+import json
 import random
 
 import structlog
@@ -8,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.core.db import AsyncSessionLocal
+from app.core.redis import get_redis_client
 from app.core.tkq import broker
 from app.models.import_job import ImportJob
 from app.models.track import Track
@@ -24,6 +28,40 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _DURATION_TOLERANCE = 0.20
 _MIN_TITLE_SCORE = 0.55
 _SEARCH_LIMIT = 10
+_SC_SEARCH_CACHE_PREFIX = "sc:search"
+
+
+def _sc_search_cache_key(query: str) -> str:
+    return (
+        f"{_SC_SEARCH_CACHE_PREFIX}:"
+        f"{hashlib.sha256(query.encode()).hexdigest()}"
+    )
+
+
+async def _get_cached_sc_search(
+    query: str,
+) -> list[dict] | None:  # type: ignore[type-arg]
+    try:
+        raw = await get_redis_client().get(_sc_search_cache_key(query))
+        if raw is None:
+            return None
+        return json.loads(raw)  # type: ignore[no-any-return]
+    except Exception:
+        return None
+
+
+async def _set_cached_sc_search(
+    query: str,
+    results: list[dict],  # type: ignore[type-arg]
+) -> None:
+    if not results:
+        return
+    with contextlib.suppress(Exception):
+        await get_redis_client().set(
+            _sc_search_cache_key(query),
+            json.dumps(results),
+            ex=settings.sc_search_cache_ttl_seconds,
+        )
 
 
 def _is_slow_mode(selected: list) -> bool:  # type: ignore[type-arg]
@@ -183,14 +221,17 @@ async def process_external_import_job(job_id: int) -> None:
                 continue
 
             try:
-                results = await _search_with_retry(
-                    sc_service,
-                    query,
-                    max_retries=settings.import_per_track_max_retries,
-                    base_delay=settings.import_per_track_retry_base_delay_seconds,
-                    delay_multiplier=delay_multiplier,
-                    job_id=job_id,
-                )
+                results = await _get_cached_sc_search(query)
+                if results is None:
+                    results = await _search_with_retry(
+                        sc_service,
+                        query,
+                        max_retries=settings.import_per_track_max_retries,
+                        base_delay=settings.import_per_track_retry_base_delay_seconds,
+                        delay_multiplier=delay_multiplier,
+                        job_id=job_id,
+                    )
+                    await _set_cached_sc_search(query, results)
             except SoundCloudRateLimitError as exc:
                 logger.warning(
                     "external_import_search_rate_limit_exhausted",
@@ -209,7 +250,8 @@ async def process_external_import_job(job_id: int) -> None:
                 )
                 await session.commit()
                 consecutive_failures += 1
-                if consecutive_failures % settings.import_adaptive_failure_window == 0:
+                _fw = settings.import_adaptive_failure_window
+                if consecutive_failures % _fw == 0:
                     delay_multiplier = min(
                         delay_multiplier * 2.0,
                         settings.import_adaptive_delay_multiplier_max,
@@ -245,7 +287,7 @@ async def process_external_import_job(job_id: int) -> None:
                 target_title=title,
                 target_duration_s=(
                     int(target_duration)
-                    if isinstance(target_duration, (int, float))
+                    if isinstance(target_duration, int | float)
                     else None
                 ),
             )
@@ -255,20 +297,29 @@ async def process_external_import_job(job_id: int) -> None:
             # combined query miss.
             if best_match is None and artist and results:
                 try:
-                    results_title_only = await _search_with_retry(
-                        sc_service,
-                        title,
-                        max_retries=settings.import_per_track_max_retries,
-                        base_delay=settings.import_per_track_retry_base_delay_seconds,
-                        delay_multiplier=delay_multiplier,
-                        job_id=job_id,
+                    results_title_only = (
+                        await _get_cached_sc_search(title)
                     )
+                    if results_title_only is None:
+                        results_title_only = await _search_with_retry(
+                            sc_service,
+                            title,
+                            max_retries=settings.import_per_track_max_retries,
+                            base_delay=settings.import_per_track_retry_base_delay_seconds,
+                            delay_multiplier=delay_multiplier,
+                            job_id=job_id,
+                        )
+                        await _set_cached_sc_search(
+                            title, results_title_only
+                        )
                     best_match = _pick_best_sc_match(
                         results_title_only,
                         target_title=title,
                         target_duration_s=(
                             int(target_duration)
-                            if isinstance(target_duration, (int, float))
+                            if isinstance(
+                                target_duration, int | float
+                            )
                             else None
                         ),
                     )
@@ -289,7 +340,8 @@ async def process_external_import_job(job_id: int) -> None:
                 )
                 await session.commit()
                 consecutive_failures += 1
-                if consecutive_failures % settings.import_adaptive_failure_window == 0:
+                _fw = settings.import_adaptive_failure_window
+                if consecutive_failures % _fw == 0:
                     delay_multiplier = min(
                         delay_multiplier * 2.0,
                         settings.import_adaptive_delay_multiplier_max,
@@ -327,26 +379,6 @@ async def process_external_import_job(job_id: int) -> None:
                     if fallback_track is None:
                         raise
                     track = fallback_track
-                dirty = False
-                if track.imported_from != job.source:
-                    track.imported_from = job.source
-                    dirty = True
-                incoming_external_id = item.get("external_id")
-                if incoming_external_id and not track.external_id:
-                    track.external_id = str(incoming_external_id)
-                    dirty = True
-                if dirty:
-                    try:
-                        await session.commit()
-                    except IntegrityError as exc:
-                        await session.rollback()
-                        logger.warning(
-                            "external_import_external_id_race",
-                            job_id=job_id,
-                            track_id=track.id,
-                            error=str(exc),
-                        )
-
                 try:
                     await library_repo.add(
                         user_id=job.user_id,
@@ -423,7 +455,8 @@ async def process_external_import_job(job_id: int) -> None:
                 )
                 await session.commit()
                 consecutive_failures += 1
-                if consecutive_failures % settings.import_adaptive_failure_window == 0:
+                _fw = settings.import_adaptive_failure_window
+                if consecutive_failures % _fw == 0:
                     delay_multiplier = min(
                         delay_multiplier * 2.0,
                         settings.import_adaptive_delay_multiplier_max,

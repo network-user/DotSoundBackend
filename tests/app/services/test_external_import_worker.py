@@ -185,7 +185,10 @@ async def test_worker_match_creates_track(
     assert imported[0]["track_id"] == existing_track.id
 
     await session.refresh(existing_track)
-    assert existing_track.imported_from == "yandex_music"
+    # imported_from reflects the audio source (soundcloud), not the
+    # originating platform. The user-facing source is stored on the
+    # library link instead (checked below).
+    assert existing_track.imported_from != "yandex_music"
 
     # Successful import also links the track to the importing
     # user's library (auto-link in Stage B of the multi-importer

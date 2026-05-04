@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist import Artist
 from app.services.soundcloud_service import (
+    SoundCloudRateLimitError,
     SoundCloudService,
     extract_soundcloud_profile_permalink_from_url,
     normalize_soundcloud_permalink,
@@ -406,12 +407,13 @@ async def test_get_charts_success(
 
 
 @patch(f"{_MOD}.httpx.AsyncClient")
-async def test_get_charts_error_returns_empty(
+async def test_get_charts_429_raises_rate_limit_error(
     mock_client_cls: AsyncMock,
     session: AsyncSession,
 ) -> None:
     mock_response = MagicMock()
     mock_response.status_code = 429
+    mock_response.headers = {"Retry-After": "1"}
 
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(return_value=mock_response)
@@ -420,8 +422,10 @@ async def test_get_charts_error_returns_empty(
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
-    result = await svc.get_charts()
-    assert result == []
+    with pytest.raises(SoundCloudRateLimitError) as exc_info:
+        await svc.get_charts()
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.retry_after == 1.0
 
 
 @patch(f"{_MOD}.httpx.AsyncClient")

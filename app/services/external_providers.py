@@ -1,10 +1,39 @@
 import asyncio
+import concurrent.futures
 from typing import Any
 
+import structlog
 from dotsound_private_core.services import (
     PlaylistScanResult,
     fetch_external_playlist,
 )
+
+from app.config import settings
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+_scan_executor: concurrent.futures.ThreadPoolExecutor | None = None
+
+
+def _get_scan_executor() -> concurrent.futures.ThreadPoolExecutor:
+    """Return the module-level bounded scan executor, creating it once.
+
+    A dedicated pool with a capped worker count prevents the default
+    ThreadPoolExecutor from spawning unbounded threads when many users
+    trigger simultaneous yt-dlp playlist scans.
+    """
+    global _scan_executor
+    if _scan_executor is None:
+        max_workers = max(1, settings.scan_executor_max_workers)
+        _scan_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix="scan_worker",
+        )
+        logger.info(
+            "scan_executor_created",
+            max_workers=max_workers,
+        )
+    return _scan_executor
 
 
 class ProviderError(Exception):
@@ -50,9 +79,15 @@ async def scan_playlist_url(
     Raises :class:`ProviderError` on non-``ok`` status. The actual
     upstream call lives in the private core; this adapter only
     normalizes shapes and maps opaque status codes to exceptions.
+    Runs ``fetch_external_playlist`` in a bounded thread pool to cap
+    concurrent yt-dlp threads under high load.
     """
-    result: PlaylistScanResult = await asyncio.to_thread(
-        fetch_external_playlist, source, url
+    loop = asyncio.get_event_loop()
+    result: PlaylistScanResult = await loop.run_in_executor(
+        _get_scan_executor(),
+        fetch_external_playlist,
+        source,
+        url,
     )
 
     if result.status == "ok":
