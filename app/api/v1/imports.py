@@ -350,16 +350,16 @@ async def scan_soundcloud_account(
     return await _scan_account("soundcloud", body, session, current_user)
 
 
-@router.post(
-    "/vk_account",
-    response_model=ImportJobResponse,
-    summary="Import audio from connected VK account",
-)
-@limiter.limit("5/minute")
-async def scan_vk_account(
-    request: Request,
-    body: AccountImportRequest,
-    session: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> ImportJobResponse:
-    return await _scan_account("vk", body, session, current_user)
+# @router.post(
+#     "/vk_account",
+#     response_model=ImportJobResponse,
+#     summary="Import audio from connected VK account",
+# )
+# @limiter.limit("5/minute")
+# async def scan_vk_account(
+#     request: Request,
+#     body: AccountImportRequest,
+#     session: AsyncSession = Depends(get_db),
+#     current_user: User = Depends(get_current_user),
+# ) -> ImportJobResponse:
+#     return await _scan_account("vk", body, session, current_user)

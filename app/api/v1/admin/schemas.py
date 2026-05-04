@@ -40,6 +40,9 @@ class AdminUserUpdate(BaseModel):
     is_admin: bool | None = None
 
 
+class AdminTrackGenrePatchRequest(BaseModel):
+    genre: str | None = Field(None, max_length=100)
+
 class AdminTrackListResponse(BaseModel):
     items: list[AdminTrackResponse]
     total: int

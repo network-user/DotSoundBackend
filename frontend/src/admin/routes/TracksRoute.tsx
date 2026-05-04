@@ -112,6 +112,18 @@ export function TracksRoute() {
     }
   }
 
+  const handleGenreChange = async (id: number, genre: string) => {
+    setBusyId(id)
+    try {
+      await adminApi.updateTrackGenre(id, genre || null)
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const handleOpen = (id: number) => {
     window.open(`/mini_app/track/${id}`, '_blank')
   }
@@ -260,6 +272,29 @@ export function TracksRoute() {
     {
       header: t('admin.tracks.colSource'),
       accessorKey: 'source',
+    },
+    {
+      header: 'Жанр',
+      accessorKey: 'genre',
+      cell: (i) => (
+        <input
+          type="text"
+          defaultValue={i.row.original.genre || ''}
+          placeholder="Без жанра"
+          onBlur={(e) => {
+            if (e.target.value !== (i.row.original.genre || '')) {
+              handleGenreChange(i.row.original.id, e.target.value)
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.currentTarget.blur()
+            }
+          }}
+          style={{ width: 120, padding: '4px 8px', fontSize: 13, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface-1)', color: 'var(--text)' }}
+          disabled={busyId === i.row.original.id}
+        />
+      ),
     },
     {
       header: t('admin.tracks.colStatus'),

@@ -14,6 +14,19 @@
 
 ---
 
+## Mini App / .sound UI (2026-05-04)
+
+- [x] **Глобальный UI redesign `.sound`** — обновлены splash/loading,
+  иконки PWA, домашний экран, поиск, чаты, профиль, admin shell и
+  Telegram bot copy/keyboards без изменения backend API, PrivateCore и
+  ComputeWorker.
+- [ ] **Home recommendations: richer highlight endpoint** — добавить
+  отдельные данные для крупной карточки главного экрана: editorial label,
+  reason/highlight metadata, стабильный hero image и компактные carousel
+  controls. Реализовать отдельным backend/frontend проходом после review
+  границы Backend/PrivateCore; текущий UI использует существующие
+  `continue` / `personalized` / `user_choice` / fallback tracks.
+
 ## Админка / альбомы (2026-05-04)
 
 - [x] **Admin: редактирование альбомов в UI** — колонка `tracks.album_position`
