@@ -900,5 +900,22 @@
         "body": "Your report was received and is being handled."
       }
     }
+  },
+  "artistStats": {
+    "title": "Stats — {{name}}",
+    "back": "Back to artist",
+    "listeners": "Listeners",
+    "plays": "Plays",
+    "likes": "Likes",
+    "followers": "Followers",
+    "monthlyListeners": "Unique listeners (monthly)",
+    "totalPlays": "Total plays",
+    "totalLikes": "Total likes",
+    "totalFollowers": "Total followers",
+    "noData": "No historical stats available yet",
+    "tooltip": {
+      "month": "Month",
+      "value": "Value"
+    }
   }
 }

@@ -342,7 +342,22 @@ export function PlaylistsView({
                   <h3 className="share-modal-title">РџРѕРґРµР»РёС‚СЊСЃСЏ РїР»РµР№Р»РёСЃС‚РѕРј</h3>
                   <p className="share-modal-subtitle">{selected.name}</p>
                 </div>
-                <button type="button" className="icon-btn" onClick={() => { void handleCopyLink() }} aria-label="Скопировать ссылку"><Icon name="copy" size={16} /></button>`r`n                <button type="button" className="icon-btn" onClick={() => setShareOpen(false)} aria-label="Закрыть">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => {
+                    void handleCopyLink()
+                  }}
+                  aria-label="Скопировать ссылку"
+                >
+                  <Icon name="copy" size={16} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => setShareOpen(false)}
+                  aria-label="Закрыть"
+                >
                   <Icon name="x" size={18} />
                 </button>
               </div>
