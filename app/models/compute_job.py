@@ -80,6 +80,9 @@ class ComputeJob(Base, TimestampMixin):
     next_attempt_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+    pinned_worker_id: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
     claimed_by: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )

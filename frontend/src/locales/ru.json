@@ -355,7 +355,26 @@
         "discographyUrlCol": "URL",
         "discographyAddRow": "Добавить строку",
         "discographyRemoveRow": "Удалить строку",
-        "discographySave": "Сохранить дискографию"
+        "discographySave": "Сохранить дискографию",
+        "artistSettingsToggle": "Артист: SoundCloud, аватар и синхронизация",
+        "moveUp": "Выше",
+        "moveDown": "Ниже",
+        "fieldTitle": "Название релиза",
+        "fieldKind": "Тип",
+        "fieldKindPh": "альбом, EP, сингл…",
+        "fieldReleased": "Дата релиза",
+        "saveReleaseMeta": "Сохранить сведения о релизе",
+        "releaseCoverUpload": "Загрузить обложку релиза",
+        "coverUploading": "Загрузка…",
+        "tracksHint": "Перетаскивайте строки для порядка. «Сохранить порядок треков» фиксирует список. Название, строка артиста, описание и обложка — для каждого трека отдельно.",
+        "trackTitle": "Название трека",
+        "trackArtist": "Артист (строка)",
+        "trackDescription": "Описание",
+        "trackCoverUpload": "Обложка",
+        "saveTrackMeta": "Сохранить трек",
+        "addTracksTitle": "Добавить треки в релиз",
+        "allTracksTitle": "Все треки артиста",
+        "allTracksHint": "Постранично все треки, привязанные к артисту. Редактирование порядка и полей — в выбранном релизе выше."
       }
     },
     "audioCompute": {

@@ -43,6 +43,7 @@ class AdminUserUpdate(BaseModel):
 class AdminTrackGenrePatchRequest(BaseModel):
     genre: str | None = Field(None, max_length=100)
 
+
 class AdminTrackListResponse(BaseModel):
     items: list[AdminTrackResponse]
     total: int
@@ -118,6 +119,28 @@ class LyricsBatchImportRequest(BaseModel):
 
 
 class LyricsBatchImportResponse(BaseModel):
+    imported: int
+    errors: list[str]
+
+
+class GenreMoodBatchPromptRequest(BaseModel):
+    track_ids: list[int] = Field(default_factory=list, max_length=200)
+    search: str | None = Field(default=None, max_length=128)
+    only_without_genre: bool = True
+    limit: int = Field(default=200, ge=1, le=500)
+
+
+class GenreMoodBatchPromptResponse(BaseModel):
+    prompt: str
+    track_count: int
+
+
+class GenreMoodBatchImportRequest(BaseModel):
+    raw_response: str = Field(..., min_length=2, max_length=800_000)
+    overwrite_genre: bool = False
+
+
+class GenreMoodBatchImportResponse(BaseModel):
     imported: int
     errors: list[str]
 

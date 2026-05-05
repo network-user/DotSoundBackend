@@ -114,6 +114,7 @@ async def _dispatch_to_tier(
     job.current_tier = tier
     job.status = "queued"
     job.routed_to_worker = None
+    job.pinned_worker_id = None
     job.started_at = None
     job.deadline_at = None
 
@@ -473,6 +474,61 @@ async def handle_lease_expired(
     )
 
 
+async def reassign_remote_lyrics_job(
+    session: AsyncSession,
+    *,
+    job: LyricsJob,
+    pinned_worker_id: str | None,
+    queue_priority: int | None = None,
+) -> None:
+    """Put a pull-queue job back to ``queued`` and optionally pin it.
+
+    Running jobs must have ``routed_to_worker`` set (remote pull). Other
+    runners (in-process tiers) cannot be reassigned here.
+    """
+    if job.status not in {"queued", "running"}:
+        raise ValueError("lyrics_job_not_reassignable")
+    if job.status == "running" and not job.routed_to_worker:
+        raise ValueError("lyrics_job_not_pull_worker")
+    released_running = False
+    if job.status == "running":
+        released_running = True
+        _close_open_attempt(
+            job,
+            status="fail",
+            error="admin_reassign",
+        )
+        job.status = "queued"
+        job.routed_to_worker = None
+        job.started_at = None
+        job.deadline_at = None
+        attempts = _attempts(job)
+        attempts.append(
+            {
+                "tier": job.current_tier or "",
+                "started_at": _now_iso(),
+                "status": "queued",
+                "error": None,
+            }
+        )
+        job.tier_attempts = attempts
+    job.pinned_worker_id = pinned_worker_id
+    if queue_priority is not None:
+        job.queue_priority = int(queue_priority)
+    await session.flush()
+    log_line = (
+        "reassigned by admin; waiting for compute worker"
+        if released_running
+        else "queue routing updated by admin"
+    )
+    await set_lyrics_progress(
+        job.progress_id,
+        stage="queued",
+        log_line=log_line,
+        percent=15,
+    )
+
+
 async def fallback_jobs_for_revoked_worker(
     session: AsyncSession,
     *,
@@ -501,6 +557,7 @@ __all__ = [
     "TIER_REMOTE_WHISPER",
     "TIER_SPEECHKIT_PAID",
     "TIER_PROFILE_MAP",
+    "reassign_remote_lyrics_job",
     "fallback_jobs_for_revoked_worker",
     "handle_lease_expired",
     "handle_tier_failure",

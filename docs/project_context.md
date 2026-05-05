@@ -125,6 +125,7 @@ src/dotsound_private_core/
   contracts/internal_api.py   ← константы внутреннего API
   services/
     lyrics_provider.py        ← автоопределение текста (внутренняя реализация)
+    text_genre_mood_infer.py  ← эвристики жанра/настроения по тексту (keywords)
     artist_normalizer.py      ← парсинг "Kai Angel & 9mice", fuzzy match
     recommendation_engine.py  ← скоринг треков, daily mix, radio
     playcount_policy.py        ← публичный play_count (qualify) + user-choice chart
@@ -160,6 +161,11 @@ Backend = чистый hub. Каждая задача попадает в `Lyric
   Tier выключен по умолчанию + жёсткий бюджет-гард
   (`asr_policy.should_use_paid_asr`).
 3. Tier-успех → `LyricsRepository.create_or_update`, job → `done`.
+   После сохранения непустого текста (если включено
+   `LYRICS_DERIVED_GENRE_MOOD_ENABLED`) эвристика в PrivateCore может
+   заполнить пустой жанр трека и дописать теги настроения в
+   `track_audio_features`. В админке — batch prompt/import
+   `POST /api/v1/admin/tracks/genre-mood/*` по аналогии с lyrics.
 4. Tier-фейл / lease expired (lease reaper) →
   `lyrics_cascade.handle_tier_failure` → следующий tier.
 5. Cascade exhausted → `status="failed"`, причина в `error`.

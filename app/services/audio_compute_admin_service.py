@@ -20,11 +20,14 @@ from app.repositories.audio_compute import (
     AudioComputeRepository,
 )
 from app.services import compute_router
+from app.services import compute_queue_service as cq
 from app.services import compute_worker_service as cws
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__
 )
+
+_MAX_QUEUE_PRIORITY = 1_000_000
 
 
 def _serialize_worker(w: ComputeWorker) -> dict[str, Any]:
@@ -72,6 +75,8 @@ def _serialize_job(j: LyricsJob) -> dict[str, Any]:
         "tiers_planned": j.tiers_planned or [],
         "tier_attempts": j.tier_attempts or [],
         "routed_to_worker": j.routed_to_worker,
+        "pinned_worker_id": j.pinned_worker_id,
+        "queue_priority": j.queue_priority,
         "attempts": j.attempts,
         "duration_ms": j.duration_ms,
         "error": j.error,
@@ -323,11 +328,185 @@ class AudioComputeAdminService:
     async def list_jobs(
         self,
         status_filter: str | None = None,
+        sort: str = "queue",
     ) -> list[dict[str, Any]]:
+        sm = "queue" if sort == "queue" else "recent"
         rows = await self._repo.list_jobs(
-            status_filter=status_filter, limit=200
+            status_filter=status_filter,
+            limit=200,
+            sort=sm,
         )
         return [_serialize_job(j) for j in rows]
+
+    async def update_lyrics_job_routing(
+        self,
+        job_id: str,
+        *,
+        pinned_worker_id: str | None,
+        queue_priority: int,
+    ) -> dict[str, Any] | None:
+        job = await self._repo.get_job(job_id)
+        if job is None:
+            return None
+        if job.status not in {"queued", "running"}:
+            raise ValueError("job_not_routable")
+        qp = max(
+            -_MAX_QUEUE_PRIORITY,
+            min(_MAX_QUEUE_PRIORITY, int(queue_priority)),
+        )
+        if pinned_worker_id:
+            w = await self._repo.get_worker(
+                pinned_worker_id
+            )
+            if (
+                w is None
+                or w.revoked_at is not None
+                or not w.active
+            ):
+                raise ValueError("worker_not_found")
+            if not cws.worker_can_run_lyrics_profile(
+                w, job.profile
+            ):
+                raise ValueError("worker_profile_mismatch")
+        from app.services.lyrics_cascade import (
+            reassign_remote_lyrics_job,
+        )
+
+        await reassign_remote_lyrics_job(
+            self._session,
+            job=job,
+            pinned_worker_id=pinned_worker_id or None,
+            queue_priority=qp,
+        )
+        await cws._log_audit(
+            self._session,
+            worker_id=pinned_worker_id,
+            ip=None,
+            action="admin_job_routing",
+            job_id=job.id,
+            status_code=200,
+            meta={
+                "queue_priority": qp,
+                "pinned_worker_id": pinned_worker_id,
+            },
+        )
+        await self._session.commit()
+        logger.info(
+            "lyrics_job_routing_updated",
+            job_id=job.id,
+            pinned_worker_id=pinned_worker_id,
+            queue_priority=qp,
+        )
+        return _serialize_job(job)
+
+    async def list_generic_compute_jobs(
+        self,
+        *,
+        status: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        from sqlalchemy import select
+
+        from app.models.compute_job import ComputeJob
+
+        sm = max(1, min(200, int(limit)))
+        stmt = select(ComputeJob)
+        if status:
+            stmt = stmt.where(ComputeJob.status == status)
+        stmt = (
+            stmt.order_by(
+                ComputeJob.priority.desc(),
+                ComputeJob.created_at.desc(),
+            ).limit(sm)
+        )
+        result = await self._session.execute(stmt)
+        rows = list(result.scalars().all())
+        return [
+            {
+                "id": r.id,
+                "job_type": r.job_type,
+                "target_kind": r.target_kind,
+                "target_id": r.target_id,
+                "status": r.status,
+                "priority": r.priority,
+                "pinned_worker_id": r.pinned_worker_id,
+                "claimed_by": r.claimed_by,
+                "attempts": r.attempts,
+                "last_error": r.last_error,
+                "created_at": (
+                    r.created_at.isoformat()
+                    if r.created_at
+                    else None
+                ),
+            }
+            for r in rows
+        ]
+
+    async def update_generic_compute_job_routing(
+        self,
+        job_id: str,
+        *,
+        pinned_worker_id: str | None,
+        priority: int,
+        release_claim: bool,
+    ) -> dict[str, Any] | None:
+        from app.models.compute_job import ComputeJob
+
+        job = await self._session.get(
+            ComputeJob, job_id
+        )
+        if job is None:
+            return None
+        if job.status in cq.TERMINAL_STATUSES:
+            raise ValueError("job_terminal")
+        pr = max(
+            -_MAX_QUEUE_PRIORITY,
+            min(_MAX_QUEUE_PRIORITY, int(priority)),
+        )
+        if pinned_worker_id:
+            w = await self._repo.get_worker(
+                pinned_worker_id
+            )
+            if (
+                w is None
+                or w.revoked_at is not None
+                or not w.active
+            ):
+                raise ValueError("worker_not_found")
+        job.pinned_worker_id = pinned_worker_id or None
+        job.priority = pr
+        if release_claim and job.status == cq.STATUS_CLAIMED:
+            job.status = cq.STATUS_PENDING
+            job.claimed_by = None
+            job.claimed_at = None
+            job.claim_deadline_at = None
+            job.started_at = None
+        await self._session.flush()
+        await cws._log_audit(
+            self._session,
+            worker_id=pinned_worker_id,
+            ip=None,
+            action="admin_compute_job_routing",
+            job_id=job.id,
+            status_code=200,
+            meta={
+                "priority": pr,
+                "release_claim": bool(release_claim),
+            },
+        )
+        await self._session.commit()
+        logger.info(
+            "generic_compute_job_routing_updated",
+            job_id=job.id,
+        )
+        return {
+            "id": job.id,
+            "job_type": job.job_type,
+            "status": job.status,
+            "priority": job.priority,
+            "pinned_worker_id": job.pinned_worker_id,
+            "claimed_by": job.claimed_by,
+        }
 
     async def list_worker_jobs(
         self,

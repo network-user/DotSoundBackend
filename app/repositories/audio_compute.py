@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import case, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.app_setting import AppSetting
@@ -132,15 +132,31 @@ class AudioComputeRepository:
         self,
         status_filter: str | None = None,
         limit: int = 200,
+        sort: str = "recent",
     ) -> list[LyricsJob]:
-        stmt = (
-            select(LyricsJob)
-            .order_by(LyricsJob.created_at.desc())
-            .limit(limit)
-        )
+        stmt = select(LyricsJob)
         if status_filter:
             stmt = stmt.where(
                 LyricsJob.status == status_filter
+            )
+        if sort == "queue":
+            queue_rank = case(
+                (LyricsJob.status == "queued", 0),
+                (LyricsJob.status == "running", 1),
+                else_=2,
+            )
+            stmt = (
+                stmt.order_by(
+                    queue_rank.asc(),
+                    LyricsJob.queue_priority.desc(),
+                    LyricsJob.created_at.asc(),
+                ).limit(limit)
+            )
+        else:
+            stmt = (
+                stmt.order_by(
+                    LyricsJob.created_at.desc()
+                ).limit(limit)
             )
         result = await self._session.execute(stmt)
         return list(result.scalars().all())

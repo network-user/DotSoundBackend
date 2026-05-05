@@ -14,12 +14,12 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.admin.schemas import (
+    AdminTrackListResponse,
+    AdminTrackResponse,
     ArtistSupplementalBatchImportRequest,
     ArtistSupplementalBatchImportResponse,
     ArtistSupplementalBatchPromptRequest,
     ArtistSupplementalBatchPromptResponse,
-    AdminTrackListResponse,
-    AdminTrackResponse,
 )
 from app.core.rate_limit import limiter
 from app.dependencies import (
@@ -113,6 +113,15 @@ async def admin_catalog_overview(
 
 _MAX_ARTIST_AVATAR_BYTES = 2 * 1024 * 1024
 _ALLOWED_ARTIST_AVATAR_CT = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    }
+)
+
+_MAX_CATALOG_RELEASE_COVER_BYTES = 5 * 1024 * 1024
+_ALLOWED_CATALOG_RELEASE_COVER_CT = frozenset(
     {
         "image/jpeg",
         "image/png",
@@ -234,6 +243,47 @@ async def admin_catalog_create_release(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Artist not found",
+        )
+    return out
+
+
+@router.post(
+    "/{artist_id}/catalog/releases/{release_id}/cover",
+    response_model=AdminCatalogReleaseSummaryResponse,
+)
+@limiter.limit("30/minute")
+async def admin_catalog_upload_release_cover(
+    request: Request,
+    artist_id: int,
+    release_id: int,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> AdminCatalogReleaseSummaryResponse:
+    mime = (file.content_type or "").split(";")[0].strip().lower()
+    if mime not in _ALLOWED_CATALOG_RELEASE_COVER_CT:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Cover must be JPEG, PNG, or WebP",
+        )
+    data = await file.read()
+    if len(data) > _MAX_CATALOG_RELEASE_COVER_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Cover exceeds 5 MB limit",
+        )
+    svc = AdminArtistCatalogService(session)
+    out = await svc.upload_release_cover(
+        artist_id,
+        release_id,
+        data=data,
+        content_type=mime,
+        admin_user_id=admin.id,
+    )
+    if out is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Artist or catalog release not found",
         )
     return out
 

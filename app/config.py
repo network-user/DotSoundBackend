@@ -92,6 +92,7 @@ class AppSettings(BaseSettings):
     lyrics_partial_ttl_seconds: int = 3600
     lyrics_stream_maxlen: int = 500
     lyrics_provider_timeout_seconds: int = 300
+    lyrics_derived_genre_mood_enabled: bool = True
 
     # Post-import background lyrics orchestrator. Enqueue pacing
     # (random uniform between MIN and MAX seconds) keeps request

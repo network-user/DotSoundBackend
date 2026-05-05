@@ -79,6 +79,23 @@ class LyricsRepository:
         result = await self._session.execute(stmt)
         lyrics = result.scalar_one()
         logger.debug("db_lyrics_upserted", track_id=track_id)
+        if plain_text.strip():
+            try:
+                from app.services.lyrics_derived_genre_mood_service import (
+                    apply_after_lyrics_saved,
+                )
+
+                await apply_after_lyrics_saved(
+                    self._session,
+                    track_id,
+                    plain_text,
+                )
+            except Exception:
+                logger.warning(
+                    "lyrics_derived_genre_mood_failed",
+                    track_id=track_id,
+                    exc_info=True,
+                )
         return lyrics
 
     async def update_sync(
