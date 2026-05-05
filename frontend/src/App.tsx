@@ -340,6 +340,7 @@ export function App() {
       if (!authenticated) {
         setNeedsAuth(true)
       } else {
+        await api.syncSessionUserFlags()
         try {
           window.dispatchEvent(
             new Event('app-auth-ready'),

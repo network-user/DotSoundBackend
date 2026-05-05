@@ -182,6 +182,13 @@ export function TrackCardSheet({
   const [albumEditPublic, setAlbumEditPublic] = useState(false)
   const [albumAddTrackId, setAlbumAddTrackId] = useState<number | null>(null)
   const [albumTrackPool, setAlbumTrackPool] = useState<Track[]>([])
+  const [relatedAlbumInfo, setRelatedAlbumInfo] = useState<{
+    id: number
+    title: string
+  } | null>(null)
+  const [albumTrackTitleDrafts, setAlbumTrackTitleDrafts] = useState<
+    Record<number, string>
+  >({})
   const [videoReady, setVideoReady] =
     useState(false)
   const videoEnabled =
@@ -289,6 +296,37 @@ export function TrackCardSheet({
       }
     }
   }, [isCardOpen, track?.id])
+
+  useEffect(() => {
+    const albumFromCard = card?.album
+    if (albumFromCard) {
+      setRelatedAlbumInfo({
+        id: albumFromCard.id,
+        title: albumFromCard.title,
+      })
+      return
+    }
+    if (!track?.album_id) {
+      setRelatedAlbumInfo(null)
+      return
+    }
+    let cancelled = false
+    api.getAlbum(track.album_id).then((album) => {
+      if (!cancelled) {
+        setRelatedAlbumInfo({
+          id: album.id,
+          title: album.title,
+        })
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setRelatedAlbumInfo(null)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [card?.album?.id, card?.album?.title, track?.album_id])
 
   useEffect(() => {
     if (!extrasOpen) return
@@ -448,11 +486,16 @@ export function TrackCardSheet({
   }, [sharePayload, toast])
 
   const openAlbumEditor = useCallback(async () => {
-    if (!card?.album || !isAdmin) return
+    const internalId = getInternalUserId()
+    const canOwnerEdit = Boolean(
+      internalId !== null &&
+      track?.uploaded_by_id === internalId,
+    )
+    if (!relatedAlbumInfo || (!isAdmin && !canOwnerEdit)) return
     setAlbumEditBusy(true)
     try {
       const [album, myLib] = await Promise.all([
-        api.getAlbum(card.album.id),
+        api.getAlbum(relatedAlbumInfo.id),
         api.getMyLibrary(1, 100, false),
       ])
       setAlbumEditData(album)
@@ -460,13 +503,18 @@ export function TrackCardSheet({
       setAlbumEditDesc(album.description || '')
       setAlbumEditPublic(album.is_public)
       setAlbumTrackPool(myLib.items)
+      setAlbumTrackTitleDrafts(
+        Object.fromEntries(
+          album.tracks.map((t) => [t.id, t.title || '']),
+        ),
+      )
       setAlbumEditOpen(true)
     } catch {
       toast.error('РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ СЂРµРґР°РєС‚РѕСЂ Р°Р»СЊР±РѕРјР°')
     } finally {
       setAlbumEditBusy(false)
     }
-  }, [card?.album?.id, isAdmin, toast])
+  }, [relatedAlbumInfo?.id, isAdmin, track?.uploaded_by_id, toast])
 
   const refreshAlbumEditor = useCallback(async () => {
     if (!albumEditData) return
@@ -475,6 +523,11 @@ export function TrackCardSheet({
     setAlbumEditTitle(album.title)
     setAlbumEditDesc(album.description || '')
     setAlbumEditPublic(album.is_public)
+    setAlbumTrackTitleDrafts(
+      Object.fromEntries(
+        album.tracks.map((t) => [t.id, t.title || '']),
+      ),
+    )
   }, [albumEditData?.id])
 
   const saveAlbumMeta = useCallback(async () => {
@@ -523,6 +576,15 @@ export function TrackCardSheet({
     await api.setAlbumTrackOrder(albumEditData.id, ids)
     await refreshAlbumEditor()
   }, [albumEditData?.id, albumEditData?.tracks, isAdmin, refreshAlbumEditor])
+
+  const saveAlbumTrackTitle = useCallback(async (trackId: number) => {
+    if (!isAdmin) return
+    const raw = albumTrackTitleDrafts[trackId]
+    const title = raw?.trim()
+    if (!title) return
+    await api.updateTrack(trackId, { title })
+    await refreshAlbumEditor()
+  }, [isAdmin, albumTrackTitleDrafts, refreshAlbumEditor])
 
   const handleAuthor = () => {
     if (track?.artist && onOpenArtist) {
@@ -1009,10 +1071,10 @@ export function TrackCardSheet({
               'external_reference' &&
               t('trackSheet.catRef')}
           </p>
-          {card?.album && (
+          {relatedAlbumInfo && (
             <div className="tcs-share-related-row">
               <span className="tcs-share-related-title">
-                Альбом: {card.album.title}
+                Альбом: {relatedAlbumInfo.title}
               </span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
@@ -1020,16 +1082,16 @@ export function TrackCardSheet({
                   className="tcs-share-related-btn"
                   onClick={() => {
                     void openShareModal({
-                      id: card.album!.id,
+                      id: relatedAlbumInfo.id,
                       type: 'album',
-                      title: card.album!.title,
+                      title: relatedAlbumInfo.title,
                     })
                   }}
                 >
                   <Icon name="share" size={14} />
                   Поделиться
                 </button>
-                {isAdmin && (
+                {(isAdmin || isOwner) && (
                   <button
                     type="button"
                     className="tcs-share-related-btn"
@@ -1855,7 +1917,20 @@ export function TrackCardSheet({
                       marginBottom: 8,
                     }}
                   >
-                    <span style={{ flex: 1 }}>{t.title}</span>
+                    <input
+                      className="form-input"
+                      style={{ flex: 1 }}
+                      value={albumTrackTitleDrafts[t.id] ?? t.title}
+                      onChange={(e) => {
+                        setAlbumTrackTitleDrafts((prev) => ({
+                          ...prev,
+                          [t.id]: e.target.value,
+                        }))
+                      }}
+                    />
+                    <button className="icon-btn" onClick={() => void saveAlbumTrackTitle(t.id)}>
+                      <Icon name="check" size={14} />
+                    </button>
                     <button className="icon-btn" onClick={() => void moveAlbumTrack(idx, -1)}>
                       ^
                     </button>

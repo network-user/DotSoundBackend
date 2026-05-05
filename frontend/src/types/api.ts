@@ -32,6 +32,7 @@ export interface Track {
   canonical_source_url: string | null
   source_name: string | null
   uploaded_by_id: number | null
+  album_id?: number | null
   video_key: string | null
   created_at: string
   waveform_data: number[] | null
@@ -178,6 +179,7 @@ export interface UserResponse {
   auth_provider: string
   totp_enabled: boolean
   is_active: boolean
+  is_admin?: boolean
   created_at: string
 }
 
@@ -513,6 +515,13 @@ export interface AppNotification {
 
 // ── Recommendations ───────────────────────────────────────────────────────
 
+export interface HomeHighlight {
+  track: Track
+  label: string
+  reason?: string | null
+  hero_image_key?: string | null
+}
+
 export interface HomeSection {
   title: string
   section_type: string
@@ -521,6 +530,7 @@ export interface HomeSection {
 
 export interface HomePageResponse {
   sections: HomeSection[]
+  highlights: HomeHighlight[]
   maturity: string
 }
 

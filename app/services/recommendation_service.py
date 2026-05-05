@@ -325,7 +325,13 @@ class RecommendationService:
                 track_id=e.track_id,
                 completed=e.completed,
                 skipped=e.skipped,
-                created_at=e.created_at,
+                created_at=(
+                    e.created_at
+                    if e.created_at.tzinfo
+                    else e.created_at.replace(
+                        tzinfo=UTC
+                    )
+                ),
                 duration_listened_seconds=float(
                     e.duration_listened_seconds or 0
                 ),
@@ -461,6 +467,8 @@ class RecommendationService:
         )
 
         sections: list[dict] = []
+        highlights: list[dict] = []
+        highlight_track_ids: set[int] = set()
 
         continue_tracks = (
             await self._rec_repo.get_incomplete_listens(
@@ -475,6 +483,14 @@ class RecommendationService:
                     "tracks": continue_tracks,
                 }
             )
+            highlights.append(
+                {
+                    "track": continue_tracks[0],
+                    "label": "Продолжить",
+                    "reason": "Вы не дослушали этот трек",
+                }
+            )
+            highlight_track_ids.add(continue_tracks[0].id)
 
         (
             user_prefs,
@@ -531,6 +547,18 @@ class RecommendationService:
                         "tracks": for_you,
                     }
                 )
+                # Add to highlights if not already there
+                for t in for_you:
+                    if t.id not in highlight_track_ids:
+                        highlights.append(
+                            {
+                                "track": t,
+                                "label": "Для вас",
+                                "reason": "Основано на ваших вкусах",
+                            }
+                        )
+                        highlight_track_ids.add(t.id)
+                        break
 
         if genre_filter:
             popular_genre = candidates[:15]
@@ -576,6 +604,19 @@ class RecommendationService:
                     "tracks": user_choice,
                 }
             )
+            # Add to highlights if not already there and we have space
+            if len(highlights) < 5:
+                for t in user_choice:
+                    if t.id not in highlight_track_ids:
+                        highlights.append(
+                            {
+                                "track": t,
+                                "label": "Выбор пользователей",
+                                "reason": "Популярно в DotSound на этой неделе",
+                            }
+                        )
+                        highlight_track_ids.add(t.id)
+                        break
 
         if (
             pref
@@ -613,9 +654,18 @@ class RecommendationService:
                     "tracks": popular,
                 }
             )
+            if not highlights and popular:
+                highlights.append(
+                    {
+                        "track": popular[0],
+                        "label": "Популярное",
+                        "reason": "То, что слушают все сейчас",
+                    }
+                )
 
         return {
             "sections": sections,
+            "highlights": highlights,
             "maturity": maturity,
         }
 

@@ -3,6 +3,13 @@ from pydantic import BaseModel
 from app.schemas.track import TrackResponse
 
 
+class HomeHighlightResponse(BaseModel):
+    track: TrackResponse
+    label: str
+    reason: str | None = None
+    hero_image_key: str | None = None
+
+
 class HomeSectionResponse(BaseModel):
     title: str
     section_type: str
@@ -11,6 +18,7 @@ class HomeSectionResponse(BaseModel):
 
 class HomePageResponse(BaseModel):
     sections: list[HomeSectionResponse]
+    highlights: list[HomeHighlightResponse]
     maturity: str = "cold"
 
 
