@@ -211,7 +211,7 @@ export function PlaylistsView({
 
   const formatShareChatTitle = (item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {
-      return 'РР·Р±СЂР°РЅРЅРѕРµ'
+      return 'Избранное'
     }
     if (item.conversation.title?.trim()) {
       return item.conversation.title.trim()
@@ -222,7 +222,7 @@ export function PlaylistsView({
       .join(' ')
     if (name && name.trim()) return name.trim()
     if (peer?.username) return `@${peer.username}`
-    return `Р§Р°С‚ #${item.conversation.id}`
+    return `Чат #${item.conversation.id}`
   }
 
   const openShareModal = async () => {
@@ -234,7 +234,7 @@ export function PlaylistsView({
       const chats = await api.listChats()
       setShareChats(chats)
     } catch {
-      setShareError('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‡Р°С‚С‹')
+      setShareError('Не удалось загрузить чаты')
     } finally {
       setShareLoading(false)
     }
@@ -251,7 +251,7 @@ export function PlaylistsView({
       })
       setShareOpen(false)
     } catch {
-      setShareError('РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ')
+      setShareError('Не удалось отправить')
     } finally {
       setShareSendingConvId(null)
     }
@@ -263,11 +263,11 @@ export function PlaylistsView({
     try {
       await navigator.clipboard.writeText(url)
       sound.play('notificationInfo')
-      toast.success('РЎСЃСЃС‹Р»РєР° СЃРєРѕРїРёСЂРѕРІР°РЅР°', {
+      toast.success('Ссылка скопирована', {
         position: 'top',
       })
     } catch {
-      toast.error('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєРѕРїРёСЂРѕРІР°С‚СЊ СЃСЃС‹Р»РєСѓ')
+      toast.error('Не удалось скопировать ссылку')
       sound.play('notificationError')
     }
   }
@@ -283,13 +283,13 @@ export function PlaylistsView({
               setSelected(null)
               setShareOpen(false)
             }}
-            aria-label="РќР°Р·Р°Рґ"
+            aria-label="Назад"
           >
             <Icon name="chevron" size={20} className="back-chevron" />
           </button>
           <div>
             <h2 className="view-detail-title">{selected.name}</h2>
-            <span className="hint">{selected.tracks.length} С‚СЂРµРєРѕРІ</span>
+            <span className="hint">{selected.tracks.length} треков</span>
           </div>
           <button
             type="button"
@@ -297,7 +297,7 @@ export function PlaylistsView({
             onClick={() => {
               void openShareModal()
             }}
-            aria-label="РџРѕРґРµР»РёС‚СЊСЃСЏ"
+            aria-label="Поделиться"
           >
             <Icon name="share" size={18} />
           </button>
@@ -306,7 +306,7 @@ export function PlaylistsView({
         {canEditSelected && (
           <div style={{ padding: '0 16px 16px' }}>
             <div className="form-group">
-              <label className="form-label">РќР°Р·РІР°РЅРёРµ</label>
+              <label className="form-label">Название</label>
               <input
                 className="form-input"
                 value={editName}
@@ -320,7 +320,7 @@ export function PlaylistsView({
                 onChange={(e) => setEditPublic(e.target.checked)}
                 style={{ marginRight: 8 }}
               />
-              РџСѓР±Р»РёС‡РЅС‹Р№
+              Публичный
             </label>
             <button
               className="btn-primary"
@@ -329,7 +329,7 @@ export function PlaylistsView({
               }}
               disabled={editBusy}
             >
-              {editBusy ? 'РЎРѕС…СЂР°РЅРµРЅРёРµ...' : 'РЎРѕС…СЂР°РЅРёС‚СЊ'}
+              {editBusy ? 'Сохранение...' : 'Сохранить'}
             </button>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
               <input
@@ -344,7 +344,7 @@ export function PlaylistsView({
                 value={addTrackId ?? ''}
                 onChange={(e) => setAddTrackId(Number(e.target.value) || null)}
               >
-                <option value="">Р”РѕР±Р°РІРёС‚СЊ С‚СЂРµРє...</option>
+                <option value="">Добавить трек...</option>
                 {availableTracks.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.title} {t.artist ? `- ${t.artist}` : ''}
@@ -352,7 +352,7 @@ export function PlaylistsView({
                 ))}
               </select>
               <button className="btn-secondary" onClick={() => void handleAddTrack()}>
-                Р”РѕР±Р°РІРёС‚СЊ
+                Добавить
               </button>
             </div>
             {searchLoading && (
@@ -375,10 +375,10 @@ export function PlaylistsView({
               >
                 <span style={{ flex: 1 }}>{t.title}</span>
                 <button className="icon-btn" onClick={() => void moveTrack(idx, -1)}>
-                  в†‘
+                  ↑
                 </button>
                 <button className="icon-btn" onClick={() => void moveTrack(idx, 1)}>
-                  в†“
+                  ↓
                 </button>
                 <button className="icon-btn" onClick={() => void handleRemoveTrack(t.id)}>
                   <Icon name="x" size={14} />
@@ -390,7 +390,7 @@ export function PlaylistsView({
 
         <TrackList
           tracks={selected.tracks}
-          emptyMessage="Р’ СЌС‚РѕРј РїР»РµР№Р»РёСЃС‚Рµ РїРѕРєР° РЅРµС‚ С‚СЂРµРєРѕРІ"
+          emptyMessage="В этом плейлисте пока нет треков"
         />
 
         {shareOpen && (
@@ -405,7 +405,7 @@ export function PlaylistsView({
             <div className="share-modal scale-in">
               <div className="share-modal-header">
                 <div className="share-modal-title-wrap">
-                  <h3 className="share-modal-title">РџРѕРґРµР»РёС‚СЊСЃСЏ РїР»РµР№Р»РёСЃС‚РѕРј</h3>
+                  <h3 className="share-modal-title">Поделиться плейлистом</h3>
                   <p className="share-modal-subtitle">{selected.name}</p>
                 </div>
                 <button
@@ -464,7 +464,7 @@ export function PlaylistsView({
                           </span>
                         </span>
                         <span className="share-chat-action">
-                          {sending ? 'РћС‚РїСЂР°РІРєР°...' : 'РћС‚РїСЂР°РІРёС‚СЊ'}
+                          {sending ? 'Отправка...' : 'Отправить'}
                         </span>
                       </button>
                     )
@@ -485,8 +485,8 @@ export function PlaylistsView({
     <section id="view-playlists" className="view active">
       {!embedded && (
         <div className="view-header">
-          <h2>РџР»РµР№Р»РёСЃС‚С‹</h2>
-          <span className="hint">РўРІРѕРё РїРѕРґР±РѕСЂРєРё</span>
+          <h2>Плейлисты</h2>
+          <span className="hint">Твои подборки</span>
         </div>
       )}
 
@@ -495,17 +495,17 @@ export function PlaylistsView({
         onClick={() => setCreating(true)}
       >
         <Icon name="plus" size={18} />
-        РЎРѕР·РґР°С‚СЊ РїР»РµР№Р»РёСЃС‚
+        Создать плейлист
       </button>
 
       {creating && (
         <div style={{ padding: '0 16px 16px' }}>
           <div className="form-group">
-            <label className="form-label">РќР°Р·РІР°РЅРёРµ РїР»РµР№Р»РёСЃС‚Р°</label>
+            <label className="form-label">Название плейлиста</label>
             <input
               id="new-playlist-name"
               className="form-input"
-              placeholder="РњРѕР№ РїР»РµР№Р»РёСЃС‚"
+              placeholder="Мой плейлист"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
@@ -521,7 +521,7 @@ export function PlaylistsView({
                 setNewName('')
               }}
             >
-              РћС‚РјРµРЅР°
+              Отмена
             </button>
             <button
               id="create-playlist-submit"
@@ -530,7 +530,7 @@ export function PlaylistsView({
               onClick={handleCreate}
               disabled={!newName.trim() || loading}
             >
-              {loading ? <span className="btn-spinner" /> : 'РЎРѕР·РґР°С‚СЊ'}
+              {loading ? <span className="btn-spinner" /> : 'Создать'}
             </button>
           </div>
         </div>
@@ -540,8 +540,8 @@ export function PlaylistsView({
 
       {playlists !== null && playlists.length === 0 && !creating && (
         <div className="empty-hint">
-          <strong>РџР»РµР№Р»РёСЃС‚РѕРІ РїРѕРєР° РЅРµС‚</strong>
-          РЎРѕР·РґР°Р№ СЃРІРѕСЋ РїРµСЂРІСѓСЋ РїРѕРґР±РѕСЂРєСѓ
+          <strong>Плейлистов пока нет</strong>
+          Создай свою первую подборку
         </div>
       )}
 
@@ -561,10 +561,10 @@ export function PlaylistsView({
               <div className="playlist-info">
                 <div className="playlist-name">{p.name}</div>
                 <div className="playlist-meta">
-                  {p.is_public ? 'РџСѓР±Р»РёС‡РЅС‹Р№' : 'РџСЂРёРІР°С‚РЅС‹Р№'}
+                  {p.is_public ? 'Публичный' : 'Приватный'}
                 </div>
               </div>
-              <span className="playlist-chevron">вЂє</span>
+              <span className="playlist-chevron">›</span>
             </div>
           ))}
         </div>

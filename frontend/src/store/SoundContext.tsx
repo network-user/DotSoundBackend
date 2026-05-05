@@ -25,6 +25,7 @@ interface SoundContextValue {
   enabled: boolean
   volume: number
   play: (id: SoundId) => void
+  playTest: (id: SoundId) => void
   setEnabled: (value: boolean) => void
   setVolume: (value: number) => void
 }
@@ -151,7 +152,6 @@ export function SoundProvider({
   const play = useCallback(
     (id: SoundId) => {
       if (!enabled) return
-      if (!userInteractedRef.current) return
       const cfg = SOUND_MAP[id]
       if (!cfg) return
       let audio = audioCacheRef.current.get(id)
@@ -166,6 +166,9 @@ export function SoundProvider({
         }
       }
       try {
+        if (!userInteractedRef.current) {
+          userInteractedRef.current = true
+        }
         const base = Math.max(0, Math.min(1, cfg.volume))
         const v = Math.max(
           0,
@@ -184,6 +187,43 @@ export function SoundProvider({
     [enabled, volume],
   )
 
+  const playTest = useCallback(
+    (id: SoundId) => {
+      const cfg = SOUND_MAP[id]
+      if (!cfg) return
+      let audio = audioCacheRef.current.get(id)
+      if (!audio) {
+        try {
+          audio = new Audio()
+          audio.preload = 'auto'
+          audio.src = cfg.src
+          audioCacheRef.current.set(id, audio)
+        } catch {
+          return
+        }
+      }
+      try {
+        if (!userInteractedRef.current) {
+          userInteractedRef.current = true
+        }
+        const base = Math.max(0, Math.min(1, cfg.volume))
+        const v = Math.max(
+          0,
+          Math.min(1, base * volume),
+        )
+        audio.currentTime = 0
+        audio.volume = v
+        const p = audio.play()
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {})
+        }
+      } catch {
+        /* ignore */
+      }
+    },
+    [volume],
+  )
+
   const setEnabled = useCallback((value: boolean) => {
     setEnabledState(value)
   }, [])
@@ -198,10 +238,11 @@ export function SoundProvider({
       enabled,
       volume,
       play,
+      playTest,
       setEnabled,
       setVolume,
     }),
-    [enabled, volume, play, setEnabled, setVolume],
+    [enabled, volume, play, playTest, setEnabled, setVolume],
   )
 
   return (
@@ -218,6 +259,7 @@ export function useSound(): SoundContextValue {
       enabled: false,
       volume: DEFAULT_VOLUME,
       play: () => undefined,
+      playTest: () => undefined,
       setEnabled: () => undefined,
       setVolume: () => undefined,
     }

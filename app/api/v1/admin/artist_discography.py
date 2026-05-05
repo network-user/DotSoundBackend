@@ -11,13 +11,9 @@ from app.schemas.artist import DiscographyItemResponse
 router = APIRouter(prefix="/artists", tags=["admin-artist-discography"])
 
 
-class ArtistDiscographyResponse(DiscographyItemResponse):  # type: ignore[misc]
-    """Alias kept for forward-compat; mirrors DiscographyItemResponse."""
-
-
 @router.get(
     "/{artist_id}/discography",
-    response_model=list[ArtistDiscographyResponse],
+    response_model=list[DiscographyItemResponse],
 )
 async def admin_get_artist_discography(
     artist_id: int,
@@ -32,7 +28,7 @@ async def admin_get_artist_discography(
             detail="Artist not found",
         )
     raw = artist.discography or []
-    items: list[ArtistDiscographyResponse] = []
+    items: list[DiscographyItemResponse] = []
     for item in raw:
         if not isinstance(item, dict):
             continue
@@ -40,7 +36,7 @@ async def admin_get_artist_discography(
         if not isinstance(title, str) or not title.strip():
             continue
         items.append(
-            ArtistDiscographyResponse(
+            DiscographyItemResponse(
                 title=title,
                 year=item.get("year"),
                 type=item.get("type"),
@@ -52,14 +48,14 @@ async def admin_get_artist_discography(
 
 @router.put(
     "/{artist_id}/discography",
-    response_model=list[ArtistDiscographyResponse],
+    response_model=list[DiscographyItemResponse],
 )
 async def admin_put_artist_discography(
     artist_id: int,
     body: list[DiscographyItemResponse],
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
-) -> list[ArtistDiscographyResponse]:
+) -> list[DiscographyItemResponse]:
     repo = ArtistRepository(session)
     artist = await repo.get_by_id(artist_id)
     if artist is None:
@@ -84,7 +80,7 @@ async def admin_put_artist_discography(
     artist.discography_manual_lock = True
     await session.commit()
     return [
-        ArtistDiscographyResponse(
+        DiscographyItemResponse(
             title=row["title"],
             year=row.get("year"),
             type=row.get("type"),

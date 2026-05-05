@@ -280,8 +280,6 @@ export function ArtistView({
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [supplemental, setSupplemental] =
     useState<ArtistSupplementalResponse | null>(null)
-  const [refreshingSupplemental, setRefreshingSupplemental] =
-    useState(false)
   const [similarArtists, setSimilarArtists] = useState<
     ArtistInfo[] | null
   >(null)
@@ -471,21 +469,6 @@ export function ArtistView({
         }
       } catch { }
     }, 3000)
-  }
-
-  const handleRefreshSupplemental = async () => {
-    setRefreshingSupplemental(true)
-    if (supplementalPollRef.current) clearTimeout(supplementalPollRef.current)
-    let cancelled = false
-    try {
-      const data = await api.refreshArtistSupplemental(artistId)
-      setSupplemental(data)
-      if (data.status === 'fetching' || data.status === 'pending') {
-        startSupplementalPoll(artistId, 0, () => cancelled)
-      }
-    } catch { /* ignore */ } finally {
-      setRefreshingSupplemental(false)
-    }
   }
 
   const handleFollow = async () => {

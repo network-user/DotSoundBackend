@@ -112,6 +112,18 @@ function FeaturedCard({
       >
         <div className="home-featured__copy">
           <span className="home-featured__eyebrow">{label}</span>
+          <button
+            type="button"
+            className="home-featured__play"
+            onClick={(e) => {
+              e.stopPropagation()
+              onPlay(track)
+            }}
+            aria-label={`Слушать ${track.title || 'трек'}`}
+          >
+            <Icon name="play" size={18} />
+            <span>Play</span>
+          </button>
           <strong className="home-featured__title">
             {track.title || 'Без названия'}
           </strong>
@@ -132,15 +144,6 @@ function FeaturedCard({
             <Icon name="music" size={36} />
           )}
         </div>
-      </button>
-      <button
-        type="button"
-        className="home-featured__play"
-        onClick={() => onPlay(track)}
-        aria-label={`Слушать ${track.title || 'трек'}`}
-      >
-        <Icon name="play" size={18} />
-        <span>Play</span>
       </button>
     </div>
   )

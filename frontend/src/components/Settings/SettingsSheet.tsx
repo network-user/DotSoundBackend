@@ -4,6 +4,7 @@ import { api } from '@/lib/api'
 import { usePlayerActions } from '@/store/PlayerContext'
 import {
   getInternalUserId,
+  hapticSelection,
   setBackButton,
 } from '@/lib/telegram'
 import { Icon } from '@/components/Icon/Icon'
@@ -137,6 +138,10 @@ export function SettingsSheet({
     const next = !soundEnabled
     setSoundEnabled(next)
     sound.setEnabled(next)
+    hapticSelection()
+    if (next) {
+      sound.play('tapSoft')
+    }
   }
 
   const handleSoundVolumeChange = (value: number) => {
@@ -146,6 +151,29 @@ export function SettingsSheet({
     )
     setSoundVolume(clamped)
     sound.setVolume(clamped)
+    hapticSelection()
+    sound.play('tapSoft')
+  }
+
+  const handleTestSound = () => {
+    hapticSelection()
+    sound.playTest('tapSoft')
+    toast.info(
+      t('settings.testSoundFired', {
+        defaultValue: 'Тест звука отправлен',
+      }),
+      { duration: 1200 },
+    )
+  }
+
+  const handleTestHaptic = () => {
+    hapticSelection()
+    toast.info(
+      t('settings.testHapticFired', {
+        defaultValue: 'Тест вибрации отправлен',
+      }),
+      { duration: 1200 },
+    )
   }
 
   return (
@@ -234,7 +262,9 @@ export function SettingsSheet({
               size={20}
             />
             <span>
-              {t('settings.interfaceSounds')}
+              {t('settings.interfaceSounds', {
+                defaultValue: 'Звуки интерфейса',
+              })}
             </span>
             <div
               className={`settings-toggle${soundEnabled ? ' on' : ''}`}
@@ -246,7 +276,9 @@ export function SettingsSheet({
           <div className="settings-item">
             <Icon name="slider" size={20} />
             <span>
-              {t('settings.interfaceSoundLevel')}
+              {t('settings.interfaceSoundLevel', {
+                defaultValue: 'Громкость UI',
+              })}
             </span>
             <input
               className="settings-range"
@@ -261,6 +293,41 @@ export function SettingsSheet({
                 )
               }
             />
+          </div>
+
+          <div className="settings-item settings-item--feedback">
+            <Icon name="sparkle" size={20} />
+            <span>
+              {t('settings.interfaceFeedbackTest', {
+                defaultValue: 'Проверка отклика',
+              })}
+            </span>
+            <div className="settings-inline-actions">
+              <button
+                type="button"
+                className="settings-mini-btn"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleTestSound()
+                }}
+              >
+                {t('settings.testSound', {
+                  defaultValue: 'Звук',
+                })}
+              </button>
+              <button
+                type="button"
+                className="settings-mini-btn"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleTestHaptic()
+                }}
+              >
+                {t('settings.testHaptic', {
+                  defaultValue: 'Вибро',
+                })}
+              </button>
+            </div>
           </div>
 
           <div className="settings-item">
