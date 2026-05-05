@@ -43,6 +43,9 @@ export function PlaylistsView({
   const [editBusy, setEditBusy] = useState(false)
   const [myTracks, setMyTracks] = useState<Track[]>([])
   const [addTrackId, setAddTrackId] = useState<number | null>(null)
+  const [trackSearch, setTrackSearch] = useState('')
+  const [searchResults, setSearchResults] = useState<Track[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
   const uid = getUserId()
   const isAdmin = getIsAdmin()
   const canEditSelected = Boolean(
@@ -83,6 +86,36 @@ export function PlaylistsView({
       }).catch(() => setMyTracks([]))
     }
   }, [selected?.id, canEditSelected])
+
+  useEffect(() => {
+    if (!selected || !canEditSelected) return
+    const q = trackSearch.trim()
+    if (!q) {
+      setSearchResults([])
+      setSearchLoading(false)
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setSearchLoading(true)
+      api.getTracks({ q, size: 30, page: 1 })
+        .then((res) => {
+          if (cancelled) return
+          setSearchResults(res.items)
+        })
+        .catch(() => {
+          if (cancelled) return
+          setSearchResults([])
+        })
+        .finally(() => {
+          if (!cancelled) setSearchLoading(false)
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [selected?.id, canEditSelected, trackSearch])
 
   const openPlaylist = async (p: Playlist) => {
     try {
@@ -154,8 +187,25 @@ export function PlaylistsView({
   const availableTracks = useMemo(() => {
     if (!selected) return []
     const inPlaylist = new Set(selected.tracks.map((t) => t.id))
-    return myTracks.filter((t) => !inPlaylist.has(t.id))
-  }, [selected, myTracks])
+    const local = myTracks.filter((t) => !inPlaylist.has(t.id))
+    const q = trackSearch.trim().toLowerCase()
+    const base = q
+      ? local.filter((t) => {
+        const hay = `${t.title} ${t.artist ?? ''}`.toLowerCase()
+        return hay.includes(q)
+      })
+      : local
+    const merged = [...base]
+    for (const remote of searchResults) {
+      if (
+        !inPlaylist.has(remote.id) &&
+        !merged.some((t) => t.id === remote.id)
+      ) {
+        merged.push(remote)
+      }
+    }
+    return merged
+  }, [selected, myTracks, trackSearch, searchResults])
 
   const formatShareChatTitle = (item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {
@@ -278,6 +328,13 @@ export function PlaylistsView({
               {editBusy ? 'РЎРѕС…СЂР°РЅРµРЅРёРµ...' : 'РЎРѕС…СЂР°РЅРёС‚СЊ'}
             </button>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <input
+                className="form-input"
+                placeholder="Поиск треков: название или артист..."
+                value={trackSearch}
+                onChange={(e) => setTrackSearch(e.target.value)}
+                style={{ minWidth: 220 }}
+              />
               <select
                 className="form-input"
                 value={addTrackId ?? ''}
@@ -294,6 +351,9 @@ export function PlaylistsView({
                 Р”РѕР±Р°РІРёС‚СЊ
               </button>
             </div>
+            {searchLoading && (
+              <p className="hint" style={{ marginTop: 8 }}>Идёт поиск…</p>
+            )}
           </div>
         )}
 

@@ -37,6 +37,9 @@ export function GenreMixView() {
   const [addTrackId, setAddTrackId] = useState<number | null>(null)
 
   const canEditUi = isAdmin || debugMode || import.meta.env.DEV
+  const storageKey = genre
+    ? `genre-mix-edit:${genre.toLowerCase()}`
+    : null
 
   const shareUrl = `${window.location.origin}${import.meta.env.BASE_URL}genre-mix/${encodeURIComponent(
     genre || '',
@@ -70,14 +73,46 @@ export function GenreMixView() {
           (m) => m.genre.toLowerCase() === genre.toLowerCase(),
         )
         if (mix) {
-          setTracks(mix.tracks)
-          setTitle(mix.title)
+          let nextTracks = mix.tracks
+          let nextTitle = mix.title
+          if (storageKey) {
+            try {
+              const raw = localStorage.getItem(storageKey)
+              if (raw) {
+                const parsed = JSON.parse(raw) as {
+                  title?: string
+                  tracks?: Track[]
+                }
+                if (parsed.title && parsed.title.trim()) {
+                  nextTitle = parsed.title
+                }
+                if (Array.isArray(parsed.tracks)) {
+                  nextTracks = parsed.tracks
+                }
+              }
+            } catch {}
+          }
+          setTracks(nextTracks)
+          setTitle(nextTitle)
         } else {
           setTracks([])
         }
       })
       .catch(() => setTracks([]))
-  }, [genre])
+  }, [genre, storageKey])
+
+  useEffect(() => {
+    if (!storageKey || tracks === null) return
+    try {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          title,
+          tracks,
+        }),
+      )
+    } catch {}
+  }, [storageKey, title, tracks])
 
   const handlePlayAll = useCallback(async () => {
     if (!tracks || !tracks.length) return
@@ -231,7 +266,7 @@ export function GenreMixView() {
                 className="btn-primary gm-edit-btn"
                 onClick={() => {
                   setTitle(titleDraft.trim() || title)
-                  toast.success('Название обновлено', { position: 'top' })
+                  toast.success('Изменения сохранены', { position: 'top' })
                 }}
               >
                 Применить
