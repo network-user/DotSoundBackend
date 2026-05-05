@@ -66,6 +66,16 @@ export function ArtistCatalogEditor({
   const [pendingTrackIds, setPendingTrackIds] = useState<
     number[] | null
   >(null)
+  const [discographyItems, setDiscographyItems] = useState<
+    {
+      title: string
+      year: number | null
+      type: string | null
+      url: string | null
+    }[]
+  >([])
+  const [discographyDirty, setDiscographyDirty] =
+    useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const overview = useQuery({
@@ -79,6 +89,18 @@ export function ArtistCatalogEditor({
         ? 1500
         : false,
   })
+
+  const discographyQuery = useQuery({
+    queryKey: ['admin', 'artist-discography', artistId],
+    queryFn: () => adminApi.artistDiscography(artistId),
+    enabled: open,
+  })
+
+  useEffect(() => {
+    if (!discographyQuery.data) return
+    setDiscographyItems(discographyQuery.data)
+    setDiscographyDirty(false)
+  }, [discographyQuery.data])
 
   useEffect(() => {
     if (!overview.data) return
@@ -214,6 +236,18 @@ export function ArtistCatalogEditor({
       qc.invalidateQueries({
         queryKey: ['admin', 'catalog', artistId],
       })
+    },
+  })
+
+  const saveDiscography = useMutation({
+    mutationFn: () =>
+      adminApi.artistDiscographySave(
+        artistId,
+        discographyItems,
+      ),
+    onSuccess: (data) => {
+      setDiscographyItems(data)
+      setDiscographyDirty(false)
     },
   })
 
@@ -684,6 +718,164 @@ export function ArtistCatalogEditor({
               </li>
             ))}
           </ul>
+        </section>
+        <section className="admin-catalog-section">
+          <h3>{t('admin.artists.catalog.discographyTitle')}</h3>
+          <p className="admin-auth-hint">
+            {t('admin.artists.catalog.discographyHint')}
+          </p>
+          {discographyQuery.isLoading && (
+            <p className="admin-auth-hint">
+              {t('admin.common.loading')}
+            </p>
+          )}
+          {!discographyQuery.isLoading && (
+            <div className="admin-catalog-discography">
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t('admin.artists.catalog.discographyTitleCol')}</th>
+                    <th>{t('admin.artists.catalog.discographyYearCol')}</th>
+                    <th>{t('admin.artists.catalog.discographyTypeCol')}</th>
+                    <th>{t('admin.artists.catalog.discographyUrlCol')}</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {discographyItems.map((row, idx) => (
+                    <tr key={`${row.title}-${idx}`}>
+                      <td>
+                        <input
+                          value={row.title}
+                          onChange={(e) => {
+                            const next = [...discographyItems]
+                            next[idx] = {
+                              ...next[idx],
+                              title: e.target.value,
+                            }
+                            setDiscographyItems(next)
+                            setDiscographyDirty(true)
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          value={
+                            row.year === null
+                              ? ''
+                              : String(row.year)
+                          }
+                          onChange={(e) => {
+                            const v = e.target.value.trim()
+                            const next = [...discographyItems]
+                            next[idx] = {
+                              ...next[idx],
+                              year:
+                                v === ''
+                                  ? null
+                                  : Number.parseInt(
+                                      v,
+                                      10,
+                                    ) || null,
+                            }
+                            setDiscographyItems(next)
+                            setDiscographyDirty(true)
+                          }}
+                          inputMode="numeric"
+                        />
+                      </td>
+                      <td>
+                        <input
+                          value={row.type ?? ''}
+                          onChange={(e) => {
+                            const next = [...discographyItems]
+                            const v = e.target.value.trim()
+                            next[idx] = {
+                              ...next[idx],
+                              type: v === '' ? null : v,
+                            }
+                            setDiscographyItems(next)
+                            setDiscographyDirty(true)
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <input
+                          value={row.url ?? ''}
+                          onChange={(e) => {
+                            const next = [...discographyItems]
+                            const v = e.target.value.trim()
+                            next[idx] = {
+                              ...next[idx],
+                              url: v === '' ? null : v,
+                            }
+                            setDiscographyItems(next)
+                            setDiscographyDirty(true)
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <Press
+                          variant="ghost"
+                          onClick={() => {
+                            setDiscographyItems((prev) =>
+                              prev.filter((_, i) => i !== idx),
+                            )
+                            setDiscographyDirty(true)
+                          }}
+                        >
+                          {t(
+                            'admin.artists.catalog.discographyRemoveRow',
+                          )}
+                        </Press>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="admin-catalog-discography-actions">
+                <Press
+                  variant="ghost"
+                  onClick={() => {
+                    setDiscographyItems((prev) => [
+                      ...prev,
+                      {
+                        title: '',
+                        year: null,
+                        type: null,
+                        url: null,
+                      },
+                    ])
+                    setDiscographyDirty(true)
+                  }}
+                >
+                  {t(
+                    'admin.artists.catalog.discographyAddRow',
+                  )}
+                </Press>
+                <Press
+                  variant="primary"
+                  disabled={
+                    !discographyDirty || saveDiscography.isPending
+                  }
+                  onClick={() =>
+                    saveDiscography.mutate(undefined, {
+                      onError: async (err) => {
+                        await showAlert(
+                          (err as Error).message ||
+                            t('admin.common.unknownError'),
+                        )
+                      },
+                    })
+                  }
+                >
+                  {t(
+                    'admin.artists.catalog.discographySave',
+                  )}
+                </Press>
+              </div>
+            </div>
+          )}
         </section>
         {selectedReleaseId !== null &&
           releaseDetail.isSuccess &&

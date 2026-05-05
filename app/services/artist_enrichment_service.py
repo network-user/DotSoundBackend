@@ -274,12 +274,13 @@ class ArtistEnrichmentService:
         if info.website_url:
             artist.website_url = info.website_url[:512]
 
-        raw_discography = getattr(info, "discography", None)
-        normalized_discography = _normalize_discography(
-            raw_discography
-        )
-        if normalized_discography:
-            artist.discography = normalized_discography
+        if not artist.discography_manual_lock:
+            raw_discography = getattr(info, "discography", None)
+            normalized_discography = _normalize_discography(
+                raw_discography
+            )
+            if normalized_discography:
+                artist.discography = normalized_discography
 
         raw_profiles = getattr(info, "source_profiles", None)
         normalized_profiles = _normalize_source_profiles(
