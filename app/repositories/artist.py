@@ -23,6 +23,17 @@ class ArtistRepository(BaseRepository[Artist]):
         )
         return result.scalar_one_or_none()
 
+    async def find_by_owner_user_id(
+        self,
+        owner_user_id: int,
+    ) -> Artist | None:
+        result = await self._session.execute(
+            select(Artist)
+            .where(Artist.owner_user_id == owner_user_id)
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
     async def find_by_soundcloud_user_id(
         self,
         soundcloud_user_id: int,

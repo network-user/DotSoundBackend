@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
@@ -109,6 +109,20 @@ class UserRepository(BaseRepository[User]):
         await self._session.flush()
         await self._session.refresh(user)
         return user
+
+    async def find_by_display_name_normalized(
+        self,
+        display_name_normalized: str,
+    ) -> User | None:
+        result = await self._session.execute(
+            select(User)
+            .where(
+                User.display_name_normalized
+                == display_name_normalized
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
     async def get_first_user(self) -> User | None:
         result = await self._session.execute(

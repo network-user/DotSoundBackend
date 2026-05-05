@@ -28,6 +28,12 @@ if TYPE_CHECKING:
 
 class Artist(Base, TimestampMixin):
     __tablename__ = "artists"
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_user_id",
+            name="uq_artists_owner_user_id",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(
@@ -95,6 +101,11 @@ class Artist(Base, TimestampMixin):
         String(256),
         nullable=True,
         index=True,
+    )
+    owner_user_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     track_links: Mapped[list[TrackArtist]] = relationship(

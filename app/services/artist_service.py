@@ -4,6 +4,7 @@ from dotsound_private_core.services.artist_normalizer import (
     normalize_name,
     resolve_artist_names,
 )
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +12,7 @@ from app.models.artist import Artist, TrackArtist
 from app.models.track import Track
 from app.repositories.artist import ArtistRepository
 from app.repositories.track import TrackRepository
+from app.repositories.user import UserRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -19,6 +21,7 @@ class ArtistService:
     def __init__(self, session: AsyncSession) -> None:
         self._repo = ArtistRepository(session)
         self._session = session
+        self._user_repo = UserRepository(session)
 
     async def resolve_and_link(
         self,
@@ -112,6 +115,58 @@ class ArtistService:
                 "artist_enrich_schedule_failed",
                 artist_id=artist.id,
             )
+        return artist
+
+    async def ensure_owned_artist_for_user(
+        self,
+        *,
+        user_id: int,
+        preferred_name: str,
+    ) -> Artist:
+        canonical = preferred_name.strip()
+        normalized = normalize_name(canonical)
+        if not normalized:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Artist name is invalid",
+            )
+        user_conflict = await self._user_repo.find_by_display_name_normalized(
+            normalized
+        )
+        if user_conflict and user_conflict.id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Artist name conflicts with another user",
+            )
+        owned = await self._repo.find_by_owner_user_id(user_id)
+        by_name = await self._repo.find_by_normalized_name(normalized)
+        if by_name and by_name.owner_user_id not in (None, user_id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Artist name is already taken",
+            )
+        if owned:
+            if by_name and by_name.id != owned.id:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Artist name is already taken",
+                )
+            if owned.name != canonical or owned.name_normalized != normalized:
+                owned.name = canonical
+                owned.name_normalized = normalized
+                await self._session.flush()
+            return owned
+        if by_name and by_name.owner_user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Artist name is already taken",
+            )
+        artist = await self._repo.create(
+            name=canonical,
+            name_normalized=normalized,
+            source="internal",
+            owner_user_id=user_id,
+        )
         return artist
 
     async def get_by_id(self, artist_id: int) -> Artist | None:
