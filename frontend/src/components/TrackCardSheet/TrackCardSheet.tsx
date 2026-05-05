@@ -10,6 +10,7 @@ import { api } from '@/lib/api'
 import {
   getInternalUserId,
   getIsAdmin,
+  hapticTick,
 } from '@/lib/telegram'
 import { useLikes } from '@/store/LikesContext'
 import {
@@ -1941,9 +1942,12 @@ export function TrackCardSheet({
             step={0.01}
             value={volume}
             onChange={(e) =>
-              setVolume(
-                parseFloat(e.target.value),
-              )
+              {
+                hapticTick()
+                setVolume(
+                  parseFloat(e.target.value),
+                )
+              }
             }
           />
         </div>

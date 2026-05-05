@@ -186,6 +186,9 @@ export function hapticSelection(): void {
     if (tgHaptic?.selectionChanged) {
       tgHaptic.selectionChanged()
       tgTriggered = true
+    } else if (tgHaptic?.impactOccurred) {
+      tgHaptic.impactOccurred('light')
+      tgTriggered = true
     }
   } catch {
     /* ignore and use fallback vibration */
@@ -201,6 +204,15 @@ export function hapticSelection(): void {
   } catch {
     /* ignore */
   }
+}
+
+let lastTickAt = 0
+
+export function hapticTick(): void {
+  const now = Date.now()
+  if (now - lastTickAt < 45) return
+  lastTickAt = now
+  hapticSelection()
 }
 
 function nativeInitData(): string {

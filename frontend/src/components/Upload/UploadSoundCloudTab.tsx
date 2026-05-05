@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '@/lib/api'
+import { hapticNotification, hapticSelection } from '@/lib/telegram'
 import type { Track } from '@/types/api'
 
 interface Props {
@@ -24,6 +25,7 @@ export function UploadSoundCloudTab({ onSuccess }: Props) {
         scPublic,
       )
       setSCPreview(track)
+      hapticSelection()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
       setSCError(
@@ -32,6 +34,7 @@ export function UploadSoundCloudTab({ onSuccess }: Props) {
         msg === '503' ? 'SC_CLIENT_ID не настроен' :
         'Ошибка. Проверь ссылку.',
       )
+      hapticNotification('error')
     } finally {
       setSCLoading(false)
     }
@@ -39,6 +42,7 @@ export function UploadSoundCloudTab({ onSuccess }: Props) {
 
   const handleSCAdd = () => {
     if (!scPreview) return
+    hapticNotification('success')
     const track = scPreview
     setSCUrl('')
     setSCPreview(null)

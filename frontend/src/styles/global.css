@@ -658,7 +658,52 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
 .section-action:hover { color: var(--text); }
 
 /* ── Upload form ── */
-#upload-form { padding: 0 16px 32px; }
+#upload-form {
+  padding: 0 16px 32px;
+}
+
+.upload-view {
+  padding-bottom: 18px;
+}
+
+.upload-view__header {
+  padding-bottom: 8px;
+}
+
+.upload-view__subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.upload-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px 16px 14px;
+}
+
+.upload-tab {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  color: var(--text-secondary);
+  border-radius: 14px;
+  font-size: 12px;
+  padding: 10px 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.upload-tab:active {
+  transform: scale(0.98);
+}
+
+.upload-tab.active {
+  border-color: color-mix(in srgb, var(--text) 30%, transparent);
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--text);
+}
 
 .cover-picker {
   display: flex;
@@ -689,6 +734,13 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
 .cover-label { font-size: 13px; color: var(--accent); font-weight: 500; }
 
 .form-group { margin-bottom: 16px; }
+
+.form-group-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
 .form-label {
   display: block;
   font-size: 12px;
@@ -718,6 +770,80 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06), 0 0 0 1px rgba(255,255,255,0.1);
 }
 .form-input::placeholder { color: var(--text-muted); }
+
+.genre-search-group {
+  position: relative;
+}
+
+.genre-search-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 13px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.genre-search-popover {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  padding: 10px;
+}
+
+.genre-search-input {
+  margin-bottom: 8px;
+}
+
+.genre-search-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 8px 4px;
+}
+
+.genre-search-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.genre-search-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-2) 85%, transparent);
+  color: var(--text-secondary);
+  font: inherit;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.genre-search-item.active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 25%, transparent);
+}
+
+.genre-search-create {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px dashed color-mix(in srgb, var(--text) 35%, transparent);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  padding: 10px 12px;
+  cursor: pointer;
+}
 
 .file-pick-btn {
   display: inline-flex;
@@ -811,6 +937,39 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   color: var(--text-muted);
   margin-top: 8px;
   text-align: center;
+}
+
+.sc-import-form {
+  padding: 0 16px 24px;
+}
+
+.sc-preview {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+}
+
+.sc-preview-cover {
+  width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-bottom: 10px;
+}
+
+.sc-preview-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.sc-preview-artist {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
 }
 
 /* ── Player bar (Liquid Glass) ── */
