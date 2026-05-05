@@ -37,23 +37,23 @@ const STORAGE_VOLUME_KEY = 'setting-sound-volume'
 
 const SOUND_MAP: Record<SoundId, SoundConfig> = {
   notificationSuccess: {
-    src: '/sounds/notify-success.mp3',
+    src: '/sounds/notify-success.wav',
     volume: 0.28,
   },
   notificationWarning: {
-    src: '/sounds/notify-warning.mp3',
+    src: '/sounds/notify-warning.wav',
     volume: 0.28,
   },
   notificationError: {
-    src: '/sounds/notify-error.mp3',
+    src: '/sounds/notify-error.wav',
     volume: 0.3,
   },
   notificationInfo: {
-    src: '/sounds/notify-info.mp3',
+    src: '/sounds/notify-info.wav',
     volume: 0.24,
   },
   tapSoft: {
-    src: '/sounds/tap-soft.mp3',
+    src: '/sounds/tap-soft.wav',
     volume: 0.2,
   },
 }

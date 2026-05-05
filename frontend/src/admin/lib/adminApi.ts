@@ -1342,4 +1342,35 @@ export const adminApi = {
         body: { raw_response: rawResponse },
       },
     ),
+
+  artistDiscography: (artistId: number) =>
+    adminFetch<
+      {
+        title: string
+        year: number | null
+        type: string | null
+        url: string | null
+      }[]
+    >(`/artists/${artistId}/discography`),
+
+  artistDiscographySave: (
+    artistId: number,
+    items: {
+      title: string
+      year: number | null
+      type: string | null
+      url: string | null
+    }[],
+  ) =>
+    adminFetch<
+      {
+        title: string
+        year: number | null
+        type: string | null
+        url: string | null
+      }[]
+    >(`/artists/${artistId}/discography`, {
+      method: 'PUT',
+      body: items,
+    }),
 }

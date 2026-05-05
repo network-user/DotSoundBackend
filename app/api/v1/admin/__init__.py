@@ -7,6 +7,7 @@ from . import (
 )
 from . import (
     artist_catalog,
+    artist_discography,
     audio_compute,
     audit,
     auth,
@@ -30,6 +31,7 @@ from . import (
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 router.include_router(artist_catalog.router)
+router.include_router(artist_discography.router)
 router.include_router(admin_albums.router)
 router.include_router(admin_playlists.router)
 router.include_router(tracks.router)

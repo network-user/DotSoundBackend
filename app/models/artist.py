@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -79,6 +80,11 @@ class Artist(Base, TimestampMixin):
     )
     enrichment_confidence: Mapped[float | None] = mapped_column(
         Float, nullable=True
+    )
+    discography_manual_lock: Mapped[bool] = mapped_column(
+        Boolean,
+        server_default="false",
+        nullable=False,
     )
     soundcloud_user_id: Mapped[int | None] = mapped_column(
         BigInteger,
