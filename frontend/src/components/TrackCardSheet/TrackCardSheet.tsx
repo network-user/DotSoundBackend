@@ -191,6 +191,9 @@ export function TrackCardSheet({
   const [albumTrackTitleDrafts, setAlbumTrackTitleDrafts] = useState<
     Record<number, string>
   >({})
+  const [albumTrackSearch, setAlbumTrackSearch] = useState('')
+  const [albumSearchResults, setAlbumSearchResults] = useState<Track[]>([])
+  const [albumSearchLoading, setAlbumSearchLoading] = useState(false)
   const [videoReady, setVideoReady] =
     useState(false)
   const videoEnabled =
@@ -644,6 +647,40 @@ export function TrackCardSheet({
     await api.updateTrack(trackId, { title })
     await refreshAlbumEditor()
   }, [isAdmin, debugMode, albumTrackTitleDrafts, refreshAlbumEditor])
+
+  useEffect(() => {
+    if (!albumEditOpen || !albumEditData) return
+    const q = albumTrackSearch.trim()
+    if (!q) {
+      setAlbumSearchResults([])
+      setAlbumSearchLoading(false)
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setAlbumSearchLoading(true)
+      api.getTracks({ q, size: 30, page: 1 })
+        .then((res) => {
+          if (!cancelled) {
+            setAlbumSearchResults(res.items)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setAlbumSearchResults([])
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setAlbumSearchLoading(false)
+          }
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [albumEditOpen, albumEditData?.id, albumTrackSearch])
 
   const handleAuthor = () => {
     if (track?.artist && onOpenArtist) {
@@ -1978,24 +2015,52 @@ export function TrackCardSheet({
                 {albumEditBusy ? 'Сохранение...' : 'Сохранить'}
               </button>
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <input
+                  className="form-input"
+                  placeholder="Поиск треков: название или артист..."
+                  value={albumTrackSearch}
+                  onChange={(e) => setAlbumTrackSearch(e.target.value)}
+                  style={{ minWidth: 220 }}
+                />
                 <select
                   className="form-input"
                   value={albumAddTrackId ?? ''}
                   onChange={(e) => setAlbumAddTrackId(Number(e.target.value) || null)}
                 >
                   <option value="">Добавить трек...</option>
-                  {albumTrackPool
-                    .filter((t) => !albumEditData.tracks.some((at) => at.id === t.id))
-                    .map((t) => (
+                  {(() => {
+                    const inAlbum = new Set(albumEditData.tracks.map((at) => at.id))
+                    const q = albumTrackSearch.trim().toLowerCase()
+                    const local = albumTrackPool
+                      .filter((t) => !inAlbum.has(t.id))
+                      .filter((t) => {
+                        if (!q) return true
+                        const hay = `${t.title} ${t.artist ?? ''}`.toLowerCase()
+                        return hay.includes(q)
+                      })
+                    const merged = [...local]
+                    for (const remote of albumSearchResults) {
+                      if (
+                        !inAlbum.has(remote.id) &&
+                        !merged.some((t) => t.id === remote.id)
+                      ) {
+                        merged.push(remote)
+                      }
+                    }
+                    return merged.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.title} {t.artist ? `- ${t.artist}` : ''}
                       </option>
-                    ))}
+                    ))
+                  })()}
                 </select>
                 <button className="btn-secondary" onClick={() => void addAlbumTrack()}>
                   Добавить
                 </button>
               </div>
+              {albumSearchLoading && (
+                <p className="hint" style={{ marginTop: 8 }}>Идёт поиск…</p>
+              )}
               <div style={{ marginTop: 12 }}>
                 {albumEditData.tracks.map((t, idx) => (
                   <div

@@ -45,6 +45,23 @@ function fmtCount(n: number): string {
   return String(n)
 }
 
+function monthlyListenersText(count: number): string {
+  const n = Math.abs(Math.trunc(count))
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) {
+    return 'уникальный слушатель за месяц'
+  }
+  if (
+    mod10 >= 2 &&
+    mod10 <= 4 &&
+    !(mod100 >= 12 && mod100 <= 14)
+  ) {
+    return 'уникальных слушателя за месяц'
+  }
+  return 'уникальных слушателей за месяц'
+}
+
 const MONTH_LABELS = [
   'Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
   'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек',
@@ -734,9 +751,7 @@ export function ArtistView({
           <Icon name="users-listeners" size={14} />
           <span>
             {fmtCount(monthlyListenersValue)}{' '}
-            {t('artist.monthly_listeners', {
-              defaultValue: 'уникальных слушателей за месяц',
-            })}
+            {monthlyListenersText(monthlyListenersValue)}
           </span>
         </p>
 
