@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 
 import { ArtistAvatarViewer } from '@/components/ArtistView/ArtistAvatarViewer'
 import { ArtistCatalogReleasePanel } from '@/components/ArtistView/ArtistCatalogReleasePanel'
@@ -1407,9 +1408,19 @@ export function ArtistView({
             </span>
           </button>
           {listenersOpen && (
-            <ArtistListenersChart
-              history={listeners.history}
-            />
+            <>
+              <ArtistListenersChart
+                history={listeners.history}
+              />
+              <Link
+                to={`/artist/${artistId}/stats`}
+                className="artist-more-stats-link"
+                onClick={() => onClose()}
+              >
+                {t('artistStats.title', { name: '', defaultValue: 'Подробная статистика' })}
+                <Icon name="chevron-right" size={14} />
+              </Link>
+            </>
           )}
         </div>
       )}

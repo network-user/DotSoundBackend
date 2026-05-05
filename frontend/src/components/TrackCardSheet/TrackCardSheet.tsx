@@ -168,6 +168,7 @@ export function TrackCardSheet({
   const [shareLoading, setShareLoading] = useState(false)
   const [shareSendingConvId, setShareSendingConvId] = useState<number | null>(null)
   const [shareError, setShareError] = useState<string | null>(null)
+  const [shareCopyBusy, setShareCopyBusy] = useState(false)
   const [sharePayload, setSharePayload] = useState<{
     id: number
     type: ShareEntityType
@@ -482,6 +483,28 @@ export function TrackCardSheet({
       setShareError('РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ С‚СЂРµРє')
     } finally {
       setShareSendingConvId(null)
+    }
+  }, [sharePayload, toast])
+
+  const handleCopyShare = useCallback(async () => {
+    if (!sharePayload) return
+    setShareCopyBusy(true)
+    try {
+      if (sharePayload.type === 'track') {
+        const links = await api.getShareLinks(sharePayload.id)
+        await navigator.clipboard.writeText(links.url)
+      } else {
+        const base = `${window.location.origin}${import.meta.env.BASE_URL}`
+        const path = sharePayload.type === 'album'
+          ? `library?shareType=album&id=${sharePayload.id}`
+          : `playlists?shareType=playlist&id=${sharePayload.id}`
+        await navigator.clipboard.writeText(`${base}${path}`)
+      }
+      toast.success('Ссылка скопирована')
+    } catch {
+      setShareError('Не удалось скопировать')
+    } finally {
+      setShareCopyBusy(false)
     }
   }, [sharePayload, toast])
 
@@ -1969,6 +1992,17 @@ export function TrackCardSheet({
                     {sharePayload?.title || 'Р’С‹Р±РµСЂРёС‚Рµ С‡Р°С‚ РґР»СЏ РѕС‚РїСЂР°РІРєРё'}
                   </p>
                 </div>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => {
+                    void handleCopyShare()
+                  }}
+                  aria-label="Скопировать ссылку"
+                  disabled={shareCopyBusy}
+                >
+                  <Icon name="copy" size={16} />
+                </button>
                 <button
                   type="button"
                   className="icon-btn"
