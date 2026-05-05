@@ -21,6 +21,17 @@ class GenreMixOverrideRepository:
         )
         return list(result.scalars().all())
 
+    async def get_by_genre(
+        self,
+        genre: str,
+    ) -> GenreMixOverride | None:
+        result = await self._session.execute(
+            select(GenreMixOverride).where(
+                GenreMixOverride.genre == genre,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def upsert(
         self,
         *,

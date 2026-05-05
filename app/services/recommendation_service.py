@@ -933,6 +933,92 @@ class RecommendationService:
 
         return output
 
+    async def get_genre_mix(
+        self,
+        user_id: int,
+        genre: str,
+    ) -> dict | None:
+        clean_genre = genre.strip().lower()
+        if not clean_genre:
+            return None
+
+        from app.repositories.track import (
+            TrackRepository,
+        )
+
+        track_repo = TrackRepository(self._session)
+        override_repo = GenreMixOverrideRepository(
+            self._session
+        )
+        override = await override_repo.get_by_genre(
+            clean_genre
+        )
+
+        tracks: list[Track] = []
+        title = (
+            f"Mix: {clean_genre[:1].upper()}{clean_genre[1:]}"
+        )
+
+        if override is not None:
+            override_tracks = (
+                await track_repo.get_by_ids_preserve_order(
+                    [
+                        int(tid)
+                        for tid in (override.track_ids or [])
+                    ]
+                )
+            )
+            if override_tracks:
+                tracks = override_tracks
+            title = override.title
+
+        if not tracks:
+            (
+                user_prefs,
+                user_locale,
+            ) = await self._build_user_prefs(
+                user_id
+            )
+            history = (
+                await self._build_listen_history(
+                    user_id
+                )
+            )
+            pool = await self._scoring_candidate_tracks(
+                user_id,
+                100,
+                [clean_genre],
+                user_prefs,
+                user_locale,
+            )
+            if pool:
+                feats = await self._tracks_to_features(
+                    pool
+                )
+                mixes = build_genre_mixes(
+                    user_prefs,
+                    history,
+                    {clean_genre: feats},
+                )
+                if mixes:
+                    mix = mixes[0]
+                    tracks = (
+                        await track_repo.get_by_ids_preserve_order(
+                            mix.track_ids
+                        )
+                    )
+                    if override is None:
+                        title = mix.title
+
+        if not tracks:
+            return None
+
+        return {
+            "genre": clean_genre,
+            "title": title,
+            "tracks": tracks,
+        }
+
     async def save_genre_mix_override(
         self,
         *,
