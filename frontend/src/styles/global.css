@@ -856,6 +856,36 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   background: color-mix(in srgb, var(--surface) 86%, transparent);
 }
 
+.upload-artist-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.upload-artist-mode-btn {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  padding: 10px 8px;
+  cursor: pointer;
+}
+
+.upload-artist-mode-btn.active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--text) 25%, transparent);
+  background: color-mix(in srgb, var(--text) 9%, transparent);
+}
+
+.upload-artist-profile-note {
+  margin: 6px 2px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .upload-check-row {
   display: flex;
   align-items: flex-start;

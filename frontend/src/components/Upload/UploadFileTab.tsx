@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
+import { getInternalUserId } from '@/lib/telegram'
 import { haptic, hapticNotification, hapticSelection } from '@/lib/telegram'
 import type { LyricsResponse, Track } from '@/types/api'
 import { LyricsEditor } from '../TrackCardSheet/LyricsEditor'
@@ -28,6 +29,8 @@ const MAX_AUDIO_BYTES = 50 * 1024 * 1024
 export function UploadFileTab({ onSuccess }: Props) {
   const [title, setTitle] = useState('')
   const [artist, setArtist] = useState('')
+  const [artistMode, setArtistMode] = useState<'profile' | 'custom'>('custom')
+  const [profileArtistName, setProfileArtistName] = useState<string | null>(null)
   const [artistQuery, setArtistQuery] = useState('')
   const [artistOpen, setArtistOpen] = useState(false)
   const [artistSearching, setArtistSearching] = useState(false)
@@ -55,6 +58,27 @@ export function UploadFileTab({ onSuccess }: Props) {
 
   useEffect(() => {
     api.getGenres().then(setGenres).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const userId = getInternalUserId()
+    if (!userId) {
+      return
+    }
+    api.getUserProfile(userId)
+      .then((user) => {
+        const display = user.display_name?.trim() ?? ''
+        if (!display) {
+          setProfileArtistName(null)
+          setArtistMode('custom')
+          return
+        }
+        setProfileArtistName(display)
+        setArtist(display)
+        setArtistQuery(display)
+        setArtistMode('profile')
+      })
+      .catch(() => {})
   }, [])
 
   const normalizedGenres = useMemo(
@@ -234,6 +258,7 @@ export function UploadFileTab({ onSuccess }: Props) {
   const reset = () => {
     setTitle('')
     setArtist('')
+    setArtistMode(profileArtistName ? 'profile' : 'custom')
     setArtistQuery('')
     setArtistOpen(false)
     setArtistSearching(false)
@@ -263,8 +288,15 @@ export function UploadFileTab({ onSuccess }: Props) {
       const exact = normalizedGenres.get(genreQuery.trim().toLowerCase())
       setGenre(exact ?? genreQuery.trim())
     }
-    if (artistQuery.trim()) {
+    if (artistMode === 'custom' && artistQuery.trim()) {
       setArtist(artistQuery.trim())
+    }
+    if (artistMode === 'profile') {
+      if (!profileArtistName?.trim()) {
+        setError('Укажи display name в профиле для режима "Я артист"')
+        return
+      }
+      setArtist(profileArtistName.trim())
     }
 
     if (!title.trim()) { setError('Введите название трека'); return }
@@ -282,6 +314,7 @@ export function UploadFileTab({ onSuccess }: Props) {
       fd.append('file', audioFile)
       fd.append('title', title.trim())
       if (artist.trim()) fd.append('artist', artist.trim())
+      fd.append('use_profile_artist', artistMode === 'profile' ? 'true' : 'false')
       if (genre.trim()) fd.append('genre', genre.trim())
       if (coverFile) fd.append('cover', coverFile)
       fd.append('is_public', String(isPublic))
@@ -363,6 +396,44 @@ export function UploadFileTab({ onSuccess }: Props) {
 
       <div className="form-group genre-search-group">
         <label className="form-label">Исполнитель</label>
+        <div className="upload-artist-mode">
+          <button
+            type="button"
+            className={`upload-artist-mode-btn${artistMode === 'profile' ? ' active' : ''}`}
+            onClick={() => {
+              if (!profileArtistName) {
+                hapticNotification('warning')
+                return
+              }
+              setArtistMode('profile')
+              setArtist(profileArtistName)
+              setArtistQuery(profileArtistName)
+              setArtistOpen(false)
+              hapticSelection()
+            }}
+          >
+            Я этот артист
+          </button>
+          <button
+            type="button"
+            className={`upload-artist-mode-btn${artistMode === 'custom' ? ' active' : ''}`}
+            onClick={() => {
+              setArtistMode('custom')
+              hapticSelection()
+            }}
+          >
+            Ввести вручную
+          </button>
+        </div>
+        {artistMode === 'profile' && (
+          <p className="upload-artist-profile-note">
+            {profileArtistName
+              ? `Будет использовано имя профиля: ${profileArtistName}`
+              : 'Добавь display name в профиле, чтобы использовать этот режим.'}
+          </p>
+        )}
+        {artistMode === 'custom' && (
+          <>
         <button
           type="button"
           className="genre-search-toggle"
@@ -437,6 +508,8 @@ export function UploadFileTab({ onSuccess }: Props) {
               </p>
             )}
           </div>
+        )}
+          </>
         )}
       </div>
 

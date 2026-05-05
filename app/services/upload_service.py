@@ -66,6 +66,7 @@ class UploadService:
         file: UploadFile,
         title: str,
         artist: str | None,
+        use_profile_artist: bool = False,
         genre: str | None = None,
         cover: UploadFile | None = None,
         uploader_id: int | None = None,
@@ -182,10 +183,21 @@ class UploadService:
 
         await schedule_reindex_track(track.id)
 
-        if artist:
-            from app.services.artist_service import ArtistService
+        from app.services.artist_service import ArtistService
 
-            artist_svc = ArtistService(self._session)
+        artist_svc = ArtistService(self._session)
+        if use_profile_artist and uploader_id is not None and artist:
+            owned_artist = await artist_svc.ensure_owned_artist_for_user(
+                user_id=uploader_id,
+                preferred_name=artist,
+            )
+            await artist_svc._repo.link_track(
+                track_id=track.id,
+                artist_id=owned_artist.id,
+                role="primary",
+                position=0,
+            )
+        elif artist:
             try:
                 await artist_svc.resolve_and_link(
                     track_id=track.id,

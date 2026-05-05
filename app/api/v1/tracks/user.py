@@ -61,6 +61,7 @@ async def upload_track(
     file: UploadFile = File(...),
     title: str = Form(..., max_length=256),
     artist: str | None = Form(None, max_length=256),
+    use_profile_artist: bool = Form(False),
     genre: str | None = Form(None, max_length=100),
     is_public: bool = Form(True),
     upload_terms_accepted: bool = Form(False),
@@ -80,10 +81,19 @@ async def upload_track(
             detail="Upload terms must be accepted",
         )
     service = UploadService(session)
+    effective_artist = artist
+    if use_profile_artist:
+        effective_artist = current_user.display_name
+        if not effective_artist:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Display name is required for profile artist mode",
+            )
     track = await service.upload_track(
         file=file,
         title=title,
-        artist=artist,
+        artist=effective_artist,
+        use_profile_artist=use_profile_artist,
         genre=genre,
         cover=cover,
         uploader_id=current_user.id,

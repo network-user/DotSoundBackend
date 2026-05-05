@@ -53,6 +53,9 @@ class User(Base, TimestampMixin):
     display_name: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
+    display_name_normalized: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, index=True
+    )
     avatar_key: Mapped[str | None] = mapped_column(
         Text, nullable=True
     )
