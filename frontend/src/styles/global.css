@@ -845,6 +845,59 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   cursor: pointer;
 }
 
+.upload-checks {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+
+.upload-check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.upload-check-row input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  margin-top: 0;
+  accent-color: #fff;
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.upload-check-row a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text) 45%, transparent);
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 420px) {
+  .upload-checks {
+    padding: 12px;
+    gap: 14px;
+  }
+
+  .upload-check-row {
+    font-size: 12px;
+  }
+
+  .upload-check-row input[type='checkbox'] {
+    width: 24px;
+    height: 24px;
+  }
+}
+
 .file-pick-btn {
   display: inline-flex;
   align-items: center;
