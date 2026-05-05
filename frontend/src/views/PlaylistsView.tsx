@@ -210,7 +210,9 @@ export function PlaylistsView({
     const url = `${window.location.origin}${import.meta.env.BASE_URL}playlists`
     try {
       await navigator.clipboard.writeText(url)
-      toast.success('РЎСЃС‹Р»РєР° СЃРєРѕРїРёСЂРѕРІР°РЅР°')
+      toast.success('РЎСЃС‹Р»РєР° СЃРєРѕРїРёСЂРѕРІР°РЅР°', {
+        position: 'top',
+      })
     } catch {
       toast.error('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєРѕРїРёСЂРѕРІР°С‚СЊ СЃСЃС‹Р»РєСѓ')
     }

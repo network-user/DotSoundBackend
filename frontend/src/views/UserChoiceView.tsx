@@ -88,7 +88,9 @@ export function UserChoiceView() {
   const handleCopyLink = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(shareUrl)
-      toast.success('Ссылка скопирована')
+      toast.success('Ссылка скопирована', {
+        position: 'top',
+      })
     } catch {
       setShareError('Не удалось скопировать ссылку')
     }

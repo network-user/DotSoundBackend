@@ -28,10 +28,7 @@ interface HomeSection {
 
 function timeGreeting(): string {
   const h = new Date().getHours()
-  if (h < 6) return 'Доброй ночи'
-  if (h < 12) return 'Доброе утро'
-  if (h < 18) return 'Добрый день'
-  return 'Добрый вечер'
+  return h < 18 ? 'Добрый день' : 'Добрый вечер'
 }
 
 function coverUrl(key: string | null): string | null {
@@ -143,6 +140,7 @@ function FeaturedCard({
         aria-label={`Слушать ${track.title || 'трек'}`}
       >
         <Icon name="play" size={18} />
+        <span>Play</span>
       </button>
     </div>
   )
@@ -533,7 +531,9 @@ export function HomeView() {
       <div className="home-greeting">
         <div className="home-greeting__text">
           <div className="home-greeting__label">
-            {displayName ? `${greeting}, ${displayName}` : greeting}
+            {displayName
+              ? `${greeting} | ${displayName}`
+              : greeting}
           </div>
           <div className="home-greeting__sub">{brandLabel}</div>
         </div>

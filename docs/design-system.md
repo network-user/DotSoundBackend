@@ -211,6 +211,11 @@ SoundCloud artist-station rows add
 `.artist-catalog-release-station-badge` (monochrome caption
 below meta; styles in `frontend/src/styles/global.css`).
 
+Artist header shows monthly listeners in a compact inline row
+`.artist-monthly-listeners-inline` under the name/meta line with a
+stroke icon (`users-listeners`). Keep it monochrome, compact and
+non-intrusive.
+
 ## Migration playbook
 
 1. Replace literal spacing with `--space-*`.

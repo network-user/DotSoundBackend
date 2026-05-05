@@ -1,10 +1,11 @@
-﻿import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
+import { getIsAdmin } from '@/lib/telegram'
 import { usePlayerActions } from '@/store/PlayerContext'
 import type {
   ChatListItem,
@@ -28,10 +29,37 @@ export function GenreMixView() {
   const [shareLoading, setShareLoading] = useState(false)
   const [shareSendingConvId, setShareSendingConvId] = useState<number | null>(null)
   const [shareError, setShareError] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(() => getIsAdmin())
+  const [debugMode, setDebugMode] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const [trackPool, setTrackPool] = useState<Track[]>([])
+  const [addTrackId, setAddTrackId] = useState<number | null>(null)
+
+  const canEditUi = isAdmin || debugMode || import.meta.env.DEV
 
   const shareUrl = `${window.location.origin}${import.meta.env.BASE_URL}genre-mix/${encodeURIComponent(
     genre || '',
   )}`
+
+  useEffect(() => {
+    let cancelled = false
+    api.syncSessionUserFlags().finally(() => {
+      if (!cancelled) {
+        setIsAdmin(getIsAdmin())
+      }
+    })
+    api.getAuthConfig()
+      .then((cfg) => {
+        if (!cancelled) {
+          setDebugMode(Boolean(cfg.debug))
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     if (!genre) return
@@ -99,11 +127,54 @@ export function GenreMixView() {
   const handleCopyLink = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(shareUrl)
-      toast.success('Ссылка скопирована')
+      toast.success('Ссылка скопирована', {
+        position: 'top',
+      })
     } catch {
       setShareError('Не удалось скопировать ссылку')
     }
   }, [shareUrl, toast])
+
+  const openEditMode = useCallback(async () => {
+    if (!canEditUi) return
+    setTitleDraft(title)
+    setEditOpen(true)
+    try {
+      const lib = await api.getMyLibrary(1, 100, false)
+      setTrackPool(lib.items)
+    } catch {
+      setTrackPool([])
+    }
+  }, [canEditUi, title])
+
+  const moveTrack = useCallback((index: number, dir: -1 | 1) => {
+    setTracks((prev) => {
+      if (!prev) return prev
+      const next = [...prev]
+      const to = index + dir
+      if (to < 0 || to >= next.length) return prev
+      const tmp = next[index]
+      next[index] = next[to]
+      next[to] = tmp
+      return next
+    })
+  }, [])
+
+  const removeTrack = useCallback((trackId: number) => {
+    setTracks((prev) => (prev ? prev.filter((t) => t.id !== trackId) : prev))
+  }, [])
+
+  const addTrack = useCallback(() => {
+    if (!addTrackId) return
+    const candidate = trackPool.find((t) => t.id === addTrackId)
+    if (!candidate) return
+    setTracks((prev) => {
+      if (!prev) return [candidate]
+      if (prev.some((t) => t.id === candidate.id)) return prev
+      return [...prev, candidate]
+    })
+    setAddTrackId(null)
+  }, [addTrackId, trackPool])
 
   return (
     <section className="view active">
@@ -117,6 +188,11 @@ export function GenreMixView() {
         </div>
         {tracks && tracks.length > 0 && (
           <div style={{ display: 'flex', gap: 8 }}>
+            {canEditUi && (
+              <button className="icon-btn" onClick={() => { void openEditMode() }} aria-label="Редактировать микс">
+                <Icon name="edit" size={18} />
+              </button>
+            )}
             <button className="icon-btn" onClick={() => { void openShareModal() }} aria-label="Поделиться">
               <Icon name="share" size={18} />
             </button>
@@ -128,6 +204,78 @@ export function GenreMixView() {
       </div>
 
       <TrackList tracks={tracks} emptyMessage="В этом миксе пока нет треков" />
+
+      {editOpen && (
+        <div className="share-modal-overlay fade-in" onClick={(e) => {
+          if (e.target === e.currentTarget) setEditOpen(false)
+        }}>
+          <div className="share-modal scale-in gm-edit-modal">
+            <div className="share-modal-header">
+              <div className="share-modal-title-wrap">
+                <h3 className="share-modal-title">Редактирование микса</h3>
+                <p className="share-modal-subtitle">Debug/Dev режим</p>
+              </div>
+              <button type="button" className="icon-btn" onClick={() => setEditOpen(false)} aria-label="Закрыть">
+                <Icon name="x" size={18} />
+              </button>
+            </div>
+            <div className="form-group gm-edit-section">
+              <label className="form-label">Название</label>
+              <input
+                className="form-input gm-edit-input"
+                value={titleDraft}
+                onChange={(e) => setTitleDraft(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn-primary gm-edit-btn"
+                onClick={() => {
+                  setTitle(titleDraft.trim() || title)
+                  toast.success('Название обновлено', { position: 'top' })
+                }}
+              >
+                Применить
+              </button>
+            </div>
+            <div className="gm-edit-add-row">
+              <select
+                className="form-input gm-edit-input"
+                value={addTrackId ?? ''}
+                onChange={(e) => setAddTrackId(Number(e.target.value) || null)}
+              >
+                <option value="">Добавить трек...</option>
+                {trackPool
+                  .filter((t) => !(tracks ?? []).some((mt) => mt.id === t.id))
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.title} {t.artist ? `- ${t.artist}` : ''}
+                    </option>
+                  ))}
+              </select>
+              <button type="button" className="btn-secondary gm-edit-btn" onClick={addTrack}>
+                Добавить
+              </button>
+            </div>
+            <div className="gm-edit-list">
+              {(tracks ?? []).map((t, idx) => (
+                <div key={t.id} className="gm-edit-item">
+                  <div className="gm-edit-item-main">
+                    <span className="gm-edit-item-title">{t.title}</span>
+                    <span className="gm-edit-item-artist">{t.artist || '—'}</span>
+                  </div>
+                  <div className="gm-edit-item-actions">
+                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => moveTrack(idx, -1)}>↑</button>
+                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => moveTrack(idx, 1)}>↓</button>
+                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => removeTrack(t.id)}>
+                    <Icon name="x" size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {shareOpen && (
         <div className="share-modal-overlay fade-in" onClick={(e) => {
