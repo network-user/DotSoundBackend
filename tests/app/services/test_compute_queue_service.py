@@ -100,6 +100,33 @@ async def test_claim_returns_none_when_empty(db_session):
     assert claimed is None
 
 
+async def test_claim_respects_pinned_worker(db_session):
+    job = await q.enqueue(
+        db_session,
+        job_type="track_audio_features",
+        target_kind="track",
+        target_id=901,
+    )
+    job.pinned_worker_id = "w_b_only"
+    await db_session.commit()
+
+    wrong = await q.claim_next(
+        db_session,
+        worker_id="w_a",
+        job_types=["track_audio_features"],
+    )
+    assert wrong is None
+
+    ok = await q.claim_next(
+        db_session,
+        worker_id="w_b_only",
+        job_types=["track_audio_features"],
+    )
+    assert ok is not None
+    assert ok.id == job.id
+    assert ok.pinned_worker_id is None
+
+
 async def test_claim_respects_priority(db_session):
     low = await q.enqueue(
         db_session,
