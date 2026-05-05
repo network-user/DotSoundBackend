@@ -28,6 +28,10 @@ const MAX_AUDIO_BYTES = 50 * 1024 * 1024
 export function UploadFileTab({ onSuccess }: Props) {
   const [title, setTitle] = useState('')
   const [artist, setArtist] = useState('')
+  const [artistQuery, setArtistQuery] = useState('')
+  const [artistOpen, setArtistOpen] = useState(false)
+  const [artistSearching, setArtistSearching] = useState(false)
+  const [artistResults, setArtistResults] = useState<string[]>([])
   const [genre, setGenre] = useState('')
   const [genreQuery, setGenreQuery] = useState('')
   const [genreOpen, setGenreOpen] = useState(false)
@@ -119,6 +123,63 @@ export function UploadFileTab({ onSuccess }: Props) {
   )
 
   useEffect(() => {
+    const query = artistQuery.trim()
+    if (!artistOpen || !query) {
+      setArtistResults([])
+      setArtistSearching(false)
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setArtistSearching(true)
+      void (async () => {
+        const artistsFromApi = await api
+          .getArtists(query, 12)
+          .catch(() => ({ items: [] as { name: string }[] }))
+        const trackHits = await api
+          .getTracks({ q: query, size: 30 })
+          .catch(() => ({ items: [] as Track[] }))
+        const merged = [
+          ...artistsFromApi.items.map((x) => x.name.trim()),
+          ...trackHits.items
+            .map((t) => t.artist?.trim() ?? '')
+            .filter((x) => x.length > 0),
+        ]
+        const seen = new Set<string>()
+        const result: string[] = []
+        for (const item of merged) {
+          const key = item.toLowerCase()
+          if (seen.has(key)) {
+            continue
+          }
+          seen.add(key)
+          result.push(item)
+          if (result.length >= 10) {
+            break
+          }
+        }
+        if (!cancelled) {
+          setArtistResults(result)
+          setArtistSearching(false)
+        }
+      })()
+    }, 220)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [artistOpen, artistQuery])
+
+  const hasExactArtist = useMemo(
+    () => artistResults.some(
+      (value) => value.toLowerCase() === artistQuery.trim().toLowerCase(),
+    ),
+    [artistResults, artistQuery],
+  )
+
+  useEffect(() => {
     return () => {
       if (localAudioUrl) URL.revokeObjectURL(localAudioUrl)
     }
@@ -173,6 +234,10 @@ export function UploadFileTab({ onSuccess }: Props) {
   const reset = () => {
     setTitle('')
     setArtist('')
+    setArtistQuery('')
+    setArtistOpen(false)
+    setArtistSearching(false)
+    setArtistResults([])
     setGenre('')
     setGenreQuery('')
     setGenreOpen(false)
@@ -197,6 +262,9 @@ export function UploadFileTab({ onSuccess }: Props) {
     if (genreQuery.trim()) {
       const exact = normalizedGenres.get(genreQuery.trim().toLowerCase())
       setGenre(exact ?? genreQuery.trim())
+    }
+    if (artistQuery.trim()) {
+      setArtist(artistQuery.trim())
     }
 
     if (!title.trim()) { setError('Введите название трека'); return }
@@ -293,17 +361,83 @@ export function UploadFileTab({ onSuccess }: Props) {
         />
       </div>
 
-      <div className="form-group">
-        <label className="form-label" htmlFor="artist-input">Исполнитель</label>
-        <input
-          id="artist-input"
-          className="form-input"
-          type="text"
-          placeholder="Имя исполнителя"
-          maxLength={256}
-          value={artist}
-          onChange={(e) => setArtist(e.target.value)}
-        />
+      <div className="form-group genre-search-group">
+        <label className="form-label">Исполнитель</label>
+        <button
+          type="button"
+          className="genre-search-toggle"
+          onClick={() => {
+            setArtistOpen((prev) => !prev)
+            hapticSelection()
+          }}
+        >
+          <Icon name="search" size={16} />
+          <span>{artist || 'Поиск исполнителя'}</span>
+          <Icon name={artistOpen ? 'chevron-up' : 'chevron-down'} size={16} />
+        </button>
+        {artistOpen && (
+          <div className="genre-search-popover" role="listbox">
+            <input
+              className="form-input genre-search-input"
+              placeholder="Начни вводить имя исполнителя"
+              maxLength={256}
+              value={artistQuery}
+              onChange={(e) => {
+                const next = e.target.value
+                setArtistQuery(next)
+                if (next.trim()) {
+                  setArtist(next.trim())
+                }
+              }}
+            />
+            {artistSearching && (
+              <p className="genre-search-note">Ищем похожих исполнителей…</p>
+            )}
+            {!artistSearching && artistResults.length > 0 && (
+              <div className="genre-search-list">
+                {artistResults.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`genre-search-item${
+                      artist.toLowerCase() === item.toLowerCase()
+                        ? ' active'
+                        : ''
+                    }`}
+                    onClick={() => {
+                      setArtist(item)
+                      setArtistQuery(item)
+                      setArtistOpen(false)
+                      hapticSelection()
+                    }}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!artistSearching && artistQuery.trim() && !hasExactArtist && (
+              <button
+                type="button"
+                className="genre-search-create"
+                onClick={() => {
+                  const custom = artistQuery.trim()
+                  setArtist(custom)
+                  setArtistQuery(custom)
+                  setArtistOpen(false)
+                  haptic('medium')
+                }}
+              >
+                Создать исполнителя: {artistQuery.trim()}
+              </button>
+            )}
+            {!artistSearching && artistResults.length === 0 && !artistQuery.trim() && (
+              <p className="genre-search-note">
+                Подсказки появятся после ввода.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="form-group genre-search-group">
@@ -449,36 +583,26 @@ export function UploadFileTab({ onSuccess }: Props) {
         </div>
       )}
 
-      <div className="form-group form-group-row">
-        <label className="form-label">Публичный</label>
-        <input
-          type="checkbox"
-          checked={isPublic}
-          onChange={(e) => setIsPublic(e.target.checked)}
-        />
-      </div>
-
-      <div className="form-group">
-        <label className="form-group-row">
+      <div className="form-group upload-checks">
+        <label className="upload-check-row">
+          <input
+            type="checkbox"
+            checked={isPublic}
+            onChange={(e) => setIsPublic(e.target.checked)}
+          />
+          <span>Публичный трек</span>
+        </label>
+        <label className="upload-check-row">
           <input
             type="checkbox"
             checked={termsAccepted}
             onChange={(e) => setTermsAccepted(e.target.checked)}
           />
           <span>
-            Я подтверждаю, что обладаю правами на загружаемый контент
-            и согласен с
+            Ознакомлен с
             {' '}
-            <a href="/legal/terms" target="_blank" rel="noreferrer">
-              пользовательским соглашением
-            </a>
-            ,{' '}
             <a href="/legal/upload-rules" target="_blank" rel="noreferrer">
               правилами загрузки
-            </a>
-            {' '}и{' '}
-            <a href="/legal/privacy" target="_blank" rel="noreferrer">
-              политикой обработки данных
             </a>
             .
           </span>

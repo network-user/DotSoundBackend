@@ -196,9 +196,9 @@ export function hapticSelection(): void {
   try {
     if ('vibrate' in navigator) {
       if (!tgTriggered) {
-        navigator.vibrate(5)
+        navigator.vibrate(4)
       } else {
-        navigator.vibrate(2)
+        navigator.vibrate(1)
       }
     }
   } catch {
@@ -210,7 +210,7 @@ let lastTickAt = 0
 
 export function hapticTick(): void {
   const now = Date.now()
-  if (now - lastTickAt < 45) return
+  if (now - lastTickAt < 65) return
   lastTickAt = now
   hapticSelection()
 }
