@@ -122,6 +122,24 @@ class LyricsBatchImportResponse(BaseModel):
     errors: list[str]
 
 
+class ArtistSupplementalBatchPromptRequest(BaseModel):
+    artist_ids: list[int] = Field(..., min_length=1, max_length=200)
+
+
+class ArtistSupplementalBatchPromptResponse(BaseModel):
+    prompt: str
+    artist_count: int
+
+
+class ArtistSupplementalBatchImportRequest(BaseModel):
+    raw_response: str = Field(..., min_length=2, max_length=500_000)
+
+
+class ArtistSupplementalBatchImportResponse(BaseModel):
+    imported: int
+    errors: list[str]
+
+
 class AdminAlbumListItem(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

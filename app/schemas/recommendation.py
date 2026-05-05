@@ -67,3 +67,8 @@ class GenreMixItemResponse(BaseModel):
 
 class GenreMixesResponse(BaseModel):
     mixes: list[GenreMixItemResponse]
+
+
+class GenreMixOverrideRequest(BaseModel):
+    title: str
+    track_ids: list[int]

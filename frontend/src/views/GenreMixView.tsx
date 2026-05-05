@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { Icon } from '@/components/Icon/Icon'
@@ -35,11 +35,13 @@ export function GenreMixView() {
   const [titleDraft, setTitleDraft] = useState('')
   const [trackPool, setTrackPool] = useState<Track[]>([])
   const [addTrackId, setAddTrackId] = useState<number | null>(null)
+  const [saveBusy, setSaveBusy] = useState(false)
+  const [trackSearch, setTrackSearch] = useState('')
+  const [searchResults, setSearchResults] = useState<Track[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
 
   const canEditUi = isAdmin || debugMode || import.meta.env.DEV
-  const storageKey = genre
-    ? `genre-mix-edit:${genre.toLowerCase()}`
-    : null
+  const normalizedGenre = (genre || '').toLowerCase()
 
   const shareUrl = `${window.location.origin}${import.meta.env.BASE_URL}genre-mix/${encodeURIComponent(
     genre || '',
@@ -73,46 +75,48 @@ export function GenreMixView() {
           (m) => m.genre.toLowerCase() === genre.toLowerCase(),
         )
         if (mix) {
-          let nextTracks = mix.tracks
-          let nextTitle = mix.title
-          if (storageKey) {
-            try {
-              const raw = localStorage.getItem(storageKey)
-              if (raw) {
-                const parsed = JSON.parse(raw) as {
-                  title?: string
-                  tracks?: Track[]
-                }
-                if (parsed.title && parsed.title.trim()) {
-                  nextTitle = parsed.title
-                }
-                if (Array.isArray(parsed.tracks)) {
-                  nextTracks = parsed.tracks
-                }
-              }
-            } catch {}
-          }
-          setTracks(nextTracks)
-          setTitle(nextTitle)
+          setTracks(mix.tracks)
+          setTitle(mix.title)
         } else {
           setTracks([])
         }
       })
       .catch(() => setTracks([]))
-  }, [genre, storageKey])
+  }, [genre])
 
   useEffect(() => {
-    if (!storageKey || tracks === null) return
-    try {
-      localStorage.setItem(
-        storageKey,
-        JSON.stringify({
-          title,
-          tracks,
-        }),
-      )
-    } catch {}
-  }, [storageKey, title, tracks])
+    if (!editOpen || !canEditUi) return
+    const q = trackSearch.trim()
+    if (!q) {
+      setSearchResults([])
+      setSearchLoading(false)
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setSearchLoading(true)
+      api.getTracks({ q, size: 30, page: 1 })
+        .then((res) => {
+          if (!cancelled) {
+            setSearchResults(res.items)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setSearchResults([])
+          }
+        })
+        .finally(() => {
+          if (!cancelled) {
+            setSearchLoading(false)
+          }
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [editOpen, canEditUi, trackSearch])
 
   const handlePlayAll = useCallback(async () => {
     if (!tracks || !tracks.length) return
@@ -170,6 +174,32 @@ export function GenreMixView() {
     }
   }, [shareUrl, toast])
 
+  const persistOverride = useCallback(async (
+    nextTitle: string,
+    nextTracks: Track[],
+  ) => {
+    if (!normalizedGenre || !canEditUi) return
+    setSaveBusy(true)
+    try {
+      const saved = await api.saveGenreMixOverride(
+        normalizedGenre,
+        {
+          title: nextTitle,
+          track_ids: nextTracks.map((t) => t.id),
+        },
+      )
+      setTitle(saved.title)
+      setTracks(saved.tracks)
+      toast.success('Изменения сохранены', {
+        position: 'top',
+      })
+    } catch {
+      toast.error('Не удалось сохранить изменения')
+    } finally {
+      setSaveBusy(false)
+    }
+  }, [normalizedGenre, canEditUi, toast])
+
   const openEditMode = useCallback(async () => {
     if (!canEditUi) return
     setTitleDraft(title)
@@ -182,34 +212,62 @@ export function GenreMixView() {
     }
   }, [canEditUi, title])
 
-  const moveTrack = useCallback((index: number, dir: -1 | 1) => {
-    setTracks((prev) => {
-      if (!prev) return prev
-      const next = [...prev]
-      const to = index + dir
-      if (to < 0 || to >= next.length) return prev
-      const tmp = next[index]
-      next[index] = next[to]
-      next[to] = tmp
-      return next
-    })
-  }, [])
+  const availableTracks = useMemo(() => {
+    const inMix = new Set((tracks ?? []).map((t) => t.id))
+    const q = trackSearch.trim().toLowerCase()
+    const local = trackPool
+      .filter((t) => !inMix.has(t.id))
+      .filter((t) => {
+        if (!q) return true
+        const hay = `${t.title} ${t.artist ?? ''}`.toLowerCase()
+        return hay.includes(q)
+      })
+    const merged = [...local]
+    for (const remote of searchResults) {
+      if (
+        !inMix.has(remote.id) &&
+        !merged.some((t) => t.id === remote.id)
+      ) {
+        merged.push(remote)
+      }
+    }
+    return merged
+  }, [tracks, trackPool, trackSearch, searchResults])
 
-  const removeTrack = useCallback((trackId: number) => {
-    setTracks((prev) => (prev ? prev.filter((t) => t.id !== trackId) : prev))
-  }, [])
+  const applyTitle = useCallback(async () => {
+    const nextTitle = titleDraft.trim() || title
+    const nextTracks = tracks ?? []
+    setTitle(nextTitle)
+    await persistOverride(nextTitle, nextTracks)
+  }, [titleDraft, title, tracks, persistOverride])
 
-  const addTrack = useCallback(() => {
+  const moveTrack = useCallback(async (index: number, dir: -1 | 1) => {
+    if (!tracks) return
+    const next = [...tracks]
+    const to = index + dir
+    if (to < 0 || to >= next.length) return
+    const tmp = next[index]
+    next[index] = next[to]
+    next[to] = tmp
+    setTracks(next)
+    await persistOverride(title, next)
+  }, [tracks, title, persistOverride])
+
+  const removeTrack = useCallback(async (trackId: number) => {
+    const next = (tracks ?? []).filter((t) => t.id !== trackId)
+    setTracks(next)
+    await persistOverride(title, next)
+  }, [tracks, title, persistOverride])
+
+  const addTrack = useCallback(async () => {
     if (!addTrackId) return
-    const candidate = trackPool.find((t) => t.id === addTrackId)
+    const candidate = availableTracks.find((t) => t.id === addTrackId)
     if (!candidate) return
-    setTracks((prev) => {
-      if (!prev) return [candidate]
-      if (prev.some((t) => t.id === candidate.id)) return prev
-      return [...prev, candidate]
-    })
+    const next = [...(tracks ?? []), candidate]
+    setTracks(next)
     setAddTrackId(null)
-  }, [addTrackId, trackPool])
+    await persistOverride(title, next)
+  }, [addTrackId, availableTracks, tracks, title, persistOverride])
 
   return (
     <section className="view active">
@@ -248,7 +306,7 @@ export function GenreMixView() {
             <div className="share-modal-header">
               <div className="share-modal-title-wrap">
                 <h3 className="share-modal-title">Редактирование микса</h3>
-                <p className="share-modal-subtitle">Debug/Dev режим</p>
+                <p className="share-modal-subtitle">Серверное сохранение</p>
               </div>
               <button type="button" className="icon-btn" onClick={() => setEditOpen(false)} aria-label="Закрыть">
                 <Icon name="x" size={18} />
@@ -265,32 +323,39 @@ export function GenreMixView() {
                 type="button"
                 className="btn-primary gm-edit-btn"
                 onClick={() => {
-                  setTitle(titleDraft.trim() || title)
-                  toast.success('Изменения сохранены', { position: 'top' })
+                  void applyTitle()
                 }}
+                disabled={saveBusy}
               >
-                Применить
+                {saveBusy ? 'Сохранение...' : 'Применить'}
               </button>
             </div>
             <div className="gm-edit-add-row">
+              <input
+                className="form-input gm-edit-input"
+                placeholder="Поиск треков: название или артист..."
+                value={trackSearch}
+                onChange={(e) => setTrackSearch(e.target.value)}
+              />
               <select
                 className="form-input gm-edit-input"
                 value={addTrackId ?? ''}
                 onChange={(e) => setAddTrackId(Number(e.target.value) || null)}
               >
                 <option value="">Добавить трек...</option>
-                {trackPool
-                  .filter((t) => !(tracks ?? []).some((mt) => mt.id === t.id))
-                  .map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.title} {t.artist ? `- ${t.artist}` : ''}
-                    </option>
-                  ))}
+                {availableTracks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title} {t.artist ? `- ${t.artist}` : ''}
+                  </option>
+                ))}
               </select>
-              <button type="button" className="btn-secondary gm-edit-btn" onClick={addTrack}>
+              <button type="button" className="btn-secondary gm-edit-btn" onClick={() => { void addTrack() }} disabled={saveBusy}>
                 Добавить
               </button>
             </div>
+            {searchLoading && (
+              <p className="hint" style={{ marginTop: 8 }}>Идёт поиск…</p>
+            )}
             <div className="gm-edit-list">
               {(tracks ?? []).map((t, idx) => (
                 <div key={t.id} className="gm-edit-item">
@@ -299,10 +364,10 @@ export function GenreMixView() {
                     <span className="gm-edit-item-artist">{t.artist || '—'}</span>
                   </div>
                   <div className="gm-edit-item-actions">
-                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => moveTrack(idx, -1)}>↑</button>
-                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => moveTrack(idx, 1)}>↓</button>
-                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => removeTrack(t.id)}>
-                    <Icon name="x" size={14} />
+                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => { void moveTrack(idx, -1) }} disabled={saveBusy}>↑</button>
+                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => { void moveTrack(idx, 1) }} disabled={saveBusy}>↓</button>
+                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => { void removeTrack(t.id) }} disabled={saveBusy}>
+                      <Icon name="x" size={14} />
                     </button>
                   </div>
                 </div>

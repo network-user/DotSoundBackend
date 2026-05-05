@@ -37,6 +37,7 @@ from app.models.encryption_key import EncryptionKey
 from app.models.eq_settings import UserEqSettings
 from app.models.follow import UserFollow
 from app.models.genre_sample import GenreSample
+from app.models.genre_mix_override import GenreMixOverride
 from app.models.image_blob import ImageBlob
 from app.models.import_job import ImportJob
 from app.models.like import Like
@@ -105,6 +106,7 @@ __all__ = [
     "Dislike",
     "EncryptionKey",
     "GenreSample",
+    "GenreMixOverride",
     "ImportJob",
     "Like",
     "ListenEvent",
