@@ -1,4 +1,9 @@
 import { Icon } from '@/components/Icon/Icon'
+import {
+  hapticNotification,
+  hapticSelection,
+} from '@/lib/telegram'
+import { useSound } from '@/store/SoundContext'
 
 interface Props {
   currentAvatar: string | null
@@ -25,6 +30,16 @@ export function ProfileHero({
   onCancel,
   onDisplayNameChange,
 }: Props) {
+  const sound = useSound()
+  const feedbackTap = () => {
+    hapticSelection()
+    sound.play('tapSoft')
+  }
+  const handleSave = () => {
+    hapticNotification('success')
+    sound.play('notificationSuccess')
+    onSave()
+  }
   return (
     <div className="profile-hero">
       <div className="profile-avatar">
@@ -52,16 +67,32 @@ export function ProfileHero({
 
       <div className="profile-edit-controls">
         {!editMode ? (
-          <button className="profile-edit-btn" onClick={onEditStart}>
+          <button
+            className="profile-edit-btn"
+            onClick={() => {
+              feedbackTap()
+              onEditStart()
+            }}
+          >
             <Icon name="edit" size={16} />
             <span>Изменить</span>
           </button>
         ) : (
           <>
-            <button className="btn-primary" onClick={onSave} disabled={saving}>
+            <button
+              className="btn-primary"
+              onClick={handleSave}
+              disabled={saving}
+            >
               {saving ? 'Сохранение…' : 'Сохранить'}
             </button>
-            <button className="profile-edit-cancel" onClick={onCancel}>
+            <button
+              className="profile-edit-cancel"
+              onClick={() => {
+                feedbackTap()
+                onCancel()
+              }}
+            >
               Отмена
             </button>
           </>

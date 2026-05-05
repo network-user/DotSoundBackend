@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 import {
   getInternalUserId,
+  hapticSelection,
   tg,
 } from '@/lib/telegram'
+import { useSound } from '@/store/SoundContext'
 import type {
   Track,
   UserStatsResponse,
@@ -30,6 +32,7 @@ export function ProfileView({
   onOpenSettings,
 }: Props) {
   const { playTrack } = usePlayerActions()
+  const sound = useSound()
   const [tab, setTab] =
     useState<ProfileTab>('profile')
   const [stats, setStats] =
@@ -177,6 +180,10 @@ export function ProfileView({
   const currentAvatar =
     avatarSrc || tgUser?.photo_url || null
   const shownName = displayName || 'Пользователь'
+  const feedbackTap = () => {
+    hapticSelection()
+    sound.play('tapSoft')
+  }
 
   return (
     <section
@@ -187,19 +194,28 @@ export function ProfileView({
         <div className="profile-tabs">
           <button
             className={`profile-tab${tab === 'profile' ? ' active' : ''}`}
-            onClick={() => setTab('profile')}
+            onClick={() => {
+              feedbackTap()
+              setTab('profile')
+            }}
           >
             Профиль
           </button>
           <button
             className={`profile-tab${tab === 'import' ? ' active' : ''}`}
-            onClick={() => setTab('import')}
+            onClick={() => {
+              feedbackTap()
+              setTab('import')
+            }}
           >
             Импорт
           </button>
           <button
             className={`profile-tab${tab === 'complaints' ? ' active' : ''}`}
-            onClick={() => setTab('complaints')}
+            onClick={() => {
+              feedbackTap()
+              setTab('complaints')
+            }}
           >
             Жалобы
           </button>
@@ -211,7 +227,10 @@ export function ProfileView({
           {onOpenSettings && (
             <button
               className="icon-btn profile-settings-btn"
-              onClick={onOpenSettings}
+              onClick={() => {
+                feedbackTap()
+                onOpenSettings()
+              }}
             >
               <Icon name="settings" size={20} />
             </button>

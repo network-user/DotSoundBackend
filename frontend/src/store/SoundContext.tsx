@@ -31,30 +31,35 @@ interface SoundContextValue {
 }
 
 const DEFAULT_ENABLED = true
-const DEFAULT_VOLUME = 0.25
+const DEFAULT_VOLUME = 0.6
 
 const STORAGE_ENABLED_KEY = 'setting-sound-enabled'
 const STORAGE_VOLUME_KEY = 'setting-sound-volume'
+const AUDIO_BASE_URL = import.meta.env.BASE_URL
+
+function soundPath(fileName: string): string {
+  return `${AUDIO_BASE_URL}sounds/${fileName}`
+}
 
 const SOUND_MAP: Record<SoundId, SoundConfig> = {
   notificationSuccess: {
-    src: '/sounds/notify-success.wav',
+    src: soundPath('notify-success.wav'),
     volume: 0.28,
   },
   notificationWarning: {
-    src: '/sounds/notify-warning.wav',
+    src: soundPath('notify-warning.wav'),
     volume: 0.28,
   },
   notificationError: {
-    src: '/sounds/notify-error.wav',
+    src: soundPath('notify-error.wav'),
     volume: 0.3,
   },
   notificationInfo: {
-    src: '/sounds/notify-info.wav',
+    src: soundPath('notify-info.wav'),
     volume: 0.24,
   },
   tapSoft: {
-    src: '/sounds/tap-soft.wav',
+    src: soundPath('tap-soft.wav'),
     volume: 0.2,
   },
 }
@@ -207,9 +212,10 @@ export function SoundProvider({
           userInteractedRef.current = true
         }
         const base = Math.max(0, Math.min(1, cfg.volume))
+        const master = Math.max(volume, 0.6)
         const v = Math.max(
           0,
-          Math.min(1, base * volume),
+          Math.min(1, base * master),
         )
         audio.currentTime = 0
         audio.volume = v
