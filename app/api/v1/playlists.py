@@ -9,6 +9,7 @@ from app.schemas.playlist import (
     PlaylistAddTrack,
     PlaylistCreate,
     PlaylistResponse,
+    PlaylistTrackOrderRequest,
     PlaylistUpdate,
     PlaylistWithTracksResponse,
 )
@@ -97,7 +98,8 @@ async def get_playlist(
         current_user
         and current_user.id == playlist.owner_id
     )
-    if not playlist.is_public and not is_owner:
+    is_admin = bool(current_user and current_user.is_admin)
+    if not playlist.is_public and not is_owner and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Playlist not found",
@@ -130,6 +132,7 @@ async def update_playlist(
         requester_id=current_user.id,
         name=data.name,
         is_public=data.is_public,
+        allow_admin=current_user.is_admin,
     )
     return PlaylistResponse.model_validate(playlist)
 
@@ -150,7 +153,11 @@ async def delete_playlist(
         playlist_id=playlist_id, requester_id=current_user.id
     )
     service = PlaylistService(session)
-    await service.delete(playlist_id, current_user.id)
+    await service.delete(
+        playlist_id,
+        current_user.id,
+        allow_admin=current_user.is_admin,
+    )
     logger.info(
         "playlist_deleted_endpoint", playlist_id=playlist_id
     )
@@ -180,6 +187,7 @@ async def add_track(
         track_id=data.track_id,
         requester_id=current_user.id,
         position=data.position,
+        allow_admin=current_user.is_admin,
     )
 
 
@@ -202,7 +210,34 @@ async def remove_track(
         requester_id=current_user.id,
     )
     service = PlaylistService(session)
-    await service.remove_track(playlist_id, track_id, current_user.id)
+    await service.remove_track(
+        playlist_id,
+        track_id,
+        current_user.id,
+        allow_admin=current_user.is_admin,
+    )
+
+
+@router.put(
+    "/{playlist_id}/track-order",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Set playlist track order (owner/editor/admin)",
+)
+@limiter.limit("60/minute")
+async def set_playlist_track_order(
+    request: Request,
+    playlist_id: int,
+    body: PlaylistTrackOrderRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    service = PlaylistService(session)
+    await service.reorder_tracks(
+        playlist_id=playlist_id,
+        ordered_track_ids=body.track_ids,
+        requester_id=current_user.id,
+        allow_admin=current_user.is_admin,
+    )
 
 
 @router.post(

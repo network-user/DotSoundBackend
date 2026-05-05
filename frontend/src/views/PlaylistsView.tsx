@@ -1,6 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+
+import { Icon } from '@/components/Icon/Icon'
+import { TrackList } from '@/components/TrackList/TrackList'
 import { api } from '@/lib/api'
 import {
+  getIsAdmin,
   getUserId,
   setBackButton,
 } from '@/lib/telegram'
@@ -8,9 +12,8 @@ import type {
   ChatListItem,
   Playlist,
   PlaylistWithTracks,
+  Track,
 } from '@/types/api'
-import { TrackList } from '@/components/TrackList/TrackList'
-import { Icon } from '@/components/Icon/Icon'
 
 interface PlaylistsViewProps {
   embedded?: boolean
@@ -23,8 +26,7 @@ export function PlaylistsView({
 }: PlaylistsViewProps) {
   const [screen, setScreen] = useState<Screen>('list')
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null)
-  const [selected, setSelected] =
-    useState<PlaylistWithTracks | null>(null)
+  const [selected, setSelected] = useState<PlaylistWithTracks | null>(null)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -34,18 +36,26 @@ export function PlaylistsView({
   const [shareSendingConvId, setShareSendingConvId] =
     useState<number | null>(null)
   const [shareError, setShareError] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPublic, setEditPublic] = useState(false)
+  const [editBusy, setEditBusy] = useState(false)
+  const [myTracks, setMyTracks] = useState<Track[]>([])
+  const [addTrackId, setAddTrackId] = useState<number | null>(null)
+  const uid = getUserId()
+  const isAdmin = getIsAdmin()
+  const canEditSelected = Boolean(
+    selected &&
+    uid &&
+    (selected.owner_id === uid || isAdmin),
+  )
 
   const loadPlaylists = () => {
-    const uid = getUserId()
     if (!uid) {
       setPlaylists([])
       return
     }
     setPlaylists(null)
-    api
-      .getPlaylists()
-      .then(setPlaylists)
-      .catch(() => setPlaylists([]))
+    api.getPlaylists().then(setPlaylists).catch(() => setPlaylists([]))
   }
 
   useEffect(() => {
@@ -61,6 +71,17 @@ export function PlaylistsView({
     })
   }, [screen])
 
+  useEffect(() => {
+    if (!selected) return
+    setEditName(selected.name)
+    setEditPublic(selected.is_public)
+    if (canEditSelected) {
+      api.getMyLibrary(1, 100, false).then((res) => {
+        setMyTracks(res.items)
+      }).catch(() => setMyTracks([]))
+    }
+  }, [selected?.id, canEditSelected])
+
   const openPlaylist = async (p: Playlist) => {
     try {
       const detail = await api.getPlaylist(p.id)
@@ -70,7 +91,6 @@ export function PlaylistsView({
   }
 
   const handleCreate = async () => {
-    const uid = getUserId()
     if (!newName.trim() || !uid) return
     setLoading(true)
     try {
@@ -83,9 +103,59 @@ export function PlaylistsView({
     }
   }
 
-  const formatShareChatTitle = (
-    item: ChatListItem,
-  ): string => {
+  const refreshSelected = async () => {
+    if (!selected) return
+    const detail = await api.getPlaylist(selected.id)
+    setSelected(detail)
+  }
+
+  const handleSaveMeta = async () => {
+    if (!selected || !canEditSelected) return
+    setEditBusy(true)
+    try {
+      await api.updatePlaylist(selected.id, {
+        name: editName.trim() || selected.name,
+        is_public: editPublic,
+      })
+      await refreshSelected()
+      loadPlaylists()
+    } finally {
+      setEditBusy(false)
+    }
+  }
+
+  const handleRemoveTrack = async (trackId: number) => {
+    if (!selected || !canEditSelected) return
+    await api.removeTrackFromPlaylist(selected.id, trackId)
+    await refreshSelected()
+  }
+
+  const handleAddTrack = async () => {
+    if (!selected || !canEditSelected || !addTrackId) return
+    await api.addTrackToPlaylist(selected.id, addTrackId)
+    await refreshSelected()
+    setAddTrackId(null)
+  }
+
+  const moveTrack = async (index: number, dir: -1 | 1) => {
+    if (!selected || !canEditSelected) return
+    const nextIndex = index + dir
+    if (nextIndex < 0 || nextIndex >= selected.tracks.length) return
+    const ids = selected.tracks.map((t) => t.id)
+    const tmp = ids[index]
+    ids[index] = ids[nextIndex]
+    ids[nextIndex] = tmp
+    await api.setPlaylistTrackOrder(selected.id, ids)
+    await refreshSelected()
+  }
+
+  const availableTracks = useMemo(() => {
+    if (!selected) return []
+    const inPlaylist = new Set(selected.tracks.map((t) => t.id))
+    return myTracks.filter((t) => !inPlaylist.has(t.id))
+  }, [selected, myTracks])
+
+  const formatShareChatTitle = (item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {
       return 'Избранное'
     }
@@ -93,10 +163,7 @@ export function PlaylistsView({
       return item.conversation.title.trim()
     }
     const peer = item.peer
-    const name = peer?.display_name || [
-      peer?.first_name,
-      peer?.last_name,
-    ]
+    const name = peer?.display_name || [peer?.first_name, peer?.last_name]
       .filter(Boolean)
       .join(' ')
     if (name && name.trim()) return name.trim()
@@ -119,21 +186,15 @@ export function PlaylistsView({
     }
   }
 
-  const handleShareToChat = async (
-    conversationId: number,
-  ) => {
+  const handleShareToChat = async (conversationId: number) => {
     if (!selected) return
     setShareSendingConvId(conversationId)
     setShareError(null)
     try {
-      await api.sendMessage(
-        conversationId,
-        '',
-        {
-          type: 'playlist_share',
-          shared_playlist_id: selected.id,
-        },
-      )
+      await api.sendMessage(conversationId, '', {
+        type: 'playlist_share',
+        shared_playlist_id: selected.id,
+      })
       setShareOpen(false)
     } catch {
       setShareError('Не удалось отправить')
@@ -159,9 +220,7 @@ export function PlaylistsView({
           </button>
           <div>
             <h2 className="view-detail-title">{selected.name}</h2>
-            <span className="hint">
-              {selected.tracks.length} треков
-            </span>
+            <span className="hint">{selected.tracks.length} треков</span>
           </div>
           <button
             type="button"
@@ -174,6 +233,81 @@ export function PlaylistsView({
             <Icon name="share" size={18} />
           </button>
         </div>
+
+        {canEditSelected && (
+          <div style={{ padding: '0 16px 16px' }}>
+            <div className="form-group">
+              <label className="form-label">Название</label>
+              <input
+                className="form-input"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <label className="hint" style={{ display: 'block', marginBottom: 12 }}>
+              <input
+                type="checkbox"
+                checked={editPublic}
+                onChange={(e) => setEditPublic(e.target.checked)}
+                style={{ marginRight: 8 }}
+              />
+              Публичный
+            </label>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                void handleSaveMeta()
+              }}
+              disabled={editBusy}
+            >
+              {editBusy ? 'Сохранение...' : 'Сохранить'}
+            </button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <select
+                className="form-input"
+                value={addTrackId ?? ''}
+                onChange={(e) => setAddTrackId(Number(e.target.value) || null)}
+              >
+                <option value="">Добавить трек...</option>
+                {availableTracks.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.title} {t.artist ? `- ${t.artist}` : ''}
+                  </option>
+                ))}
+              </select>
+              <button className="btn-secondary" onClick={() => void handleAddTrack()}>
+                Добавить
+              </button>
+            </div>
+          </div>
+        )}
+
+        {canEditSelected && (
+          <div style={{ padding: '0 16px 16px' }}>
+            {selected.tracks.map((t, idx) => (
+              <div
+                key={t.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <span style={{ flex: 1 }}>{t.title}</span>
+                <button className="icon-btn" onClick={() => void moveTrack(idx, -1)}>
+                  ↑
+                </button>
+                <button className="icon-btn" onClick={() => void moveTrack(idx, 1)}>
+                  ↓
+                </button>
+                <button className="icon-btn" onClick={() => void handleRemoveTrack(t.id)}>
+                  <Icon name="x" size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         <TrackList
           tracks={selected.tracks}
@@ -241,7 +375,7 @@ export function PlaylistsView({
                           </span>
                         </span>
                         <span className="share-chat-action">
-                          {sending ? 'Отправка…' : 'Отправить'}
+                          {sending ? 'Отправка...' : 'Отправить'}
                         </span>
                       </button>
                     )

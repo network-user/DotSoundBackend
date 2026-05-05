@@ -31,3 +31,7 @@ class AlbumResponse(BaseModel):
 
 class AlbumWithTracksResponse(AlbumResponse):
     tracks: list[TrackResponse] = []
+
+
+class AlbumTrackOrderRequest(BaseModel):
+    track_ids: list[int] = Field(min_length=1)

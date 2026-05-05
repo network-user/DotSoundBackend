@@ -10,6 +10,7 @@ from app.models.user import User
 from app.schemas.album import (
     AlbumCreateRequest,
     AlbumResponse,
+    AlbumTrackOrderRequest,
     AlbumUpdateRequest,
     AlbumWithTracksResponse,
 )
@@ -66,7 +67,8 @@ async def get_album(
         current_user
         and current_user.id == album.owner_id
     )
-    if not album.is_public and not is_owner:
+    is_admin = bool(current_user and current_user.is_admin)
+    if not album.is_public and not is_owner and not is_admin:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Album not found",
@@ -98,6 +100,7 @@ async def update_album(
         title=body.title,
         description=body.description,
         is_public=body.is_public,
+        allow_admin=current_user.is_admin,
     )
     return AlbumResponse.model_validate(album)
 
@@ -115,7 +118,11 @@ async def delete_album(
     current_user: User = Depends(get_current_user),
 ) -> None:
     service = AlbumService(session)
-    await service.delete(album_id=album_id, user_id=current_user.id)
+    await service.delete(
+        album_id=album_id,
+        user_id=current_user.id,
+        allow_admin=current_user.is_admin,
+    )
 
 
 @router.post(
@@ -133,7 +140,10 @@ async def add_track_to_album(
 ) -> dict:
     service = AlbumService(session)
     await service.add_track(
-        album_id=album_id, track_id=track_id, user_id=current_user.id
+        album_id=album_id,
+        track_id=track_id,
+        user_id=current_user.id,
+        allow_admin=current_user.is_admin,
     )
     return {"album_id": album_id, "track_id": track_id}
 
@@ -153,5 +163,30 @@ async def remove_track_from_album(
 ) -> None:
     service = AlbumService(session)
     await service.remove_track(
-        album_id=album_id, track_id=track_id, user_id=current_user.id
+        album_id=album_id,
+        track_id=track_id,
+        user_id=current_user.id,
+        allow_admin=current_user.is_admin,
+    )
+
+
+@router.put(
+    "/{album_id}/track-order",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Set album track order (owner or admin)",
+)
+@limiter.limit("30/minute")
+async def set_album_track_order(
+    request: Request,
+    album_id: int,
+    body: AlbumTrackOrderRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    service = AlbumService(session)
+    await service.reorder_tracks(
+        album_id=album_id,
+        track_ids=body.track_ids,
+        user_id=current_user.id,
+        allow_admin=current_user.is_admin,
     )

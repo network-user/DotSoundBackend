@@ -1044,3 +1044,5 @@ ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyr
     - [ ] Перенос логики в PrivateCore.
     - [ ] Анализ поведения для борьбы с накрутками.
 
+
+- [x] Public UI: admin inline editing for playlists/albums/tracks via non-admin routes with backend admin checks + reorder endpoints (2026-05-05).

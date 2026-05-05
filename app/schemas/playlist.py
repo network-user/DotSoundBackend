@@ -39,3 +39,7 @@ class PlaylistWithTracksResponse(BaseModel):
 class PlaylistAddTrack(BaseModel):
     track_id: int
     position: int = Field(default=0, ge=0)
+
+
+class PlaylistTrackOrderRequest(BaseModel):
+    track_ids: list[int] = Field(min_length=1)

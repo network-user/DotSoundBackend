@@ -499,6 +499,17 @@ export const api = {
     )
   },
 
+  setPlaylistTrackOrder(
+    playlistId: number,
+    trackIds: number[],
+  ): Promise<void> {
+    return request(`/api/v1/playlists/${playlistId}/track-order`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ track_ids: trackIds }),
+    })
+  },
+
   createPlaylistInvite(playlistId: number): Promise<PlaylistInviteOut> {
     return request(`/api/v1/playlists/${playlistId}/invites`, {
       method: 'POST',
@@ -1901,6 +1912,17 @@ export const api = {
       `/api/v1/albums/${albumId}/tracks/${trackId}`,
       { method: 'DELETE' },
     )
+  },
+
+  setAlbumTrackOrder(
+    albumId: number,
+    trackIds: number[],
+  ): Promise<void> {
+    return request(`/api/v1/albums/${albumId}/track-order`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ track_ids: trackIds }),
+    })
   },
 
   createColistenRoom(trackId: number): Promise<ColistenRoomState> {
