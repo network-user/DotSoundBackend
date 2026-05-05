@@ -1324,4 +1324,22 @@ export const adminApi = {
         },
       },
     ),
+
+  artistSupplementalBatchPrompt: (artistIds: number[]) =>
+    adminFetch<{ prompt: string; artist_count: number }>(
+      '/artists/supplemental/batch-prompt',
+      {
+        method: 'POST',
+        body: { artist_ids: artistIds },
+      },
+    ),
+
+  artistSupplementalBatchImport: (rawResponse: string) =>
+    adminFetch<{ imported: number; errors: string[] }>(
+      '/artists/supplemental/batch-import',
+      {
+        method: 'POST',
+        body: { raw_response: rawResponse },
+      },
+    ),
 }

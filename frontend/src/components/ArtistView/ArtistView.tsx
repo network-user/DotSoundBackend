@@ -188,6 +188,27 @@ function buildProfileView(
   }
 }
 
+function buildPlatformSupplementalView(
+  artist: ArtistDetail,
+  supplemental: ArtistSupplementalResponse | null,
+): ArtistViewData | null {
+  if (!supplemental || supplemental.status !== 'done' || !supplemental.content) {
+    return null
+  }
+  return {
+    source_id: 'platform',
+    source_name: 'Платформа',
+    source_page_url: null,
+    bio: supplemental.content,
+    birth_date: null,
+    birthplace: null,
+    country: null,
+    image_url: artist.image_url,
+    website_url: null,
+    discography: [],
+  }
+}
+
 function computeAge(iso: string | null): number | null {
   if (!iso) return null
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/)
@@ -559,20 +580,22 @@ export function ArtistView({
 
   const view = useMemo<ArtistViewData | null>(() => {
     if (!artist) return null
-    if (selectedSourceId === 'yandex') {
-      return {
-        source_id: 'yandex',
-        source_name: t('artistSupplemental.tabLabel', { defaultValue: 'Яндекс' }),
-        source_page_url: null,
-        bio: supplemental?.content ?? null,
-        birth_date: null,
-        birthplace: null,
-        country: null,
-        image_url: artist.image_url,
-        website_url: null,
-        discography: [],
-      }
-    }
+    const platformView = buildPlatformSupplementalView(artist, supplemental)
+    if (selectedSourceId === 'platform' && platformView) return platformView
+    // if (selectedSourceId === 'yandex') {
+    //   return {
+    //     source_id: 'yandex',
+    //     source_name: t('artistSupplemental.tabLabel', { defaultValue: 'Яндекс' }),
+    //     source_page_url: null,
+    //     bio: supplemental?.content ?? null,
+    //     birth_date: null,
+    //     birthplace: null,
+    //     country: null,
+    //     image_url: artist.image_url,
+    //     website_url: null,
+    //     discography: [],
+    //   }
+    // }
     if (selectedSourceId) {
       const found = profiles.find(
         (p) => p.source_id === selectedSourceId,
@@ -581,6 +604,7 @@ export function ArtistView({
         return buildProfileView(found, artist.image_url)
       }
     }
+    if (platformView) return platformView
     return buildMergedView(artist)
   }, [artist, profiles, selectedSourceId, supplemental])
 
@@ -836,7 +860,22 @@ export function ArtistView({
                 {p.source_name}
               </button>
             ))}
-            {supplemental && (supplemental.status === 'done' || supplemental.status === 'fetching' || supplemental.status === 'pending') && (
+            {supplemental && supplemental.status === 'done' && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selectedSourceId === 'platform'}
+                className={
+                  selectedSourceId === 'platform'
+                    ? 'artist-source-chip active'
+                    : 'artist-source-chip'
+                }
+                onClick={() => setSelectedSourceId('platform')}
+              >
+                Платформа
+              </button>
+            )}
+            {/* {supplemental && (supplemental.status === 'done' || supplemental.status === 'fetching' || supplemental.status === 'pending') && (
               <button
                 type="button"
                 role="tab"
@@ -854,7 +893,7 @@ export function ArtistView({
                   ? t('artistSupplemental.tabLabel', { defaultValue: 'Яндекс' })
                   : t('artistSupplemental.loading', { defaultValue: 'Яндекс…' })}
               </button>
-            )}
+            )} */}
           </div>
         )}
 
@@ -1332,8 +1371,8 @@ export function ArtistView({
         </div>
       )}
 
-      {/* Admin: refresh Yandex supplemental (only when done) */}
-      {isAdmin && supplemental?.status === 'done' && (
+      {/* Admin: refresh Yandex supplemental (temporarily disabled) */}
+      {/* {isAdmin && supplemental?.status === 'done' && (
         <div style={{ padding: '0 16px 8px' }}>
           <button
             className="btn-secondary artist-supplemental-refresh"
@@ -1346,7 +1385,7 @@ export function ArtistView({
               : t('trackInfo.refresh', { defaultValue: 'Обновить Яндекс' })}
           </button>
         </div>
-      )}
+      )} */}
 
       {similarArtists &&
         similarArtists.length > 0 &&
