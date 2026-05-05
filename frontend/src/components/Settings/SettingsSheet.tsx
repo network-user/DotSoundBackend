@@ -10,6 +10,7 @@ import { Icon } from '@/components/Icon/Icon'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { canInstallPwa } from '@/components/PwaInstall/InstallPrompt'
 import { useToast } from '@/components/ui/Toast'
+import { useSound } from '@/store/SoundContext'
 import { AccountDangerZone } from './AccountDangerZone'
 import { LinkedAccounts } from './LinkedAccounts'
 import { OAuthImportAccounts } from './OAuthImportAccounts'
@@ -28,6 +29,7 @@ export function SettingsSheet({
 }: Props) {
   const { t, i18n } = useTranslation()
   const { openEq } = usePlayerActions()
+  const sound = useSound()
   const [videoEnabled, setVideoEnabled] =
     useState(
       () =>
@@ -44,6 +46,10 @@ export function SettingsSheet({
     )
   const [twoFAEnabled, setTwoFAEnabled] =
     useState(false)
+  const [soundEnabled, setSoundEnabled] =
+    useState<boolean>(() => sound.enabled)
+  const [soundVolume, setSoundVolume] =
+    useState<number>(() => sound.volume)
 
   useEffect(() => {
     if (!open) return
@@ -127,6 +133,21 @@ export function SettingsSheet({
     })
   }
 
+  const handleSoundToggle = () => {
+    const next = !soundEnabled
+    setSoundEnabled(next)
+    sound.setEnabled(next)
+  }
+
+  const handleSoundVolumeChange = (value: number) => {
+    const clamped = Math.max(
+      0,
+      Math.min(1, value),
+    )
+    setSoundVolume(clamped)
+    sound.setVolume(clamped)
+  }
+
   return (
     <div
       className={`settings-backdrop${exit.cls}`}
@@ -202,6 +223,44 @@ export function SettingsSheet({
             >
               <div className="settings-toggle-dot" />
             </div>
+          </div>
+
+          <div
+            className="settings-item"
+            onClick={handleSoundToggle}
+          >
+            <Icon
+              name="volume-high"
+              size={20}
+            />
+            <span>
+              {t('settings.interfaceSounds')}
+            </span>
+            <div
+              className={`settings-toggle${soundEnabled ? ' on' : ''}`}
+            >
+              <div className="settings-toggle-dot" />
+            </div>
+          </div>
+
+          <div className="settings-item">
+            <Icon name="slider" size={20} />
+            <span>
+              {t('settings.interfaceSoundLevel')}
+            </span>
+            <input
+              className="settings-range"
+              type="range"
+              min={0}
+              max={100}
+              step={10}
+              value={Math.round(soundVolume * 100)}
+              onChange={(e) =>
+                handleSoundVolumeChange(
+                  Number(e.target.value) / 100,
+                )
+              }
+            />
           </div>
 
           <div className="settings-item">

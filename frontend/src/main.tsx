@@ -6,6 +6,7 @@ import { AdminProvider } from '@/components/Admin/AdminContext'
 import { LikesProvider } from '@/store/LikesContext'
 import { PlayerProvider } from '@/store/PlayerContext'
 import { ToastProvider } from '@/components/ui/Toast'
+import { SoundProvider } from '@/store/SoundContext'
 import { api } from '@/lib/api'
 import { installGlassPerformanceClass } from '@/lib/glassPerformance'
 import { installViewportListener } from '@/lib/telegram'
@@ -40,13 +41,15 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter basename="/mini_app">
       <ToastProvider>
-        <AdminProvider>
-          <PlayerProvider>
-            <LikesProvider>
-              <App />
-            </LikesProvider>
-          </PlayerProvider>
-        </AdminProvider>
+        <SoundProvider>
+          <AdminProvider>
+            <PlayerProvider>
+              <LikesProvider>
+                <App />
+              </LikesProvider>
+            </PlayerProvider>
+          </AdminProvider>
+        </SoundProvider>
       </ToastProvider>
     </BrowserRouter>
   </StrictMode>,

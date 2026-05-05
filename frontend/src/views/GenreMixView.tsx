@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { useToast } from '@/components/ui/Toast'
+import { useSound } from '@/store/SoundContext'
 import { api } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
 import { usePlayerActions } from '@/store/PlayerContext'
@@ -17,6 +18,7 @@ export function GenreMixView() {
   const navigate = useNavigate()
   const toast = useToast()
   const { playTrack } = usePlayerActions()
+  const sound = useSound()
 
   const [tracks, setTracks] = useState<Track[] | null>(null)
   const [title, setTitle] = useState<string>(
@@ -148,24 +150,28 @@ export function GenreMixView() {
     try {
       await api.sendMessage(conversationId, shareUrl)
       setShareOpen(false)
+      sound.play('notificationSuccess')
       toast.success('Ссылка отправлена')
     } catch {
       setShareError('Не удалось отправить')
+      sound.play('notificationError')
     } finally {
       setShareSendingConvId(null)
     }
-  }, [shareUrl, toast])
+  }, [shareUrl, toast, sound])
 
   const handleCopyLink = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(shareUrl)
+      sound.play('notificationInfo')
       toast.success('Ссылка скопирована', {
         position: 'top',
       })
     } catch {
       setShareError('Не удалось скопировать ссылку')
+      sound.play('notificationError')
     }
-  }, [shareUrl, toast])
+  }, [shareUrl, toast, sound])
 
   const persistOverride = useCallback(async (
     nextTitle: string,

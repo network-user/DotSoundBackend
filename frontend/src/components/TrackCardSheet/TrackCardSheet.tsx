@@ -29,6 +29,7 @@ import {
   isCached,
   removeTrack,
 } from '@/lib/offlineCache'
+import { useSound } from '@/store/SoundContext'
 import {
   clearThirdPartyStreamOverride,
   getThirdPartyStreamOverride,
@@ -126,6 +127,7 @@ export function TrackCardSheet({
   } = usePlayerActions()
   const { t } = useTranslation()
   const toast = useToast()
+  const sound = useSound()
   const videoRef = useRef<HTMLVideoElement>(null)
   const {
     isLiked,
@@ -508,13 +510,15 @@ export function TrackCardSheet({
     try {
       await api.sendMessage(conversationId, '', opts)
       setShareOpen(false)
+      sound.play('notificationSuccess')
       toast.success('РўСЂРµРє РѕС‚РїСЂР°РІР»РµРЅ')
     } catch {
       setShareError('РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ С‚СЂРµРє')
+      sound.play('notificationError')
     } finally {
       setShareSendingConvId(null)
     }
-  }, [sharePayload, toast])
+  }, [sharePayload, toast, sound])
 
   const handleCopyShare = useCallback(async () => {
     if (!sharePayload) return
@@ -530,15 +534,17 @@ export function TrackCardSheet({
           : `playlists?shareType=playlist&id=${sharePayload.id}`
         await navigator.clipboard.writeText(`${base}${path}`)
       }
+      sound.play('notificationInfo')
       toast.success('Ссылка скопирована', {
         position: 'top',
       })
     } catch {
       setShareError('Не удалось скопировать')
+      sound.play('notificationError')
     } finally {
       setShareCopyBusy(false)
     }
-  }, [sharePayload, toast])
+  }, [sharePayload, toast, sound])
 
   const openAlbumEditor = useCallback(async () => {
     const albumId = relatedAlbumInfo?.id ?? track?.album_id ?? null

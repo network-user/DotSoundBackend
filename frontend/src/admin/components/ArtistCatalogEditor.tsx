@@ -641,6 +641,16 @@ export function ArtistCatalogEditor({
                   <span className="admin-auth-hint">
                     ({rel.track_count})
                   </span>
+                  {rel.soundcloud_album_id !== null && (
+                    <span className="admin-tag">
+                      SC
+                    </span>
+                  )}
+                  {rel.manual_lock && (
+                    <span className="admin-tag">
+                      LOCK
+                    </span>
+                  )}
                 </button>
                 <div className="admin-catalog-rel-actions">
                   <Press

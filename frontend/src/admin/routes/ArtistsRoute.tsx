@@ -9,6 +9,7 @@ import {
 import type { ColumnDef } from '@tanstack/react-table'
 import { Press } from '@/components/ui/Press'
 import { api } from '@/lib/api'
+import { adminApi } from '../lib/adminApi'
 import { ArtistCatalogEditor } from '../components/ArtistCatalogEditor'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
@@ -95,7 +96,7 @@ function fmtArtistUpdated(row: ArtistRow): string {
 
 export function ArtistsRoute() {
   const { t } = useTranslation()
-  const { showConfirm } = useAdminPrompt()
+  const { showConfirm, showAlert } = useAdminPrompt()
   const qc = useQueryClient()
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
@@ -191,13 +192,21 @@ export function ArtistsRoute() {
   const handleBatchPrompt = async () => {
     const ids = Array.from(selectedIds)
     if (ids.length === 0) return
-    const res = await adminApi.artistSupplementalBatchPrompt(ids)
-    setBatchPromptModal(res.prompt)
+    try {
+      const res = await adminApi.artistSupplementalBatchPrompt(ids)
+      setBatchPromptModal(res.prompt)
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
   }
 
   const handleBatchImport = async () => {
-    const res = await adminApi.artistSupplementalBatchImport(importText)
-    setImportResult(res)
+    try {
+      const res = await adminApi.artistSupplementalBatchImport(importText)
+      setImportResult(res)
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
   }
 
   const columns: ColumnDef<ArtistRow>[] = [
