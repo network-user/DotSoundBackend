@@ -106,6 +106,14 @@ export function ArtistsRoute() {
     id: number
     name: string
   } | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [batchPromptModal, setBatchPromptModal] = useState<string | null>(null)
+  const [importModal, setImportModal] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [importResult, setImportResult] = useState<{
+    imported: number
+    errors: string[]
+  } | null>(null)
 
   const list = useQuery({
     queryKey: ['admin', 'artists', q, page],
@@ -159,7 +167,60 @@ export function ArtistsRoute() {
     window.open(`/mini_app/artist/${id}`, '_blank')
   }
 
+  const rows = (list.data?.items as ArtistRow[]) || []
+  const allOnPageSelected =
+    rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
+
+  const toggleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(rows.map((r) => r.id)))
+    } else {
+      setSelectedIds(new Set())
+    }
+  }
+
+  const toggleSelectOne = (id: number, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  const handleBatchPrompt = async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    const res = await adminApi.artistSupplementalBatchPrompt(ids)
+    setBatchPromptModal(res.prompt)
+  }
+
+  const handleBatchImport = async () => {
+    const res = await adminApi.artistSupplementalBatchImport(importText)
+    setImportResult(res)
+  }
+
   const columns: ColumnDef<ArtistRow>[] = [
+    {
+      id: 'select',
+      header: () => (
+        <input
+          type="checkbox"
+          checked={allOnPageSelected}
+          onChange={(e) => toggleSelectAll(e.target.checked)}
+          aria-label="Выбрать все"
+        />
+      ),
+      cell: (i) => (
+        <input
+          type="checkbox"
+          checked={selectedIds.has(i.row.original.id)}
+          onChange={(e) => toggleSelectOne(i.row.original.id, e.target.checked)}
+          aria-label={`Выбрать артиста ${i.row.original.id}`}
+        />
+      ),
+      enableSorting: false,
+    },
     {
       header: 'ID',
       accessorKey: 'id',
@@ -311,6 +372,23 @@ export function ArtistsRoute() {
             setPage(1)
           }}
         />
+        <Press
+          variant="ghost"
+          disabled={selectedIds.size === 0}
+          onClick={handleBatchPrompt}
+        >
+          Batch Prompt ({selectedIds.size})
+        </Press>
+        <Press
+          variant="ghost"
+          onClick={() => {
+            setImportText('')
+            setImportResult(null)
+            setImportModal(true)
+          }}
+        >
+          Импорт ответа AI (Artists)
+        </Press>
       </div>
       {list.error && (
         <div className="admin-error">
@@ -319,9 +397,7 @@ export function ArtistsRoute() {
       )}
       <DataTable
         columns={columns}
-        rows={
-          (list.data?.items as ArtistRow[]) || []
-        }
+        rows={rows}
         emptyHint={t('admin.artists.empty')}
         enableSorting
       />
@@ -347,6 +423,106 @@ export function ArtistsRoute() {
           {t('admin.common.next')}
         </Press>
       </div>
+
+      {batchPromptModal && (
+        <div
+          className="admin-modal-overlay"
+          onClick={() => setBatchPromptModal(null)}
+        >
+          <div
+            className="admin-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 760 }}
+          >
+            <h3>Artist Batch Prompt</h3>
+            <textarea
+              readOnly
+              value={batchPromptModal}
+              rows={22}
+              style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                resize: 'vertical',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <Press
+                variant="primary"
+                onClick={() => navigator.clipboard.writeText(batchPromptModal)}
+              >
+                Копировать
+              </Press>
+              <Press variant="ghost" onClick={() => setBatchPromptModal(null)}>
+                Закрыть
+              </Press>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {importModal && (
+        <div
+          className="admin-modal-overlay"
+          onClick={() => setImportModal(false)}
+        >
+          <div
+            className="admin-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 640 }}
+          >
+            <h3>Импорт ответа AI (Artists)</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
+              Вставьте JSON-ответ в формате artists[].id + artists[].content.
+            </p>
+            <textarea
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              rows={14}
+              placeholder='{"artists":[{"id":1,"content":"..."}]}'
+              style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                resize: 'vertical',
+              }}
+            />
+            {importResult && (
+              <div style={{ marginTop: 8 }}>
+                <p style={{ fontWeight: 600 }}>
+                  Импортировано: {importResult.imported}
+                </p>
+                {importResult.errors.length > 0 && (
+                  <ul
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--color-danger, #c00)',
+                      paddingLeft: 16,
+                      margin: '4px 0 0',
+                    }}
+                  >
+                    {importResult.errors.map((e, idx) => (
+                      <li key={idx}>{e}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <Press
+                variant="primary"
+                onClick={handleBatchImport}
+                disabled={!importText.trim()}
+              >
+                Импортировать
+              </Press>
+              <Press variant="ghost" onClick={() => setImportModal(false)}>
+                Закрыть
+              </Press>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

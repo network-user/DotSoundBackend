@@ -44,6 +44,12 @@ from app.schemas.artist_catalog import (
     ArtistCatalogReleaseListResponse,
 )
 from app.schemas.artist_supplemental import ArtistSupplementalResponse
+from app.api.v1.admin.schemas import (
+    ArtistSupplementalBatchImportRequest,
+    ArtistSupplementalBatchImportResponse,
+    ArtistSupplementalBatchPromptRequest,
+    ArtistSupplementalBatchPromptResponse,
+)
 from app.schemas.track import TrackListResponse
 from app.services import artist_enrichment_progress as progress
 from app.services.artist_catalog_read_service import (
@@ -54,6 +60,9 @@ from app.services.artist_enrichment_service import (
     ArtistNotFound,
 )
 from app.services.artist_service import ArtistService
+from app.services.admin_artist_supplemental_service import (
+    AdminArtistSupplementalService,
+)
 from app.services.track_response_build import dedupe_and_build_track_list
 
 
@@ -438,6 +447,47 @@ async def get_artist_tracks(
         total=total,
         page=page,
         size=size,
+    )
+
+
+@router.post(
+    "/supplemental/batch-prompt",
+    response_model=ArtistSupplementalBatchPromptResponse,
+    summary="[Admin] Generate batch prompt for artist supplemental import.",
+)
+@limiter.limit("20/minute")
+async def artist_supplemental_batch_prompt(
+    request: Request,
+    data: ArtistSupplementalBatchPromptRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> ArtistSupplementalBatchPromptResponse:
+    svc = AdminArtistSupplementalService(db)
+    prompt, count = await svc.batch_prompt(data.artist_ids)
+    return ArtistSupplementalBatchPromptResponse(
+        prompt=prompt,
+        artist_count=count,
+    )
+
+
+@router.post(
+    "/supplemental/batch-import",
+    response_model=ArtistSupplementalBatchImportResponse,
+    summary="[Admin] Import AI response into artist supplemental text.",
+)
+@limiter.limit("10/minute")
+async def artist_supplemental_batch_import(
+    request: Request,
+    data: ArtistSupplementalBatchImportRequest,
+    db: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin),
+) -> ArtistSupplementalBatchImportResponse:
+    svc = AdminArtistSupplementalService(db)
+    imported, errors = await svc.batch_import(data.raw_response)
+    await db.commit()
+    return ArtistSupplementalBatchImportResponse(
+        imported=imported,
+        errors=errors,
     )
 
 
