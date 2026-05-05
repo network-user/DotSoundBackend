@@ -307,7 +307,7 @@ export function TrackCardSheet({
           trackInfoPollRef.current = setTimeout(pollInfo, 3000)
         }
       } catch {
-        // silent вЂ” info block hidden if not loadable
+        // silent - info block hidden if not loadable
       }
     }
     pollInfo()
@@ -445,7 +445,7 @@ export function TrackCardSheet({
 
   const formatShareChatTitle = useCallback((item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {
-      return 'РР·Р±СЂР°РЅРЅРѕРµ'
+      return 'Избранное'
     }
     if (item.conversation.title?.trim()) {
       return item.conversation.title.trim()
@@ -461,7 +461,7 @@ export function TrackCardSheet({
     if (peer?.username) {
       return `@${peer.username}`
     }
-    return `Р§Р°С‚ #${item.conversation.id}`
+    return `Чат #${item.conversation.id}`
   }, [])
 
   const openShareModal = useCallback(async (payload: {
@@ -477,7 +477,7 @@ export function TrackCardSheet({
       const chats = await api.listChats()
       setShareChats(chats)
     } catch {
-      setShareError('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‡Р°С‚С‹')
+      setShareError('Не удалось загрузить чаты')
     } finally {
       setShareLoading(false)
     }
@@ -511,9 +511,9 @@ export function TrackCardSheet({
       await api.sendMessage(conversationId, '', opts)
       setShareOpen(false)
       sound.play('notificationSuccess')
-      toast.success('РўСЂРµРє РѕС‚РїСЂР°РІР»РµРЅ')
+      toast.success('Отправлено')
     } catch {
-      setShareError('РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ С‚СЂРµРє')
+      setShareError('Не удалось отправить')
       sound.play('notificationError')
     } finally {
       setShareSendingConvId(null)
@@ -577,7 +577,7 @@ export function TrackCardSheet({
       )
       setAlbumEditOpen(true)
     } catch {
-      toast.error('РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ СЂРµРґР°РєС‚РѕСЂ Р°Р»СЊР±РѕРјР°')
+      toast.error('Не удалось открыть редактор альбома')
     } finally {
       setAlbumEditBusy(false)
     }
@@ -1111,7 +1111,7 @@ export function TrackCardSheet({
                       : undefined
                   }
                 >
-                  {track.artist ?? 'вЂ”'}
+                  {track.artist ?? '—'}
                 </p>
               </div>
               <button
@@ -1186,7 +1186,7 @@ export function TrackCardSheet({
                     : undefined
                 }
               >
-                {track.artist ?? 'вЂ”'}
+                {track.artist ?? '—'}
               </p>
             </>
           )}
@@ -1414,7 +1414,7 @@ export function TrackCardSheet({
                         playbackRate === rate
                       }
                     >
-                      {rate}Г—
+                      {rate}×
                     </button>
                   ))}
                   <button
@@ -1451,7 +1451,7 @@ export function TrackCardSheet({
                       onClick={clearAbLoop}
                       title={t('trackSheet.abReset')}
                     >
-                      Г—
+                      ×
                     </button>
                   )}
                 </div>
@@ -1688,7 +1688,7 @@ export function TrackCardSheet({
         {playbackVariants.length > 1 && (
           <div className="tcs-source-variants">
             <span className="tcs-source-label">
-              {t('trackSheet.playbackSource', 'РСЃС‚РѕС‡РЅРёРє')}
+              {t('trackSheet.playbackSource', 'Источник')}
             </span>
             <div className="tcs-variant-chips" role="tablist">
               {playbackVariants.map((v) => (
@@ -1706,7 +1706,7 @@ export function TrackCardSheet({
                       const full = await api.getTrack(v.track_id)
                       playTrack(full)
                     } catch {
-                      toast.error(t('trackSheet.sourceSwitchError', 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРµСЂРµРєР»СЋС‡РёС‚СЊ'))
+                      toast.error(t('trackSheet.sourceSwitchError', 'Не удалось переключить'))
                     }
                   }}
                 >
@@ -1825,7 +1825,7 @@ export function TrackCardSheet({
                   <CoverImage coverKey={st.cover_key} />
                   <div className="tcs-similar-info">
                     <span className="tcs-similar-track-title">{st.title}</span>
-                    <span className="tcs-similar-track-artist">{st.artist ?? 'вЂ”'}</span>
+                    <span className="tcs-similar-track-artist">{st.artist ?? '—'}</span>
                   </div>
                 </div>
               ))}
@@ -1863,7 +1863,7 @@ export function TrackCardSheet({
                   <span>
                     {t('trackSheet.status')}{' '}
                     <b>
-                      {trackInfo?.status ?? 'вЂ”'}
+                      {trackInfo?.status ?? '—'}
                     </b>
                   </span>
                   {trackInfo?.fetched_at && (
@@ -2121,13 +2121,13 @@ export function TrackCardSheet({
                 <div className="share-modal-title-wrap">
                   <h3 className="share-modal-title">
                     {sharePayload?.type === 'album'
-                      ? 'РџРѕРґРµР»РёС‚СЊСЃСЏ Р°Р»СЊР±РѕРјРѕРј'
+                      ? 'Поделиться альбомом'
                       : sharePayload?.type === 'playlist'
-                        ? 'РџРѕРґРµР»РёС‚СЊСЃСЏ РїР»РµР№Р»РёСЃС‚РѕРј'
-                        : 'РџРѕРґРµР»РёС‚СЊСЃСЏ С‚СЂРµРєРѕРј'}
+                        ? 'Поделиться плейлистом'
+                        : 'Поделиться треком'}
                   </h3>
                   <p className="share-modal-subtitle">
-                    {sharePayload?.title || 'Р’С‹Р±РµСЂРёС‚Рµ С‡Р°С‚ РґР»СЏ РѕС‚РїСЂР°РІРєРё'}
+                    {sharePayload?.title || 'Выберите чат для отправки'}
                   </p>
                 </div>
                 <button
@@ -2145,7 +2145,7 @@ export function TrackCardSheet({
                   type="button"
                   className="icon-btn"
                   onClick={() => setShareOpen(false)}
-                  aria-label="Р—Р°РєСЂС‹С‚СЊ"
+                  aria-label="Закрыть"
                 >
                   <Icon name="x" size={18} />
                 </button>
@@ -2157,7 +2157,7 @@ export function TrackCardSheet({
                 </div>
               ) : shareChats.length === 0 ? (
                 <div className="share-modal-empty">
-                  РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… С‡Р°С‚РѕРІ
+                  Нет доступных чатов
                 </div>
               ) : (
                 <div className="share-chat-list">
@@ -2192,7 +2192,7 @@ export function TrackCardSheet({
                           </span>
                         </span>
                         <span className="share-chat-action">
-                          {sending ? 'РћС‚РїСЂР°РІРєР°вЂ¦' : 'РћС‚РїСЂР°РІРёС‚СЊ'}
+                          {sending ? 'Отправка...' : 'Отправить'}
                         </span>
                       </button>
                     )

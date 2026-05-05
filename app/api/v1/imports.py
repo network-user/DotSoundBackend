@@ -14,6 +14,10 @@ from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.services.import_service import ImportService
 from app.services.linked_account_service import LinkedAccountService
+from app.services.external_album_import_service import (
+    ExternalAlbumImportService,
+)
+from app.services.external_providers import ProviderError
 from app.utils.soundcloud_playlist_url import (
     resolve_public_soundcloud_playlist_url,
 )
@@ -70,6 +74,72 @@ class ImportJobResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AlbumFromUrlImportRequest(BaseModel):
+    source: str = Field(..., min_length=1, max_length=64)
+    url: str = Field(..., min_length=1, max_length=4096)
+    target: str = Field(
+        default="album",
+        pattern="^(album|artist_catalog_release)$",
+    )
+    title: str | None = Field(default=None, max_length=512)
+    artist_id: int | None = None
+
+
+class AlbumFromUrlImportResponse(BaseModel):
+    created_album_id: int | None
+    created_release_id: int | None
+    kind: str
+    scanned_tracks: int
+    matched_tracks: int
+
+
+@router.post(
+    "/album-from-url",
+    response_model=AlbumFromUrlImportResponse,
+)
+@limiter.limit("10/minute")
+async def import_album_from_url(
+    request: Request,
+    body: AlbumFromUrlImportRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AlbumFromUrlImportResponse:
+    if body.target == "artist_catalog_release" and not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Only admin can import to artist catalog releases"
+            ),
+        )
+    svc = ExternalAlbumImportService(session)
+    try:
+        out = await svc.import_from_url(
+            user_id=current_user.id,
+            source=body.source.strip(),
+            url=body.url.strip(),
+            target=body.target,
+            title=body.title,
+            artist_id=body.artist_id,
+        )
+    except ProviderError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{exc.code}: {exc.message}",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    return AlbumFromUrlImportResponse(
+        created_album_id=out.created_album_id,
+        created_release_id=out.created_release_id,
+        kind=out.kind,
+        scanned_tracks=out.scanned_tracks,
+        matched_tracks=out.matched_tracks,
+    )
 
 
 @router.post(

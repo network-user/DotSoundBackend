@@ -65,7 +65,12 @@
   "settings": {
     "language": "Language",
     "languageRu": "Русский",
-    "languageEn": "English"
+    "languageEn": "English",
+    "interfaceSounds": "Interface sounds",
+    "interfaceSoundLevel": "UI volume",
+    "interfaceFeedbackTest": "Feedback test",
+    "testSound": "Sound",
+    "testHaptic": "Haptic"
   },
   "lyrics": {
     "detectText": "Detect lyrics",
@@ -341,7 +346,16 @@
         "manualLock": "Manual lock (skip automatic sync overwrite)",
         "removeTrack": "Remove",
         "saveTrackOrder": "Save track order",
-        "trackSearchPlaceholder": "Search tracks linked to this artist…"
+        "trackSearchPlaceholder": "Search tracks linked to this artist…",
+        "discographyTitle": "Discography (text list)",
+        "discographyHint": "Manual override for ArtistView discography. Saving enables manual lock against enrichment overwrite.",
+        "discographyTitleCol": "Title",
+        "discographyYearCol": "Year",
+        "discographyTypeCol": "Type",
+        "discographyUrlCol": "URL",
+        "discographyAddRow": "Add row",
+        "discographyRemoveRow": "Remove row",
+        "discographySave": "Save discography"
       }
     },
     "audioCompute": {

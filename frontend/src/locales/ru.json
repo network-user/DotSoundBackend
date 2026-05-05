@@ -65,7 +65,12 @@
   "settings": {
     "language": "Язык",
     "languageRu": "Русский",
-    "languageEn": "English"
+    "languageEn": "English",
+    "interfaceSounds": "Звуки интерфейса",
+    "interfaceSoundLevel": "Громкость UI",
+    "interfaceFeedbackTest": "Проверка отклика",
+    "testSound": "Звук",
+    "testHaptic": "Вибро"
   },
   "lyrics": {
     "detectText": "Определить текст",
@@ -341,7 +346,16 @@
         "manualLock": "Ручная блокировка (не перезаписывать автосинком)",
         "removeTrack": "Убрать",
         "saveTrackOrder": "Сохранить порядок треков",
-        "trackSearchPlaceholder": "Поиск треков, привязанных к артисту…"
+        "trackSearchPlaceholder": "Поиск треков, привязанных к артисту…",
+        "discographyTitle": "Дискография (текстовый список)",
+        "discographyHint": "Ручная правка списка для ArtistView. После сохранения включается блокировка от автоперезаписи энричментом.",
+        "discographyTitleCol": "Название",
+        "discographyYearCol": "Год",
+        "discographyTypeCol": "Тип",
+        "discographyUrlCol": "URL",
+        "discographyAddRow": "Добавить строку",
+        "discographyRemoveRow": "Удалить строку",
+        "discographySave": "Сохранить дискографию"
       }
     },
     "audioCompute": {
