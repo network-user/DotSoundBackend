@@ -23,7 +23,8 @@
   иконки PWA, дома�?ний эк�?ан, поиск, �?а�?�?, п�?о�?ил�?, admin shell и
   Telegram bot copy/keyboards без изменения backend API, PrivateCore и
   ComputeWorker.
-- [ ] **Home recommendations: richer highlight endpoint** �?? добави�?�?
+- [x] **Home recommendations: richer highlight endpoint** — добавлено
+
   о�?дел�?н�?е данн�?е для к�?�?пной ка�?�?о�?ки главного эк�?ана: editorial label,
   reason/highlight metadata, с�?абил�?н�?й hero image и компак�?н�?е carousel
   controls. Реализова�?�? о�?дел�?н�?м backend/frontend п�?о�?одом после review

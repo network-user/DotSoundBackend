@@ -362,7 +362,16 @@ export const api = {
     return request('/api/v1/tracks/upload', { method: 'POST', body: formData })
   },
 
-  updateTrack(trackId: number, data: { is_public?: boolean }): Promise<Track> {
+  updateTrack(
+    trackId: number,
+    data: {
+      is_public?: boolean
+      title?: string
+      artist?: string | null
+      genre?: string | null
+      description?: string | null
+    },
+  ): Promise<Track> {
     return request(`/api/v1/tracks/${trackId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -526,6 +535,17 @@ export const api = {
 
   getUserProfile(userId: number): Promise<UserResponse> {
     return request(`/api/v1/users/${userId}`)
+  },
+
+  async syncSessionUserFlags(): Promise<void> {
+    const uid = getInternalUserId()
+    if (!uid) return
+    try {
+      const me = await request<UserResponse>(`/api/v1/users/${uid}`)
+      setIsAdmin(Boolean(me.is_admin))
+    } catch {
+      /* ignore */
+    }
   },
 
   getUserStats(userId: number): Promise<UserStatsResponse> {
@@ -794,6 +814,10 @@ export const api = {
       return null
     }
     accessToken = token
+    const payload = decodeJwtPayload(token)
+    if (typeof payload?.is_admin === 'boolean') {
+      setIsAdmin(payload.is_admin)
+    }
     if (storedUserId === null) {
       setInternalUserId(userId)
     }

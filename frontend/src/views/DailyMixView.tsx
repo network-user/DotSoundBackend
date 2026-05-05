@@ -3,12 +3,14 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { Icon } from '@/components/Icon/Icon'
+import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
 import type { DailyPlaylistResponse } from '@/types/api'
 
 export function DailyMixView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const toast = useToast()
   const [data, setData] = useState<DailyPlaylistResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -42,6 +44,24 @@ export function DailyMixView() {
   const internalTracks = loading ? null : (data?.internal_tracks ?? [])
   const externalTracks = data?.external_tracks ?? []
 
+  const handleShare = useCallback(async () => {
+    const url = `${window.location.origin}${import.meta.env.BASE_URL}daily-mix`
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: t('dailyMix.title'),
+          text: t('dailyMix.hint'),
+          url,
+        })
+        return
+      }
+      await navigator.clipboard.writeText(url)
+      toast.success('Ссылка скопирована')
+    } catch {
+      toast.error('Не удалось поделиться')
+    }
+  }, [t, toast])
+
   return (
     <section className="view active">
       <div className="view-header">
@@ -54,6 +74,15 @@ export function DailyMixView() {
             {t('dailyMix.hint')}
           </span>
         </div>
+        <button
+          className="icon-btn"
+          onClick={() => {
+            void handleShare()
+          }}
+          aria-label="Поделиться"
+        >
+          <Icon name="share" size={18} />
+        </button>
         <button
           className="icon-btn"
           onClick={handleRefresh}

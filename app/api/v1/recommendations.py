@@ -45,6 +45,7 @@ async def get_home(
 ):
     svc = RecommendationService(db)
     data = await svc.get_home_sections(user.id)
+    
     sections = []
     for s in data["sections"]:
         tracks_out = await dedupe_and_build_track_list(db, s["tracks"])
@@ -55,8 +56,23 @@ async def get_home(
                 tracks=tracks_out,
             )
         )
+        
+    highlights = []
+    for h in data.get("highlights", []):
+        track_out = await dedupe_and_build_track_list(db, [h["track"]])
+        if track_out:
+            highlights.append(
+                {
+                    "track": track_out[0],
+                    "label": h["label"],
+                    "reason": h.get("reason"),
+                    "hero_image_key": h.get("hero_image_key"),
+                }
+            )
+            
     return HomePageResponse(
         sections=sections,
+        highlights=highlights,
         maturity=data["maturity"],
     )
 

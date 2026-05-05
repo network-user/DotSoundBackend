@@ -3,12 +3,14 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { Icon } from '@/components/Icon/Icon'
+import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
 import type { UserChoicePlaylistResponse } from '@/types/api'
 
 export function UserChoiceView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const toast = useToast()
   const [data, setData] = useState<
     UserChoicePlaylistResponse | null
   >(null)
@@ -37,6 +39,24 @@ export function UserChoiceView() {
     ? null
     : (data?.tracks ?? [])
 
+  const handleShare = useCallback(async () => {
+    const url = `${window.location.origin}${import.meta.env.BASE_URL}user-choice`
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: t('userChoice.title'),
+          text: t('userChoice.hint'),
+          url,
+        })
+        return
+      }
+      await navigator.clipboard.writeText(url)
+      toast.success('Ссылка скопирована')
+    } catch {
+      toast.error('Не удалось поделиться')
+    }
+  }, [t, toast])
+
   return (
     <section className="view active">
       <div className="view-header">
@@ -57,6 +77,16 @@ export function UserChoiceView() {
             {t('userChoice.hint')}
           </span>
         </div>
+        <button
+          className="icon-btn"
+          type="button"
+          onClick={() => {
+            void handleShare()
+          }}
+          aria-label="Поделиться"
+        >
+          <Icon name="share" size={18} />
+        </button>
       </div>
 
       <TrackList

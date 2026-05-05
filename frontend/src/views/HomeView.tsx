@@ -91,6 +91,8 @@ interface SectionProps {
 interface FeaturedCardProps {
   track: Track
   label: string
+  reason?: string | null
+  heroImageKey?: string | null
   brandLabel: string
   onPlay: (t: Track) => void
 }
@@ -98,12 +100,14 @@ interface FeaturedCardProps {
 function FeaturedCard({
   track,
   label,
+  reason,
+  heroImageKey,
   brandLabel,
   onPlay,
 }: FeaturedCardProps) {
-  const src = coverUrl(track.cover_key)
+  const src = coverUrl(heroImageKey || track.cover_key)
   return (
-    <section className="home-featured" aria-label={label}>
+    <div className="home-featured-card">
       <button
         type="button"
         className="home-featured__main"
@@ -115,7 +119,7 @@ function FeaturedCard({
             {track.title || 'Без названия'}
           </strong>
           <span className="home-featured__artist">
-            {track.artist || brandLabel}
+            {reason || track.artist || brandLabel}
           </span>
         </div>
         <div className="home-featured__cover">
@@ -140,7 +144,7 @@ function FeaturedCard({
       >
         <Icon name="play" size={18} />
       </button>
-    </section>
+    </div>
   )
 }
 
@@ -448,7 +452,9 @@ export function HomeView() {
 
     api
       .getHomeRecommendations()
-      .then((data) => setSections(data.sections))
+      .then((data) => {
+        setSections(data.sections)
+      })
       .catch(() => {
         api
           .getTracks({ size: 50 })
