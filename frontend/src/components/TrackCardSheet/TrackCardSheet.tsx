@@ -307,12 +307,21 @@ export function TrackCardSheet({
       })
       return
     }
-    if (!track?.album_id) {
+    const fallbackAlbumId = track?.album_id
+    if (!fallbackAlbumId) {
       setRelatedAlbumInfo(null)
       return
     }
+    setRelatedAlbumInfo((prev) => (
+      prev?.id === fallbackAlbumId
+        ? prev
+        : {
+            id: fallbackAlbumId,
+            title: `Альбом #${fallbackAlbumId}`,
+          }
+    ))
     let cancelled = false
-    api.getAlbum(track.album_id).then((album) => {
+    api.getAlbum(fallbackAlbumId).then((album) => {
       if (!cancelled) {
         setRelatedAlbumInfo({
           id: album.id,
@@ -509,16 +518,17 @@ export function TrackCardSheet({
   }, [sharePayload, toast])
 
   const openAlbumEditor = useCallback(async () => {
+    const albumId = relatedAlbumInfo?.id ?? track?.album_id ?? null
     const internalId = getInternalUserId()
     const canOwnerEdit = Boolean(
       internalId !== null &&
       track?.uploaded_by_id === internalId,
     )
-    if (!relatedAlbumInfo || (!isAdmin && !canOwnerEdit)) return
+    if (!albumId || (!isAdmin && !canOwnerEdit)) return
     setAlbumEditBusy(true)
     try {
       const [album, myLib] = await Promise.all([
-        api.getAlbum(relatedAlbumInfo.id),
+        api.getAlbum(albumId),
         api.getMyLibrary(1, 100, false),
       ])
       setAlbumEditData(album)
@@ -537,7 +547,7 @@ export function TrackCardSheet({
     } finally {
       setAlbumEditBusy(false)
     }
-  }, [relatedAlbumInfo?.id, isAdmin, track?.uploaded_by_id, toast])
+  }, [relatedAlbumInfo?.id, track?.album_id, isAdmin, track?.uploaded_by_id, toast])
 
   const refreshAlbumEditor = useCallback(async () => {
     if (!albumEditData) return
@@ -1094,20 +1104,25 @@ export function TrackCardSheet({
               'external_reference' &&
               t('trackSheet.catRef')}
           </p>
-          {relatedAlbumInfo && (
+          {(relatedAlbumInfo || track.album_id) && (
             <div className="tcs-share-related-row">
               <span className="tcs-share-related-title">
-                Альбом: {relatedAlbumInfo.title}
+                Альбом: {
+                  relatedAlbumInfo?.title
+                  ?? `#${track.album_id}`
+                }
               </span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   type="button"
                   className="tcs-share-related-btn"
                   onClick={() => {
+                    const albumId = relatedAlbumInfo?.id ?? track.album_id
+                    if (!albumId) return
                     void openShareModal({
-                      id: relatedAlbumInfo.id,
+                      id: albumId,
                       type: 'album',
-                      title: relatedAlbumInfo.title,
+                      title: relatedAlbumInfo?.title ?? `Альбом #${albumId}`,
                     })
                   }}
                 >
