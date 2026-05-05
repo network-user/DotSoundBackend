@@ -19,7 +19,7 @@ async def admin_get_artist_discography(
     artist_id: int,
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
-) -> list[ArtistDiscographyResponse]:
+) -> list[DiscographyItemResponse]:
     repo = ArtistRepository(session)
     artist = await repo.get_by_id(artist_id)
     if artist is None:

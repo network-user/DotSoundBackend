@@ -121,18 +121,26 @@ const VIBRATE_NOTIF: Record<
 export function haptic(
   kind: HapticImpact = 'light',
 ): void {
+  let tgTriggered = false
   try {
-    const tgHaptic = (WebApp as any).HapticFeedback
+    const tgHaptic =
+      (WebApp as any).HapticFeedback
+      ?? (window as any).Telegram?.WebApp
+        ?.HapticFeedback
     if (tgHaptic?.impactOccurred) {
       tgHaptic.impactOccurred(kind)
-      return
+      tgTriggered = true
     }
   } catch {
-    /* fall through to navigator.vibrate */
+    /* ignore and use fallback vibration */
   }
   try {
     if ('vibrate' in navigator) {
-      navigator.vibrate(VIBRATE_MAP[kind])
+      if (!tgTriggered) {
+        navigator.vibrate(VIBRATE_MAP[kind])
+      } else {
+        navigator.vibrate(4)
+      }
     }
   } catch {
     /* ignore */
@@ -142,18 +150,26 @@ export function haptic(
 export function hapticNotification(
   kind: 'success' | 'warning' | 'error',
 ): void {
+  let tgTriggered = false
   try {
-    const tgHaptic = (WebApp as any).HapticFeedback
+    const tgHaptic =
+      (WebApp as any).HapticFeedback
+      ?? (window as any).Telegram?.WebApp
+        ?.HapticFeedback
     if (tgHaptic?.notificationOccurred) {
       tgHaptic.notificationOccurred(kind)
-      return
+      tgTriggered = true
     }
   } catch {
-    /* fall through to navigator.vibrate */
+    /* ignore and use fallback vibration */
   }
   try {
     if ('vibrate' in navigator) {
-      navigator.vibrate(VIBRATE_NOTIF[kind])
+      if (!tgTriggered) {
+        navigator.vibrate(VIBRATE_NOTIF[kind])
+      } else {
+        navigator.vibrate(8)
+      }
     }
   } catch {
     /* ignore */
@@ -161,18 +177,26 @@ export function hapticNotification(
 }
 
 export function hapticSelection(): void {
+  let tgTriggered = false
   try {
-    const tgHaptic = (WebApp as any).HapticFeedback
+    const tgHaptic =
+      (WebApp as any).HapticFeedback
+      ?? (window as any).Telegram?.WebApp
+        ?.HapticFeedback
     if (tgHaptic?.selectionChanged) {
       tgHaptic.selectionChanged()
-      return
+      tgTriggered = true
     }
   } catch {
-    /* fall through */
+    /* ignore and use fallback vibration */
   }
   try {
     if ('vibrate' in navigator) {
-      navigator.vibrate(5)
+      if (!tgTriggered) {
+        navigator.vibrate(5)
+      } else {
+        navigator.vibrate(2)
+      }
     }
   } catch {
     /* ignore */

@@ -4,7 +4,9 @@ import { api } from '@/lib/api'
 import { usePlayerActions } from '@/store/PlayerContext'
 import {
   getInternalUserId,
+  haptic,
   hapticSelection,
+  hapticNotification,
   setBackButton,
 } from '@/lib/telegram'
 import { Icon } from '@/components/Icon/Icon'
@@ -83,13 +85,21 @@ export function SettingsSheet({
 
   const exit = useExitTransition(open)
   if (!exit.mounted) return null
+  const toast = useToast()
+  const installable = canInstallPwa()
+  const feedbackTap = () => {
+    hapticSelection()
+    sound.play('tapSoft')
+  }
 
   const handleEq = () => {
+    feedbackTap()
     onClose()
     openEq()
   }
 
   const handleVideoToggle = () => {
+    feedbackTap()
     const next = !videoEnabled
     setVideoEnabled(next)
     localStorage.setItem(
@@ -99,6 +109,7 @@ export function SettingsSheet({
   }
 
   const handleMonoToggle = () => {
+    feedbackTap()
     const next = !monoEnabled
     setMonoEnabled(next)
     localStorage.setItem(
@@ -112,6 +123,7 @@ export function SettingsSheet({
   }
 
   const handleLanguageChange = (lng: string) => {
+    feedbackTap()
     i18n.changeLanguage(lng)
     const uid = getInternalUserId()
     if (uid) {
@@ -120,25 +132,25 @@ export function SettingsSheet({
   }
 
   const handleOpenBrowser = () => {
+    feedbackTap()
     window.open(
       window.location.href,
       '_blank',
     )
   }
 
-  const toast = useToast()
-  const installable = canInstallPwa()
   const handleInstallHint = () => {
+    feedbackTap()
     toast.info(t('settings.pwaInstallHint'), {
       duration: 7000,
     })
   }
 
   const handleSoundToggle = () => {
+    feedbackTap()
     const next = !soundEnabled
     setSoundEnabled(next)
     sound.setEnabled(next)
-    hapticSelection()
     if (next) {
       sound.play('tapSoft')
     }
@@ -151,12 +163,11 @@ export function SettingsSheet({
     )
     setSoundVolume(clamped)
     sound.setVolume(clamped)
-    hapticSelection()
-    sound.play('tapSoft')
+    feedbackTap()
   }
 
   const handleTestSound = () => {
-    hapticSelection()
+    feedbackTap()
     sound.playTest('tapSoft')
     toast.info(
       t('settings.testSoundFired', {
@@ -167,7 +178,8 @@ export function SettingsSheet({
   }
 
   const handleTestHaptic = () => {
-    hapticSelection()
+    haptic('light')
+    hapticNotification('success')
     toast.info(
       t('settings.testHapticFired', {
         defaultValue: 'Тест вибрации отправлен',
