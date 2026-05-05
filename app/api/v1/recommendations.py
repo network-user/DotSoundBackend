@@ -16,6 +16,7 @@ from app.schemas.recommendation import (
     DailyPlaylistResponse,
     GenreMixItemResponse,
     GenreMixesResponse,
+    GenreMixOverrideRequest,
     HomePageResponse,
     HomeSectionResponse,
     RadioQueueResponse,
@@ -137,6 +138,44 @@ async def get_genre_mixes(
             )
         )
     return GenreMixesResponse(mixes=result)
+
+
+@router.put(
+    "/genre-mixes/{genre}",
+    response_model=GenreMixItemResponse,
+)
+async def save_genre_mix_override(
+    genre: str,
+    body: GenreMixOverrideRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin only",
+        )
+    svc = RecommendationService(db)
+    try:
+        saved = await svc.save_genre_mix_override(
+            genre=genre,
+            title=body.title,
+            track_ids=body.track_ids,
+            updated_by_id=user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    tracks_out = await dedupe_and_build_track_list(
+        db, saved["tracks"]
+    )
+    return GenreMixItemResponse(
+        genre=saved["genre"],
+        title=saved["title"],
+        tracks=tracks_out,
+    )
 
 
 @router.get(

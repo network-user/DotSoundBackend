@@ -2032,6 +2032,23 @@ export const api = {
     return request('/api/v1/recommendations/genre-mixes')
   },
 
+  saveGenreMixOverride(
+    genre: string,
+    body: {
+      title: string
+      track_ids: number[]
+    },
+  ): Promise<import('@/types/api').GenreMixItem> {
+    return request(
+      `/api/v1/recommendations/genre-mixes/${encodeURIComponent(genre)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    )
+  },
+
   getRadio(
     seedTrackId: number,
     queueSize?: number,

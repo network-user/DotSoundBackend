@@ -49,6 +49,9 @@ from app.repositories.artist_follow import (
 from app.repositories.preference import (
     PreferenceRepository,
 )
+from app.repositories.genre_mix_override import (
+    GenreMixOverrideRepository,
+)
 from app.repositories.recommendation import (
     RecommendationRepository,
 )
@@ -894,7 +897,89 @@ class RecommendationService:
                 }
             )
 
+        override_repo = GenreMixOverrideRepository(
+            self._session
+        )
+        overrides = await override_repo.get_by_genres(
+            [m["genre"] for m in output]
+        )
+        overrides_by_genre = {
+            row.genre.lower(): row for row in overrides
+        }
+        for item in output:
+            override = overrides_by_genre.get(
+                item["genre"].lower()
+            )
+            if not override:
+                continue
+            from app.repositories.track import (
+                TrackRepository,
+            )
+
+            track_repo = TrackRepository(
+                self._session
+            )
+            override_tracks = (
+                await track_repo.get_by_ids_preserve_order(
+                    [
+                        int(tid)
+                        for tid in (override.track_ids or [])
+                    ]
+                )
+            )
+            if override_tracks:
+                item["tracks"] = override_tracks
+            item["title"] = override.title
+
         return output
+
+    async def save_genre_mix_override(
+        self,
+        *,
+        genre: str,
+        title: str,
+        track_ids: list[int],
+        updated_by_id: int,
+    ) -> dict:
+        from app.repositories.track import (
+            TrackRepository,
+        )
+
+        clean_genre = genre.strip().lower()
+        clean_title = title.strip()
+        if not clean_genre:
+            raise ValueError("genre is required")
+        if not clean_title:
+            raise ValueError("title is required")
+        if not track_ids:
+            raise ValueError("track_ids is required")
+        if len(track_ids) != len(set(track_ids)):
+            raise ValueError("track_ids must be unique")
+
+        track_repo = TrackRepository(self._session)
+        tracks = await track_repo.get_by_ids_preserve_order(
+            track_ids
+        )
+        if len(tracks) != len(track_ids):
+            raise ValueError(
+                "some tracks were not found"
+            )
+
+        override_repo = GenreMixOverrideRepository(
+            self._session
+        )
+        await override_repo.upsert(
+            genre=clean_genre,
+            title=clean_title,
+            track_ids=track_ids,
+            updated_by_id=updated_by_id,
+        )
+        await self._session.commit()
+        return {
+            "genre": clean_genre,
+            "title": clean_title,
+            "tracks": tracks,
+        }
 
     async def get_radio(
         self,
