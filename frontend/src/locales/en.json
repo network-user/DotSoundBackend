@@ -486,7 +486,24 @@
         "cancelByProgress": "Cancel by progress",
         "traceProgressId": "Progress id",
         "traceStarted": "Started",
-        "traceDeadline": "Deadline"
+        "traceDeadline": "Deadline",
+        "queueRouting": "Queue routing",
+        "applyRouting": "Apply",
+        "priorityInput": "Queue priority",
+        "pinWorker": "Pin worker",
+        "anyWorker": "Any worker",
+        "sortLabel": "Sort",
+        "sortQueue": "Queue order (priority)",
+        "sortRecent": "Recent first"
+      },
+      "genericJobs": {
+        "title": "Generic compute jobs",
+        "hint": "Pull queue served at /internal/compute (audio features, similarity indexes, …). Higher priority is claimed first. Pin limits which worker may claim; releasing a lease puts a stuck claimed row back to pending.",
+        "empty": "No rows in this list",
+        "type": "Job type",
+        "priority": "Priority",
+        "pin": "Pin worker",
+        "releaseLease": "Release lease"
       },
       "auditSection": {
         "title": "Worker audit (last 200)",

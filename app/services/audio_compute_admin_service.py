@@ -19,8 +19,8 @@ from app.models.worker_audit import WorkerAuditLog
 from app.repositories.audio_compute import (
     AudioComputeRepository,
 )
-from app.services import compute_router
 from app.services import compute_queue_service as cq
+from app.services import compute_router
 from app.services import compute_worker_service as cws
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(

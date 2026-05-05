@@ -855,6 +855,50 @@ export const adminApi = {
       method: 'POST',
       body: { progress_id: progressId },
     }),
+  patchLyricsJobRouting: (
+    jobId: string,
+    body: {
+      pinned_worker_id: string | null
+      queue_priority: number
+    },
+  ) =>
+    adminFetch<Record<string, unknown>>(
+      `/audio-compute/jobs/${encodeURIComponent(jobId)}/routing`,
+      { method: 'PATCH', body },
+    ),
+  listGenericComputeJobs: (params?: {
+    status?: string
+    limit?: number
+  }) =>
+    adminFetch<
+      Array<{
+        id: string
+        job_type: string
+        target_kind: string | null
+        target_id: string | null
+        status: string
+        priority: number
+        pinned_worker_id: string | null
+        claimed_by: string | null
+        attempts: number
+        last_error: string | null
+        created_at: string | null
+      }>
+    >('/audio-compute/generic-compute-jobs', {
+      query: params,
+    }),
+  patchGenericComputeJobRouting: (
+    jobId: string,
+    body: {
+      pinned_worker_id: string | null
+      priority: number
+      release_claim: boolean
+    },
+  ) =>
+    adminFetch<Record<string, unknown>>(
+      `/audio-compute/generic-compute-jobs/${encodeURIComponent(jobId)}/routing`,
+      { method: 'PATCH', body },
+    ),
   cancelAllQueuedLyricsJobs: () =>
     adminFetch<{
       cancelled: number

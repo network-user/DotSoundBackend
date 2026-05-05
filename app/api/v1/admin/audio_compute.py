@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -245,10 +245,111 @@ async def list_worker_jobs(
 async def list_jobs(
     session: AsyncSession = Depends(get_db),
     status_filter: str | None = None,
+    sort: str = Query(
+        "queue",
+        pattern=r"^(queue|recent)$",
+    ),
     _admin: User = Depends(require_capability("audio_compute.manage")),
 ) -> list[dict]:
     svc = AudioComputeAdminService(session)
-    return await svc.list_jobs(status_filter=status_filter)
+    return await svc.list_jobs(
+        status_filter=status_filter,
+        sort=sort,
+    )
+
+
+class LyricsJobRoutingRequest(BaseModel):
+    pinned_worker_id: str | None = Field(
+        default=None,
+        max_length=32,
+    )
+    queue_priority: int = Field(
+        default=0,
+        ge=-1_000_000,
+        le=1_000_000,
+    )
+
+
+@router.patch("/jobs/{job_id}/routing")
+async def patch_lyrics_job_routing(
+    job_id: str,
+    body: LyricsJobRoutingRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(
+        require_capability("audio_compute.manage")
+    ),
+) -> dict:
+    svc = AudioComputeAdminService(session)
+    try:
+        out = await svc.update_lyrics_job_routing(
+            job_id,
+            pinned_worker_id=body.pinned_worker_id,
+            queue_priority=body.queue_priority,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    if out is None:
+        raise HTTPException(status_code=404)
+    return out
+
+
+@router.get("/generic-compute-jobs")
+async def list_generic_compute_jobs(
+    session: AsyncSession = Depends(get_db),
+    status: str | None = Query(None, max_length=16),
+    limit: int = Query(100, ge=1, le=200),
+    _admin: User = Depends(
+        require_capability("audio_compute.manage")
+    ),
+) -> list[dict]:
+    svc = AudioComputeAdminService(session)
+    return await svc.list_generic_compute_jobs(
+        status=status,
+        limit=limit,
+    )
+
+
+class GenericComputeJobRoutingRequest(BaseModel):
+    pinned_worker_id: str | None = Field(
+        default=None,
+        max_length=32,
+    )
+    priority: int = Field(
+        default=0,
+        ge=-1_000_000,
+        le=1_000_000,
+    )
+    release_claim: bool = False
+
+
+@router.patch("/generic-compute-jobs/{job_id}/routing")
+async def patch_generic_compute_job_routing(
+    job_id: str,
+    body: GenericComputeJobRoutingRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(
+        require_capability("audio_compute.manage")
+    ),
+) -> dict:
+    svc = AudioComputeAdminService(session)
+    try:
+        out = await svc.update_generic_compute_job_routing(
+            job_id,
+            pinned_worker_id=body.pinned_worker_id,
+            priority=body.priority,
+            release_claim=body.release_claim,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    if out is None:
+        raise HTTPException(status_code=404)
+    return out
 
 
 class CancelByProgressRequest(BaseModel):

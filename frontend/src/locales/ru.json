@@ -486,7 +486,24 @@
         "cancelByProgress": "Отменить по progress",
         "traceProgressId": "Progress id",
         "traceStarted": "Старт",
-        "traceDeadline": "Дедлайн"
+        "traceDeadline": "Дедлайн",
+        "queueRouting": "Маршрут очереди",
+        "applyRouting": "Применить",
+        "priorityInput": "Приоритет в очереди",
+        "pinWorker": "Закрепить воркера",
+        "anyWorker": "Любой воркер",
+        "sortLabel": "Сортировка",
+        "sortQueue": "Как в очереди (приоритет)",
+        "sortRecent": "Сначала новые"
+      },
+      "genericJobs": {
+        "title": "Очередь generic compute",
+        "hint": "Pull-очередь /internal/compute (аудио-фичи, индексы похожести и т.д.). Больший priority забирается первым. Pin ограничивает, кто может сделать claim; снятие lease возвращает зависший claimed в pending.",
+        "empty": "Нет строк в этом списке",
+        "type": "Тип задачи",
+        "priority": "Приоритет",
+        "pin": "Закрепить воркера",
+        "releaseLease": "Снять lease"
       },
       "auditSection": {
         "title": "Аудит воркеров (последние 200)",

@@ -9,7 +9,7 @@
 
 ## 1. Что вы здесь видите
 
-Сверху вниз страница состоит из 7 секций:
+Сверху вниз страница состоит из 8 секций:
 
 1. **How to add a worker** — встроенная пошаговая инструкция с
    копируемыми сниппетами. Сворачивается в одну строку, когда
@@ -40,10 +40,17 @@
    spent counter** обнуляет Redis-счётчик (использовать только
    если вы уверены — это влияет на гард в реальном времени).
 5. **Workers** — форма создания + таблица.
-6. **Jobs** — таблица текущих/недавних job'ов с колонкой Tier,
-   счётчиком попыток и кнопкой **Trace** (открывает
-   таймлайн всех попыток).
-7. **Worker audit (last 200)** — лог действий, фильтр по action.
+6. **Jobs** — таблица LyricsJob: сортировка «как в очереди»
+   (queued/running сверху, затем по `queue_priority`) или «сначала
+   новые»; колонка **Queue routing** (приоритет, pin на воркера,
+   **Apply**); для `running` с активным pull — переназначение
+   снимает lease и возвращает job в `queued` (старый воркер
+   получит 404 на result — это норма).
+7. **Generic compute jobs** — очередь `compute_jobs`, которую
+   тянет тот же DotSoundComputeWorker по `/internal/compute`
+   (типы вроде audio features / similarity). Там же priority,
+   pin и опционально **Release lease** для зависших `claimed`.
+8. **Worker audit (last 200)** — лог действий, фильтр по action.
 
 Ниже идут отдельные подсказки по каждому workflow.
 
@@ -207,6 +214,28 @@ Tier выключен по умолчанию. Что нужно для вклю
 сгенерировалась" — за 5 секунд видно на каком tier'е и почему
 застряла.
 
+### Очередь, приоритет и pin (LyricsJob)
+
+- Поле **`queue_priority`** (целое, в разумных пределах): при
+  claim среди `queued` сначала берутся большие значения, затем
+  старые по `created_at`.
+- **`pinned_worker_id`**: пока задано, job увидит в claim только
+  этот воркер (профиль воркера должен совпадать с `LyricsJob.profile`,
+  с учётом пары `remote_whisper` / `gpu_full`). После успешного
+  claim pin сбрасывается.
+- API: `PATCH /api/v1/admin/audio-compute/jobs/{id}/routing`
+  (`audio_compute.manage`). В аудите: `admin_job_routing`.
+
+### Generic compute queue (`compute_jobs`)
+
+Та же страница показывает хвост очереди internal/compute.
+Поле **`priority`** уже использовалось при claim; добавлен
+**`pinned_worker_id`** по той же идее, что и для lyrics.
+**Release lease** переводит `claimed` обратно в `pending` без
+ожидания истечения дедлайна. API:
+`PATCH .../audio-compute/generic-compute-jobs/{id}/routing`.
+Аудит: `admin_compute_job_routing`.
+
 ### Расшифровка: `cascade exhausted: …` в прогрессе (Lyrics / DevTools)
 
 Сообщение в UI — это
@@ -236,7 +265,8 @@ Tier выключен по умолчанию. Что нужно для вклю
 **Worker audit (last 200)** — единый лог всех событий
 worker'ов: heartbeat, claim, progress, result, fail, auth_fail,
 rate_limit_exceeded, anomaly, auto_suspend, ott_fail,
-audio_sha_mismatch, result_invalid.
+audio_sha_mismatch, result_invalid, admin_job_routing,
+admin_compute_job_routing.
 
 Используйте **Filter** для расследований:
 

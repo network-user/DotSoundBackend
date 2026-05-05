@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import {
@@ -54,12 +54,245 @@ interface JobRow {
   tiers_planned: string[]
   tier_attempts: TierAttempt[]
   routed_to_worker: string | null
+  pinned_worker_id?: string | null
+  queue_priority?: number
   attempts: number
   duration_ms: number | null
   error: string | null
   created_at: string
   deadline_at?: string | null
   started_at?: string | null
+}
+
+interface GenericComputeJobRow {
+  id: string
+  job_type: string
+  target_kind: string | null
+  target_id: string | null
+  status: string
+  priority: number
+  pinned_worker_id: string | null
+  claimed_by: string | null
+  attempts: number
+  last_error: string | null
+  created_at: string | null
+}
+
+function LyricsJobRoutingControls({
+  job,
+  workers,
+  disabled,
+  isPending,
+  onApply,
+  t,
+}: {
+  job: JobRow
+  workers: WorkerRow[]
+  disabled: boolean
+  isPending: boolean
+  onApply: (payload: {
+    pinned_worker_id: string | null
+    queue_priority: number
+  }) => void
+  t: TFunction
+}) {
+  const [pri, setPri] = useState(
+    () => job.queue_priority ?? 0,
+  )
+  const [pin, setPin] = useState(
+    () => job.pinned_worker_id ?? '',
+  )
+  useEffect(() => {
+    setPri(job.queue_priority ?? 0)
+    setPin(job.pinned_worker_id ?? '')
+  }, [
+    job.id,
+    job.queue_priority,
+    job.pinned_worker_id,
+  ])
+  const eligible = workers.filter(
+    (w) => w.active && !w.revoked_at,
+  )
+  return (
+    <div
+      className="admin-toolbar"
+      style={{
+        flexWrap: 'wrap',
+        gap: 6,
+        alignItems: 'center',
+      }}
+    >
+      <input
+        type="number"
+        aria-label={t(
+          'admin.audioCompute.jobTable.priorityInput',
+        )}
+        value={pri}
+        onChange={(e) =>
+          setPri(Number(e.target.value))
+        }
+        disabled={disabled}
+        style={{ width: 72 }}
+      />
+      <select
+        aria-label={t(
+          'admin.audioCompute.jobTable.pinWorker',
+        )}
+        value={pin}
+        onChange={(e) =>
+          setPin(e.target.value)
+        }
+        disabled={disabled}
+        style={{ minWidth: 140 }}
+      >
+        <option value="">
+          {t(
+            'admin.audioCompute.jobTable.anyWorker',
+          )}
+        </option>
+        {eligible.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.name} ({w.id.slice(0, 6)})
+          </option>
+        ))}
+      </select>
+      <Press
+        variant="ghost"
+        disabled={disabled || isPending}
+        onClick={() =>
+          onApply({
+            pinned_worker_id: pin || null,
+            queue_priority: pri,
+          })
+        }
+      >
+        {t(
+          'admin.audioCompute.jobTable.applyRouting',
+        )}
+      </Press>
+    </div>
+  )
+}
+
+function GenericComputeJobRoutingControls({
+  row,
+  workers,
+  disabled,
+  isPending,
+  onApply,
+  t,
+}: {
+  row: GenericComputeJobRow
+  workers: WorkerRow[]
+  disabled: boolean
+  isPending: boolean
+  onApply: (payload: {
+    pinned_worker_id: string | null
+    priority: number
+    release_claim: boolean
+  }) => void
+  t: TFunction
+}) {
+  const [pri, setPri] = useState(
+    () => row.priority ?? 0,
+  )
+  const [pin, setPin] = useState(
+    () => row.pinned_worker_id ?? '',
+  )
+  const [release, setRelease] = useState(false)
+  useEffect(() => {
+    setPri(row.priority ?? 0)
+    setPin(row.pinned_worker_id ?? '')
+    setRelease(false)
+  }, [
+    row.id,
+    row.priority,
+    row.pinned_worker_id,
+  ])
+  const eligible = workers.filter(
+    (w) => w.active && !w.revoked_at,
+  )
+  return (
+    <div
+      className="admin-toolbar"
+      style={{
+        flexWrap: 'wrap',
+        gap: 6,
+        alignItems: 'center',
+      }}
+    >
+      <input
+        type="number"
+        aria-label={t(
+          'admin.audioCompute.genericJobs.priority',
+        )}
+        value={pri}
+        onChange={(e) =>
+          setPri(Number(e.target.value))
+        }
+        disabled={disabled}
+        style={{ width: 72 }}
+      />
+      <select
+        aria-label={t(
+          'admin.audioCompute.genericJobs.pin',
+        )}
+        value={pin}
+        onChange={(e) =>
+          setPin(e.target.value)
+        }
+        disabled={disabled}
+        style={{ minWidth: 140 }}
+      >
+        <option value="">
+          {t(
+            'admin.audioCompute.jobTable.anyWorker',
+          )}
+        </option>
+        {eligible.map((w) => (
+          <option key={w.id} value={w.id}>
+            {w.name} ({w.id.slice(0, 6)})
+          </option>
+        ))}
+      </select>
+      {row.status === 'claimed' && (
+        <label
+          style={{
+            display: 'inline-flex',
+            gap: 6,
+            alignItems: 'center',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={release}
+            onChange={(e) =>
+              setRelease(e.target.checked)
+            }
+            disabled={disabled}
+          />
+          {t(
+            'admin.audioCompute.genericJobs.releaseLease',
+          )}
+        </label>
+      )}
+      <Press
+        variant="ghost"
+        disabled={disabled || isPending}
+        onClick={() =>
+          onApply({
+            pinned_worker_id: pin || null,
+            priority: pri,
+            release_claim: release,
+          })
+        }
+      >
+        {t(
+          'admin.audioCompute.jobTable.applyRouting',
+        )}
+      </Press>
+    </div>
+  )
 }
 
 interface AuditRow {
@@ -119,14 +352,20 @@ const AUDIT_ACTION_FILTERS = [
 function jobKind(
   status: string,
 ): 'ok' | 'warn' | 'error' | 'unknown' {
-  if (status === 'done') return 'ok'
+  if (status === 'done' || status === 'succeeded')
+    return 'ok'
   if (
     status === 'failed' ||
     status === 'error' ||
     status === 'cancelled'
   )
     return 'error'
-  if (status === 'queued' || status === 'running')
+  if (
+    status === 'queued' ||
+    status === 'running' ||
+    status === 'pending' ||
+    status === 'claimed'
+  )
     return 'warn'
   return 'unknown'
 }
@@ -177,10 +416,15 @@ export function AudioComputeRoute() {
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   })
+  const [jobsSort, setJobsSort] = useState<
+    'queue' | 'recent'
+  >('queue')
   const jobs = useQuery({
-    queryKey: ['admin', 'compute', 'jobs'],
+    queryKey: ['admin', 'compute', 'jobs', jobsSort],
     queryFn: () =>
-      adminFetch<JobRow[]>('/audio-compute/jobs'),
+      adminFetch<JobRow[]>(
+        `/audio-compute/jobs?sort=${jobsSort}`,
+      ),
     refetchInterval: 15_000,
     refetchIntervalInBackground: false,
   })
@@ -222,6 +466,52 @@ export function AudioComputeRoute() {
       setProgressToCancel('')
       qc.invalidateQueries({
         queryKey: ['admin', 'compute', 'jobs'],
+      })
+    },
+  })
+  const patchLyricsRoutingMutation = useMutation({
+    mutationFn: (args: {
+      id: string
+      pinned_worker_id: string | null
+      queue_priority: number
+    }) =>
+      adminApi.patchLyricsJobRouting(args.id, {
+        pinned_worker_id: args.pinned_worker_id,
+        queue_priority: args.queue_priority,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'compute', 'jobs'],
+      })
+    },
+  })
+  const genericJobs = useQuery({
+    queryKey: ['admin', 'compute', 'generic-jobs'],
+    queryFn: () =>
+      adminApi.listGenericComputeJobs({
+        limit: 100,
+      }),
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
+  })
+  const patchGenericRoutingMutation = useMutation({
+    mutationFn: (args: {
+      id: string
+      pinned_worker_id: string | null
+      priority: number
+      release_claim: boolean
+    }) =>
+      adminApi.patchGenericComputeJobRouting(
+        args.id,
+        {
+          pinned_worker_id: args.pinned_worker_id,
+          priority: args.priority,
+          release_claim: args.release_claim,
+        },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'compute', 'generic-jobs'],
       })
     },
   })
@@ -710,6 +1000,38 @@ export function AudioComputeRoute() {
             : '–',
       },
       {
+        header: t(
+          'admin.audioCompute.jobTable.queueRouting',
+        ),
+        id: 'routing',
+        cell: (i) => {
+          const row = i.row.original
+          const can =
+            row.status === 'queued' ||
+            row.status === 'running'
+          if (!can) {
+            return '–'
+          }
+          return (
+            <LyricsJobRoutingControls
+              job={row}
+              workers={workersList}
+              disabled={!can}
+              isPending={
+                patchLyricsRoutingMutation.isPending
+              }
+              t={t}
+              onApply={(payload) =>
+                patchLyricsRoutingMutation.mutate({
+                  id: row.id,
+                  ...payload,
+                })
+              }
+            />
+          )
+        },
+      },
+      {
         header: '',
         id: 'cancel',
         cell: (i) => {
@@ -760,8 +1082,109 @@ export function AudioComputeRoute() {
         ),
       },
     ],
-    [t, cancelJobMutation, showConfirm],
+    [
+      t,
+      cancelJobMutation,
+      showConfirm,
+      workersList,
+      patchLyricsRoutingMutation,
+    ],
   )
+
+  const genericJobColumns: ColumnDef<GenericComputeJobRow>[] =
+    useMemo(
+      () => [
+        {
+          header: t(
+            'admin.audioCompute.table.id',
+          ),
+          accessorKey: 'id',
+          cell: (i) => (
+            <span className="admin-mono">
+              {String(
+                i.getValue<string>(),
+              ).slice(0, 10)}
+            </span>
+          ),
+        },
+        {
+          header: t(
+            'admin.audioCompute.genericJobs.type',
+          ),
+          accessorKey: 'job_type',
+        },
+        {
+          header: t(
+            'admin.audioCompute.table.status',
+          ),
+          cell: (i) => (
+            <StatusPill
+              kind={jobKind(
+                i.row.original.status,
+              )}
+            >
+              {i.row.original.status}
+            </StatusPill>
+          ),
+        },
+        {
+          header: t(
+            'admin.audioCompute.table.worker',
+          ),
+          accessorKey: 'claimed_by',
+          cell: (i) => {
+            const v =
+              i.getValue<string | null>()
+            return v ? (
+              <span className="admin-mono">
+                {v.slice(0, 10)}
+              </span>
+            ) : (
+              '–'
+            )
+          },
+        },
+        {
+          header: t(
+            'admin.audioCompute.jobTable.queueRouting',
+          ),
+          id: 'groute',
+          cell: (i) => {
+            const row = i.row.original
+            const can =
+              row.status === 'pending' ||
+              row.status === 'claimed'
+            if (!can) {
+              return '–'
+            }
+            return (
+              <GenericComputeJobRoutingControls
+                row={row}
+                workers={workersList}
+                disabled={!can}
+                isPending={
+                  patchGenericRoutingMutation.isPending
+                }
+                t={t}
+                onApply={(payload) =>
+                  patchGenericRoutingMutation.mutate(
+                    {
+                      id: row.id,
+                      ...payload,
+                    },
+                  )
+                }
+              />
+            )
+          },
+        },
+      ],
+      [
+        t,
+        workersList,
+        patchGenericRoutingMutation,
+      ],
+    )
 
   const auditColumns: ColumnDef<AuditRow>[] =
     useMemo(
@@ -1339,9 +1762,49 @@ export function AudioComputeRoute() {
       </section>
 
       <section className="admin-card">
-        <h2>
-          {t('admin.audioCompute.jobs')}
-        </h2>
+        <div
+          className="admin-toolbar"
+          style={{
+            marginBottom: '0.5rem',
+            alignItems: 'center',
+            gap: '0.75rem',
+          }}
+        >
+          <h2 style={{ margin: 0 }}>
+            {t('admin.audioCompute.jobs')}
+          </h2>
+          <label
+            htmlFor="ac-jobs-sort"
+            className="admin-card__sub"
+            style={{ margin: 0 }}
+          >
+            {t(
+              'admin.audioCompute.jobTable.sortLabel',
+            )}
+          </label>
+          <select
+            id="ac-jobs-sort"
+            value={jobsSort}
+            onChange={(e) =>
+              setJobsSort(
+                e.target.value as
+                  | 'queue'
+                  | 'recent',
+              )
+            }
+          >
+            <option value="queue">
+              {t(
+                'admin.audioCompute.jobTable.sortQueue',
+              )}
+            </option>
+            <option value="recent">
+              {t(
+                'admin.audioCompute.jobTable.sortRecent',
+              )}
+            </option>
+          </select>
+        </div>
         <p className="admin-card__sub">
           {t(
             'admin.audioCompute.jobTable.toolbarHint',
@@ -1440,6 +1903,28 @@ export function AudioComputeRoute() {
           }
           emptyHint={t(
             'admin.audioCompute.jobTable.empty',
+          )}
+        />
+      </section>
+
+      <section className="admin-card">
+        <h2>
+          {t('admin.audioCompute.genericJobs.title')}
+        </h2>
+        <p className="admin-card__sub">
+          {t(
+            'admin.audioCompute.genericJobs.hint',
+          )}
+        </p>
+        <DataTable
+          columns={genericJobColumns}
+          rows={
+            (genericJobs.data as
+              | GenericComputeJobRow[]
+              | undefined) || []
+          }
+          emptyHint={t(
+            'admin.audioCompute.genericJobs.empty',
           )}
         />
       </section>
