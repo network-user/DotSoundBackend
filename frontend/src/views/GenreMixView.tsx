@@ -69,17 +69,10 @@ export function GenreMixView() {
   useEffect(() => {
     if (!genre) return
     api
-      .getGenreMixes()
-      .then((data) => {
-        const mix = data.mixes.find(
-          (m) => m.genre.toLowerCase() === genre.toLowerCase(),
-        )
-        if (mix) {
-          setTracks(mix.tracks)
-          setTitle(mix.title)
-        } else {
-          setTracks([])
-        }
+      .getGenreMix(genre)
+      .then((mix) => {
+        setTracks(mix.tracks)
+        setTitle(mix.title)
       })
       .catch(() => setTracks([]))
   }, [genre])

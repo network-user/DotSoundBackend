@@ -14,6 +14,10 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.admin.schemas import (
+    ArtistSupplementalBatchImportRequest,
+    ArtistSupplementalBatchImportResponse,
+    ArtistSupplementalBatchPromptRequest,
+    ArtistSupplementalBatchPromptResponse,
     AdminTrackListResponse,
     AdminTrackResponse,
 )
@@ -39,9 +43,51 @@ from app.schemas.artist_catalog import ArtistCatalogReleaseDetailResponse
 from app.services.admin_artist_catalog_service import (
     AdminArtistCatalogService,
 )
+from app.services.admin_artist_supplemental_service import (
+    AdminArtistSupplementalService,
+)
 from app.services.admin_service import AdminService
 
 router = APIRouter(prefix="/artists", tags=["admin-artist-catalog"])
+
+
+@router.post(
+    "/supplemental/batch-prompt",
+    response_model=ArtistSupplementalBatchPromptResponse,
+)
+@limiter.limit("20/minute")
+async def admin_artist_supplemental_batch_prompt(
+    request: Request,
+    body: ArtistSupplementalBatchPromptRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> ArtistSupplementalBatchPromptResponse:
+    svc = AdminArtistSupplementalService(session)
+    prompt, count = await svc.batch_prompt(body.artist_ids)
+    return ArtistSupplementalBatchPromptResponse(
+        prompt=prompt,
+        artist_count=count,
+    )
+
+
+@router.post(
+    "/supplemental/batch-import",
+    response_model=ArtistSupplementalBatchImportResponse,
+)
+@limiter.limit("10/minute")
+async def admin_artist_supplemental_batch_import(
+    request: Request,
+    body: ArtistSupplementalBatchImportRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> ArtistSupplementalBatchImportResponse:
+    svc = AdminArtistSupplementalService(session)
+    imported, errors = await svc.batch_import(body.raw_response)
+    await session.commit()
+    return ArtistSupplementalBatchImportResponse(
+        imported=imported,
+        errors=errors,
+    )
 
 
 @router.get(

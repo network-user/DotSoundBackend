@@ -2032,6 +2032,14 @@ export const api = {
     return request('/api/v1/recommendations/genre-mixes')
   },
 
+  getGenreMix(
+    genre: string,
+  ): Promise<import('@/types/api').GenreMixItem> {
+    return request(
+      `/api/v1/recommendations/genre-mixes/${encodeURIComponent(genre)}`,
+    )
+  },
+
   saveGenreMixOverride(
     genre: string,
     body: {

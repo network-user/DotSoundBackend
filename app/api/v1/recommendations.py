@@ -140,6 +140,35 @@ async def get_genre_mixes(
     return GenreMixesResponse(mixes=result)
 
 
+@router.get(
+    "/genre-mixes/{genre}",
+    response_model=GenreMixItemResponse,
+)
+async def get_genre_mix(
+    genre: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    svc = RecommendationService(db)
+    mix = await svc.get_genre_mix(
+        user_id=user.id,
+        genre=genre,
+    )
+    if mix is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="genre mix not found",
+        )
+    tracks_out = await dedupe_and_build_track_list(
+        db, mix["tracks"]
+    )
+    return GenreMixItemResponse(
+        genre=mix["genre"],
+        title=mix["title"],
+        tracks=tracks_out,
+    )
+
+
 @router.put(
     "/genre-mixes/{genre}",
     response_model=GenreMixItemResponse,
