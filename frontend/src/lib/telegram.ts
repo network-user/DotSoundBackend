@@ -248,6 +248,7 @@ export function getUserId(): number | null {
 }
 
 const IS_ADMIN_KEY = 'auth-is-admin'
+const AUTH_TOKEN_KEY = 'auth-token'
 
 export function setIsAdmin(value: boolean): void {
   try {
@@ -261,7 +262,24 @@ export function setIsAdmin(value: boolean): void {
 
 export function getIsAdmin(): boolean {
   try {
-    return localStorage.getItem(IS_ADMIN_KEY) === '1'
+    if (localStorage.getItem(IS_ADMIN_KEY) === '1') {
+      return true
+    }
+    const token = localStorage.getItem(AUTH_TOKEN_KEY)
+    if (!token) return false
+    const parts = token.split('.')
+    if (parts.length < 2) return false
+    const payloadBase64 = parts[1]
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+    const padded = payloadBase64.padEnd(
+      payloadBase64.length +
+        ((4 - (payloadBase64.length % 4)) % 4),
+      '=',
+    )
+    const payloadRaw = atob(padded)
+    const payload = JSON.parse(payloadRaw) as Record<string, unknown>
+    return payload.is_admin === true
   } catch {
     return false
   }

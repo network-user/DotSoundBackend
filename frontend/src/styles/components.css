@@ -793,6 +793,11 @@ button.empty-cta:focus-visible {
   width: min(92vw, 480px);
 }
 
+.toast-host--top {
+  top: calc(var(--safe-top) + var(--space-4));
+  bottom: auto;
+}
+
 .toast {
   pointer-events: auto;
   display: inline-flex;

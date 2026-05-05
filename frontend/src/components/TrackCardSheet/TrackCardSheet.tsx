@@ -153,7 +153,8 @@ export function TrackCardSheet({
   const trackInfoPollRef = useRef<
     ReturnType<typeof setTimeout> | null
   >(null)
-  const isAdmin = getIsAdmin()
+  const [isAdmin, setIsAdmin] = useState(() => getIsAdmin())
+  const [debugMode, setDebugMode] = useState(false)
 
   const [coverKey, setCoverKey] = useState<
     string | null
@@ -223,6 +224,20 @@ export function TrackCardSheet({
   }, [isCardOpen, track?.id, track?.access_mode])
 
   useEffect(() => {
+    let cancelled = false
+    api.getAuthConfig()
+      .then((cfg) => {
+        if (!cancelled) {
+          setDebugMode(Boolean(cfg.debug))
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
     if (!isCardOpen || !track) {
       setExtrasOpen(false)
       setCard(null)
@@ -242,6 +257,9 @@ export function TrackCardSheet({
       return
     }
     setCoverKey(track.cover_key)
+    void api.syncSessionUserFlags().finally(() => {
+      setIsAdmin(getIsAdmin())
+    })
     setCoverVer((v) => v + 1)
     setCoverFailed(false)
     setShowEdit(false)
@@ -509,7 +527,9 @@ export function TrackCardSheet({
           : `playlists?shareType=playlist&id=${sharePayload.id}`
         await navigator.clipboard.writeText(`${base}${path}`)
       }
-      toast.success('Ссылка скопирована')
+      toast.success('Ссылка скопирована', {
+        position: 'top',
+      })
     } catch {
       setShareError('Не удалось скопировать')
     } finally {
@@ -524,7 +544,12 @@ export function TrackCardSheet({
       internalId !== null &&
       track?.uploaded_by_id === internalId,
     )
-    if (!albumId || (!isAdmin && !canOwnerEdit)) return
+    if (
+      !albumId ||
+      (!isAdmin && !debugMode && !import.meta.env.DEV && !canOwnerEdit)
+    ) {
+      return
+    }
     setAlbumEditBusy(true)
     try {
       const [album, myLib] = await Promise.all([
@@ -547,7 +572,7 @@ export function TrackCardSheet({
     } finally {
       setAlbumEditBusy(false)
     }
-  }, [relatedAlbumInfo?.id, track?.album_id, isAdmin, track?.uploaded_by_id, toast])
+  }, [relatedAlbumInfo?.id, track?.album_id, isAdmin, debugMode, track?.uploaded_by_id, toast])
 
   const refreshAlbumEditor = useCallback(async () => {
     if (!albumEditData) return
@@ -564,7 +589,7 @@ export function TrackCardSheet({
   }, [albumEditData?.id])
 
   const saveAlbumMeta = useCallback(async () => {
-    if (!albumEditData || !isAdmin) return
+    if (!albumEditData || (!isAdmin && !debugMode)) return
     setAlbumEditBusy(true)
     try {
       await api.updateAlbum(albumEditData.id, {
@@ -582,24 +607,25 @@ export function TrackCardSheet({
     albumEditDesc,
     albumEditPublic,
     isAdmin,
+    debugMode,
     refreshAlbumEditor,
   ])
 
   const removeAlbumTrack = useCallback(async (trackId: number) => {
-    if (!albumEditData || !isAdmin) return
+    if (!albumEditData || (!isAdmin && !debugMode)) return
     await api.removeTrackFromAlbum(albumEditData.id, trackId)
     await refreshAlbumEditor()
-  }, [albumEditData?.id, isAdmin, refreshAlbumEditor])
+  }, [albumEditData?.id, isAdmin, debugMode, refreshAlbumEditor])
 
   const addAlbumTrack = useCallback(async () => {
-    if (!albumEditData || !isAdmin || !albumAddTrackId) return
+    if (!albumEditData || (!isAdmin && !debugMode) || !albumAddTrackId) return
     await api.addTrackToAlbum(albumEditData.id, albumAddTrackId)
     setAlbumAddTrackId(null)
     await refreshAlbumEditor()
-  }, [albumEditData?.id, isAdmin, albumAddTrackId, refreshAlbumEditor])
+  }, [albumEditData?.id, isAdmin, debugMode, albumAddTrackId, refreshAlbumEditor])
 
   const moveAlbumTrack = useCallback(async (index: number, dir: -1 | 1) => {
-    if (!albumEditData || !isAdmin) return
+    if (!albumEditData || (!isAdmin && !debugMode)) return
     const nextIndex = index + dir
     if (nextIndex < 0 || nextIndex >= albumEditData.tracks.length) return
     const ids = albumEditData.tracks.map((t) => t.id)
@@ -608,16 +634,16 @@ export function TrackCardSheet({
     ids[nextIndex] = tmp
     await api.setAlbumTrackOrder(albumEditData.id, ids)
     await refreshAlbumEditor()
-  }, [albumEditData?.id, albumEditData?.tracks, isAdmin, refreshAlbumEditor])
+  }, [albumEditData?.id, albumEditData?.tracks, isAdmin, debugMode, refreshAlbumEditor])
 
   const saveAlbumTrackTitle = useCallback(async (trackId: number) => {
-    if (!isAdmin) return
+    if (!isAdmin && !debugMode) return
     const raw = albumTrackTitleDrafts[trackId]
     const title = raw?.trim()
     if (!title) return
     await api.updateTrack(trackId, { title })
     await refreshAlbumEditor()
-  }, [isAdmin, albumTrackTitleDrafts, refreshAlbumEditor])
+  }, [isAdmin, debugMode, albumTrackTitleDrafts, refreshAlbumEditor])
 
   const handleAuthor = () => {
     if (track?.artist && onOpenArtist) {
@@ -829,6 +855,8 @@ export function TrackCardSheet({
   const isOwner =
     internalId !== null &&
     track.uploaded_by_id === internalId
+  const canEditUi =
+    isAdmin || debugMode || import.meta.env.DEV
   const liked = isLiked(track.id)
   const disliked = isDisliked(track.id)
   const pct = duration
@@ -975,7 +1003,7 @@ export function TrackCardSheet({
               </button>
               <LyricsPanel
                 trackId={track.id}
-                isOwner={isOwner}
+                isOwner={isOwner || canEditUi}
                 catalogType={track.catalog_type}
                 hasLyrics={
                   card?.has_lyrics ?? false
@@ -1003,7 +1031,7 @@ export function TrackCardSheet({
               </button>
               <LyricsPanel
                 trackId={track.id}
-                isOwner={isOwner}
+                isOwner={isOwner || canEditUi}
                 catalogType={track.catalog_type}
                 hasLyrics={
                   card?.has_lyrics ?? false
@@ -1055,6 +1083,18 @@ export function TrackCardSheet({
               >
                 <Icon name="share" size={18} />
               </button>
+              {(canEditUi && (relatedAlbumInfo || track.album_id)) && (
+                <button
+                  className="icon-btn"
+                  onClick={() => {
+                    void openAlbumEditor()
+                  }}
+                  disabled={albumEditBusy}
+                  aria-label="Редактировать альбом"
+                >
+                  <Icon name="edit" size={18} />
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -1077,6 +1117,18 @@ export function TrackCardSheet({
                     size={18}
                   />
                 </button>
+                {(canEditUi && (relatedAlbumInfo || track.album_id)) && (
+                  <button
+                    className="icon-btn"
+                    onClick={() => {
+                      void openAlbumEditor()
+                    }}
+                    disabled={albumEditBusy}
+                    aria-label="Редактировать альбом"
+                  >
+                    <Icon name="edit" size={18} />
+                  </button>
+                )}
               </div>
               <p
                 className="tcs-artist"
@@ -1129,7 +1181,7 @@ export function TrackCardSheet({
                   <Icon name="share" size={14} />
                   Поделиться
                 </button>
-                {(isAdmin || isOwner) && (
+                {canEditUi && (
                   <button
                     type="button"
                     className="tcs-share-related-btn"
@@ -1405,7 +1457,7 @@ export function TrackCardSheet({
               setEditingLyrics(false)
             }}
             disabled={
-              !card?.has_lyrics && !isOwner
+              !card?.has_lyrics && !isOwner && !canEditUi
             }
           >
             <Icon name="text" size={20} />
@@ -1447,7 +1499,7 @@ export function TrackCardSheet({
             </span>
           </button>
 
-          {(isAdmin || (isOwner && track.catalog_type === 'ugc')) && (
+          {canEditUi && (
             <button
               className={`tcs-action-btn${showEdit ? ' active' : ''}`}
               onClick={() =>
@@ -1473,13 +1525,13 @@ export function TrackCardSheet({
           </button>
         </div>
 
-        {showEdit && (isAdmin || (isOwner && track.catalog_type === 'ugc')) && (
+        {showEdit && canEditUi && (
           <div className="tcs-edit-panel">
             <div className="tcs-edit-title">
               {t('trackSheet.editing')}
             </div>
             <div className="tcs-edit-actions">
-              {(isAdmin || track.catalog_type === 'ugc') && (
+              {canEditUi && (
                 <>
                   <button
                     className="tcs-edit-btn"
@@ -1566,11 +1618,11 @@ export function TrackCardSheet({
         )}
 
         {editingLyrics &&
-          (isOwner || isAdmin) && (
+          (isOwner || canEditUi) && (
           <div className="tcs-lyrics-edit-inline">
             <LyricsPanel
               trackId={track.id}
-              isOwner={isOwner}
+              isOwner={isOwner || canEditUi}
               catalogType={track.catalog_type}
               hasLyrics={
                 card?.has_lyrics ?? false

@@ -14,6 +14,7 @@ type ToastKind = 'info' | 'success' | 'warning' | 'error'
 
 interface ToastOpts {
   duration?: number
+  position?: 'top' | 'bottom'
   action?: { label: string; onClick: () => void }
 }
 
@@ -22,6 +23,7 @@ interface ToastItem {
   kind: ToastKind
   message: string
   duration: number
+  position: 'top' | 'bottom'
   leaving: boolean
   action?: { label: string; onClick: () => void }
 }
@@ -93,6 +95,7 @@ export function ToastProvider({
           kind,
           message,
           duration,
+          position: opts?.position ?? 'bottom',
           leaving: false,
           action: opts?.action,
         },
@@ -132,18 +135,27 @@ export function ToastProvider({
   return (
     <ToastCtx.Provider value={api}>
       {children}
-      <div
-        className="toast-host"
-        aria-live="polite"
-        aria-atomic="false"
-      >
-        {items.map((t) => (
-          <ToastView
-            key={t.id}
-            item={t}
-            onClose={() => dismiss(t.id)}
-          />
-        ))}
+      <div className="toast-host toast-host--top" aria-live="polite" aria-atomic="false">
+        {items
+          .filter((t) => t.position === 'top')
+          .map((t) => (
+            <ToastView
+              key={t.id}
+              item={t}
+              onClose={() => dismiss(t.id)}
+            />
+          ))}
+      </div>
+      <div className="toast-host" aria-live="polite" aria-atomic="false">
+        {items
+          .filter((t) => t.position !== 'top')
+          .map((t) => (
+            <ToastView
+              key={t.id}
+              item={t}
+              onClose={() => dismiss(t.id)}
+            />
+          ))}
       </div>
     </ToastCtx.Provider>
   )

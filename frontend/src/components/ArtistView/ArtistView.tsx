@@ -673,6 +673,10 @@ export function ArtistView({
     view.source_page_url ??
     primaryProfile?.source_page_url ??
     null
+  const monthlyListenersValue =
+    listeners?.current_month_listeners ??
+    artist.monthly_listeners ??
+    0
 
   return (
     <div className="author-view">
@@ -726,37 +730,15 @@ export function ArtistView({
           {metaParts.join(' • ')}
         </p>
 
-        {/* Stats: monthly listeners + followers */}
-        {(listeners || artist.follower_count !== undefined) && (
-          <div className="artist-stats-row">
-            {(listeners?.current_month_listeners ?? artist.monthly_listeners) !== undefined && (
-              <span className="artist-stat-chip">
-                <span className="artist-stat-value">
-                  {fmtCount(
-                    listeners?.current_month_listeners ??
-                      artist.monthly_listeners ??
-                      0,
-                  )}
-                </span>
-                <span className="artist-stat-label">
-                  {t('artist.monthly_listeners', {
-                    defaultValue: 'слушателей',
-                  })}
-                </span>
-              </span>
-            )}
-            <span className="artist-stat-chip">
-              <span className="artist-stat-value">
-                {fmtCount(artist.follower_count ?? 0)}
-              </span>
-              <span className="artist-stat-label">
-                {t('artist.followers', {
-                  defaultValue: 'подписчиков',
-                })}
-              </span>
-            </span>
-          </div>
-        )}
+        <p className="artist-monthly-listeners-inline">
+          <Icon name="users-listeners" size={14} />
+          <span>
+            {fmtCount(monthlyListenersValue)}{' '}
+            {t('artist.monthly_listeners', {
+              defaultValue: 'уникальных слушателей за месяц',
+            })}
+          </span>
+        </p>
 
         {/* Follow button (only for logged-in users) */}
         {currentUserId && (

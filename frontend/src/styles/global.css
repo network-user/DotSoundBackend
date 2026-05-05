@@ -3080,38 +3080,47 @@ html.le-lyrics-sync-open body {
   overflow: hidden;
 }
 .splash-logo {
+  font-family:
+    'SF Pro Display',
+    'SF Pro Text',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
   font-size: 40px;
-  font-weight: 800;
-  letter-spacing: 0;
+  font-weight: 600;
+  letter-spacing: -0.02em;
   color: var(--text);
   line-height: 1;
   white-space: nowrap;
   padding: 0 12px;
   opacity: 0;
   will-change: opacity, transform;
-  animation: splashLogoIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards;
+  animation:
+    splashLogoIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards,
+    splashLogoBreath 2s ease-in-out 0.9s infinite;
 }
 .splash-dots {
   display: flex;
-  gap: 7px;
+  gap: 8px;
   margin-top: 24px;
   opacity: 0;
   will-change: opacity;
   animation: splashDotsIn 0.5s ease 0.5s forwards;
 }
 .splash-dots span {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   background: var(--text-muted);
   border-radius: 50%;
-  animation: splashDotOnce 1.4s ease-in-out 0.8s forwards;
-  opacity: 0.15;
+  animation: splashDotPulse 1s ease-in-out infinite;
+  opacity: 0.22;
 }
 .splash-dots span:nth-child(2) {
-  animation-delay: 1s;
+  animation-delay: 0.16s;
 }
 .splash-dots span:nth-child(3) {
-  animation-delay: 1.2s;
+  animation-delay: 0.32s;
 }
 
 @keyframes splashLogoIn {
@@ -3130,18 +3139,28 @@ html.le-lyrics-sync-open body {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-@keyframes splashDotOnce {
+@keyframes splashDotPulse {
   0% {
-    opacity: 0.15;
-    transform: scale(0.7);
+    opacity: 0.2;
+    transform: translateY(0) scale(0.92);
   }
   50% {
-    opacity: 0.55;
-    transform: scale(1);
+    opacity: 0.78;
+    transform: translateY(-4px) scale(1.05);
   }
   100% {
-    opacity: 0.38;
-    transform: scale(0.88);
+    opacity: 0.24;
+    transform: translateY(0) scale(0.92);
+  }
+}
+@keyframes splashLogoBreath {
+  0%, 100% {
+    text-shadow: 0 0 0 rgba(255, 255, 255, 0);
+    transform: scale(1);
+  }
+  50% {
+    text-shadow: 0 0 22px rgba(255, 255, 255, 0.08);
+    transform: scale(1.01);
   }
 }
 
@@ -6131,6 +6150,25 @@ html.le-lyrics-sync-open body {
   justify-content: center;
   flex-wrap: wrap;
 }
+.artist-stats-grid {
+  width: 100%;
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.artist-stat-card {
+  min-height: 64px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 8px;
+}
 .artist-stat-chip {
   display: flex;
   flex-direction: column;
@@ -6147,7 +6185,20 @@ html.le-lyrics-sync-open body {
   font-size: 11px;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
+  text-align: center;
+}
+.artist-monthly-listeners-inline {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+.artist-monthly-listeners-inline svg {
+  opacity: 0.82;
 }
 .artist-follow-btn {
   margin-top: 14px;
@@ -6965,12 +7016,96 @@ html.ds-low-glass .tcs-sheet {
 
 .splash-logo,
 .auth-logo {
+  font-family:
+    'SF Pro Display',
+    'SF Pro Text',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
   font-size: 34px;
-  letter-spacing: 0;
+  letter-spacing: -0.02em;
 }
 
 .splash-dots {
   margin-top: 18px;
+}
+
+.gm-edit-modal {
+  width: min(760px, 96vw);
+  max-height: min(84vh, 900px);
+  padding: 18px;
+  border-radius: 18px;
+}
+
+.gm-edit-section {
+  margin-top: 8px;
+}
+
+.gm-edit-input {
+  min-height: 46px;
+  font-size: 16px;
+}
+
+.gm-edit-btn {
+  min-height: 44px;
+  font-size: 15px;
+  padding: 0 16px;
+  margin-top: 10px;
+}
+
+.gm-edit-add-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  margin-top: 14px;
+  align-items: center;
+}
+
+.gm-edit-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.gm-edit-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+
+.gm-edit-item-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.gm-edit-item-title {
+  font-size: 15px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gm-edit-item-artist {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.gm-edit-item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.gm-edit-icon-btn {
+  min-width: 38px;
+  min-height: 38px;
 }
 
 #view-home {
@@ -7077,17 +7212,28 @@ html.ds-low-glass .tcs-sheet {
 .home-featured__play {
   position: absolute;
   right: 18px;
-  bottom: 18px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
+  top: 22px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
   border: 1px solid var(--border-hover);
   background: var(--accent);
   color: var(--bg);
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   justify-content: center;
   cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.home-featured__play:hover {
+  filter: brightness(0.96);
+}
+.home-featured__play span {
+  line-height: 1;
 }
 
 .home-featured--skeleton {
