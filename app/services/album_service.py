@@ -41,6 +41,38 @@ class AlbumService:
             )
         return album
 
+    async def _assert_admin_actor(self, user_id: int) -> None:
+        actor = await self._resolve_user(user_id)
+        if not actor.is_admin or not actor.is_active or not actor.admin_init:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access required",
+            )
+
+    async def _get_manageable_album(
+        self,
+        album_id: int,
+        user_id: int,
+        *,
+        allow_admin: bool = False,
+    ) -> Album:
+        album = await self._repo.get_by_id(album_id)
+        if not album:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Album not found",
+            )
+        resolved = await self._resolve_user_id(user_id)
+        if album.owner_id == resolved:
+            return album
+        if allow_admin:
+            await self._assert_admin_actor(user_id)
+            return album
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not the album owner",
+        )
+
     async def create(
         self,
         user_id: int,
@@ -79,43 +111,98 @@ class AlbumService:
         title: str | None = None,
         description: str | None = None,
         is_public: bool | None = None,
+        *,
+        allow_admin: bool = False,
     ) -> Album:
-        album = await self._get_owned_album(album_id, user_id)
+        album = await self._get_manageable_album(
+            album_id,
+            user_id,
+            allow_admin=allow_admin,
+        )
         album = await self._repo.update(album, title, description, is_public)
         await self._session.commit()
+        logger.info(
+            "album_updated",
+            album_id=album_id,
+            actor_user_id=user_id,
+            admin_override=allow_admin and album.owner_id != user_id,
+        )
         return album
 
-    async def delete(self, album_id: int, user_id: int) -> None:
-        album = await self._get_owned_album(album_id, user_id)
+    async def delete(
+        self,
+        album_id: int,
+        user_id: int,
+        *,
+        allow_admin: bool = False,
+    ) -> None:
+        album = await self._get_manageable_album(
+            album_id,
+            user_id,
+            allow_admin=allow_admin,
+        )
         await self._repo.delete(album)
         await self._session.commit()
+        logger.info(
+            "album_deleted",
+            album_id=album_id,
+            actor_user_id=user_id,
+            admin_override=allow_admin and album.owner_id != user_id,
+        )
 
     async def add_track(
-        self, album_id: int, track_id: int, user_id: int
+        self,
+        album_id: int,
+        track_id: int,
+        user_id: int,
+        *,
+        allow_admin: bool = False,
     ) -> None:
-        album = await self._get_owned_album(album_id, user_id)
+        album = await self._get_manageable_album(
+            album_id,
+            user_id,
+            allow_admin=allow_admin,
+        )
         track = await self._track_repo.get_by_id(track_id)
         if not track or not track.is_active:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Track not found"
             )
         resolved = await self._resolve_user_id(user_id)
-        if track.uploaded_by_id != resolved:
+        if not allow_admin and track.uploaded_by_id != resolved:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Can only add own tracks to album",
             )
+        if allow_admin and album.owner_id != resolved:
+            await self._assert_admin_actor(user_id)
         if track.album_id == album.id:
             return
         if track.album_id is not None:
             await self._repo.remove_track(track)
         await self._repo.add_track(album.id, track)
         await self._session.commit()
+        logger.info(
+            "album_track_added",
+            album_id=album_id,
+            track_id=track_id,
+            actor_user_id=user_id,
+            admin_override=allow_admin and album.owner_id != user_id,
+        )
 
     async def remove_track(
-        self, album_id: int, track_id: int, user_id: int
+        self,
+        album_id: int,
+        track_id: int,
+        user_id: int,
+        *,
+        allow_admin: bool = False,
     ) -> None:
-        await self._get_owned_album(album_id, user_id)
+        await self._get_manageable_album(
+            album_id,
+            user_id,
+            allow_admin=allow_admin,
+        )
         track = await self._track_repo.get_by_id(track_id)
         if not track or track.album_id != album_id:
             raise HTTPException(
@@ -124,3 +211,36 @@ class AlbumService:
             )
         await self._repo.remove_track(track)
         await self._session.commit()
+        logger.info(
+            "album_track_removed",
+            album_id=album_id,
+            track_id=track_id,
+            actor_user_id=user_id,
+        )
+
+    async def reorder_tracks(
+        self,
+        album_id: int,
+        track_ids: list[int],
+        user_id: int,
+        *,
+        allow_admin: bool = False,
+    ) -> None:
+        await self._get_manageable_album(
+            album_id,
+            user_id,
+            allow_admin=allow_admin,
+        )
+        try:
+            await self._repo.set_album_track_order(album_id, track_ids)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+        await self._session.commit()
+        logger.info(
+            "album_track_order_updated",
+            album_id=album_id,
+            actor_user_id=user_id,
+        )

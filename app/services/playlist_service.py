@@ -62,19 +62,29 @@ class PlaylistService:
         requester_id: int,
         name: str | None,
         is_public: bool | None,
+        *,
+        allow_admin: bool = False,
     ) -> Playlist:
-        playlist = await self._get_owned(
-            playlist_id, requester_id
+        playlist = await self._get_can_manage(
+            playlist_id,
+            requester_id,
+            allow_admin=allow_admin,
         )
         return await self._repo.update(
             playlist, name=name, is_public=is_public
         )
 
     async def delete(
-        self, playlist_id: int, requester_id: int
+        self,
+        playlist_id: int,
+        requester_id: int,
+        *,
+        allow_admin: bool = False,
     ) -> None:
-        playlist = await self._get_owned(
-            playlist_id, requester_id
+        playlist = await self._get_can_manage(
+            playlist_id,
+            requester_id,
+            allow_admin=allow_admin,
         )
         await self._repo.delete(playlist)
         logger.info(
@@ -89,8 +99,14 @@ class PlaylistService:
         track_id: int,
         requester_id: int,
         position: int = 0,
+        *,
+        allow_admin: bool = False,
     ) -> None:
-        await self._get_can_write(playlist_id, requester_id)
+        await self._get_can_write(
+            playlist_id,
+            requester_id,
+            allow_admin=allow_admin,
+        )
         track = await self._track_repo.get_by_id(track_id)
         if not track or not track.is_active:
             raise HTTPException(
@@ -109,8 +125,14 @@ class PlaylistService:
         playlist_id: int,
         track_id: int,
         requester_id: int,
+        *,
+        allow_admin: bool = False,
     ) -> None:
-        await self._get_can_write(playlist_id, requester_id)
+        await self._get_can_write(
+            playlist_id,
+            requester_id,
+            allow_admin=allow_admin,
+        )
         found = await self._repo.remove_track(
             playlist_id, track_id
         )
@@ -119,6 +141,30 @@ class PlaylistService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Track not in playlist",
             )
+
+    async def reorder_tracks(
+        self,
+        playlist_id: int,
+        ordered_track_ids: list[int],
+        requester_id: int,
+        *,
+        allow_admin: bool = False,
+    ) -> None:
+        await self._get_can_write(
+            playlist_id,
+            requester_id,
+            allow_admin=allow_admin,
+        )
+        try:
+            await self._repo.set_track_order(
+                playlist_id,
+                ordered_track_ids,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
 
     async def get_tracks(
         self, playlist_id: int
@@ -143,8 +189,20 @@ class PlaylistService:
             )
         return playlist
 
-    async def _get_can_write(
-        self, playlist_id: int, requester_id: int
+    async def _assert_admin_actor(self, requester_id: int) -> None:
+        user = await self._resolve_user(requester_id)
+        if not user.is_admin or not user.is_active or not user.admin_init:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access required",
+            )
+
+    async def _get_can_manage(
+        self,
+        playlist_id: int,
+        requester_id: int,
+        *,
+        allow_admin: bool = False,
     ) -> Playlist:
         user = await self._resolve_user(requester_id)
         playlist = await self._repo.get_by_id(playlist_id)
@@ -154,6 +212,33 @@ class PlaylistService:
                 detail="Playlist not found",
             )
         if playlist.owner_id == user.id:
+            return playlist
+        if allow_admin:
+            await self._assert_admin_actor(requester_id)
+            return playlist
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not your playlist",
+        )
+
+    async def _get_can_write(
+        self,
+        playlist_id: int,
+        requester_id: int,
+        *,
+        allow_admin: bool = False,
+    ) -> Playlist:
+        user = await self._resolve_user(requester_id)
+        playlist = await self._repo.get_by_id(playlist_id)
+        if not playlist:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Playlist not found",
+        )
+        if playlist.owner_id == user.id:
+            return playlist
+        if allow_admin:
+            await self._assert_admin_actor(requester_id)
             return playlist
         r = await self._session.execute(
             select(PlaylistCollaborator)

@@ -1,4 +1,4 @@
-import {
+﻿import {
   useCallback,
   useEffect,
   useMemo,
@@ -36,6 +36,7 @@ import {
 } from '@/lib/streamDebugOverride'
 import { hapticNotification } from '@/lib/telegram'
 import type {
+  AlbumWithTracksRecord,
   ChatListItem,
   Track,
   TrackCardResponse,
@@ -172,6 +173,15 @@ export function TrackCardSheet({
     type: ShareEntityType
     title: string
   } | null>(null)
+  const [albumEditOpen, setAlbumEditOpen] = useState(false)
+  const [albumEditData, setAlbumEditData] =
+    useState<AlbumWithTracksRecord | null>(null)
+  const [albumEditBusy, setAlbumEditBusy] = useState(false)
+  const [albumEditTitle, setAlbumEditTitle] = useState('')
+  const [albumEditDesc, setAlbumEditDesc] = useState('')
+  const [albumEditPublic, setAlbumEditPublic] = useState(false)
+  const [albumAddTrackId, setAlbumAddTrackId] = useState<number | null>(null)
+  const [albumTrackPool, setAlbumTrackPool] = useState<Track[]>([])
   const [videoReady, setVideoReady] =
     useState(false)
   const videoEnabled =
@@ -266,7 +276,7 @@ export function TrackCardSheet({
           trackInfoPollRef.current = setTimeout(pollInfo, 3000)
         }
       } catch {
-        // silent — info block hidden if not loadable
+        // silent вЂ” info block hidden if not loadable
       }
     }
     pollInfo()
@@ -364,7 +374,7 @@ export function TrackCardSheet({
 
   const formatShareChatTitle = useCallback((item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {
-      return 'Избранное'
+      return 'РР·Р±СЂР°РЅРЅРѕРµ'
     }
     if (item.conversation.title?.trim()) {
       return item.conversation.title.trim()
@@ -380,7 +390,7 @@ export function TrackCardSheet({
     if (peer?.username) {
       return `@${peer.username}`
     }
-    return `Чат #${item.conversation.id}`
+    return `Р§Р°С‚ #${item.conversation.id}`
   }, [])
 
   const openShareModal = useCallback(async (payload: {
@@ -396,7 +406,7 @@ export function TrackCardSheet({
       const chats = await api.listChats()
       setShareChats(chats)
     } catch {
-      setShareError('Не удалось загрузить чаты')
+      setShareError('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ С‡Р°С‚С‹')
     } finally {
       setShareLoading(false)
     }
@@ -429,13 +439,90 @@ export function TrackCardSheet({
     try {
       await api.sendMessage(conversationId, '', opts)
       setShareOpen(false)
-      toast.success('Трек отправлен')
+      toast.success('РўСЂРµРє РѕС‚РїСЂР°РІР»РµРЅ')
     } catch {
-      setShareError('Не удалось отправить трек')
+      setShareError('РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ С‚СЂРµРє')
     } finally {
       setShareSendingConvId(null)
     }
   }, [sharePayload, toast])
+
+  const openAlbumEditor = useCallback(async () => {
+    if (!card?.album || !isAdmin) return
+    setAlbumEditBusy(true)
+    try {
+      const [album, myLib] = await Promise.all([
+        api.getAlbum(card.album.id),
+        api.getMyLibrary(1, 100, false),
+      ])
+      setAlbumEditData(album)
+      setAlbumEditTitle(album.title)
+      setAlbumEditDesc(album.description || '')
+      setAlbumEditPublic(album.is_public)
+      setAlbumTrackPool(myLib.items)
+      setAlbumEditOpen(true)
+    } catch {
+      toast.error('РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєСЂС‹С‚СЊ СЂРµРґР°РєС‚РѕСЂ Р°Р»СЊР±РѕРјР°')
+    } finally {
+      setAlbumEditBusy(false)
+    }
+  }, [card?.album?.id, isAdmin, toast])
+
+  const refreshAlbumEditor = useCallback(async () => {
+    if (!albumEditData) return
+    const album = await api.getAlbum(albumEditData.id)
+    setAlbumEditData(album)
+    setAlbumEditTitle(album.title)
+    setAlbumEditDesc(album.description || '')
+    setAlbumEditPublic(album.is_public)
+  }, [albumEditData?.id])
+
+  const saveAlbumMeta = useCallback(async () => {
+    if (!albumEditData || !isAdmin) return
+    setAlbumEditBusy(true)
+    try {
+      await api.updateAlbum(albumEditData.id, {
+        title: albumEditTitle.trim() || albumEditData.title,
+        description: albumEditDesc.trim() || null,
+        is_public: albumEditPublic,
+      })
+      await refreshAlbumEditor()
+    } finally {
+      setAlbumEditBusy(false)
+    }
+  }, [
+    albumEditData?.id,
+    albumEditTitle,
+    albumEditDesc,
+    albumEditPublic,
+    isAdmin,
+    refreshAlbumEditor,
+  ])
+
+  const removeAlbumTrack = useCallback(async (trackId: number) => {
+    if (!albumEditData || !isAdmin) return
+    await api.removeTrackFromAlbum(albumEditData.id, trackId)
+    await refreshAlbumEditor()
+  }, [albumEditData?.id, isAdmin, refreshAlbumEditor])
+
+  const addAlbumTrack = useCallback(async () => {
+    if (!albumEditData || !isAdmin || !albumAddTrackId) return
+    await api.addTrackToAlbum(albumEditData.id, albumAddTrackId)
+    setAlbumAddTrackId(null)
+    await refreshAlbumEditor()
+  }, [albumEditData?.id, isAdmin, albumAddTrackId, refreshAlbumEditor])
+
+  const moveAlbumTrack = useCallback(async (index: number, dir: -1 | 1) => {
+    if (!albumEditData || !isAdmin) return
+    const nextIndex = index + dir
+    if (nextIndex < 0 || nextIndex >= albumEditData.tracks.length) return
+    const ids = albumEditData.tracks.map((t) => t.id)
+    const tmp = ids[index]
+    ids[index] = ids[nextIndex]
+    ids[nextIndex] = tmp
+    await api.setAlbumTrackOrder(albumEditData.id, ids)
+    await refreshAlbumEditor()
+  }, [albumEditData?.id, albumEditData?.tracks, isAdmin, refreshAlbumEditor])
 
   const handleAuthor = () => {
     if (track?.artist && onOpenArtist) {
@@ -858,7 +945,7 @@ export function TrackCardSheet({
                       : undefined
                   }
                 >
-                  {track.artist ?? '—'}
+                  {track.artist ?? 'вЂ”'}
                 </p>
               </div>
               <button
@@ -909,7 +996,7 @@ export function TrackCardSheet({
                     : undefined
                 }
               >
-                {track.artist ?? '—'}
+                {track.artist ?? 'вЂ”'}
               </p>
             </>
           )}
@@ -927,20 +1014,35 @@ export function TrackCardSheet({
               <span className="tcs-share-related-title">
                 Альбом: {card.album.title}
               </span>
-              <button
-                type="button"
-                className="tcs-share-related-btn"
-                onClick={() => {
-                  void openShareModal({
-                    id: card.album!.id,
-                    type: 'album',
-                    title: card.album!.title,
-                  })
-                }}
-              >
-                <Icon name="share" size={14} />
-                Поделиться
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="tcs-share-related-btn"
+                  onClick={() => {
+                    void openShareModal({
+                      id: card.album!.id,
+                      type: 'album',
+                      title: card.album!.title,
+                    })
+                  }}
+                >
+                  <Icon name="share" size={14} />
+                  Поделиться
+                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    className="tcs-share-related-btn"
+                    onClick={() => {
+                      void openAlbumEditor()
+                    }}
+                    disabled={albumEditBusy}
+                  >
+                    <Icon name="edit" size={14} />
+                    Редактировать
+                  </button>
+                )}
+              </div>
             </div>
           )}
           {card?.author && (
@@ -1117,7 +1219,7 @@ export function TrackCardSheet({
                         playbackRate === rate
                       }
                     >
-                      {rate}×
+                      {rate}Г—
                     </button>
                   ))}
                   <button
@@ -1154,7 +1256,7 @@ export function TrackCardSheet({
                       onClick={clearAbLoop}
                       title={t('trackSheet.abReset')}
                     >
-                      ×
+                      Г—
                     </button>
                   )}
                 </div>
@@ -1391,7 +1493,7 @@ export function TrackCardSheet({
         {playbackVariants.length > 1 && (
           <div className="tcs-source-variants">
             <span className="tcs-source-label">
-              {t('trackSheet.playbackSource', 'Источник')}
+              {t('trackSheet.playbackSource', 'РСЃС‚РѕС‡РЅРёРє')}
             </span>
             <div className="tcs-variant-chips" role="tablist">
               {playbackVariants.map((v) => (
@@ -1409,7 +1511,7 @@ export function TrackCardSheet({
                       const full = await api.getTrack(v.track_id)
                       playTrack(full)
                     } catch {
-                      toast.error(t('trackSheet.sourceSwitchError', 'Не удалось переключить'))
+                      toast.error(t('trackSheet.sourceSwitchError', 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРµСЂРµРєР»СЋС‡РёС‚СЊ'))
                     }
                   }}
                 >
@@ -1528,7 +1630,7 @@ export function TrackCardSheet({
                   <CoverImage coverKey={st.cover_key} />
                   <div className="tcs-similar-info">
                     <span className="tcs-similar-track-title">{st.title}</span>
-                    <span className="tcs-similar-track-artist">{st.artist ?? '—'}</span>
+                    <span className="tcs-similar-track-artist">{st.artist ?? 'вЂ”'}</span>
                   </div>
                 </div>
               ))}
@@ -1566,7 +1668,7 @@ export function TrackCardSheet({
                   <span>
                     {t('trackSheet.status')}{' '}
                     <b>
-                      {trackInfo?.status ?? '—'}
+                      {trackInfo?.status ?? 'вЂ”'}
                     </b>
                   </span>
                   {trackInfo?.fetched_at && (
@@ -1665,7 +1767,110 @@ export function TrackCardSheet({
           style={{ display: 'none' }}
           onChange={handleVideoSelected}
         />
-
+        {albumEditOpen && albumEditData && (
+          <div
+            className="share-modal-overlay fade-in"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setAlbumEditOpen(false)
+              }
+            }}
+          >
+            <div className="share-modal scale-in">
+              <div className="share-modal-header">
+                <div className="share-modal-title-wrap">
+                  <h3 className="share-modal-title">Редактирование альбома</h3>
+                  <p className="share-modal-subtitle">{albumEditData.title}</p>
+                </div>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => setAlbumEditOpen(false)}
+                  aria-label="Закрыть"
+                >
+                  <Icon name="x" size={18} />
+                </button>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Название</label>
+                <input
+                  className="form-input"
+                  value={albumEditTitle}
+                  onChange={(e) => setAlbumEditTitle(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Описание</label>
+                <input
+                  className="form-input"
+                  value={albumEditDesc}
+                  onChange={(e) => setAlbumEditDesc(e.target.value)}
+                />
+              </div>
+              <label className="hint" style={{ display: 'block', marginBottom: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={albumEditPublic}
+                  onChange={(e) => setAlbumEditPublic(e.target.checked)}
+                  style={{ marginRight: 8 }}
+                />
+                Публичный
+              </label>
+              <button
+                className="btn-primary"
+                onClick={() => {
+                  void saveAlbumMeta()
+                }}
+                disabled={albumEditBusy}
+              >
+                {albumEditBusy ? 'Сохранение...' : 'Сохранить'}
+              </button>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <select
+                  className="form-input"
+                  value={albumAddTrackId ?? ''}
+                  onChange={(e) => setAlbumAddTrackId(Number(e.target.value) || null)}
+                >
+                  <option value="">Добавить трек...</option>
+                  {albumTrackPool
+                    .filter((t) => !albumEditData.tracks.some((at) => at.id === t.id))
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title} {t.artist ? `- ${t.artist}` : ''}
+                      </option>
+                    ))}
+                </select>
+                <button className="btn-secondary" onClick={() => void addAlbumTrack()}>
+                  Добавить
+                </button>
+              </div>
+              <div style={{ marginTop: 12 }}>
+                {albumEditData.tracks.map((t, idx) => (
+                  <div
+                    key={t.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <span style={{ flex: 1 }}>{t.title}</span>
+                    <button className="icon-btn" onClick={() => void moveAlbumTrack(idx, -1)}>
+                      ^
+                    </button>
+                    <button className="icon-btn" onClick={() => void moveAlbumTrack(idx, 1)}>
+                      v
+                    </button>
+                    <button className="icon-btn" onClick={() => void removeAlbumTrack(t.id)}>
+                      <Icon name="x" size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
         {shareOpen && (
           <div
             className="share-modal-overlay fade-in"
@@ -1680,20 +1885,20 @@ export function TrackCardSheet({
                 <div className="share-modal-title-wrap">
                   <h3 className="share-modal-title">
                     {sharePayload?.type === 'album'
-                      ? 'Поделиться альбомом'
+                      ? 'РџРѕРґРµР»РёС‚СЊСЃСЏ Р°Р»СЊР±РѕРјРѕРј'
                       : sharePayload?.type === 'playlist'
-                        ? 'Поделиться плейлистом'
-                        : 'Поделиться треком'}
+                        ? 'РџРѕРґРµР»РёС‚СЊСЃСЏ РїР»РµР№Р»РёСЃС‚РѕРј'
+                        : 'РџРѕРґРµР»РёС‚СЊСЃСЏ С‚СЂРµРєРѕРј'}
                   </h3>
                   <p className="share-modal-subtitle">
-                    {sharePayload?.title || 'Выберите чат для отправки'}
+                    {sharePayload?.title || 'Р’С‹Р±РµСЂРёС‚Рµ С‡Р°С‚ РґР»СЏ РѕС‚РїСЂР°РІРєРё'}
                   </p>
                 </div>
                 <button
                   type="button"
                   className="icon-btn"
                   onClick={() => setShareOpen(false)}
-                  aria-label="Закрыть"
+                  aria-label="Р—Р°РєСЂС‹С‚СЊ"
                 >
                   <Icon name="x" size={18} />
                 </button>
@@ -1705,7 +1910,7 @@ export function TrackCardSheet({
                 </div>
               ) : shareChats.length === 0 ? (
                 <div className="share-modal-empty">
-                  Нет доступных чатов
+                  РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… С‡Р°С‚РѕРІ
                 </div>
               ) : (
                 <div className="share-chat-list">
@@ -1740,7 +1945,7 @@ export function TrackCardSheet({
                           </span>
                         </span>
                         <span className="share-chat-action">
-                          {sending ? 'Отправка…' : 'Отправить'}
+                          {sending ? 'РћС‚РїСЂР°РІРєР°вЂ¦' : 'РћС‚РїСЂР°РІРёС‚СЊ'}
                         </span>
                       </button>
                     )
@@ -1766,3 +1971,6 @@ export function TrackCardSheet({
     </div>
   )
 }
+
+
+
