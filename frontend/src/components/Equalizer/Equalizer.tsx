@@ -7,6 +7,7 @@ import {
 } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import { useExitTransition } from '@/hooks/useExitTransition'
+import { hapticTick } from '@/lib/telegram'
 import type { Track } from '@/types/api'
 
 const BANDS = [
@@ -67,6 +68,7 @@ export function Equalizer() {
     idx: number,
     gain: number,
   ) => {
+    hapticTick()
     setEqBand(idx, gain)
     setEqPreset(null)
   }

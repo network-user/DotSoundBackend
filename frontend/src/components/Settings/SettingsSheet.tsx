@@ -7,6 +7,7 @@ import {
   haptic,
   hapticSelection,
   hapticNotification,
+  hapticTick,
   setBackButton,
 } from '@/lib/telegram'
 import { Icon } from '@/components/Icon/Icon'
@@ -163,7 +164,7 @@ export function SettingsSheet({
     )
     setSoundVolume(clamped)
     sound.setVolume(clamped)
-    feedbackTap()
+    hapticTick()
   }
 
   const handleTestSound = () => {

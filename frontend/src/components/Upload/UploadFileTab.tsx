@@ -1,5 +1,14 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent, type DragEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+  type FormEvent,
+} from 'react'
 import { api } from '@/lib/api'
+import { Icon } from '@/components/Icon/Icon'
+import { haptic, hapticNotification, hapticSelection } from '@/lib/telegram'
 import type { LyricsResponse, Track } from '@/types/api'
 import { LyricsEditor } from '../TrackCardSheet/LyricsEditor'
 
@@ -20,7 +29,10 @@ export function UploadFileTab({ onSuccess }: Props) {
   const [title, setTitle] = useState('')
   const [artist, setArtist] = useState('')
   const [genre, setGenre] = useState('')
-  const [genreMode, setGenreMode] = useState<'pick' | 'custom'>('pick')
+  const [genreQuery, setGenreQuery] = useState('')
+  const [genreOpen, setGenreOpen] = useState(false)
+  const [genreSearching, setGenreSearching] = useState(false)
+  const [genreResults, setGenreResults] = useState<string[]>([])
   const [genres, setGenres] = useState<string[]>([])
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [audioDuration, setAudioDuration] = useState<number | null>(null)
@@ -41,6 +53,71 @@ export function UploadFileTab({ onSuccess }: Props) {
     api.getGenres().then(setGenres).catch(() => {})
   }, [])
 
+  const normalizedGenres = useMemo(
+    () => new Map(genres.map((g) => [g.toLowerCase(), g])),
+    [genres],
+  )
+
+  useEffect(() => {
+    const query = genreQuery.trim()
+    if (!genreOpen || !query) {
+      setGenreResults([])
+      setGenreSearching(false)
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setGenreSearching(true)
+      void (async () => {
+        const byName = genres
+          .filter((g) => g.toLowerCase().includes(query.toLowerCase()))
+          .slice(0, 8)
+        const searchHits = await api
+          .getTracks({ q: query, size: 30 })
+          .catch(() => ({ items: [] as Track[] }))
+        const genresFromEs = searchHits.items
+          .map((t) => t.genre?.trim() ?? '')
+          .filter((x) => x.length > 0)
+        const merged = [...byName, ...genresFromEs]
+        const seen = new Set<string>()
+        const result: string[] = []
+        for (const item of merged) {
+          const key = item.toLowerCase()
+          if (seen.has(key)) {
+            continue
+          }
+          seen.add(key)
+          result.push(normalizedGenres.get(key) ?? item)
+          if (result.length >= 10) {
+            break
+          }
+        }
+        const exact = normalizedGenres.get(query.toLowerCase())
+        if (
+          exact
+          && !result.some((value) => value.toLowerCase() === exact.toLowerCase())
+        ) {
+          result.unshift(exact)
+        }
+        if (!cancelled) {
+          setGenreResults(result)
+          setGenreSearching(false)
+        }
+      })()
+    }, 220)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [genreOpen, genreQuery, genres, normalizedGenres])
+
+  const hasExactGenre = useMemo(
+    () => normalizedGenres.has(genreQuery.trim().toLowerCase()),
+    [genreQuery, normalizedGenres],
+  )
+
   useEffect(() => {
     return () => {
       if (localAudioUrl) URL.revokeObjectURL(localAudioUrl)
@@ -50,14 +127,17 @@ export function UploadFileTab({ onSuccess }: Props) {
   const applyAudioFile = (file: File) => {
     if (!ALLOWED_AUDIO_TYPES.includes(file.type)) {
       setError('Формат файла не поддерживается')
+      hapticNotification('error')
       return
     }
     if (file.size > MAX_AUDIO_BYTES) {
       setError('Файл слишком большой (макс. 50 МБ)')
+      hapticNotification('error')
       return
     }
     setError('')
     setAudioFile(file)
+    hapticSelection()
     if (localAudioUrl) URL.revokeObjectURL(localAudioUrl)
     const url = URL.createObjectURL(file)
     setLocalAudioUrl(url)
@@ -78,6 +158,7 @@ export function UploadFileTab({ onSuccess }: Props) {
   const applyCoverFile = (file: File) => {
     if (!file.type.startsWith('image/')) return
     setCoverFile(file)
+    hapticSelection()
     const reader = new FileReader()
     reader.onload = (ev) => setCoverPreview(ev.target?.result as string)
     reader.readAsDataURL(file)
@@ -93,7 +174,10 @@ export function UploadFileTab({ onSuccess }: Props) {
     setTitle('')
     setArtist('')
     setGenre('')
-    setGenreMode('pick')
+    setGenreQuery('')
+    setGenreOpen(false)
+    setGenreSearching(false)
+    setGenreResults([])
     setAudioFile(null)
     setAudioDuration(null)
     setCoverFile(null)
@@ -110,6 +194,10 @@ export function UploadFileTab({ onSuccess }: Props) {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
+    if (genreQuery.trim()) {
+      const exact = normalizedGenres.get(genreQuery.trim().toLowerCase())
+      setGenre(exact ?? genreQuery.trim())
+    }
 
     if (!title.trim()) { setError('Введите название трека'); return }
     if (!audioFile) { setError('Выберите аудиофайл'); return }
@@ -141,6 +229,7 @@ export function UploadFileTab({ onSuccess }: Props) {
         }
       }
       setUploadDone(true)
+      hapticNotification('success')
 
       setTimeout(async () => {
         const fullTrack = await api.getTrack(uploaded.id)
@@ -156,6 +245,7 @@ export function UploadFileTab({ onSuccess }: Props) {
         msg === '413' ? 'Файл слишком большой (макс. 50 МБ)' :
         'Ошибка загрузки. Попробуй ещё раз.',
       )
+      hapticNotification('error')
     }
   }
 
@@ -216,34 +306,81 @@ export function UploadFileTab({ onSuccess }: Props) {
         />
       </div>
 
-      <div className="form-group">
-        <label className="form-label" htmlFor="genre-select">Жанр</label>
-        <select
-          id="genre-select"
-          className="form-input"
-          value={genreMode === 'pick' ? genre : '_custom'}
-          onChange={(e) => {
-            if (e.target.value === '_custom') {
-              setGenreMode('custom')
-              setGenre('')
-            } else {
-              setGenreMode('pick')
-              setGenre(e.target.value)
-            }
+      <div className="form-group genre-search-group">
+        <label className="form-label">Жанр</label>
+        <button
+          type="button"
+          className="genre-search-toggle"
+          onClick={() => {
+            setGenreOpen((prev) => !prev)
+            hapticSelection()
           }}
         >
-          <option value="">Выбрать жанр</option>
-          {genres.map((g) => <option key={g} value={g}>{g}</option>)}
-          <option value="_custom">Другой жанр…</option>
-        </select>
-        {genreMode === 'custom' && (
-          <input
-            className="form-input"
-            style={{ marginTop: 8 }}
-            placeholder="Введи жанр"
-            value={genre}
-            onChange={(e) => setGenre(e.target.value)}
-          />
+          <Icon name="search" size={16} />
+          <span>{genre || 'Поиск жанра'}</span>
+          <Icon name={genreOpen ? 'chevron-up' : 'chevron-down'} size={16} />
+        </button>
+        {genreOpen && (
+          <div className="genre-search-popover" role="listbox">
+            <input
+              className="form-input genre-search-input"
+              placeholder="Начни вводить жанр"
+              value={genreQuery}
+              onChange={(e) => {
+                const next = e.target.value
+                setGenreQuery(next)
+                if (next.trim()) {
+                  setGenre(next.trim())
+                }
+              }}
+            />
+            {genreSearching && (
+              <p className="genre-search-note">Ищем похожие жанры…</p>
+            )}
+            {!genreSearching && genreResults.length > 0 && (
+              <div className="genre-search-list">
+                {genreResults.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`genre-search-item${
+                      genre.toLowerCase() === item.toLowerCase()
+                        ? ' active'
+                        : ''
+                    }`}
+                    onClick={() => {
+                      setGenre(item)
+                      setGenreQuery(item)
+                      setGenreOpen(false)
+                      hapticSelection()
+                    }}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            )}
+            {!genreSearching && genreQuery.trim() && !hasExactGenre && (
+              <button
+                type="button"
+                className="genre-search-create"
+                onClick={() => {
+                  const custom = genreQuery.trim()
+                  setGenre(custom)
+                  setGenreQuery(custom)
+                  setGenreOpen(false)
+                  haptic('medium')
+                }}
+              >
+                Создать жанр: {genreQuery.trim()}
+              </button>
+            )}
+            {!genreSearching && genreResults.length === 0 && !genreQuery.trim() && (
+              <p className="genre-search-note">
+                Популярные жанры появятся после ввода.
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -284,7 +421,10 @@ export function UploadFileTab({ onSuccess }: Props) {
           <button
             type="button"
             className={`lyrics-editor-trigger${lyrics ? ' active' : ''}`}
-            onClick={() => setShowLyricsEditor(true)}
+            onClick={() => {
+              hapticSelection()
+              setShowLyricsEditor(true)
+            }}
           >
             {lyrics
               ? 'Текст добавлен (изменить)'

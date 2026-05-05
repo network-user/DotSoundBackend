@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api, getApiErrorMessage } from '@/lib/api'
+import { hapticNotification, hapticSelection } from '@/lib/telegram'
 import type { Track } from '@/types/api'
 
 interface Props {
@@ -23,6 +24,7 @@ export function UploadBandcampTab({ onSuccess }: Props) {
     try {
       const track = await api.importBandcampTrack(bcUrl.trim(), isPublic)
       setPreview(track)
+      hapticSelection()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
       const isCode = /^[1-5]\d{2}$/.test(msg)
@@ -36,6 +38,7 @@ export function UploadBandcampTab({ onSuccess }: Props) {
             t('upload.errBandcamp.def'),
           ),
       )
+      hapticNotification('error')
     } finally {
       setLoading(false)
     }
@@ -43,6 +46,7 @@ export function UploadBandcampTab({ onSuccess }: Props) {
 
   const handleAdd = () => {
     if (!preview) return
+    hapticNotification('success')
     const track = preview
     setBcUrl('')
     setPreview(null)

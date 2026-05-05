@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { hapticNotification, hapticSelection } from '@/lib/telegram'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { UploadFileTab } from '@/components/Upload/UploadFileTab'
 import { UploadSoundCloudTab } from '@/components/Upload/UploadSoundCloudTab'
@@ -15,36 +16,50 @@ export function UploadView() {
   const [tab, setTab] = useState<Tab>('file')
 
   const handleSuccess = async (track: Track) => {
+    hapticNotification('success')
     navigate('/')
     await playTrack(track)
   }
 
+  const handleTabChange = (next: Tab) => {
+    if (tab === next) {
+      return
+    }
+    hapticSelection()
+    setTab(next)
+  }
+
   return (
-    <section id="view-upload" className="view active">
-      <div className="view-header"><h2>Загрузить трек</h2></div>
+    <section id="view-upload" className="view active upload-view">
+      <div className="view-header upload-view__header">
+        <h2>Загрузка трека</h2>
+        <p className="upload-view__subtitle">
+          Добавь трек в библиотеку за пару шагов.
+        </p>
+      </div>
 
       <div className="upload-tabs">
         <button
           className={`upload-tab${tab === 'file' ? ' active' : ''}`}
-          onClick={() => setTab('file')}
+          onClick={() => handleTabChange('file')}
         >
           Файл
         </button>
         <button
           className={`upload-tab${tab === 'soundcloud' ? ' active' : ''}`}
-          onClick={() => setTab('soundcloud')}
+          onClick={() => handleTabChange('soundcloud')}
         >
           SoundCloud
         </button>
         <button
           className={`upload-tab${tab === 'youtube' ? ' active' : ''}`}
-          onClick={() => setTab('youtube')}
+          onClick={() => handleTabChange('youtube')}
         >
           YouTube
         </button>
         <button
           className={`upload-tab${tab === 'bandcamp' ? ' active' : ''}`}
-          onClick={() => setTab('bandcamp')}
+          onClick={() => handleTabChange('bandcamp')}
         >
           Bandcamp
         </button>
