@@ -3,6 +3,7 @@
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { useToast } from '@/components/ui/Toast'
+import { useSound } from '@/store/SoundContext'
 import { api } from '@/lib/api'
 import {
   getIsAdmin,
@@ -26,6 +27,7 @@ export function PlaylistsView({
   embedded = false,
 }: PlaylistsViewProps) {
   const toast = useToast()
+  const sound = useSound()
   const [screen, setScreen] = useState<Screen>('list')
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null)
   const [selected, setSelected] = useState<PlaylistWithTracks | null>(null)
@@ -260,11 +262,13 @@ export function PlaylistsView({
     const url = `${window.location.origin}${import.meta.env.BASE_URL}playlists`
     try {
       await navigator.clipboard.writeText(url)
-      toast.success('РЎСЃС‹Р»РєР° СЃРєРѕРїРёСЂРѕРІР°РЅР°', {
+      sound.play('notificationInfo')
+      toast.success('РЎСЃСЃС‹Р»РєР° СЃРєРѕРїРёСЂРѕРІР°РЅР°', {
         position: 'top',
       })
     } catch {
       toast.error('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєРѕРїРёСЂРѕРІР°С‚СЊ СЃСЃС‹Р»РєСѓ')
+      sound.play('notificationError')
     }
   }
 

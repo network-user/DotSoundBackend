@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { onWS } from '@/lib/ws'
 import { useToast } from '@/components/ui/Toast'
 import { hapticNotification } from '@/lib/telegram'
+import { useSound } from '@/store/SoundContext'
 import {
   buildNotificationToastMessage,
 } from '@/lib/notificationText'
@@ -75,6 +76,7 @@ function eventToNotif(
 export function SystemEventListener() {
   const toast = useToast()
   const { t } = useTranslation()
+  const sound = useSound()
 
   useEffect(() => {
     const handle = (raw: Record<string, unknown>) => {
@@ -97,21 +99,25 @@ export function SystemEventListener() {
           message || t('notifications.toast.fallbackSuccess'),
           importToastOpts,
         )
+        sound.play('notificationSuccess')
       } else if (kind === 'warning') {
         toast.warning(
           message || t('notifications.toast.fallbackWarning'),
           importToastOpts,
         )
+        sound.play('notificationWarning')
       } else if (kind === 'error') {
         toast.error(
           message || t('notifications.toast.fallbackError'),
           importToastOpts,
         )
+        sound.play('notificationError')
       } else {
         toast.info(
           message || t('notifications.toast.fallbackInfo'),
           importToastOpts,
         )
+        sound.play('notificationInfo')
       }
       const haptic = HAPTIC_BY_TYPE[nLike.type]
       if (haptic) hapticNotification(haptic)
@@ -144,7 +150,7 @@ export function SystemEventListener() {
       offComplaint()
       offWarning()
     }
-  }, [toast, t])
+  }, [toast, t, sound])
 
   return null
 }
