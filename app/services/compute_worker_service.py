@@ -18,7 +18,7 @@ import structlog
 from dotsound_private_core.services.network_policy import (
     is_ip_in_cidrs,
 )
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -334,6 +334,16 @@ def _expand_profiles_for_lyrics_claim(
     return out
 
 
+def worker_can_run_lyrics_profile(
+    worker: ComputeWorker,
+    job_profile: str,
+) -> bool:
+    profiles = _expand_profiles_for_lyrics_claim(
+        list(worker.allowed_profiles or [worker.profile])
+    )
+    return job_profile in profiles
+
+
 async def claim_next_job(
     session: AsyncSession,
     *,
@@ -390,8 +400,15 @@ async def claim_next_job(
         .where(
             LyricsJob.status == "queued",
             LyricsJob.profile.in_(profiles),
+            or_(
+                LyricsJob.pinned_worker_id.is_(None),
+                LyricsJob.pinned_worker_id == worker.id,
+            ),
         )
-        .order_by(LyricsJob.created_at.asc())
+        .order_by(
+            LyricsJob.queue_priority.desc(),
+            LyricsJob.created_at.asc(),
+        )
         .limit(1)
     )
     if _supports_skip_locked(session):
@@ -417,6 +434,7 @@ async def claim_next_job(
         .values(
             status="running",
             routed_to_worker=worker.id,
+            pinned_worker_id=None,
             started_at=now,
             deadline_at=deadline,
             attempts=LyricsJob.attempts + 1,

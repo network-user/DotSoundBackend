@@ -1182,6 +1182,51 @@ export const adminApi = {
       },
     ),
 
+  catalogUploadReleaseCover: (
+    artistId: number,
+    releaseId: number,
+    file: File,
+  ) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return adminFetch<{
+      id: number
+      title: string
+      release_kind: string | null
+      released_at: string | null
+      display_position: number
+      track_count: number
+      cover_key: string | null
+      manual_lock: boolean
+      soundcloud_album_id: number | null
+    }>(
+      `/artists/${artistId}/catalog/releases/${releaseId}/cover`,
+      { method: 'POST', body: fd },
+    )
+  },
+
+  updateTrackMetadata: (
+    trackId: number,
+    body: {
+      title?: string
+      artist?: string | null
+      description?: string | null
+    },
+  ) =>
+    adminFetch<Record<string, unknown>>(`/tracks/${trackId}`, {
+      method: 'PATCH',
+      body,
+    }),
+
+  uploadTrackCover: (trackId: number, file: File) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return adminFetch<Record<string, unknown>>(
+      `/tracks/${trackId}/cover`,
+      { method: 'POST', body: fd },
+    )
+  },
+
   catalogDeleteRelease: (artistId: number, releaseId: number) =>
     adminFetch<void>(
       `/artists/${artistId}/catalog/releases/${releaseId}`,
@@ -1321,6 +1366,32 @@ export const adminApi = {
         body: {
           raw_response: rawResponse,
           skip_existing: skipExisting,
+        },
+      },
+    ),
+
+  batchGenreMoodPrompt: (body: {
+    track_ids?: number[]
+    search?: string
+    only_without_genre?: boolean
+    limit?: number
+  }) =>
+    adminFetch<{ prompt: string; track_count: number }>(
+      '/tracks/genre-mood/batch-prompt',
+      { method: 'POST', body },
+    ),
+
+  batchGenreMoodImport: (
+    rawResponse: string,
+    overwriteGenre: boolean = false,
+  ) =>
+    adminFetch<{ imported: number; errors: string[] }>(
+      '/tracks/genre-mood/batch-import',
+      {
+        method: 'POST',
+        body: {
+          raw_response: rawResponse,
+          overwrite_genre: overwriteGenre,
         },
       },
     ),

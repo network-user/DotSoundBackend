@@ -53,9 +53,19 @@ export function TracksRoute() {
   const [busyContext, setBusyContext] = useState(false)
   const [batchPromptModal, setBatchPromptModal] = useState<string | null>(null)
   const [batchLyricsPromptModal, setBatchLyricsPromptModal] = useState<string | null>(null)
+  const [batchGenreMoodPromptModal, setBatchGenreMoodPromptModal] = useState<
+    string | null
+  >(null)
   const [importModal, setImportModal] = useState(false)
   const [importText, setImportText] = useState('')
   const [importResult, setImportResult] = useState<{
+    imported: number
+    errors: string[]
+  } | null>(null)
+  const [gmImportModal, setGmImportModal] = useState(false)
+  const [gmImportText, setGmImportText] = useState('')
+  const [gmOverwriteGenre, setGmOverwriteGenre] = useState(false)
+  const [gmImportResult, setGmImportResult] = useState<{
     imported: number
     errors: string[]
   } | null>(null)
@@ -230,6 +240,42 @@ export function TracksRoute() {
     try {
       const res = await adminApi.batchLyricsImport(importText, true)
       setImportResult(res)
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
+  }
+
+  const handleBatchGenreMoodPromptSelected = async () => {
+    const ids = Array.from(selectedIds)
+    try {
+      const res = await adminApi.batchGenreMoodPrompt({ track_ids: ids })
+      setBatchGenreMoodPromptModal(res.prompt)
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
+  }
+
+  const handleBatchGenreMoodPromptFiltered = async () => {
+    try {
+      const res = await adminApi.batchGenreMoodPrompt({
+        search: search || undefined,
+        only_without_genre: true,
+        limit: 300,
+      })
+      setBatchGenreMoodPromptModal(res.prompt)
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
+  }
+
+  const handleGenreMoodImport = async () => {
+    try {
+      const res = await adminApi.batchGenreMoodImport(
+        gmImportText,
+        gmOverwriteGenre,
+      )
+      setGmImportResult(res)
       refresh()
     } catch (err) {
       await showAlert((err as Error).message)
@@ -483,6 +529,27 @@ export function TracksRoute() {
         >
           Импорт ответа AI (Lyrics)
         </Press>
+        <Press
+          variant="ghost"
+          disabled={selectedIds.size === 0}
+          onClick={handleBatchGenreMoodPromptSelected}
+        >
+          Genre/Mood prompt ({selectedIds.size})
+        </Press>
+        <Press variant="ghost" onClick={handleBatchGenreMoodPromptFiltered}>
+          Genre/Mood prompt (filtered)
+        </Press>
+        <Press
+          variant="ghost"
+          onClick={() => {
+            setGmImportText('')
+            setGmImportResult(null)
+            setGmOverwriteGenre(false)
+            setGmImportModal(true)
+          }}
+        >
+          Импорт AI (genre/mood)
+        </Press>
       </div>
       <DataTable
         columns={columns}
@@ -666,6 +733,58 @@ export function TracksRoute() {
         </div>
       )}
 
+      {batchGenreMoodPromptModal && (
+        <div
+          className="admin-modal-overlay"
+          onClick={() => setBatchGenreMoodPromptModal(null)}
+        >
+          <div
+            className="admin-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 760 }}
+          >
+            <h3>Genre / mood batch prompt</h3>
+            <p
+              style={{
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                margin: '0 0 8px',
+              }}
+            >
+              Промпт для нейросети; ответ импортируйте через «Импорт AI
+              (genre/mood)».
+            </p>
+            <textarea
+              readOnly
+              value={batchGenreMoodPromptModal}
+              rows={22}
+              style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                resize: 'vertical',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <Press
+                variant="primary"
+                onClick={() =>
+                  navigator.clipboard.writeText(batchGenreMoodPromptModal)
+                }
+              >
+                Копировать
+              </Press>
+              <Press
+                variant="ghost"
+                onClick={() => setBatchGenreMoodPromptModal(null)}
+              >
+                Закрыть
+              </Press>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Lyrics batch prompt modal */}
       {batchLyricsPromptModal && (
         <div
@@ -769,6 +888,94 @@ export function TracksRoute() {
                 Импортировать
               </Press>
               <Press variant="ghost" onClick={() => setImportModal(false)}>
+                Закрыть
+              </Press>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gmImportModal && (
+        <div
+          className="admin-modal-overlay"
+          onClick={() => setGmImportModal(false)}
+        >
+          <div
+            className="admin-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 640 }}
+          >
+            <h3>Импорт ответа AI (genre / mood)</h3>
+            <p
+              style={{
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                margin: '0 0 8px',
+              }}
+            >
+              JSON: tracks[].id, genre (строка), moods (массив тегов). Пустой
+              genre не меняет поле. Новые mood добавляются к существующим.
+            </p>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 13,
+                marginBottom: 8,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={gmOverwriteGenre}
+                onChange={(e) => setGmOverwriteGenre(e.target.checked)}
+              />
+              Перезаписать жанр, если уже заполнен
+            </label>
+            <textarea
+              value={gmImportText}
+              onChange={(e) => setGmImportText(e.target.value)}
+              rows={14}
+              placeholder={
+                '{"tracks":[{"id":1,"genre":"Pop","moods":["bright"]}]}'
+              }
+              style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                resize: 'vertical',
+              }}
+            />
+            {gmImportResult && (
+              <div style={{ marginTop: 8 }}>
+                <p style={{ fontWeight: 600 }}>
+                  Импортировано: {gmImportResult.imported}
+                </p>
+                {gmImportResult.errors.length > 0 && (
+                  <ul
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--color-danger, #c00)',
+                      paddingLeft: 16,
+                      margin: '4px 0 0',
+                    }}
+                  >
+                    {gmImportResult.errors.map((e, idx) => (
+                      <li key={idx}>{e}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <Press
+                variant="primary"
+                onClick={handleGenreMoodImport}
+                disabled={!gmImportText.trim()}
+              >
+                Импортировать
+              </Press>
+              <Press variant="ghost" onClick={() => setGmImportModal(false)}>
                 Закрыть
               </Press>
             </div>

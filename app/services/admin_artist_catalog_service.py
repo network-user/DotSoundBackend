@@ -304,6 +304,58 @@ class AdminArtistCatalogService:
             soundcloud_album_id=rel.soundcloud_album_id,
         )
 
+    async def upload_release_cover(
+        self,
+        artist_id: int,
+        release_id: int,
+        *,
+        data: bytes,
+        content_type: str,
+        admin_user_id: int,
+    ) -> AdminCatalogReleaseSummaryResponse | None:
+        rel = await self._catalog.get_release_for_artist(
+            artist_id,
+            release_id,
+        )
+        if rel is None:
+            return None
+        old_key = rel.cover_key
+        img_key = await s3.upload_cover(
+            data,
+            content_type,
+            user_id=admin_user_id,
+            session=self._session,
+        )
+        rel.cover_key = img_key
+        await self._session.flush()
+        await self._session.commit()
+        await self._session.refresh(rel)
+        if old_key and old_key != img_key:
+            try:
+                await s3.delete_object(old_key)
+            except Exception:
+                logger.exception(
+                    "admin_catalog_release_cover_old_delete_failed",
+                    artist_id=artist_id,
+                    release_id=release_id,
+                    old_key=old_key,
+                )
+        ordered = await self._catalog.get_release_tracks_ordered(
+            release_id,
+        )
+        cnt = len(ordered)
+        return AdminCatalogReleaseSummaryResponse(
+            id=rel.id,
+            title=rel.title,
+            release_kind=rel.release_kind,
+            released_at=rel.released_at,
+            display_position=rel.display_position,
+            track_count=cnt,
+            cover_key=rel.cover_key,
+            manual_lock=rel.manual_lock,
+            soundcloud_album_id=rel.soundcloud_album_id,
+        )
+
     async def delete_release(
         self,
         artist_id: int,

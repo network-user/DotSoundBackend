@@ -107,6 +107,50 @@ class AdminService:
         await self._session.delete(track)
         return True
 
+    async def upload_track_cover(
+        self,
+        track_id: int,
+        *,
+        data: bytes,
+        content_type: str,
+        admin_user_id: int,
+    ) -> Track | None:
+        from app.services.search_index_notify import (
+            schedule_reindex_track,
+        )
+
+        track = await self._repo.get_track(track_id)
+        if track is None:
+            return None
+        old = track.cover_key
+        key = await s3.upload_cover(
+            data,
+            content_type,
+            user_id=admin_user_id,
+            session=self._session,
+        )
+        track.cover_key = key
+        await self._session.flush()
+        await self._session.commit()
+        await self._session.refresh(track)
+        if old and old != key:
+            try:
+                await s3.delete_object(old)
+            except Exception:
+                logger.warning(
+                    "admin_track_cover_old_delete_failed",
+                    track_id=track_id,
+                    cover_key=old,
+                )
+        try:
+            await schedule_reindex_track(track.id)
+        except Exception:
+            logger.warning(
+                "admin_track_cover_reindex_failed",
+                track_id=track_id,
+            )
+        return track
+
     async def update_track(
         self,
         track_id: int,

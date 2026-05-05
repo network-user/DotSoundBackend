@@ -22,7 +22,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -212,6 +212,10 @@ async def claim_next(
             ComputeJob.status == STATUS_PENDING,
             ComputeJob.job_type.in_(list(job_types)),
             ComputeJob.next_attempt_at <= now,
+            or_(
+                ComputeJob.pinned_worker_id.is_(None),
+                ComputeJob.pinned_worker_id == worker_id,
+            ),
         )
         .order_by(
             ComputeJob.priority.desc(),
@@ -239,6 +243,7 @@ async def claim_next(
         )
         .values(
             status=STATUS_CLAIMED,
+            pinned_worker_id=None,
             claimed_by=worker_id,
             claimed_at=now,
             claim_deadline_at=deadline,

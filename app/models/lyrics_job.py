@@ -43,6 +43,12 @@ class LyricsJob(Base, TimestampMixin):
     routed_to_worker: Mapped[str | None] = mapped_column(
         String(32), nullable=True
     )
+    pinned_worker_id: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    queue_priority: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
     attempts: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )

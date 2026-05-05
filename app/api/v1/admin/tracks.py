@@ -5,9 +5,11 @@ from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
+    File,
     HTTPException,
     Query,
     Request,
+    UploadFile,
     status,
 )
 from sqlalchemy import select
@@ -28,6 +30,9 @@ from app.services.admin_track_context_service import (
     AdminTrackContextService,
     TrackNotFoundError,
 )
+from app.services.admin_track_genre_mood_import_service import (
+    AdminTrackGenreMoodImportService,
+)
 from app.services.transcoding import transcode_hls_only
 
 from .schemas import (
@@ -38,6 +43,10 @@ from .schemas import (
     BatchImportResponse,
     BatchPromptRequest,
     BatchPromptResponse,
+    GenreMoodBatchImportRequest,
+    GenreMoodBatchImportResponse,
+    GenreMoodBatchPromptRequest,
+    GenreMoodBatchPromptResponse,
     LyricsBatchImportRequest,
     LyricsBatchImportResponse,
     LyricsBatchPromptRequest,
@@ -49,6 +58,15 @@ from .schemas import (
 
 router = APIRouter()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+_MAX_COVER_BYTES = 5 * 1024 * 1024
+_ALLOWED_COVER_CT = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    }
+)
 
 
 @router.get(
@@ -164,6 +182,47 @@ async def admin_update_track(
         track_id=track_id,
         fields=list(fields.keys()),
     )
+    return AdminTrackResponse.model_validate(track)
+
+
+@router.post(
+    "/tracks/{track_id}/cover",
+    response_model=AdminTrackResponse,
+    summary="[Admin] Upload track cover image",
+)
+@limiter.limit("30/minute")
+async def admin_upload_track_cover(
+    request: Request,
+    track_id: int,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> AdminTrackResponse:
+    mime = (file.content_type or "").split(";")[0].strip().lower()
+    if mime not in _ALLOWED_COVER_CT:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Cover must be JPEG, PNG, or WebP",
+        )
+    data = await file.read()
+    if len(data) > _MAX_COVER_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Cover exceeds 5 MB limit",
+        )
+    service = AdminService(session)
+    track = await service.upload_track_cover(
+        track_id,
+        data=data,
+        content_type=mime,
+        admin_user_id=admin.id,
+    )
+    if track is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    logger.info("admin_track_cover_uploaded", track_id=track_id)
     return AdminTrackResponse.model_validate(track)
 
 
@@ -350,6 +409,61 @@ async def admin_batch_lyrics_import(
         skip_existing=data.skip_existing,
     )
     return LyricsBatchImportResponse(imported=imported, errors=errors)
+
+
+@router.post(
+    "/tracks/genre-mood/batch-prompt",
+    response_model=GenreMoodBatchPromptResponse,
+    summary=(
+        "[Admin] Batch prompt for genre/mood from lyrics excerpt + metadata"
+    ),
+)
+@limiter.limit("20/minute")
+async def admin_genre_mood_batch_prompt(
+    request: Request,
+    data: GenreMoodBatchPromptRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> GenreMoodBatchPromptResponse:
+    svc = AdminTrackGenreMoodImportService(session)
+    if data.track_ids:
+        prompt, count = await svc.build_prompt_for_tracks(data.track_ids)
+    else:
+        prompt, count = await svc.build_prompt_for_filtered(
+            search=data.search,
+            only_without_genre=data.only_without_genre,
+            limit=data.limit,
+        )
+    logger.info("admin_genre_mood_batch_prompt", track_count=count)
+    return GenreMoodBatchPromptResponse(prompt=prompt, track_count=count)
+
+
+@router.post(
+    "/tracks/genre-mood/batch-import",
+    response_model=GenreMoodBatchImportResponse,
+    summary="[Admin] Import AI JSON into track.genre and mood tags",
+)
+@limiter.limit("10/minute")
+async def admin_genre_mood_batch_import(
+    request: Request,
+    data: GenreMoodBatchImportRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> GenreMoodBatchImportResponse:
+    svc = AdminTrackGenreMoodImportService(session)
+    imported, errors = await svc.import_ai_response(
+        raw_response=data.raw_response,
+        overwrite_genre=data.overwrite_genre,
+    )
+    logger.info(
+        "admin_genre_mood_batch_import",
+        imported=imported,
+        error_count=len(errors),
+    )
+    return GenreMoodBatchImportResponse(
+        imported=imported,
+        errors=errors,
+    )
 
 
 @router.get(

@@ -355,7 +355,26 @@
         "discographyUrlCol": "URL",
         "discographyAddRow": "Add row",
         "discographyRemoveRow": "Remove row",
-        "discographySave": "Save discography"
+        "discographySave": "Save discography",
+        "artistSettingsToggle": "Artist: SoundCloud, avatar & sync",
+        "moveUp": "Move up",
+        "moveDown": "Move down",
+        "fieldTitle": "Release title",
+        "fieldKind": "Kind",
+        "fieldKindPh": "album, ep, single…",
+        "fieldReleased": "Release date",
+        "saveReleaseMeta": "Save release info",
+        "releaseCoverUpload": "Upload release cover",
+        "coverUploading": "Uploading…",
+        "tracksHint": "Drag rows to reorder. Save track order applies the list on the right. Edit titles, artist credit, description, and covers per track.",
+        "trackTitle": "Track title",
+        "trackArtist": "Artist line",
+        "trackDescription": "Description",
+        "trackCoverUpload": "Cover image",
+        "saveTrackMeta": "Save track",
+        "addTracksTitle": "Add tracks to this release",
+        "allTracksTitle": "All tracks linked to this artist",
+        "allTracksHint": "Paged list of every track tied to this artist (any release). Open a release above to edit order and metadata."
       }
     },
     "audioCompute": {
