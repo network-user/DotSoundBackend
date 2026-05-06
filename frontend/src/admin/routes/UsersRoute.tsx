@@ -13,6 +13,7 @@ import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 import { KpiCard } from '../components/widgets/KpiCard'
 import { Sparkline } from '../components/charts/Sparkline'
+import { LineChart } from '../components/charts/LineChart'
 
 interface UserRow {
   id: number
@@ -41,6 +42,9 @@ export function UsersRoute() {
   const [activeOnly, setActiveOnly] =
     useState<boolean | undefined>(undefined)
   const [busyId, setBusyId] = useState<number | null>(null)
+  const [statsPeriod, setStatsPeriod] = useState<
+    'today' | '7d' | '30d' | 'all'
+  >('7d')
   const [messageTarget, setMessageTarget] = useState<UserRow | null>(null)
   const [messageText, setMessageText] = useState('')
   const { data, isFetching } = useQuery({
@@ -59,6 +63,12 @@ export function UsersRoute() {
         is_active: activeOnly,
       }),
     placeholderData: keepPreviousData,
+  })
+  const adminStats = useQuery({
+    queryKey: ['admin', 'users', 'admin-stats', statsPeriod],
+    queryFn: () => adminApi.dashboardAdminStats(statsPeriod),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 
   const total = data?.total || 0
@@ -304,6 +314,66 @@ export function UsersRoute() {
             ) : undefined
           }
         />
+      </section>
+      <section className="admin-card">
+        <div className="admin-dashboard__toplist-head">
+          <h2>Admin activity</h2>
+          <div className="admin-range-switch">
+            {(['today', '7d', '30d', 'all'] as const).map((period) => (
+              <button
+                key={period}
+                type="button"
+                className={`admin-range-switch__btn${
+                  statsPeriod === period ? ' is-active' : ''
+                }`}
+                onClick={() => setStatsPeriod(period)}
+              >
+                {period}
+              </button>
+            ))}
+          </div>
+        </div>
+        {adminStats.isLoading || !adminStats.data ? (
+          <div className="admin-skeleton admin-skeleton--card" />
+        ) : (
+          <>
+            <section className="kpi-grid">
+              <KpiCard
+                label="Total actions"
+                value={adminStats.data.total_actions}
+              />
+              <KpiCard
+                label="Unique admins"
+                value={adminStats.data.unique_admins}
+              />
+            </section>
+            <h3>Actions timeline</h3>
+            <LineChart
+              data={adminStats.data.actions_series}
+              ariaLabel="Admin actions timeline"
+            />
+            <h3>Top admins</h3>
+            {adminStats.data.top_admins.length === 0 ? (
+              <div className="admin-log-empty">No data</div>
+            ) : (
+              <div className="admin-dashboard__toplist-rows">
+                {adminStats.data.top_admins.map((item) => (
+                  <div
+                    key={item.user_id}
+                    className="admin-dashboard__toplist-row"
+                  >
+                    <div className="admin-dashboard__toplist-title">
+                      {item.name}
+                    </div>
+                    <div className="admin-dashboard__toplist-meta">
+                      {item.actions} actions
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </section>
       <div className="admin-toolbar">
         <input

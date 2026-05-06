@@ -14,6 +14,7 @@ import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 import { KpiCard } from '../components/widgets/KpiCard'
 import { Sparkline } from '../components/charts/Sparkline'
+import { LineChart } from '../components/charts/LineChart'
 
 interface TrackRow {
   id: number
@@ -46,6 +47,9 @@ export function TracksRoute() {
   const [withoutLyricsOnly, setWithoutLyricsOnly] = useState(false)
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
+  const [statsPeriod, setStatsPeriod] = useState<
+    'today' | '7d' | '30d' | 'all'
+  >('7d')
 
   // context feature state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -84,6 +88,12 @@ export function TracksRoute() {
         without_lyrics: withoutLyricsOnly || undefined,
       }),
     placeholderData: keepPreviousData,
+  })
+  const trackStats = useQuery({
+    queryKey: ['admin', 'tracks', 'stats', statsPeriod],
+    queryFn: () => adminApi.dashboardTrackStats(statsPeriod),
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
   const total = data?.total || 0
   const totalPages = Math.max(1, Math.ceil(total / 25))
@@ -508,6 +518,56 @@ export function TracksRoute() {
             ) : undefined
           }
         />
+      </section>
+      <section className="admin-card">
+        <div className="admin-dashboard__toplist-head">
+          <h2>Track analytics</h2>
+          <div className="admin-range-switch">
+            {(['today', '7d', '30d', 'all'] as const).map((period) => (
+              <button
+                key={period}
+                type="button"
+                className={`admin-range-switch__btn${
+                  statsPeriod === period ? ' is-active' : ''
+                }`}
+                onClick={() => setStatsPeriod(period)}
+              >
+                {period}
+              </button>
+            ))}
+          </div>
+        </div>
+        {trackStats.isLoading || !trackStats.data ? (
+          <div className="admin-skeleton admin-skeleton--card" />
+        ) : (
+          <>
+            <h3>Uploads timeline</h3>
+            <LineChart
+              data={trackStats.data.uploads_series}
+              ariaLabel="Track uploads timeline"
+            />
+            <h3>Top popular tracks</h3>
+            {trackStats.data.top_tracks.length === 0 ? (
+              <div className="admin-log-empty">No data</div>
+            ) : (
+              <div className="admin-dashboard__toplist-rows">
+                {trackStats.data.top_tracks.map((item) => (
+                  <div
+                    key={item.track_id}
+                    className="admin-dashboard__toplist-row"
+                  >
+                    <div className="admin-dashboard__toplist-title">
+                      {item.title}
+                    </div>
+                    <div className="admin-dashboard__toplist-meta">
+                      {item.plays} plays · {item.unique_listeners} listeners
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </section>
       <div className="admin-toolbar">
         <input

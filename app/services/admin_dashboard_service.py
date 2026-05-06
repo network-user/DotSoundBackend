@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_client
 from app.models.complaint import Complaint
+from app.models.admin_action_log import AdminActionLog
 from app.models.lyrics_job import LyricsJob
 from app.models.listen_event import ListenEvent
 from app.models.track import Track
@@ -286,4 +287,173 @@ async def collect_stats(
         "complaints_new": complaints_new,
         "complaints_open": complaints_open,
         "top_tracks": top_tracks,
+    }
+
+
+def _day_to_ts(day_value: Any) -> int | None:  # noqa: ANN401
+    if day_value is None:
+        return None
+    if isinstance(day_value, datetime):
+        return int(day_value.replace(tzinfo=UTC).timestamp())
+    if hasattr(day_value, "year") and hasattr(day_value, "month"):
+        as_dt = datetime(
+            day_value.year,
+            day_value.month,
+            day_value.day,
+            tzinfo=UTC,
+        )
+        return int(as_dt.timestamp())
+    try:
+        parsed = datetime.fromisoformat(str(day_value))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return int(parsed.timestamp())
+    except Exception:
+        return None
+
+
+async def collect_track_stats(
+    session: AsyncSession,
+    *,
+    period: str,
+) -> dict[str, Any]:
+    now = datetime.now(UTC)
+    start = _period_start(now, period)
+
+    base_listen = select(
+        ListenEvent.track_id.label("track_id"),
+        func.count(ListenEvent.id).label("plays"),
+        func.count(func.distinct(ListenEvent.user_id)).label(
+            "unique_listeners"
+        ),
+    ).group_by(ListenEvent.track_id)
+    if start is not None:
+        base_listen = base_listen.where(ListenEvent.created_at >= start)
+    top_stmt = base_listen.order_by(func.count(ListenEvent.id).desc()).limit(15)
+    top_rows = await session.execute(top_stmt)
+    top_raw = list(top_rows.all())
+
+    track_ids = [int(row.track_id) for row in top_raw]
+    names: dict[int, str] = {}
+    if track_ids:
+        names_rows = await session.execute(
+            select(Track.id, Track.title).where(Track.id.in_(track_ids))
+        )
+        names = {int(row.id): str(row.title) for row in names_rows}
+    top_tracks = [
+        {
+            "track_id": int(row.track_id),
+            "title": names.get(int(row.track_id), f"Track #{row.track_id}"),
+            "plays": int(row.plays or 0),
+            "unique_listeners": int(row.unique_listeners or 0),
+        }
+        for row in top_raw
+    ]
+
+    uploads_series_stmt = select(
+        func.date(Track.created_at).label("day"),
+        func.count(Track.id).label("value"),
+    ).group_by(func.date(Track.created_at))
+    if start is not None:
+        uploads_series_stmt = uploads_series_stmt.where(Track.created_at >= start)
+    uploads_series_stmt = uploads_series_stmt.order_by(func.date(Track.created_at))
+    uploads_rows = await session.execute(uploads_series_stmt)
+    uploads_series: list[dict[str, int]] = []
+    for row in uploads_rows:
+        ts = _day_to_ts(row.day)
+        if ts is None:
+            continue
+        uploads_series.append({"ts": ts, "value": int(row.value or 0)})
+
+    return {
+        "period": period,
+        "from_ts": int(start.timestamp()) if start is not None else None,
+        "to_ts": int(now.timestamp()),
+        "top_tracks": top_tracks,
+        "uploads_series": uploads_series,
+    }
+
+
+async def collect_admin_stats(
+    session: AsyncSession,
+    *,
+    period: str,
+) -> dict[str, Any]:
+    now = datetime.now(UTC)
+    start = _period_start(now, period)
+
+    base = select(func.count(AdminActionLog.id))
+    if start is not None:
+        base = base.where(AdminActionLog.created_at >= start)
+    total_actions = await _safe_count(session, base)
+
+    unique_admins_stmt = select(func.count(func.distinct(AdminActionLog.user_id)))
+    if start is not None:
+        unique_admins_stmt = unique_admins_stmt.where(
+            AdminActionLog.created_at >= start
+        )
+    unique_admins = await _safe_count(session, unique_admins_stmt)
+
+    top_admins_stmt = (
+        select(
+            AdminActionLog.user_id.label("user_id"),
+            func.count(AdminActionLog.id).label("actions"),
+        )
+        .group_by(AdminActionLog.user_id)
+        .order_by(func.count(AdminActionLog.id).desc())
+        .limit(10)
+    )
+    if start is not None:
+        top_admins_stmt = top_admins_stmt.where(
+            AdminActionLog.created_at >= start
+        )
+    top_admin_rows = await session.execute(top_admins_stmt)
+    top_admin_raw = list(top_admin_rows.all())
+
+    admin_ids = [int(row.user_id) for row in top_admin_raw]
+    names: dict[int, str] = {}
+    if admin_ids:
+        user_rows = await session.execute(
+            select(User.id, User.username, User.email).where(User.id.in_(admin_ids))
+        )
+        names = {
+            int(row.id): str(row.username or row.email or f"#{row.id}")
+            for row in user_rows
+        }
+    top_admins = [
+        {
+            "user_id": int(row.user_id),
+            "name": names.get(int(row.user_id), f"#{row.user_id}"),
+            "actions": int(row.actions or 0),
+        }
+        for row in top_admin_raw
+    ]
+
+    actions_series_stmt = select(
+        func.date(AdminActionLog.created_at).label("day"),
+        func.count(AdminActionLog.id).label("value"),
+    ).group_by(func.date(AdminActionLog.created_at))
+    if start is not None:
+        actions_series_stmt = actions_series_stmt.where(
+            AdminActionLog.created_at >= start
+        )
+    actions_series_stmt = actions_series_stmt.order_by(
+        func.date(AdminActionLog.created_at)
+    )
+    actions_rows = await session.execute(actions_series_stmt)
+    actions_series: list[dict[str, int]] = []
+    for row in actions_rows:
+        ts = _day_to_ts(row.day)
+        if ts is None:
+            continue
+        actions_series.append({"ts": ts, "value": int(row.value or 0)})
+
+    return {
+        "period": period,
+        "from_ts": int(start.timestamp()) if start is not None else None,
+        "to_ts": int(now.timestamp()),
+        "total_actions": total_actions,
+        "unique_admins": unique_admins,
+        "top_admins": top_admins,
+        "actions_series": actions_series,
     }

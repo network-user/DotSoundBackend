@@ -411,6 +411,43 @@ export const adminApi = {
     }>('/dashboard/stats', {
       query: { period },
     }),
+  dashboardTrackStats: (period: 'today' | '7d' | '30d' | 'all') =>
+    adminFetch<{
+      period: 'today' | '7d' | '30d' | 'all'
+      from_ts: number | null
+      to_ts: number
+      top_tracks: Array<{
+        track_id: number
+        title: string
+        plays: number
+        unique_listeners: number
+      }>
+      uploads_series: Array<{
+        ts: number
+        value: number
+      }>
+    }>('/dashboard/track-stats', {
+      query: { period },
+    }),
+  dashboardAdminStats: (period: 'today' | '7d' | '30d' | 'all') =>
+    adminFetch<{
+      period: 'today' | '7d' | '30d' | 'all'
+      from_ts: number | null
+      to_ts: number
+      total_actions: number
+      unique_admins: number
+      top_admins: Array<{
+        user_id: number
+        name: string
+        actions: number
+      }>
+      actions_series: Array<{
+        ts: number
+        value: number
+      }>
+    }>('/dashboard/admin-stats', {
+      query: { period },
+    }),
   containers: () =>
     adminFetch<{
       counts: {
