@@ -9,6 +9,13 @@ import { useLikes } from '@/store/LikesContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { useDebounce } from '@/hooks/useDebounce'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import {
+  SPRING_GENTLE,
+  TWEEN_FAST,
+  VARIANTS_FADE_UP,
+  m,
+} from '@/lib/motion'
 import type {
   ArtistInfo,
   BCSearchResult,
@@ -22,7 +29,36 @@ type SearchViewProps = {
   onOpenArtist?: (id: number) => void
 }
 
+type EntityFilter = 'all' | 'tracks' | 'artists' | 'external'
+
 const SEARCH_DEBOUNCE_MS = 300
+
+const ENTITY_FILTERS: {
+  id: EntityFilter
+  labelKey: string
+  icon: string
+}[] = [
+  {
+    id: 'all',
+    labelKey: 'redesign.library.searchFilterAll',
+    icon: 'search',
+  },
+  {
+    id: 'tracks',
+    labelKey: 'redesign.library.searchFilterTracks',
+    icon: 'music',
+  },
+  {
+    id: 'artists',
+    labelKey: 'redesign.library.searchFilterArtists',
+    icon: 'users-listeners',
+  },
+  {
+    id: 'external',
+    labelKey: 'redesign.library.searchFilterExternal',
+    icon: 'link',
+  },
+]
 
 /** Порядок треков из ES suggest сверху, остальные — как в выдаче getTracks */
 function mergeTracksBySuggestOrder(
@@ -72,6 +108,9 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const [catalogArtists, setCatalogArtists] = useState<ArtistInfo[]>([])
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [entityFilter, setEntityFilter] =
+    useState<EntityFilter>('all')
+  const [inputFocused, setInputFocused] = useState(false)
 
   const searchPrefetchSlice =
     typeof tracks === 'object' && tracks !== null
@@ -276,13 +315,59 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     setYtResults([])
     setBcResults([])
     setCatalogArtists([])
+    setEntityFilter('all')
     inputRef.current?.focus()
   }
 
+  const hasActiveQuery = Boolean(debouncedQuery.trim())
+  const chipsVisible = hasActiveQuery && tracks !== 'idle'
+  const showArtistsBlock =
+    hasActiveQuery &&
+    (entityFilter === 'all' || entityFilter === 'artists')
+  const showPlatformTracksBlock =
+    hasActiveQuery &&
+    (entityFilter === 'all' || entityFilter === 'tracks')
+  const showExternalBlock =
+    hasActiveQuery &&
+    (entityFilter === 'all' || entityFilter === 'external')
+  const hasExternalResults =
+    ytResults.length > 0 ||
+    bcResults.length > 0 ||
+    scResults.length > 0
+  const showSearchEmpty =
+    hasActiveQuery &&
+    tracks !== 'idle' &&
+    tracks !== null &&
+    Array.isArray(tracks) &&
+    ((entityFilter === 'all' &&
+      tracks.length === 0 &&
+      !hasExternalResults &&
+      catalogArtists.length === 0) ||
+      (entityFilter === 'tracks' && tracks.length === 0) ||
+      (entityFilter === 'artists' && catalogArtists.length === 0) ||
+      (entityFilter === 'external' && !hasExternalResults))
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setEntityFilter('all')
+    }
+  }, [query])
+
   return (
-    <section id="view-search" className="view active">
-      <div className="search-sticky">
-        <div className="search-bar">
+    <section id="view-search" className="view active rd-search">
+      <div className="search-sticky rd-search-sticky">
+        <m.div
+          className="search-bar rd-search-bar"
+          animate={
+            inputFocused
+              ? {
+                  boxShadow:
+                    '0 0 0 2px color-mix(in srgb, var(--accent) 42%, transparent)',
+                }
+              : { boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }
+          }
+          transition={SPRING_GENTLE}
+        >
         <span className="search-icon"><Icon name="search" size={16} /></span>
         <input
           ref={inputRef}
@@ -293,12 +378,38 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
           autoComplete="off"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
         />
         {query && (
           <button type="button" className="icon-btn" onClick={clearSearch}><Icon name="x" size={16} /></button>
         )}
-        </div>
+        </m.div>
       </div>
+
+      {chipsVisible && (
+        <div
+          className="rd-search-chips"
+          role="tablist"
+          aria-label={t('redesign.library.searchFiltersAria')}
+        >
+          {ENTITY_FILTERS.map((f) => (
+            <MotionPress
+              key={f.id}
+              variant="subtle"
+              haptic="selection"
+              role="tab"
+              aria-selected={entityFilter === f.id}
+              className="rd-search-chip"
+              data-active={entityFilter === f.id ? 'true' : 'false'}
+              onClick={() => setEntityFilter(f.id)}
+            >
+              <Icon name={f.icon} size={14} />
+              <span>{t(f.labelKey)}</span>
+            </MotionPress>
+          ))}
+        </div>
+      )}
 
       {tracks === 'idle' && history.length === 0 && (
         <div className="search-idle-hint">
@@ -327,20 +438,31 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
         </div>
       )}
 
-      {tracks === null && (
-        <div className="search-section">
+      {tracks === null && hasActiveQuery && (
+        <m.div
+          className="search-section rd-search-section"
+          variants={VARIANTS_FADE_UP}
+          initial="hidden"
+          animate="visible"
+          transition={TWEEN_FAST}
+        >
           <p className="search-section-label">
             {t('search.onPlatform')}
           </p>
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="track-card-skeleton shimmer" />
           ))}
-        </div>
+        </m.div>
       )}
 
-      {Array.isArray(tracks) && (
-        <>
-          <div className="search-section">
+      {Array.isArray(tracks) && showArtistsBlock && (
+        <m.div
+          className="search-section rd-search-section"
+          variants={VARIANTS_FADE_UP}
+          initial="hidden"
+          animate="visible"
+          transition={{ ...TWEEN_FAST, delay: 0.02 }}
+        >
             <p className="search-section-label">
               {t('search.artists')}
             </p>
@@ -380,9 +502,17 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                 {t('search.artistsEmpty')}
               </p>
             )}
-          </div>
+        </m.div>
+      )}
 
-          <div className="search-section">
+      {Array.isArray(tracks) && showPlatformTracksBlock && (
+        <m.div
+          className="search-section rd-search-section"
+          variants={VARIANTS_FADE_UP}
+          initial="hidden"
+          animate="visible"
+          transition={{ ...TWEEN_FAST, delay: 0.04 }}
+        >
             <p className="search-section-label">
               {t('search.platformTracks')}
             </p>
@@ -393,11 +523,10 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                 {t('search.emptyCatalogHint')}
               </p>
             )}
-          </div>
-        </>
+        </m.div>
       )}
 
-      {(tracks === null || Array.isArray(tracks)) && (
+      {(tracks === null || Array.isArray(tracks)) && showExternalBlock && (
         <>
           {ytResults.length > 0 && (
             <div className="search-section">
@@ -644,12 +773,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
         </>
       )}
 
-      {Array.isArray(tracks) &&
-        tracks.length === 0 &&
-        scResults.length === 0 &&
-        ytResults.length === 0 &&
-        bcResults.length === 0 &&
-        catalogArtists.length === 0 && (
+      {showSearchEmpty && (
         <p className="empty-hint">
           {t('search.notFound')}
         </p>

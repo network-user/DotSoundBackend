@@ -6,6 +6,8 @@ import { PlaylistsView } from '@/views/PlaylistsView'
 import { OfflineList } from '@/components/Profile/OfflineList'
 import { HistoryList } from '@/components/Profile/HistoryList'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { SPRING_LAYOUT, m } from '@/lib/motion'
 import { hapticSelection } from '@/lib/telegram'
 
 type Tab = 'liked' | 'playlists' | 'offline' | 'history'
@@ -90,38 +92,46 @@ export function LibraryView() {
       className="view active"
     >
       <div style={{ padding: '8px 16px 0' }}>
-        <button
-          className="playlist-card"
-          style={{ width: '100%' }}
-          onClick={() => navigate('/daily-mix')}
-        >
-          <div className="playlist-cover" aria-hidden>
-            <Icon name="calendar" size={26} />
+      <MotionPress
+        variant="subtle"
+        haptic="selection"
+        className="rd-lib-daily playlist-card"
+        onClick={() => navigate('/daily-mix')}
+      >
+        <div className="playlist-cover" aria-hidden>
+          <Icon name="calendar" size={26} />
+        </div>
+        <div style={{ flex: 1, textAlign: 'left' }}>
+          <div style={{ fontWeight: 600, fontSize: 15 }}>
+            {t('home.dayPlaylistTitle')}
           </div>
-          <div style={{ flex: 1, textAlign: 'left' }}>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>
-              {t('home.dayPlaylistTitle')}
-            </div>
-            <div
-              className="hint"
-              style={{ fontSize: 12 }}
-            >
-              {t('home.dayPlaylistHint')}
-            </div>
+          <div className="hint" style={{ fontSize: 12 }}>
+            {t('home.dayPlaylistHint')}
           </div>
-          <Icon name="chevron" size={18} />
-        </button>
+        </div>
+        <Icon name="chevron" size={18} />
+      </MotionPress>
       </div>
 
-      <div className="library-tabs">
+      <div className="library-tabs rd-lib-tabs">
         {TABS.map((row) => (
           <button
             key={row.id}
             type="button"
-            className={`library-tab${tab === row.id ? ' active' : ''}`}
+            data-active={tab === row.id ? 'true' : 'false'}
+            className={`rd-lib-tab library-tab${tab === row.id ? ' active' : ''}`}
             onClick={() => handleTab(row.id)}
           >
-            {t(row.labelKey)}
+            {tab === row.id && (
+              <m.span
+                className="rd-lib-tab-pill"
+                layoutId="library-tab-pill"
+                transition={SPRING_LAYOUT}
+              />
+            )}
+            <span className="rd-lib-tab-label">
+              {t(row.labelKey)}
+            </span>
           </button>
         ))}
       </div>

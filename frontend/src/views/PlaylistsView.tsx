@@ -1,6 +1,8 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Icon } from '@/components/Icon/Icon'
+import { LongPressMenu } from '@/components/ui/LongPressMenu'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { useToast } from '@/components/ui/Toast'
 import { useSound } from '@/store/SoundContext'
@@ -27,6 +29,7 @@ type Screen = 'list' | 'detail'
 export function PlaylistsView({
   embedded = false,
 }: PlaylistsViewProps) {
+  const { t } = useTranslation()
   const toast = useToast()
   const sound = useSound()
   const [screen, setScreen] = useState<Screen>('list')
@@ -231,18 +234,38 @@ export function PlaylistsView({
     return `Чат #${item.conversation.id}`
   }
 
-  const openShareModal = async () => {
-    if (!selected) return
-    setShareOpen(true)
+  const loadShareChats = async () => {
     setShareLoading(true)
     setShareError(null)
     try {
       const chats = await api.listChats()
       setShareChats(chats)
     } catch {
-      setShareError('Не удалось загрузить чаты')
+      setShareError(
+        t('redesign.library.playlistShareLoadFail'),
+      )
     } finally {
       setShareLoading(false)
+    }
+  }
+
+  const openShareModal = async () => {
+    if (!selected) return
+    setShareOpen(true)
+    await loadShareChats()
+  }
+
+  const beginShareForPlaylist = async (p: Playlist) => {
+    try {
+      const detail = await api.getPlaylist(p.id)
+      setSelected(detail)
+      setScreen('detail')
+      setShareOpen(true)
+      await loadShareChats()
+    } catch {
+      toast.error(
+        t('redesign.library.playlistOpenFail'),
+      )
     }
   }
 
@@ -552,26 +575,56 @@ export function PlaylistsView({
       )}
 
       {playlists !== null && playlists.length > 0 && (
-        <div className="playlist-list">
+        <div className="playlist-list rd-playlist-grid">
           {playlists.map((p) => (
-            <div
+            <LongPressMenu
               key={p.id}
-              className="playlist-card"
-              onClick={() => {
-                void openPlaylist(p)
-              }}
+              items={[
+                {
+                  id: 'open',
+                  label: t('redesign.library.playlistLongOpen'),
+                  icon: 'list',
+                  onPick: () => {
+                    void openPlaylist(p)
+                  },
+                },
+                {
+                  id: 'share',
+                  label: t('redesign.library.playlistLongShare'),
+                  icon: 'share',
+                  onPick: () => {
+                    void beginShareForPlaylist(p)
+                  },
+                },
+              ]}
             >
-              <div className="playlist-cover">
-                <Icon name="list" size={20} />
-              </div>
-              <div className="playlist-info">
-                <div className="playlist-name">{p.name}</div>
-                <div className="playlist-meta">
-                  {p.is_public ? 'Публичный' : 'Приватный'}
+              <div
+                className="playlist-card rd-playlist-card"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  void openPlaylist(p)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    void openPlaylist(p)
+                  }
+                }}
+              >
+                <div className="playlist-cover">
+                  <Icon name="list" size={20} />
+                </div>
+                <div className="playlist-info">
+                  <div className="playlist-name">{p.name}</div>
+                  <div className="playlist-meta">
+                    {p.is_public
+                      ? t('redesign.library.playlistPublic')
+                      : t('redesign.library.playlistPrivate')}
+                  </div>
                 </div>
               </div>
-              <span className="playlist-chevron">›</span>
-            </div>
+            </LongPressMenu>
           ))}
         </div>
       )}
