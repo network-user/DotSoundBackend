@@ -114,11 +114,12 @@ export function GenreMixView() {
   }, [editOpen, canEditUi, trackSearch])
 
   const handlePlayAll = useCallback(async () => {
-    if (!tracks || !tracks.length) return
+    if (!tracks || !Array.isArray(tracks) || !tracks.length) return
     await playTrack(tracks[0])
   }, [tracks, playTrack])
 
   const formatShareChatTitle = useCallback((item: ChatListItem): string => {
+    if (!item?.conversation) return 'Чат'
     if (item.conversation.type === 'saved') return 'Избранное'
     if (item.conversation.title?.trim()) return item.conversation.title.trim()
     const peer = item.peer

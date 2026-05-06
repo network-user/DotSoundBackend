@@ -211,7 +211,7 @@ export function App() {
       let initData = getInitData()
 
       debug.sdkInitData = String(
-        tg.initData ? tg.initData.length : 0,
+        tg?.initData ? tg.initData.length : 0,
       )
       debug.nativeInitData = String(
         window.Telegram?.WebApp?.initData
@@ -221,7 +221,7 @@ export function App() {
       )
       debug.platform =
         (tg as { platform?: string })
-          .platform ?? 'unknown'
+          ?.platform ?? 'unknown'
 
       if (!initData) {
         await new Promise((r) =>
@@ -229,7 +229,7 @@ export function App() {
         )
         initData = getInitData()
         debug.sdkInitDataRetry = String(
-          tg.initData ? tg.initData.length : 0,
+          tg?.initData ? tg.initData.length : 0,
         )
         debug.nativeInitDataRetry = String(
           window.Telegram?.WebApp?.initData

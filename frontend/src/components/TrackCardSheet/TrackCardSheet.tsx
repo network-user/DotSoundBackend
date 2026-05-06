@@ -213,7 +213,6 @@ export function TrackCardSheet({
     useRef<HTMLInputElement>(null)
   const videoInputRef =
     useRef<HTMLInputElement>(null)
-  const extrasWrapRef = useRef<HTMLDivElement>(null)
   const [extrasOpen, setExtrasOpen] = useState(false)
   const [streamOverrideDraft, setStreamOverrideDraft] =
     useState('')
@@ -394,19 +393,11 @@ export function TrackCardSheet({
 
   useEffect(() => {
     if (!extrasOpen) return
-    const onDoc = (e: globalThis.PointerEvent) => {
-      const el = extrasWrapRef.current
-      if (el && !el.contains(e.target as Node)) {
-        setExtrasOpen(false)
-      }
-    }
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') setExtrasOpen(false)
     }
-    document.addEventListener('pointerdown', onDoc)
     window.addEventListener('keydown', onKey)
     return () => {
-      document.removeEventListener('pointerdown', onDoc)
       window.removeEventListener('keydown', onKey)
     }
   }, [extrasOpen])
@@ -1390,188 +1381,6 @@ export function TrackCardSheet({
               />
             </button>
           </div>
-          <div
-            className="tcs-extras-wrap"
-            ref={extrasWrapRef}
-          >
-            <button
-              type="button"
-              className="tcs-extras-trigger"
-              onClick={() =>
-                setExtrasOpen((v) => !v)
-              }
-              aria-expanded={extrasOpen}
-              aria-haspopup="true"
-              aria-controls={
-                extrasOpen ? 'tcs-extras-menu' : undefined
-              }
-              aria-label={t('trackSheet.moreMenu')}
-            >
-              <Icon name="settings" size={18} />
-              {t('trackSheet.more')}
-            </button>
-            {extrasOpen && (
-              <div
-                className="tcs-extras-popover"
-                id="tcs-extras-menu"
-                role="menu"
-              >
-                <div className="pb-extras">
-                  <button
-                    type="button"
-                    className="pb-extras-btn"
-                    role="menuitem"
-                    onClick={() => {
-                      setExtrasOpen(false)
-                      openQueue()
-                    }}
-                    aria-label={t('trackSheet.queue')}
-                  >
-                    <Icon
-                      name="queue"
-                      size={14}
-                    />
-                    {t('trackSheet.queue')}
-                  </button>
-                  {SPEED_OPTIONS.map((rate) => (
-                    <button
-                      type="button"
-                      key={rate}
-                      className={`pb-extras-btn${playbackRate === rate ? ' active' : ''}`}
-                      role="menuitem"
-                      onClick={() =>
-                        setPlaybackRate(rate)
-                      }
-                      aria-pressed={
-                        playbackRate === rate
-                      }
-                    >
-                      {rate}×
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className={`pb-extras-btn${abLoop.a !== null ? ' active' : ''}`}
-                    role="menuitem"
-                    onClick={() => setAbA()}
-                    title={t('trackSheet.abA')}
-                  >
-                    <Icon name="loop" size={14} />A
-                    {abLoop.a !== null
-                      ? ` ${fmt(abLoop.a)}`
-                      : ''}
-                  </button>
-                  <button
-                    type="button"
-                    className={`pb-extras-btn${abLoop.b !== null ? ' active' : ''}`}
-                    role="menuitem"
-                    onClick={() => setAbB()}
-                    title={t('trackSheet.abB')}
-                    disabled={abLoop.a === null}
-                  >
-                    <Icon name="loop" size={14} />B
-                    {abLoop.b !== null
-                      ? ` ${fmt(abLoop.b)}`
-                      : ''}
-                  </button>
-                  {(abLoop.a !== null ||
-                    abLoop.b !== null) && (
-                    <button
-                      type="button"
-                      className="pb-extras-btn"
-                      role="menuitem"
-                      onClick={clearAbLoop}
-                      title={t('trackSheet.abReset')}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-                <div
-                  className="pb-extras"
-                  style={{ marginTop: 6 }}
-                  aria-label={t(
-                    'trackSheet.sleepTimer',
-                    'Sleep timer',
-                  )}
-                >
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      opacity: 0.75,
-                      fontSize: 12,
-                    }}
-                  >
-                    <Icon name="moon" size={12} />
-                    {sleepMode === 'minutes' &&
-                    sleepRemainingSec > 0
-                      ? `${Math.floor(
-                          sleepRemainingSec / 60,
-                        )}:${String(
-                          sleepRemainingSec % 60,
-                        ).padStart(2, '0')}`
-                      : sleepMode === 'end-of-track'
-                        ? t(
-                            'trackSheet.sleepEot',
-                            'Конец трека',
-                          )
-                        : t(
-                            'trackSheet.sleepOff',
-                            'Сон',
-                          )}
-                  </span>
-                  {[15, 30, 60].map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      className={`pb-extras-btn${
-                        sleepMode === 'minutes' &&
-                        Math.ceil(sleepRemainingSec / 60) === m
-                          ? ' active'
-                          : ''
-                      }`}
-                      role="menuitem"
-                      onClick={() => setSleepTimerMinutes(m)}
-                    >
-                      {m}м
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className={`pb-extras-btn${
-                      sleepMode === 'end-of-track'
-                        ? ' active'
-                        : ''
-                    }`}
-                    role="menuitem"
-                    onClick={setSleepTimerEndOfTrack}
-                    title={t(
-                      'trackSheet.sleepEotTitle',
-                      'Стоп после текущего трека',
-                    )}
-                  >
-                    EOT
-                  </button>
-                  {sleepMode !== 'off' && (
-                    <button
-                      type="button"
-                      className="pb-extras-btn"
-                      role="menuitem"
-                      onClick={cancelSleepTimer}
-                      title={t(
-                        'trackSheet.sleepCancel',
-                        'Выключить таймер сна',
-                      )}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
         </div>
 
         <div
@@ -1604,6 +1413,23 @@ export function TrackCardSheet({
             />
             <span className="tcs-action-label">
               {t('trackSheet.dislike')}
+            </span>
+          </button>
+
+          <button
+            className={`tcs-action-btn${extrasOpen ? ' active' : ''}`}
+            onClick={() =>
+              setExtrasOpen(true)
+            }
+            aria-haspopup="dialog"
+            aria-expanded={extrasOpen}
+            aria-controls={
+              extrasOpen ? 'tcs-extras-sheet' : undefined
+            }
+          >
+            <Icon name="settings" size={20} />
+            <span className="tcs-action-label">
+              {t('trackSheet.more')}
             </span>
           </button>
 
@@ -1681,6 +1507,197 @@ export function TrackCardSheet({
             </span>
           </button>
         </div>
+
+        {extrasOpen && (
+          <div
+            className="tcs-extras-overlay"
+            onClick={() => setExtrasOpen(false)}
+            role="presentation"
+          >
+            <div
+              className="tcs-extras-sheet"
+              id="tcs-extras-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-label={t('trackSheet.moreMenu')}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="tcs-extras-sheet-header">
+                <span>{t('trackSheet.moreMenu')}</span>
+                <button
+                  type="button"
+                  className="tcs-extras-close"
+                  onClick={() =>
+                    setExtrasOpen(false)
+                  }
+                  aria-label={t('common.close', 'Закрыть')}
+                >
+                  <Icon name="x" size={16} />
+                </button>
+              </div>
+              <div className="tcs-extras-section">
+                <div className="tcs-extras-title">
+                  {t('trackSheet.queue')}
+                </div>
+                <div className="pb-extras">
+                  <button
+                    type="button"
+                    className="pb-extras-btn"
+                    onClick={() => {
+                      setExtrasOpen(false)
+                      openQueue()
+                    }}
+                    aria-label={t('trackSheet.queue')}
+                  >
+                    <Icon name="queue" size={14} />
+                    {t('trackSheet.queue')}
+                  </button>
+                </div>
+              </div>
+
+              <div className="tcs-extras-section">
+                <div className="tcs-extras-title">
+                  {t(
+                    'trackSheet.playbackSpeed',
+                    'Скорость',
+                  )}
+                </div>
+                <div className="pb-extras">
+                  {SPEED_OPTIONS.map((rate) => (
+                    <button
+                      type="button"
+                      key={rate}
+                      className={`pb-extras-btn${playbackRate === rate ? ' active' : ''}`}
+                      onClick={() =>
+                        setPlaybackRate(rate)
+                      }
+                      aria-pressed={
+                        playbackRate === rate
+                      }
+                    >
+                      {rate}×
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="tcs-extras-section">
+                <div className="tcs-extras-title">
+                  AB loop
+                </div>
+                <div className="pb-extras">
+                  <button
+                    type="button"
+                    className={`pb-extras-btn${abLoop.a !== null ? ' active' : ''}`}
+                    onClick={() => setAbA()}
+                    title={t('trackSheet.abA')}
+                  >
+                    <Icon name="loop" size={14} />A
+                    {abLoop.a !== null
+                      ? ` ${fmt(abLoop.a)}`
+                      : ''}
+                  </button>
+                  <button
+                    type="button"
+                    className={`pb-extras-btn${abLoop.b !== null ? ' active' : ''}`}
+                    onClick={() => setAbB()}
+                    title={t('trackSheet.abB')}
+                    disabled={abLoop.a === null}
+                  >
+                    <Icon name="loop" size={14} />B
+                    {abLoop.b !== null
+                      ? ` ${fmt(abLoop.b)}`
+                      : ''}
+                  </button>
+                  {(abLoop.a !== null ||
+                    abLoop.b !== null) && (
+                    <button
+                      type="button"
+                      className="pb-extras-btn"
+                      onClick={clearAbLoop}
+                      title={t('trackSheet.abReset')}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="tcs-extras-section">
+                <div className="tcs-extras-title">
+                  {t(
+                    'trackSheet.sleepTimer',
+                    'Sleep timer',
+                  )}
+                </div>
+                <div className="pb-extras">
+                  <span className="tcs-extras-sleep-state">
+                    <Icon name="moon" size={12} />
+                    {sleepMode === 'minutes' &&
+                    sleepRemainingSec > 0
+                      ? `${Math.floor(
+                          sleepRemainingSec / 60,
+                        )}:${String(
+                          sleepRemainingSec % 60,
+                        ).padStart(2, '0')}`
+                      : sleepMode === 'end-of-track'
+                        ? t(
+                            'trackSheet.sleepEot',
+                            'Конец трека',
+                          )
+                        : t(
+                            'trackSheet.sleepOff',
+                            'Сон',
+                          )}
+                  </span>
+                  {[15, 30, 60].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`pb-extras-btn${
+                        sleepMode === 'minutes' &&
+                        Math.ceil(sleepRemainingSec / 60) === m
+                          ? ' active'
+                          : ''
+                      }`}
+                      onClick={() => setSleepTimerMinutes(m)}
+                    >
+                      {m}м
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={`pb-extras-btn${
+                      sleepMode === 'end-of-track'
+                        ? ' active'
+                        : ''
+                    }`}
+                    onClick={setSleepTimerEndOfTrack}
+                    title={t(
+                      'trackSheet.sleepEotTitle',
+                      'Стоп после текущего трека',
+                    )}
+                  >
+                    EOT
+                  </button>
+                  {sleepMode !== 'off' && (
+                    <button
+                      type="button"
+                      className="pb-extras-btn"
+                      onClick={cancelSleepTimer}
+                      title={t(
+                        'trackSheet.sleepCancel',
+                        'Выключить таймер сна',
+                      )}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showEdit && canEditUi && (
           <div className="tcs-edit-panel">

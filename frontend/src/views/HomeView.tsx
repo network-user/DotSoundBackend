@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { useToast } from '@/components/ui/Toast'
 import { Icon } from '@/components/Icon/Icon'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
+import { usePullToRefresh } from '@/hooks/usePullToRefresh'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { useBrandLabel } from '@/lib/brand'
@@ -363,9 +364,8 @@ function TrackCarouselSection({
   tracks,
   onPlay,
 }: SectionProps) {
-  const carouselRef =
-    useRef<HTMLDivElement>(null)
-  if (!tracks.length) return null
+  const carouselRef = useRef<HTMLDivElement>(null)
+  if (!tracks || !tracks.length) return null
   return (
     <div>
       <div className="home-section-header">
@@ -382,7 +382,7 @@ function TrackCarouselSection({
       </div>
       <div className="home-carousel-shell">
         <div ref={carouselRef} className="home-carousel">
-          {tracks.map((t) => (
+          {tracks.filter(Boolean).map((t) => (
             <TrackTile key={t.id} track={t} onPlay={onPlay} />
           ))}
         </div>
@@ -403,7 +403,9 @@ interface GenreCardProps {
 }
 
 function GenreMixCard({ mix, onPlay, onOpen }: GenreCardProps) {
-  const covers = mix.tracks
+  const tracks = mix.tracks || []
+  const covers = tracks
+    .filter(Boolean)
     .slice(0, 4)
     .map((t) => coverUrl(t.cover_key))
     .filter(Boolean) as string[]
@@ -446,17 +448,17 @@ function GenreMixCard({ mix, onPlay, onOpen }: GenreCardProps) {
         className="home-genre-mix-card__play"
         onClick={(e) => {
           e.stopPropagation()
-          if (mix.tracks.length) onPlay(mix.tracks)
+          if (tracks.length) onPlay(tracks)
         }}
         aria-label={`Слушать ${mix.title}`}
       >
         <Icon name="play" size={14} />
       </button>
       <span className="home-genre-mix-card__genre">
-        {mix.genre.charAt(0).toUpperCase() + mix.genre.slice(1)}
+        {(mix.genre || '').charAt(0).toUpperCase() + (mix.genre || '').slice(1)}
       </span>
       <span className="home-genre-mix-card__count">
-        {mix.tracks.length} треков
+        {tracks.length} треков
       </span>
     </div>
   )
@@ -699,7 +701,9 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   const sectionMap = new Map<string, HomeSection>()
   if (sections) {
     for (const s of sections) {
-      sectionMap.set(s.section_type, s)
+      if (s && s.section_type) {
+        sectionMap.set(s.section_type, s)
+      }
     }
   }
   const featuredSource =
@@ -708,7 +712,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     sectionMap.get('user_choice') ||
     sectionMap.get('popular')
   const featuredTrack =
-    featuredSource?.tracks[0] ||
+    featuredSource?.tracks?.[0] ||
     fallbackTracks?.[0] ||
     null
   const featuredLabel =
@@ -873,11 +877,13 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         </div>
       ) : (() => {
         const continueIds = new Set(
-          (sectionMap.get('continue')?.tracks ?? []).map((t) => t.id),
+          (sectionMap.get('continue')?.tracks ?? [])
+            .filter(Boolean)
+            .map((t) => t.id),
         )
-        const recent = recentlyPlayed.filter(
-          (t) => !continueIds.has(t.id),
-        )
+        const recent = recentlyPlayed
+          .filter(Boolean)
+          .filter((t) => !continueIds.has(t.id))
         if (recent.length === 0) return null
         return (
           <TrackCarouselSection
