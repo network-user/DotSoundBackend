@@ -9,13 +9,17 @@ const DB_NAME = 'dotsound-pending'
 const DB_VERSION = 1
 const STORE = 'events'
 
-type PendingKind = 'post-play' | 'record-listen'
+type PendingKind =
+  | 'post-play'
+  | 'record-listen'
+  | 'mutation'
 
 interface PendingEvent {
   id?: number
   kind: PendingKind
   url: string
   body: string
+  method?: string
   createdAt: number
   attempts: number
 }
@@ -155,14 +159,17 @@ async function attemptSend(
   ev: PendingEvent,
 ): Promise<boolean> {
   try {
-    const res = await fetch(ev.url, {
-      method: 'POST',
+    const init: RequestInit = {
+      method: ev.method || 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...getAuthHeader(),
       },
-      body: ev.body,
-    })
+    }
+    if (ev.body && ev.body.length > 0) {
+      init.body = ev.body
+    }
+    const res = await fetch(ev.url, init)
     return res.ok
   } catch {
     return false
@@ -225,6 +232,34 @@ export async function queueOrSend(
   if (!opts.silent && online) {
     void flushPending()
   }
+}
+
+/**
+ * Queue an arbitrary user-mutation (like/dislike/follow/comment) so it
+ * gets replayed when the device returns online. Use ONLY for actions
+ * where the optimistic UI has already updated and the server response
+ * is non-essential for the next interaction.
+ */
+export async function queueMutation(
+  method: 'POST' | 'DELETE' | 'PUT' | 'PATCH',
+  url: string,
+  payload?: unknown,
+): Promise<void> {
+  const body = payload === undefined ? '' : JSON.stringify(payload)
+  const ev: PendingEvent = {
+    kind: 'mutation',
+    url,
+    body,
+    method,
+    createdAt: Date.now(),
+    attempts: 0,
+  }
+  await addPending(ev)
+  const online =
+    typeof navigator === 'undefined'
+      ? true
+      : navigator.onLine
+  if (online) void flushPending()
 }
 
 export function installOnlineFlush(): () => void {

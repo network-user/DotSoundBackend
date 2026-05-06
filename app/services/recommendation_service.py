@@ -88,6 +88,10 @@ def _weekly_ttl() -> int:
     ).replace(hour=0, minute=0, second=0, microsecond=0)
     return max(1, int((next_monday - now).total_seconds()))
 
+
+def _weekly_top_ttl() -> int:
+    return 30 * 60
+
 logger = structlog.get_logger(__name__)
 
 
@@ -705,6 +709,92 @@ class RecommendationService:
         return await self._rec_repo.get_tracks_by_ids(
             ordered
         )
+
+    async def get_weekly_top_playlist(
+        self,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        from dotsound_private_core.services.weekly_top_policy import (
+            WEEKLY_TOP_DEFAULT_LIMIT,
+            WEEKLY_TOP_SCORE_VERSION,
+            WEEKLY_TOP_WINDOW_DAYS,
+            WeeklyTopTrackInput,
+            rank_weekly_top_tracks,
+        )
+
+        size = max(
+            1,
+            min(int(limit), WEEKLY_TOP_DEFAULT_LIMIT * 2),
+        )
+        redis = get_redis_client()
+        cache_key = f"rec:weekly-top:{size}"
+        try:
+            cached = await redis.get(cache_key)
+        except Exception as exc:
+            logger.warning(
+                "weekly_top_cache_get_fail",
+                err=str(exc),
+            )
+            cached = None
+        if cached:
+            try:
+                payload = json.loads(cached)
+                payload["from_cache"] = True
+                return payload
+            except (TypeError, ValueError):
+                pass
+
+        listens_map = (
+            await self._rec_repo.get_qualified_listens_7d_counts(
+                days=WEEKLY_TOP_WINDOW_DAYS,
+                candidate_pool_limit=max(
+                    400, size * 6
+                ),
+            )
+        )
+        track_ids = list(listens_map.keys())
+        likes_map: dict[int, int] = {}
+        if track_ids:
+            likes_map = (
+                await self._rec_repo.get_likes_7d_count_by_track_ids(
+                    track_ids
+                )
+            )
+        items = [
+            WeeklyTopTrackInput(
+                track_id=tid,
+                listens_7d=listens_map.get(tid, 0),
+                likes_7d=likes_map.get(tid, 0),
+            )
+            for tid in track_ids
+        ]
+        ordered_ids = rank_weekly_top_tracks(
+            items, limit=size
+        )
+        now = datetime.now(UTC)
+        ttl = _weekly_top_ttl()
+        payload: dict[str, Any] = {
+            "track_ids": ordered_ids,
+            "score_version": WEEKLY_TOP_SCORE_VERSION,
+            "window_days": WEEKLY_TOP_WINDOW_DAYS,
+            "generated_at": now.isoformat(),
+            "expires_at": (
+                now + timedelta(seconds=ttl)
+            ).isoformat(),
+            "from_cache": False,
+        }
+        try:
+            await redis.set(
+                cache_key,
+                json.dumps(payload),
+                ex=ttl,
+            )
+        except Exception as exc:
+            logger.warning(
+                "weekly_top_cache_set_fail",
+                err=str(exc),
+            )
+        return payload
 
     async def get_similar(
         self, track_id: int, limit: int = 10

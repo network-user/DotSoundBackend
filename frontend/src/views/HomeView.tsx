@@ -495,6 +495,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   const [followedArtists, setFollowedArtists] = useState<
     FollowedArtistItem[] | null
   >(null)
+  const [recentlyPlayed, setRecentlyPlayed] = useState<Track[] | null>(null)
   const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(null)
   const genreRowRef =
     useRef<HTMLDivElement>(null)
@@ -528,6 +529,45 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       .getFollowedArtistsList(30)
       .then((data) => setFollowedArtists(data.items))
       .catch(() => setFollowedArtists([]))
+
+    api
+      .getListenHistory(20)
+      .then((data) => setRecentlyPlayed(data.items))
+      .catch(() => setRecentlyPlayed([]))
+  }, [])
+
+  useEffect(() => {
+    const main = document.getElementById('main')
+    if (!main) return
+    const saved = sessionStorage.getItem('home-scroll')
+    if (saved) {
+      const y = Number(saved)
+      if (Number.isFinite(y) && y > 0) {
+        requestAnimationFrame(() => {
+          main.scrollTop = y
+        })
+      }
+    }
+    let raf = 0
+    const onScroll = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        try {
+          sessionStorage.setItem(
+            'home-scroll',
+            String(Math.round(main.scrollTop)),
+          )
+        } catch {
+          // quota / privacy mode; ignore
+        }
+      })
+    }
+    main.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      main.removeEventListener('scroll', onScroll)
+    }
   }, [])
 
   const handlePlay = useCallback(
@@ -759,6 +799,35 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
           />
         )
       )}
+
+      {/* Recently played */}
+      {recentlyPlayed === null ? (
+        <div>
+          <div className="home-section-header">
+            <span className="home-section-header__title">Недавно слушали</span>
+          </div>
+          <div className="home-carousel home-skeleton-row">
+            {[1, 2, 3, 4].map((i) => (
+              <SkeletonBlock key={i} className="home-skeleton-tile" />
+            ))}
+          </div>
+        </div>
+      ) : (() => {
+        const continueIds = new Set(
+          (sectionMap.get('continue')?.tracks ?? []).map((t) => t.id),
+        )
+        const recent = recentlyPlayed.filter(
+          (t) => !continueIds.has(t.id),
+        )
+        if (recent.length === 0) return null
+        return (
+          <TrackCarouselSection
+            title="Недавно слушали"
+            tracks={recent}
+            onPlay={handlePlay}
+          />
+        )
+      })()}
 
       {/* Followed artists strip */}
       {followedArtists === null ? (

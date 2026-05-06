@@ -164,6 +164,12 @@ export function DashboardRoute() {
     refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
+  const activation = useQuery({
+    queryKey: ['admin', 'dashboard', 'activation', statsPeriod],
+    queryFn: () => adminApi.dashboardActivationFunnel(statsPeriod),
+    refetchInterval: live ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  })
   useEffect(() => {
     if (!data?.generated_at) return
     setOnlineFallback((prev) => {
@@ -554,6 +560,37 @@ export function DashboardRoute() {
       </section>
 
       <section className="kpi-grid">
+        {activation.data && (
+          <>
+            <KpiCard
+              label="Auth -> First Play (sec)"
+              value={activation.data.avg_auth_to_first_play_seconds}
+            />
+            <KpiCard
+              label="Onboarding Completion Rate"
+              value={
+                activation.data.users.auth_success
+                  ? `${Math.round(
+                      (activation.data.users.onboarding_complete /
+                        activation.data.users.auth_success) *
+                        100,
+                    )}%`
+                  : '0%'
+              }
+            />
+            <KpiCard
+              label="Skip Onboarding Rate"
+              value={`${Math.round(activation.data.skip_rate * 100)}%`}
+              accent={
+                activation.data.skip_rate > 0.4 ? 'warn' : 'default'
+              }
+            />
+            <KpiCard
+              label="First Session Plays"
+              value={activation.data.first_session_plays_count}
+            />
+          </>
+        )}
         <KpiCard
           label={t(
             'admin.dashboard.kpi.onlineNow',

@@ -19,6 +19,11 @@
     "seekForwardTitle": "+15 с",
     "moreMenu": "Скорость, очередь, AB-цикл",
     "more": "Ещё",
+    "sleepTimer": "Таймер сна",
+    "sleepEot": "Конец трека",
+    "sleepOff": "Сон",
+    "sleepEotTitle": "Стоп после текущего трека",
+    "sleepCancel": "Выключить таймер сна",
     "queue": "Очередь",
     "abA": "Точка A",
     "abB": "Точка B",
@@ -119,5 +124,12 @@
     "continueImport": "Продолжить импорт",
     "confirmCancel": "Да, отменить",
     "cancelling": "Отмена..."
+  },
+  "likes": {
+    "like_failed": "Не удалось обновить лайк",
+    "dislike_failed": "Не удалось обновить дизлайк"
+  },
+  "artist": {
+    "follow_failed": "Не удалось обновить подписку"
   }
 }

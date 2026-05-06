@@ -149,6 +149,9 @@ services:
       - app.services.artist_catalog_sync_worker
       - app.services.waveform_worker
       - app.services.snippet_worker
+      - app.services.artist_stats_worker
+      - app.services.scheduler_service
+      - app.services.account_deletion_worker
     env_file:
       - .env
       # PrivateCore-only configuration (lyrics provider tokens, audio

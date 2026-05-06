@@ -29,6 +29,7 @@ class ListenEventRepository(
         completed: bool,
         skipped: bool,
         source_context: str | None,
+        last_position: int | None = None,
     ) -> ListenEvent:
         return await self.create(
             user_id=user_id,
@@ -41,7 +42,63 @@ class ListenEventRepository(
             completed=completed,
             skipped=skipped,
             source_context=source_context,
+            last_position_seconds=(
+                last_position if last_position is not None else 0
+            ),
         )
+
+    async def latest_resume_position(
+        self,
+        user_id: int,
+        track_ids: list[int],
+    ) -> dict[int, int]:
+        """Return last-recorded position (sec) per track, only for
+        events the user did not finish (so we don't suggest resuming
+        the very last second of a completed listen).
+        """
+        if not track_ids:
+            return {}
+        from sqlalchemy import and_, func
+
+        stmt = (
+            select(
+                ListenEvent.track_id,
+                func.max(ListenEvent.created_at),
+            )
+            .where(
+                and_(
+                    ListenEvent.user_id == user_id,
+                    ListenEvent.track_id.in_(track_ids),
+                    ListenEvent.completed.is_(False),
+                    ListenEvent.skipped.is_(False),
+                    ListenEvent.last_position_seconds > 0,
+                )
+            )
+            .group_by(ListenEvent.track_id)
+        )
+        latest_keys = (
+            await self._session.execute(stmt)
+        ).all()
+        if not latest_keys:
+            return {}
+        out: dict[int, int] = {}
+        for track_id, latest_ts in latest_keys:
+            row = (
+                await self._session.execute(
+                    select(
+                        ListenEvent.last_position_seconds
+                    )
+                    .where(
+                        ListenEvent.user_id == user_id,
+                        ListenEvent.track_id == track_id,
+                        ListenEvent.created_at == latest_ts,
+                    )
+                    .limit(1)
+                )
+            ).first()
+            if row and row[0] is not None:
+                out[int(track_id)] = int(row[0])
+        return out
 
     async def get_recent(
         self,
@@ -85,6 +142,32 @@ class ListenEventRepository(
             )
         )
         return int(r.scalar_one())
+
+    async def get_user_listen_rows_since(
+        self,
+        user_id: int,
+        since: datetime | None,
+    ) -> list[tuple[int, int, int | None]]:
+        """Return raw ``(track_id, duration_listened, total_duration)``
+        rows for personal-stats aggregation. Period filter ``since``
+        is exclusive of older events.
+        """
+        stmt = select(
+            ListenEvent.track_id,
+            ListenEvent.duration_listened_seconds,
+            ListenEvent.total_duration_seconds,
+        ).where(ListenEvent.user_id == user_id)
+        if since is not None:
+            stmt = stmt.where(
+                ListenEvent.created_at >= since
+            )
+        rows = (
+            await self._session.execute(stmt)
+        ).all()
+        return [
+            (int(r[0]), int(r[1] or 0), r[2])
+            for r in rows
+        ]
 
 
 class SearchEventRepository(

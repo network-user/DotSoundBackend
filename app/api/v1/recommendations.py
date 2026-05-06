@@ -11,6 +11,9 @@ from app.models.user import User
 from app.repositories.recommendation import (
     RecommendationRepository,
 )
+from app.repositories.signal import (
+    ListenEventRepository,
+)
 from app.schemas.recommendation import (
     DailyMixResponse,
     DailyPlaylistResponse,
@@ -23,6 +26,7 @@ from app.schemas.recommendation import (
     SimilarTracksResponse,
     UserChoicePlaylistResponse,
     WeeklyPlaylistResponse,
+    WeeklyTopPlaylistResponse,
 )
 from app.services.recommendation_service import (
     RecommendationService,
@@ -48,8 +52,26 @@ async def get_home(
     data = await svc.get_home_sections(user.id)
     
     sections = []
+    listen_repo = ListenEventRepository(db)
     for s in data["sections"]:
         tracks_out = await dedupe_and_build_track_list(db, s["tracks"])
+        if s["section_type"] == "continue" and tracks_out:
+            positions = await listen_repo.latest_resume_position(
+                user.id, [t.id for t in tracks_out]
+            )
+            if positions:
+                tracks_out = [
+                    t.model_copy(
+                        update={
+                            "resume_position_seconds": positions.get(
+                                t.id
+                            )
+                        }
+                    )
+                    if positions.get(t.id) is not None
+                    else t
+                    for t in tracks_out
+                ]
         sections.append(
             HomeSectionResponse(
                 title=s["title"],
@@ -314,6 +336,32 @@ async def get_user_choice_playlist(
         tracks=await dedupe_and_build_track_list(db, tracks),
         generated_at=datetime.now(UTC).isoformat(),
         score_version=USER_CHOICE_SCORE_VERSION,
+    )
+
+
+@router.get(
+    "/weekly-top",
+    response_model=WeeklyTopPlaylistResponse,
+)
+async def get_weekly_top_playlist(
+    _user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    svc = RecommendationService(db)
+    payload = await svc.get_weekly_top_playlist(
+        limit=limit
+    )
+    repo = RecommendationRepository(db)
+    tracks = await repo.get_tracks_by_ids(
+        payload.get("track_ids", [])
+    )
+    return WeeklyTopPlaylistResponse(
+        tracks=await dedupe_and_build_track_list(db, tracks),
+        generated_at=payload["generated_at"],
+        expires_at=payload["expires_at"],
+        score_version=payload["score_version"],
+        window_days=payload["window_days"],
     )
 
 

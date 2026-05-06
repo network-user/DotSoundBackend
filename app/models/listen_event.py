@@ -51,6 +51,9 @@ class ListenEvent(Base):
     total_duration_seconds: Mapped[int | None] = (
         mapped_column(Integer, nullable=True)
     )
+    last_position_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
     completed: Mapped[bool] = mapped_column(
         Boolean, server_default="false", nullable=False
     )

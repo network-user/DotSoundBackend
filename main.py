@@ -28,6 +28,8 @@ if __name__ == "__main__":
             "app.services.artist_catalog_sync_worker",
             "app.services.waveform_worker",
             "app.services.snippet_worker",
+            "app.services.artist_stats_worker",
+            "app.services.account_deletion_worker",
         ],
         stdout=sys.stdout,
         stderr=sys.stderr,

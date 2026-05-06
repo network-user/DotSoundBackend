@@ -37,6 +37,7 @@ export interface Track {
   created_at: string
   waveform_data: number[] | null
   playback_variants?: TrackPlaybackVariantBrief[]
+  resume_position_seconds?: number | null
 }
 
 export interface TrackListResponse {

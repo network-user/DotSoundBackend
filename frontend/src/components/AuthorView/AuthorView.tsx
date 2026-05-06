@@ -1,8 +1,26 @@
 import { useEffect, useState } from 'react'
-import { api } from '@/lib/api'
-import { getInternalUserId } from '@/lib/telegram'
+import { useTranslation } from 'react-i18next'
+import { api, getApiErrorMessage } from '@/lib/api'
+import {
+  getInternalUserId,
+  haptic,
+  hapticNotification,
+} from '@/lib/telegram'
 import { TrackList } from '@/components/TrackList/TrackList'
+import { useToast } from '@/components/ui/Toast'
+import { queueMutation } from '@/lib/pendingEvents'
 import type { AuthorProfile, Track, UserStatsResponse } from '@/types/api'
+
+function _isNetworkError(e: unknown): boolean {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return true
+  }
+  return (
+    e instanceof TypeError &&
+    typeof e.message === 'string' &&
+    /fetch|network/i.test(e.message)
+  )
+}
 
 interface Props {
   authorId: number | null
@@ -10,6 +28,8 @@ interface Props {
 }
 
 export function AuthorView({ authorId, onClose }: Props) {
+  const { t } = useTranslation()
+  const toast = useToast()
   const [author, setAuthor] = useState<AuthorProfile | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [stats, setStats] = useState<UserStatsResponse | null>(null)
@@ -50,14 +70,42 @@ export function AuthorView({ authorId, onClose }: Props) {
   }, [authorId])
 
   const handleFollow = async () => {
-    if (!authorId) return
+    if (!authorId || followLoading) return
+    const prevFollowing = following
+    const prevStats = stats
+    const willFollow = !(prevFollowing === true)
+    setFollowing(willFollow)
+    if (stats) {
+      const delta = willFollow ? 1 : -1
+      setStats({
+        ...stats,
+        followers_count: Math.max(0, (stats.followers_count ?? 0) + delta),
+      })
+    }
+    haptic('light')
     setFollowLoading(true)
     try {
       const res = await api.toggleFollow(authorId)
       setFollowing(res.following)
-      // Refresh stats for follower count
       api.getUserStats(authorId).then(setStats).catch(() => {})
-    } catch {}
+    } catch (e) {
+      if (_isNetworkError(e)) {
+        await queueMutation(
+          'POST',
+          `/api/v1/users/${authorId}/follow`,
+        )
+        setFollowLoading(false)
+        return
+      }
+      setFollowing(prevFollowing)
+      setStats(prevStats)
+      hapticNotification('error')
+      const msg = getApiErrorMessage(
+        e,
+        t('artist.follow_failed', 'Не удалось обновить подписку'),
+      )
+      toast.error(msg)
+    }
     setFollowLoading(false)
   }
 

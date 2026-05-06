@@ -163,6 +163,28 @@ class UserRepository(BaseRepository[User]):
         await self._session.flush()
         return user
 
+    async def list_hard_delete_candidates(
+        self, cutoff: datetime, limit: int
+    ) -> list[User]:
+        result = await self._session.execute(
+            select(User)
+            .where(
+                User.deleted_at.is_not(None),
+                User.deleted_at <= cutoff,
+            )
+            .order_by(User.deleted_at.asc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def hard_delete(self, user_id: int) -> bool:
+        user = await self.get_by_id(user_id)
+        if not user:
+            return False
+        await self._session.delete(user)
+        await self._session.flush()
+        return True
+
     async def get_by_ids(
         self, ids: list[int]
     ) -> dict[int, User]:

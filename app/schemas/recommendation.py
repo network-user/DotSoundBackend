@@ -59,6 +59,14 @@ class UserChoicePlaylistResponse(BaseModel):
     score_version: str
 
 
+class WeeklyTopPlaylistResponse(BaseModel):
+    tracks: list[TrackResponse]
+    generated_at: str
+    expires_at: str
+    score_version: str
+    window_days: int
+
+
 class GenreMixItemResponse(BaseModel):
     genre: str
     title: str

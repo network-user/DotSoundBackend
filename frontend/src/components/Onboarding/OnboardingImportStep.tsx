@@ -339,6 +339,11 @@ export function OnboardingImportStep({ onDone }: Props) {
     }
   }
 
+  const hasImportedTracks = Boolean(
+    job?.completed_tracks &&
+      job.completed_tracks > 0,
+  )
+
   if (!status) {
     return (
       <div className="onboarding-step">
@@ -411,6 +416,17 @@ export function OnboardingImportStep({ onDone }: Props) {
           </p>
         )}
         <div className="onboarding-import-footer-btns" style={{ marginTop: 20 }}>
+          {hasImportedTracks && (
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ maxWidth: '100%', width: '100%' }}
+              onClick={continueAfterImport}
+              disabled={busy}
+            >
+              {busy ? '…' : 'Слушать уже готовые треки'}
+            </button>
+          )}
           <button
             type="button"
             className="onboarding-next"
@@ -632,6 +648,17 @@ export function OnboardingImportStep({ onDone }: Props) {
             >
               К жанрам, импорт пойдёт в фоне
             </button>
+            {hasImportedTracks && (
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ width: '100%', marginTop: 8 }}
+                onClick={continueAfterImport}
+                disabled={busy}
+              >
+                {busy ? '…' : 'Слушать уже готовые треки'}
+              </button>
+            )}
           </div>
         )}
         {flow === 'importing' && (
@@ -709,6 +736,17 @@ export function OnboardingImportStep({ onDone }: Props) {
             >
               К жанрам, импорт пойдёт в фоне
             </button>
+            {hasImportedTracks && (
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{ width: '100%', marginTop: 8 }}
+                onClick={continueAfterImport}
+                disabled={busy}
+              >
+                {busy ? '…' : 'Слушать уже готовые треки'}
+              </button>
+            )}
           </div>
         )}
         {cancelConfirmOpen && (

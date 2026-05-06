@@ -363,6 +363,34 @@ async def get_my_listen_history(
     )
 
 
+@router.get(
+    "/me/listening-stats",
+    summary=(
+        "Personal listening aggregates: minutes listened, "
+        "top artists/genres in the requested period"
+    ),
+)
+@limiter.limit("30/minute")
+async def get_my_listening_stats(
+    request: Request,
+    period_days: int = Query(30, ge=0, le=365),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    from app.services.listener_stats_service import (
+        ListenerStatsService,
+    )
+
+    structlog.contextvars.bind_contextvars(
+        user_id=current_user.id
+    )
+    svc = ListenerStatsService(session)
+    return await svc.get_listener_stats(
+        user_id=current_user.id,
+        period_days=period_days,
+    )
+
+
 class _MyComplaintsResponse(BaseModel):
     items: list[ComplaintResponse]
 

@@ -1,10 +1,13 @@
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.redis import get_redis_client
 from app.models.user import User
 from app.models.user_preference import UserPreference
+from app.repositories.app_settings import AppSettingsRepository
 from app.repositories.artist import ArtistRepository
 from app.repositories.preference import (
     PreferenceRepository,
@@ -16,6 +19,10 @@ from app.services.telegram_profile_preflight import (
 )
 
 logger = structlog.get_logger(__name__)
+_SMART_SKIP_FLAG = "onboarding.smart_skip_enabled"
+_ACTIVATION_COUNTER_PREFIX = "activation:counters:"
+_ACTIVATION_USERS_PREFIX = "activation:users:"
+_ACTIVATION_RETENTION_SECONDS = 35 * 24 * 60 * 60
 
 
 class OnboardingService:
@@ -30,6 +37,7 @@ class OnboardingService:
         )
         self._track_repo = TrackRepository(session)
         self._session = session
+        self._settings_repo = AppSettingsRepository(session)
 
     async def get_status(
         self, user_id: int
@@ -215,6 +223,8 @@ class OnboardingService:
         for item in items:
             track_id = item["track_id"]
             liked = item["liked"]
+            if liked is None:
+                continue
             if liked:
                 existing = await like_repo.get(
                     user_id, track_id
@@ -239,6 +249,12 @@ class OnboardingService:
         )
         return pref
 
+    async def is_smart_skip_enabled(self) -> bool:
+        return await self._settings_repo.get_feature_flag(
+            _SMART_SKIP_FLAG,
+            default=True,
+        )
+
     async def complete(
         self, user_id: int
     ) -> UserPreference:
@@ -251,6 +267,18 @@ class OnboardingService:
     async def apply_smart_default_profile(
         self, user_id: int
     ) -> dict[str, list[Any]]:
+        if not await self.is_smart_skip_enabled():
+            await self.complete(user_id)
+            logger.info(
+                "onboarding_smart_skip_disabled",
+                user_id=user_id,
+                flag=_SMART_SKIP_FLAG,
+            )
+            return {
+                "genres": [],
+                "artist_ids": [],
+                "moods": [],
+            }
         existing = await self._pref_repo.get_by_user_id(
             user_id
         )
@@ -293,6 +321,69 @@ class OnboardingService:
             "artist_ids": [],
             "moods": [],
         }
+
+    async def process_activation_event(
+        self,
+        *,
+        user_id: int,
+        event: str,
+        meta: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        now = datetime.now(UTC)
+        pref = await self._pref_repo.get_by_user_id(user_id)
+        if pref is None:
+            pref = await self._pref_repo.upsert(user_id=user_id)
+
+        out_meta: dict[str, Any] = dict(meta or {})
+        if event == "auth_success":
+            if pref.auth_first_seen_at is None:
+                pref.auth_first_seen_at = now
+                await self._session.flush()
+        elif event in ("home_first_play", "home_first_session_start"):
+            if pref.first_play_at is None:
+                pref.first_play_at = now
+                if pref.auth_first_seen_at is not None:
+                    delta = now - pref.auth_first_seen_at
+                    out_meta["ms_from_auth_server"] = int(
+                        delta.total_seconds() * 1000
+                    )
+                await self._session.flush()
+
+        await self._record_activation_aggregate(
+            user_id=user_id,
+            event=event,
+            meta=out_meta,
+            now=now,
+        )
+        return out_meta
+
+    async def _record_activation_aggregate(
+        self,
+        *,
+        user_id: int,
+        event: str,
+        meta: dict[str, Any],
+        now: datetime,
+    ) -> None:
+        day = now.strftime("%Y%m%d")
+        redis = get_redis_client()
+        counter_key = f"{_ACTIVATION_COUNTER_PREFIX}{day}"
+        users_key = f"{_ACTIVATION_USERS_PREFIX}{day}:{event}"
+
+        pipe = redis.pipeline()
+        pipe.hincrby(counter_key, event, 1)
+        pipe.expire(counter_key, _ACTIVATION_RETENTION_SECONDS)
+        pipe.sadd(users_key, str(user_id))
+        pipe.expire(users_key, _ACTIVATION_RETENTION_SECONDS)
+
+        step = meta.get("step")
+        if isinstance(step, str) and step:
+            step_key = (
+                f"{_ACTIVATION_USERS_PREFIX}{day}:{event}:step:{step}"
+            )
+            pipe.sadd(step_key, str(user_id))
+            pipe.expire(step_key, _ACTIVATION_RETENTION_SECONDS)
+        await pipe.execute()
 
     async def get_available_genres(
         self,

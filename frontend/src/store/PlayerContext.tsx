@@ -51,6 +51,24 @@ function _computeEqHeadroom(
   )
 }
 
+function _applyPitchPreservation(
+  audio: HTMLAudioElement | null,
+) {
+  if (!audio) return
+  const a = audio as HTMLAudioElement & {
+    preservesPitch?: boolean
+    mozPreservesPitch?: boolean
+    webkitPreservesPitch?: boolean
+  }
+  try {
+    a.preservesPitch = true
+    a.mozPreservesPitch = true
+    a.webkitPreservesPitch = true
+  } catch {
+    // older browsers without the property; ignore
+  }
+}
+
 function _loadEqState() {
   try {
     const rawBands = localStorage.getItem(
@@ -173,6 +191,11 @@ interface PlayerContextValue {
   radioSeedTrackId: number | null
   startRadio: (seedTrack: Track) => Promise<void>
   stopRadio: () => void
+  sleepMode: 'off' | 'minutes' | 'end-of-track'
+  sleepRemainingSec: number
+  setSleepTimerMinutes: (minutes: number) => void
+  setSleepTimerEndOfTrack: () => void
+  cancelSleepTimer: () => void
 }
 
 interface PlayerStateValue {
@@ -229,6 +252,11 @@ interface PlayerActionsValue {
   radioSeedTrackId: number | null
   startRadio: (seedTrack: Track) => Promise<void>
   stopRadio: () => void
+  sleepMode: 'off' | 'minutes' | 'end-of-track'
+  sleepRemainingSec: number
+  setSleepTimerMinutes: (minutes: number) => void
+  setSleepTimerEndOfTrack: () => void
+  cancelSleepTimer: () => void
 }
 
 interface PlayerMetaValue {
@@ -354,6 +382,34 @@ function _updateMediaSession(
           audio.currentTime = d.seekTime
       },
     )
+    try {
+      navigator.mediaSession.setActionHandler(
+        'seekforward',
+        (d) => {
+          const offset = d.seekOffset ?? 15
+          const target = Math.min(
+            (audio.duration || 0) - 0.5,
+            (audio.currentTime || 0) + offset,
+          )
+          if (Number.isFinite(target) && target >= 0) {
+            audio.currentTime = target
+          }
+        },
+      )
+      navigator.mediaSession.setActionHandler(
+        'seekbackward',
+        (d) => {
+          const offset = d.seekOffset ?? 15
+          const target = Math.max(
+            0,
+            (audio.currentTime || 0) - offset,
+          )
+          audio.currentTime = target
+        },
+      )
+    } catch {
+      // some browsers do not support seekforward/seekbackward
+    }
   } catch {}
 }
 
@@ -489,6 +545,12 @@ export function PlayerProvider({
     () => localStorage.getItem('player-shuffle') === 'true',
   )
   const [hlsError, setHlsError] = useState<string | null>(null)
+  const [sleepMode, setSleepMode] = useState<
+    'off' | 'minutes' | 'end-of-track'
+  >('off')
+  const [sleepRemainingSec, setSleepRemainingSec] = useState(0)
+  const sleepDeadlineRef = useRef<number | null>(null)
+  const sleepEndOfTrackRef = useRef(false)
   const [radioMode, setRadioMode] = useState(false)
   const [radioSeedTrackId, setRadioSeedTrackId] = useState<number | null>(null)
   const radioModeRef = useRef(false)
@@ -949,6 +1011,10 @@ export function PlayerProvider({
           duration_listened: listened,
           total_duration: track.duration_seconds,
           source_context: 'player',
+          last_position: Math.max(
+            0,
+            Math.floor(audio.currentTime),
+          ),
         },
       )
     }
@@ -990,6 +1056,13 @@ export function PlayerProvider({
       setIsPlaying(false)
       setCurrentTime(0)
       sendListenSignal()
+      if (sleepEndOfTrackRef.current) {
+        sleepEndOfTrackRef.current = false
+        sleepDeadlineRef.current = null
+        setSleepMode('off')
+        setSleepRemainingSec(0)
+        return
+      }
       const audio = audioRef.current
       if (repeatModeRef.current === 'one' && audio) {
         audio.currentTime = 0
@@ -1202,7 +1275,40 @@ export function PlayerProvider({
     setCurrentTime(0)
     setDuration(0)
     _saveState(newTrack, 0)
-    if (audio) audio.playbackRate = playbackRate
+    if (audio) {
+      audio.playbackRate = playbackRate
+      _applyPitchPreservation(audio)
+    }
+
+    const resumeRaw = newTrack.resume_position_seconds
+    const totalRaw = newTrack.duration_seconds
+    if (
+      typeof resumeRaw === 'number' &&
+      resumeRaw > 5 &&
+      (typeof totalRaw !== 'number' ||
+        resumeRaw < totalRaw - 10)
+    ) {
+      const onMeta = () => {
+        try {
+          const a = audioRef.current
+          if (!a) return
+          if (lastTrackIdRef.current !== newTrack.id) return
+          const target = Math.min(
+            resumeRaw,
+            Math.max(0, (a.duration || resumeRaw + 1) - 1),
+          )
+          if (target > 1 && Number.isFinite(target)) {
+            a.currentTime = target
+            listenStartTimeRef.current = target
+          }
+        } catch {
+          // currentTime can throw on some readyStates; skip
+        }
+      }
+      audio.addEventListener('loadedmetadata', onMeta, {
+        once: true,
+      })
+    }
 
     try {
       audio.crossOrigin = 'anonymous'
@@ -1482,6 +1588,7 @@ export function PlayerProvider({
       const pa = new Audio()
       pa.preload = 'auto'
       pa.src = trackProgressiveAudioUrl(next.id)
+      _applyPitchPreservation(pa)
       prefetchAudioRef.current = pa
 
       const canHls =
@@ -1679,11 +1786,60 @@ export function PlayerProvider({
       const a = audioRef.current
       if (a) {
         a.playbackRate = r
+        _applyPitchPreservation(a)
         flushPlayerTimeUi()
       }
     },
     [flushPlayerTimeUi],
   )
+
+  const cancelSleepTimer = useCallback(() => {
+    sleepDeadlineRef.current = null
+    sleepEndOfTrackRef.current = false
+    setSleepMode('off')
+    setSleepRemainingSec(0)
+  }, [])
+
+  const setSleepTimerMinutes = useCallback(
+    (minutes: number) => {
+      const safeMinutes = Math.max(1, Math.floor(minutes))
+      sleepEndOfTrackRef.current = false
+      sleepDeadlineRef.current =
+        Date.now() + safeMinutes * 60_000
+      setSleepMode('minutes')
+      setSleepRemainingSec(safeMinutes * 60)
+    },
+    [],
+  )
+
+  const setSleepTimerEndOfTrack = useCallback(() => {
+    sleepDeadlineRef.current = null
+    sleepEndOfTrackRef.current = true
+    setSleepMode('end-of-track')
+    setSleepRemainingSec(0)
+  }, [])
+
+  useEffect(() => {
+    if (sleepMode !== 'minutes') return
+    const tick = () => {
+      const dl = sleepDeadlineRef.current
+      if (dl == null) return
+      const remainingMs = dl - Date.now()
+      if (remainingMs <= 0) {
+        const a = audioRef.current
+        if (a && !a.paused) a.pause()
+        sleepDeadlineRef.current = null
+        sleepEndOfTrackRef.current = false
+        setSleepMode('off')
+        setSleepRemainingSec(0)
+        return
+      }
+      setSleepRemainingSec(Math.ceil(remainingMs / 1000))
+    }
+    tick()
+    const interval = window.setInterval(tick, 1000)
+    return () => window.clearInterval(interval)
+  }, [sleepMode])
 
   const addToQueue = useCallback((t: Track) => {
     manualQueueRef.current = [
@@ -1854,6 +2010,11 @@ export function PlayerProvider({
       radioSeedTrackId,
       startRadio,
       stopRadio,
+      sleepMode,
+      sleepRemainingSec,
+      setSleepTimerMinutes,
+      setSleepTimerEndOfTrack,
+      cancelSleepTimer,
     }),
     [
       playTrack, togglePlay, seek, seekToSeconds,
@@ -1877,6 +2038,11 @@ export function PlayerProvider({
       radioSeedTrackId,
       startRadio,
       stopRadio,
+      sleepMode,
+      sleepRemainingSec,
+      setSleepTimerMinutes,
+      setSleepTimerEndOfTrack,
+      cancelSleepTimer,
     ],
   )
 
