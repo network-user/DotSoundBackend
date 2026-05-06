@@ -5,7 +5,6 @@
   useRef,
   useState,
 } from 'react'
-import { type PanInfo } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import {
@@ -50,10 +49,6 @@ import type {
 import { CommentSection } from '@/components/Comments/CommentSection'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
-import {
-  m,
-  useReducedMotion,
-} from '@/lib/motion'
 import { LyricsPanel } from './LyricsPanel'
 
 const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5]
@@ -218,7 +213,6 @@ export function TrackCardSheet({
     localStorage.getItem('setting-video-enabled') !== 'false'
 
   const sheetRef = useRef<HTMLDivElement>(null)
-  const reduceSheetDrag = useReducedMotion()
   const coverInputRef =
     useRef<HTMLInputElement>(null)
   const videoInputRef =
@@ -957,16 +951,9 @@ export function TrackCardSheet({
       className={`tcs-backdrop${exit.cls}`}
       onClick={handleBackdrop}
     >
-      <m.div
+      <div
         className={`tcs-sheet${hasActiveVideo ? ' tcs-video-mode' : ''}${exit.cls}`}
         ref={sheetRef}
-        drag={reduceSheetDrag ? false : 'y'}
-        dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={0.12}
-        dragMomentum={false}
-        onDragEnd={(_e, info: PanInfo) => {
-          if (info.offset.y > 100) closeCard()
-        }}
       >
         <div className="tcs-handle" />
         <button
@@ -2250,10 +2237,10 @@ export function TrackCardSheet({
                       <Icon name="x" size={14} />
                     </button>
                   </div>
-                )        )}
-      </div>
-    </m.div>
-  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
         {shareOpen && (
           <div
