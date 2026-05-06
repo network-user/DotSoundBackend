@@ -4,6 +4,7 @@ import { VoicePlayer } from '@/components/Chat/VoicePlayer'
 import { api } from '@/lib/api'
 import { useBrandLabel } from '@/lib/brand'
 import { usePlayerActions } from '@/store/PlayerContext'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type {
   AlbumWithTracksRecord,
   ChatMessage,
@@ -51,6 +52,10 @@ export function ChatBubble({
   const [imgLoaded, setImgLoaded] = useState(false)
   const [sharedTrack, setSharedTrack] = useState<Track | null>(null)
   const [sharedTrackLoading, setSharedTrackLoading] = useState(false)
+  usePrefetchTracks(
+    sharedTrack ? [sharedTrack] : null,
+    'chat_shared',
+  )
   const [sharedAlbum, setSharedAlbum] =
     useState<AlbumWithTracksRecord | null>(null)
   const [sharedAlbumLoading, setSharedAlbumLoading] =

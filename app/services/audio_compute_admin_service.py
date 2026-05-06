@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import secrets as pysecrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -56,6 +56,13 @@ def _serialize_worker(w: ComputeWorker) -> dict[str, Any]:
             else None
         ),
         "last_ip": w.last_ip,
+        "worker_package_version": w.worker_package_version,
+        "claims_paused_until": (
+            w.claims_paused_until.isoformat()
+            if w.claims_paused_until
+            else None
+        ),
+        "claims_pause_reason": w.claims_pause_reason,
         "created_at": (
             w.created_at.isoformat()
             if w.created_at
@@ -324,6 +331,69 @@ class AudioComputeAdminService:
             worker_id=worker_id,
         )
         return "deleted"
+
+    async def pause_worker_claims(
+        self,
+        worker_id: str,
+        *,
+        minutes: int,
+        mode: str,
+    ) -> dict[str, Any] | None:
+        w = await self._repo.get_worker(
+            worker_id,
+        )
+        if (
+            w is None
+            or w.revoked_at is not None
+            or not w.active
+        ):
+            return None
+        reasons = {
+            "soft": "admin_soft",
+            "drain": "admin_drain",
+        }
+        if mode not in reasons:
+            raise ValueError("invalid_pause_mode")
+        mins = max(
+            1,
+            min(int(minutes), 10_080),
+        )
+        w.claims_paused_until = datetime.now(
+            UTC,
+        ) + timedelta(minutes=mins)
+        w.claims_pause_reason = reasons[mode]
+        await self._session.commit()
+        logger.info(
+            "compute_worker_claims_paused",
+            worker_id=worker_id,
+            minutes=mins,
+            mode=mode,
+            until=w.claims_paused_until.isoformat(),
+        )
+        return {
+            "claims_paused_until": (
+                w.claims_paused_until.isoformat()
+            ),
+            "claims_pause_reason": w.claims_pause_reason,
+        }
+
+    async def resume_worker_claims(
+        self,
+        worker_id: str,
+    ) -> bool:
+        w = await self._repo.get_worker(
+            worker_id,
+        )
+        if w is None:
+            return False
+        w.claims_paused_until = None
+        w.claims_pause_reason = None
+        await self._session.commit()
+        logger.info(
+            "compute_worker_claims_resumed",
+            worker_id=worker_id,
+        )
+        return True
 
     async def list_jobs(
         self,

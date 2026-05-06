@@ -14,7 +14,9 @@ import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { useBrandLabel } from '@/lib/brand'
 import { usePlayerActions } from '@/store/PlayerContext'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { trackActivationEvent } from '@/lib/activation'
+import { usePullToRefresh } from '@/hooks/usePullToRefresh'
 import type {
   FollowedArtistItem,
   GenreMixItem,
@@ -568,6 +570,11 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     onRefresh: handleRefresh,
     enabled: true,
   })
+
+  const homeFirstTracks = (sections ?? [])
+    .flatMap((s) => s.tracks.slice(0, 1))
+    .slice(0, 6)
+  usePrefetchTracks(homeFirstTracks, 'home')
 
   useEffect(() => {
     const main = document.getElementById('main')

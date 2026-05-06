@@ -5,6 +5,7 @@ import { TrackList } from '@/components/TrackList/TrackList'
 import { Icon } from '@/components/Icon/Icon'
 import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type {
   ChatListItem,
   UserChoicePlaylistResponse,
@@ -44,6 +45,8 @@ export function UserChoiceView() {
   }, [load])
 
   const tracks = loading ? null : (data?.tracks ?? [])
+
+  usePrefetchTracks(tracks ?? null, 'user_choice')
 
   const formatShareChatTitle = useCallback((item: ChatListItem): string => {
     if (item.conversation.type === 'saved') return 'Избранное'

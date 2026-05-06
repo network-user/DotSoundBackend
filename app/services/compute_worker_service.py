@@ -25,6 +25,9 @@ from app.config import settings
 from app.core.redis import get_redis_client
 from app.models.compute_worker import ComputeWorker
 from app.models.lyrics_job import LyricsJob
+from app.services.worker_job_control import (
+    worker_claims_blocked,
+)
 from app.models.worker_audit import WorkerAuditLog
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
@@ -359,6 +362,8 @@ async def claim_next_job(
     """
     now = datetime.now(UTC)
     if worker.revoked_at is not None:
+        return None
+    if worker_claims_blocked(worker, now=now):
         return None
     if (
         worker.suspended_until is not None

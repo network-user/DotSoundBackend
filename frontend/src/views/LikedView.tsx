@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { api } from '@/lib/api'
 import { getUserId } from '@/lib/telegram'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type { LikedTrack, Track } from '@/types/api'
 
 interface LikedViewProps {
@@ -75,6 +76,8 @@ export function LikedView({ embedded = false }: LikedViewProps) {
     pageRef.current = 1
     fetchPage(1, sourceFilter, true)
   }, [sourceFilter, fetchPage])
+
+  usePrefetchTracks(tracks ?? null, 'library')
 
   const loadMore = useCallback(async () => {
     if (loading || !hasMore) return

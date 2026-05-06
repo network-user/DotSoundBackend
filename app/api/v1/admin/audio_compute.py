@@ -85,6 +85,11 @@ class RoutingModeRequest(BaseModel):
     )
 
 
+class ClaimsPauseRequest(BaseModel):
+    minutes: int = Field(default=30, ge=1, le=10_080)
+    mode: str = Field(pattern=r"^(soft|drain)$")
+
+
 @router.get("/workers")
 async def list_workers(
     session: AsyncSession = Depends(get_db),
@@ -157,6 +162,47 @@ async def revoke_worker(
     if not ok:
         raise HTTPException(status_code=404)
     return {"status": "revoked"}
+
+
+@router.post("/workers/{worker_id}/claims/pause")
+async def pause_worker_claims(
+    worker_id: str,
+    body: ClaimsPauseRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(
+        require_capability("audio_compute.manage")
+    ),
+) -> dict:
+    svc = AudioComputeAdminService(session)
+    try:
+        out = await svc.pause_worker_claims(
+            worker_id,
+            minutes=body.minutes,
+            mode=body.mode,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+    if out is None:
+        raise HTTPException(status_code=404)
+    return {"status": "ok", **out}
+
+
+@router.post("/workers/{worker_id}/claims/resume")
+async def resume_worker_claims(
+    worker_id: str,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(
+        require_capability("audio_compute.manage")
+    ),
+) -> dict:
+    svc = AudioComputeAdminService(session)
+    ok = await svc.resume_worker_claims(worker_id)
+    if not ok:
+        raise HTTPException(status_code=404)
+    return {"status": "ok"}
 
 
 @router.delete("/workers/{worker_id}")

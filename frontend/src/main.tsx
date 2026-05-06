@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { AdminProvider } from '@/components/Admin/AdminContext'
 import { LikesProvider } from '@/store/LikesContext'
 import { PlayerProvider } from '@/store/PlayerContext'
+import { PrefetchProvider } from '@/store/PrefetchContext'
 import { ToastProvider } from '@/components/ui/Toast'
 import { SoundProvider } from '@/store/SoundContext'
 import { api } from '@/lib/api'
@@ -54,11 +55,13 @@ createRoot(document.getElementById('root')!).render(
         <ToastProvider>
           <SoundProvider>
             <AdminProvider>
-              <PlayerProvider>
-                <LikesProvider>
-                  <App />
-                </LikesProvider>
-              </PlayerProvider>
+              <PrefetchProvider>
+                <PlayerProvider>
+                  <LikesProvider>
+                    <App />
+                  </LikesProvider>
+                </PlayerProvider>
+              </PrefetchProvider>
             </AdminProvider>
           </SoundProvider>
         </ToastProvider>

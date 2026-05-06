@@ -16,6 +16,7 @@ import {
 } from '@/lib/telegram'
 import { useToast } from '@/components/ui/Toast'
 import { queueMutation } from '@/lib/pendingEvents'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 
 function _isNetworkError(e: unknown): boolean {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -283,6 +284,7 @@ export function ArtistView({
   const [tracks, setTracks] = useState<
     Track[] | null
   >(null)
+  usePrefetchTracks(tracks ?? null, 'artist')
   const [bioOpen, setBioOpen] = useState(false)
   const [enriching, setEnriching] = useState(false)
   const [enrichError, setEnrichError] = useState<

@@ -39,6 +39,9 @@ from app.repositories.audio_compute import (
 from app.repositories.lyrics import LyricsRepository
 from app.services import compute_worker_service as cws
 from app.services import worker_rate_limit as rl
+from app.services.worker_job_control import (
+    merge_heartbeat_control_payload,
+)
 from app.services.tor_pool import get_outbound_proxy
 from app.services.lyrics_worker import (
     set_lyrics_progress,
@@ -227,12 +230,19 @@ async def heartbeat(
         action="heartbeat",
         status_code=200,
     )
+    ctl = await merge_heartbeat_control_payload(
+        worker,
+        package_version_header=request.headers.get(
+            "X-Worker-Package-Version"
+        ),
+    )
     await session.commit()
     return {
         "status": "ok",
         "server_time": int(
             datetime.now(UTC).timestamp()
         ),
+        **ctl,
     }
 
 

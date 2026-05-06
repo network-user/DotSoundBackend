@@ -22,6 +22,7 @@ import {
   inferStreamTypeFromUrl,
 } from '@/lib/streamDebugOverride'
 import { isBenignPlayError, safePlay } from '@/lib/safePlay'
+import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
 import type { Track } from '@/types/api'
 
 const EQ_FREQUENCIES = [
@@ -1630,6 +1631,14 @@ export function PlayerProvider({
           tracks: res.tracks,
         }
         preloadFirst(res.tracks)
+        try {
+          void getPrefetchManager().enqueue(res.tracks, {
+            context: 'playback',
+            replaceContext: true,
+          })
+        } catch {
+          /* ignore */
+        }
       })
       .catch(() => {
         api.getTrackQueue(track.id, 3)
@@ -1640,6 +1649,17 @@ export function PlayerProvider({
               tracks: res.next_tracks,
             }
             preloadFirst(res.next_tracks)
+            try {
+              void getPrefetchManager().enqueue(
+                res.next_tracks,
+                {
+                  context: 'queue',
+                  replaceContext: true,
+                },
+              )
+            } catch {
+              /* ignore */
+            }
           })
           .catch(() => {})
       })
