@@ -1,6 +1,11 @@
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 
-from sqlalchemy import and_, delete, distinct, func, select
+from dotsound_private_core.services.similarity_signal_policy import (
+    build_similar_artist_weight_map,
+    ordered_similar_artist_ids,
+)
+from sqlalchemy import and_, delete, distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist import TrackArtist
@@ -258,14 +263,32 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
         )
         return await self._session.scalar(stmt)
 
-    async def get_similar_artist_ids_from_stations(
+    async def get_coartist_overlap_counts(
         self,
-        artist_ids: list[int],
-    ) -> list[int]:
-        if not artist_ids:
-            return []
+        seed_artist_ids: list[int],
+        *,
+        scope: Literal["station", "album"],
+    ) -> dict[int, int]:
+        if not seed_artist_ids:
+            return {}
+        release_station = (
+            ArtistCatalogRelease.release_kind == _ARTIST_STATION_KIND
+        )
+        release_album = or_(
+            ArtistCatalogRelease.release_kind.is_(None),
+            ArtistCatalogRelease.release_kind != _ARTIST_STATION_KIND,
+        )
+        scope_clause = (
+            release_station if scope == "station" else release_album
+        )
+        cnt = func.count(
+            distinct(ArtistCatalogReleaseTrack.track_id),
+        ).label("overlap_cnt")
         stmt = (
-            select(distinct(TrackArtist.artist_id))
+            select(
+                TrackArtist.artist_id,
+                cnt,
+            )
             .join(
                 ArtistCatalogReleaseTrack,
                 ArtistCatalogReleaseTrack.track_id
@@ -278,23 +301,88 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
             )
             .where(
                 ArtistCatalogRelease.artist_id.in_(
-                    artist_ids
+                    seed_artist_ids
+                ),
+                TrackArtist.artist_id.not_in(
+                    seed_artist_ids
+                ),
+                scope_clause,
+            )
+            .group_by(TrackArtist.artist_id)
+        )
+        rows = await self._session.execute(stmt)
+        return {
+            int(aid): int(c)
+            for aid, c in rows.all()
+            if aid is not None and c is not None
+        }
+
+    async def get_station_neighbor_track_ids_for_artists(
+        self,
+        seed_artist_ids: list[int],
+        *,
+        exclude_track_ids: frozenset[int],
+        limit: int,
+    ) -> list[int]:
+        if not seed_artist_ids or limit <= 0:
+            return []
+        stmt = (
+            select(ArtistCatalogReleaseTrack.track_id)
+            .join(
+                ArtistCatalogRelease,
+                ArtistCatalogRelease.id
+                == ArtistCatalogReleaseTrack.release_id,
+            )
+            .where(
+                ArtistCatalogRelease.artist_id.in_(
+                    seed_artist_ids
                 ),
                 ArtistCatalogRelease.release_kind
                 == _ARTIST_STATION_KIND,
-                TrackArtist.artist_id.not_in(
-                    artist_ids
-                ),
             )
+            .distinct()
+            .limit(limit)
         )
+        if exclude_track_ids:
+            stmt = stmt.where(
+                ArtistCatalogReleaseTrack.track_id.not_in(
+                    exclude_track_ids
+                )
+            )
         rows = await self._session.execute(stmt)
-        return [r for (r,) in rows.all()]
+        return [int(r) for (r,) in rows.all() if r is not None]
+
+    async def get_similar_artist_recommendation_signals(
+        self,
+        seed_artist_ids: list[int],
+    ) -> tuple[list[int], dict[int, float]]:
+        if not seed_artist_ids:
+            return [], {}
+        station = await self.get_coartist_overlap_counts(
+            seed_artist_ids,
+            scope="station",
+        )
+        album = await self.get_coartist_overlap_counts(
+            seed_artist_ids,
+            scope="album",
+        )
+        weights = build_similar_artist_weight_map(station, album)
+        return ordered_similar_artist_ids(weights), weights
+
+    async def get_similar_artist_ids_from_stations(
+        self,
+        artist_ids: list[int],
+    ) -> list[int]:
+        ids, _ = await self.get_similar_artist_recommendation_signals(
+            artist_ids,
+        )
+        return ids
 
     async def find_stale_station_artist_ids(
         self,
         threshold_days: int,
     ) -> list[int]:
-        """Artist IDs whose station release is stale or has never been synced."""
+        """Artists whose SC station row is stale or missing."""
         cutoff = datetime.now(UTC) - timedelta(days=threshold_days)
         stmt = (
             select(distinct(ArtistCatalogRelease.artist_id))

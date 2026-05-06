@@ -6,7 +6,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
@@ -313,7 +313,7 @@ export function SchedulesRoute() {
           <h2 style={{ flex: 1 }}>
             {t('admin.schedules.list')}
           </h2>
-          <Press
+          <MotionPress
             variant="primary"
             onClick={() => {
               setDraft(EMPTY_DRAFT)
@@ -322,7 +322,7 @@ export function SchedulesRoute() {
             }}
           >
             {t('admin.schedules.actions.create')}
-          </Press>
+          </MotionPress>
         </div>
         <p className="admin-card__sub">
           {t('admin.schedules.hint')}
@@ -445,13 +445,13 @@ export function SchedulesRoute() {
             </p>
           )}
           <div className="admin-toolbar">
-            <Press
+            <MotionPress
               variant="primary"
               onClick={() => saveSchedule.mutate()}
               disabled={saveSchedule.isPending}
             >
               {t('admin.schedules.actions.save')}
-            </Press>
+            </MotionPress>
             <button
               type="button"
               className="admin-link"

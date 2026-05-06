@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { onWS } from '@/lib/ws'
 import { ChatList } from '@/components/Chat/ChatList'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import type { ChatListItem } from '@/types/api'
 
@@ -23,6 +25,7 @@ interface Props {
 export function ChatsView({
   onOpenAuthor,
 }: Props) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const active = true
   const [chats, setChats] = useState<ChatListItem[]>([])
@@ -92,7 +95,9 @@ export function ChatsView({
 
   const handleOpenSaved = async () => {
     const res = await api.getSavedChat()
-    navigate(`/chats/${res.conversation.id}`, { state: { title: 'Избранное' } })
+    navigate(`/chats/${res.conversation.id}`, {
+      state: { title: t('redesign.chats.savedTitle') },
+    })
   }
 
   const handleSelectUser = async (userId: number) => {
@@ -107,9 +112,11 @@ export function ChatsView({
   }
 
   return (
-    <div className={`view${active ? ' active' : ''}`}>
+    <div className={`view re-chats-view${active ? ' active' : ''}`}>
       <div className="chats-header">
-        <h2 className="chats-title">Чаты</h2>
+        <h2 className="chats-title">
+          {t('redesign.chats.title')}
+        </h2>
         <NotificationBell />
       </div>
 
@@ -119,15 +126,21 @@ export function ChatsView({
           className="chats-search-input"
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
-          placeholder="Поиск по имени или username..."
+          placeholder={t('redesign.chats.searchPlaceholder')}
         />
         {query && (
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
             className="chats-search-clear"
-            onClick={() => { setQuery(''); setSearchResults([]) }}
+            ariaLabel={t('redesign.chats.searchClearAria')}
+            onClick={() => {
+              setQuery('')
+              setSearchResults([])
+            }}
           >
             <Icon name="x" size={14} />
-          </button>
+          </MotionPress>
         )}
       </div>
 
@@ -140,7 +153,9 @@ export function ChatsView({
               ))}
             </div>
           ) : searchResults.length === 0 ? (
-            <div className="chats-empty">Никого не найдено</div>
+            <div className="chats-empty">
+              {t('redesign.chats.emptySearch')}
+            </div>
           ) : (
             searchResults.map((u, i) => (
               <div
@@ -166,34 +181,47 @@ export function ChatsView({
                     {u.last_name ? ` ${u.last_name}` : ''}
                   </span>
                   {u.username && (
-                    <span className="chat-list-preview">@{u.username}</span>
+                    <span className="chat-list-preview">
+                      @{u.username}
+                    </span>
                   )}
                 </div>
-                <button
+                <MotionPress
+                  type="button"
+                  variant="subtle"
                   className="chat-search-message-btn"
                   onClick={(e) => {
                     e.stopPropagation()
                     void handleSelectUser(u.id)
                   }}
                 >
-                  Написать
-                </button>
+                  {t('redesign.chats.messageUser')}
+                </MotionPress>
               </div>
             ))
           )}
         </div>
       ) : (
         <>
-          <button className="saved-messages-btn fade-in" onClick={handleOpenSaved}>
+          <MotionPress
+            type="button"
+            variant="ghost"
+            className="saved-messages-btn fade-in"
+            onClick={() => void handleOpenSaved()}
+          >
             <div className="saved-messages-icon">
               <Icon name="heart" size={20} />
             </div>
             <div className="chat-list-info">
-              <span className="chat-list-name">Избранное</span>
-              <span className="chat-list-preview">Сохранённые сообщения</span>
+              <span className="chat-list-name">
+                {t('redesign.chats.savedTitle')}
+              </span>
+              <span className="chat-list-preview">
+                {t('redesign.chats.savedSubtitle')}
+              </span>
             </div>
             <Icon name="chevron" size={16} className="chat-list-chevron" />
-          </button>
+          </MotionPress>
 
           {loading ? (
             <div className="chat-skeleton">
@@ -203,7 +231,7 @@ export function ChatsView({
             </div>
           ) : chats.length === 0 ? (
             <div className="chats-empty">
-              Нет чатов. Найдите пользователя через поиск выше.
+              {t('redesign.chats.emptyChats')}
             </div>
           ) : (
             <ChatList items={chats} />

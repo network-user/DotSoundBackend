@@ -95,3 +95,74 @@
   margin-bottom: var(--space-5);
   border: 1px solid var(--border);
 }
+
+.ru-up-preview-stage__inner {
+  position: relative;
+  min-height: 168px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.ru-up-preview-stage .ambient-stage__content {
+  position: relative;
+  z-index: 1;
+}
+
+.ru-up-preview-cover-wrap {
+  align-self: flex-start;
+  width: 100%;
+  max-width: 220px;
+  border-radius: var(--r-lg, 14px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.ru-up-preview-cover-wrap .kenburns-cover {
+  width: 100%;
+}
+
+.ru-up-preview-cover-wrap .kenburns-cover img {
+  width: 100%;
+  display: block;
+}
+
+.ru-up-preview-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  border-radius: var(--r-lg, 14px);
+  border: 1px dashed var(--border);
+  color: var(--text-secondary);
+}
+
+.ru-up-preview-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--fs-14);
+}
+
+.ru-up-preview-meta strong {
+  font-size: var(--fs-16);
+}
+
+.ru-up-step-dots {
+  display: flex;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.ru-up-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.ru-up-step-dot.is-active {
+  background: var(--accent);
+}

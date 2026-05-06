@@ -127,6 +127,9 @@
       "savedSubtitle": "Сохранённые сообщения",
       "messageUser": "Написать",
       "chatNumber": "Чат #{{id}}",
+      "trackNumber": "Трек #{{id}}",
+      "albumNumber": "Альбом #{{id}}",
+      "playlistNumber": "Плейлист #{{id}}",
       "noMessages": "Нет сообщений",
       "systemLabel": "Команда {{brand}}",
       "replyTo": "Ответ на #{{id}}",
@@ -141,7 +144,9 @@
       "tracksCount": "{{count}} треков",
       "fileTooBig": "Файл слишком большой ({{mb}} МБ, макс {{max}} МБ)",
       "attachPhoto": "Прикрепить фото",
-      "voiceMessage": "Голосовое сообщение"
+      "voiceMessage": "Голосовое сообщение",
+      "addReaction": "Реакция",
+      "deleteMessage": "Удалить"
     },
     "artist": {},
     "recap": {},

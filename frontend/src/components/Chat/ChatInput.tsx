@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { sendWS } from '@/lib/ws'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { PhotoPreview } from '@/components/Chat/PhotoPreview'
 import { VoiceRecorder } from '@/components/Chat/VoiceRecorder'
 
@@ -22,6 +24,7 @@ export function ChatInput({
   onSendPhoto,
   onSendVoice,
 }: Props) {
+  const { t } = useTranslation()
   const [text, setText] = useState('')
   const [recording, setRecording] = useState(false)
   const [pendingPhoto, setPendingPhoto] =
@@ -101,7 +104,12 @@ export function ChatInput({
 
     const sizeMb = file.size / 1024 / 1024
     if (sizeMb > MAX_IMAGE_MB) {
-      setFileError(`Файл слишком большой (${sizeMb.toFixed(1)} МБ, макс ${MAX_IMAGE_MB} МБ)`)
+      setFileError(
+        t('redesign.chats.fileTooBig', {
+          mb: sizeMb.toFixed(1),
+          max: MAX_IMAGE_MB,
+        }),
+      )
       setTimeout(() => setFileError(''), 4000)
       return
     }
@@ -150,13 +158,16 @@ export function ChatInput({
   }
 
   return (
-    <div className="chat-input-bar">
-      <button
+    <div className="chat-input-bar glass--medium re-chat-composer">
+      <MotionPress
+        type="button"
+        variant="icon"
         className="chat-input-btn"
+        ariaLabel={t('redesign.chats.attachPhoto')}
         onClick={() => fileRef.current?.click()}
       >
         <Icon name="image" size={20} />
-      </button>
+      </MotionPress>
       <input
         ref={fileRef}
         type="file"
@@ -170,7 +181,9 @@ export function ChatInput({
           value={text}
           onChange={handleTextChange}
           onKeyDown={handleKeyDown}
-          placeholder="Сообщение..."
+          placeholder={t(
+            'redesign.tracks.composerPlaceholder',
+          )}
           rows={1}
         />
         {showCounter && (
@@ -180,20 +193,26 @@ export function ChatInput({
         )}
       </div>
       {text.trim() ? (
-        <button
+        <MotionPress
+          type="button"
+          variant="icon"
           className="chat-input-btn chat-send-btn"
-          onClick={handleSubmit}
+          ariaLabel={t('redesign.tracks.send')}
           disabled={isOverLimit}
+          onClick={handleSubmit}
         >
           <Icon name="send" size={20} />
-        </button>
+        </MotionPress>
       ) : (
-        <button
+        <MotionPress
+          type="button"
+          variant="icon"
           className="chat-input-btn"
+          ariaLabel={t('redesign.chats.voiceMessage')}
           onClick={handleStartRecording}
         >
           <Icon name="mic" size={20} />
-        </button>
+        </MotionPress>
       )}
       {fileError && (
         <div className="chat-file-error fade-in">{fileError}</div>

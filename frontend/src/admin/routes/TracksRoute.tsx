@@ -6,7 +6,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { trackProgressiveAudioUrl } from '@/lib/offlineCache'
@@ -432,7 +432,7 @@ export function TracksRoute() {
               alignItems: 'center',
             }}
           >
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() => handleTogglePlay(id)}
               disabled={busy}
@@ -440,7 +440,7 @@ export function TracksRoute() {
               {isPlaying
                 ? t('admin.tracks.actionPause')
                 : t('admin.tracks.actionPlay')}
-            </Press>
+            </MotionPress>
             {isPlaying && (
               <audio
                 src={trackProgressiveAudioUrl(id)}
@@ -449,7 +449,7 @@ export function TracksRoute() {
                 style={{ height: 28, maxWidth: 180 }}
               />
             )}
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() => handleToggleVisibility(id, is_active)}
               disabled={busy}
@@ -457,35 +457,35 @@ export function TracksRoute() {
               {is_active
                 ? t('admin.tracks.actionHide')
                 : t('admin.tracks.actionShow')}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               onClick={() => handleOpen(id)}
               disabled={busy}
             >
               {t('admin.tracks.actionOpen')}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               onClick={() => handlePrompt(id)}
               disabled={busy}
             >
               Промпт
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               onClick={() => handleContext(id)}
               disabled={busy}
             >
               Контекст
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               onClick={() => handleDelete(id, title)}
               disabled={busy}
             >
               {t('admin.tracks.actionDelete')}
-            </Press>
+            </MotionPress>
           </div>
         )
       },
@@ -599,27 +599,27 @@ export function TracksRoute() {
           />
           Без текста
         </label>
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={selectedIds.size === 0}
           onClick={handleBatchPrompt}
         >
           Batch Prompt ({selectedIds.size})
-        </Press>
-        <Press
+        </MotionPress>
+        <MotionPress
           variant="ghost"
           disabled={selectedIds.size === 0}
           onClick={handleBatchLyricsPromptSelected}
         >
           Lyrics Prompt ({selectedIds.size})
-        </Press>
-        <Press
+        </MotionPress>
+        <MotionPress
           variant="ghost"
           onClick={handleBatchLyricsPromptFiltered}
         >
           Lyrics Prompt (filtered)
-        </Press>
-        <Press
+        </MotionPress>
+        <MotionPress
           variant="ghost"
           onClick={() => {
             setImportText('')
@@ -628,18 +628,18 @@ export function TracksRoute() {
           }}
         >
           Импорт ответа AI (Lyrics)
-        </Press>
-        <Press
+        </MotionPress>
+        <MotionPress
           variant="ghost"
           disabled={selectedIds.size === 0}
           onClick={handleBatchGenreMoodPromptSelected}
         >
           Genre/Mood prompt ({selectedIds.size})
-        </Press>
-        <Press variant="ghost" onClick={handleBatchGenreMoodPromptFiltered}>
+        </MotionPress>
+        <MotionPress variant="ghost" onClick={handleBatchGenreMoodPromptFiltered}>
           Genre/Mood prompt (filtered)
-        </Press>
-        <Press
+        </MotionPress>
+        <MotionPress
           variant="ghost"
           onClick={() => {
             setGmImportText('')
@@ -649,7 +649,7 @@ export function TracksRoute() {
           }}
         >
           Импорт AI (genre/mood)
-        </Press>
+        </MotionPress>
       </div>
       <DataTable
         columns={columns}
@@ -657,24 +657,24 @@ export function TracksRoute() {
         enableSorting
       />
       <div className="admin-pagination">
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={page <= 1 || isFetching}
           onClick={() => setPage((p) => Math.max(1, p - 1))}
         >
           {t('admin.common.prev')}
-        </Press>
+        </MotionPress>
         <span>
           {page} / {totalPages} ·{' '}
           {t('admin.common.total', { count: total })}
         </span>
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={page >= totalPages || isFetching}
           onClick={() => setPage((p) => p + 1)}
         >
           {t('admin.common.next')}
-        </Press>
+        </MotionPress>
       </div>
 
       {/* Prompt modal */}
@@ -706,17 +706,17 @@ export function TracksRoute() {
               }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Press
+              <MotionPress
                 variant="primary"
                 onClick={() =>
                   navigator.clipboard.writeText(promptModal.prompt)
                 }
               >
                 Копировать
-              </Press>
-              <Press variant="ghost" onClick={() => setPromptModal(null)}>
+              </MotionPress>
+              <MotionPress variant="ghost" onClick={() => setPromptModal(null)}>
                 Закрыть
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>
@@ -764,27 +764,27 @@ export function TracksRoute() {
               {contextEditValue.length} / 5000
             </p>
             <div style={{ display: 'flex', gap: 8 }}>
-              <Press
+              <MotionPress
                 variant="primary"
                 onClick={handleSaveContext}
                 disabled={busyContext || !contextEditValue.trim()}
               >
                 Сохранить
-              </Press>
-              <Press
+              </MotionPress>
+              <MotionPress
                 variant="ghost"
                 onClick={handleClearContext}
                 disabled={busyContext}
               >
                 Очистить
-              </Press>
-              <Press
+              </MotionPress>
+              <MotionPress
                 variant="ghost"
                 onClick={() => setContextModal(null)}
                 disabled={busyContext}
               >
                 Отмена
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>
@@ -817,17 +817,17 @@ export function TracksRoute() {
               }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Press
+              <MotionPress
                 variant="primary"
                 onClick={() =>
                   navigator.clipboard.writeText(batchPromptModal)
                 }
               >
                 Копировать
-              </Press>
-              <Press variant="ghost" onClick={() => setBatchPromptModal(null)}>
+              </MotionPress>
+              <MotionPress variant="ghost" onClick={() => setBatchPromptModal(null)}>
                 Закрыть
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>
@@ -866,20 +866,20 @@ export function TracksRoute() {
               }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Press
+              <MotionPress
                 variant="primary"
                 onClick={() =>
                   navigator.clipboard.writeText(batchGenreMoodPromptModal)
                 }
               >
                 Копировать
-              </Press>
-              <Press
+              </MotionPress>
+              <MotionPress
                 variant="ghost"
                 onClick={() => setBatchGenreMoodPromptModal(null)}
               >
                 Закрыть
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>
@@ -912,17 +912,17 @@ export function TracksRoute() {
               }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Press
+              <MotionPress
                 variant="primary"
                 onClick={() =>
                   navigator.clipboard.writeText(batchLyricsPromptModal)
                 }
               >
                 Копировать
-              </Press>
-              <Press variant="ghost" onClick={() => setBatchLyricsPromptModal(null)}>
+              </MotionPress>
+              <MotionPress variant="ghost" onClick={() => setBatchLyricsPromptModal(null)}>
                 Закрыть
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>
@@ -980,16 +980,16 @@ export function TracksRoute() {
               </div>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Press
+              <MotionPress
                 variant="primary"
                 onClick={handleLyricsImport}
                 disabled={!importText.trim()}
               >
                 Импортировать
-              </Press>
-              <Press variant="ghost" onClick={() => setImportModal(false)}>
+              </MotionPress>
+              <MotionPress variant="ghost" onClick={() => setImportModal(false)}>
                 Закрыть
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>
@@ -1068,16 +1068,16 @@ export function TracksRoute() {
               </div>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Press
+              <MotionPress
                 variant="primary"
                 onClick={handleGenreMoodImport}
                 disabled={!gmImportText.trim()}
               >
                 Импортировать
-              </Press>
-              <Press variant="ghost" onClick={() => setGmImportModal(false)}>
+              </MotionPress>
+              <MotionPress variant="ghost" onClick={() => setGmImportModal(false)}>
                 Закрыть
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>

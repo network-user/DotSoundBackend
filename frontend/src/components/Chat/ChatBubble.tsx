@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { VoicePlayer } from '@/components/Chat/VoicePlayer'
 import { api } from '@/lib/api'
 import { useBrandLabel } from '@/lib/brand'
@@ -45,6 +47,7 @@ export function ChatBubble({
   onCancelUpload,
   onViewPhoto,
 }: Props) {
+  const { t } = useTranslation()
   const brandLabel = useBrandLabel()
   const [showBar, setShowBar] = useState(false)
   const [showReactions, setShowReactions] =
@@ -212,7 +215,9 @@ export function ChatBubble({
           </span>
           <div className="chat-msg-system-body">
             <span className="chat-msg-system-label">
-              Команда {brandLabel}
+              {t('redesign.chats.systemLabel', {
+                brand: brandLabel,
+              })}
             </span>
             {message.content}
           </div>
@@ -223,15 +228,17 @@ export function ChatBubble({
 
   return (
     <div
-      className={`chat-bubble-wrap ${isMine ? 'mine' : 'theirs'}`}
+      className={`chat-bubble-wrap re-bubble-wrap ${isMine ? 'mine' : 'theirs'}`}
     >
       <div
-        className={`chat-bubble ${isMine ? 'mine' : 'theirs'} msg-appear ${message._uploading ? 'uploading' : ''}`}
+        className={`chat-bubble re-bubble ${isMine ? 'mine' : 'theirs'} msg-appear re-bubble-appear ${message._uploading ? 'uploading' : ''}`}
         onClick={handleTap}
       >
         {message.reply_to_id && (
           <div className="bubble-reply">
-            Reply to #{message.reply_to_id}
+            {t('redesign.chats.replyTo', {
+              id: message.reply_to_id,
+            })}
           </div>
         )}
 
@@ -302,17 +309,19 @@ export function ChatBubble({
                 </div>
                 <div className="bubble-track-main">
                   <span className="bubble-track-label">
-                    Трек
+                    {t('redesign.chats.entityTrack')}
                   </span>
                   <span className="bubble-track-title">
                     {sharedTrack.title}
                   </span>
                   <span className="bubble-track-artist">
-                    {sharedTrack.artist || 'Неизвестный артист'}
+                    {sharedTrack.artist ||
+                      t('trackCard.unknownArtist')}
                   </span>
                 </div>
-                <button
+                <MotionPress
                   type="button"
+                  variant="ghost"
                   className="bubble-track-play"
                   onClick={(e) => {
                     e.stopPropagation()
@@ -320,14 +329,16 @@ export function ChatBubble({
                   }}
                 >
                   <Icon name="play" size={14} />
-                  Play
-                </button>
+                  {t('redesign.chats.play')}
+                </MotionPress>
               </div>
             ) : (
               <div className="bubble-track-share-fallback">
                 {sharedTrackLoading
-                  ? 'Загрузка трека…'
-                  : `Трек #${message.shared_track_id}`}
+                  ? t('redesign.chats.loadingTrack')
+                  : t('redesign.chats.trackNumber', {
+                      id: message.shared_track_id,
+                    })}
               </div>
             )}
           </div>
@@ -352,16 +363,21 @@ export function ChatBubble({
                   )}
                 </div>
                 <div className="bubble-track-main">
-                  <span className="bubble-track-label">Альбом</span>
+                  <span className="bubble-track-label">
+                    {t('redesign.chats.entityAlbum')}
+                  </span>
                   <span className="bubble-track-title">
                     {sharedAlbum.title}
                   </span>
                   <span className="bubble-track-artist">
-                    {sharedAlbum.tracks.length} треков
+                    {t('redesign.chats.tracksCount', {
+                      count: sharedAlbum.tracks.length,
+                    })}
                   </span>
                 </div>
-                <button
+                <MotionPress
                   type="button"
+                  variant="ghost"
                   className="bubble-track-play"
                   onClick={(e) => {
                     e.stopPropagation()
@@ -371,14 +387,16 @@ export function ChatBubble({
                   }}
                 >
                   <Icon name="play" size={14} />
-                  Play
-                </button>
+                  {t('redesign.chats.play')}
+                </MotionPress>
               </div>
             ) : (
               <div className="bubble-track-share-fallback">
                 {sharedAlbumLoading
-                  ? 'Загрузка альбома…'
-                  : `Альбом #${message.shared_album_id}`}
+                  ? t('redesign.chats.loadingAlbum')
+                  : t('redesign.chats.albumNumber', {
+                      id: message.shared_album_id,
+                    })}
               </div>
             )}
           </div>
@@ -394,16 +412,21 @@ export function ChatBubble({
                   </span>
                 </div>
                 <div className="bubble-track-main">
-                  <span className="bubble-track-label">Плейлист</span>
+                  <span className="bubble-track-label">
+                    {t('redesign.chats.entityPlaylist')}
+                  </span>
                   <span className="bubble-track-title">
                     {sharedPlaylist.name}
                   </span>
                   <span className="bubble-track-artist">
-                    {sharedPlaylist.tracks.length} треков
+                    {t('redesign.chats.tracksCount', {
+                      count: sharedPlaylist.tracks.length,
+                    })}
                   </span>
                 </div>
-                <button
+                <MotionPress
                   type="button"
+                  variant="ghost"
                   className="bubble-track-play"
                   onClick={(e) => {
                     e.stopPropagation()
@@ -413,14 +436,16 @@ export function ChatBubble({
                   }}
                 >
                   <Icon name="play" size={14} />
-                  Play
-                </button>
+                  {t('redesign.chats.play')}
+                </MotionPress>
               </div>
             ) : (
               <div className="bubble-track-share-fallback">
                 {sharedPlaylistLoading
-                  ? 'Загрузка плейлиста…'
-                  : `Плейлист #${message.shared_playlist_id}`}
+                  ? t('redesign.chats.loadingPlaylist')
+                  : t('redesign.chats.playlistNumber', {
+                      id: message.shared_playlist_id,
+                    })}
               </div>
             )}
           </div>
@@ -435,7 +460,7 @@ export function ChatBubble({
         <div className="bubble-meta">
           {message._uploading ? (
             <span className="bubble-time uploading-text">
-              отправка...
+              {t('redesign.chats.uploading')}
             </span>
           ) : (
             <span className="bubble-time">
@@ -467,26 +492,32 @@ export function ChatBubble({
 
       {showBar && !message._uploading && (
         <div
-          className={`bubble-action-bar ${isMine ? 'mine' : 'theirs'} scale-in`}
+          className={`bubble-action-bar ${isMine ? 'mine' : 'theirs'} scale-in re-bubble-actions`}
         >
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
             className="bubble-action-btn"
+            ariaLabel={t('redesign.chats.addReaction')}
             onClick={() => {
               setShowReactions((p) => !p)
               setShowBar(false)
             }}
           >
             <Icon name="sparkle" size={16} />
-          </button>
-          <button
+          </MotionPress>
+          <MotionPress
+            type="button"
+            variant="icon"
             className="bubble-action-btn"
+            ariaLabel={t('redesign.chats.deleteMessage')}
             onClick={() => {
               onDelete(message.id)
               setShowBar(false)
             }}
           >
             <Icon name="trash" size={16} />
-          </button>
+          </MotionPress>
         </div>
       )}
 
@@ -496,20 +527,23 @@ export function ChatBubble({
           onClick={() => setShowReactions(false)}
         >
           <div
-            className="reaction-picker scale-in"
+            className="reaction-picker scale-in re-bubble-reactions"
             onClick={(e) => e.stopPropagation()}
           >
             {REACTIONS.map((r) => (
-              <button
+              <MotionPress
                 key={r}
+                type="button"
+                variant="icon"
                 className="reaction-btn"
+                ariaLabel={r}
                 onClick={() => {
                   onReaction(message.id, r)
                   setShowReactions(false)
                 }}
               >
                 <Icon name={r} size={24} />
-              </button>
+              </MotionPress>
             ))}
           </div>
         </div>

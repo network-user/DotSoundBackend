@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
@@ -115,7 +115,7 @@ export function SecurityRoute() {
       id: 'actions',
       cell: (i) =>
         canRelease ? (
-          <Press
+          <MotionPress
             variant="ghost"
             onClick={() =>
               handleRelease(
@@ -124,7 +124,7 @@ export function SecurityRoute() {
             }
           >
             {t('admin.security.release')}
-          </Press>
+          </MotionPress>
         ) : null,
     },
   ]

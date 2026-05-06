@@ -5,7 +5,7 @@ import {
   useQuery,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { JsonViewer } from '../components/widgets/JsonViewer'
@@ -145,7 +145,7 @@ export function AuditRoute() {
         rows={(data?.items || []) as unknown as AuditRow[]}
       />
       <div className="admin-pagination">
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={page <= 1 || isFetching}
           onClick={() =>
@@ -153,12 +153,12 @@ export function AuditRoute() {
           }
         >
           {t('admin.common.prev')}
-        </Press>
+        </MotionPress>
         <span>
           {page} / {totalPages} ·{' '}
           {t('admin.common.total', { count: total })}
         </span>
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={
             page >= totalPages || isFetching
@@ -166,7 +166,7 @@ export function AuditRoute() {
           onClick={() => setPage((p) => p + 1)}
         >
           {t('admin.common.next')}
-        </Press>
+        </MotionPress>
       </div>
     </div>
   )
