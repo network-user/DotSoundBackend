@@ -36,3 +36,25 @@ class ArtistBriefResponse(BaseModel):
     id: int
     name: str
     image_key: str | None = None
+
+
+class SmartSkipResponse(BaseModel):
+    applied_genres: list[str] = Field(
+        default_factory=list
+    )
+    applied_artist_ids: list[int] = Field(
+        default_factory=list
+    )
+    applied_moods: list[str] = Field(
+        default_factory=list
+    )
+
+
+ActivationEventMeta = dict[
+    str, str | int | float | bool | None
+]
+
+
+class ActivationEventRequest(BaseModel):
+    event: str = Field(min_length=1, max_length=64)
+    meta: ActivationEventMeta | None = None

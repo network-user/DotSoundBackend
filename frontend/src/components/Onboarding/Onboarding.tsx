@@ -4,6 +4,8 @@ import { Icon } from '@/components/Icon/Icon'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { OnboardingImportStep } from '@/components/Onboarding/OnboardingImportStep'
 import { OnboardingGenreScreen } from '@/components/Onboarding/OnboardingGenreScreen'
+import { useToast } from '@/components/ui/Toast'
+import { trackActivationEvent } from '@/lib/activation'
 import type { Track } from '@/types/api'
 
 interface Props {
@@ -21,7 +23,38 @@ const MOODS = [
   { id: 'party', label: 'Party' },
 ]
 
+const STEP_HINTS: Record<Step, { reason: string; etaSec: number }> = {
+  import: {
+    reason: 'Перенесёт вашу музыку — ничего не теряем',
+    etaSec: 90,
+  },
+  genres: {
+    reason: 'Помогает сразу собрать главную страницу',
+    etaSec: 30,
+  },
+  artists: {
+    reason: 'Подключим радио и подписки автоматически',
+    etaSec: 30,
+  },
+  moods: {
+    reason: 'Подскажет, под какое настроение играть',
+    etaSec: 15,
+  },
+  calibration: {
+    reason: 'Настроит подборки за пару кликов',
+    etaSec: 30,
+  },
+}
+
+function formatEtaSeconds(sec: number): string {
+  if (sec <= 0) return '<1 сек'
+  if (sec < 60) return `~${sec} сек`
+  const min = Math.round(sec / 60)
+  return `~${min} мин`
+}
+
 export function Onboarding({ onComplete }: Props) {
+  const toast = useToast()
   const [includeImport, setIncludeImport] = useState(false)
   const [step, setStep] = useState<Step>('genres')
   const [genres, setGenres] = useState<string[]>([])
@@ -120,9 +153,26 @@ export function Onboarding({ onComplete }: Props) {
 
   const handleNext = async () => {
     if (step === 'genres') {
+      trackActivationEvent('onboarding_step_complete', {
+        meta: { step: 'genres', count: genres.length },
+      })
+      toast.success(
+        `Готово, ${genres.length} жанров — обновляем подборки`,
+      )
       loadArtists(genres)
       setStep('artists')
     } else if (step === 'artists') {
+      trackActivationEvent('onboarding_step_complete', {
+        meta: {
+          step: 'artists',
+          count: selectedArtists.length,
+        },
+      })
+      if (selectedArtists.length) {
+        toast.success(
+          `Подписались на ${selectedArtists.length} артистов`,
+        )
+      }
       setStep('moods')
     } else if (step === 'moods') {
       setSaving(true)
@@ -132,10 +182,17 @@ export function Onboarding({ onComplete }: Props) {
           artist_ids: selectedArtists,
           moods: selectedMoods,
         })
+        trackActivationEvent('onboarding_step_complete', {
+          meta: {
+            step: 'moods',
+            count: selectedMoods.length,
+          },
+        })
+        toast.success('Профиль сохранён, осталось 1 шаг')
         await loadCalibrationTracks()
         setStep('calibration')
       } catch {
-        /* ignore */
+        toast.error('Не удалось сохранить, попробуйте ещё раз')
       }
       setSaving(false)
     } else if (step === 'calibration') {
@@ -151,9 +208,13 @@ export function Onboarding({ onComplete }: Props) {
           await api.saveCalibration(items)
         }
         await api.completeOnboarding()
+        trackActivationEvent('onboarding_complete', {
+          meta: { calibrated: items.length },
+        })
+        toast.success('Готово — подборки обновлены')
         onComplete()
       } catch {
-        /* ignore */
+        toast.error('Не удалось завершить, попробуйте ещё раз')
       }
       setSaving(false)
     }
@@ -163,10 +224,30 @@ export function Onboarding({ onComplete }: Props) {
     if (step === 'import') return
     setSaving(true)
     try {
-      await api.completeOnboarding()
+      const res = await api.smartSkipOnboarding()
+      trackActivationEvent('onboarding_skip', {
+        meta: {
+          step,
+          applied_genres: res.applied_genres.length,
+        },
+      })
+      if (res.applied_genres.length) {
+        toast.info(
+          'Подобрали стартовые жанры — настроить можно в профиле позже',
+        )
+      } else {
+        toast.info(
+          'Запустим без настройки — поправим в профиле позже',
+        )
+      }
       onComplete()
     } catch {
-      /* ignore */
+      try {
+        await api.completeOnboarding()
+        onComplete()
+      } catch {
+        toast.error('Не удалось пропустить, попробуйте ещё раз')
+      }
     }
     setSaving(false)
   }
@@ -188,10 +269,34 @@ export function Onboarding({ onComplete }: Props) {
 
   const stepIndex = stepOrder.indexOf(step)
   const dotCount = stepOrder.length
+  const remainingSec = stepOrder
+    .slice(stepIndex)
+    .reduce((acc, s) => acc + STEP_HINTS[s].etaSec, 0)
+  const stepHint = STEP_HINTS[step]
+
+  useEffect(() => {
+    trackActivationEvent('onboarding_step_view', {
+      meta: { step },
+    })
+  }, [step])
 
   return (
     <div className="onboarding-overlay">
       <div className="onboarding-container">
+        <div
+          className="onboarding-progress-meta"
+          aria-live="polite"
+        >
+          <span className="onboarding-progress-meta__step">
+            Шаг {stepIndex + 1} из {dotCount}
+          </span>
+          <span className="onboarding-progress-meta__sep">
+            ·
+          </span>
+          <span className="onboarding-progress-meta__time">
+            {formatEtaSeconds(remainingSec)} осталось
+          </span>
+        </div>
         <div className="onboarding-progress">
           {Array.from({ length: dotCount }, (_, i) => (
             <div
@@ -201,6 +306,9 @@ export function Onboarding({ onComplete }: Props) {
               }`}
             />
           ))}
+        </div>
+        <div className="onboarding-progress-hint">
+          {stepHint.reason}
         </div>
 
         {step === 'import' && (

@@ -1,3 +1,4 @@
+import structlog
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,10 +7,12 @@ from app.models.user import User
 from app.schemas.genre_samples import GenrePreviewQueueResponse
 from app.schemas.track import TrackResponse
 from app.schemas.onboarding import (
+    ActivationEventRequest,
     ArtistBriefResponse,
     CalibrationRequest,
     OnboardingPreferencesRequest,
     OnboardingStatusResponse,
+    SmartSkipResponse,
 )
 from app.services.genre_samples_service import GenreSamplesService
 from app.services.onboarding_service import (
@@ -18,6 +21,10 @@ from app.services.onboarding_service import (
 from app.services.track_response_build import (
     build_track_responses,
     dedupe_and_build_track_list,
+)
+
+_activation_logger = structlog.get_logger(
+    "app.activation"
 )
 
 router = APIRouter(
@@ -157,4 +164,38 @@ async def complete_onboarding(
 ):
     svc = OnboardingService(db)
     await svc.complete(user.id)
+    return {"status": "ok"}
+
+
+@router.post(
+    "/smart-skip", response_model=SmartSkipResponse
+)
+async def smart_skip(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SmartSkipResponse:
+    svc = OnboardingService(db)
+    applied = await svc.apply_smart_default_profile(
+        user.id
+    )
+    return SmartSkipResponse(
+        applied_genres=applied.get("genres", []),
+        applied_artist_ids=applied.get(
+            "artist_ids", []
+        ),
+        applied_moods=applied.get("moods", []),
+    )
+
+
+@router.post("/activation-event")
+async def activation_event(
+    body: ActivationEventRequest,
+    user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    _activation_logger.info(
+        "activation_event",
+        event=body.event,
+        user_id=user.id,
+        meta=body.meta or {},
+    )
     return {"status": "ok"}

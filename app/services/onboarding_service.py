@@ -1,3 +1,5 @@
+from typing import Any
+
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -245,6 +247,52 @@ class OnboardingService:
             onboarding_completed=True,
             onboarding_import_acknowledged=True,
         )
+
+    async def apply_smart_default_profile(
+        self, user_id: int
+    ) -> dict[str, list[Any]]:
+        existing = await self._pref_repo.get_by_user_id(
+            user_id
+        )
+        if (
+            existing
+            and existing.preferred_genres
+            and len(existing.preferred_genres) >= 3
+        ):
+            return {
+                "genres": list(
+                    existing.preferred_genres
+                ),
+                "artist_ids": list(
+                    existing.preferred_artist_ids
+                    or []
+                ),
+                "moods": list(
+                    existing.preferred_moods or []
+                ),
+            }
+
+        all_genres = (
+            await self.get_available_genres()
+        )
+        default_genres = list(all_genres[:5])
+
+        await self._pref_repo.upsert(
+            user_id=user_id,
+            preferred_genres=default_genres or None,
+            onboarding_completed=True,
+            onboarding_import_acknowledged=True,
+        )
+        logger.info(
+            "onboarding_smart_skip_applied",
+            user_id=user_id,
+            applied_genres=default_genres,
+        )
+        return {
+            "genres": default_genres,
+            "artist_ids": [],
+            "moods": [],
+        }
 
     async def get_available_genres(
         self,
