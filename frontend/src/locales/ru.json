@@ -166,6 +166,18 @@
         "subtitle": "Интерактивный график подключений по времени",
         "chartTitle": "Онлайн (WebSocket) по времени"
       },
+      "stats": {
+        "title": "Статистика",
+        "subtitle": "Ключевые продуктовые показатели за период",
+        "usersRegistered": "Регистрации",
+        "listensTotal": "Прослушивания",
+        "uniqueListeners": "Уникальные слушатели",
+        "tracksUploaded": "Загружено треков",
+        "completed": "Дослушивания",
+        "skips": "Скипы",
+        "topTracks": "Топ треков",
+        "noData": "Нет данных за выбранный период"
+      },
       "kpi": {
         "onlineNow": "Онлайн сейчас",
         "activeAccounts": "{{count}} активных аккаунтов",

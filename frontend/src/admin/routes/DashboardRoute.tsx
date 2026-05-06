@@ -51,6 +51,9 @@ export function DashboardRoute() {
   const { t } = useTranslation()
   const [minutes, setMinutes] = useState(60)
   const [live, setLive] = useState(true)
+  const [statsPeriod, setStatsPeriod] = useState<
+    'today' | '7d' | '30d'
+  >('today')
 
   const { data, error, isLoading } = useQuery({
     queryKey: ['admin', 'dashboard', 'overview'],
@@ -90,6 +93,12 @@ export function DashboardRoute() {
         minutes,
         30,
       ),
+    refetchInterval: live ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  })
+  const stats = useQuery({
+    queryKey: ['admin', 'dashboard', 'stats', statsPeriod],
+    queryFn: () => adminApi.dashboardStats(statsPeriod),
     refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
@@ -191,6 +200,88 @@ export function DashboardRoute() {
           <div className="admin-log-empty">
             No online data for selected range
           </div>
+        )}
+      </section>
+
+      <section className="admin-card">
+        <div className="admin-dashboard__hero">
+          <div>
+            <h2>{t('admin.dashboard.stats.title')}</h2>
+            <p className="admin-card__sub">
+              {t('admin.dashboard.stats.subtitle')}
+            </p>
+          </div>
+          <div className="admin-range-switch" role="tablist">
+            {(['today', '7d', '30d'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={`admin-range-switch__btn${
+                  statsPeriod === value ? ' is-active' : ''
+                }`}
+                onClick={() => setStatsPeriod(value)}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+        {stats.isLoading || !stats.data ? (
+          <div className="admin-skeleton admin-skeleton--card" />
+        ) : (
+          <>
+            <section className="kpi-grid">
+              <KpiCard
+                label={t('admin.dashboard.stats.usersRegistered')}
+                value={stats.data.users_registered}
+              />
+              <KpiCard
+                label={t('admin.dashboard.stats.listensTotal')}
+                value={stats.data.listens_total}
+              />
+              <KpiCard
+                label={t('admin.dashboard.stats.uniqueListeners')}
+                value={stats.data.unique_listeners}
+              />
+              <KpiCard
+                label={t('admin.dashboard.stats.tracksUploaded')}
+                value={stats.data.tracks_uploaded}
+              />
+              <KpiCard
+                label={t('admin.dashboard.stats.completed')}
+                value={stats.data.completed_listens}
+              />
+              <KpiCard
+                label={t('admin.dashboard.stats.skips')}
+                value={stats.data.skips}
+                accent={stats.data.skips > 0 ? 'warn' : 'default'}
+              />
+            </section>
+            <div className="admin-card admin-dashboard__toplist">
+              <h3>{t('admin.dashboard.stats.topTracks')}</h3>
+              {stats.data.top_tracks.length === 0 ? (
+                <div className="admin-log-empty">
+                  {t('admin.dashboard.stats.noData')}
+                </div>
+              ) : (
+                <div className="admin-dashboard__toplist-rows">
+                  {stats.data.top_tracks.map((item) => (
+                    <div
+                      key={item.track_id}
+                      className="admin-dashboard__toplist-row"
+                    >
+                      <div className="admin-dashboard__toplist-title">
+                        {item.title}
+                      </div>
+                      <div className="admin-dashboard__toplist-meta">
+                        {item.plays} plays · {item.unique_listeners} listeners
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
         )}
       </section>
 

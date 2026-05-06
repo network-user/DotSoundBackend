@@ -73,11 +73,11 @@
       pointer-events: none;
     }
   </style>
-  <script type="module" crossorigin src="/mini_app/assets/index-Df5CV7rC.js"></script>
+  <script type="module" crossorigin src="/mini_app/assets/index-B8H9KyG9.js"></script>
   <link rel="modulepreload" crossorigin href="/mini_app/assets/vendor-V1sCP0F7.js">
   <link rel="modulepreload" crossorigin href="/mini_app/assets/hls-BbSaIQh1.js">
   <link rel="stylesheet" crossorigin href="/mini_app/assets/secure/admin-bundle.css">
-  <link rel="stylesheet" crossorigin href="/mini_app/assets/index-B9c7UP4A.css">
+  <link rel="stylesheet" crossorigin href="/mini_app/assets/index-rli5taHP.css">
 <link rel="manifest" href="/mini_app/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/mini_app/registerSW.js"></script></head>
 <body>
   <div id="ds-loader">
@@ -87,8 +87,9 @@
   </div>
   <div id="root"></div>
   <script>
-    // Hide loader once the app marks itself as ready, with
-    // a hard ceiling so we don't block on slow networks.
+    // Hide loader once the app marks itself as ready.
+    // Keep a short minimum visibility to avoid flicker,
+    // and a hard ceiling so it never hangs forever.
     (function () {
       function detectLanguage() {
         try {
@@ -136,25 +137,27 @@
         loaderText.textContent = brandLabel.slice(1);
       }
       var done = false;
+      var shownAt = Date.now();
+      var minVisibleMs = 520;
+      var fallbackMs = 8000;
       function hide() {
         if (done || !loader) return;
+        var elapsed = Date.now() - shownAt;
+        var waitMs = elapsed >= minVisibleMs
+          ? 0
+          : (minVisibleMs - elapsed);
         done = true;
-        loader.classList.add('fade-out');
         setTimeout(function () {
-          if (loader && loader.parentNode) {
-            loader.parentNode.removeChild(loader);
-          }
-        }, 350);
+          loader.classList.add('fade-out');
+          setTimeout(function () {
+            if (loader && loader.parentNode) {
+              loader.parentNode.removeChild(loader);
+            }
+          }, 350);
+        }, waitMs);
       }
       window.addEventListener('app-ready', hide);
-      var started = Date.now();
-      var id = setInterval(function () {
-        var root = document.getElementById('root');
-        if ((root && root.firstChild) || Date.now() - started > 6000) {
-          clearInterval(id);
-          hide();
-        }
-      }, 100);
+      setTimeout(hide, fallbackMs);
     })();
   </script>
 </body>

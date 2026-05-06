@@ -389,6 +389,28 @@ export const adminApi = {
       complaints: { open: number }
       jobs: { active: number; failed_1h: number }
     }>('/dashboard/overview'),
+  dashboardStats: (period: 'today' | '7d' | '30d') =>
+    adminFetch<{
+      period: 'today' | '7d' | '30d'
+      from_ts: number
+      to_ts: number
+      users_registered: number
+      tracks_uploaded: number
+      listens_total: number
+      unique_listeners: number
+      completed_listens: number
+      skips: number
+      complaints_new: number
+      complaints_open: number
+      top_tracks: Array<{
+        track_id: number
+        title: string
+        plays: number
+        unique_listeners: number
+      }>
+    }>('/dashboard/stats', {
+      query: { period },
+    }),
   containers: () =>
     adminFetch<{
       counts: {

@@ -166,6 +166,18 @@
         "subtitle": "Interactive timeline of active connections",
         "chartTitle": "Online (WebSocket) over time"
       },
+      "stats": {
+        "title": "Statistics",
+        "subtitle": "Key product metrics for selected period",
+        "usersRegistered": "Registrations",
+        "listensTotal": "Listens",
+        "uniqueListeners": "Unique listeners",
+        "tracksUploaded": "Tracks uploaded",
+        "completed": "Completed listens",
+        "skips": "Skips",
+        "topTracks": "Top tracks",
+        "noData": "No data for selected period"
+      },
       "kpi": {
         "onlineNow": "Online now",
         "activeAccounts": "{{count}} active accounts",
