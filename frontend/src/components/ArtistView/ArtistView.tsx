@@ -238,6 +238,11 @@ function cleanWikiText(s: string | null): string | null {
   return cleaned || null
 }
 
+function artistImageUrl(imageKey: string | null): string | null {
+  if (!imageKey) return null
+  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(imageKey)}`
+}
+
 const stageProgress: Record<string, number> = {
   queued: 5,
   searching: 20,
@@ -300,9 +305,12 @@ export function ArtistView({
     useState<ArtistListenersResponse | null>(null)
   const [listenersOpen, setListenersOpen] =
     useState(false)
+  const [similarCanPrev, setSimilarCanPrev] = useState(false)
+  const [similarCanNext, setSimilarCanNext] = useState(false)
   const supplementalPollRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
+  const similarRowRef = useRef<HTMLDivElement>(null)
   const [snippetPlaying, setSnippetPlaying] = useState(false)
   const [snippetIndex, setSnippetIndex] = useState(0)
   const isAdmin = getIsAdmin()
@@ -450,6 +458,23 @@ export function ArtistView({
       if (supplementalPollRef.current) clearTimeout(supplementalPollRef.current)
     }
   }, [artistId])
+
+  useEffect(() => {
+    const row = similarRowRef.current
+    if (!row) return
+    const update = () => {
+      const maxScroll = Math.max(0, row.scrollWidth - row.clientWidth)
+      setSimilarCanPrev(row.scrollLeft > 2)
+      setSimilarCanNext(row.scrollLeft < maxScroll - 2)
+    }
+    update()
+    row.addEventListener('scroll', update, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      row.removeEventListener('scroll', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [similarArtists, artistId])
 
   function startSupplementalPoll(
     id: number,
@@ -1373,11 +1398,7 @@ export function ArtistView({
       {similarArtists &&
         similarArtists.length > 0 &&
         onSelectSimilarArtist && (
-        <div
-          style={{
-            padding: '0 16px 16px',
-          }}
-        >
+        <div className="artist-similar-section">
           <div className="section-header">
             <span className="section-title">
               {t('artist.similar_title', {
@@ -1385,25 +1406,77 @@ export function ArtistView({
               })}
             </span>
           </div>
-          <div
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 8,
-            }}
-          >
-            {similarArtists.map((a) => (
+          <div className="artist-similar-shell">
+            {similarCanPrev && (
               <button
-                key={a.id}
                 type="button"
-                className="btn-secondary"
+                className="artist-similar-arrow artist-similar-arrow--left"
                 onClick={() =>
-                  onSelectSimilarArtist(a.id)
+                  similarRowRef.current?.scrollBy({
+                    left: -220,
+                    behavior: 'smooth',
+                  })
                 }
+                aria-label={t('common.prev', { defaultValue: 'Назад' })}
               >
-                {a.name}
+                <Icon
+                  name="chevron"
+                  size={18}
+                  className="artist-similar-arrow__icon artist-similar-arrow__icon--left"
+                />
               </button>
-            ))}
+            )}
+            <div
+              ref={similarRowRef}
+              className="artist-similar-row"
+            >
+              {similarArtists.map((a) => {
+                const imageSrc = artistImageUrl(a.image_key)
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    className="artist-similar-card"
+                    onClick={() =>
+                      onSelectSimilarArtist(a.id)
+                    }
+                  >
+                    <div className="artist-similar-card__avatar">
+                      {imageSrc ? (
+                        <img
+                          src={imageSrc}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <div className="artist-similar-card__avatar-placeholder">
+                          <Icon name="user" size={20} />
+                        </div>
+                      )}
+                    </div>
+                    <span className="artist-similar-card__name">
+                      {a.name}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            {similarCanNext && (
+              <button
+                type="button"
+                className="artist-similar-arrow artist-similar-arrow--right"
+                onClick={() =>
+                  similarRowRef.current?.scrollBy({
+                    left: 220,
+                    behavior: 'smooth',
+                  })
+                }
+                aria-label={t('common.next', { defaultValue: 'Вперёд' })}
+              >
+                <Icon name="chevron" size={18} />
+              </button>
+            )}
           </div>
         </div>
       )}

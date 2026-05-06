@@ -427,7 +427,11 @@ const QUICK_ITEMS: {
   { label: 'Подписки', icon: 'users-following', path: '/library?tab=following' },
 ]
 
-export function HomeView() {
+interface HomeViewProps {
+  onOpenArtist?: (id: number) => void
+}
+
+export function HomeView({ onOpenArtist }: HomeViewProps) {
   const navigate = useNavigate()
   const toast = useToast()
   const { playTrack } = usePlayerActions()
@@ -665,11 +669,15 @@ export function HomeView() {
                     key={artist.id}
                     type="button"
                     className="home-artist-chip"
-                    onClick={() =>
+                    onClick={() => {
+                      if (onOpenArtist) {
+                        onOpenArtist(artist.id)
+                        return
+                      }
                       navigate(
                         `/search?q=${encodeURIComponent(artist.name)}`,
                       )
-                    }
+                    }}
                     title={artist.name}
                   >
                     <div className="home-artist-chip__avatar">

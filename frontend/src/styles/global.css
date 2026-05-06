@@ -6592,6 +6592,118 @@ html.le-lyrics-sync-open body {
   transform: scale(0.98);
 }
 
+.artist-similar-section {
+  padding: 0 16px 16px;
+}
+
+.artist-similar-shell {
+  position: relative;
+}
+
+.artist-similar-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 2px 2px 4px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.artist-similar-row::-webkit-scrollbar {
+  display: none;
+}
+
+.artist-similar-card {
+  border: 1px solid var(--border);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.01)
+  );
+  border-radius: 16px;
+  width: 132px;
+  min-width: 132px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  scroll-snap-align: start;
+  transition: transform var(--dur-fast) var(--ease-snappy),
+    border-color var(--dur-fast) var(--ease-snappy);
+}
+
+.artist-similar-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-hover);
+}
+
+.artist-similar-card__avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+}
+
+.artist-similar-card__avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.artist-similar-card__avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.artist-similar-card__name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: center;
+  line-height: 1.25;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.artist-similar-arrow {
+  position: absolute;
+  top: 38px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+}
+
+.artist-similar-arrow--left {
+  left: -8px;
+}
+
+.artist-similar-arrow--right {
+  right: -8px;
+}
+
+.artist-similar-arrow__icon--left {
+  transform: rotate(180deg);
+}
+
 html.ds-low-glass #nav {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;

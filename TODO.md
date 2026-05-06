@@ -16,10 +16,10 @@
 
 ## Mini App / .sound UI (2026-05-04)
 
-- [x] **Admin + lyrics pipeline: жанр и настроение по тексту** —
-  эвристика в PrivateCore (`text_genre_mood_infer`), автоприменение
+- [x] **Admin + lyrics pipeline: жан�? и нас�?�?оение по �?екс�?�?** �??
+  эв�?ис�?ика в PrivateCore (`text_genre_mood_infer`), ав�?оп�?именение
   после `LyricsRepository.create_or_update`, batch prompt/import в
-  админ-треках и `LYRICS_DERIVED_GENRE_MOOD_ENABLED` в `.env.example`.
+  админ-�?�?ека�? и `LYRICS_DERIVED_GENRE_MOOD_ENABLED` в `.env.example`.
 - [x] **View Transitions + React** ? `flushSync` ? ???????
   `startViewTransition` ? `App.tsx` (????? ?????? ???????? ????? ?? ???????
   React ? ??????/?????? ????? ??? ????? ???????/?????????).
@@ -1086,3 +1086,5 @@ ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyr
 - [x] Frontend: improved Telegram Android haptic reliability (`selectionChanged` -> `impactOccurred` fallback + throttled `hapticTick`) and added micro-vibration ticks for EQ/track-volume sliders; regenerated deeper, neutral UI feedback sounds, 2026-05-05.
 
 - [x] Admin compute: lyrics + generic compute job queue priority and worker pin, in-flight reassignment (lease release), API + Audio Compute UI; ComputeWorker treats 404 on result/fail as abandoned job (2026-05-05).
+
+- [x] Mini App: fixed artist navigation regressions (followed artist opens artist card, tabs close active artist/author overlay) and upgraded Artist `Similar` section to photo cards with horizontal slider + arrow controls (2026-05-06).
