@@ -869,7 +869,7 @@ export function ArtistView({
         )}
 
         {/* Listen Snippets Button */}
-        {tracks && tracks.length > 0 && (
+        {tracks && tracks.length > 0 && tracks[snippetIndex] && (
           <div style={{ marginTop: 12 }}>
             <button
               className="btn-primary"

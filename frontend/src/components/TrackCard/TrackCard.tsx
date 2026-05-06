@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
@@ -10,7 +10,7 @@ import {
 import { getInternalUserId, haptic } from '@/lib/telegram'
 import { api } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
-import type { Track } from '@/types/api'
+import type { Track, TrackInfoResponse } from '@/types/api'
 
 interface Props {
   track: Track
@@ -39,9 +39,22 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
   const { playTrack, addToQueue } = usePlayerActions()
   const toast = useToast()
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [showInfo, setShowInfo] = useState(false)
+  const [trackInfo, setTrackInfo] = useState<TrackInfoResponse | null>(null)
+  const [loadingInfo, setLoadingInfo] = useState(false)
+  
   const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const longPressFiredRef = useRef(false)
+
+  useEffect(() => {
+    if (showInfo && !trackInfo && !loadingInfo) {
+      setLoadingInfo(true)
+      api.getTrackInfo(track.id)
+        .then(setTrackInfo)
+        .finally(() => setLoadingInfo(false))
+    }
+  }, [showInfo, track.id, trackInfo, loadingInfo])
 
   const handlePointerDown = () => {
     longPressFiredRef.current = false
@@ -76,6 +89,11 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
     await toggleLike(track.id)
   }
 
+  const handleToggleInfo = (e: MouseEvent) => {
+    e.stopPropagation()
+    setShowInfo(!showInfo)
+  }
+
   const handleDelete = async (e: MouseEvent) => {
     e.stopPropagation()
     if (!internalId) return
@@ -103,7 +121,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
 
   return (
     <div
-      className={`track-card${playing ? ' playing' : ''}`}
+      className={`track-card${playing ? ' playing' : ''}${showInfo ? ' info-expanded' : ''}`}
       data-id={track.id}
       onClick={handleClick}
       onPointerDown={handlePointerDown}
@@ -127,11 +145,6 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
                 MOD
               </span>
             )}
-            {track.source === 'soundcloud' && <span className="track-badge track-badge-sc">SC</span>}
-            {track.source === 'youtube' && <span className="track-badge track-badge-yt">YT</span>}
-            {track.source === 'bandcamp' && <span className="track-badge track-badge-bc">BC</span>}
-            {track.source === 'telegram' && <span className="track-badge track-badge-tg">TG</span>}
-            {catalogLabel && <span className="track-badge">{catalogLabel}</span>}
           </div>
           <p className="track-card-artist" dir="auto">
             {track.artist ?? t('trackCard.unknownArtist')}
@@ -141,47 +154,15 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
             {' '}{track.play_count}
             {track.duration_seconds ? ` · ${fmtDuration(track.duration_seconds)}` : ''}
           </p>
-          {(track.source_url || track.sc_url) && (
-            <span className="track-source">
-              {t('search.extSourceLabel')}{' '}
-              <a
-                href={track.source_url || track.sc_url || '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="track-source-link"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {track.source_name || track.source}
-              </a>
-            </span>
-          )}
-          {track.access_mode === 'third_party_stream' && (
-            <span className="track-source">
-              {t('trackCard.accessStream')}
-            </span>
-          )}
-          {track.catalog_type === 'ugc' && (
-            <span className="track-source">
-              {t('trackCard.catUgc')}
-            </span>
-          )}
-          {track.catalog_type === 'licensed' && (
-            <span className="track-source">
-              {t('trackCard.catLicensed')}
-            </span>
-          )}
-          {track.catalog_type === 'external_reference' && (
-            <span className="track-source">
-              {t('trackCard.catRef')}
-            </span>
-          )}
-          {!track.source_url && !track.sc_url && track.source === 'telegram' && (
-            <span className="track-source">
-              {t('trackCard.sourceTg')}
-            </span>
-          )}
         </div>
         <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
+          <button
+            className={`track-card-info-btn${showInfo ? ' active' : ''}`}
+            title={t('trackCard.info')}
+            onClick={handleToggleInfo}
+          >
+            <Icon name="info" size={18} />
+          </button>
           <button
             className={`track-card-like${liked ? ' liked spring' : ''}`}
             title={t('trackCard.like')}
@@ -224,6 +205,64 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
         </div>
       </div>
 
+      {showInfo && (
+        <div className="track-card-ai-body" onClick={(e) => e.stopPropagation()}>
+          <div className="track-card-badges-row">
+            {track.source === 'soundcloud' && <span className="track-badge track-badge-sc">SC</span>}
+            {track.source === 'youtube' && <span className="track-badge track-badge-yt">YT</span>}
+            {track.source === 'bandcamp' && <span className="track-badge track-badge-bc">BC</span>}
+            {track.source === 'telegram' && <span className="track-badge track-badge-tg">TG</span>}
+            {catalogLabel && <span className="track-badge">{catalogLabel}</span>}
+          </div>
+
+          {(track.source_url || track.sc_url) && (
+            <div className="track-source">
+              {t('search.extSourceLabel')}{' '}
+              <a
+                href={track.source_url || track.sc_url || '#'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="track-source-link"
+              >
+                {track.source_name || track.source}
+              </a>
+            </div>
+          )}
+          {track.access_mode === 'third_party_stream' && (
+            <div className="track-source">
+              {t('trackCard.accessStream')}
+            </div>
+          )}
+          {track.catalog_type === 'ugc' && (
+            <div className="track-source">
+              {t('trackCard.catUgc')}
+            </div>
+          )}
+          {track.catalog_type === 'licensed' && (
+            <div className="track-source">
+              {t('trackCard.catLicensed')}
+            </div>
+          )}
+          {track.catalog_type === 'external_reference' && (
+            <div className="track-source">
+              {t('trackCard.catRef')}
+            </div>
+          )}
+          {!track.source_url && !track.sc_url && track.source === 'telegram' && (
+            <div className="track-source">
+              {t('trackCard.sourceTg')}
+            </div>
+          )}
+
+          {loadingInfo && (
+            <p className="track-card-ai-info-loading">{t('trackSheet.preparingInfo')}</p>
+          )}
+          {trackInfo?.content && (
+            <p className="track-card-ai-text">{trackInfo.content}</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
+

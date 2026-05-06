@@ -216,6 +216,19 @@ Artist header shows monthly listeners in a compact inline row
 stroke icon (`users-listeners`). Keep it monochrome, compact and
 non-intrusive.
 
+## Track card extras
+
+`TrackCardSheet` exposes advanced playback controls through a
+dedicated bottom-sheet overlay (`.tcs-extras-overlay` /
+`.tcs-extras-sheet`) opened from the action grid button
+`trackSheet.more`. Do not render these controls in transparent floating
+popovers over core playback controls.
+
+Spacing in the track card should keep side gutters at `24px` for
+primary content blocks (`.tcs-info`, `.tcs-player-controls`,
+`.tcs-actions`, `.tcs-edit-panel`) to avoid text and controls sticking
+to card edges.
+
 ## Migration playbook
 
 1. Replace literal spacing with `--space-*`.
