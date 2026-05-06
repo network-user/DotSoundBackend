@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -18,6 +19,7 @@ from app.models.lyrics_job import LyricsJob
 from app.models.listen_event import ListenEvent
 from app.models.track import Track
 from app.models.user import User
+from app.models.user_preference import UserPreference
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -456,4 +458,95 @@ async def collect_admin_stats(
         "unique_admins": unique_admins,
         "top_admins": top_admins,
         "actions_series": actions_series,
+    }
+
+
+async def collect_activation_funnel(
+    session: AsyncSession,
+    *,
+    period: str,
+) -> dict[str, Any]:
+    now = datetime.now(UTC)
+    start = _period_start(now, period)
+    redis = get_redis_client()
+
+    first_day = (start or (now - timedelta(days=6))).date()
+    last_day = now.date()
+    day = first_day
+
+    users_by_event = {
+        "auth_success": 0,
+        "onboarding_complete": 0,
+        "onboarding_skip": 0,
+        "home_first_play": 0,
+        "home_first_session_start": 0,
+    }
+    counters_by_event = {
+        "auth_success": 0,
+        "onboarding_complete": 0,
+        "onboarding_skip": 0,
+        "home_first_play": 0,
+        "home_first_session_start": 0,
+    }
+
+    while day <= last_day:
+        suffix = day.strftime("%Y%m%d")
+        counter_key = f"activation:counters:{suffix}"
+        counter_values_raw = redis.hgetall(counter_key)
+        if inspect.isawaitable(counter_values_raw):
+            counter_values = await counter_values_raw
+        else:
+            counter_values = counter_values_raw
+        for key in counters_by_event:
+            raw = counter_values.get(key)
+            counters_by_event[key] += int(raw or 0)
+            set_key = f"activation:users:{suffix}:{key}"
+            scard_raw = redis.scard(set_key)
+            if inspect.isawaitable(scard_raw):
+                scard = await scard_raw
+            else:
+                scard = scard_raw
+            users_by_event[key] += int(scard)
+        day += timedelta(days=1)
+
+    time_stmt = select(
+        func.avg(
+            func.extract(
+                "epoch",
+                UserPreference.first_play_at
+                - UserPreference.auth_first_seen_at,
+            )
+        )
+    ).where(
+        UserPreference.auth_first_seen_at.is_not(None),
+        UserPreference.first_play_at.is_not(None),
+    )
+    if start is not None:
+        time_stmt = time_stmt.where(
+            UserPreference.auth_first_seen_at >= start
+        )
+    avg_seconds_res = await session.execute(time_stmt)
+    avg_seconds_raw = avg_seconds_res.scalar_one_or_none()
+    avg_seconds = float(avg_seconds_raw or 0.0)
+
+    onboarding_total = (
+        users_by_event["onboarding_complete"]
+        + users_by_event["onboarding_skip"]
+    )
+    skip_rate = (
+        users_by_event["onboarding_skip"] / onboarding_total
+        if onboarding_total
+        else 0.0
+    )
+
+    return {
+        "period": period,
+        "from_ts": int(start.timestamp()) if start is not None else None,
+        "to_ts": int(now.timestamp()),
+        "users": users_by_event,
+        "events": counters_by_event,
+        "avg_auth_to_first_play_seconds": round(avg_seconds, 2),
+        "skip_rate": round(skip_rate, 4),
+        "first_session_plays_count": counters_by_event["home_first_play"]
+        + counters_by_event["home_first_session_start"],
     }

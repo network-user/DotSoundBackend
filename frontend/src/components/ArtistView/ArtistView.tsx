@@ -7,8 +7,26 @@ import { ArtistCatalogReleasePanel } from '@/components/ArtistView/ArtistCatalog
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
-import { api } from '@/lib/api'
-import { getIsAdmin, getInternalUserId } from '@/lib/telegram'
+import { api, getApiErrorMessage } from '@/lib/api'
+import {
+  getIsAdmin,
+  getInternalUserId,
+  haptic,
+  hapticNotification,
+} from '@/lib/telegram'
+import { useToast } from '@/components/ui/Toast'
+import { queueMutation } from '@/lib/pendingEvents'
+
+function _isNetworkError(e: unknown): boolean {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return true
+  }
+  return (
+    e instanceof TypeError &&
+    typeof e.message === 'string' &&
+    /fetch|network/i.test(e.message)
+  )
+}
 import type {
   ArtistCatalogReleaseSummary,
   ArtistDetail,
@@ -259,6 +277,7 @@ export function ArtistView({
   onSelectSimilarArtist,
 }: Props) {
   const { t } = useTranslation()
+  const toast = useToast()
   const [artist, setArtist] =
     useState<ArtistDetail | null>(null)
   const [tracks, setTracks] = useState<
@@ -497,6 +516,23 @@ export function ArtistView({
   }
 
   const handleFollow = async () => {
+    if (followLoading) return
+    const prevFollowing = following
+    const prevFollowerCount = artist?.follower_count
+    const willFollow = !(prevFollowing === true)
+    setFollowing(willFollow)
+    setArtist((prev) =>
+      prev
+        ? {
+            ...prev,
+            follower_count: Math.max(
+              0,
+              (prev.follower_count ?? 0) + (willFollow ? 1 : -1),
+            ),
+          }
+        : prev,
+    )
+    haptic('light')
     setFollowLoading(true)
     try {
       const res = await api.toggleArtistFollow(artistId)
@@ -506,7 +542,28 @@ export function ArtistView({
           ? { ...prev, follower_count: res.follower_count }
           : prev,
       )
-    } catch {}
+    } catch (e) {
+      if (_isNetworkError(e)) {
+        await queueMutation(
+          'POST',
+          `/api/v1/artists/${artistId}/follow`,
+        )
+        setFollowLoading(false)
+        return
+      }
+      setFollowing(prevFollowing)
+      setArtist((prev) =>
+        prev && prevFollowerCount != null
+          ? { ...prev, follower_count: prevFollowerCount }
+          : prev,
+      )
+      hapticNotification('error')
+      const msg = getApiErrorMessage(
+        e,
+        t('artist.follow_failed', 'Не удалось обновить подписку'),
+      )
+      toast.error(msg)
+    }
     setFollowLoading(false)
   }
 

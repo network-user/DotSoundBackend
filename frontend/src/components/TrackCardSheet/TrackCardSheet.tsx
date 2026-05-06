@@ -125,6 +125,11 @@ export function TrackCardSheet({
     setAbA,
     setAbB,
     clearAbLoop,
+    sleepMode,
+    sleepRemainingSec,
+    setSleepTimerMinutes,
+    setSleepTimerEndOfTrack,
+    cancelSleepTimer,
   } = usePlayerActions()
   const { t } = useTranslation()
   const toast = useToast()
@@ -1309,6 +1314,7 @@ export function TrackCardSheet({
                 onSeek={seek}
                 height={40}
                 className="tcs-waveform-bar"
+                durationSec={duration}
               />
             ) : (
             <input
@@ -1476,6 +1482,88 @@ export function TrackCardSheet({
                       role="menuitem"
                       onClick={clearAbLoop}
                       title={t('trackSheet.abReset')}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                <div
+                  className="pb-extras"
+                  style={{ marginTop: 6 }}
+                  aria-label={t(
+                    'trackSheet.sleepTimer',
+                    'Sleep timer',
+                  )}
+                >
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      opacity: 0.75,
+                      fontSize: 12,
+                    }}
+                  >
+                    <Icon name="moon" size={12} />
+                    {sleepMode === 'minutes' &&
+                    sleepRemainingSec > 0
+                      ? `${Math.floor(
+                          sleepRemainingSec / 60,
+                        )}:${String(
+                          sleepRemainingSec % 60,
+                        ).padStart(2, '0')}`
+                      : sleepMode === 'end-of-track'
+                        ? t(
+                            'trackSheet.sleepEot',
+                            'Конец трека',
+                          )
+                        : t(
+                            'trackSheet.sleepOff',
+                            'Сон',
+                          )}
+                  </span>
+                  {[15, 30, 60].map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`pb-extras-btn${
+                        sleepMode === 'minutes' &&
+                        Math.ceil(sleepRemainingSec / 60) === m
+                          ? ' active'
+                          : ''
+                      }`}
+                      role="menuitem"
+                      onClick={() => setSleepTimerMinutes(m)}
+                    >
+                      {m}м
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className={`pb-extras-btn${
+                      sleepMode === 'end-of-track'
+                        ? ' active'
+                        : ''
+                    }`}
+                    role="menuitem"
+                    onClick={setSleepTimerEndOfTrack}
+                    title={t(
+                      'trackSheet.sleepEotTitle',
+                      'Стоп после текущего трека',
+                    )}
+                  >
+                    EOT
+                  </button>
+                  {sleepMode !== 'off' && (
+                    <button
+                      type="button"
+                      className="pb-extras-btn"
+                      role="menuitem"
+                      onClick={cancelSleepTimer}
+                      title={t(
+                        'trackSheet.sleepCancel',
+                        'Выключить таймер сна',
+                      )}
                     >
                       ×
                     </button>

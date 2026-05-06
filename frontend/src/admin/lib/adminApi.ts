@@ -448,6 +448,33 @@ export const adminApi = {
     }>('/dashboard/admin-stats', {
       query: { period },
     }),
+  dashboardActivationFunnel: (
+    period: 'today' | '7d' | '30d' | 'all',
+  ) =>
+    adminFetch<{
+      period: 'today' | '7d' | '30d' | 'all'
+      from_ts: number | null
+      to_ts: number
+      users: {
+        auth_success: number
+        onboarding_complete: number
+        onboarding_skip: number
+        home_first_play: number
+        home_first_session_start: number
+      }
+      events: {
+        auth_success: number
+        onboarding_complete: number
+        onboarding_skip: number
+        home_first_play: number
+        home_first_session_start: number
+      }
+      avg_auth_to_first_play_seconds: number
+      skip_rate: number
+      first_session_plays_count: number
+    }>('/dashboard/activation-funnel', {
+      query: { period },
+    }),
   containers: () =>
     adminFetch<{
       counts: {

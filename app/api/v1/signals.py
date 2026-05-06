@@ -31,6 +31,7 @@ async def record_listen_batch(
             duration_listened=event.duration_listened,
             total_duration=event.total_duration,
             source_context=event.source_context,
+            last_position=event.last_position,
         )
     return {"status": "ok", "processed": len(body.events)}
 
@@ -48,6 +49,7 @@ async def record_listen(
         duration_listened=body.duration_listened,
         total_duration=body.total_duration,
         source_context=body.source_context,
+        last_position=body.last_position,
     )
     return {"status": "ok"}
 

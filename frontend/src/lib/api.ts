@@ -200,6 +200,13 @@ export function getApiErrorMessage(
   return m
 }
 
+const RETRY_STATUS = new Set([502, 503, 504])
+const RETRY_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+function _sleep(ms: number) {
+  return new Promise<void>((r) => setTimeout(r, ms))
+}
+
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers = new Headers(opts.headers)
   const sentWithAuth =
@@ -212,47 +219,77 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     )
   }
 
-  try {
-    const res = await fetch(path, {
-      ...opts,
-      headers,
-    })
-    const accountStatus = res.headers.get(
-      'X-Account-Status',
-    )
-    const isBanned =
-      accountStatus === 'banned' ||
-      accountStatus === 'blocked'
-    if (res.status === 401 && sentWithAuth) {
-      console.error(
-        `[API] 401 Unauthorized: ${path}`,
+  const method = (opts.method || 'GET').toUpperCase()
+  const canRetry = RETRY_SAFE_METHODS.has(method)
+
+  let attempt = 0
+  const maxAttempts = canRetry ? 2 : 1
+
+  while (true) {
+    attempt += 1
+    try {
+      const res = await fetch(path, {
+        ...opts,
+        headers,
+      })
+      const accountStatus = res.headers.get(
+        'X-Account-Status',
       )
-      accessToken = null
-      persistToken(null)
-      if (isBanned) {
+      const isBanned =
+        accountStatus === 'banned' ||
+        accountStatus === 'blocked'
+      if (res.status === 401 && sentWithAuth) {
+        console.error(
+          `[API] 401 Unauthorized: ${path}`,
+        )
+        accessToken = null
+        persistToken(null)
+        if (isBanned) {
+          onAccountBlocked?.(
+            res.headers.get('X-Account-Reason'),
+          )
+        } else {
+          onUnauthorized?.()
+        }
+      } else if (isBanned) {
         onAccountBlocked?.(
           res.headers.get('X-Account-Reason'),
         )
-      } else {
-        onUnauthorized?.()
       }
-    } else if (isBanned) {
-      onAccountBlocked?.(
-        res.headers.get('X-Account-Reason'),
+      if (
+        canRetry &&
+        attempt < maxAttempts &&
+        RETRY_STATUS.has(res.status)
+      ) {
+        await _sleep(250 + Math.floor(Math.random() * 350))
+        continue
+      }
+      if (!res.ok) {
+        const message = await readApiErrorMessage(res)
+        throw new Error(message)
+      }
+      if (res.status === 204) return null as T
+      return res.json() as Promise<T>
+    } catch (err) {
+      const isAbort =
+        err instanceof DOMException && err.name === 'AbortError'
+      const isNetwork =
+        err instanceof TypeError &&
+        /fetch|network/i.test(err.message)
+      if (
+        canRetry &&
+        attempt < maxAttempts &&
+        (isNetwork || isAbort === false && err instanceof TypeError)
+      ) {
+        await _sleep(250 + Math.floor(Math.random() * 350))
+        continue
+      }
+      console.error(
+        `[API] Fetch error for ${path}:`,
+        err,
       )
+      throw err
     }
-    if (!res.ok) {
-      const message = await readApiErrorMessage(res)
-      throw new Error(message)
-    }
-    if (res.status === 204) return null as T
-    return res.json() as Promise<T>
-  } catch (err) {
-    console.error(
-      `[API] Fetch error for ${path}:`,
-      err,
-    )
-    throw err
   }
 }
 
@@ -320,6 +357,20 @@ export const api = {
   ): Promise<TrackListResponse> {
     return request(
       `/api/v1/users/me/listen-history?limit=${limit}`,
+    )
+  },
+
+  getMyListeningStats(
+    periodDays: number = 30,
+  ): Promise<{
+    period_days: number
+    minutes_listened: number
+    tracks_listened: number
+    top_artists: { name: string; minutes: number; plays: number }[]
+    top_genres: { name: string; minutes: number; plays: number }[]
+  }> {
+    return request(
+      `/api/v1/users/me/listening-stats?period_days=${periodDays}`,
     )
   },
 
@@ -1702,6 +1753,7 @@ export const api = {
     applied_genres: string[]
     applied_artist_ids: number[]
     applied_moods: string[]
+    enabled: boolean
   }> {
     return request('/api/v1/onboarding/smart-skip', {
       method: 'POST',

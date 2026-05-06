@@ -8,6 +8,7 @@ class ListenEventRequest(BaseModel):
     source_context: str | None = Field(
         None, max_length=30
     )
+    last_position: int | None = Field(default=None, ge=0)
 
 
 class BatchListenEventRequest(BaseModel):

@@ -13,6 +13,17 @@ interface Props {
 }
 
 type Step = 'import' | 'genres' | 'artists' | 'moods' | 'calibration'
+type CalibrationChoice = 'like' | 'dislike' | 'skip'
+type OnboardingDraft = {
+  step: Step
+  includeImport: boolean
+  genres: string[]
+  selectedArtists: number[]
+  selectedMoods: string[]
+  calibrationResults: Record<number, CalibrationChoice>
+}
+
+const ONBOARDING_DRAFT_KEY = 'onboarding:draft:v1'
 
 const MOODS = [
   { id: 'chill', label: 'Chill' },
@@ -66,7 +77,7 @@ export function Onboarding({ onComplete }: Props) {
   const [selectedMoods, setSelectedMoods] = useState<string[]>([])
   const [calibrationTracks, setCalibrationTracks] = useState<Track[]>([])
   const [calibrationResults, setCalibrationResults] = useState<
-    Record<number, boolean>
+    Record<number, CalibrationChoice>
   >({})
   const [saving, setSaving] = useState(false)
 
@@ -94,15 +105,55 @@ export function Onboarding({ onComplete }: Props) {
   }
 
   useEffect(() => {
+    const parseDraft = (): OnboardingDraft | null => {
+      try {
+        const raw = localStorage.getItem(ONBOARDING_DRAFT_KEY)
+        if (!raw) return null
+        return JSON.parse(raw) as OnboardingDraft
+      } catch {
+        return null
+      }
+    }
+
+    const restoreDraft = (
+      draft: OnboardingDraft,
+      useImportStep: boolean,
+    ) => {
+      setGenres(Array.isArray(draft.genres) ? draft.genres : [])
+      setSelectedArtists(
+        Array.isArray(draft.selectedArtists)
+          ? draft.selectedArtists
+          : [],
+      )
+      setSelectedMoods(
+        Array.isArray(draft.selectedMoods) ? draft.selectedMoods : [],
+      )
+      setCalibrationResults(draft.calibrationResults ?? {})
+      if (useImportStep) {
+        setStep(draft.step)
+      } else {
+        setStep(draft.step === 'import' ? 'genres' : draft.step)
+      }
+    }
+
     api
       .getOnboardingStatus()
       .then(s => {
+        const draft = parseDraft()
         if (!s.import_prompt_acknowledged) {
           setIncludeImport(true)
-          setStep('import')
+          if (draft) {
+            restoreDraft(draft, true)
+          } else {
+            setStep('import')
+          }
         } else {
           setIncludeImport(false)
-          setStep('genres')
+          if (draft) {
+            restoreDraft(draft, false)
+          } else {
+            setStep('genres')
+          }
         }
       })
       .catch(() => {
@@ -110,6 +161,32 @@ export function Onboarding({ onComplete }: Props) {
         setStep('genres')
       })
   }, [])
+
+  useEffect(() => {
+    const draft: OnboardingDraft = {
+      step,
+      includeImport,
+      genres,
+      selectedArtists,
+      selectedMoods,
+      calibrationResults,
+    }
+    try {
+      localStorage.setItem(
+        ONBOARDING_DRAFT_KEY,
+        JSON.stringify(draft),
+      )
+    } catch {
+      /* ignore */
+    }
+  }, [
+    step,
+    includeImport,
+    genres,
+    selectedArtists,
+    selectedMoods,
+    calibrationResults,
+  ])
 
   useEffect(() => {
     api.getOnboardingGenres().then(setAvailableGenres).catch(() => {})
@@ -199,19 +276,32 @@ export function Onboarding({ onComplete }: Props) {
       setSaving(true)
       try {
         const items = Object.entries(calibrationResults).map(
-          ([tid, liked]) => ({
-            track_id: Number(tid),
-            liked,
-          }),
+          ([tid, choice]) =>
+            choice === 'like'
+              ? {
+                  track_id: Number(tid),
+                  liked: true,
+                }
+              : choice === 'dislike'
+                ? {
+                    track_id: Number(tid),
+                    liked: false,
+                  }
+                : null,
         )
-        if (items.length > 0) {
-          await api.saveCalibration(items)
+        const filteredItems = items.filter(
+          (item): item is { track_id: number; liked: boolean } =>
+            item !== null,
+        )
+        if (filteredItems.length > 0) {
+          await api.saveCalibration(filteredItems)
         }
         await api.completeOnboarding()
         trackActivationEvent('onboarding_complete', {
-          meta: { calibrated: items.length },
+          meta: { calibrated: filteredItems.length },
         })
         toast.success('Готово — подборки обновлены')
+        localStorage.removeItem(ONBOARDING_DRAFT_KEY)
         onComplete()
       } catch {
         toast.error('Не удалось завершить, попробуйте ещё раз')
@@ -235,15 +325,19 @@ export function Onboarding({ onComplete }: Props) {
         toast.info(
           'Подобрали стартовые жанры — настроить можно в профиле позже',
         )
+      } else if (!res.enabled) {
+        toast.info('Smart skip выключен флагом, просто завершаем шаг')
       } else {
         toast.info(
           'Запустим без настройки — поправим в профиле позже',
         )
       }
+      localStorage.removeItem(ONBOARDING_DRAFT_KEY)
       onComplete()
     } catch {
       try {
         await api.completeOnboarding()
+        localStorage.removeItem(ONBOARDING_DRAFT_KEY)
         onComplete()
       } catch {
         toast.error('Не удалось пропустить, попробуйте ещё раз')
@@ -418,14 +512,14 @@ export function Onboarding({ onComplete }: Props) {
                   <div className="onboarding-calibration-actions">
                     <button
                       className={`icon-btn${
-                        calibrationResults[t.id] === true
+                        calibrationResults[t.id] === 'like'
                           ? ' active'
                           : ''
                       }`}
                       onClick={() =>
                         setCalibrationResults(prev => ({
                           ...prev,
-                          [t.id]: true,
+                          [t.id]: 'like',
                         }))
                       }
                     >
@@ -433,18 +527,34 @@ export function Onboarding({ onComplete }: Props) {
                     </button>
                     <button
                       className={`icon-btn${
-                        calibrationResults[t.id] === false
+                        calibrationResults[t.id] === 'dislike'
                           ? ' active'
                           : ''
                       }`}
                       onClick={() =>
                         setCalibrationResults(prev => ({
                           ...prev,
-                          [t.id]: false,
+                          [t.id]: 'dislike',
                         }))
                       }
                     >
                       <Icon name="thumbs-down" size={20} />
+                    </button>
+                    <button
+                      className={`icon-btn${
+                        calibrationResults[t.id] === 'skip'
+                          ? ' active'
+                          : ''
+                      }`}
+                      onClick={() =>
+                        setCalibrationResults(prev => ({
+                          ...prev,
+                          [t.id]: 'skip',
+                        }))
+                      }
+                      title="Нейтрально, пропустить"
+                    >
+                      <Icon name="x" size={18} />
                     </button>
                   </div>
                 </div>

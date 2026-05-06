@@ -175,6 +175,7 @@ async def smart_skip(
     db: AsyncSession = Depends(get_db),
 ) -> SmartSkipResponse:
     svc = OnboardingService(db)
+    enabled = await svc.is_smart_skip_enabled()
     applied = await svc.apply_smart_default_profile(
         user.id
     )
@@ -184,6 +185,7 @@ async def smart_skip(
             "artist_ids", []
         ),
         applied_moods=applied.get("moods", []),
+        enabled=enabled,
     )
 
 
@@ -191,11 +193,18 @@ async def smart_skip(
 async def activation_event(
     body: ActivationEventRequest,
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
+    svc = OnboardingService(db)
+    merged_meta = await svc.process_activation_event(
+        user_id=user.id,
+        event=body.event,
+        meta=body.meta,
+    )
     _activation_logger.info(
         "activation_event",
         event=body.event,
         user_id=user.id,
-        meta=body.meta or {},
+        meta=merged_meta,
     )
     return {"status": "ok"}

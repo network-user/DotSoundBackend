@@ -14,6 +14,7 @@ import { usePlayerActions } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import { ProfileHero } from '@/components/Profile/ProfileHero'
 import { ProfileStats } from '@/components/Profile/ProfileStats'
+import { ListenerStats } from '@/components/Profile/ListenerStats'
 import { ProfileActions } from '@/components/Profile/ProfileActions'
 import { ProfileTrackList } from '@/components/Profile/ProfileTrackList'
 import { ImportView } from '@/components/Import/ImportView'
@@ -253,6 +254,7 @@ export function ProfileView({
             onDisplayNameChange={setDisplayName}
           />
           <ProfileStats stats={stats} />
+          <ListenerStats />
           <ProfileActions
             onOpenImport={() => setTab('import')}
           />

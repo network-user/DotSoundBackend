@@ -34,10 +34,10 @@ class TrackComment(Base, TimestampMixin):
         ForeignKey("tracks.id", ondelete="CASCADE"),
         nullable=False,
     )
-    user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
         type_=BigInteger,
-        nullable=False,
+        nullable=True,
     )
     parent_id: Mapped[int | None] = mapped_column(
         ForeignKey(

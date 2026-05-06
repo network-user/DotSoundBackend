@@ -50,6 +50,7 @@ class TrackResponse(BaseModel):
     playback_variants: list[TrackPlaybackVariantBrief] = Field(
         default_factory=list,
     )
+    resume_position_seconds: int | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -11,7 +11,7 @@ class OnboardingPreferencesRequest(BaseModel):
 
 class CalibrationItem(BaseModel):
     track_id: int
-    liked: bool
+    liked: bool | None
 
 
 class CalibrationRequest(BaseModel):
@@ -48,6 +48,7 @@ class SmartSkipResponse(BaseModel):
     applied_moods: list[str] = Field(
         default_factory=list
     )
+    enabled: bool = True
 
 
 ActivationEventMeta = dict[

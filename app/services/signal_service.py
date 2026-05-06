@@ -38,6 +38,7 @@ class SignalService:
         duration_listened: int,
         total_duration: int | None,
         source_context: str | None = None,
+        last_position: int | None = None,
     ) -> None:
         completed, skipped = classify_listen(
             duration_listened, total_duration
@@ -52,6 +53,7 @@ class SignalService:
             completed=completed,
             skipped=skipped,
             source_context=source_context,
+            last_position=last_position,
         )
         await self._public_pc.bump_after_qualified_listen(
             user_id=user_id,

@@ -258,3 +258,46 @@ class RecommendationRepository:
             .group_by(Like.track_id)
         )
         return {tid: int(c) for tid, c in result.all()}
+
+    async def get_qualified_listens_7d_counts(
+        self,
+        days: int = 7,
+        candidate_pool_limit: int = 1000,
+    ) -> dict[int, int]:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        qualified = (
+            ListenEvent.skipped.is_(False)
+            & (
+                ListenEvent.completed.is_(True)
+                | (
+                    ListenEvent.duration_listened_seconds
+                    >= 30
+                )
+            )
+        )
+        active_public = (
+            select(Track.id)
+            .where(
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+            )
+            .scalar_subquery()
+        )
+        result = await self._session.execute(
+            select(
+                ListenEvent.track_id,
+                func.count().label("c"),
+            )
+            .where(
+                ListenEvent.created_at >= cutoff,
+                qualified,
+                ListenEvent.track_id.in_(active_public),
+            )
+            .group_by(ListenEvent.track_id)
+            .order_by(func.count().desc())
+            .limit(candidate_pool_limit)
+        )
+        return {
+            int(tid): int(c)
+            for tid, c in result.all()
+        }

@@ -40,10 +40,10 @@ class Message(Base, TimestampMixin):
         type_=BigInteger,
         nullable=False,
     )
-    sender_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
+    sender_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
         type_=BigInteger,
-        nullable=False,
+        nullable=True,
     )
     type: Mapped[str] = mapped_column(
         String(20), server_default="text", nullable=False

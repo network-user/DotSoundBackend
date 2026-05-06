@@ -1,9 +1,6 @@
-from sqlalchemy import (
-    JSON,
-    BigInteger,
-    Boolean,
-    ForeignKey,
-)
+from datetime import datetime
+
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -38,4 +35,10 @@ class UserPreference(Base, TimestampMixin):
         mapped_column(
             Boolean, server_default="false", nullable=False
         )
+    )
+    auth_first_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    first_play_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

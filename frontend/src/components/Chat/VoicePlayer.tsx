@@ -20,6 +20,18 @@ export function VoicePlayer({ fileKey, duration, waveform }: Props) {
     if (!audioRef.current) {
       const audio = new Audio(`/api/v1/tracks/cover_proxy?key=${encodeURIComponent(fileKey)}`)
       audio.playbackRate = SPEEDS[speedIdx]
+      try {
+        const a = audio as HTMLAudioElement & {
+          preservesPitch?: boolean
+          mozPreservesPitch?: boolean
+          webkitPreservesPitch?: boolean
+        }
+        a.preservesPitch = true
+        a.mozPreservesPitch = true
+        a.webkitPreservesPitch = true
+      } catch {
+        // older browsers without the property; ignore
+      }
       audio.ontimeupdate = () => {
         if (audio.duration) setProgress(audio.currentTime / audio.duration)
       }

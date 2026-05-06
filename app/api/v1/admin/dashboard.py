@@ -14,6 +14,7 @@ from app.dependencies import (
 )
 from app.models.user import User
 from app.services.admin_dashboard_service import (
+    collect_activation_funnel,
     collect_admin_stats,
     collect_stats,
     collect_track_stats,
@@ -64,6 +65,15 @@ async def admin_stats(
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     return await collect_admin_stats(session, period=period)
+
+
+@router.get("/activation-funnel")
+async def activation_funnel(
+    period: str = Query("7d", pattern="^(today|7d|30d|all)$"),
+    _admin: User = Depends(require_admin_session),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    return await collect_activation_funnel(session, period=period)
 
 
 @router.get("/containers")

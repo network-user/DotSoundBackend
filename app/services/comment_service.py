@@ -39,7 +39,11 @@ class CommentService:
     @staticmethod
     def _author_label(user: User | None) -> str:
         if not user:
-            return ""
+            from dotsound_private_core.services.account_deletion_policy import (
+                ANONYMIZED_DISPLAY_NAME,
+            )
+
+            return ANONYMIZED_DISPLAY_NAME
         dn = (user.display_name or "").strip()
         if dn:
             return dn
@@ -155,6 +159,8 @@ class CommentService:
         actor: User | None,
     ) -> None:
         owner_id = comment.user_id
+        if owner_id is None:
+            return
         if owner_id == actor_id:
             return
         if comment.is_deleted or comment.is_hidden_by_author:

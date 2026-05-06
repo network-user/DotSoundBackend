@@ -19,6 +19,11 @@
     "seekForwardTitle": "+15 s",
     "moreMenu": "Speed, queue, A–B loop",
     "more": "More",
+    "sleepTimer": "Sleep timer",
+    "sleepEot": "End of track",
+    "sleepOff": "Sleep",
+    "sleepEotTitle": "Stop after the current track",
+    "sleepCancel": "Cancel sleep timer",
     "queue": "Queue",
     "abA": "Point A",
     "abB": "Point B",
@@ -119,5 +124,12 @@
     "continueImport": "Continue import",
     "confirmCancel": "Yes, cancel",
     "cancelling": "Cancelling..."
+  },
+  "likes": {
+    "like_failed": "Couldn't update like",
+    "dislike_failed": "Couldn't update dislike"
+  },
+  "artist": {
+    "follow_failed": "Couldn't update follow"
   }
 }
