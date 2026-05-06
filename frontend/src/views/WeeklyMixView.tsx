@@ -3,18 +3,33 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { Icon } from '@/components/Icon/Icon'
+import { AmbientStage } from '@/components/ui/AmbientStage'
+import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { useToast } from '@/components/ui/Toast'
-import { api } from '@/lib/api'
+import { api, getApiErrorMessage } from '@/lib/api'
+import { VARIANTS_FADE_UP, m } from '@/lib/motion'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+} from '@/store/PlayerContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type {
   ChatListItem,
   WeeklyPlaylistResponse,
 } from '@/types/api'
 
+function mixCoverUrl(key: string | null): string | null {
+  if (!key) return null
+  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+}
+
 export function WeeklyMixView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const toast = useToast()
+  const { playTrack, toggleShuffle } = usePlayerActions()
+  const { shuffleOn } = usePlayerMeta()
   const [data, setData] = useState<WeeklyPlaylistResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [shareOpen, setShareOpen] = useState(false)
@@ -103,6 +118,31 @@ export function WeeklyMixView() {
     }
   }, [shareUrl, toast])
 
+  const playList = internalTracks ?? []
+  const heroArt = playList[0]
+  const heroUrl = heroArt ? mixCoverUrl(heroArt.cover_key) : null
+
+  const handlePlayAll = useCallback(async () => {
+    if (!playList.length) return
+    try {
+      await playTrack(playList[0])
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, 'Playback error'))
+    }
+  }, [playList, playTrack, toast])
+
+  const handleShufflePlay = useCallback(async () => {
+    if (!playList.length) return
+    try {
+      if (!shuffleOn) toggleShuffle()
+      const pick =
+        playList[Math.floor(Math.random() * playList.length)]
+      await playTrack(pick)
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, 'Playback error'))
+    }
+  }, [playList, playTrack, shuffleOn, toggleShuffle, toast])
+
   return (
     <section className="view active">
       <div className="view-header">
@@ -124,10 +164,48 @@ export function WeeklyMixView() {
         </button>
       </div>
 
-      <TrackList
-        tracks={internalTracks}
-        emptyMessage={t('weeklyMix.empty')}
-      />
+      {!loading && heroUrl && (
+        <AmbientStage coverUrl={heroUrl} className="rh-mix-hero">
+          <div className="rh-mix-hero__inner">
+            <div>
+              <h1 className="rh-mix-hero__title">{t('weeklyMix.title')}</h1>
+              <p className="rh-mix-hero__hint">{t('weeklyMix.hint')}</p>
+              <div className="rh-mix-actions">
+                <MotionPress
+                  variant="primary"
+                  onClick={() => {
+                    void handlePlayAll()
+                  }}
+                >
+                  {t('redesign.home.mixPlayAll')}
+                </MotionPress>
+                <MotionPress
+                  variant="ghost"
+                  onClick={() => {
+                    void handleShufflePlay()
+                  }}
+                >
+                  {t('redesign.home.mixShuffle')}
+                </MotionPress>
+              </div>
+            </div>
+            <div className="rh-mix-hero__cover">
+              <KenBurnsCover src={heroUrl} alt="" />
+            </div>
+          </div>
+        </AmbientStage>
+      )}
+
+      <m.div
+        initial="hidden"
+        animate="visible"
+        variants={VARIANTS_FADE_UP}
+      >
+        <TrackList
+          tracks={internalTracks}
+          emptyMessage={t('weeklyMix.empty')}
+        />
+      </m.div>
 
       {!loading && externalTracks.length > 0 && (
         <>

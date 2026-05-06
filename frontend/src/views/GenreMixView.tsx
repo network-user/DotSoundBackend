@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
+import { AmbientStage } from '@/components/ui/AmbientStage'
+import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { useToast } from '@/components/ui/Toast'
 import { useSound } from '@/store/SoundContext'
-import { api } from '@/lib/api'
+import { api, getApiErrorMessage } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
-import { usePlayerActions } from '@/store/PlayerContext'
+import { VARIANTS_FADE_UP, m } from '@/lib/motion'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+} from '@/store/PlayerContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type {
   ChatListItem,
@@ -15,10 +23,12 @@ import type {
 } from '@/types/api'
 
 export function GenreMixView() {
+  const { t } = useTranslation()
   const { genre } = useParams<{ genre: string }>()
   const navigate = useNavigate()
   const toast = useToast()
-  const { playTrack } = usePlayerActions()
+  const { playTrack, toggleShuffle } = usePlayerActions()
+  const { shuffleOn } = usePlayerMeta()
   const sound = useSound()
 
   const [tracks, setTracks] = useState<Track[] | null>(null)
@@ -51,6 +61,11 @@ export function GenreMixView() {
   const shareUrl = `${window.location.origin}${import.meta.env.BASE_URL}genre-mix/${encodeURIComponent(
     genre || '',
   )}`
+
+  function mixCoverUrl(key: string | null): string | null {
+    if (!key) return null
+    return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -120,6 +135,18 @@ export function GenreMixView() {
     if (!tracks || !tracks.length) return
     await playTrack(tracks[0])
   }, [tracks, playTrack])
+
+  const handleShufflePlay = useCallback(async () => {
+    if (!tracks || !tracks.length) return
+    try {
+      if (!shuffleOn) toggleShuffle()
+      const pick =
+        tracks[Math.floor(Math.random() * tracks.length)]
+      await playTrack(pick)
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, 'Playback error'))
+    }
+  }, [tracks, playTrack, shuffleOn, toggleShuffle, toast])
 
   const formatShareChatTitle = useCallback((item: ChatListItem): string => {
     if (item.conversation.type === 'saved') return 'Избранное'
@@ -298,7 +325,53 @@ export function GenreMixView() {
         )}
       </div>
 
-      <TrackList tracks={tracks} emptyMessage="В этом миксе пока нет треков" />
+      {tracks && tracks.length > 0 && mixCoverUrl(tracks[0].cover_key) && (
+        <AmbientStage
+          coverUrl={mixCoverUrl(tracks[0].cover_key)}
+          className="rh-mix-hero"
+        >
+          <div className="rh-mix-hero__inner">
+            <div>
+              <h1 className="rh-mix-hero__title">{title}</h1>
+              <p className="rh-mix-hero__hint">
+                {tracks.length} треков
+              </p>
+              <div className="rh-mix-actions">
+                <MotionPress
+                  variant="primary"
+                  onClick={() => {
+                    void handlePlayAll()
+                  }}
+                >
+                  {t('redesign.home.mixPlayAll')}
+                </MotionPress>
+                <MotionPress
+                  variant="ghost"
+                  onClick={() => {
+                    void handleShufflePlay()
+                  }}
+                >
+                  {t('redesign.home.mixShuffle')}
+                </MotionPress>
+              </div>
+            </div>
+            <div className="rh-mix-hero__cover">
+              <KenBurnsCover
+                src={mixCoverUrl(tracks[0].cover_key)!}
+                alt=""
+              />
+            </div>
+          </div>
+        </AmbientStage>
+      )}
+
+      <m.div
+        initial="hidden"
+        animate="visible"
+        variants={VARIANTS_FADE_UP}
+      >
+        <TrackList tracks={tracks} emptyMessage="В этом миксе пока нет треков" />
+      </m.div>
 
       {editOpen && (
         <div className="share-modal-overlay fade-in" onClick={(e) => {

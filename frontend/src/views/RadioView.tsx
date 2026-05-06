@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
+import { AmbientStage } from '@/components/ui/AmbientStage'
+import { BeatPulse } from '@/components/ui/BeatPulse'
+import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
+import { MorphIcon } from '@/components/ui/MorphIcon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
 import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
 import {
@@ -10,8 +17,24 @@ import {
 } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
 
+function coverUrl(key: string | null): string | null {
+  if (!key) return null
+  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+}
+
+const MOOD_ICONS = [
+  'heart',
+  'search',
+  'flame',
+  'star',
+  'radio',
+  'bookmark',
+] as const
+
 export function RadioView() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
+  const toast = useToast()
   const { track: currentTrack } = usePlayerMeta()
   const {
     startRadio,
@@ -21,6 +44,11 @@ export function RadioView() {
 
   const [historyTracks, setHistoryTracks] = useState<Track[]>([])
   const historyRef = useRef<Track[]>([])
+
+  const heroCover = currentTrack
+    ? coverUrl(currentTrack.cover_key)
+    : null
+  const bpm = 120
 
   useEffect(() => {
     if (!currentTrack) return
@@ -67,10 +95,52 @@ export function RadioView() {
     stopRadio()
   }
 
+  const handleMood = () => {
+    if (!currentTrack) {
+      toast.info(t('redesign.home.radioPickTrack'))
+      return
+    }
+    void handleStartRadio()
+  }
+
+  const moodDefs = [
+    {
+      id: 'chill',
+      label: t('redesign.home.radioMoodChill'),
+      hint: t('redesign.home.radioMoodHintChill'),
+    },
+    {
+      id: 'focus',
+      label: t('redesign.home.radioMoodFocus'),
+      hint: t('redesign.home.radioMoodHintFocus'),
+    },
+    {
+      id: 'gym',
+      label: t('redesign.home.radioMoodGym'),
+      hint: t('redesign.home.radioMoodHintGym'),
+    },
+    {
+      id: 'cinematic',
+      label: t('redesign.home.radioMoodCinematic'),
+      hint: t('redesign.home.radioMoodHintCinematic'),
+    },
+    {
+      id: 'retro',
+      label: t('redesign.home.radioMoodRetro'),
+      hint: t('redesign.home.radioMoodHintRetro'),
+    },
+    {
+      id: 'acoustic',
+      label: t('redesign.home.radioMoodAcoustic'),
+      hint: t('redesign.home.radioMoodHintAcoustic'),
+    },
+  ]
+
   return (
-    <section className="view active">
+    <section className="view active rh-radio-root">
       <div className="view-header">
         <button
+          type="button"
           className="icon-btn"
           onClick={() => navigate(-1)}
           aria-label="Назад"
@@ -82,86 +152,128 @@ export function RadioView() {
           />
         </button>
         <div style={{ flex: 1 }}>
-          <h2>Радио</h2>
+          <h2>{t('redesign.home.radioTitle')}</h2>
           <span className="hint">
             {radioMode
-              ? 'Бесконечное радио включено'
-              : 'Бесконечная подборка похожих треков'}
+              ? t('redesign.home.radioSubtitleOn')
+              : t('redesign.home.radioSubtitleIdle')}
           </span>
         </div>
         {radioMode && (
           <button
+            type="button"
             className="icon-btn"
             onClick={handleStop}
-            aria-label="Остановить радио"
-            title="Остановить радио"
+            aria-label={t('redesign.home.radioStopAria')}
+            title={t('redesign.home.radioStopAria')}
           >
             <Icon name="x" size={20} />
           </button>
         )}
       </div>
 
-      <div style={{ padding: '16px' }}>
+      <AmbientStage
+        coverUrl={heroCover ?? undefined}
+        className="rh-radio-hero"
+      >
+        <div className="rh-radio-hero__inner">
+          <BeatPulse bpm={bpm} active={radioMode}>
+            <div className="rh-radio-disc-wrap">
+              {heroCover ? (
+                <KenBurnsCover src={heroCover} alt="" />
+              ) : (
+                <div className="rh-radio-disc-placeholder">
+                  <Icon name="radio" size={48} />
+                </div>
+              )}
+            </div>
+          </BeatPulse>
+          <div className="rh-radio-hero__meta">
+            <h2>
+              {currentTrack?.title ?? '—'}
+            </h2>
+            <span className="hint">
+              {radioMode
+                ? t('redesign.home.radioSubtitleOn')
+                : t('redesign.home.radioSubtitleIdle')}
+            </span>
+          </div>
+        </div>
+      </AmbientStage>
+
+      <div className="rh-radio-controls">
         {!radioMode ? (
-          <button
-            className="btn-primary"
-            style={{
-              width: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
+          <MotionPress
+            variant="primary"
+            className="rh-radio-start"
+            style={{ width: '100%' }}
+            onClick={() => {
+              void handleStartRadio()
             }}
-            onClick={handleStartRadio}
             disabled={!currentTrack}
           >
             <Icon name="radio" size={18} />
-            {currentTrack
-              ? 'Запустить бесконечное радио'
-              : 'Сначала выберите трек'}
-          </button>
+            <span>
+              {currentTrack
+                ? t('redesign.home.radioStart')
+                : t('redesign.home.radioPickTrack')}
+            </span>
+          </MotionPress>
         ) : (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '10px 14px',
-              borderRadius: 'var(--r-lg)',
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-            }}
-          >
+          <div className="rh-radio-active-bar">
             <span className="player-radio-badge player-radio-badge--active">
               <span className="player-radio-badge__dot" />
-              Радио
+              {t('redesign.home.radioActiveBadge')}
             </span>
-            <span
-              style={{
-                flex: 1,
-                fontSize: 13,
-                color: 'var(--text-secondary)',
-              }}
-            >
+            <span className="rh-radio-active-bar__meta">
               {currentTrack?.title ?? '—'}
             </span>
-            <button
-              className="icon-btn"
+            <MotionPress
+              variant="icon"
+              ariaLabel={t('redesign.home.radioStopAria')}
               onClick={handleStop}
-              aria-label="Стоп"
-              style={{ flexShrink: 0 }}
             >
               <Icon name="x" size={16} />
-            </button>
+            </MotionPress>
           </div>
         )}
       </div>
 
+      <div className="rh-radio-moods">
+        <div className="rh-radio-moods__title">
+          {t('redesign.home.radioMoodsTitle')}
+        </div>
+        <div className="rh-radio-moods__grid">
+          {moodDefs.map((mood, idx) => (
+            <MotionPress
+              key={mood.id}
+              variant="subtle"
+              className="rh-radio-mood-card glass--liquid"
+              onClick={handleMood}
+            >
+              <span className="rh-radio-mood-card__icon" aria-hidden>
+                <MorphIcon
+                  name={MOOD_ICONS[idx]}
+                  filled
+                  size={22}
+                />
+              </span>
+              <span className="rh-radio-mood-card__label">
+                {mood.label}
+              </span>
+              <span className="rh-radio-mood-card__hint">
+                {mood.hint}
+              </span>
+            </MotionPress>
+          ))}
+        </div>
+      </div>
+
       {historyTracks.length > 0 && (
         <>
-          <div className="home-section-header" style={{ paddingTop: 12 }}>
-            <span className="home-section-header__title">
-              История прослушивания
+          <div className="rh-home-section-head" style={{ paddingTop: 12 }}>
+            <span className="rh-home-section-head__title">
+              {t('redesign.home.radioHistory')}
             </span>
           </div>
           <TrackList tracks={historyTracks} emptyMessage="" />
@@ -169,16 +281,8 @@ export function RadioView() {
       )}
 
       {!radioMode && !currentTrack && (
-        <p
-          style={{
-            padding: '24px 16px',
-            textAlign: 'center',
-            color: 'var(--text-secondary)',
-            fontSize: 14,
-          }}
-        >
-          Выберите трек на главной или в поиске, а затем запустите
-          радио
+        <p className="rh-radio-hint-paragraph">
+          {t('redesign.home.radioPickTrack')}
         </p>
       )}
     </section>
