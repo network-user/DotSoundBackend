@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
+import { api } from '@/lib/api'
+import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
 import {
   usePlayerActions,
   usePlayerMeta,
@@ -35,6 +37,24 @@ export function RadioView() {
     ].slice(-30)
     setHistoryTracks([...historyRef.current].reverse())
   }, [currentTrack, radioMode])
+
+  useEffect(() => {
+    if (!radioMode || !currentTrack) return
+    let cancelled = false
+    api
+      .getRadio(currentTrack.id, 14)
+      .then((res) => {
+        if (cancelled || !res.tracks.length) return
+        void getPrefetchManager().enqueue(res.tracks, {
+          context: 'radio',
+          replaceContext: true,
+        })
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [radioMode, currentTrack?.id])
 
   const handleStartRadio = async () => {
     if (!currentTrack) return

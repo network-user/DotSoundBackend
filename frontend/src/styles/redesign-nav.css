@@ -5,3 +5,127 @@
  *
  * Префиксы классов: .rb-nav-, .rb-auth-, .rb-ob-, .rb-ban-, .rb-install-.
  */
+
+.rb-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-nav, 40);
+  display: flex;
+  align-items: stretch;
+  justify-content: space-around;
+  gap: 2px;
+  padding: calc(6px + var(--safe-bottom, 0px)) 8px
+    calc(8px + var(--safe-bottom, 0px));
+  border-top: 1px solid var(--glass-edge, rgba(255, 255, 255, 0.08));
+  background: rgba(10, 10, 10, 0.72);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+}
+
+.rb-nav__btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 4px 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--r-md, 12px);
+  position: relative;
+}
+
+.rb-nav__btn.is-active {
+  color: var(--text);
+}
+
+.rb-nav__icon-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+}
+
+.rb-nav__bubble {
+  position: absolute;
+  inset: 2px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.1);
+  z-index: 0;
+}
+
+.rb-nav__bubble--static {
+  opacity: 1;
+}
+
+.rb-nav__btn .morph-icon-wrap,
+.rb-nav__btn svg {
+  position: relative;
+  z-index: 1;
+}
+
+.rb-nav__label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: var(--ls-snug);
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.rb-auth-screen {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  overflow: hidden;
+}
+
+.rb-auth__stage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.rb-auth__stage .kenburns-cover,
+.rb-auth__stage .kenburns-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.35;
+}
+
+.rb-auth__card {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 400px;
+}
+
+.rb-ban {
+  padding: var(--space-6);
+}
+
+.rb-install {
+  border-radius: var(--r-lg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rb-nav__bubble {
+    animation: none;
+  }
+}

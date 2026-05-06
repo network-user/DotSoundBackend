@@ -10,6 +10,7 @@ import {
   getUserId,
   setBackButton,
 } from '@/lib/telegram'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type {
   ChatListItem,
   Playlist,
@@ -54,6 +55,11 @@ export function PlaylistsView({
     selected &&
     uid &&
     (selected.owner_id === uid || isAdmin),
+  )
+
+  usePrefetchTracks(
+    selected && selected.tracks.length > 0 ? selected.tracks : null,
+    'playlist',
   )
 
   const loadPlaylists = () => {

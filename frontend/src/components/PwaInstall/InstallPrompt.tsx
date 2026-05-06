@@ -2,6 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { useToast } from '@/components/ui/Toast'
+import { MotionPress } from '@/components/ui/MotionPress'
+import {
+  m,
+  VARIANTS_FADE_UP,
+} from '@/lib/motion'
 import {
   hapticNotification,
   isTelegram,
@@ -245,10 +250,13 @@ export function InstallPrompt() {
     panelMode === 'bip' && promptRef.current !== null
 
   return (
-    <div
-      className="install-prompt"
+    <m.div
+      className="install-prompt rb-install glass--medium"
       role="dialog"
       aria-label={t('pwa.installLabel')}
+      initial="hidden"
+      animate="visible"
+      variants={VARIANTS_FADE_UP}
     >
       <div className="install-prompt__icon">
         <Icon name="install" size={22} />
@@ -263,32 +271,35 @@ export function InstallPrompt() {
       </div>
       <div className="install-prompt__actions">
         {usePrimaryForInstall ? (
-          <button
+          <MotionPress
+            variant="primary"
             className="install-prompt__btn primary"
+            haptic="medium"
             onClick={install}
-            type="button"
           >
             {t('pwa.installCta')}
-          </button>
+          </MotionPress>
         ) : (
-          <button
+          <MotionPress
+            variant="primary"
             className="install-prompt__btn primary"
+            haptic="light"
             onClick={() => dismiss(true)}
-            type="button"
           >
             {t('pwa.ok')}
-          </button>
+          </MotionPress>
         )}
-        <button
+        <MotionPress
+          variant="ghost"
           className="install-prompt__btn"
+          ariaLabel={t('pwa.closeAria')}
+          haptic="light"
           onClick={() => dismiss(true)}
-          aria-label={t('pwa.closeAria')}
-          type="button"
         >
           <Icon name="x" size={16} />
-        </button>
+        </MotionPress>
       </div>
-    </div>
+    </m.div>
   )
 }
 
