@@ -1,5 +1,97 @@
 /*
- * redesign-2026 / stage-I (Upload)
- * Owned by STAGE-I (см. docs/redesign-2026/STAGE-I-upload.md).
- * Не редактировать из других этапов.
+ * redesign-2026 / Stage-I upload (.ru-up-*)
  */
+
+.ru-up-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.ru-up-header {
+  padding: 0 var(--space-1);
+}
+
+.ru-up-header h2 {
+  margin: 0;
+  font-size: var(--fs-lt);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+}
+
+.ru-up-subtitle {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-14);
+  color: var(--text-secondary);
+}
+
+.ru-up-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0 var(--space-1);
+}
+
+.ru-up-tab {
+  border-radius: var(--r-pill);
+}
+
+.ru-up-panel {
+  position: relative;
+  min-height: 120px;
+}
+
+.ru-up-wizard-head {
+  margin-bottom: var(--space-4);
+}
+
+.ru-up-wizard-head h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-18);
+  font-weight: 700;
+}
+
+.ru-up-wizard-head p {
+  margin: 0;
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+}
+
+.ru-up-wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+  flex-wrap: wrap;
+}
+
+.ru-up-audio-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--r-lg, 14px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  margin-bottom: var(--space-4);
+}
+
+.ru-up-audio-summary__meta {
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ru-up-preview-stage {
+  position: relative;
+  border-radius: var(--r-xl, 20px);
+  overflow: hidden;
+  min-height: 140px;
+  margin-bottom: var(--space-5);
+  border: 1px solid var(--border);
+}
