@@ -159,10 +159,52 @@ const PATHS: Record<string, string> = {
     'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 7a4 4 0 100 8 4 4 0 000-8z M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75',
   'users-listeners':
     'M16 20v-1a4 4 0 00-4-4H6a4 4 0 00-4 4v1 M9 11a4 4 0 100-8 4 4 0 000 8z M22 20v-1a4 4 0 00-3-3.87 M15 3.13a4 4 0 010 7.75',
-  clock:
-    'M12 22a10 10 0 100-20 10 10 0 000 20z M12 6v6l4 2',
-  moon:
-    'M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z',
+  bookmark: 'M6 3h12v18l-6-4-6 4V3z',
+  'bookmark-fill': 'M6 3h12v18l-6-4-6 4V3z',
+  'play-fill': 'M7 4.5v15l13-7.5L7 4.5z',
+  'pause-fill': 'M7 4h4v16H7zm6 0h4v16h-4z',
+  'heart-fill':
+    'M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 000-7.78z',
+  'star-fill':
+    'M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z',
+  'flame-fill':
+    'M12 2c1 4 5 5 5 10a5 5 0 11-10 0c0-2 1-3 1-5 0-3-2-3-2-5 2 0 3 1 3 1 0-1 1-2 3-1z',
+  'home-fill':
+    'M3 11l9-8 9 8v9a2 2 0 01-2 2h-3v-7H8v7H5a2 2 0 01-2-2v-9z',
+  'search-fill':
+    'M21 21l-5.4-5.4M16 10.5A5.5 5.5 0 115 10.5a5.5 5.5 0 0111 0z',
+  'library-fill':
+    'M4 4h3v16H4zM10 4h3v16h-3zM16 5l3-1 3 17-3 1-3-17z',
+  'chats-fill':
+    'M21 11.5A8.5 8.5 0 0112.5 20a8.4 8.4 0 01-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 01-.9-3.8A8.5 8.5 0 0121 11.5z',
+  'profile-fill':
+    'M12 12a4 4 0 100-8 4 4 0 000 8zm-7 9a7 7 0 0114 0H5z',
+  'radio-fill':
+    'M12 12a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM8 12a4 4 0 018 0M5 12a7 7 0 0114 0M3 12a9 9 0 0118 0',
+  'users-following-fill':
+    'M9 11a4 4 0 100-8 4 4 0 000 8zM1 21a8 8 0 0116 0H1zM18 7l2 2 4-4',
+  'chevron-left': 'M15 18l-6-6 6-6',
+  'chevron-right': 'M9 6l6 6-6 6',
+  dots:
+    'M5 12a1 1 0 110-2 1 1 0 010 2zm7 0a1 1 0 110-2 1 1 0 010 2zm7 0a1 1 0 110-2 1 1 0 010 2z',
+  grip:
+    'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
+  'add-to-queue':
+    'M3 6h13M3 12h7 M3 18h7 M16 14v8 M12 18h8',
+  headphones:
+    'M3 14a9 9 0 0118 0v5a2 2 0 01-2 2h-2v-7h4 M3 14v5a2 2 0 002 2h2v-7H3',
+  wave:
+    'M2 12h2 M6 8v8 M10 4v16 M14 8v8 M18 6v12 M22 12h-2',
+  disc:
+    'M12 22a10 10 0 100-20 10 10 0 000 20z M12 14a2 2 0 100-4 2 2 0 000 4z',
+  'chart-bar':
+    'M4 20V10 M10 20V4 M16 20v-8 M22 20H2',
+  'gear-alt':
+    'M12 8a4 4 0 100 8 4 4 0 000-8z M12 2v3 M12 19v3 M22 12h-3 M5 12H2 M18.36 5.64l-2.12 2.12 M7.76 16.24l-2.12 2.12 M18.36 18.36l-2.12-2.12 M7.76 7.76L5.64 5.64',
+  'share-arrow':
+    'M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8 M16 6l-4-4-4 4 M12 2v14',
+  'airplay-like':
+    'M5 17h-1a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-1 M8 22l4-5 4 5z',
 }
 
 const FILLED_ICONS = new Set([
@@ -170,6 +212,19 @@ const FILLED_ICONS = new Set([
   'play',
   'pause',
   'more-vertical',
+  'play-fill',
+  'pause-fill',
+  'heart-fill',
+  'star-fill',
+  'flame-fill',
+  'home-fill',
+  'search-fill',
+  'library-fill',
+  'chats-fill',
+  'profile-fill',
+  'radio-fill',
+  'users-following-fill',
+  'bookmark-fill',
 ])
 
 export function Icon({

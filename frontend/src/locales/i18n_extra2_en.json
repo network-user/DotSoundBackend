@@ -1,4 +1,16 @@
 {
+  "redesign": {
+    "player": {},
+    "nav": {},
+    "home": {},
+    "library": {},
+    "tracks": {},
+    "artist": {},
+    "recap": {},
+    "upload": {},
+    "admin": {},
+    "achievements": {}
+  },
   "trackSheet": {
     "shareError": "Could not get the link",
     "removedFromDownloads": "Removed from downloads",

@@ -92,6 +92,7 @@ import { Equalizer } from '@/components/Equalizer/Equalizer'
 import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics'
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
 import { OfflineBanner } from '@/components/ui/OfflineBanner'
+import { DynamicIslandHost } from '@/components/ui/DynamicIsland'
 import { InstallPrompt } from '@/components/PwaInstall/InstallPrompt'
 import { QueueSheet } from '@/components/QueueSheet/QueueSheet'
 import { BannedScreen } from '@/components/BannedScreen/BannedScreen'
@@ -123,6 +124,8 @@ const WeeklyTopView = lazy(() => import('@/views/WeeklyTopView').then(m => ({ de
 const RadioView = lazy(() => import('@/views/RadioView').then(m => ({ default: m.RadioView })))
 const GenreMixView = lazy(() => import('@/views/GenreMixView').then(m => ({ default: m.GenreMixView })))
 const ArtistStatsView = lazy(() => import('@/views/ArtistStatsView').then(m => ({ default: m.ArtistStatsView })))
+const NowPlayingView = lazy(() => import('@/views/NowPlayingView').then(m => ({ default: m.NowPlayingView })))
+const RecapView = lazy(() => import('@/views/RecapView').then(m => ({ default: m.RecapView })))
 const AdminApp = lazy(() =>
   import('@/admin/AdminApp').then((m) => ({
     default: m.AdminApp,
@@ -501,6 +504,7 @@ export function App() {
 
   return (
     <div id="app">
+      <DynamicIslandHost />
       <OfflineBanner />
       {!needsOnboarding && !needsAuth && <ImportActivityBanner />}
       <main id="main">
@@ -582,6 +586,8 @@ export function App() {
           <Route path="/radio" element={<RadioView />} />
           <Route path="/genre-mix/:genre" element={<GenreMixView />} />
           <Route path="/artist/:id/stats" element={<ArtistStatsView />} />
+          <Route path="/now-playing" element={<NowPlayingView />} />
+          <Route path="/recap" element={<RecapView />} />
           <Route path="/admin/*" element={<AdminApp />} />
           <Route path="*" element={<NotFoundView />} />
         </AnimatedRoutes>

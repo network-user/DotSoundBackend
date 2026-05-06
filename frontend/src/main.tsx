@@ -11,11 +11,21 @@ import { api } from '@/lib/api'
 import { installGlassPerformanceClass } from '@/lib/glassPerformance'
 import { installViewportListener } from '@/lib/telegram'
 import { installOnlineFlush } from '@/lib/pendingEvents'
+import { LazyMotion, domAnimation } from '@/lib/motion'
 import { App } from './App'
 import './styles/tokens.css'
 import './styles/global.css'
 import './styles/animations.css'
 import './styles/components.css'
+import './styles/redesign-shared.css'
+import './styles/redesign-player.css'
+import './styles/redesign-nav.css'
+import './styles/redesign-home.css'
+import './styles/redesign-library.css'
+import './styles/redesign-tracks.css'
+import './styles/redesign-artist.css'
+import './styles/redesign-recap.css'
+import './styles/redesign-upload.css'
 
 installGlassPerformanceClass()
 installViewportListener()
@@ -39,18 +49,20 @@ if (
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <BrowserRouter basename="/mini_app">
-      <ToastProvider>
-        <SoundProvider>
-          <AdminProvider>
-            <PlayerProvider>
-              <LikesProvider>
-                <App />
-              </LikesProvider>
-            </PlayerProvider>
-          </AdminProvider>
-        </SoundProvider>
-      </ToastProvider>
-    </BrowserRouter>
+    <LazyMotion features={domAnimation}>
+      <BrowserRouter basename="/mini_app">
+        <ToastProvider>
+          <SoundProvider>
+            <AdminProvider>
+              <PlayerProvider>
+                <LikesProvider>
+                  <App />
+                </LikesProvider>
+              </PlayerProvider>
+            </AdminProvider>
+          </SoundProvider>
+        </ToastProvider>
+      </BrowserRouter>
+    </LazyMotion>
   </StrictMode>,
 )
