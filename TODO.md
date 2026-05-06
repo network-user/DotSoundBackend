@@ -14,6 +14,38 @@
 
 ---
 
+## Smart-buffering / pre-fetch (2026-05-06)
+
+- [x] **Smart predictive audio buffering (Mini App)** — единый
+  PrefetchManager на фронте, IndexedDB warm-index + Service-Worker
+  Cache API (через `vite-plugin-pwa` runtimeCaching) для HLS-сегментов
+  и progressive-audio.
+  - PrivateCore: `services/prefetch_policy.py` — константы и decision
+    функции (`decide_lookahead`, `decide_max_storage_bytes`,
+    `decide_warm_segments_per_track`, `should_prefetch_in_context`,
+    `build_policy_snapshot`) + `NetworkProfile`/`PrefetchPolicySnapshot`
+    + 24 unit-теста.
+  - Backend: `GET /api/v1/prefetch/policy` (stateless) принимает
+    client-hints (`effective_type`, `save_data`, `downlink`,
+    `quota_bytes`) и отдаёт snapshot из PrivateCore. Pydantic-схема
+    `app/schemas/prefetch.py`, тесты `tests/app/api/v1/test_prefetch.py`.
+  - Frontend: `lib/prefetch/PrefetchManager.ts` (priority queue,
+    semaphore, network listener, IndexedDB LRU), `store/PrefetchContext.tsx`
+    + `usePrefetch`/`usePrefetchTracks`, тоггл «Умная буферизация» в
+    `SettingsSheet`. Интеграция в `PlayerContext` (доп. слой к
+    in-memory gapless handoff).
+  - Триггеры prefetch: `HomeView`, `ArtistView`, `GenreMixView`,
+    `WeeklyTopView`, `WeeklyMixView`, `DailyMixView`, `UserChoiceView`,
+    `LikedView`, `SearchView` (top-3), `TrackCardSheet` (similar),
+    `ChatBubble` (shared track), deep-link `/track/:id`,
+    `continue_on_app_start` (последний трек history).
+  - SW caching: HLS manifests SWR, HLS-segments CacheFirst (240
+    entries, range-requests), progressive audio CacheFirst
+    (`purgeOnQuotaError`).
+  - Third-party stream треки (`access_mode == 'third_party_stream'`,
+    SoundCloud/YouTube/Bandcamp) не кешируются локально — только
+    metadata + URL warm-up через существующий `audio_cache_prefetch`.
+
 ## Mini App / .sound UI (2026-05-04)
 
 - [x] **Admin + lyrics pipeline: жан�? и нас�?�?оение по �?екс�?�?** �??
