@@ -161,6 +161,11 @@
       "title": "Dashboard",
       "loading": "Loading dashboard…",
       "loadFailed": "Failed",
+      "onlineHistory": {
+        "title": "Online History",
+        "subtitle": "Interactive timeline of active connections",
+        "chartTitle": "Online (WebSocket) over time"
+      },
       "kpi": {
         "onlineNow": "Online now",
         "activeAccounts": "{{count}} active accounts",
@@ -180,6 +185,10 @@
         "warning": "warning {{count}}",
         "error": "error {{count}}",
         "unknown": "unknown {{count}}"
+      },
+      "charts": {
+        "rps": "Traffic (RPS)",
+        "latency": "Latency p95"
       }
     },
     "users": {

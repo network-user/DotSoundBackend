@@ -1,4 +1,5 @@
 ﻿import {
+  type KeyboardEvent,
   useCallback,
   useEffect,
   type RefObject,
@@ -103,12 +104,22 @@ function FeaturedCard({
   onPlay,
 }: FeaturedCardProps) {
   const src = coverUrl(heroImageKey || track.cover_key)
+  const handleMainKeyDown = (
+    e: KeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onPlay(track)
+    }
+  }
   return (
     <div className="home-featured-card">
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         className="home-featured__main"
         onClick={() => onPlay(track)}
+        onKeyDown={handleMainKeyDown}
       >
         <div className="home-featured__copy">
           <span className="home-featured__eyebrow">{label}</span>
@@ -144,7 +155,7 @@ function FeaturedCard({
             <Icon name="music" size={36} />
           )}
         </div>
-      </button>
+      </div>
     </div>
   )
 }
@@ -239,6 +250,7 @@ function CarouselArrows({
 }) {
   const [canLeft, setCanLeft] = useState(false)
   const [canRight, setCanRight] = useState(false)
+  const rafRef = useRef<number | null>(null)
 
   useEffect(() => {
     const el = containerRef.current
@@ -258,11 +270,21 @@ function CarouselArrows({
       setCanRight(el.scrollLeft < maxScroll - 2)
     }
 
+    const onScroll = () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+      rafRef.current = requestAnimationFrame(update)
+    }
+
     update()
-    el.addEventListener('scroll', update, { passive: true })
+    el.addEventListener('scroll', onScroll, { passive: true })
     window.addEventListener('resize', update)
     return () => {
-      el.removeEventListener('scroll', update)
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+      el.removeEventListener('scroll', onScroll)
       window.removeEventListener('resize', update)
     }
   }, [containerRef])
@@ -367,11 +389,22 @@ function GenreMixCard({ mix, onPlay, onOpen }: GenreCardProps) {
     .map((t) => coverUrl(t.cover_key))
     .filter(Boolean) as string[]
 
+  const handleCardKeyDown = (
+    e: KeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onOpen()
+    }
+  }
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       className="home-genre-mix-card"
       onClick={onOpen}
+      onKeyDown={handleCardKeyDown}
       title={mix.title}
     >
       <div className="home-genre-mix-card__mosaic">
@@ -406,7 +439,7 @@ function GenreMixCard({ mix, onPlay, onOpen }: GenreCardProps) {
       <span className="home-genre-mix-card__count">
         {mix.tracks.length} треков
       </span>
-    </button>
+    </div>
   )
 }
 

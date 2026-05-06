@@ -161,6 +161,11 @@
       "title": "Дашборд",
       "loading": "Загрузка дашборда…",
       "loadFailed": "Не удалось загрузить",
+      "onlineHistory": {
+        "title": "История онлайна",
+        "subtitle": "Интерактивный график подключений по времени",
+        "chartTitle": "Онлайн (WebSocket) по времени"
+      },
       "kpi": {
         "onlineNow": "Онлайн сейчас",
         "activeAccounts": "{{count}} активных аккаунтов",
@@ -180,6 +185,10 @@
         "warning": "предупреждений {{count}}",
         "error": "ошибок {{count}}",
         "unknown": "неизвестно {{count}}"
+      },
+      "charts": {
+        "rps": "Нагрузка (RPS)",
+        "latency": "Задержка p95"
       }
     },
     "users": {
