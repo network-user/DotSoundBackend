@@ -7,6 +7,9 @@ import {
   usePlayerState,
 } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
+import { SwipeRow } from '@/components/ui/SwipeRow'
+import { BeatPulse } from '@/components/ui/BeatPulse'
+import { MorphIcon } from '@/components/ui/MorphIcon'
 
 export function QueueSheet() {
   const {
@@ -129,7 +132,7 @@ export function QueueSheet() {
               {queue.map((t, idx) => (
                 <div
                   key={`q-${t.id}-${idx}`}
-                  className={`queue-row-wrap${dragIdx === idx ? ' dragging' : ''}`}
+                  className={`queue-row-wrap rp-queue-row${dragIdx === idx ? ' dragging' : ''}`}
                   draggable
                   onDragStart={() =>
                     onDragStart(idx)
@@ -140,14 +143,26 @@ export function QueueSheet() {
                   onDragEnd={onDragEnd}
                   onDrop={onDragEnd}
                 >
-                  <QueueRow
-                    t={t}
-                    onClick={() => onClickItem(t)}
-                    onRemove={() =>
-                      removeFromQueue(idx)
-                    }
-                    grabbable
-                  />
+                  <SwipeRow
+                    rightAction={{
+                      icon: 'trash',
+                      label: 'Удалить',
+                      destructive: true,
+                      onTrigger: () =>
+                        removeFromQueue(idx),
+                    }}
+                  >
+                    <QueueRow
+                      t={t}
+                      onClick={() =>
+                        onClickItem(t)
+                      }
+                      onRemove={() =>
+                        removeFromQueue(idx)
+                      }
+                      grabbable
+                    />
+                  </SwipeRow>
                 </div>
               ))}
             </section>
@@ -219,14 +234,18 @@ function QueueRow({
             {t.artist || '—'}
           </span>
         </span>
-        {primary && playing && (
+        {primary && (
           <span
-            className="queue-eq-bars"
+            className="queue-eq-bars rp-queue-eq"
             aria-hidden="true"
           >
-            <span />
-            <span />
-            <span />
+            <BeatPulse bpm={120} active={!!playing}>
+              <MorphIcon
+                name="play"
+                filled={!!playing}
+                size={14}
+              />
+            </BeatPulse>
           </span>
         )}
       </button>
