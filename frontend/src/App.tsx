@@ -75,6 +75,10 @@ import {
   Navigate,
 } from 'react-router-dom'
 import { api } from '@/lib/api'
+import {
+  markAuthSuccess,
+  trackActivationEvent,
+} from '@/lib/activation'
 import { tg, getInitData } from '@/lib/telegram'
 import { AuthScreen } from '@/components/Auth/AuthScreen'
 import { Onboarding } from '@/components/Onboarding/Onboarding'
@@ -117,6 +121,7 @@ const WeeklyMixView = lazy(() => import('@/views/WeeklyMixView').then(m => ({ de
 const UserChoiceView = lazy(() => import('@/views/UserChoiceView').then(m => ({ default: m.UserChoiceView })))
 const RadioView = lazy(() => import('@/views/RadioView').then(m => ({ default: m.RadioView })))
 const GenreMixView = lazy(() => import('@/views/GenreMixView').then(m => ({ default: m.GenreMixView })))
+const ArtistStatsView = lazy(() => import('@/views/ArtistStatsView').then(m => ({ default: m.ArtistStatsView })))
 const AdminApp = lazy(() =>
   import('@/admin/AdminApp').then((m) => ({
     default: m.AdminApp,
@@ -268,6 +273,11 @@ export function App() {
             !res.requires_2fa
           ) {
             connectWS(res.access_token)
+            markAuthSuccess()
+            trackActivationEvent('auth_success', {
+              once: true,
+              meta: { via: 'magic_link' },
+            })
             api.setOnUnauthorized(() => {
               disconnectWS()
               setNeedsAuth(true)
@@ -343,6 +353,15 @@ export function App() {
         setNeedsAuth(true)
       } else {
         await api.syncSessionUserFlags()
+        markAuthSuccess()
+        trackActivationEvent('auth_success', {
+          once: true,
+          meta: {
+            via: hasTelegramContext
+              ? 'telegram_initdata'
+              : 'restored_session',
+          },
+        })
         try {
           window.dispatchEvent(
             new Event('app-auth-ready'),
@@ -455,6 +474,11 @@ export function App() {
         onAuth={() => {
           setAuthError(null)
           setNeedsAuth(false)
+          markAuthSuccess()
+          trackActivationEvent('auth_success', {
+            once: true,
+            meta: { via: 'auth_screen' },
+          })
           reloadLikes()
         }}
         error={authError}
@@ -552,6 +576,7 @@ export function App() {
           />
           <Route path="/radio" element={<RadioView />} />
           <Route path="/genre-mix/:genre" element={<GenreMixView />} />
+          <Route path="/artist/:id/stats" element={<ArtistStatsView />} />
           <Route path="/admin/*" element={<AdminApp />} />
           <Route path="*" element={<NotFoundView />} />
         </AnimatedRoutes>

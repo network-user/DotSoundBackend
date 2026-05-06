@@ -4,7 +4,9 @@
     "tagline": "Music without ads.",
     "subtitle": "Listen. Share. Discover.",
     "loginTelegram": "Sign in with Telegram",
-    "loginEmail": "Sign in with email"
+    "loginEmail": "Sign in with email",
+    "tgMicrocopy": "One tap — no password or email confirmation",
+    "afterLogin": "We will pick playlists for you right after sign-in"
   },
   "nav": {
     "home": "Home",
@@ -988,6 +990,24 @@
     "tooltip": {
       "month": "Month",
       "value": "Value"
+    },
+    "kpi": {
+      "listenersThisMonth": "Listeners this month",
+      "playsThisMonth": "Plays this month",
+      "likesThisMonth": "Likes this month",
+      "followersThisMonth": "Followers this month",
+      "noPrev": "no prior month"
+    },
+    "aria": {
+      "kpiRegion": "Key metrics for the latest month",
+      "listenersCard": "Card: unique listeners this month",
+      "playsCard": "Card: plays this month",
+      "likesCard": "Card: likes this month",
+      "followersCard": "Card: followers this month",
+      "chartListeners": "Monthly unique listeners chart",
+      "chartPlays": "Monthly plays chart",
+      "chartLikes": "Monthly likes chart",
+      "chartFollowers": "Monthly followers chart"
     }
   }
 }
