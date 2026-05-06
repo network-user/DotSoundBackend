@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { adminApi } from '../lib/adminApi'
 import { KpiCard } from '../components/widgets/KpiCard'
@@ -52,7 +52,7 @@ export function DashboardRoute() {
   const [minutes, setMinutes] = useState(60)
   const [live, setLive] = useState(true)
   const [statsPeriod, setStatsPeriod] = useState<
-    'today' | '7d' | '30d'
+    'today' | '7d' | '30d' | 'all'
   >('today')
   const [statsMetric, setStatsMetric] = useState<
     | 'all'
@@ -63,6 +63,53 @@ export function DashboardRoute() {
     | 'completed_listens'
     | 'skips'
   >('all')
+  const metricOptions: Array<{
+    value:
+      | 'all'
+      | 'users_registered'
+      | 'listens_total'
+      | 'unique_listeners'
+      | 'tracks_uploaded'
+      | 'completed_listens'
+      | 'skips'
+    label: string
+  }> = [
+    { value: 'all', label: t('admin.dashboard.stats.filterAll') },
+    {
+      value: 'users_registered',
+      label: t('admin.dashboard.stats.usersRegistered'),
+    },
+    {
+      value: 'listens_total',
+      label: t('admin.dashboard.stats.listensTotal'),
+    },
+    {
+      value: 'unique_listeners',
+      label: t('admin.dashboard.stats.uniqueListeners'),
+    },
+    {
+      value: 'tracks_uploaded',
+      label: t('admin.dashboard.stats.tracksUploaded'),
+    },
+    {
+      value: 'completed_listens',
+      label: t('admin.dashboard.stats.completed'),
+    },
+    { value: 'skips', label: t('admin.dashboard.stats.skips') },
+  ]
+  const metricIndex = Math.max(
+    0,
+    metricOptions.findIndex((opt) => opt.value === statsMetric),
+  )
+  const [topSortBy, setTopSortBy] = useState<
+    'plays' | 'unique_listeners'
+  >('plays')
+  const [topSortDir, setTopSortDir] = useState<
+    'desc' | 'asc'
+  >('desc')
+  const [onlineFallback, setOnlineFallback] = useState<
+    ChartPoint[]
+  >([])
 
   const { data, error, isLoading } = useQuery({
     queryKey: ['admin', 'dashboard', 'overview'],
@@ -111,6 +158,16 @@ export function DashboardRoute() {
     refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
+  useEffect(() => {
+    if (!data?.generated_at) return
+    setOnlineFallback((prev) => {
+      const next = [
+        ...prev,
+        { ts: data.generated_at, value: data.users.online_now },
+      ]
+      return next.slice(-120)
+    })
+  }, [data?.generated_at, data?.users.online_now])
 
   if (isLoading) {
     return <div>{t('admin.dashboard.loading')}</div>
@@ -136,9 +193,11 @@ export function DashboardRoute() {
   const onlinePoints = flattenRange(onlineHistory.data)
   const rpsPoints = flattenRange(rpsHistory.data)
   const latencyPoints = flattenRange(latencyHistory.data)
+  const displayOnlinePoints =
+    onlinePoints.length > 0 ? onlinePoints : onlineFallback
   const onlineTrend = useMemo(
-    () => calcTrend(onlinePoints),
-    [onlinePoints],
+    () => calcTrend(displayOnlinePoints),
+    [displayOnlinePoints],
   )
   const trendClass =
     onlineTrend > 2
@@ -198,16 +257,16 @@ export function DashboardRoute() {
         </div>
         {onlineHistory.isLoading ? (
           <div className="admin-skeleton admin-skeleton--card" />
-        ) : onlinePoints.length > 0 ? (
+        ) : displayOnlinePoints.length > 0 ? (
           <LineChart
-            data={onlinePoints}
+            data={displayOnlinePoints}
             ariaLabel={t(
               'admin.dashboard.onlineHistory.chartTitle',
             )}
           />
         ) : (
           <div className="admin-log-empty">
-            No online data for selected range
+            No online data yet
           </div>
         )}
       </section>
@@ -221,7 +280,7 @@ export function DashboardRoute() {
             </p>
           </div>
           <div className="admin-range-switch" role="tablist">
-            {(['today', '7d', '30d'] as const).map((value) => (
+            {(['today', '7d', '30d', 'all'] as const).map((value) => (
               <button
                 key={value}
                 type="button"
@@ -239,57 +298,41 @@ export function DashboardRoute() {
           <div className="admin-skeleton admin-skeleton--card" />
         ) : (
           <>
-            <div className="admin-range-switch" role="tablist">
-              {[
-                ['all', t('admin.dashboard.stats.filterAll')],
-                [
-                  'users_registered',
-                  t('admin.dashboard.stats.usersRegistered'),
-                ],
-                [
-                  'listens_total',
-                  t('admin.dashboard.stats.listensTotal'),
-                ],
-                [
-                  'unique_listeners',
-                  t('admin.dashboard.stats.uniqueListeners'),
-                ],
-                [
-                  'tracks_uploaded',
-                  t('admin.dashboard.stats.tracksUploaded'),
-                ],
-                [
-                  'completed_listens',
-                  t('admin.dashboard.stats.completed'),
-                ],
-                ['skips', t('admin.dashboard.stats.skips')],
-              ].map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  className={`admin-range-switch__btn${
-                    statsMetric === value ? ' is-active' : ''
-                  }`}
-                  onClick={() =>
-                    setStatsMetric(
-                      value as
-                        | 'all'
-                        | 'users_registered'
-                        | 'listens_total'
-                        | 'unique_listeners'
-                        | 'tracks_uploaded'
-                        | 'completed_listens'
-                        | 'skips',
-                    )
-                  }
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="admin-metric-slider">
+              <div className="admin-metric-slider__label">
+                {metricOptions[metricIndex]?.label}
+              </div>
+              <input
+                className="admin-metric-slider__input"
+                type="range"
+                min={0}
+                max={metricOptions.length - 1}
+                step={1}
+                value={metricIndex}
+                onChange={(e) => {
+                  const idx = Number(e.target.value)
+                  const option = metricOptions[idx]
+                  if (option) setStatsMetric(option.value)
+                }}
+                aria-label="Select statistics metric"
+              />
+              <div className="admin-metric-slider__ticks">
+                {metricOptions.map((opt, idx) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`admin-metric-slider__tick${
+                      idx === metricIndex ? ' is-active' : ''
+                    }`}
+                    onClick={() => setStatsMetric(opt.value)}
+                    aria-label={opt.label}
+                  />
+                ))}
+              </div>
             </div>
-            <section className="kpi-grid">
-              {(statsMetric === 'all' ||
-                statsMetric === 'users_registered') && (
+            {statsMetric === 'all' && (
+              <section className="kpi-grid">
+              {(statsMetric === 'all' || statsMetric === 'users_registered') && (
                 <KpiCard
                   label={t('admin.dashboard.stats.usersRegistered')}
                   value={stats.data.users_registered}
@@ -331,16 +374,112 @@ export function DashboardRoute() {
                   accent={stats.data.skips > 0 ? 'warn' : 'default'}
                 />
               )}
-            </section>
+              </section>
+            )}
+            {statsMetric !== 'all' && (
+              <div
+                key={statsMetric}
+                className="admin-metric-focus"
+              >
+                {statsMetric === 'users_registered' && (
+                  <KpiCard
+                    label={t('admin.dashboard.stats.usersRegistered')}
+                    value={stats.data.users_registered}
+                  />
+                )}
+                {statsMetric === 'listens_total' && (
+                  <KpiCard
+                    label={t('admin.dashboard.stats.listensTotal')}
+                    value={stats.data.listens_total}
+                  />
+                )}
+                {statsMetric === 'unique_listeners' && (
+                  <KpiCard
+                    label={t('admin.dashboard.stats.uniqueListeners')}
+                    value={stats.data.unique_listeners}
+                  />
+                )}
+                {statsMetric === 'tracks_uploaded' && (
+                  <KpiCard
+                    label={t('admin.dashboard.stats.tracksUploaded')}
+                    value={stats.data.tracks_uploaded}
+                  />
+                )}
+                {statsMetric === 'completed_listens' && (
+                  <KpiCard
+                    label={t('admin.dashboard.stats.completed')}
+                    value={stats.data.completed_listens}
+                  />
+                )}
+                {statsMetric === 'skips' && (
+                  <KpiCard
+                    label={t('admin.dashboard.stats.skips')}
+                    value={stats.data.skips}
+                    accent={stats.data.skips > 0 ? 'warn' : 'default'}
+                  />
+                )}
+              </div>
+            )}
             <div className="admin-card admin-dashboard__toplist">
-              <h3>{t('admin.dashboard.stats.topTracks')}</h3>
+              <div className="admin-dashboard__toplist-head">
+                <h3>{t('admin.dashboard.stats.topTracks')}</h3>
+                <div className="admin-range-switch">
+                  <button
+                    type="button"
+                    className={`admin-range-switch__btn${
+                      topSortBy === 'plays' ? ' is-active' : ''
+                    }`}
+                    onClick={() => setTopSortBy('plays')}
+                  >
+                    Plays
+                  </button>
+                  <button
+                    type="button"
+                    className={`admin-range-switch__btn${
+                      topSortBy === 'unique_listeners'
+                        ? ' is-active'
+                        : ''
+                    }`}
+                    onClick={() =>
+                      setTopSortBy('unique_listeners')
+                    }
+                  >
+                    Listeners
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-range-switch__btn"
+                    onClick={() =>
+                      setTopSortDir((v) =>
+                        v === 'desc' ? 'asc' : 'desc',
+                      )
+                    }
+                  >
+                    {topSortDir === 'desc' ? 'Desc' : 'Asc'}
+                  </button>
+                </div>
+              </div>
               {stats.data.top_tracks.length === 0 ? (
                 <div className="admin-log-empty">
                   {t('admin.dashboard.stats.noData')}
                 </div>
               ) : (
                 <div className="admin-dashboard__toplist-rows">
-                  {stats.data.top_tracks.map((item) => (
+                  {[...stats.data.top_tracks]
+                    .sort((a, b) => {
+                      const left =
+                        topSortBy === 'plays'
+                          ? a.plays
+                          : a.unique_listeners
+                      const right =
+                        topSortBy === 'plays'
+                          ? b.plays
+                          : b.unique_listeners
+                      return topSortDir === 'desc'
+                        ? right - left
+                        : left - right
+                    })
+                    .map((item) => (
                     <div
                       key={item.track_id}
                       className="admin-dashboard__toplist-row"

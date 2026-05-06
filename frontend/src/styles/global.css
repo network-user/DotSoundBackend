@@ -1104,9 +1104,9 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   border-radius: 0;
   outline: none;
   display: block;
-  transition: height 0.15s;
+  transition: height var(--dur-fast) var(--ease-standard);
 }
-#pb-seek:hover { height: 5px; }
+#pb-seek:hover { height: 4px; }
 #pb-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -1264,7 +1264,7 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   align-items: center;
   justify-content: center;
   transition:
-    transform var(--dur-xfast) var(--ease-snappy, cubic-bezier(0.2,0,0,1)),
+    transform var(--dur-fast) var(--ease-standard),
     box-shadow var(--dur-fast) var(--ease-soft);
   box-shadow: 0 2px 14px rgba(255, 255, 255, 0.22), 0 0 0 1px rgba(255,255,255,0.08);
   will-change: transform;
@@ -1286,8 +1286,8 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
 }
 .play-btn svg { fill: var(--bg); stroke: none; }
 .play-btn:active {
-  transform: scale(0.91);
-  transition-duration: var(--dur-instant, 30ms);
+  transform: scale(0.96);
+  transition-duration: var(--dur-xfast);
 }
 
 .ctrl-btn {
@@ -1302,11 +1302,17 @@ html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition:
+    color var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard),
+    transform var(--dur-xfast) var(--ease-standard);
 }
 .ctrl-btn:hover {
   color: var(--text);
   background: var(--bg-card-hover);
+}
+.ctrl-btn:active {
+  transform: scale(0.97);
 }
 
 #pb-time {
@@ -1828,10 +1834,10 @@ textarea.form-input { resize: none; }
 /* ── PlayerBar clickable area ── */
 .pb-clickable {
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity var(--dur-fast) var(--ease-standard);
 }
-.pb-clickable:hover { opacity: 0.8; }
-.pb-clickable:active { opacity: 0.6; }
+.pb-clickable:hover { opacity: 0.9; }
+.pb-clickable:active { opacity: 0.78; }
 
 /* ── Track Card Sheet ── */
 .tcs-backdrop {
@@ -1844,10 +1850,10 @@ textarea.form-input { resize: none; }
   display: flex;
   align-items: flex-end;
   isolation: isolate;
-  animation: overlayFadeIn var(--dur-med) var(--ease-standard);
+  animation: overlayFadeIn var(--dur-fast) var(--ease-standard);
 }
 .tcs-backdrop.is-closing {
-  animation: fade-out var(--dur-med) var(--ease-standard)
+  animation: fade-out var(--dur-fast) var(--ease-standard)
     forwards;
 }
 
@@ -1867,8 +1873,8 @@ textarea.form-input { resize: none; }
     box-shadow:
       0 24px 56px rgba(0, 0, 0, 0.5),
       0 0 0 1px rgba(255, 255, 255, 0.03) inset;
-    animation: tcsSheetEnterDesk var(--dur-slow)
-      var(--ease-soft) both;
+    animation: tcsSheetEnterDesk var(--dur-med)
+      var(--ease-standard) both;
     transform-origin: 50% 100%;
   }
   .tcs-backdrop .tcs-cover-wrap {
@@ -1920,11 +1926,11 @@ textarea.form-input { resize: none; }
   transform-origin: center bottom;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  animation: tcsSheetEnter var(--dur-slow) var(--ease-soft) both;
+  animation: tcsSheetEnter var(--dur-med) var(--ease-standard) both;
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
 }
 .tcs-sheet.is-closing {
-  animation: sheet-exit-tcs var(--dur-med) var(--ease-soft)
+  animation: sheet-exit-tcs var(--dur-fast) var(--ease-standard)
     forwards;
 }
 @keyframes sheet-exit-tcs {
@@ -2096,6 +2102,20 @@ textarea.form-input { resize: none; }
   .tcs-backdrop,
   .tcs-sheet {
     animation: none !important;
+  }
+
+  .play-btn,
+  .ctrl-btn,
+  .pb-clickable,
+  .tcs-action-btn,
+  .tcs-extras-trigger,
+  .home-featured__main,
+  .home-featured__play,
+  .home-track-tile,
+  .home-artist-chip,
+  .home-carousel-dot {
+    transition: none !important;
+    transform: none !important;
   }
 }
 .tcs-video-gradient {
@@ -2296,7 +2316,7 @@ textarea.form-input { resize: none; }
   font-size: 14px;
   font-weight: 500;
   color: var(--text-secondary);
-  transition: color 0.15s;
+  transition: color var(--dur-fast) var(--ease-standard);
 }
 .tcs-author-chevron {
   color: var(--text-muted);
@@ -2330,11 +2350,17 @@ textarea.form-input { resize: none; }
   color: var(--text);
   font-family: inherit;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-xfast) var(--ease-standard);
 }
 .tcs-action-btn:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-hover);
+}
+.tcs-action-btn:active {
+  transform: scale(0.985);
 }
 .tcs-action-btn:disabled {
   opacity: 0.35;
@@ -2380,9 +2406,10 @@ textarea.form-input { resize: none; }
   cursor: pointer;
   font-family: inherit;
   transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease;
+    background var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-xfast) var(--ease-standard);
 }
 .tcs-extras-trigger:hover {
   color: var(--text);
@@ -2393,6 +2420,9 @@ textarea.form-input { resize: none; }
   color: var(--text);
   border-color: rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.08);
+}
+.tcs-extras-trigger:active {
+  transform: scale(0.985);
 }
 .tcs-extras-popover {
   position: absolute;
@@ -2415,8 +2445,8 @@ textarea.form-input { resize: none; }
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
   padding: 10px;
   z-index: 20;
-  animation: tcsExtrasIn 0.2s
-    var(--ease-standard, cubic-bezier(0.2, 0.8, 0.2, 1));
+  animation: tcsExtrasIn var(--dur-fast)
+    var(--ease-standard);
 }
 @keyframes tcsExtrasIn {
   from {
@@ -3734,12 +3764,14 @@ html.le-lyrics-sync-open body {
   background: var(--surface);
   border-radius: 8px;
   padding: 8px;
-  transition: border-color .15s ease, transform .15s ease;
+  transition:
+    border-color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
 }
 
 .home-track-tile:hover {
   border-color: var(--border-hover);
-  transform: translateY(-1px);
+  transform: translateY(-0.5px);
 }
 
 .home-track-tile__cover img,
@@ -3764,12 +3796,14 @@ html.le-lyrics-sync-open body {
   background: var(--surface);
   border-radius: 8px;
   padding: 10px 10px 8px;
-  transition: border-color .15s ease, transform .15s ease;
+  transition:
+    border-color var(--dur-fast) var(--ease-standard),
+    transform var(--dur-fast) var(--ease-standard);
 }
 
 .home-artist-chip:hover {
   border-color: var(--border-hover);
-  transform: translateY(-1px);
+  transform: translateY(-0.5px);
 }
 
 .home-artist-chip__avatar,
@@ -7579,6 +7613,15 @@ html.ds-low-glass .tcs-sheet {
   text-align: left;
   cursor: pointer;
   font: inherit;
+  transition:
+    transform var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard);
+}
+.home-featured__main:hover {
+  transform: translateY(-0.5px);
+}
+.home-featured__main:active {
+  transform: scale(0.995);
 }
 
 .home-featured__copy {
@@ -7655,9 +7698,15 @@ html.ds-low-glass .tcs-sheet {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   margin: 2px 0 4px;
+  transition:
+    filter var(--dur-fast) var(--ease-standard),
+    transform var(--dur-xfast) var(--ease-standard);
 }
 .home-featured__play:hover {
   filter: brightness(0.96);
+}
+.home-featured__play:active {
+  transform: scale(0.985);
 }
 .home-featured__play span {
   line-height: 1;
@@ -7739,15 +7788,15 @@ html.ds-low-glass .tcs-sheet {
   background: var(--text-muted);
   opacity: 0.35;
   transition:
-    width 220ms ease,
-    opacity 220ms ease,
-    transform 220ms ease,
-    background-color 220ms ease;
+    width var(--dur-med) var(--ease-standard),
+    opacity var(--dur-med) var(--ease-standard),
+    transform var(--dur-med) var(--ease-standard),
+    background-color var(--dur-med) var(--ease-standard);
 }
 
 .home-carousel-dot:hover {
   opacity: 0.55;
-  transform: scale(1.08);
+  transform: scale(1.04);
 }
 
 .home-carousel-dot.active {

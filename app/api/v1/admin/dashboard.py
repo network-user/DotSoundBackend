@@ -39,7 +39,7 @@ async def overview(
 
 @router.get("/stats")
 async def stats(
-    period: str = Query("today", pattern="^(today|7d|30d)$"),
+    period: str = Query("today", pattern="^(today|7d|30d|all)$"),
     _admin: User = Depends(require_admin_session),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
