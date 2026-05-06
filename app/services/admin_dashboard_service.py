@@ -178,7 +178,9 @@ async def collect_overview(
     return payload
 
 
-def _period_start(now: datetime, period: str) -> datetime:
+def _period_start(now: datetime, period: str) -> datetime | None:
+    if period == "all":
+        return None
     if period == "today":
         return datetime(
             year=now.year,
@@ -201,51 +203,17 @@ async def collect_stats(
     now = datetime.now(UTC)
     start = _period_start(now, period)
 
-    users_registered = await _safe_count(
-        session,
-        select(func.count(User.id)).where(User.created_at >= start),
+    users_stmt = select(func.count(User.id))
+    tracks_stmt = select(func.count(Track.id))
+    listens_stmt = select(func.count(ListenEvent.id))
+    unique_stmt = select(func.count(func.distinct(ListenEvent.user_id)))
+    complaints_new_stmt = select(func.count(Complaint.id))
+    completed_stmt = select(func.count(ListenEvent.id)).where(
+        ListenEvent.completed.is_(True)
     )
-    tracks_uploaded = await _safe_count(
-        session,
-        select(func.count(Track.id)).where(Track.created_at >= start),
+    skips_stmt = select(func.count(ListenEvent.id)).where(
+        ListenEvent.skipped.is_(True)
     )
-    listens_total = await _safe_count(
-        session,
-        select(func.count(ListenEvent.id)).where(
-            ListenEvent.created_at >= start
-        ),
-    )
-    unique_listeners = await _safe_count(
-        session,
-        select(func.count(func.distinct(ListenEvent.user_id))).where(
-            ListenEvent.created_at >= start
-        ),
-    )
-    complaints_new = await _safe_count(
-        session,
-        select(func.count(Complaint.id)).where(Complaint.created_at >= start),
-    )
-    complaints_open = await _safe_count(
-        session,
-        select(func.count(Complaint.id)).where(
-            Complaint.is_resolved.is_(False)
-        ),
-    )
-    completed_listens = await _safe_count(
-        session,
-        select(func.count(ListenEvent.id)).where(
-            ListenEvent.created_at >= start,
-            ListenEvent.completed.is_(True),
-        ),
-    )
-    skips = await _safe_count(
-        session,
-        select(func.count(ListenEvent.id)).where(
-            ListenEvent.created_at >= start,
-            ListenEvent.skipped.is_(True),
-        ),
-    )
-
     top_tracks_stmt = (
         select(
             ListenEvent.track_id.label("track_id"),
@@ -254,11 +222,37 @@ async def collect_stats(
                 "unique_listeners"
             ),
         )
-        .where(ListenEvent.created_at >= start)
         .group_by(ListenEvent.track_id)
         .order_by(func.count(ListenEvent.id).desc())
         .limit(5)
     )
+    if start is not None:
+        users_stmt = users_stmt.where(User.created_at >= start)
+        tracks_stmt = tracks_stmt.where(Track.created_at >= start)
+        listens_stmt = listens_stmt.where(ListenEvent.created_at >= start)
+        unique_stmt = unique_stmt.where(ListenEvent.created_at >= start)
+        complaints_new_stmt = complaints_new_stmt.where(
+            Complaint.created_at >= start
+        )
+        completed_stmt = completed_stmt.where(ListenEvent.created_at >= start)
+        skips_stmt = skips_stmt.where(ListenEvent.created_at >= start)
+        top_tracks_stmt = top_tracks_stmt.where(
+            ListenEvent.created_at >= start
+        )
+
+    users_registered = await _safe_count(session, users_stmt)
+    tracks_uploaded = await _safe_count(session, tracks_stmt)
+    listens_total = await _safe_count(session, listens_stmt)
+    unique_listeners = await _safe_count(session, unique_stmt)
+    complaints_new = await _safe_count(session, complaints_new_stmt)
+    complaints_open = await _safe_count(
+        session,
+        select(func.count(Complaint.id)).where(
+            Complaint.is_resolved.is_(False)
+        ),
+    )
+    completed_listens = await _safe_count(session, completed_stmt)
+    skips = await _safe_count(session, skips_stmt)
     top_rows = await session.execute(top_tracks_stmt)
     raw_top = list(top_rows.all())
 
@@ -281,7 +275,7 @@ async def collect_stats(
 
     return {
         "period": period,
-        "from_ts": int(start.timestamp()),
+        "from_ts": int(start.timestamp()) if start is not None else None,
         "to_ts": int(now.timestamp()),
         "users_registered": users_registered,
         "tracks_uploaded": tracks_uploaded,

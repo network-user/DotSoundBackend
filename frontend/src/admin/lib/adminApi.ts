@@ -389,10 +389,10 @@ export const adminApi = {
       complaints: { open: number }
       jobs: { active: number; failed_1h: number }
     }>('/dashboard/overview'),
-  dashboardStats: (period: 'today' | '7d' | '30d') =>
+  dashboardStats: (period: 'today' | '7d' | '30d' | 'all') =>
     adminFetch<{
-      period: 'today' | '7d' | '30d'
-      from_ts: number
+      period: 'today' | '7d' | '30d' | 'all'
+      from_ts: number | null
       to_ts: number
       users_registered: number
       tracks_uploaded: number

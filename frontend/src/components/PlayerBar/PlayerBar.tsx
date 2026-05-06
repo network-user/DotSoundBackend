@@ -125,7 +125,7 @@ export function PlayerBar() {
     e.stopPropagation()
     if (!liked) {
       setLikeBurst(true)
-      window.setTimeout(() => setLikeBurst(false), 520)
+      window.setTimeout(() => setLikeBurst(false), 420)
     }
     haptic(liked ? 'light' : 'medium')
     await toggleLike(track.id)
