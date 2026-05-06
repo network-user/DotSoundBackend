@@ -50,6 +50,12 @@ function calcTrend(points: ChartPoint[]): number {
 export function DashboardRoute() {
   const { t } = useTranslation()
   const [minutes, setMinutes] = useState(60)
+  const [onlineRangeMode, setOnlineRangeMode] = useState<
+    'range' | 'all'
+  >('range')
+  const [onlineSortDir, setOnlineSortDir] = useState<
+    'asc' | 'desc'
+  >('asc')
   const [live, setLive] = useState(true)
   const [statsPeriod, setStatsPeriod] = useState<
     'today' | '7d' | '30d' | 'all'
@@ -193,8 +199,23 @@ export function DashboardRoute() {
   const onlinePoints = flattenRange(onlineHistory.data)
   const rpsPoints = flattenRange(rpsHistory.data)
   const latencyPoints = flattenRange(latencyHistory.data)
-  const displayOnlinePoints =
+  const baseOnlinePoints =
     onlinePoints.length > 0 ? onlinePoints : onlineFallback
+  const displayOnlinePoints = useMemo(() => {
+    const source =
+      onlineRangeMode === 'all'
+        ? onlineFallback
+        : baseOnlinePoints
+    const sorted = [...source].sort((a, b) =>
+      onlineSortDir === 'asc' ? a.ts - b.ts : b.ts - a.ts,
+    )
+    return sorted
+  }, [
+    onlineRangeMode,
+    onlineFallback,
+    baseOnlinePoints,
+    onlineSortDir,
+  ])
   const onlineTrend = useMemo(
     () => calcTrend(displayOnlinePoints),
     [displayOnlinePoints],
@@ -233,6 +254,39 @@ export function DashboardRoute() {
                   : '24h'}
             </button>
           ))}
+          <button
+            type="button"
+            className={`admin-range-switch__btn${
+              onlineRangeMode === 'all' ? ' is-active' : ''
+            }`}
+            onClick={() => setOnlineRangeMode('all')}
+          >
+            All-time
+          </button>
+          <button
+            type="button"
+            className={`admin-range-switch__btn${
+              onlineRangeMode === 'range'
+                ? ' is-active'
+                : ''
+            }`}
+            onClick={() => setOnlineRangeMode('range')}
+          >
+            Interval
+          </button>
+          <button
+            type="button"
+            className="admin-range-switch__btn"
+            onClick={() =>
+              setOnlineSortDir((v) =>
+                v === 'asc' ? 'desc' : 'asc',
+              )
+            }
+          >
+            {onlineSortDir === 'asc'
+              ? 'Oldest first'
+              : 'Newest first'}
+          </button>
           <button
             type="button"
             className={`admin-range-switch__btn${

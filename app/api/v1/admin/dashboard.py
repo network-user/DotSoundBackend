@@ -14,7 +14,9 @@ from app.dependencies import (
 )
 from app.models.user import User
 from app.services.admin_dashboard_service import (
+    collect_admin_stats,
     collect_stats,
+    collect_track_stats,
     collect_overview,
 )
 from app.services.container_health_service import (
@@ -44,6 +46,24 @@ async def stats(
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     return await collect_stats(session, period=period)
+
+
+@router.get("/track-stats")
+async def track_stats(
+    period: str = Query("today", pattern="^(today|7d|30d|all)$"),
+    _admin: User = Depends(require_admin_session),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    return await collect_track_stats(session, period=period)
+
+
+@router.get("/admin-stats")
+async def admin_stats(
+    period: str = Query("today", pattern="^(today|7d|30d|all)$"),
+    _admin: User = Depends(require_admin_session),
+    session: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    return await collect_admin_stats(session, period=period)
 
 
 @router.get("/containers")
