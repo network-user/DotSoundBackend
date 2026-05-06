@@ -191,6 +191,7 @@ export function App() {
     string | null
   >(null)
   const initCalled = useRef(false)
+  const readyEventSent = useRef(false)
 
   useEffect(() => {
     if (initCalled.current) return
@@ -363,6 +364,19 @@ export function App() {
     }
     init()
   }, [])
+
+  useEffect(() => {
+    if (!isInitialized || readyEventSent.current) {
+      return
+    }
+    readyEventSent.current = true
+    const id = window.setTimeout(() => {
+      window.dispatchEvent(new Event('app-ready'))
+    }, 120)
+    return () => {
+      window.clearTimeout(id)
+    }
+  }, [isInitialized])
 
   useEffect(() => {
     const mono =

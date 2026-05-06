@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   keepPreviousData,
@@ -11,6 +11,8 @@ import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
+import { KpiCard } from '../components/widgets/KpiCard'
+import { Sparkline } from '../components/charts/Sparkline'
 
 interface UserRow {
   id: number
@@ -64,6 +66,21 @@ export function UsersRoute() {
     1,
     Math.ceil(total / 25),
   )
+  const rows = (data?.items || []) as unknown as UserRow[]
+  const activeCount = rows.filter((u) => u.is_active).length
+  const adminCount = rows.filter((u) => u.is_admin).length
+  const sparkline = useMemo(() => {
+    const buckets = new Map<string, number>()
+    for (const row of rows) {
+      const day = new Date(row.created_at)
+        .toISOString()
+        .slice(0, 10)
+      buckets.set(day, (buckets.get(day) || 0) + 1)
+    }
+    return Array.from(buckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, value]) => value)
+  }, [rows])
 
   const refresh = () =>
     qc.invalidateQueries({ queryKey: ['admin', 'users'] })
@@ -264,6 +281,30 @@ export function UsersRoute() {
   return (
     <div>
       <h1>{t('admin.users.title')}</h1>
+      <section className="kpi-grid">
+        <KpiCard
+          label={t('admin.users.title')}
+          value={total}
+          hint={t('admin.common.total', { count: total })}
+        />
+        <KpiCard
+          label={t('admin.users.filterActive')}
+          value={activeCount}
+          hint={t('admin.users.filterBanned')}
+        />
+        <KpiCard
+          label={t('admin.users.colAdmin')}
+          value={adminCount}
+          hint={
+            sparkline.length > 1 ? (
+              <Sparkline
+                data={sparkline}
+                ariaLabel="Users growth sparkline"
+              />
+            ) : undefined
+          }
+        />
+      </section>
       <div className="admin-toolbar">
         <input
           type="search"
@@ -307,7 +348,7 @@ export function UsersRoute() {
       </div>
       <DataTable
         columns={columns}
-        rows={(data?.items || []) as unknown as UserRow[]}
+        rows={rows}
         enableSorting
       />
       <div className="admin-pagination">

@@ -50,17 +50,18 @@ function calcTrend(points: ChartPoint[]): number {
 export function DashboardRoute() {
   const { t } = useTranslation()
   const [minutes, setMinutes] = useState(60)
+  const [live, setLive] = useState(true)
 
   const { data, error, isLoading } = useQuery({
     queryKey: ['admin', 'dashboard', 'overview'],
     queryFn: () => adminApi.dashboardOverview(),
-    refetchInterval: 30_000,
+    refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
   const containers = useQuery({
     queryKey: ['admin', 'containers', 'overview'],
     queryFn: () => adminApi.containers(),
-    refetchInterval: 30_000,
+    refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
   const onlineHistory = useQuery({
@@ -71,14 +72,14 @@ export function DashboardRoute() {
         minutes,
         30,
       ),
-    refetchInterval: 30_000,
+    refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
   const rpsHistory = useQuery({
     queryKey: ['admin', 'dashboard', 'rps', minutes],
     queryFn: () =>
       adminApi.dashboardTimeseries('rps_5m', minutes, 30),
-    refetchInterval: 30_000,
+    refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
   const latencyHistory = useQuery({
@@ -89,7 +90,7 @@ export function DashboardRoute() {
         minutes,
         30,
       ),
-    refetchInterval: 30_000,
+    refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
 
@@ -155,6 +156,15 @@ export function DashboardRoute() {
                   : '24h'}
             </button>
           ))}
+          <button
+            type="button"
+            className={`admin-range-switch__btn${
+              live ? ' is-active' : ''
+            }`}
+            onClick={() => setLive((v) => !v)}
+          >
+            Live
+          </button>
         </div>
       </section>
 
@@ -168,12 +178,20 @@ export function DashboardRoute() {
             {onlineTrend.toFixed(1)}%
           </span>
         </div>
-        <LineChart
-          data={onlinePoints}
-          ariaLabel={t(
-            'admin.dashboard.onlineHistory.chartTitle',
-          )}
-        />
+        {onlineHistory.isLoading ? (
+          <div className="admin-skeleton admin-skeleton--card" />
+        ) : onlinePoints.length > 0 ? (
+          <LineChart
+            data={onlinePoints}
+            ariaLabel={t(
+              'admin.dashboard.onlineHistory.chartTitle',
+            )}
+          />
+        ) : (
+          <div className="admin-log-empty">
+            No online data for selected range
+          </div>
+        )}
       </section>
 
       <section className="kpi-grid">

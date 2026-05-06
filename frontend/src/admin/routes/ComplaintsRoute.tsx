@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   keepPreviousData,
@@ -11,6 +11,8 @@ import { api } from '@/lib/api'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
+import { KpiCard } from '../components/widgets/KpiCard'
+import { Sparkline } from '../components/charts/Sparkline'
 
 interface ComplaintRow {
   id: number
@@ -197,9 +199,49 @@ export function ComplaintsRoute() {
     1,
     Math.ceil(total / 25),
   )
+  const rows =
+    (data?.items || []) as unknown as ComplaintRow[]
+  const openCount = rows.filter((r) => !r.is_resolved).length
+  const resolvedCount = rows.filter((r) => r.is_resolved).length
+  const sparkline = useMemo(() => {
+    const buckets = new Map<string, number>()
+    for (const row of rows) {
+      const day = new Date(row.created_at)
+        .toISOString()
+        .slice(0, 10)
+      buckets.set(day, (buckets.get(day) || 0) + 1)
+    }
+    return Array.from(buckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, value]) => value)
+  }, [rows])
   return (
     <div>
       <h1>{t('admin.complaints.title')}</h1>
+      <section className="kpi-grid">
+        <KpiCard
+          label={t('admin.complaints.title')}
+          value={total}
+          hint={t('admin.common.total', { count: total })}
+        />
+        <KpiCard
+          label="Open"
+          value={openCount}
+          accent={openCount > 0 ? 'warn' : 'default'}
+        />
+        <KpiCard
+          label="Resolved"
+          value={resolvedCount}
+          hint={
+            sparkline.length > 1 ? (
+              <Sparkline
+                data={sparkline}
+                ariaLabel="Complaints sparkline"
+              />
+            ) : undefined
+          }
+        />
+      </section>
       <div className="admin-toolbar">
         <label className="admin-checkbox">
           <input
@@ -217,9 +259,7 @@ export function ComplaintsRoute() {
       </div>
       <DataTable
         columns={columns}
-        rows={
-          (data?.items || []) as unknown as ComplaintRow[]
-        }
+        rows={rows}
       />
       <div className="admin-pagination">
         <Press
