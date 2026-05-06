@@ -166,6 +166,7 @@ export function App() {
   const brandLabel = useBrandLabel()
   const { reloadLikes } = useLikes()
   const navigate = useNavigate()
+  const location = useLocation()
   const [authorId, setAuthorId] = useState<
     number | null
   >(null)
@@ -389,6 +390,11 @@ export function App() {
     }
   }, [needsAuth])
 
+  useEffect(() => {
+    setArtistId(null)
+    setAuthorId(null)
+  }, [location.pathname])
+
   const handleOpenAuthor = (id: number) =>
     setAuthorId(id)
   const handleCloseAuthor = () =>
@@ -462,7 +468,14 @@ export function App() {
         <ErrorBoundary>
         <Suspense fallback={<RouteFallback />}>
         <AnimatedRoutes>
-          <Route path="/" element={<HomeView />} />
+          <Route
+            path="/"
+            element={
+              <HomeView
+                onOpenArtist={(id) => setArtistId(id)}
+              />
+            }
+          />
           <Route
             path="/search"
             element={
