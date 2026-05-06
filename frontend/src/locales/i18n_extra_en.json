@@ -40,6 +40,13 @@
     "hint": "Tracks with the strongest plays and likes in the last 7 days",
     "empty": "Nothing to show yet"
   },
+  "weeklyTop": {
+    "title": "Weekly Top 50",
+    "hint": "The 50 strongest tracks by plays and likes in the last 7 days",
+    "homeTitle": "Weekly Top 50",
+    "homeHint": "Loudest tracks on the platform this week",
+    "empty": "Not enough plays this week yet"
+  },
   "library": {
     "tabLiked": "Favorites",
     "tabPlaylists": "Playlists",

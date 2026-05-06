@@ -473,6 +473,7 @@ const QUICK_ITEMS: {
 }[] = [
   { label: 'Плейлист дня', icon: 'calendar', path: '/daily-mix' },
   { label: 'Плейлист недели', icon: 'star', path: '/weekly-mix' },
+  { label: 'Топ недели', icon: 'flame', path: '/weekly-top' },
   { label: 'Выбор пользователей', icon: 'heart', path: '/user-choice' },
   { label: 'Библиотека', icon: 'layers', path: '/library' },
   { label: 'Радио', icon: 'radio', path: '/radio' },
@@ -535,6 +536,38 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       .then((data) => setRecentlyPlayed(data.items))
       .catch(() => setRecentlyPlayed([]))
   }, [])
+
+  const handleRefresh = useCallback(async () => {
+    setSections(null)
+    setGenreMixes(null)
+    setFollowedArtists(null)
+    setRecentlyPlayed(null)
+    await Promise.allSettled([
+      api
+        .getHomeRecommendations()
+        .then((data) => setSections(data.sections))
+        .catch(() => {
+          setFallbackTracks([])
+        }),
+      api
+        .getGenreMixes()
+        .then((data) => setGenreMixes(data.mixes))
+        .catch(() => setGenreMixes([])),
+      api
+        .getFollowedArtistsList(30)
+        .then((data) => setFollowedArtists(data.items))
+        .catch(() => setFollowedArtists([])),
+      api
+        .getListenHistory(20)
+        .then((data) => setRecentlyPlayed(data.items))
+        .catch(() => setRecentlyPlayed([])),
+    ])
+  }, [])
+
+  const pull = usePullToRefresh({
+    onRefresh: handleRefresh,
+    enabled: true,
+  })
 
   useEffect(() => {
     const main = document.getElementById('main')
@@ -689,6 +722,32 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
 
   return (
     <section id="view-home" className="view active">
+      {(pull.pulling || pull.refreshing) && (
+        <div
+          className="ptr-indicator"
+          aria-live="polite"
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 5,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            height: pull.refreshing
+              ? 36
+              : Math.min(72, Math.round(pull.distance)),
+            opacity: pull.refreshing ? 1 : Math.min(1, pull.distance / 70),
+            color: 'var(--clr-text-secondary, rgba(255,255,255,0.7))',
+            fontSize: 12,
+            transition: pull.refreshing
+              ? 'height .15s ease'
+              : 'none',
+            pointerEvents: 'none',
+          }}
+        >
+          {pull.refreshing ? '↻ Обновляем…' : '↓ Потяните'}
+        </div>
+      )}
       {/* Greeting */}
       <div className="home-greeting">
         <div className="home-greeting__text">

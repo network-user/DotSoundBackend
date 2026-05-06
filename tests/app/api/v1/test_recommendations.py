@@ -165,3 +165,32 @@ async def test_radio_missing_seed(
         headers=headers,
     )
     assert r.status_code == 422
+
+
+async def test_weekly_top_unauthenticated(
+    client: AsyncClient,
+) -> None:
+    r = await client.get(
+        "/api/v1/recommendations/weekly-top"
+    )
+    assert r.status_code == 401
+
+
+async def test_weekly_top_ok(
+    client: AsyncClient,
+) -> None:
+    await create_test_user(client, 7007)
+    headers = await auth_headers(client, 7007)
+    r = await client.get(
+        "/api/v1/recommendations/weekly-top?limit=20",
+        headers=headers,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert "tracks" in data
+    assert "generated_at" in data
+    assert "expires_at" in data
+    assert "score_version" in data
+    assert "window_days" in data
+    assert data["window_days"] == 7
+    assert isinstance(data["tracks"], list)

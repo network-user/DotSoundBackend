@@ -119,4 +119,4 @@ class AccountDeletionService:
     def is_eligible(user: User) -> bool:
         if user.deleted_at is None:
             return False
-        return should_hard_delete(user.deleted_at)
+        return bool(should_hard_delete(user.deleted_at))

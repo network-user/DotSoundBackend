@@ -225,6 +225,7 @@ export function PlayerBar() {
               <p
                 className="pb-title"
                 style={{ flex: 1, minWidth: 0 }}
+                dir="auto"
               >
                 {track.title}
               </p>
@@ -243,7 +244,7 @@ export function PlayerBar() {
                 </button>
               )}
             </div>
-            <p className="pb-artist hint">
+            <p className="pb-artist hint" dir="auto">
               {track.artist ?? '—'}
             </p>
           </div>
