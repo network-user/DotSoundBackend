@@ -10,6 +10,11 @@ import {
 import { Icon } from '@/components/Icon/Icon'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import type { LyricsResponse, SyncedLine } from '@/types/api'
+import {
+  m,
+  SPRING_GENTLE,
+  useReducedMotion,
+} from '@/lib/motion'
 
 const SYNC_OFFSET_KEY = 'setting-lyrics-sync-offset-ms'
 const KARAOKE_KEY = 'setting-lyrics-karaoke'
@@ -57,6 +62,7 @@ function activeWordIndex(line: SyncedLine, ms: number): number {
 
 export function FullscreenLyrics() {
   const { t } = useTranslation()
+  const lyricsReduce = useReducedMotion()
   const { currentTime, duration, isPlaying } =
     usePlayerState()
   const { track, isLyricsOpen } = usePlayerMeta()
@@ -335,9 +341,17 @@ export function FullscreenLyrics() {
               const lineWordIdx =
                 karaokeActive && isActive ? wordIdx : -1
               return (
-                <div
+                <m.div
                   key={i}
                   ref={isActive ? activeRef : null}
+                  layout
+                  initial={false}
+                  animate={
+                    isActive && !lyricsReduce
+                      ? { scale: 1.04, opacity: 1 }
+                      : { scale: 1, opacity: isActive ? 1 : 0.55 }
+                  }
+                  transition={SPRING_GENTLE}
                   className={`fl-line${isActive ? ' fl-line-active' : ''}`}
                   onClick={() =>
                     handleLineClick(line.time_ms)
@@ -357,7 +371,7 @@ export function FullscreenLyrics() {
                   ) : (
                     line.text
                   )}
-                </div>
+                </m.div>
               )
             })
           : !loading &&

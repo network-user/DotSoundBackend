@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { type PanInfo } from 'framer-motion'
 import { api } from '@/lib/api'
 import {
   usePlayerActions,
@@ -7,8 +8,13 @@ import {
 } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import { useExitTransition } from '@/hooks/useExitTransition'
-import { hapticTick } from '@/lib/telegram'
+import { hapticTick, haptic } from '@/lib/telegram'
 import type { Track } from '@/types/api'
+import {
+  m,
+  SPRING_GENTLE,
+  useReducedMotion,
+} from '@/lib/motion'
 
 const BANDS = [
   '32', '64', '125', '250',
@@ -29,6 +35,7 @@ const PRESETS: Record<string, number[]> = {
 const PRESET_NAMES = Object.keys(PRESETS)
 
 export function Equalizer() {
+  const reduceMotion = useReducedMotion()
   const { isPlaying } = usePlayerState()
   const {
     isEqOpen,
@@ -126,6 +133,16 @@ export function Equalizer() {
 
   if (!exit.mounted) return null
 
+  const handleDragEnd = (
+    _: unknown,
+    info: PanInfo,
+  ) => {
+    if (info.offset.y > 100) {
+      haptic('light')
+      closeEq()
+    }
+  }
+
   return (
     <div
       className={`eq-backdrop${exit.cls}`}
@@ -134,8 +151,16 @@ export function Equalizer() {
           closeEq()
       }}
     >
-      <div className={`eq-sheet${exit.cls}`}>
-        <div className="eq-handle" />
+      <m.div
+        className={`eq-sheet rp-eq-sheet${exit.cls}`}
+        drag={reduceMotion ? false : 'y'}
+        dragConstraints={{ top: 0, bottom: 240 }}
+        dragElastic={0.18}
+        dragMomentum={false}
+        onDragEnd={handleDragEnd}
+        transition={SPRING_GENTLE}
+      >
+        <div className="eq-handle rp-eq__handle" />
 
         <div className="eq-header">
           <div className="eq-header-main">
@@ -328,7 +353,7 @@ export function Equalizer() {
             </div>
           ))}
         </div>
-      </div>
+      </m.div>
     </div>
   )
 }

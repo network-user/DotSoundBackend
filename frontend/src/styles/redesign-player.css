@@ -1,7 +1,296 @@
 /*
  * redesign-2026 / stage-A (Player)
  * Owned by STAGE-A (см. docs/redesign-2026/STAGE-A-player.md).
- * Не редактировать из других этапов.
- *
  * Префиксы классов: .rp-player-, .rp-now-, .rp-queue-, .rp-eq-.
  */
+
+/* PlayerBar overrides — apply on top of legacy #player-bar */
+.rp-player-bar {
+  touch-action: pan-y;
+}
+
+.rp-player-bar:active {
+  cursor: grab;
+}
+
+.rp-player-cover .shared-cover {
+  border-radius: var(--r-md);
+}
+
+/* NowPlayingView */
+.rp-now {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-sheet);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+.rp-now__bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.rp-now__bg .ambient-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.rp-now__bg .ambient-stage::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.18) 0%,
+    rgba(0, 0, 0, 0.7) 100%
+  );
+  pointer-events: none;
+}
+
+.rp-now__scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.55) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.rp-now__shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding-top: calc(var(--safe-top) + var(--space-3));
+  padding-bottom: calc(var(--safe-bottom) + var(--space-3));
+}
+
+.rp-now__topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-4);
+  gap: var(--space-3);
+}
+
+.rp-now__handle {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: var(--r-pill);
+  margin: 0 auto;
+}
+
+.rp-now__title {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-13);
+  letter-spacing: var(--ls-snug);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.rp-now__close {
+  width: var(--tap);
+  height: var(--tap);
+}
+
+.rp-now__hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5) var(--space-6);
+  position: relative;
+}
+
+.rp-now__cover {
+  width: min(72vw, 360px);
+  aspect-ratio: 1 / 1;
+  border-radius: var(--r-xl);
+  overflow: hidden;
+  position: relative;
+  box-shadow:
+    0 24px 64px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  background: var(--surface, #161616);
+}
+
+.rp-now__cover .shared-cover,
+.rp-now__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.rp-now__cover-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: var(--text-muted);
+}
+
+.rp-now__meta {
+  padding: var(--space-2) var(--space-6) var(--space-3);
+  text-align: center;
+}
+
+.rp-now__meta-title {
+  font-size: var(--fs-22);
+  font-weight: 700;
+  letter-spacing: var(--ls-tight);
+  color: var(--text);
+  margin: 0 0 4px;
+}
+
+.rp-now__meta-artist {
+  font-size: var(--fs-15);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.rp-now__seek {
+  padding: var(--space-3) var(--space-6);
+}
+
+.rp-now__seek-bar {
+  position: relative;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+
+.rp-now__seek-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--text);
+  border-radius: var(--r-pill);
+  transition: width var(--dur-fast) var(--ease-out);
+}
+
+.rp-now__seek-input {
+  position: absolute;
+  inset: -10px 0;
+  width: 100%;
+  height: calc(100% + 20px);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.rp-now__seek-times {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.rp-now__controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-6) var(--space-4);
+}
+
+.rp-now__ctl-play {
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+}
+
+.rp-now__ctl-play:hover,
+.rp-now__ctl-play:focus-visible {
+  background: var(--text);
+}
+
+.rp-now__secondary {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: var(--space-2) var(--space-6) var(--space-4);
+  gap: var(--space-3);
+}
+
+.rp-now__tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin: 0 var(--space-6);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-pill);
+  position: relative;
+}
+
+.rp-now__tab {
+  position: relative;
+  flex: 1;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-13);
+  font-weight: 600;
+  letter-spacing: var(--ls-snug);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  z-index: 1;
+}
+
+.rp-now__tab--active {
+  color: var(--text);
+}
+
+.rp-now__tab-pill {
+  position: absolute;
+  inset: 4px auto 4px 4px;
+  width: calc((100% - 8px) / 3);
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-pill);
+  z-index: 0;
+}
+
+.rp-now__panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-6) var(--space-6);
+}
+
+/* QueueSheet swipe-row skin */
+.rp-queue-row .swipe-row__content {
+  background: transparent;
+}
+
+/* Equalizer bottom-sheet */
+.rp-eq__handle {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: var(--r-pill);
+  margin: 8px auto 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-player-bar {
+    touch-action: auto;
+  }
+}
