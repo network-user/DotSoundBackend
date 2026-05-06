@@ -1912,7 +1912,8 @@ textarea.form-input { resize: none; }
     var(--glass-saturate);
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   border-top: 1px solid var(--glass-edge);
-  padding: 0 0 calc(var(--nav-h) + 8px);
+  padding: 0 0
+    calc(var(--nav-h) + 8px + env(safe-area-inset-bottom, 0px));
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;

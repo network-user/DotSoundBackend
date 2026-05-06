@@ -156,6 +156,7 @@ export function TrackCardSheet({
   const trackInfoPollRef = useRef<
     ReturnType<typeof setTimeout> | null
   >(null)
+  const activeTrackRequestRef = useRef(0)
   const [isAdmin, setIsAdmin] = useState(() => getIsAdmin())
   const [debugMode, setDebugMode] = useState(false)
 
@@ -245,6 +246,7 @@ export function TrackCardSheet({
 
   useEffect(() => {
     if (!isCardOpen || !track) {
+      activeTrackRequestRef.current += 1
       setExtrasOpen(false)
       setCard(null)
       setShowLyrics(false)
@@ -271,25 +273,43 @@ export function TrackCardSheet({
     setShowEdit(false)
     setVideoReady(false)
     setLoading(true)
+    const requestId = activeTrackRequestRef.current + 1
+    activeTrackRequestRef.current = requestId
     api
       .getTrackCard(track.id)
       .then((c) => {
+        if (activeTrackRequestRef.current !== requestId) {
+          return
+        }
         setCard(c)
         if (c.author?.id) {
           api
             .getAvatarUrl(c.author.id)
-            .then((r) =>
-              setAuthorAvatarUrl(r.avatar_url),
-            )
+            .then((r) => {
+              if (activeTrackRequestRef.current !== requestId) {
+                return
+              }
+              setAuthorAvatarUrl(r.avatar_url)
+            })
             .catch(() => {})
         }
       })
       .catch(() => {})
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (activeTrackRequestRef.current !== requestId) {
+          return
+        }
+        setLoading(false)
+      })
 
     setSimilarTracks([])
     api.getSimilarTracks(track.id)
-      .then((r) => setSimilarTracks(r.tracks))
+      .then((r) => {
+        if (activeTrackRequestRef.current !== requestId) {
+          return
+        }
+        setSimilarTracks(r.tracks)
+      })
       .catch(() => {})
 
     setTrackInfo(null)
@@ -298,7 +318,12 @@ export function TrackCardSheet({
     const pollInfo = async () => {
       try {
         const data = await api.getTrackInfo(track.id)
-        if (cancelled) return
+        if (
+          cancelled ||
+          activeTrackRequestRef.current !== requestId
+        ) {
+          return
+        }
         setTrackInfo(data)
         if (
           (data.status === 'fetching' || data.status === 'pending') &&
