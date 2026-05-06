@@ -27,6 +27,13 @@
   --r-xl: 24px;
   --r-pill: 999px;
 
+  /* Font stack — system-ui cascade (SF Pro on iOS, Roboto on Android). */
+  --font-stack-system:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+
   /* Type scale */
   --fs-12: 12px;
   --fs-13: 13px;
@@ -38,15 +45,17 @@
   --fs-28: 28px;
   --fs-36: 36px;
   --fs-48: 48px;
+  --fs-tt: 28px;
+  --fs-lt: 34px;
 
   --lh-tight: 1.2;
   --lh-normal: 1.5;
   --lh-loose: 1.7;
 
   /* Letter-spacing scale */
-  --ls-display:  0;
-  --ls-tight:    0;
-  --ls-snug:     0;
+  --ls-display:  -0.022em;
+  --ls-tight:    -0.014em;
+  --ls-snug:     -0.006em;
   --ls-normal:   0em;
   --ls-wide:     0.04em;
   --ls-widest:   0.08em;
