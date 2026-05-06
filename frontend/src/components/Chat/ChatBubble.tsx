@@ -422,7 +422,7 @@ export function ChatBubble({
         )}
 
         {message.content && (
-          <div className="bubble-text">
+          <div className="bubble-text" dir="auto">
             {message.content}
           </div>
         )}

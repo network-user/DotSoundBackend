@@ -115,7 +115,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
         <CoverImage coverKey={track.cover_key} />
         <div className="track-card-info">
           <div className="track-card-title-row">
-            <p className="track-card-title">{track.title}</p>
+            <p className="track-card-title" dir="auto">{track.title}</p>
             {!track.is_public && (
               <span className="track-badge track-badge-private"><Icon name="lock" size={12} /></span>
             )}
@@ -133,7 +133,7 @@ export function TrackCard({ track, onDeleted, onVisibilityChanged }: Props) {
             {track.source === 'telegram' && <span className="track-badge track-badge-tg">TG</span>}
             {catalogLabel && <span className="track-badge">{catalogLabel}</span>}
           </div>
-          <p className="track-card-artist">
+          <p className="track-card-artist" dir="auto">
             {track.artist ?? t('trackCard.unknownArtist')}
           </p>
           <p className="track-card-meta">

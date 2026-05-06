@@ -67,7 +67,7 @@ export function CommentCard({
           </button>
         </div>
       </div>
-      <p className="comment-text">{comment.text}</p>
+      <p className="comment-text" dir="auto">{comment.text}</p>
       <div className="comment-actions">
         <button
           className="comment-vote-btn"

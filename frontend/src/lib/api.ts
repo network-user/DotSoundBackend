@@ -274,12 +274,14 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
       const isAbort =
         err instanceof DOMException && err.name === 'AbortError'
       const isNetwork =
+        !isAbort &&
         err instanceof TypeError &&
-        /fetch|network/i.test(err.message)
+        typeof err.message === 'string' &&
+        /fetch|network|failed/i.test(err.message)
       if (
         canRetry &&
         attempt < maxAttempts &&
-        (isNetwork || isAbort === false && err instanceof TypeError)
+        isNetwork
       ) {
         await _sleep(250 + Math.floor(Math.random() * 350))
         continue
@@ -1819,6 +1821,14 @@ export const api = {
   ): Promise<import('@/types/api').UserChoicePlaylistResponse> {
     return request(
       `/api/v1/recommendations/user-choice?limit=${limit}`,
+    )
+  },
+
+  getWeeklyTopPlaylist(
+    limit = 50,
+  ): Promise<import('@/types/api').WeeklyTopPlaylistResponse> {
+    return request(
+      `/api/v1/recommendations/weekly-top?limit=${limit}`,
     )
   },
 
