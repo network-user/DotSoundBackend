@@ -1,8 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { setInternalUserId } from '@/lib/telegram'
 import { connectWS } from '@/lib/ws'
 import { useBrandLabel } from '@/lib/brand'
+import { AmbientStage } from '@/components/ui/AmbientStage'
+import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
+import {
+  dismissIsland,
+  showIsland,
+} from '@/lib/island'
+
+const AUTH_KB_SRC =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'>" +
+      "<rect width='24' height='24' fill='%23242424'/></svg>",
+  )
 
 function notifyAuthReady(token: string | null): void {
   if (token) {
@@ -36,7 +50,9 @@ export function EmailAuth({
   onAuth,
   onBack,
 }: Props) {
+  const { t } = useTranslation()
   const brandLabel = useBrandLabel()
+  const progressRef = useRef<string | null>(null)
   const successTimer = useRef<ReturnType<
     typeof setTimeout
   > | null>(null)
@@ -52,6 +68,30 @@ export function EmailAuth({
     fallbackMode,
     setFallbackMode,
   ] = useState(false)
+
+  useEffect(() => {
+    if (!loading) {
+      if (progressRef.current) {
+        dismissIsland(progressRef.current)
+        progressRef.current = null
+      }
+      return
+    }
+    const id = showIsland({
+      kind: 'progress',
+      title: t(
+        'redesign.nav.authWorking',
+        'Signing in…',
+      ),
+    })
+    progressRef.current = id
+    return () => {
+      dismissIsland(id)
+      if (progressRef.current === id) {
+        progressRef.current = null
+      }
+    }
+  }, [loading, t])
   const [fallbackSent, setFallbackSent] =
     useState(false)
 
@@ -178,8 +218,19 @@ export function EmailAuth({
   }
 
   return (
-    <div className="auth-screen">
-      <div className="auth-card">
+    <div className="auth-screen rb-auth-screen">
+      <AmbientStage
+        coverUrl={null}
+        className="rb-auth__stage"
+      >
+        <KenBurnsCover
+          src={AUTH_KB_SRC}
+          alt=""
+          duration={22}
+          className="rb-auth__kb"
+        />
+      </AmbientStage>
+      <div className="auth-card rb-auth__card glass--strong">
         <div className="auth-logo">{brandLabel}</div>
 
         {step === 'email' && (

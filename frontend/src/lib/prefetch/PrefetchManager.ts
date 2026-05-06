@@ -46,6 +46,7 @@ interface PendingTask {
   progressiveUrl: string | null
   segmentDirUrls: string[]
   sourcePlatform: string | null
+  serverWarmOnly: boolean
   abort: AbortController
 }
 
@@ -277,6 +278,14 @@ export class PrefetchManager {
         this._touchHot(track.id)
         continue
       }
+      const accessMode = (track as { access_mode?: string }).access_mode
+      if (
+        accessMode === 'third_party_stream' &&
+        this.policy.skipThirdPartyAudioCache
+      ) {
+        eligible.push(track)
+        continue
+      }
       if (
         this.policy.skipThirdPartyAudioCache &&
         !_isThirdPartyCacheableSafe(track)
@@ -291,15 +300,24 @@ export class PrefetchManager {
     let scheduled = 0
     for (const track of eligible) {
       const abort = new AbortController()
+      const serverWarmOnly =
+        (track as { access_mode?: string }).access_mode ===
+          'third_party_stream' &&
+        this.policy.skipThirdPartyAudioCache
       const task: PendingTask = {
         trackId: track.id,
         context: options.context,
-        hlsManifestUrl: _trackHlsManifestUrl(track),
-        progressiveUrl: _trackProgressiveUrl(track),
+        hlsManifestUrl: serverWarmOnly
+          ? null
+          : _trackHlsManifestUrl(track),
+        progressiveUrl: serverWarmOnly
+          ? null
+          : _trackProgressiveUrl(track),
         segmentDirUrls: [],
         sourcePlatform:
           (track as { source_platform?: string | null }).source_platform ??
           null,
+        serverWarmOnly,
         abort,
       }
       list.push(task)
@@ -346,6 +364,10 @@ export class PrefetchManager {
     const release = await this.semaphore.acquire()
     try {
       if (task.abort.signal.aborted) return
+      if (task.serverWarmOnly) {
+        await this._warmThirdPartyServerCache(task)
+        return
+      }
       let bytes = 0
       if (task.hlsManifestUrl) {
         const ok = await this._warmHls(task)
@@ -372,6 +394,26 @@ export class PrefetchManager {
       this._evictExpiredHot()
       release()
       this._removePending(task)
+    }
+  }
+
+  private async _warmThirdPartyServerCache(
+    task: PendingTask,
+  ): Promise<void> {
+    try {
+      const { api } = await import('@/lib/api')
+      await api.warmTrackStreamCache([task.trackId])
+      this.warmTrackIds.add(task.trackId)
+      this._touchHot(task.trackId)
+      await persistWarmRecord({
+        trackId: task.trackId,
+        warmedAt: Date.now(),
+        context: task.context,
+        bytes: 0,
+        sourcePlatform: task.sourcePlatform,
+      })
+    } catch {
+      /* ignore */
     }
   }
 

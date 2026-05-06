@@ -1427,6 +1427,16 @@ export const api = {
     )
   },
 
+  warmTrackStreamCache(
+    trackIds: number[],
+  ): Promise<{ accepted: number }> {
+    return request('/api/v1/tracks/prefetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ track_ids: trackIds }),
+    })
+  },
+
   saveEqSettings(data: {
     preset: string | null
     bands: number[]

@@ -3,6 +3,7 @@ import {
   useEffect,
   useState,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { type PanInfo } from 'framer-motion'
 import {
@@ -15,6 +16,7 @@ import {
   usePlayerActions,
   usePlayerMeta,
   usePlayerState,
+  usePlayer,
 } from '@/store/PlayerContext'
 import { useLikes } from '@/store/LikesContext'
 import { Icon } from '@/components/Icon/Icon'
@@ -24,7 +26,10 @@ import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { SharedCover } from '@/components/ui/SharedCover'
 import { BeatPulse } from '@/components/ui/BeatPulse'
+import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics'
+import { QueuePanelContent } from '@/components/QueueSheet/QueueSheet'
 import { haptic } from '@/lib/telegram'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 
 const SWIPE_DOWN_THRESHOLD = 120
 
@@ -41,6 +46,7 @@ function fmt(sec: number) {
 
 export function NowPlayingView() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const reduce = useReducedMotion()
   const { track } = usePlayerMeta()
   const {
@@ -57,17 +63,23 @@ export function NowPlayingView() {
     openQueue,
   } = usePlayerActions()
   const { isLiked, toggleLike } = useLikes()
+  const { queue } = usePlayer()
+
+  usePrefetchTracks(
+    queue.length > 0 ? queue : null,
+    'queue',
+  )
 
   const [tab, setTab] = useState<Tab>('now')
   const [likeBurst, setLikeBurst] = useState(false)
 
   useEffect(() => {
     if (!track) {
-      const t = window.setTimeout(
+      const tid = window.setTimeout(
         () => navigate('/'),
         80,
       )
-      return () => window.clearTimeout(t)
+      return () => window.clearTimeout(tid)
     }
   }, [track, navigate])
 
@@ -76,7 +88,10 @@ export function NowPlayingView() {
       <div className="rp-now rp-now--empty">
         <div className="rp-now__shell">
           <p style={{ padding: 24, textAlign: 'center' }}>
-            Сейчас ничего не играет.
+            {t(
+              'redesign.player.emptyPlayback',
+              'Nothing is playing right now.',
+            )}
           </p>
         </div>
       </div>
@@ -138,19 +153,23 @@ export function NowPlayingView() {
   }
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'now', label: 'Сейчас' },
-    { id: 'lyrics', label: 'Текст' },
-    { id: 'queue', label: 'Очередь' },
+    {
+      id: 'now',
+      label: t('redesign.player.tabNow', 'Now'),
+    },
+    {
+      id: 'lyrics',
+      label: t('redesign.player.tabLyrics', 'Lyrics'),
+    },
+    {
+      id: 'queue',
+      label: t('redesign.player.tabQueue', 'Queue'),
+    },
   ]
 
   const handleTab = (next: Tab) => {
     haptic('light')
     setTab(next)
-    if (next === 'lyrics') {
-      openLyrics()
-    } else if (next === 'queue') {
-      openQueue()
-    }
   }
 
   return (
@@ -188,19 +207,32 @@ export function NowPlayingView() {
         <div className="rp-now__topbar">
           <MotionPress
             variant="icon"
-            ariaLabel="Закрыть"
+            ariaLabel={t(
+              'redesign.player.close',
+              'Close',
+            )}
             haptic="light"
             onClick={handleClose}
           >
             <Icon name="chevron-down" size={20} />
           </MotionPress>
           <span className="rp-now__title">
-            Сейчас играет
+            {t(
+              'redesign.player.screenTitle',
+              'Now playing',
+            )}
           </span>
           <MotionPress
             variant="icon"
-            ariaLabel="Меню"
+            ariaLabel={t(
+              'redesign.player.menu',
+              'Menu',
+            )}
             haptic="light"
+            onClick={() => {
+              haptic('light')
+              openLyrics()
+            }}
           >
             <Icon name="dots" size={18} />
           </MotionPress>
@@ -249,7 +281,10 @@ export function NowPlayingView() {
               max={100}
               step={0.1}
               value={pct}
-              aria-label="Перемотка"
+              aria-label={t(
+                'redesign.player.seekAria',
+                'Seek',
+              )}
               onChange={(e) =>
                 seek(Number(e.currentTarget.value))
               }
@@ -264,7 +299,10 @@ export function NowPlayingView() {
         <div className="rp-now__controls">
           <MotionPress
             variant="icon"
-            ariaLabel="Предыдущий"
+            ariaLabel={t(
+              'redesign.player.prevAria',
+              'Previous track',
+            )}
             haptic="light"
             onClick={() => playPrev()}
           >
@@ -274,7 +312,9 @@ export function NowPlayingView() {
             variant="icon"
             className="rp-now__ctl-play"
             ariaLabel={
-              isPlaying ? 'Пауза' : 'Воспроизвести'
+              isPlaying
+                ? t('redesign.player.pauseAria', 'Pause')
+                : t('redesign.player.playAria', 'Play')
             }
             haptic="medium"
             onClick={() => togglePlay()}
@@ -292,7 +332,10 @@ export function NowPlayingView() {
           </MotionPress>
           <MotionPress
             variant="icon"
-            ariaLabel="Следующий"
+            ariaLabel={t(
+              'redesign.player.nextAria',
+              'Next track',
+            )}
             haptic="light"
             onClick={() => playNext()}
           >
@@ -314,7 +357,15 @@ export function NowPlayingView() {
             <MotionPress
               variant="icon"
               ariaLabel={
-                liked ? 'Убрать лайк' : 'Лайк'
+                liked
+                  ? t(
+                      'redesign.player.unlikeAria',
+                      'Unlike',
+                    )
+                  : t(
+                      'redesign.player.likeAria',
+                      'Like',
+                    )
               }
               aria-pressed={liked}
               onClick={handleLike}
@@ -329,14 +380,20 @@ export function NowPlayingView() {
           </m.div>
           <MotionPress
             variant="icon"
-            ariaLabel="Поделиться"
+            ariaLabel={t(
+              'redesign.player.shareAria',
+              'Share',
+            )}
             onClick={handleShare}
           >
             <Icon name="share-arrow" size={20} />
           </MotionPress>
           <MotionPress
             variant="icon"
-            ariaLabel="Открыть очередь"
+            ariaLabel={t(
+              'redesign.player.openQueueAria',
+              'Open queue',
+            )}
             onClick={() => {
               haptic('light')
               openQueue()
@@ -357,7 +414,7 @@ export function NowPlayingView() {
             className="rp-now__tab-pill"
             style={{
               left: `calc(4px + ${
-                tabs.findIndex((t) => t.id === tab) *
+                tabs.findIndex((tabItem) => tabItem.id === tab) *
                   (100 / tabs.length)
               }% )`,
             }}
@@ -385,30 +442,16 @@ export function NowPlayingView() {
 
         <div className="rp-now__panel" role="tabpanel">
           {tab === 'now' && (
-            <NowPanel description={track.description} />
+            <NowPanel
+              description={track.description}
+              aboutLabel={t(
+                'redesign.player.aboutTrack',
+                'About',
+              )}
+            />
           )}
-          {tab === 'lyrics' && (
-            <p
-              style={{
-                color: 'var(--text-secondary)',
-                fontSize: 'var(--fs-13)',
-                textAlign: 'center',
-              }}
-            >
-              Текст откроется в полноэкранном виде.
-            </p>
-          )}
-          {tab === 'queue' && (
-            <p
-              style={{
-                color: 'var(--text-secondary)',
-                fontSize: 'var(--fs-13)',
-                textAlign: 'center',
-              }}
-            >
-              Очередь откроется поверх.
-            </p>
-          )}
+          {tab === 'lyrics' && <FullscreenLyrics embed />}
+          {tab === 'queue' && <QueuePanelContent inline />}
         </div>
       </div>
     </m.section>
@@ -417,8 +460,10 @@ export function NowPlayingView() {
 
 function NowPanel({
   description,
+  aboutLabel,
 }: {
   description?: string | null
+  aboutLabel: string
 }): ReactNode {
   if (!description) {
     return null
@@ -434,7 +479,7 @@ function NowPanel({
           margin: '0 0 8px',
         }}
       >
-        О треке
+        {aboutLabel}
       </h2>
       <p
         style={{

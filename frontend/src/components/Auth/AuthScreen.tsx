@@ -2,8 +2,23 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { useBrandLabel } from '@/lib/brand'
+import { AmbientStage } from '@/components/ui/AmbientStage'
+import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { EmailAuth } from './EmailAuth'
 import { TelegramAuth } from './TelegramAuth'
+
+const AUTH_KB_SRC =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'>" +
+      "<defs>" +
+      "<linearGradient id='a' x1='0' y1='0' x2='1' y2='1'>" +
+      "<stop offset='0' stop-color='%23222'/>" +
+      "<stop offset='1' stop-color='%23383838'/>" +
+      '</linearGradient></defs>' +
+      "<rect width='24' height='24' fill='url(%23a)'/></svg>",
+  )
 
 type Method = 'choose' | 'telegram' | 'email'
 
@@ -130,8 +145,19 @@ export function AuthScreen({
   }
 
   return (
-    <div className="auth-screen">
-      <div className="auth-card">
+    <div className="auth-screen rb-auth-screen">
+      <AmbientStage
+        coverUrl={null}
+        className="rb-auth__stage"
+      >
+        <KenBurnsCover
+          src={AUTH_KB_SRC}
+          alt=""
+          duration={22}
+          className="rb-auth__kb"
+        />
+      </AmbientStage>
+      <div className="auth-card rb-auth__card glass--strong">
         <div className="auth-logo">{brandLabel}</div>
         <h2 className="auth-title">
           {t('auth.welcome')}
@@ -141,21 +167,25 @@ export function AuthScreen({
           <br />
           {t('auth.subtitle')}
         </p>
-        <button
+        <MotionPress
+          variant="primary"
           className="btn-primary auth-tg-btn"
+          haptic="medium"
           onClick={() => setMethod('telegram')}
         >
           {t('auth.loginTelegram')}
-        </button>
+        </MotionPress>
         <p className="auth-microcopy">
           {t('auth.tgMicrocopy')}
         </p>
-        <button
+        <MotionPress
+          variant="ghost"
           className="btn-secondary auth-back"
+          haptic="light"
           onClick={() => setMethod('email')}
         >
           {t('auth.loginEmail')}
-        </button>
+        </MotionPress>
         <p className="auth-microcopy auth-microcopy--muted">
           {t('auth.afterLogin')}
         </p>
