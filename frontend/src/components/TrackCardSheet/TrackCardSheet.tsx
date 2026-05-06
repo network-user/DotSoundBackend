@@ -146,6 +146,8 @@ export function TrackCardSheet({
     useState<TrackCardResponse | null>(null)
   const [showLyrics, setShowLyrics] =
     useState(false)
+  const [showTrackInfo, setShowTrackInfo] =
+    useState(false)
   const [editingLyrics, setEditingLyrics] =
     useState(false)
   const [showEdit, setShowEdit] = useState(false)
@@ -220,6 +222,8 @@ export function TrackCardSheet({
     (import.meta.env.DEV || isAdmin) &&
     track != null &&
     track.access_mode === 'third_party_stream'
+  const isTrackInfoUnavailable =
+    trackInfo?.status === 'not_found'
 
   useEffect(() => {
     if (
@@ -254,6 +258,7 @@ export function TrackCardSheet({
       setExtrasOpen(false)
       setCard(null)
       setShowLyrics(false)
+      setShowTrackInfo(false)
       setEditingLyrics(false)
       setShowEdit(false)
       setAuthorAvatarUrl(null)
@@ -330,6 +335,7 @@ export function TrackCardSheet({
         }
         setTrackInfo(data)
         if (
+          showTrackInfo &&
           (data.status === 'fetching' || data.status === 'pending') &&
           attempts < 30
         ) {
@@ -349,7 +355,7 @@ export function TrackCardSheet({
         trackInfoPollRef.current = null
       }
     }
-  }, [isCardOpen, track?.id])
+  }, [isCardOpen, track?.id, showTrackInfo])
 
   useEffect(() => {
     const albumFromCard = card?.album
@@ -1450,6 +1456,19 @@ export function TrackCardSheet({
           </button>
 
           <button
+            className={`tcs-action-btn${showTrackInfo ? ' active' : ''}`}
+            onClick={() =>
+              setShowTrackInfo((v) => !v)
+            }
+            disabled={isTrackInfoUnavailable}
+          >
+            <Icon name="info" size={20} />
+            <span className="tcs-action-label">
+              {t('trackSheet.aboutTrack')}
+            </span>
+          </button>
+
+          <button
             className={`tcs-action-btn${downloadState === 'cached' ? ' active' : ''}`}
             onClick={handleDownload}
             disabled={downloadState === 'downloading'}
@@ -1936,38 +1955,7 @@ export function TrackCardSheet({
           </details>
         )}
 
-        {similarTracks.length > 0 && (
-          <div className="tcs-similar-section">
-            <h3 className="tcs-similar-title">
-              {t('trackSheet.similar')}
-            </h3>
-            <div className="tcs-similar-list">
-              {similarTracks.slice(0, 5).map((st) => (
-                <div
-                  key={st.id}
-                  className="tcs-similar-item"
-                  onClick={() => {
-                    closeCard()
-                    requestAnimationFrame(() =>
-                      playTrack(st),
-                    )
-                  }}
-                >
-                  <CoverImage coverKey={st.cover_key} />
-                  <div className="tcs-similar-info">
-                    <span className="tcs-similar-track-title">{st.title}</span>
-                    <span className="tcs-similar-track-artist">{st.artist ?? '—'}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {(trackInfo?.status === 'done' ||
-          trackInfo?.status === 'fetching' ||
-          trackInfo?.status === 'pending' ||
-          isAdmin) && (
+        {showTrackInfo && (
           <div className="tcs-info-section">
             <div className="tcs-info-section-header">
               <h3 className="tcs-info-section-title">
@@ -2016,7 +2004,8 @@ export function TrackCardSheet({
             )}
             {(trackInfo?.status === 'fetching' ||
               trackInfo?.status === 'pending' ||
-              trackInfoRefreshing) && (
+              trackInfoRefreshing ||
+              !trackInfo) && (
               <p className="tcs-info-placeholder">
                 {t('trackSheet.preparingInfo')}
               </p>
@@ -2040,6 +2029,34 @@ export function TrackCardSheet({
                 {t('trackSheet.infoError')}
               </p>
             )}
+          </div>
+        )}
+
+        {similarTracks.length > 0 && (
+          <div className="tcs-similar-section">
+            <h3 className="tcs-similar-title">
+              {t('trackSheet.similar')}
+            </h3>
+            <div className="tcs-similar-list">
+              {similarTracks.slice(0, 5).map((st) => (
+                <div
+                  key={st.id}
+                  className="tcs-similar-item"
+                  onClick={() => {
+                    closeCard()
+                    requestAnimationFrame(() =>
+                      playTrack(st),
+                    )
+                  }}
+                >
+                  <CoverImage coverKey={st.cover_key} />
+                  <div className="tcs-similar-info">
+                    <span className="tcs-similar-track-title">{st.title}</span>
+                    <span className="tcs-similar-track-artist">{st.artist ?? '—'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

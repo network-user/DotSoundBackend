@@ -25,7 +25,19 @@
     "placeholder": "Track or artist…",
     "startTyping": "Start typing a name",
     "onPlatform": "On platform",
-    "notFound": "Nothing found"
+    "notFound": "Nothing found",
+    "tabAll": "All",
+    "tabTracks": "Tracks",
+    "tabArtists": "Artists",
+    "tabPlaylists": "Playlists",
+    "discoverGenres": "Genres",
+    "recentGenres": "Your genres",
+    "discoverArtists": "Artists",
+    "discoverTrending": "Trending",
+    "playlists": "Playlists",
+    "editorialBadge": "Editorial",
+    "publicBadge": "Public",
+    "privateBadge": "Private"
   },
   "liked": {
     "title": "Liked",
@@ -771,7 +783,7 @@
       "enabledOff": "off",
       "createTitle": "New schedule",
       "editTitle": "Edit schedule",
-      "confirmDelete": "Delete schedule \u201c{{name}}\u201d?",
+      "confirmDelete": "Delete schedule “{{name}}”?",
       "cols": {
         "name": "Name",
         "task": "Task",

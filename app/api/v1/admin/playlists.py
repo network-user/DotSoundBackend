@@ -11,7 +11,9 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.admin.schemas import (
+    AdminPlaylistCreateEditorialRequest,
     AdminPlaylistDetailResponse,
+    AdminPlaylistImportRequest,
     AdminPlaylistListItem,
     AdminPlaylistListResponse,
     AdminPlaylistPatchRequest,
@@ -23,6 +25,7 @@ from app.dependencies import get_db, require_admin_session
 from app.models.user import User
 from app.schemas.playlist import PlaylistResponse
 from app.services.admin_playlist_service import AdminPlaylistService
+from app.services.soundcloud_service import SoundCloudService
 from app.services.track_response_build import dedupe_and_build_track_list
 
 router = APIRouter(prefix="/playlists", tags=["admin-playlists"])
@@ -98,6 +101,56 @@ async def admin_get_playlist(
     )
 
 
+@router.post(
+    "/import",
+    response_model=PlaylistResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="[Admin] Import playlist from SoundCloud URL",
+)
+@limiter.limit("10/minute")
+async def admin_import_playlist(
+    request: Request,
+    body: AdminPlaylistImportRequest,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> PlaylistResponse:
+    svc = AdminPlaylistService(session)
+    sc_svc = SoundCloudService()
+    playlist = await svc.import_from_sc_url(
+        sc_service=sc_svc,
+        source_url=body.source_url,
+        name=body.name,
+        owner_id=admin.id,
+        make_featured=body.make_featured,
+        make_public=body.make_public,
+    )
+    return PlaylistResponse.model_validate(playlist)
+
+
+@router.post(
+    "/editorial",
+    response_model=PlaylistResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="[Admin] Create editorial (curated) playlist",
+)
+@limiter.limit("30/minute")
+async def admin_create_editorial_playlist(
+    request: Request,
+    body: AdminPlaylistCreateEditorialRequest,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> PlaylistResponse:
+    svc = AdminPlaylistService(session)
+    playlist = await svc.create_editorial(
+        name=body.name,
+        owner_id=admin.id,
+        description=body.description,
+        is_featured=body.is_featured,
+        is_public=body.is_public,
+    )
+    return PlaylistResponse.model_validate(playlist)
+
+
 @router.patch(
     "/{playlist_id}",
     response_model=PlaylistResponse,
@@ -123,6 +176,8 @@ async def admin_patch_playlist(
         name=fields.get("name"),
         is_public=fields.get("is_public"),
         owner_id=fields.get("owner_id"),
+        is_featured=fields.get("is_featured"),
+        description=fields.get("description"),
     )
     if not playlist:
         raise HTTPException(
