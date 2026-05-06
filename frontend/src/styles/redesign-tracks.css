@@ -77,3 +77,76 @@
   opacity: 0;
   pointer-events: none;
 }
+
+.re-chats-root {
+  width: 100%;
+  min-width: 0;
+}
+
+.re-chats-row {
+  width: 100%;
+  min-width: 0;
+}
+
+.re-chats-row .swipe-row {
+  width: 100%;
+}
+
+.re-chats-item-inner:focus-visible {
+  outline: 2px solid var(--accent, #fff);
+  outline-offset: 2px;
+}
+
+.re-chats-view .saved-messages-btn.mp-press {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: calc(100% - 32px);
+  margin: 0 16px 8px;
+  min-height: 64px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+
+.re-chats-view .chat-search-message-btn.mp-press {
+  flex-shrink: 0;
+}
+
+.re-chat-composer {
+  border-top-color: var(--glass-edge, rgba(255, 255, 255, 0.08));
+}
+
+.re-bubble-appear {
+  animation-duration: inherit;
+}
+
+.re-bubble-actions {
+  gap: 4px;
+}
+
+.re-bubble-actions .bubble-action-btn.mp-press--icon {
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+}
+
+.re-bubble-reactions .reaction-btn.mp-press--icon {
+  width: auto;
+  height: auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px;
+}
+
+.re-bubble .bubble-track-play.mp-press {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}

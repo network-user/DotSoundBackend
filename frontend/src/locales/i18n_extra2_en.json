@@ -127,6 +127,9 @@
       "savedSubtitle": "Saved messages",
       "messageUser": "Message",
       "chatNumber": "Chat #{{id}}",
+      "trackNumber": "Track #{{id}}",
+      "albumNumber": "Album #{{id}}",
+      "playlistNumber": "Playlist #{{id}}",
       "noMessages": "No messages",
       "systemLabel": "{{brand}} team",
       "replyTo": "Reply to #{{id}}",
@@ -141,7 +144,9 @@
       "tracksCount": "{{count}} tracks",
       "fileTooBig": "File too large ({{mb}} MB, max {{max}} MB)",
       "attachPhoto": "Attach photo",
-      "voiceMessage": "Voice message"
+      "voiceMessage": "Voice message",
+      "addReaction": "Reaction",
+      "deleteMessage": "Delete"
     },
     "artist": {},
     "recap": {},

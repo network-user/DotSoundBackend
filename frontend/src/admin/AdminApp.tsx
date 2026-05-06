@@ -31,6 +31,7 @@ import { AlbumDetailRoute } from './routes/AlbumDetailRoute'
 import { AlbumsListRoute } from './routes/AlbumsListRoute'
 import { PlaylistDetailRoute } from './routes/PlaylistDetailRoute'
 import { PlaylistsListRoute } from './routes/PlaylistsListRoute'
+import { AdminProfileRoute } from './routes/AdminProfileRoute'
 import { TracksRoute } from './routes/TracksRoute'
 import { UsersRoute } from './routes/UsersRoute'
 import '@/styles/admin/redesign-admin.css'
@@ -249,6 +250,10 @@ export function AdminApp() {
                 <Route
                   path="settings"
                   element={<SettingsRoute />}
+                />
+                <Route
+                  path="profile"
+                  element={<AdminProfileRoute />}
                 />
               </Route>
             </Routes>

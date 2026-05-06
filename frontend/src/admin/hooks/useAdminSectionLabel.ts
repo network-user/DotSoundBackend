@@ -8,6 +8,12 @@ export function useAdminSectionLabel(): string {
   const { pathname } = useLocation()
   const items = useAdminMenu()
   return useMemo(() => {
+    if (
+      pathname === '/admin/profile' ||
+      pathname.endsWith('/admin/profile')
+    ) {
+      return t('redesign.admin.profileTitle')
+    }
     if (!items.length) {
       return t('admin.shell.title')
     }

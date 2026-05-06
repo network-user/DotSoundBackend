@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { showIsland } from '@/lib/island'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
@@ -140,14 +141,14 @@ export function SettingsRoute() {
       header: '',
       id: 'actions',
       cell: (i) => (
-        <Press
+        <MotionPress
           variant="ghost"
           onClick={() =>
             revokeDevice(i.row.original.id)
           }
         >
           {t('admin.settings.revoke')}
-        </Press>
+        </MotionPress>
       ),
     },
   ]
@@ -190,7 +191,7 @@ export function SettingsRoute() {
         const enabled = !!i.row.original.value
           ?.enabled
         return (
-          <Press
+          <MotionPress
             variant="ghost"
             disabled={
               busyFlag === i.row.original.key
@@ -205,7 +206,7 @@ export function SettingsRoute() {
             {enabled
               ? t('admin.settings.disable')
               : t('admin.settings.enable')}
-          </Press>
+          </MotionPress>
         )
       },
     },
@@ -294,6 +295,11 @@ function AiEnrichmentSettings() {
         artist_supplemental_ttl_days: artistDays,
       })
       aiSettings.refetch()
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.admin.aiSettingsSaved'),
+        durationMs: 2600,
+      })
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
     } catch (err) {
@@ -338,9 +344,9 @@ function AiEnrichmentSettings() {
             style={{ width: 80 }}
           />
         </label>
-        <Press variant="ghost" onClick={handleSave} disabled={busy}>
+        <MotionPress variant="ghost" onClick={handleSave} disabled={busy}>
           {busy ? t('common.saving', { defaultValue: 'Saving…' }) : t('common.save', { defaultValue: 'Save' })}
-        </Press>
+        </MotionPress>
         {saved && (
           <span style={{ color: '#4ade80', fontSize: 13 }}>
             {t('common.saved', { defaultValue: 'Saved' })}
@@ -434,20 +440,20 @@ function BackupsSection() {
       </p>
       {canRun && (
         <div className="admin-toolbar">
-          <Press
+          <MotionPress
             variant="ghost"
             disabled={busy}
             onClick={() => handleRun('full')}
           >
             {t('admin.settings.runFull')}
-          </Press>
-          <Press
+          </MotionPress>
+          <MotionPress
             variant="ghost"
             disabled={busy}
             onClick={() => handleRun('pg')}
           >
             {t('admin.settings.runPg')}
-          </Press>
+          </MotionPress>
         </div>
       )}
       {sections.map(([label, items]) => (
@@ -539,7 +545,7 @@ function FeatureFlagCreator({
         onChange={(e) => setName(e.target.value)}
         maxLength={64}
       />
-      <Press
+      <MotionPress
         variant="ghost"
         onClick={handleCreate}
         disabled={!name || busy}
@@ -547,7 +553,7 @@ function FeatureFlagCreator({
         {busy
           ? t('admin.settings.creatingFlag')
           : t('admin.settings.createFlag')}
-      </Press>
+      </MotionPress>
     </div>
   )
 }

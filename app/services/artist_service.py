@@ -4,6 +4,9 @@ from dotsound_private_core.services.artist_normalizer import (
     normalize_name,
     resolve_artist_names,
 )
+from dotsound_private_core.services.similarity_signal_policy import (
+    rank_similar_artists_for_display,
+)
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.artist import Artist, TrackArtist
 from app.models.track import Track
 from app.repositories.artist import ArtistRepository
+from app.repositories.artist_catalog import ArtistCatalogRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
 
@@ -286,3 +290,47 @@ class ArtistService:
             limit=size,
             public_only=public_only,
         )
+
+    async def list_similar_artists_for_discovery(
+        self,
+        artist_id: int,
+        *,
+        limit: int = 10,
+    ) -> list[Artist]:
+        seed = await self._repo.get_by_id(artist_id)
+        if seed is None:
+            return []
+
+        catalog_repo = ArtistCatalogRepository(self._session)
+        station = await catalog_repo.get_coartist_overlap_counts(
+            [artist_id],
+            scope="station",
+        )
+        album = await catalog_repo.get_coartist_overlap_counts(
+            [artist_id],
+            scope="album",
+        )
+        ml_pairs = (
+            await self._repo.list_similar_artists_from_similarity_index(
+                artist_id,
+                limit=max(limit * 4, 24),
+            )
+        )
+        ml_scores = {i: s for i, s in ml_pairs}
+        ranked_ids = rank_similar_artists_for_display(
+            station,
+            album,
+            ml_scores,
+            limit=max(limit * 4, 24),
+        )
+        trimmed = [
+            rid for rid in ranked_ids if rid != artist_id
+        ][:limit]
+        if not trimmed:
+            popular = await self._repo.list_popular(
+                limit=max(limit * 3, 30),
+            )
+            trimmed = [
+                a.id for a in popular if a.id != artist_id
+            ][:limit]
+        return await self._repo.get_by_ids_preserve_order(trimmed)

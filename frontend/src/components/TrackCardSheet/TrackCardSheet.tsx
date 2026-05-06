@@ -480,7 +480,7 @@ export function TrackCardSheet({
 
   const formatShareChatTitle = useCallback((item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {
-      return 'Избранное'
+      return t('redesign.chats.savedTitle')
     }
     if (item.conversation.title?.trim()) {
       return item.conversation.title.trim()
@@ -496,8 +496,10 @@ export function TrackCardSheet({
     if (peer?.username) {
       return `@${peer.username}`
     }
-    return `Чат #${item.conversation.id}`
-  }, [])
+    return t('redesign.chats.chatNumber', {
+      id: item.conversation.id,
+    })
+  }, [t])
 
   const openShareModal = useCallback(async (payload: {
     id: number

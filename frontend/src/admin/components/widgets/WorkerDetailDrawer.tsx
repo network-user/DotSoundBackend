@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import {
   computeWorkerPillKind,
   computeWorkerPillLabel,
@@ -464,9 +464,9 @@ WORKER_ASR_DEVICE=auto`,
           {t(`${WD}.headingPrefix`)} ·{' '}
           <code>{worker.name}</code>
         </h2>
-        <Press variant="ghost" onClick={onClose}>
+        <MotionPress variant="ghost" onClick={onClose}>
           {t(`${WD}.close`)}
-        </Press>
+        </MotionPress>
       </div>
 
       <p>
@@ -519,7 +519,7 @@ WORKER_ASR_DEVICE=auto`,
                 >
                   {t(`${WD}.lyricsProfileHint`)}
                 </p>
-                <Press
+                <MotionPress
                   variant="ghost"
                   disabled={updateAllowlist.isPending}
                   onClick={() =>
@@ -531,7 +531,7 @@ WORKER_ASR_DEVICE=auto`,
                   }
                 >
                   {t(`${WD}.lyricsProfileFixButton`)}
-                </Press>
+                </MotionPress>
               </td>
             </tr>
           )}
@@ -571,7 +571,7 @@ WORKER_ASR_DEVICE=auto`,
               {(
                 worker.allowed_ip_cidrs || []
               ).join(', ') || t(`${WD}.noneCidr`)}
-              <Press
+              <MotionPress
                 variant="ghost"
                 onClick={() =>
                   setEditCidrs(
@@ -584,7 +584,7 @@ WORKER_ASR_DEVICE=auto`,
                 style={{ marginLeft: 8 }}
               >
                 {t(`${WD}.editCidr`)}
-              </Press>
+              </MotionPress>
             </td>
           </tr>
           <tr>
@@ -639,7 +639,7 @@ WORKER_ASR_DEVICE=auto`,
           <div
             style={{ display: 'flex', gap: 8 }}
           >
-            <Press
+            <MotionPress
               variant="ghost"
               disabled={
                 editParsed.length === 0 ||
@@ -655,8 +655,8 @@ WORKER_ASR_DEVICE=auto`,
               }
             >
               {t(`${WD}.save`)}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               onClick={() => {
                 setEditCidrs(null)
@@ -664,7 +664,7 @@ WORKER_ASR_DEVICE=auto`,
               }}
             >
               {t(`${WD}.cancel`)}
-            </Press>
+            </MotionPress>
           </div>
         </div>
       )}
@@ -712,7 +712,7 @@ WORKER_ASR_DEVICE=auto`,
                 style={{ width: 80 }}
               />
             </label>
-            <Press
+            <MotionPress
               variant="ghost"
               disabled={pauseClaims.isPending}
               onClick={() =>
@@ -723,8 +723,8 @@ WORKER_ASR_DEVICE=auto`,
               }
             >
               {t(`${WD}.pauseSoft`)}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               disabled={pauseClaims.isPending}
               onClick={() =>
@@ -735,14 +735,14 @@ WORKER_ASR_DEVICE=auto`,
               }
             >
               {t(`${WD}.pauseDrain`)}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               disabled={resumeClaims.isPending}
               onClick={() => resumeClaims.mutate()}
             >
               {t(`${WD}.resumeClaims`)}
-            </Press>
+            </MotionPress>
           </div>
         </div>
       )}
@@ -761,11 +761,11 @@ WORKER_ASR_DEVICE=auto`,
       >
         {envSnippet}
       </pre>
-      <Press variant="ghost" onClick={copy}>
+      <MotionPress variant="ghost" onClick={copy}>
         {copied
           ? t(`${AC}.copied`)
           : t(`${AC}.copy`)}
-      </Press>
+      </MotionPress>
 
       <h3 style={{ marginTop: 20 }}>
         {t(`${WD}.jobsTitle`)}
@@ -945,61 +945,61 @@ WORKER_ASR_DEVICE=auto`,
       </h3>
       <div style={{ display: 'flex', gap: 8 }}>
         {!confirmRotate ? (
-          <Press
+          <MotionPress
             variant="ghost"
             onClick={() => setConfirmRotate(true)}
           >
             {t(`${WD}.rotate`)}
-          </Press>
+          </MotionPress>
         ) : (
           <>
             <span className="admin-card__sub">
               {t(`${WD}.rotateHelp`)}
             </span>
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() => rotateSecret.mutate()}
               disabled={rotateSecret.isPending}
             >
               {t(`${WD}.confirmRotate`)}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               onClick={() =>
                 setConfirmRotate(false)
               }
             >
               {t(`${WD}.cancel`)}
-            </Press>
+            </MotionPress>
           </>
         )}
         {!confirmRevoke ? (
-          <Press
+          <MotionPress
             variant="ghost"
             onClick={() => setConfirmRevoke(true)}
           >
             {t(`${WD}.revoke`)}
-          </Press>
+          </MotionPress>
         ) : (
           <>
             <span className="admin-card__sub">
               {t(`${WD}.revokeHelp`)}
             </span>
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() => revokeWorker.mutate()}
               disabled={revokeWorker.isPending}
             >
               {t(`${WD}.confirmRevoke`)}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               onClick={() =>
                 setConfirmRevoke(false)
               }
             >
               {t(`${WD}.cancel`)}
-            </Press>
+            </MotionPress>
           </>
         )}
       </div>
@@ -1019,19 +1019,19 @@ WORKER_ASR_DEVICE=auto`,
             style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}
           >
             {!confirmDeleteFromList ? (
-              <Press
+              <MotionPress
                 variant="ghost"
                 onClick={() => setConfirmDeleteFromList(true)}
                 disabled={deleteFromListPending}
               >
                 {t(`${WD}.removeFromList`)}
-              </Press>
+              </MotionPress>
             ) : (
               <>
                 <span className="admin-card__sub">
                   {t(`${WD}.removeFromListHelp`)}
                 </span>
-                <Press
+                <MotionPress
                   variant="ghost"
                   onClick={() => {
                     onRequestDeleteRevoked()
@@ -1040,13 +1040,13 @@ WORKER_ASR_DEVICE=auto`,
                   disabled={deleteFromListPending}
                 >
                   {t(`${WD}.confirmRemoveFromList`)}
-                </Press>
-                <Press
+                </MotionPress>
+                <MotionPress
                   variant="ghost"
                   onClick={() => setConfirmDeleteFromList(false)}
                 >
                   {t(`${WD}.cancel`)}
-                </Press>
+                </MotionPress>
               </>
             )}
           </div>

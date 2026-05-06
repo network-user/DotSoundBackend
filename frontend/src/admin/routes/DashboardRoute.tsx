@@ -8,6 +8,18 @@ import {
   ChartPoint,
   LineChart,
 } from '../components/charts/LineChart'
+import type { Variants } from 'framer-motion'
+import {
+  m,
+  VARIANTS_FADE_UP,
+} from '@/lib/motion'
+
+const ADMIN_DASH_KPI_STAGGER: Variants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.06 },
+  },
+}
 
 function formatBytes(bytes: number): string {
   if (!bytes) return '0 B'
@@ -181,6 +193,45 @@ export function DashboardRoute() {
     })
   }, [data?.generated_at, data?.users.online_now])
 
+  const onlinePoints = flattenRange(
+    onlineHistory.data,
+  )
+  const rpsPoints = flattenRange(rpsHistory.data)
+  const latencyPoints = flattenRange(
+    latencyHistory.data,
+  )
+  const baseOnlinePoints =
+    onlinePoints.length > 0
+      ? onlinePoints
+      : onlineFallback
+  const displayOnlinePoints = useMemo(() => {
+    const source =
+      onlineRangeMode === 'all'
+        ? onlineFallback
+        : baseOnlinePoints
+    const sorted = [...source].sort((a, b) =>
+      onlineSortDir === 'asc'
+        ? a.ts - b.ts
+        : b.ts - a.ts,
+    )
+    return sorted
+  }, [
+    onlineRangeMode,
+    onlineFallback,
+    baseOnlinePoints,
+    onlineSortDir,
+  ])
+  const onlineTrend = useMemo(
+    () => calcTrend(displayOnlinePoints),
+    [displayOnlinePoints],
+  )
+  const trendClass =
+    onlineTrend > 2
+      ? 'up'
+      : onlineTrend < -2
+        ? 'down'
+        : 'flat'
+
   if (isLoading) {
     return <div>{t('admin.dashboard.loading')}</div>
   }
@@ -202,36 +253,6 @@ export function DashboardRoute() {
       unknown: 0,
     }
   const total = containers.data?.total || 0
-  const onlinePoints = flattenRange(onlineHistory.data)
-  const rpsPoints = flattenRange(rpsHistory.data)
-  const latencyPoints = flattenRange(latencyHistory.data)
-  const baseOnlinePoints =
-    onlinePoints.length > 0 ? onlinePoints : onlineFallback
-  const displayOnlinePoints = useMemo(() => {
-    const source =
-      onlineRangeMode === 'all'
-        ? onlineFallback
-        : baseOnlinePoints
-    const sorted = [...source].sort((a, b) =>
-      onlineSortDir === 'asc' ? a.ts - b.ts : b.ts - a.ts,
-    )
-    return sorted
-  }, [
-    onlineRangeMode,
-    onlineFallback,
-    baseOnlinePoints,
-    onlineSortDir,
-  ])
-  const onlineTrend = useMemo(
-    () => calcTrend(displayOnlinePoints),
-    [displayOnlinePoints],
-  )
-  const trendClass =
-    onlineTrend > 2
-      ? 'up'
-      : onlineTrend < -2
-        ? 'down'
-        : 'flat'
 
   return (
     <div className="admin-dashboard">
@@ -559,113 +580,156 @@ export function DashboardRoute() {
         )}
       </section>
 
-      <section className="kpi-grid">
+      <m.section
+        className="kpi-grid adm-r-dash-kpi-stagger"
+        variants={ADMIN_DASH_KPI_STAGGER}
+        initial="hidden"
+        animate="visible"
+      >
         {activation.data && (
           <>
-            <KpiCard
-              label="Auth -> First Play (sec)"
-              value={activation.data.avg_auth_to_first_play_seconds}
-            />
-            <KpiCard
-              label="Onboarding Completion Rate"
-              value={
-                activation.data.users.auth_success
-                  ? `${Math.round(
-                      (activation.data.users.onboarding_complete /
-                        activation.data.users.auth_success) *
-                        100,
-                    )}%`
-                  : '0%'
-              }
-            />
-            <KpiCard
-              label="Skip Onboarding Rate"
-              value={`${Math.round(activation.data.skip_rate * 100)}%`}
-              accent={
-                activation.data.skip_rate > 0.4 ? 'warn' : 'default'
-              }
-            />
-            <KpiCard
-              label="First Session Plays"
-              value={activation.data.first_session_plays_count}
-            />
+            <m.div variants={VARIANTS_FADE_UP}>
+              <KpiCard
+                label="Auth -> First Play (sec)"
+                value={
+                  activation.data.avg_auth_to_first_play_seconds
+                }
+              />
+            </m.div>
+            <m.div variants={VARIANTS_FADE_UP}>
+              <KpiCard
+                label="Onboarding Completion Rate"
+                value={
+                  activation.data.users.auth_success
+                    ? `${Math.round(
+                        (activation.data.users.onboarding_complete /
+                          activation.data.users.auth_success) *
+                          100,
+                      )}%`
+                    : '0%'
+                }
+              />
+            </m.div>
+            <m.div variants={VARIANTS_FADE_UP}>
+              <KpiCard
+                label="Skip Onboarding Rate"
+                value={`${Math.round(activation.data.skip_rate * 100)}%`}
+                accent={
+                  activation.data.skip_rate > 0.4
+                    ? 'warn'
+                    : 'default'
+                }
+              />
+            </m.div>
+            <m.div variants={VARIANTS_FADE_UP}>
+              <KpiCard
+                label="First Session Plays"
+                value={
+                  activation.data.first_session_plays_count
+                }
+              />
+            </m.div>
           </>
         )}
-        <KpiCard
-          label={t(
-            'admin.dashboard.kpi.onlineNow',
-          )}
-          value={data.users.online_now}
-          hint={
-            <>
-              {t(
-                'admin.dashboard.kpi.activeAccounts',
-                { count: data.users.active },
-              )}
-              <span
-                className={`admin-kpi-trend admin-kpi-trend--${trendClass}`}
-              >
-                {onlineTrend > 0 ? '+' : ''}
-                {onlineTrend.toFixed(1)}%
-              </span>
-            </>
-          }
-        />
-        <KpiCard
-          label={t(
-            'admin.dashboard.kpi.usersTotal',
-          )}
-          value={data.users.total}
-          hint={t(
-            'admin.dashboard.kpi.newIn24h',
-            { count: data.users.new_24h },
-          )}
-        />
-        <KpiCard
-          label={t('admin.dashboard.kpi.tracks')}
-          value={data.tracks.total}
-          hint={t(
-            'admin.dashboard.kpi.newIn24h',
-            { count: data.tracks.new_24h },
-          )}
-        />
-        <KpiCard
-          label={t('admin.dashboard.kpi.storage')}
-          value={formatBytes(
-            data.tracks.storage_bytes,
-          )}
-        />
-        <KpiCard
-          label={t(
-            'admin.dashboard.kpi.openComplaints',
-          )}
-          value={data.complaints.open}
-          accent={
-            data.complaints.open > 0
-              ? 'warn'
-              : 'default'
-          }
-        />
-        <KpiCard
-          label={t(
-            'admin.dashboard.kpi.activeJobs',
-          )}
-          value={data.jobs.active}
-          hint={
-            data.jobs.failed_1h
-              ? t(
-                  'admin.dashboard.kpi.failedIn1h',
-                  { count: data.jobs.failed_1h },
-                )
-              : t('admin.dashboard.kpi.noFailures')
-          }
-          accent={
-            data.jobs.failed_1h > 0
-              ? 'warn'
-              : 'default'
-          }
-        />
-      </section>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t(
+              'admin.dashboard.kpi.onlineNow',
+            )}
+            value={data.users.online_now}
+            hint={
+              <>
+                {t(
+                  'admin.dashboard.kpi.activeAccounts',
+                  {
+                    count: data.users.active,
+                  },
+                )}
+                <span
+                  className={`admin-kpi-trend admin-kpi-trend--${trendClass}`}
+                >
+                  {onlineTrend > 0 ? '+' : ''}
+                  {onlineTrend.toFixed(1)}%
+                </span>
+              </>
+            }
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t(
+              'admin.dashboard.kpi.usersTotal',
+            )}
+            value={data.users.total}
+            hint={t(
+              'admin.dashboard.kpi.newIn24h',
+              {
+                count: data.users.new_24h,
+              },
+            )}
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t('admin.dashboard.kpi.tracks')}
+            value={data.tracks.total}
+            hint={t(
+              'admin.dashboard.kpi.newIn24h',
+              {
+                count: data.tracks.new_24h,
+              },
+            )}
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t(
+              'admin.dashboard.kpi.storage',
+            )}
+            value={formatBytes(
+              data.tracks.storage_bytes,
+            )}
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t(
+              'admin.dashboard.kpi.openComplaints',
+            )}
+            value={data.complaints.open}
+            accent={
+              data.complaints.open > 0
+                ? 'warn'
+                : 'default'
+            }
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t(
+              'admin.dashboard.kpi.activeJobs',
+            )}
+            value={data.jobs.active}
+            hint={
+              data.jobs.failed_1h
+                ? t(
+                    'admin.dashboard.kpi.failedIn1h',
+                    {
+                      count: data.jobs.failed_1h,
+                    },
+                  )
+                : t(
+                    'admin.dashboard.kpi.noFailures',
+                  )
+            }
+            accent={
+              data.jobs.failed_1h > 0
+                ? 'warn'
+                : 'default'
+            }
+          />
+        </m.div>
+      </m.section>
 
       <section className="kpi-grid kpi-grid--charts">
         <article className="admin-card">

@@ -6,7 +6,7 @@ import {
   useQuery,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
@@ -80,14 +80,14 @@ export function PlaylistsListRoute() {
       id: 'open',
       header: '',
       cell: ({ row }) => (
-        <Press
+        <MotionPress
           variant="ghost"
           onClick={() =>
             navigate(`/admin/playlists/${row.original.id}`)
           }
         >
           {t('admin.playlists.open')}
-        </Press>
+        </MotionPress>
       ),
     },
   ]
@@ -115,18 +115,18 @@ export function PlaylistsListRoute() {
         emptyHint={t('admin.playlists.empty')}
       />
       <div className="admin-pagination">
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={page <= 1 || isFetching}
           onClick={() => setPage((p) => Math.max(1, p - 1))}
         >
           {t('admin.common.prev')}
-        </Press>
+        </MotionPress>
         <span>
           {page} / {totalPages} ·{' '}
           {t('admin.common.total', { count: total })}
         </span>
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={page >= totalPages || isFetching}
           onClick={() =>
@@ -134,7 +134,7 @@ export function PlaylistsListRoute() {
           }
         >
           {t('admin.common.next')}
-        </Press>
+        </MotionPress>
       </div>
     </section>
   )

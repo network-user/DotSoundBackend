@@ -13,7 +13,7 @@ import {
 } from '@tanstack/react-query'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { Sheet } from '@/components/ui/Sheet'
 import { useStepUp } from './auth/StepUpDialog'
 import { useAdminPrompt } from './layout/AdminPromptContext'
@@ -866,7 +866,7 @@ export function ArtistCatalogEditor({
                 />
               </label>
             </div>
-            <Press
+            <MotionPress
               variant="primary"
               disabled={saveSc.isPending}
               onClick={() => {
@@ -881,7 +881,7 @@ export function ArtistCatalogEditor({
               }}
             >
               {t('admin.artists.catalog.saveSoundcloud')}
-            </Press>
+            </MotionPress>
           </section>
           <section className="admin-catalog-section">
             <h3>{t('admin.artists.catalog.avatar')}</h3>
@@ -912,7 +912,7 @@ export function ArtistCatalogEditor({
                   })
                 }}
               />
-              <Press
+              <MotionPress
                 variant="ghost"
                 disabled={uploadAvatar.isPending}
                 onClick={() => avatarInputRef.current?.click()}
@@ -920,7 +920,7 @@ export function ArtistCatalogEditor({
                 {uploadAvatar.isPending
                   ? t('admin.artists.catalog.avatarUploading')
                   : t('admin.artists.catalog.avatarUpload')}
-              </Press>
+              </MotionPress>
             </div>
           </section>
           <section className="admin-catalog-section">
@@ -944,13 +944,13 @@ export function ArtistCatalogEditor({
                 )}
               </div>
             )}
-            <Press
+            <MotionPress
               variant="ghost"
               disabled={catalogSyncBusy}
               onClick={() => void onSyncFull()}
             >
               {t('admin.artists.catalog.syncFull')}
-            </Press>
+            </MotionPress>
           </section>
         </details>
 
@@ -964,7 +964,7 @@ export function ArtistCatalogEditor({
                 'admin.artists.catalog.newReleasePlaceholder',
               )}
             />
-            <Press
+            <MotionPress
               variant="ghost"
               disabled={
                 createRelease.isPending || !newTitle.trim()
@@ -972,7 +972,7 @@ export function ArtistCatalogEditor({
               onClick={() => createRelease.mutate()}
             >
               {t('admin.artists.catalog.addRelease')}
-            </Press>
+            </MotionPress>
           </div>
           <ul className="admin-catalog-release-list">
             {releasesOrdered.map((rel, idx) => (
@@ -1007,7 +1007,7 @@ export function ArtistCatalogEditor({
                   </span>
                 </button>
                 <div className="admin-catalog-rel-actions">
-                  <Press
+                  <MotionPress
                     variant="ghost"
                     aria-label={t(
                       'admin.artists.catalog.moveUp',
@@ -1015,8 +1015,8 @@ export function ArtistCatalogEditor({
                     onClick={() => moveRelease(idx, -1)}
                   >
                     <Icon name="chevron-up" size={18} />
-                  </Press>
-                  <Press
+                  </MotionPress>
+                  <MotionPress
                     variant="ghost"
                     aria-label={t(
                       'admin.artists.catalog.moveDown',
@@ -1024,22 +1024,22 @@ export function ArtistCatalogEditor({
                     onClick={() => moveRelease(idx, 1)}
                   >
                     <Icon name="chevron-down" size={18} />
-                  </Press>
-                  <Press
+                  </MotionPress>
+                  <MotionPress
                     variant="ghost"
                     disabled={catalogSyncBusy}
                     onClick={() => void onSyncRelease(rel.id)}
                   >
                     {t('admin.artists.catalog.syncRelease')}
-                  </Press>
-                  <Press
+                  </MotionPress>
+                  <MotionPress
                     variant="ghost"
                     onClick={() =>
                       void confirmDeleteRelease(rel.id)
                     }
                   >
                     {t('admin.artists.catalog.deleteRelease')}
-                  </Press>
+                  </MotionPress>
                 </div>
               </li>
             ))}
@@ -1086,7 +1086,7 @@ export function ArtistCatalogEditor({
                       })
                     }}
                   />
-                  <Press
+                  <MotionPress
                     variant="ghost"
                     disabled={uploadReleaseCover.isPending}
                     onClick={() =>
@@ -1100,7 +1100,7 @@ export function ArtistCatalogEditor({
                       : t(
                           'admin.artists.catalog.releaseCoverUpload',
                         )}
-                  </Press>
+                  </MotionPress>
                 </div>
                 <div className="admin-catalog-release-fields">
                   <label>
@@ -1146,7 +1146,7 @@ export function ArtistCatalogEditor({
                       }}
                     />
                   </label>
-                  <Press
+                  <MotionPress
                     variant="primary"
                     disabled={
                       !releaseMeta.title.trim() ||
@@ -1165,7 +1165,7 @@ export function ArtistCatalogEditor({
                     }
                   >
                     {t('admin.artists.catalog.saveReleaseMeta')}
-                  </Press>
+                  </MotionPress>
                 </div>
               </div>
 
@@ -1212,7 +1212,7 @@ export function ArtistCatalogEditor({
                           {tid}
                         </span>
                         <div className="admin-catalog-rel-actions">
-                          <Press
+                          <MotionPress
                             variant="ghost"
                             aria-label={t(
                               'admin.artists.catalog.moveUp',
@@ -1222,8 +1222,8 @@ export function ArtistCatalogEditor({
                             }
                           >
                             <Icon name="chevron-up" size={18} />
-                          </Press>
-                          <Press
+                          </MotionPress>
+                          <MotionPress
                             variant="ghost"
                             aria-label={t(
                               'admin.artists.catalog.moveDown',
@@ -1236,8 +1236,8 @@ export function ArtistCatalogEditor({
                               name="chevron-down"
                               size={18}
                             />
-                          </Press>
-                          <Press
+                          </MotionPress>
+                          <MotionPress
                             variant="ghost"
                             onClick={() =>
                               removeTrackAt(tidx)
@@ -1246,7 +1246,7 @@ export function ArtistCatalogEditor({
                             {t(
                               'admin.artists.catalog.removeTrack',
                             )}
-                          </Press>
+                          </MotionPress>
                         </div>
                       </div>
                       <div className="admin-catalog-track-fields">
@@ -1325,7 +1325,7 @@ export function ArtistCatalogEditor({
                               )
                             }}
                           />
-                          <Press
+                          <MotionPress
                             variant="ghost"
                             disabled={
                               uploadTrackCoverMut.isPending
@@ -1341,8 +1341,8 @@ export function ArtistCatalogEditor({
                             {t(
                               'admin.artists.catalog.trackCoverUpload',
                             )}
-                          </Press>
-                          <Press
+                          </MotionPress>
+                          <MotionPress
                             variant="primary"
                             disabled={
                               saveTrackRow.isPending
@@ -1381,14 +1381,14 @@ export function ArtistCatalogEditor({
                             {t(
                               'admin.artists.catalog.saveTrackMeta',
                             )}
-                          </Press>
+                          </MotionPress>
                         </div>
                       </div>
                     </li>
                   )
                 })}
               </ul>
-              <Press
+              <MotionPress
                 variant="primary"
                 disabled={
                   saveTracks.isPending ||
@@ -1400,7 +1400,7 @@ export function ArtistCatalogEditor({
                 }
               >
                 {t('admin.artists.catalog.saveTrackOrder')}
-              </Press>
+              </MotionPress>
 
               <div className="admin-catalog-search">
                 <h4 className="admin-catalog-subhead">
@@ -1478,7 +1478,7 @@ export function ArtistCatalogEditor({
                 )}
               </ul>
               <div className="admin-catalog-pagination">
-                <Press
+                <MotionPress
                   variant="ghost"
                   disabled={allTracksPage <= 1}
                   onClick={() =>
@@ -1488,14 +1488,14 @@ export function ArtistCatalogEditor({
                   }
                 >
                   {t('admin.common.prev')}
-                </Press>
+                </MotionPress>
                 <span>
                   {allTracksPage} / {allPages} ·{' '}
                   {t('admin.common.total', {
                     count: allTotal,
                   })}
                 </span>
-                <Press
+                <MotionPress
                   variant="ghost"
                   disabled={allTracksPage >= allPages}
                   onClick={() =>
@@ -1503,7 +1503,7 @@ export function ArtistCatalogEditor({
                   }
                 >
                   {t('admin.common.next')}
-                </Press>
+                </MotionPress>
               </div>
             </>
           )}
@@ -1621,7 +1621,7 @@ export function ArtistCatalogEditor({
                         />
                       </td>
                       <td>
-                        <Press
+                        <MotionPress
                           variant="ghost"
                           onClick={() => {
                             setDiscographyItems((prev) =>
@@ -1633,14 +1633,14 @@ export function ArtistCatalogEditor({
                           {t(
                             'admin.artists.catalog.discographyRemoveRow',
                           )}
-                        </Press>
+                        </MotionPress>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               <div className="admin-catalog-discography-actions">
-                <Press
+                <MotionPress
                   variant="ghost"
                   onClick={() => {
                     setDiscographyItems((prev) => [
@@ -1658,8 +1658,8 @@ export function ArtistCatalogEditor({
                   {t(
                     'admin.artists.catalog.discographyAddRow',
                   )}
-                </Press>
-                <Press
+                </MotionPress>
+                <MotionPress
                   variant="primary"
                   disabled={
                     !discographyDirty ||
@@ -1679,16 +1679,16 @@ export function ArtistCatalogEditor({
                   {t(
                     'admin.artists.catalog.discographySave',
                   )}
-                </Press>
+                </MotionPress>
               </div>
             </div>
           )}
         </section>
 
         <div className="admin-catalog-footer">
-          <Press variant="ghost" onClick={onClose}>
+          <MotionPress variant="ghost" onClick={onClose}>
             {t('admin.common.cancel')}
-          </Press>
+          </MotionPress>
         </div>
       </div>
     </Sheet>

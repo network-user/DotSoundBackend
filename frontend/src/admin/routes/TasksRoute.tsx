@@ -8,7 +8,7 @@ import {
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Icon } from '@/components/Icon/Icon'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { lyricsTierAdminTitle } from '../lib/lyricsAdminLabels'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
@@ -937,7 +937,7 @@ export function TasksRoute() {
             {t('admin.tasks.lyricsJobs')}
           </h2>
           {queuedCount > 0 && (
-            <Press
+            <MotionPress
               variant="primary"
               onClick={handleCancelAll}
               disabled={bulkBusy}
@@ -945,7 +945,7 @@ export function TasksRoute() {
               {t('admin.tasks.cancelQueueButton', {
                 count: queuedCount,
               })}
-            </Press>
+            </MotionPress>
           )}
         </div>
         <p className="admin-card__sub">

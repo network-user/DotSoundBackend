@@ -7,7 +7,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import { Icon } from '@/components/Icon/Icon'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 
@@ -298,13 +298,13 @@ export function AlbumDetailRoute() {
           style={{ display: 'none' }}
           onChange={handleCoverChange}
         />
-        <Press
-          variant="default"
+        <MotionPress
+          variant="ghost"
           disabled={busy}
           onClick={() => coverInputRef.current?.click()}
         >
           {t('admin.albums.changeCover')}
-        </Press>
+        </MotionPress>
       </div>
 
       <div
@@ -396,13 +396,13 @@ export function AlbumDetailRoute() {
           />
           {t('admin.albums.fieldPublic')}
         </label>
-        <Press
+        <MotionPress
           variant="primary"
           onClick={() => void handleSaveMeta()}
           disabled={saveMetaMutation.isPending || busy}
         >
           {t('admin.albums.saveMeta')}
-        </Press>
+        </MotionPress>
       </div>
 
       <h2 style={{ margin: '24px 0 12px', fontSize: 17 }}>
@@ -453,15 +453,15 @@ export function AlbumDetailRoute() {
                   flexShrink: 0,
                 }}
               >
-                <Press
+                <MotionPress
                   variant="ghost"
                   aria-label="up"
                   disabled={busy || idx === 0}
                   onClick={() => moveTrack(idx, -1)}
                 >
                   <Icon name="chevron-up" size={18} />
-                </Press>
-                <Press
+                </MotionPress>
+                <MotionPress
                   variant="ghost"
                   aria-label="down"
                   disabled={
@@ -470,14 +470,14 @@ export function AlbumDetailRoute() {
                   onClick={() => moveTrack(idx, 1)}
                 >
                   <Icon name="chevron-down" size={18} />
-                </Press>
-                <Press
+                </MotionPress>
+                <MotionPress
                   variant="ghost"
                   disabled={busy}
                   onClick={() => void handleRemoveTrack(tid)}
                 >
                   {t('admin.albums.removeTrack')}
-                </Press>
+                </MotionPress>
               </span>
             </li>
           )
@@ -491,15 +491,15 @@ export function AlbumDetailRoute() {
           flexWrap: 'wrap',
         }}
       >
-        <Press
-          variant="default"
+        <MotionPress
+          variant="ghost"
           disabled={busy}
           onClick={() => void handleSaveOrder()}
         >
           {t('admin.albums.saveOrder')}
-        </Press>
-        <Press
-          variant="default"
+        </MotionPress>
+        <MotionPress
+          variant="ghost"
           disabled={busy}
           onClick={() => {
             setAddModal(true)
@@ -508,7 +508,7 @@ export function AlbumDetailRoute() {
           }}
         >
           {t('admin.albums.addTrack')}
-        </Press>
+        </MotionPress>
       </div>
 
       {addModal && (
@@ -547,7 +547,7 @@ export function AlbumDetailRoute() {
                   const art = it.artist as string | null
                   return (
                     <li key={id} style={{ marginBottom: 6 }}>
-                      <Press
+                      <MotionPress
                         variant="ghost"
                         disabled={busy}
                         onClick={() => void handleAddTrack(id)}
@@ -565,14 +565,14 @@ export function AlbumDetailRoute() {
                         >
                           #{id}
                         </span>
-                      </Press>
+                      </MotionPress>
                     </li>
                   )
                 },
               )}
             </ul>
             <div className="admin-pagination">
-              <Press
+              <MotionPress
                 variant="ghost"
                 disabled={addPage <= 1}
                 onClick={() =>
@@ -580,8 +580,8 @@ export function AlbumDetailRoute() {
                 }
               >
                 {t('admin.common.prev')}
-              </Press>
-              <Press
+              </MotionPress>
+              <MotionPress
                 variant="ghost"
                 disabled={
                   !addQuery.data ||
@@ -590,7 +590,7 @@ export function AlbumDetailRoute() {
                 onClick={() => setAddPage((p) => p + 1)}
               >
                 {t('admin.common.next')}
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>

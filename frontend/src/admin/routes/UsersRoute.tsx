@@ -6,7 +6,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
@@ -249,30 +249,30 @@ export function UsersRoute() {
             }}
           >
             {u.is_active ? (
-              <Press
+              <MotionPress
                 variant="ghost"
                 disabled={busy}
                 onClick={() => handleBan(u)}
               >
                 {t('admin.users.actionBan')}
-              </Press>
+              </MotionPress>
             ) : (
-              <Press
+              <MotionPress
                 variant="ghost"
                 disabled={busy}
                 onClick={() => handleUnban(u)}
               >
                 {t('admin.users.actionUnban')}
-              </Press>
+              </MotionPress>
             )}
-            <Press
+            <MotionPress
               variant="ghost"
               disabled={busy}
               onClick={() => handleForceLogout(u)}
             >
               {t('admin.users.actionLogout')}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               disabled={busy}
               onClick={() => {
@@ -281,7 +281,7 @@ export function UsersRoute() {
               }}
             >
               {t('admin.users.actionMessage')}
-            </Press>
+            </MotionPress>
           </div>
         )
       },
@@ -422,7 +422,7 @@ export function UsersRoute() {
         enableSorting
       />
       <div className="admin-pagination">
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={page <= 1 || isFetching}
           onClick={() =>
@@ -430,12 +430,12 @@ export function UsersRoute() {
           }
         >
           {t('admin.common.prev')}
-        </Press>
+        </MotionPress>
         <span>
           {page} / {totalPages} ·{' '}
           {t('admin.common.total', { count: total })}
         </span>
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={
             page >= totalPages || isFetching
@@ -443,7 +443,7 @@ export function UsersRoute() {
           onClick={() => setPage((p) => p + 1)}
         >
           {t('admin.common.next')}
-        </Press>
+        </MotionPress>
       </div>
       {messageTarget && (
         <div
@@ -505,7 +505,7 @@ export function UsersRoute() {
                 marginTop: 12,
               }}
             >
-              <Press
+              <MotionPress
                 variant="ghost"
                 onClick={() => {
                   setMessageTarget(null)
@@ -513,8 +513,8 @@ export function UsersRoute() {
                 }}
               >
                 {t('admin.users.messageCancel')}
-              </Press>
-              <Press
+              </MotionPress>
+              <MotionPress
                 variant="primary"
                 disabled={
                   !messageText.trim() ||
@@ -529,7 +529,7 @@ export function UsersRoute() {
                 }}
               >
                 {t('admin.users.messageSend')}
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>
