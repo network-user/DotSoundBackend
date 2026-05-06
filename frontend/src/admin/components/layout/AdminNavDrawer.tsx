@@ -6,7 +6,7 @@ import {
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useBrandLabel } from '@/lib/brand'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { AdminMenu } from './AdminMenu'
 
 export function AdminNavDrawer({
@@ -73,15 +73,15 @@ export function AdminNavDrawer({
             onClose()
           }}
         />
-        <div className="admin-nav-drawer__foot">
-          <Press
+        <div className="admin-nav-drawer__foot adm-r-nav-drawer-foot">
+          <MotionPress
             variant="ghost"
             onClick={() => {
               void onLogout()
             }}
           >
             {t('admin.shell.signOut')}
-          </Press>
+          </MotionPress>
         </div>
       </div>
     </div>

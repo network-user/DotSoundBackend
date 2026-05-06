@@ -6,8 +6,10 @@ import {
   type DragEvent,
   type FormEvent,
 } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
+import { dismissIsland, showIsland } from '@/lib/island'
 import { getInternalUserId } from '@/lib/telegram'
 import { haptic, hapticNotification, hapticSelection } from '@/lib/telegram'
 import type { LyricsResponse, Track } from '@/types/api'
@@ -22,9 +24,6 @@ function fmtDuration(sec: number): string {
   const s = Math.floor(sec % 60).toString().padStart(2, '0')
   return `${m}:${s}`
 }
-
-const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/flac', 'audio/mp4', 'audio/aac']
-const MAX_AUDIO_BYTES = 50 * 1024 * 1024
 
 export function UploadFileTab({ onSuccess }: Props) {
   const [title, setTitle] = useState('')
@@ -55,6 +54,8 @@ export function UploadFileTab({ onSuccess }: Props) {
   const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(null)
   const [coverDragging, setCoverDragging] = useState(false)
   const [audioDragging, setAudioDragging] = useState(false)
+
+  const { t } = useTranslation()
 
   useEffect(() => {
     api.getGenres().then(setGenres).catch(() => {})
@@ -210,16 +211,6 @@ export function UploadFileTab({ onSuccess }: Props) {
   }, [localAudioUrl])
 
   const applyAudioFile = (file: File) => {
-    if (!ALLOWED_AUDIO_TYPES.includes(file.type)) {
-      setError('Формат файла не поддерживается')
-      hapticNotification('error')
-      return
-    }
-    if (file.size > MAX_AUDIO_BYTES) {
-      setError('Файл слишком большой (макс. 50 МБ)')
-      hapticNotification('error')
-      return
-    }
     setError('')
     setAudioFile(file)
     hapticSelection()
@@ -309,7 +300,13 @@ export function UploadFileTab({ onSuccess }: Props) {
     setUploading(true)
     setUploadDone(false)
 
+    let islandId: string | undefined
     try {
+      islandId = showIsland({
+        kind: 'progress',
+        title: t('redesign.upload.progressTitle'),
+        hint: t('redesign.upload.progressHint'),
+      })
       const fd = new FormData()
       fd.append('file', audioFile)
       fd.append('title', title.trim())
@@ -330,6 +327,12 @@ export function UploadFileTab({ onSuccess }: Props) {
         }
       }
       setUploadDone(true)
+      if (islandId) dismissIsland(islandId)
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.upload.doneToast'),
+        durationMs: 2800,
+      })
       hapticNotification('success')
 
       setTimeout(async () => {
@@ -338,6 +341,7 @@ export function UploadFileTab({ onSuccess }: Props) {
         onSuccess(fullTrack)
       }, 600)
     } catch (err: unknown) {
+      if (islandId) dismissIsland(islandId)
       setUploading(false)
       setUploadDone(false)
       const msg = err instanceof Error ? err.message : ''
@@ -616,7 +620,7 @@ export function UploadFileTab({ onSuccess }: Props) {
         <input
           id="audio-input"
           type="file"
-          accept="audio/mpeg,audio/ogg,audio/wav,audio/flac,audio/mp4,audio/aac"
+          accept="audio/*"
           hidden
           onChange={handleAudioChange}
         />

@@ -1,5 +1,14 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
+import {
+  m,
+  SPRING_GENTLE,
+  TWEEN_FAST,
+  useReducedMotion,
+} from '@/lib/motion'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { hapticNotification, hapticSelection } from '@/lib/telegram'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { UploadFileTab } from '@/components/Upload/UploadFileTab'
@@ -11,7 +20,9 @@ import type { Track } from '@/types/api'
 type Tab = 'file' | 'soundcloud' | 'youtube' | 'bandcamp'
 
 export function UploadView() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
+  const reduce = useReducedMotion()
   const { playTrack } = usePlayerActions()
   const [tab, setTab] = useState<Tab>('file')
 
@@ -29,46 +40,82 @@ export function UploadView() {
     setTab(next)
   }
 
+  const transition = reduce ? TWEEN_FAST : SPRING_GENTLE
+
   return (
-    <section id="view-upload" className="view active upload-view">
-      <div className="view-header upload-view__header">
-        <h2>Загрузка трека</h2>
-        <p className="upload-view__subtitle">
-          Добавь трек в библиотеку за пару шагов.
+    <section
+      id="view-upload"
+      className="view active upload-view ru-up-root"
+    >
+      <div className="view-header upload-view__header ru-up-header">
+        <h2>{t('redesign.upload.screenTitle')}</h2>
+        <p className="upload-view__subtitle ru-up-subtitle">
+          {t('redesign.upload.screenSubtitle')}
         </p>
       </div>
 
-      <div className="upload-tabs">
-        <button
-          className={`upload-tab${tab === 'file' ? ' active' : ''}`}
-          onClick={() => handleTabChange('file')}
-        >
-          Файл
-        </button>
-        <button
-          className={`upload-tab${tab === 'soundcloud' ? ' active' : ''}`}
-          onClick={() => handleTabChange('soundcloud')}
-        >
-          SoundCloud
-        </button>
-        <button
-          className={`upload-tab${tab === 'youtube' ? ' active' : ''}`}
-          onClick={() => handleTabChange('youtube')}
-        >
-          YouTube
-        </button>
-        <button
-          className={`upload-tab${tab === 'bandcamp' ? ' active' : ''}`}
-          onClick={() => handleTabChange('bandcamp')}
-        >
-          Bandcamp
-        </button>
+      <div
+        className="upload-tabs ru-up-tabs"
+        role="tablist"
+        aria-label={t('redesign.upload.screenTitle')}
+      >
+        {(
+          [
+            ['file', 'tabFile'],
+            ['soundcloud', 'tabSoundCloud'],
+            ['youtube', 'tabYouTube'],
+            ['bandcamp', 'tabBandcamp'],
+          ] as const
+        ).map(([id, labelKey]) => (
+          <MotionPress
+            key={id}
+            type="button"
+            variant={tab === id ? 'primary' : 'ghost'}
+            haptic="selection"
+            aria-selected={tab === id}
+            role="tab"
+            className={
+              tab === id ? 'ru-up-tab is-active' : 'ru-up-tab'
+            }
+            onClick={() => handleTabChange(id)}
+          >
+            {t(`redesign.upload.${labelKey}`)}
+          </MotionPress>
+        ))}
       </div>
 
-      {tab === 'file' && <UploadFileTab onSuccess={handleSuccess} />}
-      {tab === 'soundcloud' && <UploadSoundCloudTab onSuccess={handleSuccess} />}
-      {tab === 'youtube' && <UploadYouTubeTab onSuccess={handleSuccess} />}
-      {tab === 'bandcamp' && <UploadBandcampTab onSuccess={handleSuccess} />}
+      <div className="ru-up-panel">
+        <AnimatePresence mode="wait">
+          <m.div
+            key={tab}
+            initial={
+              reduce ? false : { opacity: 0, y: 10 }
+            }
+            animate={{ opacity: 1, y: 0 }}
+            exit={
+              reduce ? undefined : { opacity: 0, y: -8 }
+            }
+            transition={transition}
+          >
+            {tab === 'file' && (
+              <UploadFileTab onSuccess={handleSuccess} />
+            )}
+            {tab === 'soundcloud' && (
+              <UploadSoundCloudTab
+                onSuccess={handleSuccess}
+              />
+            )}
+            {tab === 'youtube' && (
+              <UploadYouTubeTab onSuccess={handleSuccess} />
+            )}
+            {tab === 'bandcamp' && (
+              <UploadBandcampTab
+                onSuccess={handleSuccess}
+              />
+            )}
+          </m.div>
+        </AnimatePresence>
+      </div>
     </section>
   )
 }
