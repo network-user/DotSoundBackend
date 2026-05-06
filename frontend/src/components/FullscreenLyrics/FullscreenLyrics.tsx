@@ -76,6 +76,8 @@ export function FullscreenLyrics() {
   const [videoFailed, setVideoFailed] = useState(false)
   const [offsetMs, setOffsetMs] = useState<number>(readOffset)
   const [karaoke, setKaraoke] = useState<boolean>(readKaraoke)
+  const [selectedLang, setSelectedLang] =
+    useState<string>('original')
   const [activeIdx, setActiveIdx] = useState(-1)
   const [wordIdx, setWordIdx] = useState(-1)
   const activeRef = useRef<HTMLDivElement>(null)
@@ -90,6 +92,7 @@ export function FullscreenLyrics() {
     if (!isLyricsOpen || !track) {
       return
     }
+    setSelectedLang('original')
     setLoading(true)
     api
       .getLyrics(track.id)
@@ -118,6 +121,17 @@ export function FullscreenLyrics() {
   )
   const karaokeActive =
     karaoke && hasWordTimes && lyrics?.sync_quality === 'word'
+  const translationItems = lyrics?.translations ?? []
+  const selectedTranslation =
+    selectedLang === 'original'
+      ? null
+      : translationItems.find(
+          (x) => x.language_code === selectedLang,
+        ) ?? null
+  const plainTextToRender =
+    selectedTranslation?.translated_text ??
+    lyrics?.plain_text ??
+    ''
 
   useEffect(() => {
     const lines = lyrics?.synced_lines
@@ -288,6 +302,28 @@ export function FullscreenLyrics() {
             {offsetMs} ms
           </span>
         </label>
+        {translationItems.length > 0 && (
+          <label className="fl-offset">
+            <span>Language</span>
+            <select
+              className="form-input"
+              value={selectedLang}
+              onChange={(e) =>
+                setSelectedLang(e.target.value)
+              }
+            >
+              <option value="original">Original</option>
+              {translationItems.map((tr) => (
+                <option
+                  key={tr.language_code}
+                  value={tr.language_code}
+                >
+                  {tr.language_code.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       <div className="fl-content">
@@ -327,7 +363,7 @@ export function FullscreenLyrics() {
           : !loading &&
             lyrics?.plain_text && (
               <pre className="fl-plain">
-                {lyrics.plain_text}
+                {plainTextToRender}
               </pre>
             )}
 

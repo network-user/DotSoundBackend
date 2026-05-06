@@ -28,6 +28,7 @@ import type {
   LikeToggleResponse,
   LyricsAutoResponse,
   LyricsAutoStatusResponse,
+  LyricsTranslation,
   LyricsResponse,
   Playlist,
   BCSearchResult,
@@ -591,6 +592,41 @@ export const api = {
 
   getLyrics(trackId: number): Promise<LyricsResponse> {
     return request(`/api/v1/tracks/${trackId}/lyrics`)
+  },
+
+  getLyricsTranslations(
+    trackId: number,
+  ): Promise<LyricsTranslation[]> {
+    return request(
+      `/api/v1/tracks/${trackId}/lyrics/translations`,
+    )
+  },
+
+  saveLyricsTranslation(
+    trackId: number,
+    languageCode: string,
+    translatedText: string,
+  ): Promise<LyricsTranslation> {
+    return request(
+      `/api/v1/tracks/${trackId}/lyrics/translations/${encodeURIComponent(languageCode)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          translated_text: translatedText,
+        }),
+      },
+    )
+  },
+
+  deleteLyricsTranslation(
+    trackId: number,
+    languageCode: string,
+  ): Promise<void> {
+    return request(
+      `/api/v1/tracks/${trackId}/lyrics/translations/${encodeURIComponent(languageCode)}`,
+      { method: 'DELETE' },
+    )
   },
 
   saveLyrics(trackId: number, plainText: string): Promise<LyricsResponse> {

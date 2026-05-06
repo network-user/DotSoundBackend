@@ -89,3 +89,51 @@ async def test_delete_by_track_id(
         track.id
     )
     assert removed_again is False
+
+
+async def test_upsert_and_list_translations(
+    session: AsyncSession,
+) -> None:
+    track = await _make_track(session)
+    repo = LyricsRepository(session)
+    lyrics = await repo.create_or_update(
+        track.id, "Lyrics"
+    )
+
+    await repo.upsert_translation(
+        lyrics.id, "EN", "Hello"
+    )
+    await repo.upsert_translation(
+        lyrics.id, "ru", "Privet"
+    )
+    await repo.upsert_translation(
+        lyrics.id, "en", "Hello updated"
+    )
+    items = await repo.list_translations(lyrics.id)
+    assert [x.language_code for x in items] == [
+        "en",
+        "ru",
+    ]
+    assert items[0].translated_text == "Hello updated"
+
+
+async def test_delete_translation(
+    session: AsyncSession,
+) -> None:
+    track = await _make_track(session)
+    repo = LyricsRepository(session)
+    lyrics = await repo.create_or_update(
+        track.id, "Lyrics"
+    )
+    await repo.upsert_translation(
+        lyrics.id, "en", "Hello"
+    )
+
+    removed = await repo.delete_translation(
+        lyrics.id, "en"
+    )
+    assert removed is True
+    removed_again = await repo.delete_translation(
+        lyrics.id, "en"
+    )
+    assert removed_again is False

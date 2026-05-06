@@ -26,3 +26,8 @@ class TrackLyrics(Base, TimestampMixin):
     sync_profile: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     track = relationship("Track", back_populates="lyrics")
+    translations = relationship(
+        "TrackLyricsTranslation",
+        back_populates="lyrics",
+        cascade="all, delete-orphan",
+    )
