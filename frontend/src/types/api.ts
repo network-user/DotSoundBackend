@@ -290,6 +290,14 @@ export interface LyricsResponse {
   sync_source_name?: string | null
   sync_quality?: string | null
   sync_profile?: string | null
+  translations?: LyricsTranslation[] | null
+  created_at: string
+  updated_at: string
+}
+
+export interface LyricsTranslation {
+  language_code: string
+  translated_text: string
   created_at: string
   updated_at: string
 }

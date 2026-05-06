@@ -31,6 +31,8 @@ from app.schemas.lyrics import (
     LyricsAutoStatusResponse,
     LyricsCreateRequest,
     LyricsResponse,
+    LyricsTranslationResponse,
+    LyricsTranslationUpsertRequest,
     LyricsSyncRequest,
 )
 from app.services.lyrics_service import LyricsService
@@ -120,6 +122,80 @@ async def update_sync(
         synced_lines=synced_dicts,
     )
     return LyricsResponse.model_validate(lyrics)
+
+
+@router.get(
+    "/{track_id}/lyrics/translations",
+    response_model=list[LyricsTranslationResponse],
+    summary="List lyrics translations for a track",
+)
+@limiter.limit("200/minute")
+async def list_lyrics_translations(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+) -> list[LyricsTranslationResponse]:
+    service = LyricsService(session)
+    items = await service.list_translations(
+        track_id=track_id,
+        requester_id=current_user.id if current_user else None,
+    )
+    return [
+        LyricsTranslationResponse.model_validate(item)
+        for item in items
+    ]
+
+
+@router.put(
+    "/{track_id}/lyrics/translations/{language_code}",
+    response_model=LyricsTranslationResponse,
+    summary="Create or update lyrics translation (owner only)",
+)
+@limiter.limit("30/minute")
+async def upsert_lyrics_translation(
+    request: Request,
+    track_id: int,
+    language_code: str,
+    body: LyricsTranslationUpsertRequest,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> LyricsTranslationResponse:
+    service = LyricsService(session)
+    item = await service.upsert_translation(
+        track_id=track_id,
+        user_id=current_user.id,
+        language_code=language_code,
+        translated_text=body.translated_text,
+    )
+    return LyricsTranslationResponse.model_validate(item)
+
+
+@router.delete(
+    "/{track_id}/lyrics/translations/{language_code}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete lyrics translation (owner only)",
+)
+@limiter.limit("30/minute")
+async def delete_lyrics_translation(
+    request: Request,
+    track_id: int,
+    language_code: str,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    service = LyricsService(session)
+    removed = await service.delete_translation(
+        track_id=track_id,
+        user_id=current_user.id,
+        language_code=language_code,
+    )
+    if not removed:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Lyrics translation not found",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.delete(

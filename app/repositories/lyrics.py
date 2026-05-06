@@ -4,8 +4,12 @@ import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.lyrics import TrackLyrics
+from app.models.lyrics_translation import (
+    TrackLyricsTranslation,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -16,7 +20,9 @@ class LyricsRepository:
 
     async def get_by_track_id(self, track_id: int) -> TrackLyrics | None:
         result = await self._session.execute(
-            select(TrackLyrics).where(TrackLyrics.track_id == track_id)
+            select(TrackLyrics)
+            .options(selectinload(TrackLyrics.translations))
+            .where(TrackLyrics.track_id == track_id)
         )
         return result.scalar_one_or_none()
 
@@ -121,3 +127,62 @@ class LyricsRepository:
             found=removed,
         )
         return removed
+
+    async def list_translations(
+        self, track_lyrics_id: int
+    ) -> list[TrackLyricsTranslation]:
+        result = await self._session.execute(
+            select(TrackLyricsTranslation)
+            .where(
+                TrackLyricsTranslation.track_lyrics_id
+                == track_lyrics_id
+            )
+            .order_by(TrackLyricsTranslation.language_code.asc())
+        )
+        return list(result.scalars().all())
+
+    async def upsert_translation(
+        self,
+        track_lyrics_id: int,
+        language_code: str,
+        translated_text: str,
+    ) -> TrackLyricsTranslation:
+        from datetime import datetime
+
+        normalized_code = language_code.strip().lower()
+        now = datetime.now(UTC)
+        stmt = (
+            insert(TrackLyricsTranslation)
+            .values(
+                track_lyrics_id=track_lyrics_id,
+                language_code=normalized_code,
+                translated_text=translated_text,
+                created_at=now,
+                updated_at=now,
+            )
+            .on_conflict_do_update(
+                constraint="uq_track_lyrics_translations_language",
+                set_={
+                    "translated_text": translated_text,
+                    "updated_at": now,
+                },
+            )
+            .returning(TrackLyricsTranslation)
+        )
+        result = await self._session.execute(stmt)
+        return result.scalar_one()
+
+    async def delete_translation(
+        self,
+        track_lyrics_id: int,
+        language_code: str,
+    ) -> bool:
+        result = await self._session.execute(
+            delete(TrackLyricsTranslation).where(
+                TrackLyricsTranslation.track_lyrics_id
+                == track_lyrics_id,
+                TrackLyricsTranslation.language_code
+                == language_code.strip().lower(),
+            )
+        )
+        return result.rowcount > 0

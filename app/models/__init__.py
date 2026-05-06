@@ -44,6 +44,9 @@ from app.models.like import Like
 from app.models.listen_event import ListenEvent
 from app.models.login_history import LoginHistory
 from app.models.lyrics import TrackLyrics
+from app.models.lyrics_translation import (
+    TrackLyricsTranslation,
+)
 from app.models.lyrics_job import LyricsJob
 from app.models.message import (
     Message,
@@ -131,6 +134,7 @@ __all__ = [
     "TrackArtist",
     "TrackComment",
     "TrackLyrics",
+    "TrackLyricsTranslation",
     "TrackUploadMeta",
     "User",
     "UserBlock",

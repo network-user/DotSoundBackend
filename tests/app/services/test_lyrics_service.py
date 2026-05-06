@@ -202,3 +202,55 @@ async def test_update_sync_no_lyrics(
         await svc.update_sync(tid, uid, [{"time": 0, "text": "X"}])
 
     assert exc.value.status_code == 404
+
+
+async def test_upsert_and_list_translations(
+    session: AsyncSession,
+) -> None:
+    uid = await _make_user(session, telegram_id=1414)
+    tid = await _make_track(session, uid)
+    svc = LyricsService(session)
+    await svc.create_or_update(tid, uid, "Hello")
+
+    await svc.upsert_translation(
+        tid, uid, "EN", "Hello EN"
+    )
+    await svc.upsert_translation(
+        tid, uid, "ru", "Privet"
+    )
+    items = await svc.list_translations(tid, uid)
+    assert [x.language_code for x in items] == [
+        "en",
+        "ru",
+    ]
+
+
+async def test_delete_translation(
+    session: AsyncSession,
+) -> None:
+    uid = await _make_user(session, telegram_id=1415)
+    tid = await _make_track(session, uid)
+    svc = LyricsService(session)
+    await svc.create_or_update(tid, uid, "Hello")
+    await svc.upsert_translation(
+        tid, uid, "en", "Hello EN"
+    )
+
+    removed = await svc.delete_translation(
+        tid, uid, "en"
+    )
+    assert removed is True
+
+
+async def test_upsert_translation_requires_lyrics(
+    session: AsyncSession,
+) -> None:
+    uid = await _make_user(session, telegram_id=1416)
+    tid = await _make_track(session, uid)
+    svc = LyricsService(session)
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.upsert_translation(
+            tid, uid, "en", "Hello EN"
+        )
+    assert exc.value.status_code == 404

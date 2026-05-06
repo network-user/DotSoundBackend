@@ -1038,7 +1038,7 @@ ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyr
 
 ## Lyrics Roadmap
 
-- [ ] Add support for per-track lyrics translations (store translated text separately from original lyrics).
+- [x] Add support for per-track lyrics translations (store translated text separately from original lyrics), including backend API/model + minimal language switch in lyrics UI (2026-05-06).
 
 - [x] RU/EN brand switch for mini app: default '.\\u0437\\u0432\\u0443\\u043a', English '.sound' (loader, splash, auth, home, admin shell, static build sync) ? 2026-05-04
 

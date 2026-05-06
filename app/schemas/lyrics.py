@@ -38,6 +38,19 @@ class LyricsSyncRequest(BaseModel):
         return v
 
 
+class LyricsTranslationUpsertRequest(BaseModel):
+    translated_text: str = Field(max_length=10000)
+
+
+class LyricsTranslationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    language_code: str
+    translated_text: str
+    created_at: datetime
+    updated_at: datetime
+
+
 class LyricsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -64,6 +77,7 @@ class LyricsResponse(BaseModel):
     )
     sync_quality: str | None = None
     sync_profile: str | None = None
+    translations: list[LyricsTranslationResponse] = []
     created_at: datetime
     updated_at: datetime
 

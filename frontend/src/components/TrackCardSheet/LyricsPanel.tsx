@@ -61,6 +61,8 @@ export function LyricsPanel({
     return Number.isFinite(n) ? n : 0
   })
   const activeRef = useRef<HTMLDivElement>(null)
+  const [selectedLang, setSelectedLang] =
+    useState<string>('original')
   const [devOpen, setDevOpen] = useState(false)
   const logEndRef = useRef<HTMLDivElement>(null)
   const [
@@ -105,6 +107,10 @@ export function LyricsPanel({
   useEffect(() => {
     setLyricsChoiceStep('root')
   }, [trackId, genStatus])
+
+  useEffect(() => {
+    setSelectedLang('original')
+  }, [trackId])
 
   useEffect(() => {
     if (genStatus === 'found' && !lyrics) {
@@ -185,6 +191,17 @@ export function LyricsPanel({
   )
   const karaokeActive =
     karaoke && hasWordTimes && lyrics?.sync_quality === 'word'
+  const translationItems = lyrics?.translations ?? []
+  const selectedTranslation =
+    selectedLang === 'original'
+      ? null
+      : translationItems.find(
+          (x) => x.language_code === selectedLang,
+        ) ?? null
+  const plainTextToRender =
+    selectedTranslation?.translated_text ??
+    lyrics?.plain_text ??
+    ''
 
   useEffect(() => {
     if (activeRef.current) {
@@ -910,6 +927,26 @@ export function LyricsPanel({
             </span>
           </label>
         )}
+        {translationItems.length > 0 && (
+          <select
+            className="form-input"
+            value={selectedLang}
+            onChange={(e) =>
+              setSelectedLang(e.target.value)
+            }
+            style={{ maxWidth: 160 }}
+          >
+            <option value="original">Original</option>
+            {translationItems.map((tr) => (
+              <option
+                key={tr.language_code}
+                value={tr.language_code}
+              >
+                {tr.language_code.toUpperCase()}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <div className="lyrics-content">
@@ -969,7 +1006,7 @@ export function LyricsPanel({
             })
           : (
               <pre className="lyrics-plain">
-                {lyrics.plain_text}
+                {plainTextToRender}
               </pre>
             )}
       </div>

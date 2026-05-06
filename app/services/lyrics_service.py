@@ -6,6 +6,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lyrics import TrackLyrics
+from app.models.lyrics_translation import (
+    TrackLyricsTranslation,
+)
 from app.models.track import Track
 from app.repositories.lyrics import LyricsRepository
 from app.repositories.track import TrackRepository
@@ -123,6 +126,62 @@ class LyricsService:
     async def delete_lyrics(self, track_id: int, user_id: int) -> bool:
         await self._get_owned_track(track_id, user_id)
         removed = await self._repo.delete_by_track_id(track_id)
+        if removed:
+            await self._session.commit()
+        return removed
+
+    async def list_translations(
+        self,
+        track_id: int,
+        requester_id: int | None = None,
+    ) -> list[TrackLyricsTranslation]:
+        lyrics = await self.get_lyrics(track_id, requester_id=requester_id)
+        if not lyrics:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lyrics not found",
+            )
+        return await self._repo.list_translations(lyrics.id)
+
+    async def upsert_translation(
+        self,
+        track_id: int,
+        user_id: int,
+        language_code: str,
+        translated_text: str,
+    ) -> TrackLyricsTranslation:
+        await self._get_owned_track(track_id, user_id)
+        lyrics = await self._repo.get_by_track_id(track_id)
+        if not lyrics:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lyrics not found — upload plain text first",
+            )
+        translation = await self._repo.upsert_translation(
+            track_lyrics_id=lyrics.id,
+            language_code=language_code,
+            translated_text=translated_text,
+        )
+        await self._session.commit()
+        return translation
+
+    async def delete_translation(
+        self,
+        track_id: int,
+        user_id: int,
+        language_code: str,
+    ) -> bool:
+        await self._get_owned_track(track_id, user_id)
+        lyrics = await self._repo.get_by_track_id(track_id)
+        if not lyrics:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Lyrics not found",
+            )
+        removed = await self._repo.delete_translation(
+            track_lyrics_id=lyrics.id,
+            language_code=language_code,
+        )
         if removed:
             await self._session.commit()
         return removed
