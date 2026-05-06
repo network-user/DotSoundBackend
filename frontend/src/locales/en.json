@@ -169,6 +169,7 @@
       "stats": {
         "title": "Statistics",
         "subtitle": "Key product metrics for selected period",
+        "filterAll": "All",
         "usersRegistered": "Registrations",
         "listensTotal": "Listens",
         "uniqueListeners": "Unique listeners",

@@ -54,6 +54,15 @@ export function DashboardRoute() {
   const [statsPeriod, setStatsPeriod] = useState<
     'today' | '7d' | '30d'
   >('today')
+  const [statsMetric, setStatsMetric] = useState<
+    | 'all'
+    | 'users_registered'
+    | 'listens_total'
+    | 'unique_listeners'
+    | 'tracks_uploaded'
+    | 'completed_listens'
+    | 'skips'
+  >('all')
 
   const { data, error, isLoading } = useQuery({
     queryKey: ['admin', 'dashboard', 'overview'],
@@ -230,32 +239,98 @@ export function DashboardRoute() {
           <div className="admin-skeleton admin-skeleton--card" />
         ) : (
           <>
+            <div className="admin-range-switch" role="tablist">
+              {[
+                ['all', t('admin.dashboard.stats.filterAll')],
+                [
+                  'users_registered',
+                  t('admin.dashboard.stats.usersRegistered'),
+                ],
+                [
+                  'listens_total',
+                  t('admin.dashboard.stats.listensTotal'),
+                ],
+                [
+                  'unique_listeners',
+                  t('admin.dashboard.stats.uniqueListeners'),
+                ],
+                [
+                  'tracks_uploaded',
+                  t('admin.dashboard.stats.tracksUploaded'),
+                ],
+                [
+                  'completed_listens',
+                  t('admin.dashboard.stats.completed'),
+                ],
+                ['skips', t('admin.dashboard.stats.skips')],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`admin-range-switch__btn${
+                    statsMetric === value ? ' is-active' : ''
+                  }`}
+                  onClick={() =>
+                    setStatsMetric(
+                      value as
+                        | 'all'
+                        | 'users_registered'
+                        | 'listens_total'
+                        | 'unique_listeners'
+                        | 'tracks_uploaded'
+                        | 'completed_listens'
+                        | 'skips',
+                    )
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <section className="kpi-grid">
-              <KpiCard
-                label={t('admin.dashboard.stats.usersRegistered')}
-                value={stats.data.users_registered}
-              />
-              <KpiCard
-                label={t('admin.dashboard.stats.listensTotal')}
-                value={stats.data.listens_total}
-              />
-              <KpiCard
-                label={t('admin.dashboard.stats.uniqueListeners')}
-                value={stats.data.unique_listeners}
-              />
-              <KpiCard
-                label={t('admin.dashboard.stats.tracksUploaded')}
-                value={stats.data.tracks_uploaded}
-              />
-              <KpiCard
-                label={t('admin.dashboard.stats.completed')}
-                value={stats.data.completed_listens}
-              />
-              <KpiCard
-                label={t('admin.dashboard.stats.skips')}
-                value={stats.data.skips}
-                accent={stats.data.skips > 0 ? 'warn' : 'default'}
-              />
+              {(statsMetric === 'all' ||
+                statsMetric === 'users_registered') && (
+                <KpiCard
+                  label={t('admin.dashboard.stats.usersRegistered')}
+                  value={stats.data.users_registered}
+                />
+              )}
+              {(statsMetric === 'all' ||
+                statsMetric === 'listens_total') && (
+                <KpiCard
+                  label={t('admin.dashboard.stats.listensTotal')}
+                  value={stats.data.listens_total}
+                />
+              )}
+              {(statsMetric === 'all' ||
+                statsMetric === 'unique_listeners') && (
+                <KpiCard
+                  label={t('admin.dashboard.stats.uniqueListeners')}
+                  value={stats.data.unique_listeners}
+                />
+              )}
+              {(statsMetric === 'all' ||
+                statsMetric === 'tracks_uploaded') && (
+                <KpiCard
+                  label={t('admin.dashboard.stats.tracksUploaded')}
+                  value={stats.data.tracks_uploaded}
+                />
+              )}
+              {(statsMetric === 'all' ||
+                statsMetric === 'completed_listens') && (
+                <KpiCard
+                  label={t('admin.dashboard.stats.completed')}
+                  value={stats.data.completed_listens}
+                />
+              )}
+              {(statsMetric === 'all' ||
+                statsMetric === 'skips') && (
+                <KpiCard
+                  label={t('admin.dashboard.stats.skips')}
+                  value={stats.data.skips}
+                  accent={stats.data.skips > 0 ? 'warn' : 'default'}
+                />
+              )}
             </section>
             <div className="admin-card admin-dashboard__toplist">
               <h3>{t('admin.dashboard.stats.topTracks')}</h3>

@@ -169,6 +169,7 @@
       "stats": {
         "title": "Статистика",
         "subtitle": "Ключевые продуктовые показатели за период",
+        "filterAll": "Все",
         "usersRegistered": "Регистрации",
         "listensTotal": "Прослушивания",
         "uniqueListeners": "Уникальные слушатели",
