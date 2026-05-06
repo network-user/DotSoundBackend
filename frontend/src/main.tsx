@@ -54,9 +54,3 @@ createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </StrictMode>,
 )
-
-requestAnimationFrame(() => {
-  requestAnimationFrame(() => {
-    window.dispatchEvent(new Event('app-ready'))
-  })
-})

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   keepPreviousData,
@@ -12,6 +12,8 @@ import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { trackProgressiveAudioUrl } from '@/lib/offlineCache'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
+import { KpiCard } from '../components/widgets/KpiCard'
+import { Sparkline } from '../components/charts/Sparkline'
 
 interface TrackRow {
   id: number
@@ -86,6 +88,20 @@ export function TracksRoute() {
   const total = data?.total || 0
   const totalPages = Math.max(1, Math.ceil(total / 25))
   const rows = (data?.items || []) as unknown as TrackRow[]
+  const visibleCount = rows.filter((r) => r.is_active).length
+  const withGenreCount = rows.filter((r) => !!r.genre).length
+  const sparkline = useMemo(() => {
+    const buckets = new Map<string, number>()
+    for (const row of rows) {
+      const day = new Date(row.created_at)
+        .toISOString()
+        .slice(0, 10)
+      buckets.set(day, (buckets.get(day) || 0) + 1)
+    }
+    return Array.from(buckets.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([, value]) => value)
+  }, [rows])
 
   useEffect(() => {
     setSelectedIds(new Set())
@@ -469,6 +485,30 @@ export function TracksRoute() {
   return (
     <div>
       <h1>{t('admin.tracks.title')}</h1>
+      <section className="kpi-grid">
+        <KpiCard
+          label={t('admin.tracks.title')}
+          value={total}
+          hint={t('admin.common.total', { count: total })}
+        />
+        <KpiCard
+          label={t('admin.tracks.visible')}
+          value={visibleCount}
+          hint={t('admin.tracks.hidden')}
+        />
+        <KpiCard
+          label="With genre"
+          value={withGenreCount}
+          hint={
+            sparkline.length > 1 ? (
+              <Sparkline
+                data={sparkline}
+                ariaLabel="Tracks growth sparkline"
+              />
+            ) : undefined
+          }
+        />
+      </section>
       <div className="admin-toolbar">
         <input
           type="search"

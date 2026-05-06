@@ -28,6 +28,7 @@ function flatten(raw: unknown): ChartPoint[] {
 export function MetricsRoute() {
   const { t } = useTranslation()
   const [minutes, setMinutes] = useState(60)
+  const [live, setLive] = useState(true)
   const list = useQuery({
     queryKey: ['admin', 'metrics', 'list'],
     queryFn: () => adminApi.metricsList(),
@@ -36,7 +37,7 @@ export function MetricsRoute() {
     queryKey: ['admin', 'metrics', 'rps', minutes],
     queryFn: () =>
       adminApi.metricRange('rps_5m', minutes, 30),
-    refetchInterval: 30_000,
+    refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
   const errs = useQuery({
@@ -47,7 +48,7 @@ export function MetricsRoute() {
         minutes,
         30,
       ),
-    refetchInterval: 30_000,
+    refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
   const lat = useQuery({
@@ -58,7 +59,7 @@ export function MetricsRoute() {
         minutes,
         30,
       ),
-    refetchInterval: 30_000,
+    refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
   const srcStatus =
@@ -101,6 +102,14 @@ export function MetricsRoute() {
             count: list.data?.metrics.length ?? 0,
           })}
         </span>
+        <label className="admin-checkbox">
+          <input
+            type="checkbox"
+            checked={live}
+            onChange={(e) => setLive(e.target.checked)}
+          />
+          Live
+        </label>
       </div>
       {srcStatus === 'disabled' && (
         <div className="admin-warning">
@@ -120,24 +129,48 @@ export function MetricsRoute() {
       )}
       <section className="admin-card">
         <h2>{t('admin.metrics.rps')}</h2>
-        <LineChart
-          data={flatten(rps.data)}
-          ariaLabel="Requests per second"
-        />
+        {rps.isLoading ? (
+          <div className="admin-skeleton admin-skeleton--card" />
+        ) : flatten(rps.data).length > 0 ? (
+          <LineChart
+            data={flatten(rps.data)}
+            ariaLabel="Requests per second"
+          />
+        ) : (
+          <div className="admin-log-empty">
+            No metric data for selected range
+          </div>
+        )}
       </section>
       <section className="admin-card">
         <h2>{t('admin.metrics.errorRate')}</h2>
-        <LineChart
-          data={flatten(errs.data)}
-          ariaLabel="HTTP error rate"
-        />
+        {errs.isLoading ? (
+          <div className="admin-skeleton admin-skeleton--card" />
+        ) : flatten(errs.data).length > 0 ? (
+          <LineChart
+            data={flatten(errs.data)}
+            ariaLabel="HTTP error rate"
+          />
+        ) : (
+          <div className="admin-log-empty">
+            No metric data for selected range
+          </div>
+        )}
       </section>
       <section className="admin-card">
         <h2>{t('admin.metrics.latency')}</h2>
-        <LineChart
-          data={flatten(lat.data)}
-          ariaLabel="Latency p95"
-        />
+        {lat.isLoading ? (
+          <div className="admin-skeleton admin-skeleton--card" />
+        ) : flatten(lat.data).length > 0 ? (
+          <LineChart
+            data={flatten(lat.data)}
+            ariaLabel="Latency p95"
+          />
+        ) : (
+          <div className="admin-log-empty">
+            No metric data for selected range
+          </div>
+        )}
       </section>
     </div>
   )
