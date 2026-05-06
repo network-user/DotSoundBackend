@@ -147,12 +147,18 @@ export function AuthScreen({
         >
           {t('auth.loginTelegram')}
         </button>
+        <p className="auth-microcopy">
+          {t('auth.tgMicrocopy')}
+        </p>
         <button
           className="btn-secondary auth-back"
           onClick={() => setMethod('email')}
         >
           {t('auth.loginEmail')}
         </button>
+        <p className="auth-microcopy auth-microcopy--muted">
+          {t('auth.afterLogin')}
+        </p>
         {error && (
           <p
             className="auth-error"

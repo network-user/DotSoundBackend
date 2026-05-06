@@ -14,6 +14,7 @@ import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { useBrandLabel } from '@/lib/brand'
 import { usePlayerActions } from '@/store/PlayerContext'
+import { trackActivationEvent } from '@/lib/activation'
 import type {
   FollowedArtistItem,
   GenreMixItem,
@@ -93,6 +94,8 @@ interface FeaturedCardProps {
   heroImageKey?: string | null
   brandLabel: string
   onPlay: (t: Track) => void
+  onStartRadio?: (t: Track) => void
+  showRadioCta?: boolean
 }
 
 function FeaturedCard({
@@ -102,6 +105,8 @@ function FeaturedCard({
   heroImageKey,
   brandLabel,
   onPlay,
+  onStartRadio,
+  showRadioCta,
 }: FeaturedCardProps) {
   const src = coverUrl(heroImageKey || track.cover_key)
   const handleMainKeyDown = (
@@ -141,6 +146,20 @@ function FeaturedCard({
           <span className="home-featured__artist">
             {reason || track.artist || brandLabel}
           </span>
+          {showRadioCta && onStartRadio && (
+            <button
+              type="button"
+              className="home-featured__radio"
+              onClick={(e) => {
+                e.stopPropagation()
+                onStartRadio(track)
+              }}
+              aria-label="Запустить бесконечную волну на основе трека"
+            >
+              <Icon name="radio" size={14} />
+              <span>Бесконечная волна</span>
+            </button>
+          )}
         </div>
         <div className="home-featured__cover">
           {src ? (
@@ -467,7 +486,7 @@ interface HomeViewProps {
 export function HomeView({ onOpenArtist }: HomeViewProps) {
   const navigate = useNavigate()
   const toast = useToast()
-  const { playTrack } = usePlayerActions()
+  const { playTrack, startRadio } = usePlayerActions()
   const brandLabel = useBrandLabel()
 
   const [me, setMe] = useState<UserResponse | null>(null)
@@ -515,6 +534,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     async (track: Track) => {
       try {
         await playTrack(track)
+        trackActivationEvent('home_first_play')
       } catch (e) {
         toast.error(getApiErrorMessage(e, 'Ошибка воспроизведения'))
       }
@@ -527,12 +547,74 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       if (!tracks.length) return
       try {
         await playTrack(tracks[0])
+        trackActivationEvent('home_play_all')
       } catch (e) {
         toast.error(getApiErrorMessage(e, 'Ошибка воспроизведения'))
       }
     },
     [playTrack, toast],
   )
+
+  const handleStartRadio = useCallback(
+    async (track: Track) => {
+      try {
+        await startRadio(track)
+        trackActivationEvent('home_start_radio')
+      } catch (e) {
+        toast.error(getApiErrorMessage(e, 'Не удалось запустить волну'))
+      }
+    },
+    [startRadio, toast],
+  )
+
+  const handleStartFirstSession = useCallback(async () => {
+    const candidates: Track[] = []
+    if (sections) {
+      const order = [
+        'continue',
+        'personalized',
+        'user_choice',
+        'new_releases',
+        'genre_popular',
+        'fav_artists',
+        'popular',
+      ]
+      for (const key of order) {
+        const section = sections.find(
+          (s) => s.section_type === key,
+        )
+        if (section?.tracks?.length) {
+          candidates.push(...section.tracks)
+          break
+        }
+      }
+    }
+    if (!candidates.length && genreMixes && genreMixes.length) {
+      candidates.push(...genreMixes[0].tracks)
+    }
+    if (!candidates.length && fallbackTracks?.length) {
+      candidates.push(...fallbackTracks)
+    }
+    if (!candidates.length) {
+      try {
+        const data = await api.getTracks({ size: 30 })
+        candidates.push(...data.items)
+      } catch {
+        toast.error('Пока нет треков для запуска')
+        return
+      }
+    }
+    if (!candidates.length) {
+      toast.info('Пока нет треков — попробуйте позже')
+      return
+    }
+    try {
+      await startRadio(candidates[0])
+      trackActivationEvent('home_first_session_start')
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, 'Не удалось запустить'))
+    }
+  }, [sections, fallbackTracks, genreMixes, startRadio, toast])
 
   const greeting = timeGreeting()
   const displayName =
@@ -586,6 +668,8 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
           label={featuredLabel}
           brandLabel={brandLabel}
           onPlay={handlePlay}
+          onStartRadio={handleStartRadio}
+          showRadioCta={true}
         />
       ) : loadingFeatured ? (
         <div className="home-featured home-featured--skeleton">
@@ -818,15 +902,43 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       )}
 
       {sections && sections.length === 0 && !fallbackTracks && (
-        <div
-          style={{
-            padding: '48px 16px',
-            textAlign: 'center',
-            color: 'var(--text-secondary)',
-            fontSize: 14,
-          }}
-        >
-          Послушай что-нибудь, и здесь появятся подборки
+        <div className="home-empty">
+          <div className="home-empty__icon" aria-hidden>
+            <Icon name="music" size={28} />
+          </div>
+          <div className="home-empty__title">
+            Время первого трека
+          </div>
+          <div className="home-empty__hint">
+            Запустите случайный поток — мы быстро подберём подборки
+            под вас.
+          </div>
+          <div className="home-empty__actions">
+            <button
+              type="button"
+              className="btn-primary home-empty__cta"
+              onClick={handleStartFirstSession}
+            >
+              <Icon name="play" size={16} />
+              <span>Начать слушать</span>
+            </button>
+            <button
+              type="button"
+              className="btn-secondary home-empty__alt"
+              onClick={() => navigate('/radio')}
+            >
+              <Icon name="radio" size={16} />
+              <span>Открыть радио</span>
+            </button>
+            <button
+              type="button"
+              className="btn-secondary home-empty__alt"
+              onClick={() => navigate('/search')}
+            >
+              <Icon name="search" size={16} />
+              <span>Искать треки</span>
+            </button>
+          </div>
         </div>
       )}
     </section>

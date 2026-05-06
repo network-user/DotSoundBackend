@@ -1698,6 +1698,16 @@ export const api = {
     return request('/api/v1/onboarding/complete', { method: 'POST' })
   },
 
+  smartSkipOnboarding(): Promise<{
+    applied_genres: string[]
+    applied_artist_ids: number[]
+    applied_moods: string[]
+  }> {
+    return request('/api/v1/onboarding/smart-skip', {
+      method: 'POST',
+    })
+  },
+
   // ── Signals ─────────────────────────────────────
 
   recordListen(data: {
