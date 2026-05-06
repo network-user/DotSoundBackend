@@ -172,6 +172,9 @@ class PlaylistService:
         await self._assert_exists(playlist_id)
         return await self._repo.get_tracks(playlist_id)
 
+    async def list_featured(self, limit: int = 20) -> list[Playlist]:
+        return await self._repo.list_featured(limit=limit)
+
     async def _get_owned(
         self, playlist_id: int, requester_id: int
     ) -> Playlist:

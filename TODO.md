@@ -14,6 +14,17 @@
 
 ---
 
+## Search + Playlists overhaul (2026-05-06)
+
+- [x] **DB: playlist editorial fields** — миграция `0081`: колонки `playlist_type`, `is_featured`, `source_url`, `cover_key`, `description` + индекс `ix_playlists_is_featured`.
+- [x] **Backend: admin playlist import/editorial API** — `POST /api/v1/admin/playlists/import` (SoundCloud по URL), `POST /api/v1/admin/playlists/editorial`, `PATCH /api/v1/admin/playlists/{id}` расширен `is_featured`/`description`.
+- [x] **Backend: GET /playlists/featured** — публичный endpoint для featured/editorial плейлистов с треками.
+- [x] **Backend: GET /recommendations/discover** — персонализированный discover: trending треки, популярные артисты, жанровые карточки, недавние жанры из истории прослушиваний.
+- [x] **Frontend: SearchView redesign** — табы All/Tracks/Artists/Playlists, empty-state с discover (жанры, артисты, trending), история поиска.
+- [x] **Frontend: PlaylistsView redesign** — секции «Рекомендованные» (featured), «Авто» (Weekly Top, Genre Mixes), «Мои плейлисты» с inline-create.
+- [x] **Frontend Admin: PlaylistsListRoute** — вкладки «Список», «Импорт из URL», «Создать редакционный» с inline-формами.
+- [x] **Frontend: Icon.tsx** — добавлены иконки `fire`, `music-note`, `import`.
+
 ## Mini App / .sound UI (2026-05-04)
 
 - [x] **Admin + lyrics pipeline: жанр и настроение по тексту** - эвристика в PrivateCore (`text_genre_mood_infer`), автоприменение после `LyricsRepository.create_or_update`, batch prompt/import в админ-стеках и `LYRICS_DERIVED_GENRE_MOOD_ENABLED` в `.env.example`.
@@ -736,3 +747,4 @@
 - [x] Onboarding UX (2026-05-06): resumable draft state in localStorage, feature-flag-aware smart skip (`feature.onboarding.smart_skip_enabled`), neutral calibration "skip" option, and import-progress CTA to listen to already imported tracks immediately.
 - [x] Mini App track card UI update (2026-05-06): moved `Ещё` into the main action grid, replaced floating extras popover with dedicated bottom-sheet extras panel, and increased horizontal padding for core `TrackCardSheet` blocks to improve readability.
 - [x] Mini App TrackCardSheet spacing follow-up (2026-05-06): added stronger horizontal insets for `Источник`/external disclaimer, `Похожие треки`, and `О треке`, while restoring comments section padding to previous value.
+- [x] Mini App TrackCardSheet info toggle follow-up (2026-05-06): added a dedicated `О треке` action button and switched track-info loading/rendering to explicit on-demand toggle instead of automatic section display.

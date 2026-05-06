@@ -212,6 +212,11 @@ class AdminPlaylistListItem(BaseModel):
     name: str
     owner_id: int
     is_public: bool
+    playlist_type: str = "user"
+    is_featured: bool = False
+    description: str | None = None
+    cover_key: str | None = None
+    source_url: str | None = None
     created_at: datetime
     track_count: int
 
@@ -230,6 +235,11 @@ class AdminPlaylistDetailResponse(BaseModel):
     name: str
     owner_id: int
     is_public: bool
+    playlist_type: str = "user"
+    is_featured: bool = False
+    description: str | None = None
+    cover_key: str | None = None
+    source_url: str | None = None
     created_at: datetime
     tracks: list[AdminTrackResponse]
 
@@ -238,7 +248,26 @@ class AdminPlaylistPatchRequest(BaseModel):
     name: str | None = Field(None, max_length=256)
     is_public: bool | None = None
     owner_id: int | None = None
+    is_featured: bool | None = None
+    description: str | None = Field(None, max_length=512)
 
 
 class AdminPlaylistReorderRequest(BaseModel):
     track_ids: list[int] = Field(default_factory=list)
+
+
+class AdminPlaylistImportRequest(BaseModel):
+    source_url: str = Field(
+        ...,
+        description="SoundCloud or Bandcamp playlist URL",
+    )
+    name: str | None = Field(None, max_length=256)
+    make_featured: bool = False
+    make_public: bool = True
+
+
+class AdminPlaylistCreateEditorialRequest(BaseModel):
+    name: str = Field(..., max_length=256)
+    description: str | None = Field(None, max_length=512)
+    is_featured: bool = False
+    is_public: bool = True

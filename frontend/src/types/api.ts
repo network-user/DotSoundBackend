@@ -162,17 +162,45 @@ export interface ComplaintSubmitResponse {
   track_hidden: boolean
 }
 
+export type PlaylistType =
+  | 'user'
+  | 'editorial'
+  | 'imported_sc'
+  | 'imported_bc'
+  | 'auto_weekly_top'
+  | 'auto_genre_mix'
+  | 'auto_daily_mix'
+
 export interface Playlist {
   id: number
   name: string
   is_public: boolean
   owner_id: number
+  playlist_type: PlaylistType
+  is_featured: boolean
+  source_url: string | null
+  cover_key: string | null
+  description: string | null
   created_at: string
   track_count?: number
 }
 
 export interface PlaylistWithTracks extends Playlist {
   tracks: Track[]
+}
+
+export interface DiscoverGenreCard {
+  genre: string
+  title: string
+  cover_key: string | null
+  track_count: number
+}
+
+export interface DiscoverResponse {
+  trending_tracks: Track[]
+  suggested_artists: ArtistInfo[]
+  genre_cards: DiscoverGenreCard[]
+  recent_genres: string[]
 }
 
 export interface UserResponse {

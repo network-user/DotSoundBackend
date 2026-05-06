@@ -25,7 +25,19 @@
     "placeholder": "Трек или исполнитель…",
     "startTyping": "Начните вводить название",
     "onPlatform": "На платформе",
-    "notFound": "Ничего не найдено"
+    "notFound": "Ничего не найдено",
+    "tabAll": "Все",
+    "tabTracks": "Треки",
+    "tabArtists": "Артисты",
+    "tabPlaylists": "Плейлисты",
+    "discoverGenres": "Жанры",
+    "recentGenres": "Ваши жанры",
+    "discoverArtists": "Артисты",
+    "discoverTrending": "В тренде",
+    "playlists": "Плейлисты",
+    "editorialBadge": "Редакционный",
+    "publicBadge": "Публичный",
+    "privateBadge": "Приватный"
   },
   "liked": {
     "title": "Мне нравится",

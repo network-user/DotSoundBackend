@@ -41,11 +41,21 @@ class PlaylistRepository:
         name: str,
         owner_id: int,
         is_public: bool,
+        playlist_type: str = "user",
+        is_featured: bool = False,
+        source_url: str | None = None,
+        cover_key: str | None = None,
+        description: str | None = None,
     ) -> Playlist:
         playlist = Playlist(
             name=name,
             owner_id=owner_id,
             is_public=is_public,
+            playlist_type=playlist_type,
+            is_featured=is_featured,
+            source_url=source_url,
+            cover_key=cover_key,
+            description=description,
         )
         self._session.add(playlist)
         await self._session.flush()
@@ -54,6 +64,7 @@ class PlaylistRepository:
             "db_playlist_created",
             playlist_id=playlist.id,
             owner_id=owner_id,
+            playlist_type=playlist_type,
         )
         return playlist
 
@@ -63,6 +74,9 @@ class PlaylistRepository:
         name: str | None = None,
         is_public: bool | None = None,
         owner_id: int | None = None,
+        is_featured: bool | None = None,
+        cover_key: str | None = None,
+        description: str | None = None,
     ) -> Playlist:
         if name is not None:
             playlist.name = name
@@ -70,8 +84,26 @@ class PlaylistRepository:
             playlist.is_public = is_public
         if owner_id is not None:
             playlist.owner_id = owner_id
+        if is_featured is not None:
+            playlist.is_featured = is_featured
+        if cover_key is not None:
+            playlist.cover_key = cover_key
+        if description is not None:
+            playlist.description = description
         await self._session.flush()
         return playlist
+
+    async def list_featured(self, limit: int = 20) -> list[Playlist]:
+        result = await self._session.execute(
+            select(Playlist)
+            .where(
+                Playlist.is_featured.is_(True),
+                Playlist.is_public.is_(True),
+            )
+            .order_by(Playlist.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
     async def delete(self, playlist: Playlist) -> None:
         await self._session.delete(playlist)
