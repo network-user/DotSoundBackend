@@ -8,6 +8,7 @@ import { useSound } from '@/store/SoundContext'
 import { api } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
 import { usePlayerActions } from '@/store/PlayerContext'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type {
   ChatListItem,
   Track,
@@ -44,6 +45,8 @@ export function GenreMixView() {
 
   const canEditUi = isAdmin || debugMode || import.meta.env.DEV
   const normalizedGenre = (genre || '').toLowerCase()
+
+  usePrefetchTracks(tracks ?? null, 'genre_mix')
 
   const shareUrl = `${window.location.origin}${import.meta.env.BASE_URL}genre-mix/${encodeURIComponent(
     genre || '',

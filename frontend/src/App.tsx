@@ -79,6 +79,7 @@ import {
   markAuthSuccess,
   trackActivationEvent,
 } from '@/lib/activation'
+import { useOptionalPrefetch } from '@/store/PrefetchContext'
 import { tg, getInitData } from '@/lib/telegram'
 import { AuthScreen } from '@/components/Auth/AuthScreen'
 import { Onboarding } from '@/components/Onboarding/Onboarding'
@@ -176,6 +177,7 @@ export function App() {
   const { reloadLikes } = useLikes()
   const navigate = useNavigate()
   const location = useLocation()
+  const prefetch = useOptionalPrefetch()
   const [authorId, setAuthorId] = useState<
     number | null
   >(null)
@@ -387,6 +389,28 @@ export function App() {
     }
     init()
   }, [])
+
+  useEffect(() => {
+    if (!isInitialized || needsAuth || !prefetch) return
+    let cancelled = false
+    api
+      .getListenHistory(1)
+      .then((data) => {
+        if (cancelled) return
+        const last = data?.items?.[0]
+        if (!last) return
+        void prefetch.prefetch([last], {
+          context: 'continue_on_app_start',
+          replaceContext: true,
+        })
+      })
+      .catch(() => {
+        /* ignore */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isInitialized, needsAuth, prefetch])
 
   useEffect(() => {
     if (!isInitialized || readyEventSent.current) {

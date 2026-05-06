@@ -31,6 +31,7 @@ import {
   removeTrack,
 } from '@/lib/offlineCache'
 import { useSound } from '@/store/SoundContext'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import {
   clearThirdPartyStreamOverride,
   getThirdPartyStreamOverride,
@@ -151,6 +152,7 @@ export function TrackCardSheet({
   const [showEdit, setShowEdit] = useState(false)
   const [similarTracks, setSimilarTracks] =
     useState<Track[]>([])
+  usePrefetchTracks(similarTracks, 'similar_in_card')
   const [authorAvatarUrl, setAuthorAvatarUrl] =
     useState<string | null>(null)
   const [loading, setLoading] = useState(false)

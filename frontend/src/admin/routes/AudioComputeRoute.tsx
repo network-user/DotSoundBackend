@@ -34,6 +34,9 @@ interface WorkerRow {
   last_seen_at: string | null
   last_ip: string | null
   created_at: string | null
+  worker_package_version?: string | null
+  claims_paused_until?: string | null
+  claims_pause_reason?: string | null
 }
 
 interface TierAttempt {

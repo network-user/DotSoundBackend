@@ -5,6 +5,7 @@ import { TrackList } from '@/components/TrackList/TrackList'
 import { Icon } from '@/components/Icon/Icon'
 import { useToast } from '@/components/ui/Toast'
 import { api } from '@/lib/api'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type {
   ChatListItem,
   DailyPlaylistResponse,
@@ -55,6 +56,8 @@ export function DailyMixView() {
 
   const internalTracks = loading ? null : (data?.internal_tracks ?? [])
   const externalTracks = data?.external_tracks ?? []
+
+  usePrefetchTracks(internalTracks ?? null, 'daily_mix')
 
   const formatShareChatTitle = useCallback((item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {

@@ -465,7 +465,15 @@ async def _broadcast_loop(
             logger.exception("admin_ws_push_failed")
             if not _is_ws_open(websocket):
                 return
-        await asyncio.sleep(3)
+        pause_s = (
+            0.35
+            if (
+                "worker_logs" in subscriptions
+                and state.get("worker_logs_id")
+            )
+            else 3.0
+        )
+        await asyncio.sleep(pause_s)
 
 
 @router.websocket("")

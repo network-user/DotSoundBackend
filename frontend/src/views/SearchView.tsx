@@ -6,6 +6,7 @@ import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { api } from '@/lib/api'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { useLikes } from '@/store/LikesContext'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { useDebounce } from '@/hooks/useDebounce'
 import { Icon } from '@/components/Icon/Icon'
 import type {
@@ -71,6 +72,12 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const [catalogArtists, setCatalogArtists] = useState<ArtistInfo[]>([])
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const searchPrefetchSlice =
+    typeof tracks === 'object' && tracks !== null
+      ? tracks.slice(0, 3)
+      : null
+  usePrefetchTracks(searchPrefetchSlice, 'search_results')
 
   const [history, setHistory] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('search-history') || '[]') } catch { return [] }

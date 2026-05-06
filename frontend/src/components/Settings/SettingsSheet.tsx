@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { usePlayerActions } from '@/store/PlayerContext'
+import { useOptionalPrefetch } from '@/store/PrefetchContext'
 import {
   getInternalUserId,
   haptic,
@@ -34,6 +35,13 @@ export function SettingsSheet({
   const { t, i18n } = useTranslation()
   const { openEq } = usePlayerActions()
   const sound = useSound()
+  const prefetchCtx = useOptionalPrefetch()
+  const [smartBufferingEnabled, setSmartBufferingEnabled] =
+    useState<boolean>(
+      () =>
+        localStorage.getItem('setting-smart-buffering') !==
+        'false',
+    )
   const [videoEnabled, setVideoEnabled] =
     useState(
       () =>
@@ -121,6 +129,17 @@ export function SettingsSheet({
       'monochrome',
       next,
     )
+  }
+
+  const handleSmartBufferingToggle = () => {
+    feedbackTap()
+    const next = !smartBufferingEnabled
+    setSmartBufferingEnabled(next)
+    localStorage.setItem(
+      'setting-smart-buffering',
+      String(next),
+    )
+    prefetchCtx?.setEnabled(next)
   }
 
   const handleLanguageChange = (lng: string) => {
@@ -261,6 +280,23 @@ export function SettingsSheet({
             <span>{t('settings.monochrome')}</span>
             <div
               className={`settings-toggle${monoEnabled ? ' on' : ''}`}
+            >
+              <div className="settings-toggle-dot" />
+            </div>
+          </div>
+
+          <div
+            className="settings-item"
+            onClick={handleSmartBufferingToggle}
+          >
+            <Icon name="download" size={20} />
+            <span>
+              {t('settings.smartBuffering', {
+                defaultValue: 'Умная буферизация',
+              })}
+            </span>
+            <div
+              className={`settings-toggle${smartBufferingEnabled ? ' on' : ''}`}
             >
               <div className="settings-toggle-dot" />
             </div>

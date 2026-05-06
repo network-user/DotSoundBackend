@@ -56,3 +56,15 @@ class ComputeWorker(Base, TimestampMixin):
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    claims_paused_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    claims_pause_reason: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+    worker_package_version: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+    )

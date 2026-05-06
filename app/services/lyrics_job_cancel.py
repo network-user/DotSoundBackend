@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_client
 from app.models.lyrics_job import LyricsJob
+from app.services.worker_job_control import enqueue_cancel_signals
 from app.services.lyrics_worker import (
     CANCEL_KEY_PREFIX,
     set_lyrics_progress,
@@ -92,6 +93,7 @@ async def cancel_lyrics_job_for_admin(
 
     if row.status == "running":
         now = datetime.now(UTC)
+        routed_worker_id = row.routed_to_worker
         row.status = "cancelled"
         row.finished_at = now
         row.error = "cancelled_by_admin"
@@ -112,6 +114,11 @@ async def cancel_lyrics_job_for_admin(
                     job_id=job_id,
                 )
         await session.commit()
+        if routed_worker_id:
+            await enqueue_cancel_signals(
+                routed_worker_id,
+                [job_id],
+            )
         logger.info(
             "admin_lyrics_cancel_running",
             job_id=job_id,
