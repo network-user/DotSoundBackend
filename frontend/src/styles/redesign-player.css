@@ -340,3 +340,70 @@
     touch-action: auto;
   }
 }
+
+.rp-now-fl-header {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 8px;
+}
+
+.rp-now-fl-cover {
+  display: inline-flex;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  border-radius: var(--r-md, 10px);
+  overflow: hidden;
+  transform: scale(calc(1 + var(--bp-phase, 0) * 0.05));
+  transition: transform 80ms linear;
+}
+
+.rp-now-fl-cover :is(.cover-image, img) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
+
+.rp-now-fl-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.rp-now-fl-meta .fl-header-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rp-now-fl-meta .fl-header-artist {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fl-overlay .fl-header + .fl-toolbar {
+  position: relative;
+  top: auto;
+  left: auto;
+  padding: 0 14px 8px;
+  z-index: 3;
+}
+
+.fl-overlay .fl-header .fl-close {
+  position: relative;
+  top: auto;
+  right: auto;
+  z-index: 4;
+}
