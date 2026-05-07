@@ -8,7 +8,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
@@ -203,14 +203,14 @@ export function PlaylistsListRoute() {
       id: 'open',
       header: '',
       cell: ({ row }) => (
-        <Press
+        <MotionPress
           variant="ghost"
           onClick={() =>
             navigate(`/admin/playlists/${row.original.id}`)
           }
         >
           {t('admin.playlists.open')}
-        </Press>
+        </MotionPress>
       ),
     },
   ]
@@ -218,6 +218,48 @@ export function PlaylistsListRoute() {
   return (
     <section className="admin-card">
       <h1>{t('admin.playlists.title')}</h1>
+<<<<<<< HEAD
+      <p className="admin-card__sub">
+        {t('admin.playlists.listHint')}
+      </p>
+      <div className="admin-toolbar">
+        <input
+          type="search"
+          placeholder={t('admin.playlists.searchPlaceholder')}
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value)
+            setPage(1)
+          }}
+        />
+      </div>
+      <DataTable
+        columns={columns}
+        rows={rows}
+        emptyHint={t('admin.playlists.empty')}
+      />
+      <div className="admin-pagination">
+        <MotionPress
+          variant="ghost"
+          disabled={page <= 1 || isFetching}
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+        >
+          {t('admin.common.prev')}
+        </MotionPress>
+        <span>
+          {page} / {totalPages} ·{' '}
+          {t('admin.common.total', { count: total })}
+        </span>
+        <MotionPress
+          variant="ghost"
+          disabled={page >= totalPages || isFetching}
+          onClick={() =>
+            setPage((p) => Math.min(totalPages, p + 1))
+          }
+        >
+          {t('admin.common.next')}
+        </MotionPress>
+=======
 
       {/* Tab switcher */}
       <div
@@ -262,6 +304,7 @@ export function PlaylistsListRoute() {
             {label}
           </button>
         ))}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
       </div>
 
       {/* ── Tab: List ──────────────────────────────────────── */}

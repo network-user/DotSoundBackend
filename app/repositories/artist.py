@@ -3,6 +3,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist import Artist, TrackArtist
+from app.models.artist_similarity import ArtistSimilarity
 from app.repositories.base import BaseRepository
 
 logger = structlog.get_logger(__name__)
@@ -175,6 +176,30 @@ class ArtistRepository(BaseRepository[Artist]):
             .order_by(TrackArtist.position)
         )
         return list(result.scalars().all())
+
+    async def list_similar_artists_from_similarity_index(
+        self,
+        artist_id: int,
+        *,
+        limit: int,
+    ) -> list[tuple[int, float]]:
+        stmt = (
+            select(
+                ArtistSimilarity.similar_artist_id,
+                func.max(ArtistSimilarity.score),
+            )
+            .where(ArtistSimilarity.artist_id == artist_id)
+            .group_by(ArtistSimilarity.similar_artist_id)
+            .order_by(func.max(ArtistSimilarity.score).desc())
+            .limit(limit)
+        )
+        rows = await self._session.execute(stmt)
+        out: list[tuple[int, float]] = []
+        for sid, raw in rows.all():
+            if sid is None or raw is None:
+                continue
+            out.append((int(sid), float(raw)))
+        return out
 
     async def get_artist_track_ids(
         self,

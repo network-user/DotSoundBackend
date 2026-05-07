@@ -1,16 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import {
   computeWorkerPillKind,
   computeWorkerPillLabel,
 } from '../../lib/computeWorkerLiveness'
 import { adminFetch } from '../../lib/adminApi'
+import { AdminWs } from '../../lib/adminWs'
 import { StatusPill } from './StatusPill'
 
 const WD = 'admin.audioCompute.workerDrawer' as const
@@ -30,6 +31,9 @@ interface WorkerRow {
   last_seen_at: string | null
   last_ip: string | null
   created_at: string | null
+  worker_package_version?: string | null
+  claims_paused_until?: string | null
+  claims_pause_reason?: string | null
 }
 
 interface WorkerEvent {
@@ -106,6 +110,31 @@ function actionKind(
   return 'unknown'
 }
 
+function wsPayloadToWorkerEvent(
+  raw: Record<string, unknown>,
+): WorkerEvent {
+  const jobRaw = raw.job_id
+  return {
+    id: String(raw.id ?? ''),
+    ts: String(raw.ts ?? ''),
+    action: String(raw.action ?? ''),
+    job_id:
+      typeof jobRaw === 'string' && jobRaw
+        ? jobRaw
+        : undefined,
+    status_code:
+      typeof raw.status_code === 'string' &&
+      raw.status_code
+        ? raw.status_code
+        : undefined,
+    ip:
+      typeof raw.ip === 'string' && raw.ip
+        ? raw.ip
+        : undefined,
+    meta: raw.meta,
+  }
+}
+
 function progressSummary(
   p: WorkerJobRow['lyrics_progress'],
 ): {
@@ -149,6 +178,13 @@ export function WorkerDetailDrawer({
   >(null)
   const [acceptOpen, setAcceptOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [wsEvents, setWsEvents] = useState<
+    WorkerEvent[]
+  >([])
+  const [wsOnline, setWsOnline] =
+    useState(false)
+  const [pauseMinutes, setPauseMinutes] =
+    useState(60)
 
   const events = useQuery({
     queryKey: [
@@ -161,7 +197,7 @@ export function WorkerDetailDrawer({
       adminFetch<{ events: WorkerEvent[] }>(
         `/audio-compute/workers/${worker.id}/events?limit=100`,
       ),
-    refetchInterval: 5_000,
+    refetchInterval: wsOnline ? false : 5_000,
     refetchIntervalInBackground: false,
   })
 
@@ -238,6 +274,103 @@ export function WorkerDetailDrawer({
       setAcceptOpen(false)
     },
   })
+
+  const pauseClaims = useMutation({
+    mutationFn: (payload: {
+      minutes: number
+      mode: 'soft' | 'drain'
+    }) =>
+      adminFetch(
+        `/audio-compute/workers/${worker.id}/claims/pause`,
+        {
+          method: 'POST',
+          body: payload,
+        },
+      ),
+    onSettled: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'compute', 'workers'],
+      })
+    },
+  })
+
+  const resumeClaims = useMutation({
+    mutationFn: () =>
+      adminFetch(
+        `/audio-compute/workers/${worker.id}/claims/resume`,
+        {
+          method: 'POST',
+          body: {},
+        },
+      ),
+    onSettled: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'compute', 'workers'],
+      })
+    },
+  })
+
+  useEffect(() => {
+    setWsEvents([])
+    const ws = new AdminWs({
+      onEvent: (ev) => {
+        if (ev.channel !== 'worker_logs') {
+          return
+        }
+        const d = ev.data as {
+          worker_id?: string
+          items?: Record<string, unknown>[]
+        }
+        if (
+          d?.worker_id !== worker.id ||
+          !Array.isArray(d.items)
+        ) {
+          return
+        }
+        const mapped = d.items.map(wsPayloadToWorkerEvent)
+        setWsEvents((prev) => {
+          const merged = [...mapped, ...prev]
+          const seen = new Set<string>()
+          const out: WorkerEvent[] = []
+          for (const row of merged) {
+            if (!row.id || seen.has(row.id)) continue
+            seen.add(row.id)
+            out.push(row)
+          }
+          return out.slice(0, 200)
+        })
+      },
+      onOpen: () => setWsOnline(true),
+      onClose: () => setWsOnline(false),
+    })
+    ws.connect()
+    ws.subscribe('worker_logs', {
+      worker_id: worker.id,
+    })
+    return () => {
+      ws.unsubscribe('worker_logs')
+      ws.close()
+      setWsOnline(false)
+    }
+  }, [worker.id])
+
+  const displayEvents = useMemo(() => {
+    const base = events.data?.events ?? []
+    const merged = [...wsEvents, ...base]
+    const seen = new Set<string>()
+    const out: WorkerEvent[] = []
+    for (const row of merged) {
+      if (!row.id || seen.has(row.id)) continue
+      seen.add(row.id)
+      out.push(row)
+    }
+    out.sort(
+      (a, b) =>
+        new Date(b.ts).getTime() -
+        new Date(a.ts).getTime(),
+    )
+    return out
+  }, [events.data?.events, wsEvents])
 
   const envSnippet = useMemo(
     () =>
@@ -331,9 +464,9 @@ WORKER_ASR_DEVICE=auto`,
           {t(`${WD}.headingPrefix`)} ·{' '}
           <code>{worker.name}</code>
         </h2>
-        <Press variant="ghost" onClick={onClose}>
+        <MotionPress variant="ghost" onClick={onClose}>
           {t(`${WD}.close`)}
-        </Press>
+        </MotionPress>
       </div>
 
       <p>
@@ -386,7 +519,7 @@ WORKER_ASR_DEVICE=auto`,
                 >
                   {t(`${WD}.lyricsProfileHint`)}
                 </p>
-                <Press
+                <MotionPress
                   variant="ghost"
                   disabled={updateAllowlist.isPending}
                   onClick={() =>
@@ -398,7 +531,7 @@ WORKER_ASR_DEVICE=auto`,
                   }
                 >
                   {t(`${WD}.lyricsProfileFixButton`)}
-                </Press>
+                </MotionPress>
               </td>
             </tr>
           )}
@@ -407,12 +540,38 @@ WORKER_ASR_DEVICE=auto`,
             <td>{worker.max_concurrent_jobs}</td>
           </tr>
           <tr>
+            <th>{t(`${WD}.packageVersion`)}</th>
+            <td className="admin-mono">
+              {worker.worker_package_version ||
+                '–'}
+            </td>
+          </tr>
+          <tr>
+            <th>{t(`${WD}.claimsPause`)}</th>
+            <td>
+              {worker.claims_paused_until ? (
+                <>
+                  {fmtDate(
+                    worker.claims_paused_until,
+                  )}
+                  {' · '}
+                  <code>
+                    {worker.claims_pause_reason ||
+                      '–'}
+                  </code>
+                </>
+              ) : (
+                '–'
+              )}
+            </td>
+          </tr>
+          <tr>
             <th>{t(`${WD}.allowedIps`)}</th>
             <td className="admin-mono">
               {(
                 worker.allowed_ip_cidrs || []
               ).join(', ') || t(`${WD}.noneCidr`)}
-              <Press
+              <MotionPress
                 variant="ghost"
                 onClick={() =>
                   setEditCidrs(
@@ -425,7 +584,7 @@ WORKER_ASR_DEVICE=auto`,
                 style={{ marginLeft: 8 }}
               >
                 {t(`${WD}.editCidr`)}
-              </Press>
+              </MotionPress>
             </td>
           </tr>
           <tr>
@@ -480,7 +639,7 @@ WORKER_ASR_DEVICE=auto`,
           <div
             style={{ display: 'flex', gap: 8 }}
           >
-            <Press
+            <MotionPress
               variant="ghost"
               disabled={
                 editParsed.length === 0 ||
@@ -496,8 +655,8 @@ WORKER_ASR_DEVICE=auto`,
               }
             >
               {t(`${WD}.save`)}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               onClick={() => {
                 setEditCidrs(null)
@@ -505,7 +664,85 @@ WORKER_ASR_DEVICE=auto`,
               }}
             >
               {t(`${WD}.cancel`)}
-            </Press>
+            </MotionPress>
+          </div>
+        </div>
+      )}
+
+      {!worker.revoked_at && worker.active && (
+        <div
+          className="admin-card admin-card--inline"
+          style={{ marginBottom: 12 }}
+        >
+          <h3 style={{ marginTop: 0 }}>
+            {t(`${WD}.claimsControlTitle`)}
+          </h3>
+          <p
+            className="admin-card__sub"
+            style={{ margin: '0 0 8px' }}
+          >
+            {t(`${WD}.claimsControlHint`)}
+          </p>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              alignItems: 'center',
+            }}
+          >
+            <label
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'center',
+              }}
+            >
+              <span>{t(`${WD}.pauseMinutes`)}</span>
+              <input
+                type="number"
+                min={1}
+                max={10080}
+                value={pauseMinutes}
+                onChange={(e) =>
+                  setPauseMinutes(
+                    Number(e.target.value) || 1,
+                  )
+                }
+                style={{ width: 80 }}
+              />
+            </label>
+            <MotionPress
+              variant="ghost"
+              disabled={pauseClaims.isPending}
+              onClick={() =>
+                pauseClaims.mutate({
+                  minutes: pauseMinutes,
+                  mode: 'soft',
+                })
+              }
+            >
+              {t(`${WD}.pauseSoft`)}
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              disabled={pauseClaims.isPending}
+              onClick={() =>
+                pauseClaims.mutate({
+                  minutes: pauseMinutes,
+                  mode: 'drain',
+                })
+              }
+            >
+              {t(`${WD}.pauseDrain`)}
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              disabled={resumeClaims.isPending}
+              onClick={() => resumeClaims.mutate()}
+            >
+              {t(`${WD}.resumeClaims`)}
+            </MotionPress>
           </div>
         </div>
       )}
@@ -524,11 +761,11 @@ WORKER_ASR_DEVICE=auto`,
       >
         {envSnippet}
       </pre>
-      <Press variant="ghost" onClick={copy}>
+      <MotionPress variant="ghost" onClick={copy}>
         {copied
           ? t(`${AC}.copied`)
           : t(`${AC}.copy`)}
-      </Press>
+      </MotionPress>
 
       <h3 style={{ marginTop: 20 }}>
         {t(`${WD}.jobsTitle`)}
@@ -616,12 +853,19 @@ WORKER_ASR_DEVICE=auto`,
         className="admin-card__sub"
         style={{ margin: '0 0 8px' }}
       >
-        {t(`${WD}.eventsHint`)}
+        {wsOnline
+          ? t(`${WD}.eventsHintLive`)
+          : t(`${WD}.eventsHint`)}
       </p>
       {events.isLoading && (
         <p>{t(`${WD}.loading`)}</p>
       )}
-      {events.data && (
+      {events.isError && (
+        <p className="admin-card__sub">
+          {String(events.error)}
+        </p>
+      )}
+      {!events.isLoading && (
         <ul
           style={{
             paddingLeft: 0,
@@ -634,12 +878,12 @@ WORKER_ASR_DEVICE=auto`,
             padding: 8,
           }}
         >
-          {events.data.events.length === 0 && (
+          {displayEvents.length === 0 && (
             <li className="admin-card__sub">
               {t(`${WD}.eventsEmpty`)}
             </li>
           )}
-          {events.data.events.map((ev) => (
+          {displayEvents.map((ev) => (
             <li
               key={ev.id}
               style={{
@@ -701,61 +945,61 @@ WORKER_ASR_DEVICE=auto`,
       </h3>
       <div style={{ display: 'flex', gap: 8 }}>
         {!confirmRotate ? (
-          <Press
+          <MotionPress
             variant="ghost"
             onClick={() => setConfirmRotate(true)}
           >
             {t(`${WD}.rotate`)}
-          </Press>
+          </MotionPress>
         ) : (
           <>
             <span className="admin-card__sub">
               {t(`${WD}.rotateHelp`)}
             </span>
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() => rotateSecret.mutate()}
               disabled={rotateSecret.isPending}
             >
               {t(`${WD}.confirmRotate`)}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               onClick={() =>
                 setConfirmRotate(false)
               }
             >
               {t(`${WD}.cancel`)}
-            </Press>
+            </MotionPress>
           </>
         )}
         {!confirmRevoke ? (
-          <Press
+          <MotionPress
             variant="ghost"
             onClick={() => setConfirmRevoke(true)}
           >
             {t(`${WD}.revoke`)}
-          </Press>
+          </MotionPress>
         ) : (
           <>
             <span className="admin-card__sub">
               {t(`${WD}.revokeHelp`)}
             </span>
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() => revokeWorker.mutate()}
               disabled={revokeWorker.isPending}
             >
               {t(`${WD}.confirmRevoke`)}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               onClick={() =>
                 setConfirmRevoke(false)
               }
             >
               {t(`${WD}.cancel`)}
-            </Press>
+            </MotionPress>
           </>
         )}
       </div>
@@ -775,19 +1019,19 @@ WORKER_ASR_DEVICE=auto`,
             style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}
           >
             {!confirmDeleteFromList ? (
-              <Press
+              <MotionPress
                 variant="ghost"
                 onClick={() => setConfirmDeleteFromList(true)}
                 disabled={deleteFromListPending}
               >
                 {t(`${WD}.removeFromList`)}
-              </Press>
+              </MotionPress>
             ) : (
               <>
                 <span className="admin-card__sub">
                   {t(`${WD}.removeFromListHelp`)}
                 </span>
-                <Press
+                <MotionPress
                   variant="ghost"
                   onClick={() => {
                     onRequestDeleteRevoked()
@@ -796,13 +1040,13 @@ WORKER_ASR_DEVICE=auto`,
                   disabled={deleteFromListPending}
                 >
                   {t(`${WD}.confirmRemoveFromList`)}
-                </Press>
-                <Press
+                </MotionPress>
+                <MotionPress
                   variant="ghost"
                   onClick={() => setConfirmDeleteFromList(false)}
                 >
                   {t(`${WD}.cancel`)}
-                </Press>
+                </MotionPress>
               </>
             )}
           </div>

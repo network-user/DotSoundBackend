@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { getIsAdmin, getUserId } from '@/lib/telegram'
@@ -8,19 +13,28 @@ import {
   usePlayerState,
 } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
+import { BeatPulse } from '@/components/ui/BeatPulse'
+import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import type { LyricsResponse, SyncedLine } from '@/types/api'
+import {
+  m,
+  SPRING_GENTLE,
+  useReducedMotion,
+} from '@/lib/motion'
 
 const SYNC_OFFSET_KEY = 'setting-lyrics-sync-offset-ms'
 const KARAOKE_KEY = 'setting-lyrics-karaoke'
 
 function fmt(sec: number) {
   if (!sec || isNaN(sec)) return '0:00'
-  const m = Math.floor(sec / 60)
+  const mins = Math.floor(sec / 60)
   const s = Math.floor(sec % 60)
     .toString()
     .padStart(2, '0')
-  return `${m}:${s}`
+  return `${mins}:${s}`
 }
 
 function readOffset(): number {
@@ -55,8 +69,15 @@ function activeWordIndex(line: SyncedLine, ms: number): number {
   return -1
 }
 
-export function FullscreenLyrics() {
+export type FullscreenLyricsProps = {
+  embed?: boolean
+}
+
+export function FullscreenLyrics({
+  embed = false,
+}: FullscreenLyricsProps) {
   const { t } = useTranslation()
+  const lyricsReduce = useReducedMotion()
   const { currentTime, duration, isPlaying } =
     usePlayerState()
   const { track, isLyricsOpen } = usePlayerMeta()
@@ -68,6 +89,8 @@ export function FullscreenLyrics() {
     seek,
     getPreciseTime,
   } = usePlayerActions()
+
+  const panelOpen = embed || isLyricsOpen
 
   const [lyrics, setLyrics] = useState<LyricsResponse | null>(
     null,
@@ -84,12 +107,12 @@ export function FullscreenLyrics() {
   const rafIdRef = useRef<number | null>(null)
 
   const exit = useExitTransition(
-    Boolean(isLyricsOpen && track),
+    Boolean(track) && panelOpen,
     220,
   )
 
   useEffect(() => {
-    if (!isLyricsOpen || !track) {
+    if (!panelOpen || !track) {
       return
     }
     setSelectedLang('original')
@@ -99,7 +122,7 @@ export function FullscreenLyrics() {
       .then(setLyrics)
       .catch(() => setLyrics(null))
       .finally(() => setLoading(false))
-  }, [isLyricsOpen, track?.id])
+  }, [panelOpen, track?.id])
 
   useEffect(() => {
     if (exit.mounted) return
@@ -107,14 +130,14 @@ export function FullscreenLyrics() {
   }, [exit.mounted])
 
   useEffect(() => {
-    if (!isLyricsOpen) return
+    if (embed || !panelOpen) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeLyrics()
     }
     window.addEventListener('keydown', onKey)
     return () =>
       window.removeEventListener('keydown', onKey)
-  }, [isLyricsOpen, closeLyrics])
+  }, [embed, panelOpen, closeLyrics])
 
   const hasWordTimes = !!lyrics?.synced_lines?.some(
     (l) => l.word_times && l.word_times.length > 0,
@@ -136,7 +159,7 @@ export function FullscreenLyrics() {
   useEffect(() => {
     const lines = lyrics?.synced_lines
     if (
-      !isLyricsOpen ||
+      !panelOpen ||
       !isPlaying ||
       !lines ||
       lines.length === 0
@@ -169,7 +192,7 @@ export function FullscreenLyrics() {
       }
     }
   }, [
-    isLyricsOpen,
+    panelOpen,
     isPlaying,
     lyrics,
     offsetMs,
@@ -179,7 +202,7 @@ export function FullscreenLyrics() {
 
   useEffect(() => {
     const lines = lyrics?.synced_lines
-    if (!isLyricsOpen || !lines || lines.length === 0) {
+    if (!panelOpen || !lines || lines.length === 0) {
       setActiveIdx(-1)
       setWordIdx(-1)
       return
@@ -198,7 +221,7 @@ export function FullscreenLyrics() {
       prev === nextWord ? prev : nextWord,
     )
   }, [
-    isLyricsOpen,
+    panelOpen,
     isPlaying,
     lyrics,
     offsetMs,
@@ -222,7 +245,9 @@ export function FullscreenLyrics() {
   const videoEnabled =
     localStorage.getItem('setting-video-enabled') !== 'false'
   const videoSrc =
-    track.video_key && videoEnabled
+    !embed &&
+    track.video_key &&
+    videoEnabled
       ? `/api/v1/tracks/${track.id}/video`
       : null
 
@@ -253,6 +278,251 @@ export function FullscreenLyrics() {
     uid != null &&
     track.uploaded_by_id === uid
 
+  const toolbar = (
+    <div
+      className={`fl-toolbar${embed ? ' fl-toolbar--embed' : ''}`}
+    >
+      {hasWordTimes && (
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
+          className={`fl-toolbar-btn${karaokeActive ? ' fl-toolbar-btn-active' : ''}`}
+          onClick={toggleKaraoke}
+          aria-pressed={karaokeActive}
+        >
+          {t('lyrics.karaokeMode', 'Karaoke')}
+        </MotionPress>
+      )}
+      <label className="fl-offset">
+        <span>{t('lyrics.syncOffset', 'Offset')}</span>
+        <input
+          type="range"
+          min={-2000}
+          max={2000}
+          step={50}
+          value={offsetMs}
+          onChange={(e) =>
+            handleOffsetChange(Number(e.target.value))
+          }
+        />
+        <span className="fl-offset-value">
+          {offsetMs >= 0 ? '+' : ''}
+          {offsetMs} ms
+        </span>
+      </label>
+      {translationItems.length > 0 && (
+        <label className="fl-offset">
+          <span>
+            {t(
+              'redesign.player.lyricsLanguage',
+              'Language',
+            )}
+          </span>
+          <select
+            className="form-input"
+            value={selectedLang}
+            onChange={(e) =>
+              setSelectedLang(e.target.value)
+            }
+          >
+            <option value="original">
+              {t(
+                'redesign.player.lyricsOriginal',
+                'Original',
+              )}
+            </option>
+            {translationItems.map((tr) => (
+              <option
+                key={tr.language_code}
+                value={tr.language_code}
+              >
+                {tr.language_code.toUpperCase()}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </div>
+  )
+
+  const content = (
+    <div
+      className={`fl-content${embed ? ' fl-content--embed' : ''}`}
+    >
+      {loading && <div className="loader" />}
+
+      {!loading && lyrics?.synced_lines?.length
+        ? lyrics.synced_lines.map((line, i) => {
+            const isActive = i === activeIdx
+            const lineWordIdx =
+              karaokeActive && isActive ? wordIdx : -1
+            return (
+              <m.div
+                key={i}
+                ref={isActive ? activeRef : null}
+                layout
+                initial={false}
+                animate={
+                  isActive && !lyricsReduce
+                    ? { scale: 1.04, opacity: 1 }
+                    : {
+                        scale: 1,
+                        opacity: isActive ? 1 : 0.55,
+                      }
+                }
+                transition={SPRING_GENTLE}
+                className={`fl-line${isActive ? ' fl-line-active' : ''}`}
+                onClick={() =>
+                  handleLineClick(line.time_ms)
+                }
+              >
+                {karaokeActive &&
+                line.word_times &&
+                line.word_times.length > 0 ? (
+                  line.word_times.map((w, j) => (
+                    <span
+                      key={j}
+                      className={`fl-word${j === lineWordIdx ? ' fl-word-active' : ''}${isActive && j < lineWordIdx ? ' fl-word-past' : ''}`}
+                    >
+                      {w.text}{' '}
+                    </span>
+                  ))
+                ) : (
+                  line.text
+                )}
+              </m.div>
+            )
+          })
+        : !loading &&
+          lyrics?.plain_text && (
+            <pre className="fl-plain">
+              {plainTextToRender}
+            </pre>
+          )}
+
+      {!loading && !lyrics && (
+        <p className="fl-no-lyrics">
+          {t('lyrics.notFound', 'Текст не найден')}
+        </p>
+      )}
+
+      {!loading && lyrics && (isAdmin || isOwner) && (
+        <div className="lyrics-debug-attribution">
+          <div className="lyrics-debug-row">
+            <span className="lyrics-debug-label">
+              {t(
+                'redesign.player.lyricsSourceLabel',
+                'Источник текста:',
+              )}
+            </span>
+            <span className="lyrics-debug-value">
+              {lyrics.source_name || '—'}
+            </span>
+          </div>
+          <div className="lyrics-debug-row">
+            <span className="lyrics-debug-label">
+              {t(
+                'redesign.player.lyricsSyncLabel',
+                'Синхронизовал:',
+              )}
+            </span>
+            <span className="lyrics-debug-value">
+              {lyrics.sync_source_name || '—'}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
+  const controls = (
+    <div
+      className={`fl-controls${embed ? ' fl-controls--embed' : ''}`}
+    >
+      <div className="fl-seek-wrap">
+        <input
+          type="range"
+          className="fl-seek"
+          min={0}
+          max={100}
+          step={0.1}
+          value={pct}
+          style={
+            {
+              ['--progress']: `${pct}%`,
+            } as CSSProperties
+          }
+          aria-label={t('redesign.player.seekAria', 'Seek')}
+          onChange={(e) =>
+            seek(Number(e.target.value))
+          }
+        />
+      </div>
+      <div className="fl-controls-row">
+        <span className="fl-time">{fmt(currentTime)}</span>
+        <div className="fl-btns">
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
+            className="ctrl-btn"
+            ariaLabel={t(
+              'redesign.player.prevAria',
+              'Previous track',
+            )}
+            onClick={playPrev}
+          >
+            <Icon name="skip-back" size={18} />
+          </MotionPress>
+          <MotionPress
+            type="button"
+            variant="primary"
+            haptic="medium"
+            className={`play-btn${
+              isPlaying ? ' play-btn--playing' : ''
+            }`}
+            ariaLabel={
+              isPlaying
+                ? t('redesign.player.pauseAria', 'Pause')
+                : t('redesign.player.playAria', 'Play')
+            }
+            onClick={togglePlay}
+          >
+            <MorphIcon
+              name={isPlaying ? 'pause' : 'play'}
+              size={16}
+              filled
+            />
+          </MotionPress>
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
+            className="ctrl-btn"
+            ariaLabel={t(
+              'redesign.player.nextAria',
+              'Next track',
+            )}
+            onClick={playNext}
+          >
+            <Icon name="skip-forward" size={18} />
+          </MotionPress>
+        </div>
+        <span className="fl-time">{fmt(duration)}</span>
+      </div>
+    </div>
+  )
+
+  if (embed) {
+    return (
+      <div className="fl-embed rp-now-lyrics-embed">
+        {toolbar}
+        {content}
+        {controls}
+      </div>
+    )
+  }
+
   return (
     <div className={`fl-overlay${exit.cls}`}>
       {videoSrc && !videoFailed && (
@@ -268,182 +538,43 @@ export function FullscreenLyrics() {
       )}
       <div className="fl-gradient" />
 
-      <button
-        className="fl-close icon-btn"
-        onClick={closeLyrics}
-      >
-        <Icon name="x" size={18} />
-      </button>
-
-      <div className="fl-toolbar">
-        {hasWordTimes && (
-          <button
-            className={`fl-toolbar-btn${karaokeActive ? ' fl-toolbar-btn-active' : ''}`}
-            onClick={toggleKaraoke}
-            aria-pressed={karaokeActive}
-          >
-            {t('lyrics.karaokeMode', 'Karaoke')}
-          </button>
-        )}
-        <label className="fl-offset">
-          <span>{t('lyrics.syncOffset', 'Offset')}</span>
-          <input
-            type="range"
-            min={-2000}
-            max={2000}
-            step={50}
-            value={offsetMs}
-            onChange={(e) =>
-              handleOffsetChange(Number(e.target.value))
-            }
-          />
-          <span className="fl-offset-value">
-            {offsetMs >= 0 ? '+' : ''}
-            {offsetMs} ms
-          </span>
-        </label>
-        {translationItems.length > 0 && (
-          <label className="fl-offset">
-            <span>Language</span>
-            <select
-              className="form-input"
-              value={selectedLang}
-              onChange={(e) =>
-                setSelectedLang(e.target.value)
-              }
-            >
-              <option value="original">Original</option>
-              {translationItems.map((tr) => (
-                <option
-                  key={tr.language_code}
-                  value={tr.language_code}
-                >
-                  {tr.language_code.toUpperCase()}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-      </div>
-
-      <div className="fl-content">
-        {loading && <div className="loader" />}
-
-        {!loading && lyrics?.synced_lines?.length
-          ? lyrics.synced_lines.map((line, i) => {
-              const isActive = i === activeIdx
-              const lineWordIdx =
-                karaokeActive && isActive ? wordIdx : -1
-              return (
-                <div
-                  key={i}
-                  ref={isActive ? activeRef : null}
-                  className={`fl-line${isActive ? ' fl-line-active' : ''}`}
-                  onClick={() =>
-                    handleLineClick(line.time_ms)
-                  }
-                >
-                  {karaokeActive &&
-                  line.word_times &&
-                  line.word_times.length > 0 ? (
-                    line.word_times.map((w, j) => (
-                      <span
-                        key={j}
-                        className={`fl-word${j === lineWordIdx ? ' fl-word-active' : ''}${isActive && j < lineWordIdx ? ' fl-word-past' : ''}`}
-                      >
-                        {w.text}{' '}
-                      </span>
-                    ))
-                  ) : (
-                    line.text
-                  )}
-                </div>
-              )
-            })
-          : !loading &&
-            lyrics?.plain_text && (
-              <pre className="fl-plain">
-                {plainTextToRender}
-              </pre>
-            )}
-
-        {!loading && !lyrics && (
-          <p className="fl-no-lyrics">
-            {t('lyrics.notFound', 'Текст не найден')}
-          </p>
-        )}
-
-        {!loading && lyrics && (isAdmin || isOwner) && (
-          <div className="lyrics-debug-attribution">
-            <div className="lyrics-debug-row">
-              <span className="lyrics-debug-label">
-                Источник текста:
-              </span>
-              <span className="lyrics-debug-value">
-                {lyrics.source_name || '—'}
-              </span>
-            </div>
-            <div className="lyrics-debug-row">
-              <span className="lyrics-debug-label">
-                Синхронизовал:
-              </span>
-              <span className="lyrics-debug-value">
-                {lyrics.sync_source_name || '—'}
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="fl-controls">
-        <div className="fl-seek-wrap">
-          <input
-            type="range"
-            className="fl-seek"
-            min={0}
-            max={100}
-            step={0.1}
-            value={pct}
-            style={{ ['--progress' as any]: `${pct}%` }}
-            aria-label="Перемотка трека"
-            onChange={(e) =>
-              seek(Number(e.target.value))
-            }
-          />
+      <div className="fl-header rp-now-fl-header">
+        <BeatPulse
+          bpm={
+            (track as unknown as { bpm?: number }).bpm ??
+            120
+          }
+          active={isPlaying}
+          className="fl-header-cover rp-now-fl-cover"
+        >
+          <CoverImage coverKey={track.cover_key ?? null} />
+        </BeatPulse>
+        <div className="fl-header-meta rp-now-fl-meta">
+          <span className="fl-header-title">{track.title}</span>
+          {track.artist && (
+            <span className="fl-header-artist">
+              {track.artist}
+            </span>
+          )}
         </div>
-        <div className="fl-controls-row">
-          <span className="fl-time">{fmt(currentTime)}</span>
-          <div className="fl-btns">
-            <button
-              className="ctrl-btn"
-              onClick={playPrev}
-              aria-label="Предыдущий трек"
-            >
-              <Icon name="skip-back" size={18} />
-            </button>
-            <button
-              className={`play-btn${
-                isPlaying ? ' play-btn--playing' : ''
-              }`}
-              onClick={togglePlay}
-              aria-label={isPlaying ? 'Пауза' : 'Воспроизвести'}
-            >
-              <Icon
-                name={isPlaying ? 'pause' : 'play'}
-                size={16}
-              />
-            </button>
-            <button
-              className="ctrl-btn"
-              onClick={playNext}
-              aria-label="Следующий трек"
-            >
-              <Icon name="skip-forward" size={18} />
-            </button>
-          </div>
-          <span className="fl-time">{fmt(duration)}</span>
-        </div>
+        <MotionPress
+          type="button"
+          variant="icon"
+          haptic="light"
+          className="fl-close icon-btn"
+          ariaLabel={t(
+            'redesign.player.closeLyrics',
+            'Close',
+          )}
+          onClick={closeLyrics}
+        >
+          <Icon name="x" size={18} />
+        </MotionPress>
       </div>
+
+      {toolbar}
+      {content}
+      {controls}
     </div>
   )
 }

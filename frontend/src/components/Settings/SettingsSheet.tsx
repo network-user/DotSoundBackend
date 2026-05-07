@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { usePlayerActions } from '@/store/PlayerContext'
+import { useOptionalPrefetch } from '@/store/PrefetchContext'
 import {
   getInternalUserId,
   haptic,
@@ -11,9 +12,10 @@ import {
   setBackButton,
 } from '@/lib/telegram'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { canInstallPwa } from '@/components/PwaInstall/InstallPrompt'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { useSound } from '@/store/SoundContext'
 import { AccountDangerZone } from './AccountDangerZone'
 import { LinkedAccounts } from './LinkedAccounts'
@@ -34,6 +36,13 @@ export function SettingsSheet({
   const { t, i18n } = useTranslation()
   const { openEq } = usePlayerActions()
   const sound = useSound()
+  const prefetchCtx = useOptionalPrefetch()
+  const [smartBufferingEnabled, setSmartBufferingEnabled] =
+    useState<boolean>(
+      () =>
+        localStorage.getItem('setting-smart-buffering') !==
+        'false',
+    )
   const [videoEnabled, setVideoEnabled] =
     useState(
       () =>
@@ -86,7 +95,6 @@ export function SettingsSheet({
 
   const exit = useExitTransition(open)
   if (!exit.mounted) return null
-  const toast = useToast()
   const installable = canInstallPwa()
   const feedbackTap = () => {
     hapticSelection()
@@ -123,6 +131,17 @@ export function SettingsSheet({
     )
   }
 
+  const handleSmartBufferingToggle = () => {
+    feedbackTap()
+    const next = !smartBufferingEnabled
+    setSmartBufferingEnabled(next)
+    localStorage.setItem(
+      'setting-smart-buffering',
+      String(next),
+    )
+    prefetchCtx?.setEnabled(next)
+  }
+
   const handleLanguageChange = (lng: string) => {
     feedbackTap()
     i18n.changeLanguage(lng)
@@ -142,8 +161,10 @@ export function SettingsSheet({
 
   const handleInstallHint = () => {
     feedbackTap()
-    toast.info(t('settings.pwaInstallHint'), {
-      duration: 7000,
+    showIsland({
+      kind: 'toast',
+      title: t('settings.pwaInstallHint'),
+      durationMs: 7000,
     })
   }
 
@@ -170,23 +191,25 @@ export function SettingsSheet({
   const handleTestSound = () => {
     feedbackTap()
     sound.playTest('tapSoft')
-    toast.info(
-      t('settings.testSoundFired', {
+    showIsland({
+      kind: 'toast',
+      title: t('settings.testSoundFired', {
         defaultValue: 'Тест звука отправлен',
       }),
-      { duration: 1200 },
-    )
+      durationMs: 1200,
+    })
   }
 
   const handleTestHaptic = () => {
     haptic('light')
     hapticNotification('success')
-    toast.info(
-      t('settings.testHapticFired', {
+    showIsland({
+      kind: 'toast',
+      title: t('settings.testHapticFired', {
         defaultValue: 'Тест вибрации отправлен',
       }),
-      { duration: 1200 },
-    )
+      durationMs: 1200,
+    })
   }
 
   return (
@@ -200,10 +223,13 @@ export function SettingsSheet({
       <div className={`settings-sheet${exit.cls}`}>
         <div className="settings-handle" />
         <div className="settings-header">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
             className="settings-back"
+            ariaLabel={t('common.back')}
             onClick={onClose}
-            aria-label={t('common.back')}
           >
             <Icon
               name="chevron"
@@ -213,21 +239,27 @@ export function SettingsSheet({
             <span className="settings-back-label">
               {t('common.back')}
             </span>
-          </button>
+          </MotionPress>
           <span className="settings-title">
             {t('settings.title')}
           </span>
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
             className="icon-btn settings-close"
+            ariaLabel={t('common.close')}
             onClick={onClose}
-            aria-label={t('common.close')}
           >
             <Icon name="x" size={18} />
-          </button>
+          </MotionPress>
         </div>
 
         <div className="settings-list">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
             className="settings-item"
             onClick={handleEq}
           >
@@ -238,7 +270,7 @@ export function SettingsSheet({
               size={16}
               className="settings-chevron"
             />
-          </button>
+          </MotionPress>
 
           <div
             className="settings-item"
@@ -261,6 +293,23 @@ export function SettingsSheet({
             <span>{t('settings.monochrome')}</span>
             <div
               className={`settings-toggle${monoEnabled ? ' on' : ''}`}
+            >
+              <div className="settings-toggle-dot" />
+            </div>
+          </div>
+
+          <div
+            className="settings-item"
+            onClick={handleSmartBufferingToggle}
+          >
+            <Icon name="download" size={20} />
+            <span>
+              {t('settings.smartBuffering', {
+                defaultValue: 'Умная буферизация',
+              })}
+            </span>
+            <div
+              className={`settings-toggle${smartBufferingEnabled ? ' on' : ''}`}
             >
               <div className="settings-toggle-dot" />
             </div>
@@ -316,8 +365,10 @@ export function SettingsSheet({
               })}
             </span>
             <div className="settings-inline-actions">
-              <button
+              <MotionPress
                 type="button"
+                variant="ghost"
+                haptic="selection"
                 className="settings-mini-btn"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -327,9 +378,11 @@ export function SettingsSheet({
                 {t('settings.testSound', {
                   defaultValue: 'Звук',
                 })}
-              </button>
-              <button
+              </MotionPress>
+              <MotionPress
                 type="button"
+                variant="ghost"
+                haptic="selection"
                 className="settings-mini-btn"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -339,7 +392,7 @@ export function SettingsSheet({
                 {t('settings.testHaptic', {
                   defaultValue: 'Вибро',
                 })}
-              </button>
+              </MotionPress>
             </div>
           </div>
 
@@ -356,7 +409,10 @@ export function SettingsSheet({
             </select>
           </div>
 
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
             className="settings-item"
             onClick={handleOpenBrowser}
           >
@@ -369,10 +425,13 @@ export function SettingsSheet({
               size={16}
               className="settings-chevron"
             />
-          </button>
+          </MotionPress>
 
           {installable && (
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="settings-item"
               onClick={handleInstallHint}
             >
@@ -385,7 +444,7 @@ export function SettingsSheet({
                 size={16}
                 className="settings-chevron"
               />
-            </button>
+            </MotionPress>
           )}
 
           <div className="settings-hint">
@@ -402,6 +461,7 @@ export function SettingsSheet({
           />
 
           <button
+            type="button"
             className="settings-item disabled"
             disabled
           >
@@ -415,7 +475,12 @@ export function SettingsSheet({
             </span>
           </button>
 
-          <button className="settings-item">
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="settings-item"
+          >
             <Icon name="info" size={20} />
             <span>
               {t('settings.aboutApp')}
@@ -423,19 +488,22 @@ export function SettingsSheet({
             <span className="settings-version">
               v0.1.0
             </span>
-          </button>
+          </MotionPress>
 
           <AccountDangerZone />
         </div>
 
         <div className="settings-footer">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="medium"
             className="settings-logout"
             onClick={onLogout}
           >
             <Icon name="log-out" size={18} />
             {t('settings.logOut')}
-          </button>
+          </MotionPress>
         </div>
       </div>
     </div>

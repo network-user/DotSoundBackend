@@ -2,45 +2,64 @@ import {
   useEffect,
   useMemo,
   useState,
-  type ChangeEvent,
-  type DragEvent,
   type FormEvent,
 } from 'react'
-import { api } from '@/lib/api'
-import { Icon } from '@/components/Icon/Icon'
+import { useTranslation } from 'react-i18next'
+import { AnimatePresence } from 'framer-motion'
+import {
+  m,
+  SPRING_GENTLE,
+  TWEEN_FAST,
+  useReducedMotion,
+} from '@/lib/motion'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { api, getApiErrorMessage } from '@/lib/api'
+import { dismissIsland, showIsland } from '@/lib/island'
 import { getInternalUserId } from '@/lib/telegram'
-import { haptic, hapticNotification, hapticSelection } from '@/lib/telegram'
+import { hapticNotification, hapticSelection } from '@/lib/telegram'
 import type { LyricsResponse, Track } from '@/types/api'
 import { LyricsEditor } from '../TrackCardSheet/LyricsEditor'
+import { UploadStepAudio } from './steps/UploadStepAudio'
+import { UploadStepDetails } from './steps/UploadStepDetails'
+import { UploadStepCover } from './steps/UploadStepCover'
+import { UploadStepPreview } from './steps/UploadStepPreview'
 
 interface Props {
   onSuccess: (track: Track) => void
 }
 
-function fmtDuration(sec: number): string {
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60).toString().padStart(2, '0')
-  return `${m}:${s}`
-}
+const WIZARD_HINTS = [
+  ['wizardAudioTitle', 'wizardAudioHint'],
+  ['wizardDetailsTitle', 'wizardDetailsHint'],
+  ['wizardCoverTitle', 'wizardCoverHint'],
+  ['wizardPreviewTitle', 'wizardPreviewHint'],
+] as const
 
-const ALLOWED_AUDIO_TYPES = ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/flac', 'audio/mp4', 'audio/aac']
-const MAX_AUDIO_BYTES = 50 * 1024 * 1024
+const SEARCH_DEBOUNCE_MS = 220
 
 export function UploadFileTab({ onSuccess }: Props) {
+  const { t } = useTranslation()
+  const reduce = useReducedMotion()
+  const transition = reduce ? TWEEN_FAST : SPRING_GENTLE
+
   const [title, setTitle] = useState('')
   const [artist, setArtist] = useState('')
   const [artistMode, setArtistMode] = useState<'profile' | 'custom'>('custom')
-  const [profileArtistName, setProfileArtistName] = useState<string | null>(null)
+  const [profileArtistName, setProfileArtistName] = useState<string | null>(
+    null,
+  )
   const [artistQuery, setArtistQuery] = useState('')
   const [artistOpen, setArtistOpen] = useState(false)
   const [artistSearching, setArtistSearching] = useState(false)
   const [artistResults, setArtistResults] = useState<string[]>([])
+
   const [genre, setGenre] = useState('')
   const [genreQuery, setGenreQuery] = useState('')
   const [genreOpen, setGenreOpen] = useState(false)
   const [genreSearching, setGenreSearching] = useState(false)
   const [genreResults, setGenreResults] = useState<string[]>([])
   const [genres, setGenres] = useState<string[]>([])
+
   const [audioFile, setAudioFile] = useState<File | null>(null)
   const [audioDuration, setAudioDuration] = useState<number | null>(null)
   const [coverFile, setCoverFile] = useState<File | null>(null)
@@ -55,6 +74,7 @@ export function UploadFileTab({ onSuccess }: Props) {
   const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(null)
   const [coverDragging, setCoverDragging] = useState(false)
   const [audioDragging, setAudioDragging] = useState(false)
+  const [wizardStep, setWizardStep] = useState(0)
 
   useEffect(() => {
     api.getGenres().then(setGenres).catch(() => {})
@@ -62,10 +82,9 @@ export function UploadFileTab({ onSuccess }: Props) {
 
   useEffect(() => {
     const userId = getInternalUserId()
-    if (!userId) {
-      return
-    }
-    api.getUserProfile(userId)
+    if (!userId) return
+    api
+      .getUserProfile(userId)
       .then((user) => {
         const display = user.display_name?.trim() ?? ''
         if (!display) {
@@ -93,38 +112,37 @@ export function UploadFileTab({ onSuccess }: Props) {
       setGenreSearching(false)
       return
     }
-
     let cancelled = false
     const timer = window.setTimeout(() => {
       setGenreSearching(true)
       void (async () => {
         const byName = genres
-          .filter((g) => g.toLowerCase().includes(query.toLowerCase()))
+          .filter((g) =>
+            g.toLowerCase().includes(query.toLowerCase()),
+          )
           .slice(0, 8)
         const searchHits = await api
           .getTracks({ q: query, size: 30 })
           .catch(() => ({ items: [] as Track[] }))
         const genresFromEs = searchHits.items
-          .map((t) => t.genre?.trim() ?? '')
+          .map((tr) => tr.genre?.trim() ?? '')
           .filter((x) => x.length > 0)
         const merged = [...byName, ...genresFromEs]
         const seen = new Set<string>()
         const result: string[] = []
         for (const item of merged) {
           const key = item.toLowerCase()
-          if (seen.has(key)) {
-            continue
-          }
+          if (seen.has(key)) continue
           seen.add(key)
           result.push(normalizedGenres.get(key) ?? item)
-          if (result.length >= 10) {
-            break
-          }
+          if (result.length >= 10) break
         }
         const exact = normalizedGenres.get(query.toLowerCase())
         if (
-          exact
-          && !result.some((value) => value.toLowerCase() === exact.toLowerCase())
+          exact &&
+          !result.some(
+            (value) => value.toLowerCase() === exact.toLowerCase(),
+          )
         ) {
           result.unshift(exact)
         }
@@ -133,8 +151,7 @@ export function UploadFileTab({ onSuccess }: Props) {
           setGenreSearching(false)
         }
       })()
-    }, 220)
-
+    }, SEARCH_DEBOUNCE_MS)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
@@ -153,7 +170,6 @@ export function UploadFileTab({ onSuccess }: Props) {
       setArtistSearching(false)
       return
     }
-
     let cancelled = false
     const timer = window.setTimeout(() => {
       setArtistSearching(true)
@@ -167,29 +183,24 @@ export function UploadFileTab({ onSuccess }: Props) {
         const merged = [
           ...artistsFromApi.items.map((x) => x.name.trim()),
           ...trackHits.items
-            .map((t) => t.artist?.trim() ?? '')
+            .map((tr) => tr.artist?.trim() ?? '')
             .filter((x) => x.length > 0),
         ]
         const seen = new Set<string>()
         const result: string[] = []
         for (const item of merged) {
           const key = item.toLowerCase()
-          if (seen.has(key)) {
-            continue
-          }
+          if (seen.has(key)) continue
           seen.add(key)
           result.push(item)
-          if (result.length >= 10) {
-            break
-          }
+          if (result.length >= 10) break
         }
         if (!cancelled) {
           setArtistResults(result)
           setArtistSearching(false)
         }
       })()
-    }, 220)
-
+    }, SEARCH_DEBOUNCE_MS)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
@@ -197,9 +208,10 @@ export function UploadFileTab({ onSuccess }: Props) {
   }, [artistOpen, artistQuery])
 
   const hasExactArtist = useMemo(
-    () => artistResults.some(
-      (value) => value.toLowerCase() === artistQuery.trim().toLowerCase(),
-    ),
+    () =>
+      artistResults.some(
+        (value) => value.toLowerCase() === artistQuery.trim().toLowerCase(),
+      ),
     [artistResults, artistQuery],
   )
 
@@ -210,16 +222,6 @@ export function UploadFileTab({ onSuccess }: Props) {
   }, [localAudioUrl])
 
   const applyAudioFile = (file: File) => {
-    if (!ALLOWED_AUDIO_TYPES.includes(file.type)) {
-      setError('Формат файла не поддерживается')
-      hapticNotification('error')
-      return
-    }
-    if (file.size > MAX_AUDIO_BYTES) {
-      setError('Файл слишком большой (макс. 50 МБ)')
-      hapticNotification('error')
-      return
-    }
     setError('')
     setAudioFile(file)
     hapticSelection()
@@ -235,24 +237,19 @@ export function UploadFileTab({ onSuccess }: Props) {
     }
   }
 
-  const handleAudioChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) applyAudioFile(file)
-  }
-
   const applyCoverFile = (file: File) => {
     if (!file.type.startsWith('image/')) return
     setCoverFile(file)
     hapticSelection()
     const reader = new FileReader()
-    reader.onload = (ev) => setCoverPreview(ev.target?.result as string)
+    reader.onload = (ev) =>
+      setCoverPreview(ev.target?.result as string)
     reader.readAsDataURL(file)
   }
 
-  const handleCoverChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) applyCoverFile(file)
-    else { setCoverFile(null); setCoverPreview(null) }
+  const clearCover = () => {
+    setCoverFile(null)
+    setCoverPreview(null)
   }
 
   const reset = () => {
@@ -279,42 +276,117 @@ export function UploadFileTab({ onSuccess }: Props) {
     setUploadDone(false)
     setIsPublic(true)
     setTermsAccepted(false)
+    setWizardStep(0)
   }
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault()
-    setError('')
+  function syncGenreArtistDraft() {
     if (genreQuery.trim()) {
-      const exact = normalizedGenres.get(genreQuery.trim().toLowerCase())
+      const exact = normalizedGenres.get(
+        genreQuery.trim().toLowerCase(),
+      )
       setGenre(exact ?? genreQuery.trim())
     }
     if (artistMode === 'custom' && artistQuery.trim()) {
       setArtist(artistQuery.trim())
     }
+    if (
+      artistMode === 'profile' &&
+      profileArtistName?.trim()
+    ) {
+      setArtist(profileArtistName.trim())
+    }
+  }
+
+  function handleWizardNext() {
+    setError('')
+    if (wizardStep === 0) {
+      if (!audioFile) {
+        setError(t('redesign.upload.file.errorAudioRequired'))
+        return
+      }
+      setWizardStep(1)
+      return
+    }
+    if (wizardStep === 1) {
+      syncGenreArtistDraft()
+      if (!title.trim()) {
+        setError(t('redesign.upload.file.errorTitleRequired'))
+        return
+      }
+      if (
+        artistMode === 'profile' &&
+        !profileArtistName?.trim()
+      ) {
+        setError(t('redesign.upload.file.errorArtistProfile'))
+        return
+      }
+      setWizardStep(2)
+      return
+    }
+    if (wizardStep === 2) {
+      setWizardStep(3)
+    }
+  }
+
+  function handleWizardBack() {
+    if (!uploading && wizardStep > 0) {
+      setWizardStep((s) => Math.max(0, s - 1))
+    }
+  }
+
+  function resolveSubmitError(err: unknown): string {
+    const msg = err instanceof Error ? err.message : ''
+    const fallback = t('redesign.upload.file.errorByCode.def')
+    if (/^[1-5]\d{2}$/.test(msg)) {
+      return t(`redesign.upload.file.errorByCode.${msg}`, {
+        defaultValue: fallback,
+      })
+    }
+    return getApiErrorMessage(err, fallback)
+  }
+
+  async function handleSubmit(e?: FormEvent) {
+    e?.preventDefault()
+    setError('')
+    syncGenreArtistDraft()
     if (artistMode === 'profile') {
       if (!profileArtistName?.trim()) {
-        setError('Укажи display name в профиле для режима "Я артист"')
+        setError(t('redesign.upload.file.errorArtistProfile'))
         return
       }
       setArtist(profileArtistName.trim())
     }
-
-    if (!title.trim()) { setError('Введите название трека'); return }
-    if (!audioFile) { setError('Выберите аудиофайл'); return }
+    if (!title.trim()) {
+      setError(t('redesign.upload.file.errorTitleRequired'))
+      return
+    }
+    if (!audioFile) {
+      setError(t('redesign.upload.file.errorAudioRequired'))
+      return
+    }
     if (!termsAccepted) {
-      setError('Подтвердите права на контент и согласие с условиями загрузки')
+      setError(t('redesign.upload.file.errorTermsRequired'))
       return
     }
 
     setUploading(true)
     setUploadDone(false)
 
+    let islandId: string | undefined
     try {
+      islandId = showIsland({
+        kind: 'progress',
+        title: t('redesign.upload.progressTitle'),
+        hint: t('redesign.upload.progressHint'),
+      })
       const fd = new FormData()
       fd.append('file', audioFile)
       fd.append('title', title.trim())
       if (artist.trim()) fd.append('artist', artist.trim())
-      fd.append('use_profile_artist', artistMode === 'profile' ? 'true' : 'false')
+      fd.append(
+        'use_profile_artist',
+        artistMode === 'profile' ? 'true' : 'false',
+      )
       if (genre.trim()) fd.append('genre', genre.trim())
       if (coverFile) fd.append('cover', coverFile)
       fd.append('is_public', String(isPublic))
@@ -330,315 +402,122 @@ export function UploadFileTab({ onSuccess }: Props) {
         }
       }
       setUploadDone(true)
+      if (islandId) dismissIsland(islandId)
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.upload.doneToast'),
+        durationMs: 2800,
+      })
       hapticNotification('success')
 
-      setTimeout(async () => {
+      window.setTimeout(async () => {
         const fullTrack = await api.getTrack(uploaded.id)
         reset()
         onSuccess(fullTrack)
       }, 600)
-    } catch (err: unknown) {
+    } catch (err) {
+      if (islandId) dismissIsland(islandId)
       setUploading(false)
       setUploadDone(false)
-      const msg = err instanceof Error ? err.message : ''
-      setError(
-        msg === '415' ? 'Формат файла не поддерживается' :
-        msg === '413' ? 'Файл слишком большой (макс. 50 МБ)' :
-        'Ошибка загрузки. Попробуй ещё раз.',
-      )
+      setError(resolveSubmitError(err))
       hapticNotification('error')
     }
   }
 
+  const draftArtistLabel =
+    artistMode === 'profile'
+      ? profileArtistName?.trim() || artist.trim()
+      : artist.trim()
+
   return (
     <form id="upload-form" noValidate onSubmit={handleSubmit}>
-      <label
-        className={`cover-picker${coverDragging ? ' drag-over' : ''}`}
-        htmlFor="cover-input"
-        onDragOver={(e) => { e.preventDefault(); setCoverDragging(true) }}
-        onDragEnter={(e) => { e.preventDefault(); setCoverDragging(true) }}
-        onDragLeave={() => setCoverDragging(false)}
-        onDrop={(e) => {
-          e.preventDefault()
-          setCoverDragging(false)
-          const file = e.dataTransfer.files[0]
-          if (file) applyCoverFile(file)
-        }}
-      >
-        <div className="cover-preview">
-          {coverPreview
-            ? <img src={coverPreview} alt="cover" />
-            : <span className="cover-placeholder">Track</span>
-          }
-        </div>
-        <span className="cover-label">Добавить обложку</span>
-      </label>
-      <input
-        id="cover-input"
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        hidden
-        onChange={handleCoverChange}
-      />
-
-      <div className="form-group">
-        <label className="form-label" htmlFor="title-input">Название *</label>
-        <input
-          id="title-input"
-          className="form-input"
-          type="text"
-          placeholder="Название трека"
-          maxLength={256}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
+      <div className="ru-up-wizard-head">
+        <h3>{t(`redesign.upload.${WIZARD_HINTS[wizardStep][0]}`)}</h3>
+        <p>{t(`redesign.upload.${WIZARD_HINTS[wizardStep][1]}`)}</p>
+      </div>
+      <div className="ru-up-step-dots" aria-hidden="true">
+        {[0, 1, 2, 3].map((i) => (
+          <span
+            key={i}
+            className={
+              i === wizardStep
+                ? 'ru-up-step-dot is-active'
+                : 'ru-up-step-dot'
+            }
+          />
+        ))}
       </div>
 
-      <div className="form-group genre-search-group">
-        <label className="form-label">Исполнитель</label>
-        <div className="upload-artist-mode">
-          <button
-            type="button"
-            className={`upload-artist-mode-btn${artistMode === 'profile' ? ' active' : ''}`}
-            onClick={() => {
-              if (!profileArtistName) {
-                hapticNotification('warning')
-                return
-              }
-              setArtistMode('profile')
-              setArtist(profileArtistName)
-              setArtistQuery(profileArtistName)
-              setArtistOpen(false)
-              hapticSelection()
-            }}
-          >
-            Я этот артист
-          </button>
-          <button
-            type="button"
-            className={`upload-artist-mode-btn${artistMode === 'custom' ? ' active' : ''}`}
-            onClick={() => {
-              setArtistMode('custom')
-              hapticSelection()
-            }}
-          >
-            Ввести вручную
-          </button>
-        </div>
-        {artistMode === 'profile' && (
-          <p className="upload-artist-profile-note">
-            {profileArtistName
-              ? `Будет использовано имя профиля: ${profileArtistName}`
-              : 'Добавь display name в профиле, чтобы использовать этот режим.'}
-          </p>
-        )}
-        {artistMode === 'custom' && (
-          <>
-        <button
-          type="button"
-          className="genre-search-toggle"
-          onClick={() => {
-            setArtistOpen((prev) => !prev)
-            hapticSelection()
-          }}
+      <AnimatePresence mode="wait">
+        <m.div
+          key={wizardStep}
+          initial={reduce ? false : { opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reduce ? undefined : { opacity: 0, y: -10 }}
+          transition={transition}
         >
-          <Icon name="search" size={16} />
-          <span>{artist || 'Поиск исполнителя'}</span>
-          <Icon name={artistOpen ? 'chevron-up' : 'chevron-down'} size={16} />
-        </button>
-        {artistOpen && (
-          <div className="genre-search-popover" role="listbox">
-            <input
-              className="form-input genre-search-input"
-              placeholder="Начни вводить имя исполнителя"
-              maxLength={256}
-              value={artistQuery}
-              onChange={(e) => {
-                const next = e.target.value
-                setArtistQuery(next)
-                if (next.trim()) {
-                  setArtist(next.trim())
-                }
-              }}
+          {wizardStep === 0 && (
+            <UploadStepAudio
+              audioFile={audioFile}
+              audioDuration={audioDuration}
+              audioDragging={audioDragging}
+              onAudioFile={applyAudioFile}
+              onDragChange={setAudioDragging}
             />
-            {artistSearching && (
-              <p className="genre-search-note">Ищем похожих исполнителей…</p>
-            )}
-            {!artistSearching && artistResults.length > 0 && (
-              <div className="genre-search-list">
-                {artistResults.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`genre-search-item${
-                      artist.toLowerCase() === item.toLowerCase()
-                        ? ' active'
-                        : ''
-                    }`}
-                    onClick={() => {
-                      setArtist(item)
-                      setArtistQuery(item)
-                      setArtistOpen(false)
-                      hapticSelection()
-                    }}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-            )}
-            {!artistSearching && artistQuery.trim() && !hasExactArtist && (
-              <button
-                type="button"
-                className="genre-search-create"
-                onClick={() => {
-                  const custom = artistQuery.trim()
-                  setArtist(custom)
-                  setArtistQuery(custom)
-                  setArtistOpen(false)
-                  haptic('medium')
-                }}
-              >
-                Создать исполнителя: {artistQuery.trim()}
-              </button>
-            )}
-            {!artistSearching && artistResults.length === 0 && !artistQuery.trim() && (
-              <p className="genre-search-note">
-                Подсказки появятся после ввода.
-              </p>
-            )}
-          </div>
-        )}
-          </>
-        )}
-      </div>
-
-      <div className="form-group genre-search-group">
-        <label className="form-label">Жанр</label>
-        <button
-          type="button"
-          className="genre-search-toggle"
-          onClick={() => {
-            setGenreOpen((prev) => !prev)
-            hapticSelection()
-          }}
-        >
-          <Icon name="search" size={16} />
-          <span>{genre || 'Поиск жанра'}</span>
-          <Icon name={genreOpen ? 'chevron-up' : 'chevron-down'} size={16} />
-        </button>
-        {genreOpen && (
-          <div className="genre-search-popover" role="listbox">
-            <input
-              className="form-input genre-search-input"
-              placeholder="Начни вводить жанр"
-              value={genreQuery}
-              onChange={(e) => {
-                const next = e.target.value
-                setGenreQuery(next)
-                if (next.trim()) {
-                  setGenre(next.trim())
-                }
-              }}
-            />
-            {genreSearching && (
-              <p className="genre-search-note">Ищем похожие жанры…</p>
-            )}
-            {!genreSearching && genreResults.length > 0 && (
-              <div className="genre-search-list">
-                {genreResults.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`genre-search-item${
-                      genre.toLowerCase() === item.toLowerCase()
-                        ? ' active'
-                        : ''
-                    }`}
-                    onClick={() => {
-                      setGenre(item)
-                      setGenreQuery(item)
-                      setGenreOpen(false)
-                      hapticSelection()
-                    }}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-            )}
-            {!genreSearching && genreQuery.trim() && !hasExactGenre && (
-              <button
-                type="button"
-                className="genre-search-create"
-                onClick={() => {
-                  const custom = genreQuery.trim()
-                  setGenre(custom)
-                  setGenreQuery(custom)
-                  setGenreOpen(false)
-                  haptic('medium')
-                }}
-              >
-                Создать жанр: {genreQuery.trim()}
-              </button>
-            )}
-            {!genreSearching && genreResults.length === 0 && !genreQuery.trim() && (
-              <p className="genre-search-note">
-                Популярные жанры появятся после ввода.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Аудиофайл *</label>
-        <div
-          className={`audio-drop-zone${audioDragging ? ' drag-over' : ''}`}
-          onDragOver={(e: DragEvent) => { e.preventDefault(); setAudioDragging(true) }}
-          onDragEnter={(e: DragEvent) => { e.preventDefault(); setAudioDragging(true) }}
-          onDragLeave={() => setAudioDragging(false)}
-          onDrop={(e: DragEvent) => {
-            e.preventDefault()
-            setAudioDragging(false)
-            const file = e.dataTransfer.files[0]
-            if (file) applyAudioFile(file)
-          }}
-        >
-          <label className="file-pick-btn" htmlFor="audio-input">
-            <span>FILE</span> Выбрать файл
-          </label>
-          <p className="file-name">{audioFile ? audioFile.name : 'Файл не выбран или перетащи сюда'}</p>
-          {audioFile && audioDuration !== null && (
-            <p className="file-meta">{fmtDuration(audioDuration)}</p>
           )}
-        </div>
-        <input
-          id="audio-input"
-          type="file"
-          accept="audio/mpeg,audio/ogg,audio/wav,audio/flac,audio/mp4,audio/aac"
-          hidden
-          onChange={handleAudioChange}
-        />
-      </div>
-
-      {audioFile && (
-        <div className="form-group">
-          <label className="form-label">Текст песни</label>
-          <button
-            type="button"
-            className={`lyrics-editor-trigger${lyrics ? ' active' : ''}`}
-            onClick={() => {
-              hapticSelection()
-              setShowLyricsEditor(true)
-            }}
-          >
-            {lyrics
-              ? 'Текст добавлен (изменить)'
-              : 'Добавить текст / таймкоды'}
-          </button>
-        </div>
-      )}
+          {wizardStep === 1 && (
+            <UploadStepDetails
+              title={title}
+              setTitle={setTitle}
+              artist={artist}
+              artistMode={artistMode}
+              profileArtistName={profileArtistName}
+              artistQuery={artistQuery}
+              artistOpen={artistOpen}
+              artistSearching={artistSearching}
+              artistResults={artistResults}
+              hasExactArtist={hasExactArtist}
+              setArtist={setArtist}
+              setArtistMode={setArtistMode}
+              setArtistQuery={setArtistQuery}
+              setArtistOpen={setArtistOpen}
+              genre={genre}
+              genreQuery={genreQuery}
+              genreOpen={genreOpen}
+              genreSearching={genreSearching}
+              genreResults={genreResults}
+              hasExactGenre={hasExactGenre}
+              setGenre={setGenre}
+              setGenreQuery={setGenreQuery}
+              setGenreOpen={setGenreOpen}
+              audioFileLoaded={audioFile !== null}
+              lyrics={lyrics}
+              onOpenLyricsEditor={() => setShowLyricsEditor(true)}
+              isPublic={isPublic}
+              setIsPublic={setIsPublic}
+              termsAccepted={termsAccepted}
+              setTermsAccepted={setTermsAccepted}
+            />
+          )}
+          {wizardStep === 2 && (
+            <UploadStepCover
+              coverPreview={coverPreview}
+              coverDragging={coverDragging}
+              onCoverFile={applyCoverFile}
+              onCoverClear={clearCover}
+              onDragChange={setCoverDragging}
+            />
+          )}
+          {wizardStep === 3 && (
+            <UploadStepPreview
+              title={title}
+              artistLabel={draftArtistLabel}
+              audioDuration={audioDuration}
+              coverPreview={coverPreview}
+            />
+          )}
+        </m.div>
+      </AnimatePresence>
 
       {showLyricsEditor && localAudioUrl && (
         <div className="fullscreen-overlay">
@@ -656,37 +535,42 @@ export function UploadFileTab({ onSuccess }: Props) {
         </div>
       )}
 
-      <div className="form-group upload-checks">
-        <label className="upload-check-row">
-          <input
-            type="checkbox"
-            checked={isPublic}
-            onChange={(e) => setIsPublic(e.target.checked)}
-          />
-          <span>Публичный трек</span>
-        </label>
-        <label className="upload-check-row">
-          <input
-            type="checkbox"
-            checked={termsAccepted}
-            onChange={(e) => setTermsAccepted(e.target.checked)}
-          />
-          <span>
-            Ознакомлен с
-            {' '}
-            <a href="/legal/upload-rules" target="_blank" rel="noreferrer">
-              правилами загрузки
-            </a>
-            .
-          </span>
-        </label>
-      </div>
-
       {error && <div className="form-error">{error}</div>}
 
-      <button type="submit" className="btn-primary" disabled={uploading}>
-        Загрузить
-      </button>
+      <div className="ru-up-wizard-nav">
+        <div>
+          {wizardStep > 0 && (
+            <MotionPress
+              type="button"
+              variant="ghost"
+              disabled={uploading}
+              onClick={handleWizardBack}
+            >
+              {t('redesign.upload.wizardBack')}
+            </MotionPress>
+          )}
+        </div>
+        <div>
+          {wizardStep < 3 ? (
+            <MotionPress
+              type="button"
+              variant="primary"
+              disabled={uploading}
+              onClick={handleWizardNext}
+            >
+              {t('redesign.upload.wizardNext')}
+            </MotionPress>
+          ) : (
+            <MotionPress
+              type="submit"
+              variant="primary"
+              disabled={uploading}
+            >
+              {t('redesign.upload.wizardSubmit')}
+            </MotionPress>
+          )}
+        </div>
+      </div>
 
       {uploading && (
         <div>
@@ -697,7 +581,9 @@ export function UploadFileTab({ onSuccess }: Props) {
             />
           </div>
           <p className="progress-label">
-            {uploadDone ? 'Обработка…' : 'Загружаем файл…'}
+            {uploadDone
+              ? t('redesign.upload.file.progressProcessing')
+              : t('redesign.upload.file.progressUploading')}
           </p>
         </div>
       )}

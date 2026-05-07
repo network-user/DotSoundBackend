@@ -6,6 +6,8 @@ import {
   type MouseEvent,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import { type PanInfo } from 'framer-motion'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
 import {
@@ -16,6 +18,16 @@ import {
 import { Waveform } from '@/components/Waveform/Waveform'
 import { haptic } from '@/lib/telegram'
 import { useRipple } from '@/components/ui/Ripple'
+import {
+  m,
+  SPRING_GENTLE,
+  SPRING_SNAPPY,
+  useReducedMotion,
+} from '@/lib/motion'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
+import { BeatPulse } from '@/components/ui/BeatPulse'
+import { SharedCover } from '@/components/ui/SharedCover'
 
 const PLATFORM_LABELS: Record<string, string> = {
   youtube: 'YouTube',
@@ -33,8 +45,12 @@ function fmt(sec: number) {
   return `${m}:${s}`
 }
 
+const SWIPE_UP_THRESHOLD = 80
+
 export function PlayerBar() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
+  const reduce = useReducedMotion()
   const {
     currentTime,
     duration,
@@ -61,28 +77,20 @@ export function PlayerBar() {
     radioMode,
   } = usePlayerActions()
   const { isLiked, toggleLike } = useLikes()
-  const [likeBurst, setLikeBurst] =
-    useState(false)
-  const [overflowOpen, setOverflowOpen] =
-    useState(false)
+  const [likeBurst, setLikeBurst] = useState(false)
+  const [overflowOpen, setOverflowOpen] = useState(false)
   const overflowRef = useRef<HTMLDivElement>(null)
   const playRef = useRef<HTMLButtonElement>(null)
-  const prevRef = useRef<HTMLButtonElement>(null)
-  const nextRef = useRef<HTMLButtonElement>(null)
-  const likeRef = useRef<HTMLButtonElement>(null)
   useRipple(playRef)
-  useRipple(prevRef)
-  useRipple(nextRef)
-  useRipple(likeRef)
 
   useEffect(() => {
     if (!overflowOpen) return
-    const onDocClick = (e: globalThis.MouseEvent) => {
+    const onDocClick = (
+      e: globalThis.MouseEvent,
+    ) => {
       if (
         overflowRef.current &&
-        !overflowRef.current.contains(
-          e.target as Node,
-        )
+        !overflowRef.current.contains(e.target as Node)
       ) {
         setOverflowOpen(false)
       }
@@ -107,9 +115,7 @@ export function PlayerBar() {
 
   if (!track) return null
 
-  const pct = duration
-    ? (currentTime / duration) * 100
-    : 0
+  const pct = duration ? (currentTime / duration) * 100 : 0
   const liked = isLiked(track.id)
 
   const coverSrc = track.cover_key
@@ -125,7 +131,10 @@ export function PlayerBar() {
     e.stopPropagation()
     if (!liked) {
       setLikeBurst(true)
-      window.setTimeout(() => setLikeBurst(false), 420)
+      window.setTimeout(
+        () => setLikeBurst(false),
+        420,
+      )
     }
     haptic(liked ? 'light' : 'medium')
     await toggleLike(track.id)
@@ -149,6 +158,16 @@ export function PlayerBar() {
     playPrev()
   }
 
+  const handleDragEnd = (
+    _: unknown,
+    info: PanInfo,
+  ) => {
+    if (info.offset.y < -SWIPE_UP_THRESHOLD) {
+      haptic('medium')
+      navigate('/now-playing')
+    }
+  }
+
   const seekStyle = {
     '--progress': `${pct}%`,
   } as CSSProperties
@@ -160,10 +179,26 @@ export function PlayerBar() {
         ? 'Повтор трека'
         : 'Повтор всех'
 
+  const trackBpm = (track as unknown as { bpm?: number }).bpm
+  const tapBpm =
+    typeof trackBpm === 'number' ? trackBpm : 120
+
   return (
-    <div id="player-bar">
-      <div id="pb-seek-wrap" className="pb-seek-zone">
-        <input
+    <m.div
+      id="player-bar"
+      className="rp-player-bar"
+      drag={reduce ? false : 'y'}
+      dragConstraints={{ top: -8, bottom: 0 }}
+      dragElastic={0.25}
+      dragMomentum={false}
+      onDragEnd={handleDragEnd}
+      transition={SPRING_GENTLE}
+    >
+      <div
+        id="pb-seek-wrap"
+        className="pb-seek-zone rp-player-seek"
+      >
+        <m.input
           type="range"
           id="pb-seek"
           min={0}
@@ -173,28 +208,35 @@ export function PlayerBar() {
           style={seekStyle}
           aria-label="Перемотка трека"
           onChange={(e) =>
-            seek(Number(e.target.value))
+            seek(Number(e.currentTarget.value))
           }
+          whileTap={
+            reduce ? undefined : { scaleY: 1.5 }
+          }
+          transition={SPRING_SNAPPY}
         />
       </div>
 
       <div id="pb-row" className="pb-row-v2">
         <div
-          className="pb-cover-img pb-clickable pb-cover-with-viz"
+          className="pb-cover-img pb-clickable pb-cover-with-viz rp-player-cover"
           onClick={handleOpenCard}
         >
           <div className="pb-cover-inner">
             {coverSrc ? (
-              <img
+              <SharedCover
+                trackId={track.id}
                 src={coverSrc}
                 alt=""
-                loading="lazy"
                 className="pb-cover-vt"
               />
             ) : (
               <Icon name="music" size={18} />
             )}
-            <div className="pb-cover-wave" aria-hidden>
+            <div
+              className="pb-cover-wave"
+              aria-hidden
+            >
               <Waveform
                 overlay
                 height={12}
@@ -230,21 +272,25 @@ export function PlayerBar() {
                 {track.title}
               </p>
               {radioMode && (
-                <button
-                  type="button"
+                <MotionPress
+                  variant="ghost"
+                  haptic="selection"
                   className="player-radio-badge player-radio-badge--active"
                   onClick={(e) => {
                     e.stopPropagation()
                     navigate('/radio')
                   }}
-                  title="Режим радио — нажмите чтобы перейти"
+                  title={t('redesign.playerBar.radioMode')}
                 >
                   <span className="player-radio-badge__dot" />
-                  Радио
-                </button>
+                  {t('redesign.playerBar.radioMode')}
+                </MotionPress>
               )}
             </div>
-            <p className="pb-artist hint" dir="auto">
+            <p
+              className="pb-artist hint"
+              dir="auto"
+            >
               {track.artist ?? '—'}
             </p>
           </div>
@@ -256,7 +302,9 @@ export function PlayerBar() {
                 href={track.source_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) =>
+                  e.stopPropagation()
+                }
                 title={`Слушать на ${PLATFORM_LABELS[track.source_platform] ?? track.source_platform}`}
               >
                 <Icon
@@ -264,74 +312,86 @@ export function PlayerBar() {
                   size={12}
                 />
                 <span>
-                  {PLATFORM_LABELS[track.source_platform] ??
-                    track.source_platform}
+                  {PLATFORM_LABELS[
+                    track.source_platform
+                  ] ?? track.source_platform}
                 </span>
               </a>
             )}
         </div>
 
         <div id="pb-controls" className="pb-ctl-v2">
-          <button
-            ref={prevRef}
+          <MotionPress
+            variant="icon"
             className="ctrl-btn pb-prev"
             onClick={handlePrev}
-            aria-label="Предыдущий"
+            ariaLabel="Предыдущий"
+            haptic="light"
           >
             <Icon name="skip-back" size={18} />
-          </button>
-          <button
+          </MotionPress>
+          <MotionPress
             ref={playRef}
+            variant="icon"
             className={`play-btn${
               isPlaying ? ' play-btn--playing' : ''
             }`}
             onClick={handlePlay}
-            aria-label={
+            ariaLabel={
               isPlaying ? 'Пауза' : 'Воспроизвести'
             }
+            haptic="light"
           >
-            <Icon
-              name={isPlaying ? 'pause' : 'play'}
-              size={16}
-            />
-          </button>
-          <button
-            ref={nextRef}
+            <BeatPulse
+              bpm={tapBpm}
+              active={isPlaying}
+            >
+              <MorphIcon
+                name="play"
+                filled={isPlaying}
+                size={16}
+              />
+            </BeatPulse>
+          </MotionPress>
+          <MotionPress
+            variant="icon"
             className="ctrl-btn"
             onClick={handleNext}
-            aria-label="Следующий"
+            ariaLabel="Следующий"
+            haptic="light"
           >
             <Icon name="skip-forward" size={18} />
-          </button>
-          <button
-            ref={likeRef}
+          </MotionPress>
+          <MotionPress
+            variant="icon"
             className={`icon-btn pb-like${liked ? ' liked' : ''}${
               likeBurst ? ' pb-like-burst' : ''
             }`}
             onClick={handleLike}
-            aria-label={
+            ariaLabel={
               liked ? 'Убрать лайк' : 'Лайк'
             }
             aria-pressed={liked}
+            haptic={liked ? 'light' : 'medium'}
           >
-            <Icon
-              name={
-                liked ? 'heart' : 'heart-outline'
-              }
+            <MorphIcon
+              name="heart"
+              filled={liked}
               size={18}
             />
-          </button>
+          </MotionPress>
           <div
             className="pb-overflow-wrap"
             ref={overflowRef}
           >
-            <button
+            <MotionPress
+              variant="icon"
               className="ctrl-btn pb-overflow-btn"
               onClick={(e) => {
                 e.stopPropagation()
                 setOverflowOpen((v) => !v)
               }}
-              aria-label="Дополнительно"
+              ariaLabel="Дополнительно"
               aria-expanded={overflowOpen}
               aria-haspopup="menu"
             >
@@ -339,14 +399,16 @@ export function PlayerBar() {
                 name="more-horizontal"
                 size={18}
               />
-            </button>
+            </MotionPress>
             {overflowOpen && (
               <div
                 className="pb-overflow-menu"
                 role="menu"
               >
-                <button
+                <MotionPress
                   role="menuitem"
+                  variant="ghost"
+                  haptic="selection"
                   className="pb-menu-item"
                   onClick={() => {
                     setOverflowOpen(false)
@@ -354,10 +416,12 @@ export function PlayerBar() {
                   }}
                 >
                   <Icon name="queue" size={16} />
-                  Очередь
-                </button>
-                <button
+                  {t('redesign.playerBar.queueMenu')}
+                </MotionPress>
+                <MotionPress
                   role="menuitem"
+                  variant="ghost"
+                  haptic="selection"
                   className="pb-menu-item"
                   onClick={() => {
                     setOverflowOpen(false)
@@ -365,25 +429,27 @@ export function PlayerBar() {
                   }}
                 >
                   <Icon name="eq" size={16} />
-                  Эквалайзер
-                </button>
-                <button
+                  {t('redesign.playerBar.eqMenu')}
+                </MotionPress>
+                <MotionPress
                   role="menuitem"
+                  variant="ghost"
+                  haptic="selection"
                   className={`pb-menu-item ${shuffleOn ? 'active' : ''}`}
                   onClick={() => {
-                    haptic('light')
                     toggleShuffle()
                     setOverflowOpen(false)
                   }}
                 >
                   <Icon name="shuffle" size={16} />
-                  Перемешать
-                </button>
-                <button
+                  {t('redesign.playerBar.shuffleMenu')}
+                </MotionPress>
+                <MotionPress
                   role="menuitem"
+                  variant="ghost"
+                  haptic="selection"
                   className={`pb-menu-item ${repeatMode !== 'none' ? 'active' : ''}`}
                   onClick={() => {
-                    haptic('light')
                     toggleRepeat()
                     setOverflowOpen(false)
                   }}
@@ -398,9 +464,11 @@ export function PlayerBar() {
                     size={16}
                   />
                   {repeatTitle}
-                </button>
-                <button
+                </MotionPress>
+                <MotionPress
                   role="menuitem"
+                  variant="ghost"
+                  haptic="selection"
                   className="pb-menu-item pb-menu-item-danger"
                   onClick={() => {
                     setOverflowOpen(false)
@@ -408,8 +476,8 @@ export function PlayerBar() {
                   }}
                 >
                   <Icon name="x" size={16} />
-                  Остановить
-                </button>
+                  {t('redesign.playerBar.stopMenu')}
+                </MotionPress>
               </div>
             )}
           </div>
@@ -432,6 +500,6 @@ export function PlayerBar() {
           <Icon name="x" size={14} />
         </div>
       )}
-    </div>
+    </m.div>
   )
 }

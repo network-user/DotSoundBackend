@@ -1,10 +1,17 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Icon } from '@/components/Icon/Icon'
+import { LongPressMenu } from '@/components/ui/LongPressMenu'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { TrackList } from '@/components/TrackList/TrackList'
+<<<<<<< HEAD
+import { showIsland } from '@/lib/island'
+=======
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { useToast } from '@/components/ui/Toast'
 import { usePlayerActions } from '@/store/PlayerContext'
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 import { useSound } from '@/store/SoundContext'
 import { api } from '@/lib/api'
 import {
@@ -12,6 +19,7 @@ import {
   getUserId,
   setBackButton,
 } from '@/lib/telegram'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type {
   ChatListItem,
   Playlist,
@@ -75,7 +83,7 @@ export function PlaylistsView({
   embedded = false,
   onNavigate,
 }: PlaylistsViewProps) {
-  const toast = useToast()
+  const { t } = useTranslation()
   const sound = useSound()
   const { playTrack } = usePlayerActions()
   const [screen, setScreen] = useState<Screen>('list')
@@ -107,23 +115,34 @@ export function PlaylistsView({
   const [trackSearch, setTrackSearch] = useState('')
   const [searchResults, setSearchResults] = useState<Track[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const [renameOpen, setRenameOpen] = useState<Playlist | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameBusy, setRenameBusy] = useState(false)
   const uid = getUserId()
   const isAdmin = getIsAdmin()
   const canEditSelected = Boolean(
     selected && uid && (selected.owner_id === uid || isAdmin),
   )
 
-  const loadPlaylists = () => {
+  usePrefetchTracks(
+    selected && selected.tracks.length > 0 ? selected.tracks : null,
+    'playlist',
+  )
+
+  const loadPlaylists = useCallback(() => {
     if (!uid) {
       setPlaylists([])
       return
     }
     setPlaylists(null)
     api.getPlaylists().then(setPlaylists).catch(() => setPlaylists([]))
-  }
+  }, [uid])
 
   useEffect(() => {
     loadPlaylists()
+<<<<<<< HEAD
+  }, [loadPlaylists])
+=======
     api
       .getFeaturedPlaylists(6)
       .then(setFeaturedPlaylists)
@@ -137,6 +156,7 @@ export function PlaylistsView({
       .then(setGenreMixes)
       .catch(() => setGenreMixes(null))
   }, [])
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 
   useEffect(() => {
     if (screen !== 'detail') return
@@ -190,15 +210,20 @@ export function PlaylistsView({
     }
   }, [selected?.id, canEditSelected, trackSearch])
 
-  const openPlaylist = async (p: Playlist) => {
-    try {
-      const detail = await api.getPlaylist(p.id)
-      setSelected(detail)
-      setScreen('detail')
-    } catch {}
-  }
+  const openPlaylist = useCallback(
+    async (p: Playlist) => {
+      try {
+        const detail = await api.getPlaylist(p.id)
+        setSelected(detail)
+        setScreen('detail')
+      } catch {
+        showIsland({ kind: 'error', title: t('redesign.library.playlistOpenFail'), durationMs: 3500 })
+      }
+    },
+    [t],
+  )
 
-  const handleCreate = async () => {
+  const handleCreate = useCallback(async () => {
     if (!newName.trim() || !uid) return
     setLoading(true)
     try {
@@ -209,13 +234,13 @@ export function PlaylistsView({
     } finally {
       setLoading(false)
     }
-  }
+  }, [newName, uid, loadPlaylists])
 
-  const refreshSelected = async () => {
+  const refreshSelected = useCallback(async () => {
     if (!selected) return
     const detail = await api.getPlaylist(selected.id)
     setSelected(detail)
-  }
+  }, [selected])
 
   const handleSaveMeta = async () => {
     if (!selected || !canEditSelected) return
@@ -257,6 +282,87 @@ export function PlaylistsView({
     await refreshSelected()
   }
 
+  const beginRename = useCallback((p: Playlist) => {
+    setRenameOpen(p)
+    setRenameValue(p.name)
+  }, [])
+
+  const handleRenameConfirm = useCallback(async () => {
+    if (!renameOpen) return
+    const trimmed = renameValue.trim()
+    if (!trimmed || trimmed === renameOpen.name) {
+      setRenameOpen(null)
+      return
+    }
+    setRenameBusy(true)
+    try {
+      await api.updatePlaylist(renameOpen.id, { name: trimmed })
+      loadPlaylists()
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.library.playlistRenameDone'),
+        durationMs: 2000,
+      })
+      setRenameOpen(null)
+    } catch {
+      showIsland({ kind: 'error', title: t('redesign.library.playlistRenameFail'), durationMs: 3500 })
+    } finally {
+      setRenameBusy(false)
+    }
+  }, [renameOpen, renameValue, loadPlaylists, t])
+
+  const handleDuplicate = useCallback(
+    async (p: Playlist) => {
+      try {
+        const detail = await api.getPlaylist(p.id)
+        const copyName = t('redesign.library.playlistDuplicateName', {
+          name: p.name,
+        })
+        const created = await api.createPlaylist(
+          copyName,
+          p.is_public,
+        )
+        for (const tr of detail.tracks) {
+          try {
+            await api.addTrackToPlaylist(created.id, tr.id)
+          } catch {
+            /* skip individual failures */
+          }
+        }
+        loadPlaylists()
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.library.playlistDuplicateDone'),
+          durationMs: 2000,
+        })
+      } catch {
+        showIsland({ kind: 'error', title: t('redesign.library.playlistDuplicateFail'), durationMs: 3500 })
+      }
+    },
+    [loadPlaylists, t],
+  )
+
+  const handleDelete = useCallback(
+    async (p: Playlist) => {
+      const ok = window.confirm(
+        t('redesign.library.playlistDeleteConfirm', { name: p.name }),
+      )
+      if (!ok) return
+      try {
+        await api.deletePlaylist(p.id)
+        loadPlaylists()
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.library.playlistDeleteDone'),
+          durationMs: 2000,
+        })
+      } catch {
+        showIsland({ kind: 'error', title: t('redesign.library.playlistDeleteFail'), durationMs: 3500 })
+      }
+    },
+    [loadPlaylists, t],
+  )
+
   const availableTracks = useMemo(() => {
     if (!selected) return []
     const inPlaylist = new Set(selected.tracks.map((t) => t.id))
@@ -281,30 +387,45 @@ export function PlaylistsView({
   }, [selected, myTracks, trackSearch, searchResults])
 
   const formatShareChatTitle = (item: ChatListItem): string => {
+<<<<<<< HEAD
+    if (item.conversation.type === 'saved') {
+      return t('redesign.library.shareChatSaved')
+    }
+    if (item.conversation.title?.trim()) {
+=======
     if (item.conversation.type === 'saved') return 'Избранное'
     if (item.conversation.title?.trim())
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
       return item.conversation.title.trim()
     const peer = item.peer
     const name = peer?.display_name ||
       [peer?.first_name, peer?.last_name].filter(Boolean).join(' ')
     if (name && name.trim()) return name.trim()
     if (peer?.username) return `@${peer.username}`
-    return `Чат #${item.conversation.id}`
+    return t('redesign.library.shareChatFallback', {
+      id: item.conversation.id,
+    })
   }
 
-  const openShareModal = async () => {
-    if (!selected) return
-    setShareOpen(true)
+  const loadShareChats = async () => {
     setShareLoading(true)
     setShareError(null)
     try {
       const chats = await api.listChats()
       setShareChats(chats)
     } catch {
-      setShareError('Не удалось загрузить чаты')
+      setShareError(
+        t('redesign.library.playlistShareLoadFail'),
+      )
     } finally {
       setShareLoading(false)
     }
+  }
+
+  const openShareModal = async () => {
+    if (!selected) return
+    setShareOpen(true)
+    await loadShareChats()
   }
 
   const handleShareToChat = async (conversationId: number) => {
@@ -318,7 +439,7 @@ export function PlaylistsView({
       })
       setShareOpen(false)
     } catch {
-      setShareError('Не удалось отправить')
+      setShareError(t('redesign.library.shareSendFail'))
     } finally {
       setShareSendingConvId(null)
     }
@@ -330,9 +451,13 @@ export function PlaylistsView({
     try {
       await navigator.clipboard.writeText(url)
       sound.play('notificationInfo')
+<<<<<<< HEAD
+      showIsland({ kind: 'toast', title: t('redesign.library.shareCopyDone'), durationMs: 2000 })
+=======
       toast.success('Ссылка скопирована', { position: 'top' })
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
     } catch {
-      toast.error('Не удалось скопировать ссылку')
+      showIsland({ kind: 'error', title: t('redesign.library.shareCopyFail'), durationMs: 3500 })
       sound.play('notificationError')
     }
   }
@@ -342,31 +467,53 @@ export function PlaylistsView({
     return (
       <section id="view-playlists" className="view active">
         <div className="view-header view-header-detail">
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
             className="icon-btn back-btn"
+            ariaLabel={t('redesign.library.backAria')}
             onClick={() => {
               setScreen('list')
               setSelected(null)
               setShareOpen(false)
             }}
-            aria-label="Назад"
           >
-            <Icon name="chevron" size={20} className="back-chevron" />
-          </button>
-          <div>
+            <Icon
+              name="chevron"
+              size={20}
+              className="back-chevron"
+            />
+          </MotionPress>
+          <div className="rd-pl-detail-meta">
             <h2 className="view-detail-title">{selected.name}</h2>
             <span className="hint">
+<<<<<<< HEAD
+              {t('redesign.library.playlistTracksCount', {
+                count: selected.tracks.length,
+              })}
+=======
               {selected.tracks.length} треков
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
             </span>
           </div>
-          <button
+          <MotionPress
             type="button"
+            variant="icon"
+            haptic="light"
             className="icon-btn"
+<<<<<<< HEAD
+            ariaLabel={t('redesign.library.playlistShare')}
+            onClick={() => {
+              void openShareModal()
+            }}
+=======
             onClick={() => void openShareModal()}
             aria-label="Поделиться"
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
           >
             <Icon name="share" size={18} />
-          </button>
+          </MotionPress>
         </div>
 
         {selected.description && (
@@ -382,32 +529,47 @@ export function PlaylistsView({
         )}
 
         {canEditSelected && (
-          <div style={{ padding: '0 16px 16px' }}>
+          <div className="rd-pl-edit">
             <div className="form-group">
-              <label className="form-label">Название</label>
+              <label className="form-label">
+                {t('redesign.library.playlistNameLabel')}
+              </label>
               <input
                 className="form-input"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
               />
             </div>
+<<<<<<< HEAD
+            <label className="hint rd-pl-edit-public">
+=======
             <label
               className="hint"
               style={{ display: 'block', marginBottom: 12 }}
             >
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
               <input
                 type="checkbox"
                 checked={editPublic}
                 onChange={(e) => setEditPublic(e.target.checked)}
-                style={{ marginRight: 8 }}
               />
-              Публичный
+              {t('redesign.library.playlistPublicLabel')}
             </label>
-            <button
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
               className="btn-primary"
               onClick={() => void handleSaveMeta()}
               disabled={editBusy}
             >
+<<<<<<< HEAD
+              {editBusy
+                ? t('redesign.library.playlistSaving')
+                : t('redesign.library.playlistSave')}
+            </MotionPress>
+            <div className="rd-pl-add-row">
+=======
               {editBusy ? 'Сохранение...' : 'Сохранить'}
             </button>
             <div
@@ -417,12 +579,14 @@ export function PlaylistsView({
                 marginTop: 12,
               }}
             >
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
               <input
-                className="form-input"
-                placeholder="Поиск треков: название или артист..."
+                className="form-input rd-pl-add-search"
+                placeholder={t(
+                  'redesign.library.playlistSearchPlaceholder',
+                )}
                 value={trackSearch}
                 onChange={(e) => setTrackSearch(e.target.value)}
-                style={{ minWidth: 220 }}
               />
               <select
                 className="form-input"
@@ -431,13 +595,30 @@ export function PlaylistsView({
                   setAddTrackId(Number(e.target.value) || null)
                 }
               >
-                <option value="">Добавить трек...</option>
-                {availableTracks.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title} {t.artist ? `- ${t.artist}` : ''}
+                <option value="">
+                  {t('redesign.library.playlistAddOption')}
+                </option>
+                {availableTracks.map((tr) => (
+                  <option key={tr.id} value={tr.id}>
+                    {tr.title} {tr.artist ? `- ${tr.artist}` : ''}
                   </option>
                 ))}
               </select>
+<<<<<<< HEAD
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="selection"
+                className="btn-secondary"
+                onClick={() => void handleAddTrack()}
+              >
+                {t('redesign.library.playlistAdd')}
+              </MotionPress>
+            </div>
+            {searchLoading && (
+              <p className="hint rd-pl-search-hint">
+                {t('redesign.library.playlistSearching')}
+=======
               <button
                 className="btn-secondary"
                 onClick={() => void handleAddTrack()}
@@ -448,12 +629,46 @@ export function PlaylistsView({
             {searchLoading && (
               <p className="hint" style={{ marginTop: 8 }}>
                 Идёт поиск…
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
               </p>
             )}
           </div>
         )}
 
         {canEditSelected && (
+<<<<<<< HEAD
+          <div className="rd-pl-edit-rows">
+            {selected.tracks.map((tr, idx) => (
+              <div key={tr.id} className="rd-pl-edit-row">
+                <span className="rd-pl-edit-row-title">{tr.title}</span>
+                <MotionPress
+                  type="button"
+                  variant="icon"
+                  haptic="selection"
+                  className="icon-btn"
+                  ariaLabel={t('redesign.library.playlistMoveUp')}
+                  onClick={() => void moveTrack(idx, -1)}
+                >
+                  <Icon name="chevron-up" size={14} />
+                </MotionPress>
+                <MotionPress
+                  type="button"
+                  variant="icon"
+                  haptic="selection"
+                  className="icon-btn"
+                  ariaLabel={t('redesign.library.playlistMoveDown')}
+                  onClick={() => void moveTrack(idx, 1)}
+                >
+                  <Icon name="chevron-down" size={14} />
+                </MotionPress>
+                <MotionPress
+                  type="button"
+                  variant="icon"
+                  haptic="medium"
+                  className="icon-btn"
+                  ariaLabel={tr.title}
+                  onClick={() => void handleRemoveTrack(tr.id)}
+=======
           <div style={{ padding: '0 16px 16px' }}>
             {selected.tracks.map((t, idx) => (
               <div
@@ -481,9 +696,10 @@ export function PlaylistsView({
                 <button
                   className="icon-btn"
                   onClick={() => void handleRemoveTrack(t.id)}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
                 >
                   <Icon name="x" size={14} />
-                </button>
+                </MotionPress>
               </div>
             ))}
           </div>
@@ -491,7 +707,7 @@ export function PlaylistsView({
 
         <TrackList
           tracks={selected.tracks}
-          emptyMessage="В этом плейлисте пока нет треков"
+          emptyMessage={t('redesign.library.playlistEmptyTracks')}
         />
 
         {shareOpen && (
@@ -505,28 +721,45 @@ export function PlaylistsView({
               <div className="share-modal-header">
                 <div className="share-modal-title-wrap">
                   <h3 className="share-modal-title">
+<<<<<<< HEAD
+                    {t('redesign.library.shareModalTitle')}
+                  </h3>
+                  <p className="share-modal-subtitle">{selected.name}</p>
+=======
                     Поделиться плейлистом
                   </h3>
                   <p className="share-modal-subtitle">
                     {selected.name}
                   </p>
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
                 </div>
-                <button
+                <MotionPress
                   type="button"
+                  variant="icon"
+                  haptic="light"
                   className="icon-btn"
+<<<<<<< HEAD
+                  ariaLabel={t('redesign.library.playlistCopyLink')}
+                  onClick={() => {
+                    void handleCopyLink()
+                  }}
+=======
                   onClick={() => void handleCopyLink()}
                   aria-label="Скопировать ссылку"
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
                 >
                   <Icon name="copy" size={16} />
-                </button>
-                <button
+                </MotionPress>
+                <MotionPress
                   type="button"
+                  variant="icon"
+                  haptic="light"
                   className="icon-btn"
+                  ariaLabel={t('redesign.library.shareClose')}
                   onClick={() => setShareOpen(false)}
-                  aria-label="Закрыть"
                 >
                   <Icon name="x" size={18} />
-                </button>
+                </MotionPress>
               </div>
               {shareLoading ? (
                 <div className="share-modal-loading">
@@ -538,9 +771,11 @@ export function PlaylistsView({
                     const convId = item.conversation.id
                     const sending = shareSendingConvId === convId
                     return (
-                      <button
+                      <MotionPress
                         key={convId}
                         type="button"
+                        variant="ghost"
+                        haptic="light"
                         className="share-chat-row"
                         onClick={() =>
                           void handleShareToChat(convId)
@@ -566,9 +801,11 @@ export function PlaylistsView({
                           </span>
                         </span>
                         <span className="share-chat-action">
-                          {sending ? 'Отправка...' : 'Отправить'}
+                          {sending
+                            ? t('redesign.library.shareSending')
+                            : t('redesign.library.shareSend')}
                         </span>
-                      </button>
+                      </MotionPress>
                     )
                   })}
                 </div>
@@ -595,11 +832,25 @@ export function PlaylistsView({
     <section id="view-playlists" className="view active">
       {!embedded && (
         <div className="view-header">
-          <h2>Плейлисты</h2>
-          <span className="hint">Твои подборки</span>
+          <h2>{t('redesign.library.playlistsTitle')}</h2>
+          <span className="hint">
+            {t('redesign.library.playlistsSub')}
+          </span>
         </div>
       )}
 
+<<<<<<< HEAD
+      <MotionPress
+        type="button"
+        variant="ghost"
+        haptic="light"
+        className="create-playlist-btn rd-pl-create"
+        onClick={() => setCreating(true)}
+      >
+        <Icon name="plus" size={18} />
+        {t('redesign.library.playlistCreate')}
+      </MotionPress>
+=======
       {/* ── Featured / Editorial section ─────────────────── */}
       {featuredPlaylists.length > 0 && (
         <div className="playlists-featured-section">
@@ -752,47 +1003,150 @@ export function PlaylistsView({
           Создать
         </button>
       </div>
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 
       {creating && (
-        <div style={{ padding: '0 16px 16px' }}>
+        <div className="rd-pl-create-form">
           <div className="form-group">
-            <label className="form-label">Название плейлиста</label>
+            <label className="form-label">
+              {t('redesign.library.playlistNameLabel')}
+            </label>
             <input
               id="new-playlist-name"
               className="form-input"
-              placeholder="Мой плейлист"
+              placeholder={t('redesign.library.playlistNamePlaceholder')}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && void handleCreate()}
               autoFocus
             />
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              className="btn-secondary"
-              style={{ flex: 1 }}
+          <div className="rd-pl-create-actions">
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="btn-secondary rd-pl-create-action"
               onClick={() => {
                 setCreating(false)
                 setNewName('')
               }}
             >
-              Отмена
-            </button>
-            <button
+              {t('redesign.library.playlistCancel')}
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
               id="create-playlist-submit"
+<<<<<<< HEAD
+              className="btn-primary rd-pl-create-action"
+              onClick={() => {
+                void handleCreate()
+              }}
+=======
               className="btn-primary"
               style={{ flex: 1, padding: '12px' }}
               onClick={() => void handleCreate()}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
               disabled={!newName.trim() || loading}
             >
-              {loading ? <span className="btn-spinner" /> : 'Создать'}
-            </button>
+              {loading ? (
+                <span className="btn-spinner" />
+              ) : (
+                t('redesign.library.playlistCreateDo')
+              )}
+            </MotionPress>
           </div>
         </div>
       )}
 
       {playlists === null && <div className="loader" />}
 
+<<<<<<< HEAD
+      {playlists !== null && playlists.length === 0 && !creating && (
+        <div className="empty-hint">
+          <strong>{t('redesign.library.playlistsEmpty')}</strong>
+          {t('redesign.library.playlistsEmptyHint')}
+        </div>
+      )}
+
+      {playlists !== null && playlists.length > 0 && (
+        <div className="playlist-list rd-playlist-grid">
+          {playlists.map((p) => {
+            const ownsThis = uid && p.owner_id === uid
+            const menuItems = ownsThis
+              ? [
+                  {
+                    id: 'rename',
+                    label: t('redesign.library.playlistMenuRename'),
+                    icon: 'edit',
+                    onPick: () => beginRename(p),
+                  },
+                  {
+                    id: 'duplicate',
+                    label: t('redesign.library.playlistMenuDuplicate'),
+                    icon: 'copy',
+                    onPick: () => {
+                      void handleDuplicate(p)
+                    },
+                  },
+                  {
+                    id: 'delete',
+                    label: t('redesign.library.playlistMenuDelete'),
+                    icon: 'trash',
+                    destructive: true,
+                    onPick: () => {
+                      void handleDelete(p)
+                    },
+                  },
+                ]
+              : [
+                  {
+                    id: 'open',
+                    label: t('redesign.library.playlistLongOpen'),
+                    icon: 'list',
+                    onPick: () => {
+                      void openPlaylist(p)
+                    },
+                  },
+                ]
+            return (
+              <LongPressMenu key={p.id} items={menuItems}>
+                <div
+                  className="playlist-card rd-playlist-card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    void openPlaylist(p)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      void openPlaylist(p)
+                    }
+                  }}
+                >
+                  <div className="rd-pl-cover">
+                    <Icon name="list" size={36} />
+                  </div>
+                  <div className="rd-pl-info">
+                    <div className="rd-pl-name">{p.name}</div>
+                    <div className="rd-pl-meta">
+                      {p.is_public
+                        ? t('redesign.library.playlistPublic')
+                        : t('redesign.library.playlistPrivate')}
+                      {typeof p.track_count === 'number' && (
+                        <>
+                          {' · '}
+                          {t('redesign.library.playlistTracksCount', {
+                            count: p.track_count,
+                          })}
+                        </>
+                      )}
+                    </div>
+                  </div>
+=======
       {playlists !== null &&
         userPlaylists.length === 0 &&
         !creating && (
@@ -814,11 +1168,82 @@ export function PlaylistsView({
                 <div className="playlist-name">{p.name}</div>
                 <div className="playlist-meta">
                   {formatPlaylistMeta(p)}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
                 </div>
+              </LongPressMenu>
+            )
+          })}
+        </div>
+      )}
+
+      {renameOpen && (
+        <div
+          className="share-modal-overlay fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !renameBusy) {
+              setRenameOpen(null)
+            }
+          }}
+        >
+          <div className="share-modal scale-in">
+            <div className="share-modal-header">
+              <div className="share-modal-title-wrap">
+                <h3 className="share-modal-title">
+                  {t('redesign.library.playlistRenameTitle')}
+                </h3>
               </div>
-              <span className="playlist-chevron">›</span>
+              <MotionPress
+                type="button"
+                variant="icon"
+                haptic="light"
+                className="icon-btn"
+                ariaLabel={t('redesign.library.shareClose')}
+                disabled={renameBusy}
+                onClick={() => setRenameOpen(null)}
+              >
+                <Icon name="x" size={18} />
+              </MotionPress>
             </div>
-          ))}
+            <div className="rd-pl-rename-body">
+              <input
+                className="form-input"
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !renameBusy) {
+                    void handleRenameConfirm()
+                  }
+                }}
+              />
+              <div className="rd-pl-rename-actions">
+                <MotionPress
+                  type="button"
+                  variant="ghost"
+                  haptic="light"
+                  className="btn-secondary"
+                  disabled={renameBusy}
+                  onClick={() => setRenameOpen(null)}
+                >
+                  {t('redesign.library.playlistCancel')}
+                </MotionPress>
+                <MotionPress
+                  type="button"
+                  variant="primary"
+                  haptic="medium"
+                  className="btn-primary"
+                  disabled={renameBusy || !renameValue.trim()}
+                  onClick={() => {
+                    void handleRenameConfirm()
+                  }}
+                >
+                  {renameBusy
+                    ? t('redesign.library.playlistSaving')
+                    : t('redesign.library.playlistSave')}
+                </MotionPress>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </section>

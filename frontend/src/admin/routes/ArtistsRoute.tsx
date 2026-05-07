@@ -7,7 +7,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
 import { adminApi } from '../lib/adminApi'
 import { ArtistCatalogEditor } from '../components/ArtistCatalogEditor'
@@ -243,15 +243,16 @@ export function ArtistsRoute() {
       header: 'Name',
       accessorKey: 'name',
       cell: (info) => (
-        <button
-          type="button"
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className="admin-link"
           onClick={() =>
             handleOpenArtist(info.row.original.id)
           }
         >
           {info.row.original.name}
-        </button>
+        </MotionPress>
       ),
     },
     {
@@ -319,7 +320,7 @@ export function ArtistsRoute() {
               flexWrap: 'wrap',
             }}
           >
-            <Press
+            <MotionPress
               variant="ghost"
               disabled={busy}
               onClick={() => handleEnrich(id)}
@@ -327,8 +328,8 @@ export function ArtistsRoute() {
               {busy && enrichMutation.isPending
                 ? t('admin.artists.enriching')
                 : t('admin.artists.enrich')}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               disabled={busy}
               onClick={() =>
@@ -336,8 +337,8 @@ export function ArtistsRoute() {
               }
             >
               {t('admin.artists.catalog.open')}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               disabled={busy}
               onClick={() =>
@@ -345,7 +346,7 @@ export function ArtistsRoute() {
               }
             >
               {t('admin.artists.actionDelete')}
-            </Press>
+            </MotionPress>
           </div>
         )
       },
@@ -381,14 +382,14 @@ export function ArtistsRoute() {
             setPage(1)
           }}
         />
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={selectedIds.size === 0}
           onClick={handleBatchPrompt}
         >
           Batch Prompt ({selectedIds.size})
-        </Press>
-        <Press
+        </MotionPress>
+        <MotionPress
           variant="ghost"
           onClick={() => {
             setImportText('')
@@ -397,7 +398,7 @@ export function ArtistsRoute() {
           }}
         >
           Импорт ответа AI (Artists)
-        </Press>
+        </MotionPress>
       </div>
       {list.error && (
         <div className="admin-error">
@@ -411,7 +412,7 @@ export function ArtistsRoute() {
         enableSorting
       />
       <div className="admin-pagination">
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={page <= 1}
           onClick={() =>
@@ -419,18 +420,18 @@ export function ArtistsRoute() {
           }
         >
           {t('admin.common.prev')}
-        </Press>
+        </MotionPress>
         <span>
           {page} / {totalPages} ·{' '}
           {t('admin.common.total', { count: total })}
         </span>
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={page >= totalPages}
           onClick={() => setPage((p) => p + 1)}
         >
           {t('admin.common.next')}
-        </Press>
+        </MotionPress>
       </div>
 
       {batchPromptModal && (
@@ -456,15 +457,15 @@ export function ArtistsRoute() {
               }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Press
+              <MotionPress
                 variant="primary"
                 onClick={() => navigator.clipboard.writeText(batchPromptModal)}
               >
                 Копировать
-              </Press>
-              <Press variant="ghost" onClick={() => setBatchPromptModal(null)}>
+              </MotionPress>
+              <MotionPress variant="ghost" onClick={() => setBatchPromptModal(null)}>
                 Закрыть
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>
@@ -518,16 +519,16 @@ export function ArtistsRoute() {
               </div>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Press
+              <MotionPress
                 variant="primary"
                 onClick={handleBatchImport}
                 disabled={!importText.trim()}
               >
                 Импортировать
-              </Press>
-              <Press variant="ghost" onClick={() => setImportModal(false)}>
+              </MotionPress>
+              <MotionPress variant="ghost" onClick={() => setImportModal(false)}>
                 Закрыть
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>

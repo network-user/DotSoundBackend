@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { api } from '@/lib/api'
 import type {
@@ -71,8 +72,10 @@ export function ArtistCatalogReleasePanel({
   return (
     <div className="author-view artist-catalog-release-view">
       <div className="author-view-header">
-        <button
+        <MotionPress
           type="button"
+          variant="ghost"
+          haptic="light"
           className="author-back-btn icon-btn"
           onClick={onBack}
         >
@@ -80,15 +83,21 @@ export function ArtistCatalogReleasePanel({
           {t('artist.catalog_release_back', {
             defaultValue: 'Back to artist',
           })}
-        </button>
+        </MotionPress>
       </div>
 
       {failed && (
         <div className="artist-catalog-release-error">
           <p>{t('artist.catalog_release_load_error')}</p>
-          <button type="button" className="btn-secondary" onClick={onBack}>
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="btn-secondary"
+            onClick={onBack}
+          >
             {t('common.back', { defaultValue: 'Back' })}
-          </button>
+          </MotionPress>
         </div>
       )}
 

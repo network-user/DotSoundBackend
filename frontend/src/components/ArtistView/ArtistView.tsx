@@ -6,6 +6,8 @@ import { ArtistAvatarViewer } from '@/components/ArtistView/ArtistAvatarViewer'
 import { ArtistCatalogReleasePanel } from '@/components/ArtistView/ArtistCatalogReleasePanel'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { api, getApiErrorMessage } from '@/lib/api'
 import {
@@ -14,8 +16,9 @@ import {
   haptic,
   hapticNotification,
 } from '@/lib/telegram'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { queueMutation } from '@/lib/pendingEvents'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 
 function _isNetworkError(e: unknown): boolean {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -277,12 +280,12 @@ export function ArtistView({
   onSelectSimilarArtist,
 }: Props) {
   const { t } = useTranslation()
-  const toast = useToast()
   const [artist, setArtist] =
     useState<ArtistDetail | null>(null)
   const [tracks, setTracks] = useState<
     Track[] | null
   >(null)
+  usePrefetchTracks(tracks ?? null, 'artist')
   const [bioOpen, setBioOpen] = useState(false)
   const [enriching, setEnriching] = useState(false)
   const [enrichError, setEnrichError] = useState<
@@ -558,11 +561,14 @@ export function ArtistView({
           : prev,
       )
       hapticNotification('error')
-      const msg = getApiErrorMessage(
-        e,
-        t('artist.follow_failed', 'Не удалось обновить подписку'),
-      )
-      toast.error(msg)
+      showIsland({
+        kind: 'error',
+        title: getApiErrorMessage(
+          e,
+          t('artist.follow_failed', 'Не удалось обновить подписку'),
+        ),
+        durationMs: 4000,
+      })
     }
     setFollowLoading(false)
   }
@@ -690,7 +696,10 @@ export function ArtistView({
     return (
       <div className="author-view">
         <div className="author-view-header">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
             className="author-back-btn icon-btn"
             onClick={onClose}
           >
@@ -698,7 +707,7 @@ export function ArtistView({
             {t('common.back', {
               defaultValue: 'Назад',
             })}
-          </button>
+          </MotionPress>
         </div>
         <div className="author-hero">
           <div className="profile-avatar skeleton" />
@@ -787,7 +796,10 @@ export function ArtistView({
   return (
     <div className="author-view">
       <div className="author-view-header">
-        <button
+        <MotionPress
+          type="button"
+          variant="ghost"
+          haptic="light"
           className="author-back-btn icon-btn"
           onClick={onClose}
         >
@@ -795,32 +807,36 @@ export function ArtistView({
           {t('common.back', {
             defaultValue: 'Назад',
           })}
-        </button>
+        </MotionPress>
       </div>
 
       <div className="author-hero">
         {avatarCoverKey ? (
-          <button
+          <MotionPress
             type="button"
+            variant="ghost"
+            haptic="light"
             className="artist-avatar-button"
+            ariaLabel={t('artist.avatar_open')}
             onClick={() => setAvatarOpen(true)}
-            aria-label={t('artist.avatar_open')}
           >
             <div className="profile-avatar profile-avatar--cover">
               <CoverImage coverKey={avatarCoverKey} size={120} />
             </div>
-          </button>
+          </MotionPress>
         ) : avatarSrc ? (
-          <button
+          <MotionPress
             type="button"
+            variant="ghost"
+            haptic="light"
             className="artist-avatar-button"
+            ariaLabel={t('artist.avatar_open')}
             onClick={() => setAvatarOpen(true)}
-            aria-label={t('artist.avatar_open')}
           >
             <div className="profile-avatar">
               <img src={avatarSrc} alt={artist.name} />
             </div>
-          </button>
+          </MotionPress>
         ) : (
           <div className="profile-avatar">
             {artist.name.charAt(0).toUpperCase()}
@@ -846,11 +862,14 @@ export function ArtistView({
 
         {/* Follow button (only for logged-in users) */}
         {currentUserId && (
-          <button
+          <MotionPress
+            type="button"
+            variant={following === true ? 'subtle' : 'primary'}
+            haptic="medium"
             className={`artist-follow-btn${following === true ? ' artist-follow-btn--active' : ''}`}
+            aria-pressed={following === true}
             onClick={handleFollow}
             disabled={followLoading}
-            aria-pressed={following === true}
           >
             <Icon
               name={following === true ? 'check' : 'bell'}
@@ -865,27 +884,47 @@ export function ArtistView({
                 : t('artist.follow', {
                     defaultValue: 'Подписаться',
                   })}
-          </button>
+          </MotionPress>
         )}
 
         {/* Listen Snippets Button */}
+<<<<<<< HEAD
+        {tracks && tracks.length > 0 && (
+          <div className="rf-artist-snippet-wrap">
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
+              className="btn-primary rf-artist-snippet-btn"
+=======
         {tracks && tracks.length > 0 && tracks[snippetIndex] && (
           <div style={{ marginTop: 12 }}>
             <button
               className="btn-primary"
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
               onClick={toggleSnippet}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center', width: '100%' }}
             >
-              <Icon name={snippetPlaying ? 'pause' : 'play'} size={16} />
-              {snippetPlaying ? 'Остановить превью' : 'Слушать их песни'}
-            </button>
-            {/* Hidden audio element for snippets */}
+              <MorphIcon
+                name={snippetPlaying ? 'pause' : 'play'}
+                size={16}
+                filled
+              />
+              {snippetPlaying
+                ? t(
+                    'redesign.artist.stopPreview',
+                    'Остановить превью',
+                  )
+                : t(
+                    'redesign.artist.listenSnippets',
+                    'Слушать их песни',
+                  )}
+            </MotionPress>
             <audio
               ref={audioRef}
               src={`/api/v1/track-preview/${tracks[snippetIndex].id}/segment.m4a`}
               onEnded={handleSnippetEnded}
               preload="none"
-              style={{ display: 'none' }}
+              className="rf-artist-snippet-audio"
             />
           </div>
         )}
@@ -896,8 +935,10 @@ export function ArtistView({
             role="tablist"
             aria-label={t('artist.sources_label')}
           >
-            <button
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="selection"
               role="tab"
               aria-selected={selectedSourceId === null}
               className={
@@ -908,11 +949,13 @@ export function ArtistView({
               onClick={() => setSelectedSourceId(null)}
             >
               {t('artist.bio_title')}
-            </button>
+            </MotionPress>
             {profiles.map((p) => (
-              <button
+              <MotionPress
                 key={p.source_id}
                 type="button"
+                variant="ghost"
+                haptic="selection"
                 role="tab"
                 aria-selected={selectedSourceId === p.source_id}
                 className={
@@ -923,11 +966,13 @@ export function ArtistView({
                 onClick={() => setSelectedSourceId(p.source_id)}
               >
                 {p.source_name}
-              </button>
+              </MotionPress>
             ))}
             {supplemental && supplemental.status === 'done' && (
-              <button
+              <MotionPress
                 type="button"
+                variant="ghost"
+                haptic="selection"
                 role="tab"
                 aria-selected={selectedSourceId === 'platform'}
                 className={
@@ -937,8 +982,11 @@ export function ArtistView({
                 }
                 onClick={() => setSelectedSourceId('platform')}
               >
-                Платформа
-              </button>
+                {t(
+                  'redesign.artist.sourcePlatform',
+                  'Платформа',
+                )}
+              </MotionPress>
             )}
             {/* {supplemental && (supplemental.status === 'done' || supplemental.status === 'fetching' || supplemental.status === 'pending') && (
               <button
@@ -985,7 +1033,10 @@ export function ArtistView({
             style={{ marginTop: 12 }}
           >
             <div className="artist-admin-row">
-              <button
+              <MotionPress
+                type="button"
+                variant="primary"
+                haptic="medium"
                 className="btn-primary artist-enrich-btn"
                 onClick={handleEnrich}
                 disabled={enriching || debugRunning}
@@ -993,17 +1044,20 @@ export function ArtistView({
                 {enriching
                   ? t('artist.enrich_loading')
                   : t('artist.enrich_button')}
-              </button>
-              <button
+              </MotionPress>
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
                 className="btn-secondary artist-enrich-btn"
+                title={t('artist.debug_run')}
                 onClick={handleEnrichWatch}
                 disabled={enriching || debugRunning}
-                title={t('artist.debug_run')}
               >
                 {debugRunning
                   ? t('artist.debug_running')
                   : t('artist.debug_run')}
-              </button>
+              </MotionPress>
             </div>
 
             {enrichError && (
@@ -1242,7 +1296,10 @@ export function ArtistView({
 
       {view.bio && (
         <div className="artist-bio-section">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
             className="section-header artist-bio-toggle"
             onClick={() => setBioOpen((v) => !v)}
           >
@@ -1252,7 +1309,7 @@ export function ArtistView({
             <span className="artist-bio-chevron">
               <Icon name="chevron" size={14} />
             </span>
-          </button>
+          </MotionPress>
           <div
             className={
               bioOpen
@@ -1263,20 +1320,26 @@ export function ArtistView({
             {view.bio}
           </div>
           {!bioOpen && (
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="artist-bio-more"
               onClick={() => setBioOpen(true)}
             >
               {t('artist.bio_show_more')}
-            </button>
+            </MotionPress>
           )}
           {bioOpen && (
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="artist-bio-more"
               onClick={() => setBioOpen(false)}
             >
               {t('artist.bio_show_less')}
-            </button>
+            </MotionPress>
           )}
         </div>
       )}
@@ -1359,9 +1422,11 @@ export function ArtistView({
                   const isScStation =
                     r.release_kind === 'dotsound_sc_artist_station'
                   return (
-                    <button
+                    <MotionPress
                       key={r.id}
                       type="button"
+                      variant="subtle"
+                      haptic="light"
                       className={
                         isScStation
                           ? 'artist-catalog-release-card artist-catalog-release-card-station'
@@ -1386,7 +1451,7 @@ export function ArtistView({
                           </span>
                         )}
                       </div>
-                    </button>
+                    </MotionPress>
                   )
                 })}
               </div>
@@ -1465,23 +1530,27 @@ export function ArtistView({
           </div>
           <div className="artist-similar-shell">
             {similarCanPrev && (
-              <button
+              <MotionPress
                 type="button"
+                variant="icon"
+                haptic="light"
                 className="artist-similar-arrow artist-similar-arrow--left"
+                ariaLabel={t('common.prev', {
+                  defaultValue: 'Назад',
+                })}
                 onClick={() =>
                   similarRowRef.current?.scrollBy({
                     left: -220,
                     behavior: 'smooth',
                   })
                 }
-                aria-label={t('common.prev', { defaultValue: 'Назад' })}
               >
                 <Icon
                   name="chevron"
                   size={18}
                   className="artist-similar-arrow__icon artist-similar-arrow__icon--left"
                 />
-              </button>
+              </MotionPress>
             )}
             <div
               ref={similarRowRef}
@@ -1490,9 +1559,11 @@ export function ArtistView({
               {similarArtists.map((a) => {
                 const imageSrc = artistImageUrl(a.image_key)
                 return (
-                  <button
+                  <MotionPress
                     key={a.id}
                     type="button"
+                    variant="subtle"
+                    haptic="light"
                     className="artist-similar-card"
                     onClick={() =>
                       onSelectSimilarArtist(a.id)
@@ -1515,24 +1586,28 @@ export function ArtistView({
                     <span className="artist-similar-card__name">
                       {a.name}
                     </span>
-                  </button>
+                  </MotionPress>
                 )
               })}
             </div>
             {similarCanNext && (
-              <button
+              <MotionPress
                 type="button"
+                variant="icon"
+                haptic="light"
                 className="artist-similar-arrow artist-similar-arrow--right"
+                ariaLabel={t('common.next', {
+                  defaultValue: 'Вперёд',
+                })}
                 onClick={() =>
                   similarRowRef.current?.scrollBy({
                     left: 220,
                     behavior: 'smooth',
                   })
                 }
-                aria-label={t('common.next', { defaultValue: 'Вперёд' })}
               >
                 <Icon name="chevron" size={18} />
-              </button>
+              </MotionPress>
             )}
           </div>
         </div>
@@ -1541,7 +1616,10 @@ export function ArtistView({
       {/* Monthly listeners history */}
       {listeners && listeners.history.length > 0 && (
         <div className="artist-listeners-section">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
             className="section-header artist-bio-toggle"
             onClick={() =>
               setListenersOpen((v) => !v)
@@ -1555,7 +1633,7 @@ export function ArtistView({
             <span className="artist-bio-chevron">
               <Icon name="chevron" size={14} />
             </span>
-          </button>
+          </MotionPress>
           {listenersOpen && (
             <>
               <ArtistListenersChart

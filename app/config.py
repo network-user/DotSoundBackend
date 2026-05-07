@@ -298,6 +298,11 @@ class AppSettings(BaseSettings):
     # service refuses to start. In dev the defaults below cover
     # localhost and Docker internal networks.
     internal_api_allowed_cidrs: str = ""
+    #: Optional semver floor for packaged DotSoundComputeWorker binaries.
+    #: When set (e.g. ``0.3.0``), ``/workers/heartbeat`` sets
+    # ``worker_package_version_below_min`` from the worker's reported
+    # ``X-Worker-Package-Version`` header versus this value.
+    compute_worker_min_package_version: str = ""
     yandex_speechkit_api_key: str = ""
     yandex_speechkit_folder_id: str = ""
     yandex_speechkit_enabled: bool = False

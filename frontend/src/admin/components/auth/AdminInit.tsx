@@ -5,7 +5,7 @@ import {
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import QRCode from 'qrcode'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../../lib/adminApi'
 import { computeFingerprint } from '../../lib/fingerprint'
 import { useAdminAuth } from '../../store/adminAuthStore'
@@ -111,14 +111,14 @@ export function AdminInit() {
             </li>
           ))}
         </ul>
-        <Press
+        <MotionPress
           variant="primary"
           onClick={() => {
             window.location.href = '/admin'
           }}
         >
           {t('admin.init.continue')}
-        </Press>
+        </MotionPress>
       </div>
     )
   }
@@ -140,15 +140,17 @@ export function AdminInit() {
       ) : (
         <div className="admin-auth-qr admin-auth-qr--placeholder" />
       )}
-      <button
+      <MotionPress
         type="button"
+        variant="ghost"
+        haptic="selection"
         className="admin-auth-toggle"
         onClick={() => setShowSecret((v) => !v)}
       >
         {showSecret
           ? t('admin.init.hideSecret')
           : t('admin.init.showSecret')}
-      </button>
+      </MotionPress>
       {showSecret && secret && (
         <code className="admin-auth-secret">
           {secret}
@@ -180,7 +182,7 @@ export function AdminInit() {
           {error}
         </div>
       )}
-      <Press
+      <MotionPress
         variant="primary"
         onClick={handleConfirm}
         disabled={busy || code.length < 6}
@@ -188,7 +190,7 @@ export function AdminInit() {
         {busy
           ? t('admin.auth.confirming')
           : t('admin.auth.confirm')}
-      </Press>
+      </MotionPress>
     </div>
   )
 }

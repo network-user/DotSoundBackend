@@ -1,24 +1,32 @@
 import {
-  ReactNode,
   useCallback,
   useEffect,
+  useMemo,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AnimatePresence } from 'framer-motion'
 import { useBrandLabel } from '@/lib/brand'
-import { useNavigate } from 'react-router-dom'
+import {
+  useNavigate,
+  useLocation,
+  Outlet,
+} from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
-import { Press } from '@/components/ui/Press'
+import {
+  m,
+  SPRING_LAYOUT,
+  TWEEN_FAST,
+  useReducedMotion,
+} from '@/lib/motion'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { useAdminSectionLabel } from '../../hooks/useAdminSectionLabel'
 import { useIsNarrowLayout } from '../../hooks/useIsNarrowLayout'
 import { adminApi } from '../../lib/adminApi'
 import { useAdminAuth } from '../../store/adminAuthStore'
+import { decodeAdminJwtHint } from '../../lib/adminJwtHint'
 import { AdminMenu } from './AdminMenu'
 import { AdminNavDrawer } from './AdminNavDrawer'
-
-interface Props {
-  children: ReactNode
-}
 
 function Clock() {
   const [now, setNow] = useState(() => Date.now())
@@ -35,30 +43,61 @@ function Clock() {
   )
 }
 
-export function AdminShell({ children }: Props) {
+const ADMIN_PAGE_ENTER = {
+  opacity: 0,
+  y: 14,
+} as const
+
+const ADMIN_PAGE_ANIMATE = {
+  opacity: 1,
+  y: 0,
+} as const
+
+const ADMIN_PAGE_EXIT = {
+  opacity: 0,
+  y: -10,
+} as const
+
+export function AdminShell() {
   const { t } = useTranslation()
   const brandLabel = useBrandLabel()
   const navigate = useNavigate()
+  const location = useLocation()
+  const reduce = useReducedMotion()
   const reset = useAdminAuth((s) => s.reset)
+  const accessToken = useAdminAuth(
+    (s) => s.accessToken,
+  )
   const sectionLabel = useAdminSectionLabel()
   const narrow = useIsNarrowLayout()
   const [menuOpen, setMenuOpen] = useState(false)
 
-  const closeMenu = useCallback(
-    () => setMenuOpen(false),
-    [],
+  const jwtHint = useMemo(
+    () => decodeAdminJwtHint(accessToken),
+    [accessToken],
   )
+
+  const subtitle = useMemo(() => {
+    const bits = [
+      jwtHint,
+      sectionLabel,
+    ].filter(Boolean)
+    return bits.join(' · ')
+  }, [jwtHint, sectionLabel])
+
+  const closeMenu = useCallback(() => setMenuOpen(false), [])
 
   async function handleLogout() {
     try {
       await adminApi.logout()
     } catch {
-      // ignore network errors on logout
     }
     setMenuOpen(false)
     reset()
     navigate('/')
   }
+
+  const transition = reduce ? TWEEN_FAST : SPRING_LAYOUT
 
   return (
     <div
@@ -78,12 +117,24 @@ export function AdminShell({ children }: Props) {
           </div>
           <AdminMenu />
           <div className="admin-shell__sidebar-foot">
-            <Press
+            <MotionPress
               variant="ghost"
-              onClick={handleLogout}
+              className="admin-shell__profile-wide"
+              onClick={() => {
+                navigate('/admin/profile')
+              }}
+            >
+              {t('redesign.admin.profileTitle')}
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              className="admin-shell__logout-wide"
+              onClick={() => {
+                void handleLogout()
+              }}
             >
               {t('admin.shell.signOut')}
-            </Press>
+            </MotionPress>
           </div>
         </aside>
       )}
@@ -97,25 +148,22 @@ export function AdminShell({ children }: Props) {
       <div className="admin-shell__body">
         <header className="admin-shell__topbar">
           {narrow && (
-            <Press
-              variant="ghost"
+            <MotionPress
+              variant="icon"
               className="admin-shell__nav-toggle"
-              onClick={() =>
-                setMenuOpen((o) => !o)
-              }
+              onClick={() => setMenuOpen((o) => !o)}
               aria-expanded={menuOpen}
               aria-label={
                 menuOpen
                   ? t('admin.shell.closeMenu')
                   : t('admin.shell.openMenu')
               }
-              iconOnly
             >
               <Icon
                 name={menuOpen ? 'x' : 'list'}
                 size={20}
               />
-            </Press>
+            </MotionPress>
           )}
           <span
             className="admin-shell__topbar-title"
@@ -125,8 +173,30 @@ export function AdminShell({ children }: Props) {
           </span>
           <Clock />
         </header>
-        <main className="admin-shell__main">
-          {children}
+        {!narrow && (
+          <div className="adm-r-page-head">
+            <h1 className="adm-r-page-head__title">
+              {t('redesign.admin.pageTitle')}
+            </h1>
+            <p className="adm-r-page-head__sub">
+              {subtitle}
+            </p>
+          </div>
+        )}
+        <main className="admin-shell__main adm-r-main-inner">
+          <AnimatePresence mode="wait">
+            <m.div
+              key={location.pathname}
+              initial={
+                reduce ? false : ADMIN_PAGE_ENTER
+              }
+              animate={ADMIN_PAGE_ANIMATE}
+              exit={reduce ? undefined : ADMIN_PAGE_EXIT}
+              transition={transition}
+            >
+              <Outlet />
+            </m.div>
+          </AnimatePresence>
         </main>
       </div>
     </div>

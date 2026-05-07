@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { MotionPress } from '@/components/ui/MotionPress'
 import type {
   LinkedAccountInfo,
   OAuthLinkedProvider,
@@ -67,22 +68,20 @@ export function OAuthImportAccounts() {
               ? ` (${a.provider_username})`
               : ''}
           </span>
-          <button
+          <MotionPress
             type="button"
-            className="settings-badge"
+            variant="ghost"
+            haptic="medium"
+            className="settings-badge settings-badge--clickable"
             disabled={busy === a.provider}
             onClick={() =>
               disconnect(
                 a.provider as OAuthLinkedProvider,
               )
             }
-            style={{
-              cursor: 'pointer',
-              background: 'var(--surface-2)',
-            }}
           >
             {busy === a.provider ? '…' : 'Отвязать'}
-          </button>
+          </MotionPress>
         </div>
       ))}
     </>

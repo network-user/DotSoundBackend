@@ -1,8 +1,7 @@
+import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
-import {
-  hapticNotification,
-  hapticSelection,
-} from '@/lib/telegram'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { hapticNotification } from '@/lib/telegram'
 import { useSound } from '@/store/SoundContext'
 
 interface Props {
@@ -30,23 +29,23 @@ export function ProfileHero({
   onCancel,
   onDisplayNameChange,
 }: Props) {
+  const { t } = useTranslation()
   const sound = useSound()
-  const feedbackTap = () => {
-    hapticSelection()
-    sound.play('tapSoft')
-  }
+  const tap = () => sound.play('tapSoft')
   const handleSave = () => {
     hapticNotification('success')
     sound.play('notificationSuccess')
     onSave()
   }
+
   return (
     <div className="profile-hero">
       <div className="profile-avatar">
-        {currentAvatar
-          ? <img src={currentAvatar} alt={shownName} />
-          : shownName.charAt(0).toUpperCase()
-        }
+        {currentAvatar ? (
+          <img src={currentAvatar} alt={shownName} />
+        ) : (
+          shownName.charAt(0).toUpperCase()
+        )}
       </div>
 
       {editMode ? (
@@ -55,7 +54,10 @@ export function ProfileHero({
           value={displayName}
           onChange={(e) => onDisplayNameChange(e.target.value)}
           maxLength={64}
-          placeholder="Отображаемое имя"
+          placeholder={t(
+            'redesign.library.profileNamePlaceholder',
+            'Отображаемое имя',
+          )}
         />
       ) : (
         <div className="profile-name">{shownName}</div>
@@ -67,34 +69,47 @@ export function ProfileHero({
 
       <div className="profile-edit-controls">
         {!editMode ? (
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="selection"
             className="profile-edit-btn"
             onClick={() => {
-              feedbackTap()
+              tap()
               onEditStart()
             }}
           >
             <Icon name="edit" size={16} />
-            <span>Изменить</span>
-          </button>
+            <span>
+              {t('redesign.library.profileNameEdit', 'Изменить')}
+            </span>
+          </MotionPress>
         ) : (
           <>
-            <button
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
               className="btn-primary"
               onClick={handleSave}
               disabled={saving}
             >
-              {saving ? 'Сохранение…' : 'Сохранить'}
-            </button>
-            <button
+              {saving
+                ? t('redesign.library.profileNameSaving', 'Сохранение…')
+                : t('redesign.library.profileNameSave', 'Сохранить')}
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="selection"
               className="profile-edit-cancel"
               onClick={() => {
-                feedbackTap()
+                tap()
                 onCancel()
               }}
             >
-              Отмена
-            </button>
+              {t('redesign.library.profileNameCancel', 'Отмена')}
+            </MotionPress>
           </>
         )}
       </div>

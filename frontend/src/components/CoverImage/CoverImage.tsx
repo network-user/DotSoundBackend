@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { Icon } from '@/components/Icon/Icon'
 
 interface Props {
@@ -6,6 +6,7 @@ interface Props {
   externalUrl?: string | null
   size?: number
   className?: string
+  style?: CSSProperties
 }
 
 export function CoverImage({
@@ -13,12 +14,16 @@ export function CoverImage({
   externalUrl,
   size = 50,
   className,
+  style,
 }: Props) {
   const [failed, setFailed] = useState(false)
   const [loaded, setLoaded] = useState(false)
-  const style = size
+  const sizeStyle = size
     ? { width: size, height: size }
     : undefined
+  const mergedStyle = style
+    ? { ...sizeStyle, ...style }
+    : sizeStyle
 
   const src = coverKey
     ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(coverKey)}`
@@ -27,7 +32,7 @@ export function CoverImage({
   return (
     <div
       className={`track-card-cover${className ? ` ${className}` : ''}${loaded ? ' loaded' : ''}`}
-      style={style}
+      style={mergedStyle}
     >
       {src && !failed ? (
         <img

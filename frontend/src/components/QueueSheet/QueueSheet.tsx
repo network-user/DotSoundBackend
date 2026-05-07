@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import {
@@ -7,11 +8,21 @@ import {
   usePlayerState,
 } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
+import { SwipeRow } from '@/components/ui/SwipeRow'
+import { BeatPulse } from '@/components/ui/BeatPulse'
+import { MorphIcon } from '@/components/ui/MorphIcon'
+import { MotionPress } from '@/components/ui/MotionPress'
 
-export function QueueSheet() {
+export type QueuePanelContentProps = {
+  inline?: boolean
+}
+
+export function QueuePanelContent({
+  inline = false,
+}: QueuePanelContentProps) {
+  const { t } = useTranslation()
   const {
     track,
-    isQueueOpen,
     queue,
     history,
   } = usePlayerMeta()
@@ -25,19 +36,16 @@ export function QueueSheet() {
     togglePlay,
   } = usePlayerActions()
 
-  const exit = useExitTransition(isQueueOpen)
   const [dragIdx, setDragIdx] = useState<
     number | null
   >(null)
   const dragOverIdx = useRef<number | null>(null)
 
-  if (!exit.mounted) return null
-
-  const onClickItem = (t: Track) => {
-    if (t.id === track?.id) {
+  const onClickItem = (tr: Track) => {
+    if (tr.id === track?.id) {
       togglePlay()
     } else {
-      playTrack(t)
+      playTrack(tr)
     }
   }
 
@@ -59,6 +67,159 @@ export function QueueSheet() {
     dragOverIdx.current = null
   }
 
+  const inner = (
+    <div
+      className={
+        inline
+          ? 'queue-content queue-content--inline rp-now-queue-embed'
+          : 'queue-content'
+      }
+    >
+      {history.length > 0 && (
+        <section className="queue-section">
+          <div className="queue-section-title">
+            {t(
+              'redesign.player.queueRecent',
+              'Recently played',
+            )}
+          </div>
+          {history
+            .slice(-5)
+            .reverse()
+            .map((tr) => (
+              <QueueRow
+                key={`h-${tr.id}`}
+                track={tr}
+                onClick={() => onClickItem(tr)}
+                muted
+              />
+            ))}
+        </section>
+      )}
+
+      {track && (
+        <section className="queue-section">
+          <div className="queue-section-title">
+            {t(
+              'redesign.player.queueNowPlaying',
+              'Now playing',
+            )}
+          </div>
+          <QueueRow
+            track={track}
+            onClick={togglePlay}
+            playing={isPlaying}
+            primary
+          />
+        </section>
+      )}
+
+      {queue.length > 0 ? (
+        <section className="queue-section">
+          <div className="queue-section-title queue-section-title-row">
+            <span>
+              {t(
+                'redesign.player.queueUpNext',
+                'Up next',
+              )}
+            </span>
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
+              className="queue-action-btn"
+              onClick={clearQueue}
+            >
+              {t('redesign.player.queueClear', 'Clear')}
+            </MotionPress>
+          </div>
+          {queue.map((tr, idx) => (
+            <div
+              key={`q-${tr.id}-${idx}`}
+              className={`queue-row-wrap rp-queue-row${dragIdx === idx ? ' dragging' : ''}`}
+              draggable
+              onDragStart={() =>
+                onDragStart(idx)
+              }
+              onDragOver={(e) =>
+                onDragOver(e, idx)
+              }
+              onDragEnd={onDragEnd}
+              onDrop={onDragEnd}
+            >
+              <SwipeRow
+                rightAction={{
+                  icon: 'trash',
+                  label: t(
+                    'redesign.player.queueDeleteSwipe',
+                    'Remove',
+                  ),
+                  destructive: true,
+                  onTrigger: () =>
+                    removeFromQueue(idx),
+                }}
+              >
+                <QueueRow
+                  track={tr}
+                  onClick={() =>
+                    onClickItem(tr)
+                  }
+                  onRemove={() =>
+                    removeFromQueue(idx)
+                  }
+                  grabbable
+                />
+              </SwipeRow>
+            </div>
+          ))}
+        </section>
+      ) : (
+        <section className="queue-section queue-empty">
+          <div className="queue-empty-text">
+            {t('redesign.player.queueEmpty', 'Queue is empty.')}
+            <br />
+            {t(
+              'redesign.player.queueEmptyHint',
+              'Long-press a track to add it to the queue.',
+            )}
+          </div>
+        </section>
+      )}
+    </div>
+  )
+
+  if (inline) {
+    return inner
+  }
+
+  return (
+    <>
+      <div className="queue-handle" />
+      <div className="queue-header">
+        <span className="queue-title">
+          {t('redesign.player.queueTitle', 'Queue')}
+        </span>
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
+          className="icon-btn"
+          onClick={closeQueue}
+          aria-label={t('redesign.player.queueClose', 'Close')}
+        >
+          <Icon name="x" size={18} />
+        </MotionPress>
+      </div>
+      {inner}
+    </>
+  )
+}
+
+export function QueueSheet() {
+  const { isQueueOpen } = usePlayerMeta()
+  const { closeQueue } = usePlayerActions()
+  const exit = useExitTransition(isQueueOpen)
+
+  if (!exit.mounted) return null
+
   return (
     <div
       className={`queue-backdrop${exit.cls}`}
@@ -67,108 +228,14 @@ export function QueueSheet() {
       }}
     >
       <div className={`queue-sheet${exit.cls}`}>
-        <div className="queue-handle" />
-        <div className="queue-header">
-          <span className="queue-title">
-            Очередь
-          </span>
-          <button
-            className="icon-btn"
-            onClick={closeQueue}
-            aria-label="Закрыть"
-          >
-            <Icon name="x" size={18} />
-          </button>
-        </div>
-
-        <div className="queue-content">
-          {history.length > 0 && (
-            <section className="queue-section">
-              <div className="queue-section-title">
-                Недавно
-              </div>
-              {history
-                .slice(-5)
-                .reverse()
-                .map((t) => (
-                  <QueueRow
-                    key={`h-${t.id}`}
-                    t={t}
-                    onClick={() => onClickItem(t)}
-                    muted
-                  />
-                ))}
-            </section>
-          )}
-
-          {track && (
-            <section className="queue-section">
-              <div className="queue-section-title">
-                Сейчас играет
-              </div>
-              <QueueRow
-                t={track}
-                onClick={togglePlay}
-                playing={isPlaying}
-                primary
-              />
-            </section>
-          )}
-
-          {queue.length > 0 ? (
-            <section className="queue-section">
-              <div className="queue-section-title queue-section-title-row">
-                <span>Дальше</span>
-                <button
-                  className="queue-action-btn"
-                  onClick={clearQueue}
-                >
-                  Очистить
-                </button>
-              </div>
-              {queue.map((t, idx) => (
-                <div
-                  key={`q-${t.id}-${idx}`}
-                  className={`queue-row-wrap${dragIdx === idx ? ' dragging' : ''}`}
-                  draggable
-                  onDragStart={() =>
-                    onDragStart(idx)
-                  }
-                  onDragOver={(e) =>
-                    onDragOver(e, idx)
-                  }
-                  onDragEnd={onDragEnd}
-                  onDrop={onDragEnd}
-                >
-                  <QueueRow
-                    t={t}
-                    onClick={() => onClickItem(t)}
-                    onRemove={() =>
-                      removeFromQueue(idx)
-                    }
-                    grabbable
-                  />
-                </div>
-              ))}
-            </section>
-          ) : (
-            <section className="queue-section queue-empty">
-              <div className="queue-empty-text">
-                Очередь пуста.
-                <br />
-                Зажмите трек, чтобы добавить в
-                очередь.
-              </div>
-            </section>
-          )}
-        </div>
+        <QueuePanelContent />
       </div>
     </div>
   )
 }
 
 function QueueRow({
-  t,
+  track,
   onClick,
   onRemove,
   playing,
@@ -176,7 +243,7 @@ function QueueRow({
   muted,
   grabbable,
 }: {
-  t: Track
+  track: Track
   onClick: () => void
   onRemove?: () => void
   playing?: boolean
@@ -184,8 +251,9 @@ function QueueRow({
   muted?: boolean
   grabbable?: boolean
 }) {
-  const cover = t.cover_key
-    ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(t.cover_key)}`
+  const { t } = useTranslation()
+  const cover = track.cover_key
+    ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`
     : null
 
   return (
@@ -200,7 +268,9 @@ function QueueRow({
           <Icon name="more-vertical" size={14} />
         </span>
       )}
-      <button
+      <MotionPress
+        variant="ghost"
+        haptic="selection"
         className="queue-row-main"
         onClick={onClick}
       >
@@ -213,31 +283,40 @@ function QueueRow({
         </span>
         <span className="queue-meta">
           <span className="queue-row-title">
-            {t.title}
+            {track.title}
           </span>
           <span className="queue-row-artist">
-            {t.artist || '—'}
+            {track.artist || '—'}
           </span>
         </span>
-        {primary && playing && (
+        {primary && (
           <span
-            className="queue-eq-bars"
+            className="queue-eq-bars rp-queue-eq"
             aria-hidden="true"
           >
-            <span />
-            <span />
-            <span />
+            <BeatPulse bpm={120} active={!!playing}>
+              <MorphIcon
+                name="play"
+                filled={!!playing}
+                size={14}
+              />
+            </BeatPulse>
           </span>
         )}
-      </button>
+      </MotionPress>
       {onRemove && (
-        <button
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className="icon-btn queue-remove"
           onClick={onRemove}
-          aria-label="Убрать из очереди"
+          aria-label={t(
+            'redesign.player.queueRemoveAria',
+            'Remove from queue',
+          )}
         >
           <Icon name="x" size={14} />
-        </button>
+        </MotionPress>
       )}
     </div>
   )

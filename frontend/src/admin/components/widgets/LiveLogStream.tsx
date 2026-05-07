@@ -5,7 +5,7 @@ import {
   useState,
 } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../../lib/adminApi'
 import { AdminWs } from '../../lib/adminWs'
 
@@ -207,20 +207,20 @@ export function LiveLogStream({
             }))
           }
         />
-        <Press
+        <MotionPress
           variant="ghost"
           onClick={() =>
             setPaused((v) => !v)
           }
         >
           {paused ? 'Resume' : 'Pause'}
-        </Press>
-        <Press
+        </MotionPress>
+        <MotionPress
           variant="ghost"
           onClick={() => setItems([])}
         >
           Clear
-        </Press>
+        </MotionPress>
         <span className="admin-live-log__status">
           {status}
         </span>

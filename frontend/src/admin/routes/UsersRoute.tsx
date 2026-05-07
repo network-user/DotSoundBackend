@@ -6,7 +6,8 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { AdminRangeSwitch } from '../components/widgets/AdminRangeSwitch'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
@@ -249,30 +250,30 @@ export function UsersRoute() {
             }}
           >
             {u.is_active ? (
-              <Press
+              <MotionPress
                 variant="ghost"
                 disabled={busy}
                 onClick={() => handleBan(u)}
               >
                 {t('admin.users.actionBan')}
-              </Press>
+              </MotionPress>
             ) : (
-              <Press
+              <MotionPress
                 variant="ghost"
                 disabled={busy}
                 onClick={() => handleUnban(u)}
               >
                 {t('admin.users.actionUnban')}
-              </Press>
+              </MotionPress>
             )}
-            <Press
+            <MotionPress
               variant="ghost"
               disabled={busy}
               onClick={() => handleForceLogout(u)}
             >
               {t('admin.users.actionLogout')}
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="ghost"
               disabled={busy}
               onClick={() => {
@@ -281,7 +282,7 @@ export function UsersRoute() {
               }}
             >
               {t('admin.users.actionMessage')}
-            </Press>
+            </MotionPress>
           </div>
         )
       },
@@ -317,21 +318,30 @@ export function UsersRoute() {
       </section>
       <section className="admin-card">
         <div className="admin-dashboard__toplist-head">
-          <h2>Admin activity</h2>
-          <div className="admin-range-switch">
-            {(['today', '7d', '30d', 'all'] as const).map((period) => (
-              <button
-                key={period}
-                type="button"
-                className={`admin-range-switch__btn${
-                  statsPeriod === period ? ' is-active' : ''
-                }`}
-                onClick={() => setStatsPeriod(period)}
-              >
-                {period}
-              </button>
-            ))}
-          </div>
+          <h2>{t('admin.users.activityTitle', 'Admin activity')}</h2>
+          <AdminRangeSwitch
+            groupId="users-stats-period"
+            value={statsPeriod}
+            onChange={setStatsPeriod}
+            options={[
+              {
+                value: 'today',
+                label: t('redesign.admin.dashboard.periodToday'),
+              },
+              {
+                value: '7d',
+                label: t('redesign.admin.dashboard.period7d'),
+              },
+              {
+                value: '30d',
+                label: t('redesign.admin.dashboard.period30d'),
+              },
+              {
+                value: 'all',
+                label: t('redesign.admin.dashboard.periodAll'),
+              },
+            ]}
+          />
         </div>
         {adminStats.isLoading || !adminStats.data ? (
           <div className="admin-skeleton admin-skeleton--card" />
@@ -422,7 +432,7 @@ export function UsersRoute() {
         enableSorting
       />
       <div className="admin-pagination">
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={page <= 1 || isFetching}
           onClick={() =>
@@ -430,12 +440,12 @@ export function UsersRoute() {
           }
         >
           {t('admin.common.prev')}
-        </Press>
+        </MotionPress>
         <span>
           {page} / {totalPages} ·{' '}
           {t('admin.common.total', { count: total })}
         </span>
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={
             page >= totalPages || isFetching
@@ -443,7 +453,7 @@ export function UsersRoute() {
           onClick={() => setPage((p) => p + 1)}
         >
           {t('admin.common.next')}
-        </Press>
+        </MotionPress>
       </div>
       {messageTarget && (
         <div
@@ -463,9 +473,10 @@ export function UsersRoute() {
             </h3>
             <div className="admin-dm-templates">
               {DM_TEMPLATES.map((tpl) => (
-                <button
+                <MotionPress
                   key={tpl.id}
-                  type="button"
+                  variant="ghost"
+                  haptic="selection"
                   className="admin-dm-template-btn"
                   onClick={() =>
                     setMessageText(t(tpl.textKey))
@@ -473,7 +484,7 @@ export function UsersRoute() {
                   title={t(tpl.textKey)}
                 >
                   {t(tpl.labelKey)}
-                </button>
+                </MotionPress>
               ))}
             </div>
             <textarea
@@ -505,7 +516,7 @@ export function UsersRoute() {
                 marginTop: 12,
               }}
             >
-              <Press
+              <MotionPress
                 variant="ghost"
                 onClick={() => {
                   setMessageTarget(null)
@@ -513,8 +524,8 @@ export function UsersRoute() {
                 }}
               >
                 {t('admin.users.messageCancel')}
-              </Press>
-              <Press
+              </MotionPress>
+              <MotionPress
                 variant="primary"
                 disabled={
                   !messageText.trim() ||
@@ -529,7 +540,7 @@ export function UsersRoute() {
                 }}
               >
                 {t('admin.users.messageSend')}
-              </Press>
+              </MotionPress>
             </div>
           </div>
         </div>

@@ -6,8 +6,17 @@ import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { api } from '@/lib/api'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { useLikes } from '@/store/LikesContext'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { useDebounce } from '@/hooks/useDebounce'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
+import {
+  SPRING_GENTLE,
+  TWEEN_FAST,
+  VARIANTS_FADE_UP,
+  m,
+} from '@/lib/motion'
 import type {
   ArtistInfo,
   BCSearchResult,
@@ -23,10 +32,45 @@ type SearchViewProps = {
   onOpenArtist?: (id: number) => void
 }
 
+<<<<<<< HEAD
+type EntityFilter = 'all' | 'tracks' | 'artists' | 'external'
+
+const SEARCH_DEBOUNCE_MS = 300
+
+const ENTITY_FILTERS: {
+  id: EntityFilter
+  labelKey: string
+  icon: string
+}[] = [
+  {
+    id: 'all',
+    labelKey: 'redesign.library.searchFilterAll',
+    icon: 'search',
+  },
+  {
+    id: 'tracks',
+    labelKey: 'redesign.library.searchFilterTracks',
+    icon: 'music',
+  },
+  {
+    id: 'artists',
+    labelKey: 'redesign.library.searchFilterArtists',
+    icon: 'users-listeners',
+  },
+  {
+    id: 'external',
+    labelKey: 'redesign.library.searchFilterExternal',
+    icon: 'link',
+  },
+]
+
+/** Порядок треков из ES suggest сверху, остальные — как в выдаче getTracks */
+=======
 type SearchTab = 'all' | 'tracks' | 'artists' | 'playlists'
 
 const SEARCH_DEBOUNCE_MS = 300
 
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 function mergeTracksBySuggestOrder(
   items: Track[],
   suggest: SearchSuggestItem[],
@@ -82,6 +126,15 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
 
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [entityFilter, setEntityFilter] =
+    useState<EntityFilter>('all')
+  const [inputFocused, setInputFocused] = useState(false)
+
+  const searchPrefetchSlice =
+    typeof tracks === 'object' && tracks !== null
+      ? tracks.slice(0, 3)
+      : null
+  usePrefetchTracks(searchPrefetchSlice, 'search_results')
 
   const [history, setHistory] = useState<string[]>(() => {
     try {
@@ -315,6 +368,149 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     setYtResults([])
     setBcResults([])
     setCatalogArtists([])
+<<<<<<< HEAD
+    setEntityFilter('all')
+    inputRef.current?.focus()
+  }
+
+  const hasActiveQuery = Boolean(debouncedQuery.trim())
+  const chipsVisible = hasActiveQuery && tracks !== 'idle'
+  const showArtistsBlock =
+    hasActiveQuery &&
+    (entityFilter === 'all' || entityFilter === 'artists')
+  const showPlatformTracksBlock =
+    hasActiveQuery &&
+    (entityFilter === 'all' || entityFilter === 'tracks')
+  const showExternalBlock =
+    hasActiveQuery &&
+    (entityFilter === 'all' || entityFilter === 'external')
+  const hasExternalResults =
+    ytResults.length > 0 ||
+    bcResults.length > 0 ||
+    scResults.length > 0
+  const showSearchEmpty =
+    hasActiveQuery &&
+    tracks !== 'idle' &&
+    tracks !== null &&
+    Array.isArray(tracks) &&
+    ((entityFilter === 'all' &&
+      tracks.length === 0 &&
+      !hasExternalResults &&
+      catalogArtists.length === 0) ||
+      (entityFilter === 'tracks' && tracks.length === 0) ||
+      (entityFilter === 'artists' && catalogArtists.length === 0) ||
+      (entityFilter === 'external' && !hasExternalResults))
+
+  useEffect(() => {
+    if (!query.trim()) {
+      setEntityFilter('all')
+    }
+  }, [query])
+
+  return (
+    <section id="view-search" className="view active rd-search">
+      <div className="search-sticky rd-search-sticky">
+        <m.div
+          className="search-bar rd-search-bar"
+          animate={
+            inputFocused
+              ? {
+                  boxShadow:
+                    '0 0 0 2px color-mix(in srgb, var(--accent) 42%, transparent)',
+                }
+              : { boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }
+          }
+          transition={SPRING_GENTLE}
+        >
+        <span className="search-icon"><Icon name="search" size={16} /></span>
+        <input
+          ref={inputRef}
+          id="search-input"
+          type="search"
+          enterKeyHint="search"
+          placeholder={t('search.placeholder')}
+          autoComplete="off"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
+        />
+        {query && (
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
+            className="icon-btn"
+            ariaLabel={t('redesign.tracks.chatBackAria', 'Очистить')}
+            onClick={clearSearch}
+          >
+            <Icon name="x" size={16} />
+          </MotionPress>
+        )}
+        </m.div>
+      </div>
+
+      {chipsVisible && (
+        <div
+          className="rd-search-chips"
+          role="tablist"
+          aria-label={t('redesign.library.searchFiltersAria')}
+        >
+          {ENTITY_FILTERS.map((f) => {
+            const active = entityFilter === f.id
+            return (
+              <MotionPress
+                key={f.id}
+                variant="subtle"
+                haptic="selection"
+                role="tab"
+                aria-selected={active}
+                className="rd-search-chip"
+                data-active={active ? 'true' : 'false'}
+                onClick={() => setEntityFilter(f.id)}
+              >
+                <MorphIcon
+                  name={f.icon}
+                  size={14}
+                  filled={active}
+                />
+                <span>{t(f.labelKey)}</span>
+              </MotionPress>
+            )
+          })}
+        </div>
+      )}
+
+      {tracks === 'idle' && history.length === 0 && (
+        <div className="search-idle-hint">
+          <Icon name="search" size={32} />
+          <p>{t('search.hint')}</p>
+        </div>
+      )}
+
+      {tracks === 'idle' && history.length > 0 && (
+        <div className="search-history">
+          <p className="search-section-label">
+            {t('search.recent')}
+          </p>
+          {history.map((h) => (
+            <div key={h} className="search-history-item" onClick={() => setQuery(h)}>
+              <Icon name="search" size={14} />
+              <span>{h}</span>
+              <MotionPress
+                type="button"
+                variant="icon"
+                haptic="light"
+                className="icon-btn"
+                ariaLabel={t('redesign.library.shareClose', 'Удалить')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeFromHistory(h)
+                }}
+              >
+                <Icon name="x" size={12} />
+              </MotionPress>
+=======
     setCatalogPlaylists([])
     inputRef.current?.focus()
   }
@@ -416,6 +612,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                   </button>
                 </div>
               ))}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
             </div>
           )}
 
@@ -534,18 +731,66 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
         </>
       )}
 
+<<<<<<< HEAD
+      {tracks === null && hasActiveQuery && (
+        <m.div
+          className="search-section rd-search-section"
+          variants={VARIANTS_FADE_UP}
+          initial="hidden"
+          animate="visible"
+          transition={TWEEN_FAST}
+        >
+=======
       {/* Loading skeleton */}
       {tracks === null && (
         <div className="search-section">
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
           <p className="search-section-label">
             {t('search.onPlatform')}
           </p>
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="track-card-skeleton shimmer" />
           ))}
-        </div>
+        </m.div>
       )}
 
+<<<<<<< HEAD
+      {Array.isArray(tracks) && showArtistsBlock && (
+        <m.div
+          className="search-section rd-search-section"
+          variants={VARIANTS_FADE_UP}
+          initial="hidden"
+          animate="visible"
+          transition={{ ...TWEEN_FAST, delay: 0.02 }}
+        >
+            <p className="search-section-label">
+              {t('search.artists')}
+            </p>
+            {catalogArtists.length > 0 ? (
+              catalogArtists.map((a) => (
+                <div
+                  key={`catalog-artist-${a.id}`}
+                  className="track-card search-catalog-artist"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={t('search.catalogArtistRowAria', {
+                    name: a.name,
+                  })}
+                  onClick={() => {
+                    onOpenArtist?.(a.id)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onOpenArtist?.(a.id)
+                    }
+                  }}
+                >
+                  <CoverImage coverKey={a.image_key} />
+                  <div className="track-card-info">
+                    <div className="track-card-title-row">
+                      <p className="track-card-title">{a.name}</p>
+=======
       {/* Search results */}
       {Array.isArray(tracks) && (
         <>
@@ -589,14 +834,135 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         size={16}
                         className="search-artist-row__chevron"
                       />
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
                     </div>
                   ))}
                 </div>
+<<<<<<< HEAD
+              ))
+            ) : (
+              <p className="search-catalog-empty">
+                {t('search.artistsEmpty')}
+              </p>
+            )}
+        </m.div>
+      )}
+
+      {Array.isArray(tracks) && showPlatformTracksBlock && (
+        <m.div
+          className="search-section rd-search-section"
+          variants={VARIANTS_FADE_UP}
+          initial="hidden"
+          animate="visible"
+          transition={{ ...TWEEN_FAST, delay: 0.04 }}
+        >
+            <p className="search-section-label">
+              {t('search.platformTracks')}
+            </p>
+            {tracks.length > 0 ? (
+              <TrackList tracks={tracks} emptyMessage="" />
+            ) : (
+              <p className="search-catalog-empty">
+                {t('search.emptyCatalogHint')}
+              </p>
+            )}
+        </m.div>
+      )}
+
+      {(tracks === null || Array.isArray(tracks)) && showExternalBlock && (
+        <>
+          {ytResults.length > 0 && (
+            <div className="search-section">
+              <p className="search-section-label">
+                {t('search.ytSection')}
+              </p>
+              {ytResults.map((r) => {
+                const imported = importedYT[r.video_id]
+                if (imported) {
+                  return (
+                    <TrackCard
+                      key={r.video_id}
+                      track={imported}
+                    />
+                  )
+                }
+                return (
+                  <div
+                    key={r.video_id}
+                    className="track-card sc-result"
+                    onClick={() => handlePlayYT(r)}
+                  >
+                    <CoverImage
+                      coverKey={null}
+                      externalUrl={r.thumbnail_url}
+                    />
+                    <div className="track-card-info">
+                      <div className="track-card-title-row">
+                        <p className="track-card-title">{r.title}</p>
+                        <span className="track-badge track-badge-yt">
+                          YT
+                        </span>
+                      </div>
+                      <p className="track-card-artist">
+                        {r.artist ?? '—'}
+                      </p>
+                      <p className="track-card-meta">
+                        {r.duration_seconds != null && (
+                          <span className="sc-duration">
+                            {Math.floor(
+                              r.duration_seconds / 60,
+                            )}:{String(
+                              r.duration_seconds % 60,
+                            ).padStart(2, '0')}
+                          </span>
+                        )}
+                      </p>
+                      <span className="track-source">
+                        {t('search.extSourceLabel')}{' '}
+                        <a
+                          href={r.watch_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="track-source-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          YouTube
+                        </a>
+                      </span>
+                      <span className="track-source">
+                        {t('search.afterAddStream')}
+                      </span>
+                    </div>
+                    <div
+                      className="track-card-actions"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MotionPress
+                        variant="ghost"
+                        haptic="selection"
+                        className="track-card-like"
+                        title={t('search.addAndLike')}
+                        onClick={(e) => handleLikeYT(e, r)}
+                        disabled={importingYt === r.video_id}
+                      >
+                        <Icon name="heart-outline" size={18} />
+                      </MotionPress>
+                      <span className="sc-play-hint sc-play-hint--yt">
+                        {importingYt === r.video_id
+                          ? '...'
+                          : t('search.addAndPlay')}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+=======
               ) : (
                 <p className="search-catalog-empty">
                   {t('search.artistsEmpty')}
                 </p>
               )}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
             </div>
           )}
 
@@ -606,6 +972,88 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
               <p className="search-section-label">
                 {t('search.platformTracks')}
               </p>
+<<<<<<< HEAD
+              {bcResults.map((r) => {
+                const imported = importedBC[r.track_url]
+                if (imported) {
+                  return (
+                    <TrackCard
+                      key={r.result_id}
+                      track={imported}
+                    />
+                  )
+                }
+                return (
+                  <div
+                    key={r.result_id}
+                    className="track-card sc-result"
+                    onClick={() => handlePlayBC(r)}
+                  >
+                    <CoverImage
+                      coverKey={null}
+                      externalUrl={r.artwork_url}
+                    />
+                    <div className="track-card-info">
+                      <div className="track-card-title-row">
+                        <p className="track-card-title">{r.title}</p>
+                        <span className="track-badge track-badge-bc">
+                          BC
+                        </span>
+                      </div>
+                      <p className="track-card-artist">
+                        {r.artist ?? '—'}
+                      </p>
+                      <p className="track-card-meta">
+                        {r.duration_seconds != null && (
+                          <span className="sc-duration">
+                            {Math.floor(
+                              r.duration_seconds / 60,
+                            )}:{String(
+                              r.duration_seconds % 60,
+                            ).padStart(2, '0')}
+                          </span>
+                        )}
+                      </p>
+                      <span className="track-source">
+                        {t('search.extSourceLabel')}{' '}
+                        <a
+                          href={r.track_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="track-source-link"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Bandcamp
+                        </a>
+                      </span>
+                      <span className="track-source">
+                        {t('search.afterAddStream')}
+                      </span>
+                    </div>
+                    <div
+                      className="track-card-actions"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MotionPress
+                        variant="ghost"
+                        haptic="selection"
+                        className="track-card-like"
+                        title={t('search.addAndLike')}
+                        onClick={(e) => handleLikeBC(e, r)}
+                        disabled={importingBc === r.track_url}
+                      >
+                        <Icon name="heart-outline" size={18} />
+                      </MotionPress>
+                      <span className="sc-play-hint sc-play-hint--bc">
+                        {importingBc === r.track_url
+                          ? '...'
+                          : t('search.addAndPlay')}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+=======
               {tracks.length > 0 ? (
                 <TrackList tracks={tracks} emptyMessage="" />
               ) : (
@@ -613,6 +1061,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                   {t('search.emptyCatalogHint')}
                 </p>
               )}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
             </div>
           )}
 
@@ -718,6 +1167,36 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                           className="track-card-actions"
                           onClick={(e) => e.stopPropagation()}
                         >
+<<<<<<< HEAD
+                          SoundCloud
+                        </a>
+                      </span>
+                      <span className="track-source">
+                        {t('search.afterAddStream')}
+                      </span>
+                    </div>
+                    <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
+                      <MotionPress
+                        variant="ghost"
+                        haptic="selection"
+                        className="track-card-like"
+                        title={t('search.addAndLike')}
+                        onClick={(e) => handleLikeSC(e, r)}
+                        disabled={importing === r.sc_url}
+                      >
+                        <Icon name="heart-outline" size={18} />
+                      </MotionPress>
+                      <span className="sc-play-hint">
+                        {importing === r.sc_url
+                          ? '...'
+                          : t('search.addAndPlay')}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+=======
                           <button
                             className="track-card-like"
                             title={t('search.addAndLike')}
@@ -918,12 +1397,21 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
 
           {!hasResults && (
             <p className="empty-hint">{t('search.notFound')}</p>
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
           )}
         </>
       )}
 
+<<<<<<< HEAD
+      {showSearchEmpty && (
+        <p className="empty-hint">
+          {t('search.notFound')}
+        </p>
+      )}
+=======
       {/* Suppress unused var warning */}
       {externalResults.length === 0 && null}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
     </section>
   )
 }

@@ -1,7 +1,10 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
+import { MotionPress } from '@/components/ui/MotionPress'
 
 export function AccountDangerZone() {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
@@ -21,24 +24,33 @@ export function AccountDangerZone() {
   }
 
   return (
-    <div style={{ marginTop: 20 }}>
-      <div className="settings-hint">Аккаунт</div>
+    <div className="settings-danger-zone">
+      <div className="settings-hint">
+        {t(
+          'settings.dangerZoneTitle',
+          'Аккаунт',
+        )}
+      </div>
       {!open ? (
-        <button
+        <MotionPress
           type="button"
-          className="settings-item"
+          variant="ghost"
+          haptic="medium"
+          className="settings-item settings-item--danger"
           onClick={() => setOpen(true)}
-          style={{
-            color: 'var(--danger, #c44)',
-          }}
         >
-          Удалить аккаунт…
-        </button>
+          {t(
+            'settings.deleteAccount',
+            'Удалить аккаунт…',
+          )}
+        </MotionPress>
       ) : (
-        <div style={{ padding: '8px 0' }}>
+        <div className="settings-danger-zone__form">
           <p className="twofa-hint">
-            Введите DELETE для подтверждения удаления
-            аккаунта.
+            {t(
+              'settings.deleteAccountConfirmHint',
+              'Введите DELETE для подтверждения удаления аккаунта.',
+            )}
           </p>
           <input
             className="form-input"
@@ -47,25 +59,28 @@ export function AccountDangerZone() {
             placeholder="DELETE"
             autoComplete="off"
           />
-          <div
-            style={{
-              display: 'flex',
-              gap: 8,
-              marginTop: 8,
-            }}
-          >
-            <button
+          <div className="settings-danger-zone__actions">
+            <MotionPress
               type="button"
+              variant="primary"
+              haptic="medium"
               className="btn-primary"
               disabled={
                 loading || text.trim() !== 'DELETE'
               }
               onClick={() => void submit()}
             >
-              {loading ? '…' : 'Подтвердить'}
-            </button>
-            <button
+              {loading
+                ? '…'
+                : t(
+                    'settings.deleteAccountConfirm',
+                    'Подтвердить',
+                  )}
+            </MotionPress>
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="light"
               className="btn-secondary"
               disabled={loading}
               onClick={() => {
@@ -73,8 +88,8 @@ export function AccountDangerZone() {
                 setText('')
               }}
             >
-              Отмена
-            </button>
+              {t('common.cancel', 'Отмена')}
+            </MotionPress>
           </div>
         </div>
       )}

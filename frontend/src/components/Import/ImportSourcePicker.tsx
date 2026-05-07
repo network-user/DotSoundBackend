@@ -1,4 +1,6 @@
+import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { useBrandLabel } from '@/lib/brand'
 
 interface Source {
@@ -9,83 +11,63 @@ interface Source {
 }
 
 const SOURCES: Source[] = [
-  {
-    id: 'telegram',
-    label: 'Telegram',
-    icon: 'source-telegram',
-    available: true,
-  },
-  {
-    id: 'yandex',
-    label: 'Яндекс Музыка',
-    icon: 'source-yandex',
-    available: true,
-  },
-  {
-    id: 'vk',
-    label: 'VK Музыка',
-    icon: 'source-vk',
-    available: false,
-  },
-  {
-    id: 'spotify',
-    label: 'Spotify',
-    icon: 'source-spotify',
-    available: true,
-  },
-  {
-    id: 'soundcloud',
-    label: 'SoundCloud',
-    icon: 'source-soundcloud',
-    available: true,
-  },
+  { id: 'telegram', label: 'Telegram', icon: 'source-telegram', available: true },
+  { id: 'yandex', label: 'Яндекс Музыка', icon: 'source-yandex', available: true },
+  { id: 'vk', label: 'VK Музыка', icon: 'source-vk', available: false },
+  { id: 'spotify', label: 'Spotify', icon: 'source-spotify', available: true },
+  { id: 'soundcloud', label: 'SoundCloud', icon: 'source-soundcloud', available: true },
 ]
 
 interface Props {
   onSelect: (sourceId: string) => void
 }
 
-export function ImportSourcePicker({
-  onSelect,
-}: Props) {
+export function ImportSourcePicker({ onSelect }: Props) {
+  const { t } = useTranslation()
   const brandLabel = useBrandLabel()
   return (
-    <div className="import-sources">
-      <div className="view-header">
-        <h2>Импорт музыки</h2>
-        <span className="hint">
-          Перенеси свою музыку в {brandLabel}
+    <div className="import-sources ru-imp-root">
+      <div className="view-header ru-imp-header">
+        <h2>{t('redesign.upload.import.title')}</h2>
+        <span className="hint ru-imp-subtitle">
+          {t('redesign.upload.import.subtitle', { brand: brandLabel })}
         </span>
       </div>
-      <div className="import-source-list">
+      <div className="import-source-list ru-imp-list">
         {SOURCES.map((src) => (
-          <button
+          <MotionPress
             key={src.id}
-            className={`import-source-btn${
-              !src.available ? ' disabled' : ''
-            }`}
+            type="button"
+            variant="ghost"
+            haptic={src.available ? 'selection' : null}
             disabled={!src.available}
-            onClick={() =>
-              src.available && onSelect(src.id)
+            ariaLabel={t('redesign.upload.import.openSourceAria', {
+              name: src.label,
+            })}
+            className={
+              src.available
+                ? 'ru-imp-row'
+                : 'ru-imp-row ru-imp-row--disabled'
             }
+            onClick={() => {
+              if (src.available) onSelect(src.id)
+            }}
           >
-            <span className="import-source-icon">
+            <span className="ru-imp-row__icon" aria-hidden>
               <Icon name={src.icon} size={22} />
             </span>
-            <span className="import-source-label">
-              {src.label}
-            </span>
+            <span className="ru-imp-row__label">{src.label}</span>
             {!src.available && (
-              <span className="import-source-badge">
-                скоро
+              <span className="ru-imp-row__badge">
+                {t('redesign.upload.import.comingSoon')}
               </span>
             )}
             {src.available && (
-              <span className="profile-action-chevron">
-                ›
+              <span className="ru-imp-row__chevron" aria-hidden>
+                <Icon name="chevron" size={16} />
               </span>
             )}
-          </button>
+          </MotionPress>
         ))}
       </div>
     </div>

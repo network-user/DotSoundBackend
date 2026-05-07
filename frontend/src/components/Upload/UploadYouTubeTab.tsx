@@ -1,118 +1,22 @@
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { api, getApiErrorMessage } from '@/lib/api'
-import { hapticNotification, hapticSelection } from '@/lib/telegram'
+import { api } from '@/lib/api'
 import type { Track } from '@/types/api'
+import { UrlImportTab } from './UrlImportTab'
 
 interface Props {
   onSuccess: (track: Track) => void
 }
 
 export function UploadYouTubeTab({ onSuccess }: Props) {
-  const { t } = useTranslation()
-  const [ytUrl, setYtUrl] = useState('')
-  const [preview, setPreview] = useState<Track | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [isPublic, setIsPublic] = useState(true)
-  const [error, setError] = useState('')
-
-  const handlePreview = async () => {
-    if (!ytUrl.trim()) return
-    setError('')
-    setPreview(null)
-    setLoading(true)
-    try {
-      const track = await api.importYouTubeTrack(ytUrl.trim(), isPublic)
-      setPreview(track)
-      hapticSelection()
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : ''
-      const isCode = /^[1-5]\d{2}$/.test(msg)
-      setError(
-        isCode
-          ? t(`upload.errYoutube.${msg}`, {
-            defaultValue: t('upload.errYoutube.def'),
-          })
-          : getApiErrorMessage(
-            err,
-            t('upload.errYoutube.def'),
-          ),
-      )
-      hapticNotification('error')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleAdd = () => {
-    if (!preview) return
-    hapticNotification('success')
-    const track = preview
-    setYtUrl('')
-    setPreview(null)
-    onSuccess(track)
-  }
-
   return (
-    <div className="sc-import-form">
-      <div className="form-group">
-        <label className="form-label">
-          {t('upload.urlVideo')}
-        </label>
-        <input
-          className="form-input"
-          type="url"
-          placeholder="https://www.youtube.com/watch?v=..."
-          value={ytUrl}
-          onChange={(e) => {
-            setYtUrl(e.target.value)
-            setPreview(null)
-            setError('')
-          }}
-        />
-      </div>
-
-      <div className="form-group form-group-row">
-        <label className="form-label">
-          {t('upload.public')}
-        </label>
-        <input
-          type="checkbox"
-          checked={isPublic}
-          onChange={(e) => setIsPublic(e.target.checked)}
-        />
-      </div>
-
-      <button
-        className="btn-primary"
-        onClick={handlePreview}
-        disabled={loading || !ytUrl.trim()}
-      >
-        {loading
-          ? t('upload.loading')
-          : t('upload.getInfo')}
-      </button>
-
-      {error && <div className="form-error">{error}</div>}
-
-      {preview && (
-        <div className="sc-preview">
-          {preview.cover_key && (
-            <img
-              src={`/api/v1/tracks/cover_proxy?key=${encodeURIComponent(preview.cover_key)}`}
-              alt="cover"
-              className="sc-preview-cover"
-            />
-          )}
-          <div className="sc-preview-info">
-            <p className="sc-preview-title">{preview.title}</p>
-            <p className="sc-preview-artist">{preview.artist}</p>
-          </div>
-          <button className="btn-primary" onClick={handleAdd}>
-            {t('upload.addAndPlay')}
-          </button>
-        </div>
-      )}
-    </div>
+    <UrlImportTab
+      source={{
+        id: 'YouTube',
+        iconName: 'source-youtube',
+        placeholder: 'https://www.youtube.com/watch?v=...',
+        importFn: api.importYouTubeTrack,
+        errorKey: 'youtube',
+      }}
+      onSuccess={onSuccess}
+    />
   )
 }

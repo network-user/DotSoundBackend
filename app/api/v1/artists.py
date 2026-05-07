@@ -630,10 +630,10 @@ async def get_similar_artists(
     if not artist:
         return ArtistListResponse(items=[], total=0)
 
-    all_artists = await svc.list_popular(limit=limit * 3)
-    similar = [
-        a for a in all_artists if a.id != artist_id
-    ][:limit]
+    similar = await svc.list_similar_artists_for_discovery(
+        artist_id,
+        limit=limit,
+    )
 
     return ArtistListResponse(
         items=[

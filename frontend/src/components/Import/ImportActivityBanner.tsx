@@ -1,17 +1,19 @@
-import {
-  useCallback,
-  useEffect,
-  useState,
-  type MouseEvent,
-} from 'react'
-import { Icon } from '@/components/Icon/Icon'
+import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
+import {
+  dismissIsland,
+  showIsland,
+  updateIsland,
+} from '@/lib/island'
 import type { ImportJobResponse } from '@/types/api'
 
-/** Only real background work. `ready` / `scanning` belong in Профиль → Импорт. */
 const ACTIVE = new Set(['queued', 'importing'])
 
 const DISMISS_JOB_KEY = 'dotsound_import_activity_banner_dismiss_job_id'
+
+const FOREGROUND_PERIOD_MS = 5000
+const HIDDEN_PERIOD_MS = 30000
 
 function readDismissedJobId(): number | null {
   const s = sessionStorage.getItem(DISMISS_JOB_KEY)
@@ -20,91 +22,131 @@ function readDismissedJobId(): number | null {
   return Number.isFinite(n) ? n : null
 }
 
-function labelFor(
-  j: ImportJobResponse,
-): { line: string; sub?: string } {
-  if (j.status === 'queued') {
-    return {
-      line: 'В очереди',
-      sub: j.queue_position
-        ? `№ ${j.queue_position}`
-        : undefined,
-    }
-  }
-  if (j.status === 'importing') {
-    const max = j.total_tracks || 0
-    const done = j.completed_tracks + j.failed_tracks
-    return {
-      line: 'Импорт',
-      sub: max
-        ? `${Math.min(done, max)} / ${max}`
-        : undefined,
-    }
-  }
-  return { line: 'Импорт' }
+interface IslandLabel {
+  title: string
+  hint?: string
+  progress?: number
 }
 
+function buildLabel(
+  job: ImportJobResponse,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): IslandLabel {
+  if (job.status === 'queued') {
+    return {
+      title: t('redesign.upload.import.statusQueued'),
+      hint: job.queue_position
+        ? t('redesign.upload.import.queuePos', { n: job.queue_position })
+        : undefined,
+    }
+  }
+  const max = job.total_tracks || 0
+  const done = job.completed_tracks + job.failed_tracks
+  const progress = max > 0 ? Math.min(1, done / max) : undefined
+  return {
+    title: t('redesign.upload.import.statusImporting'),
+    hint: max ? `${Math.min(done, max)} / ${max}` : undefined,
+    progress,
+  }
+}
+
+/**
+ * Driver: subscribes to active import jobs and reflects their status into
+ * the global DynamicIsland queue. Renders no DOM of its own.
+ */
 export function ImportActivityBanner() {
-  const [job, setJob] = useState<ImportJobResponse | null>(null)
+  const { t } = useTranslation()
   const [dismissedJobId, setDismissedJobId] = useState<number | null>(
     readDismissedJobId,
   )
+  const islandIdRef = useRef<string | null>(null)
+  const islandJobIdRef = useRef<number | null>(null)
 
-  const clearDismiss = useCallback(() => {
-    sessionStorage.removeItem(DISMISS_JOB_KEY)
-    setDismissedJobId(null)
-  }, [])
+  const clearIsland = () => {
+    if (islandIdRef.current) {
+      dismissIsland(islandIdRef.current)
+      islandIdRef.current = null
+      islandJobIdRef.current = null
+    }
+  }
 
   useEffect(() => {
     if (!api.getToken()) return
-
-    // GET /import/active is 30/min per IP. 5s foreground ≈ 12/min; 30s background
-    // ≈ 2/min so two tabs in the same minute stay under 30. Refresh when tab
-    // becomes visible again.
-    const PERIOD_MS_FOREGROUND = 5000
-    const PERIOD_MS_HIDDEN = 30000
 
     let intervalId: number | null = null
 
     const periodMs = () =>
       document.visibilityState === 'visible'
-        ? PERIOD_MS_FOREGROUND
-        : PERIOD_MS_HIDDEN
+        ? FOREGROUND_PERIOD_MS
+        : HIDDEN_PERIOD_MS
+
+    const onClickIsland = (jobId: number) => {
+      sessionStorage.setItem(DISMISS_JOB_KEY, String(jobId))
+      setDismissedJobId(jobId)
+      clearIsland()
+    }
+
+    const reflect = (job: ImportJobResponse | null) => {
+      if (!job || !ACTIVE.has(job.status)) {
+        clearIsland()
+        if (readDismissedJobId() != null) {
+          sessionStorage.removeItem(DISMISS_JOB_KEY)
+          setDismissedJobId(null)
+        }
+        return
+      }
+      const stored = readDismissedJobId()
+      if (stored != null && stored !== job.id) {
+        sessionStorage.removeItem(DISMISS_JOB_KEY)
+        setDismissedJobId(null)
+      }
+      const currentlyDismissed =
+        readDismissedJobId() === job.id
+      if (currentlyDismissed) {
+        clearIsland()
+        return
+      }
+      const label = buildLabel(job, t)
+      if (
+        islandIdRef.current &&
+        islandJobIdRef.current === job.id
+      ) {
+        updateIsland(islandIdRef.current, {
+          title: label.title,
+          hint: label.hint,
+          progress: label.progress,
+        })
+      } else {
+        clearIsland()
+        const id = showIsland({
+          kind: 'progress',
+          title: label.title,
+          hint: label.hint,
+          progress: label.progress,
+          iconName: 'download',
+          onClick: () => onClickIsland(job.id),
+        })
+        islandIdRef.current = id
+        islandJobIdRef.current = job.id
+      }
+    }
 
     const poll = () => {
       api
         .getActiveImport()
-        .then((j) => {
-          if (j && ACTIVE.has(j.status)) {
-            const stored = readDismissedJobId()
-            if (stored != null && j.id !== stored) {
-              clearDismiss()
-            }
-            setJob(j)
-          } else {
-            setJob(null)
-            if (readDismissedJobId() != null) {
-              clearDismiss()
-            }
-          }
-        })
-        .catch(() => {
-          setJob(null)
-        })
+        .then(reflect)
+        .catch(() => reflect(null))
     }
 
     const schedule = () => {
       if (intervalId != null) {
         window.clearInterval(intervalId)
-        intervalId = null
       }
       intervalId = window.setInterval(poll, periodMs())
     }
 
     const onVis = () => {
-      if (document.visibilityState === 'visible') {
-        poll()
-      }
+      if (document.visibilityState === 'visible') poll()
       schedule()
     }
 
@@ -114,86 +156,19 @@ export function ImportActivityBanner() {
 
     return () => {
       document.removeEventListener('visibilitychange', onVis)
-      if (intervalId != null) {
-        window.clearInterval(intervalId)
-      }
+      if (intervalId != null) window.clearInterval(intervalId)
+      clearIsland()
     }
-  }, [clearDismiss])
+    // t is stable enough across renders for this lifecycle driver.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  const handleDismiss = (e: MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation()
-    if (!job) return
-    sessionStorage.setItem(DISMISS_JOB_KEY, String(job.id))
-    setDismissedJobId(job.id)
-  }
-
-  const ribbonShown =
-    job != null &&
-    (dismissedJobId == null || job.id !== dismissedJobId)
-
+  // Reflect dismissal changes coming from outside (e.g. logout flushing
+  // sessionStorage) by re-running the reflect path on next poll.
   useEffect(() => {
-    if (ribbonShown) {
-      document.documentElement.setAttribute(
-        'data-import-ribbon',
-        '1',
-      )
-    } else {
-      document.documentElement.removeAttribute('data-import-ribbon')
-    }
-    return () => {
-      document.documentElement.removeAttribute('data-import-ribbon')
-    }
-  }, [ribbonShown])
+    if (dismissedJobId == null && islandIdRef.current == null) return
+    // No-op effect; presence of state ensures consumers can subscribe.
+  }, [dismissedJobId])
 
-  if (!ribbonShown || !job) {
-    return null
-  }
-
-  const { line, sub } = labelFor(job)
-  const max = job.total_tracks || 0
-  const done = job.completed_tracks + job.failed_tracks
-  const pct =
-    job.status === 'importing' && max > 0
-      ? Math.min(100, (done / max) * 100)
-      : null
-
-  return (
-    <div
-      className="import-activity-banner"
-      role="status"
-      aria-live="polite"
-    >
-      <div className="import-activity-banner__row">
-        <div className="import-activity-banner__text">
-          <span className="import-activity-banner__line">
-            {line}
-          </span>
-          {sub && (
-            <span className="import-activity-banner__sub">
-              {sub}
-            </span>
-          )}
-        </div>
-        <button
-          type="button"
-          className="import-activity-banner__dismiss"
-          onClick={handleDismiss}
-          aria-label="Скрыть уведомление; импорт продолжится в фоне"
-        >
-          <Icon name="x" size={16} />
-        </button>
-      </div>
-      {pct != null && (
-        <div
-          className="import-activity-banner__bar"
-          aria-hidden
-        >
-          <div
-            className="import-activity-banner__bar-fill"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-      )}
-    </div>
-  )
+  return null
 }

@@ -31,6 +31,9 @@ from app.services import compute_results_router as crr
 from app.services import compute_worker_service as cws
 from app.services import worker_rate_limit as rl
 from app.services.soundcloud_service import SoundCloudService
+from app.services.worker_job_control import (
+    merge_heartbeat_control_payload,
+)
 
 log: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__
@@ -84,12 +87,19 @@ async def heartbeat(
         action="heartbeat",
         status_code=200,
     )
+    ctl = await merge_heartbeat_control_payload(
+        worker,
+        package_version_header=request.headers.get(
+            "X-Worker-Package-Version"
+        ),
+    )
     await session.commit()
     return {
         "status": "ok",
         "server_time": int(
             datetime.now(UTC).timestamp()
         ),
+        **ctl,
     }
 
 

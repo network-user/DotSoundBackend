@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../../lib/adminApi'
 import { useAdminAuth } from '../../store/adminAuthStore'
 import { TotpInput } from './TotpInput'
@@ -133,7 +133,7 @@ export function DeviceApproval() {
           {error}
         </div>
       )}
-      <Press
+      <MotionPress
         variant="primary"
         onClick={handleConfirm}
         disabled={
@@ -145,7 +145,7 @@ export function DeviceApproval() {
         {busy
           ? t('admin.device.approving')
           : t('admin.device.approve')}
-      </Press>
+      </MotionPress>
     </div>
   )
 }

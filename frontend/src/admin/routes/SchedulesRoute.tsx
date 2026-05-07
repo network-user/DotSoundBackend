@@ -6,7 +6,8 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { showIsland } from '@/lib/island'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
@@ -97,7 +98,21 @@ export function SchedulesRoute() {
 
   const runNow = useMutation({
     mutationFn: (id: string) => adminApi.runScheduleNow(id),
-    onSuccess: () => invalidate(),
+    onSuccess: () => {
+      invalidate()
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.admin.schedules.runDone'),
+        durationMs: 2200,
+      })
+    },
+    onError: () => {
+      showIsland({
+        kind: 'error',
+        title: t('redesign.admin.schedules.runFailed'),
+        durationMs: 4000,
+      })
+    },
   })
 
   const toggleEnabled = useMutation({
@@ -105,12 +120,26 @@ export function SchedulesRoute() {
       adminApi.updateSchedule(row.id, {
         enabled: !row.enabled,
       }),
-    onSuccess: () => invalidate(),
+    onSuccess: () => {
+      invalidate()
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.admin.schedules.toggleDone'),
+        durationMs: 1800,
+      })
+    },
   })
 
   const removeSchedule = useMutation({
     mutationFn: (id: string) => adminApi.deleteSchedule(id),
-    onSuccess: () => invalidate(),
+    onSuccess: () => {
+      invalidate()
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.admin.schedules.deleteDone'),
+        durationMs: 2200,
+      })
+    },
   })
 
   const saveSchedule = useMutation({
@@ -149,6 +178,11 @@ export function SchedulesRoute() {
       setDraft(EMPTY_DRAFT)
       setFormError(null)
       invalidate()
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.admin.schedules.saveDone'),
+        durationMs: 2400,
+      })
     },
     onError: (err: unknown) => {
       const msg =
@@ -263,16 +297,18 @@ export function SchedulesRoute() {
         const row = i.row.original
         return (
           <div className="admin-toolbar admin-toolbar--compact">
-            <button
-              type="button"
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
               className="admin-link"
               onClick={() => runNow.mutate(row.id)}
               disabled={runNow.isPending}
             >
               {t('admin.schedules.actions.runNow')}
-            </button>
-            <button
-              type="button"
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
               className="admin-link"
               onClick={() => toggleEnabled.mutate(row)}
               disabled={toggleEnabled.isPending}
@@ -280,21 +316,23 @@ export function SchedulesRoute() {
               {row.enabled
                 ? t('admin.schedules.actions.disable')
                 : t('admin.schedules.actions.enable')}
-            </button>
-            <button
-              type="button"
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
               className="admin-link"
               onClick={() => handleEdit(row)}
             >
               {t('admin.schedules.actions.edit')}
-            </button>
-            <button
-              type="button"
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
               className="admin-link admin-link--danger"
               onClick={() => handleDelete(row)}
             >
               {t('admin.schedules.actions.delete')}
-            </button>
+            </MotionPress>
           </div>
         )
       },
@@ -313,7 +351,7 @@ export function SchedulesRoute() {
           <h2 style={{ flex: 1 }}>
             {t('admin.schedules.list')}
           </h2>
-          <Press
+          <MotionPress
             variant="primary"
             onClick={() => {
               setDraft(EMPTY_DRAFT)
@@ -322,7 +360,7 @@ export function SchedulesRoute() {
             }}
           >
             {t('admin.schedules.actions.create')}
-          </Press>
+          </MotionPress>
         </div>
         <p className="admin-card__sub">
           {t('admin.schedules.hint')}
@@ -445,15 +483,16 @@ export function SchedulesRoute() {
             </p>
           )}
           <div className="admin-toolbar">
-            <Press
+            <MotionPress
               variant="primary"
               onClick={() => saveSchedule.mutate()}
               disabled={saveSchedule.isPending}
             >
               {t('admin.schedules.actions.save')}
-            </Press>
-            <button
-              type="button"
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
               className="admin-link"
               onClick={() => {
                 setEditing(null)
@@ -461,7 +500,7 @@ export function SchedulesRoute() {
               }}
             >
               {t('admin.schedules.actions.cancel')}
-            </button>
+            </MotionPress>
           </div>
         </section>
       )}

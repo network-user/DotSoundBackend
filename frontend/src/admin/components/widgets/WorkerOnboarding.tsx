@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 
 interface Props {
   hasWorkers: boolean
@@ -53,14 +53,14 @@ function CopyBlock({
             }}
           >
             <span>{s.label}</span>
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() => copy(s.label, s.body)}
             >
               {copied === s.label
                 ? copiedLabel
                 : copyLabel}
-            </Press>
+            </MotionPress>
           </div>
           <pre
             className="admin-mono"
@@ -103,12 +103,12 @@ export function WorkerOnboarding({
           }}
         >
           <h2 style={{ margin: 0 }}>{t(`${p}.title`)}</h2>
-          <Press
+          <MotionPress
             variant="ghost"
             onClick={() => setCollapsed(false)}
           >
             {t(`${p}.show`)}
-          </Press>
+          </MotionPress>
         </div>
       </section>
     )
@@ -124,12 +124,12 @@ export function WorkerOnboarding({
         }}
       >
         <h2 style={{ margin: 0 }}>{t(`${p}.title`)}</h2>
-        <Press
+        <MotionPress
           variant="ghost"
           onClick={() => setCollapsed(true)}
         >
           {t(`${p}.hide`)}
-        </Press>
+        </MotionPress>
       </div>
       <p className="admin-card__sub">
         {t(`${p}.intro`)}

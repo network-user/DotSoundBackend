@@ -1407,6 +1407,55 @@ export const api = {
     return request('/api/v1/users/me/eq')
   },
 
+  getPrefetchPolicy(params: {
+    effective_type?: string | null
+    save_data?: boolean
+    downlink?: number | null
+    quota_bytes?: number | null
+  }): Promise<{
+    enabled: boolean
+    algorithm_version: string
+    hot_pool_size: number
+    warm_segments_per_track: number
+    initial_bytes_per_track: number
+    max_storage_bytes: number
+    in_memory_ttl_seconds: number
+    persistent_ttl_seconds: number
+    eviction_policy: string
+    concurrent_prefetch_limit: number
+    skip_third_party_audio_cache: boolean
+    lookahead_by_context: Record<string, number>
+  }> {
+    const qs = new URLSearchParams()
+    if (params.effective_type) {
+      qs.set('effective_type', params.effective_type)
+    }
+    if (params.save_data) qs.set('save_data', 'true')
+    if (typeof params.downlink === 'number') {
+      qs.set('downlink', String(params.downlink))
+    }
+    if (
+      typeof params.quota_bytes === 'number' &&
+      params.quota_bytes > 0
+    ) {
+      qs.set('quota_bytes', String(params.quota_bytes))
+    }
+    const query = qs.toString()
+    return request(
+      `/api/v1/prefetch/policy${query ? `?${query}` : ''}`,
+    )
+  },
+
+  warmTrackStreamCache(
+    trackIds: number[],
+  ): Promise<{ accepted: number }> {
+    return request('/api/v1/tracks/prefetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ track_ids: trackIds }),
+    })
+  },
+
   saveEqSettings(data: {
     preset: string | null
     bands: number[]
