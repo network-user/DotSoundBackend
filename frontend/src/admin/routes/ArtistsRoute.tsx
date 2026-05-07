@@ -243,15 +243,16 @@ export function ArtistsRoute() {
       header: 'Name',
       accessorKey: 'name',
       cell: (info) => (
-        <button
-          type="button"
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className="admin-link"
           onClick={() =>
             handleOpenArtist(info.row.original.id)
           }
         >
           {info.row.original.name}
-        </button>
+        </MotionPress>
       ),
     },
     {

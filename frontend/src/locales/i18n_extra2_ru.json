@@ -246,7 +246,41 @@
       "reactionMusic": "Музыка",
       "reactionStar": "Звезда"
     },
-    "artist": {},
+    "artist": {
+      "loadError": "Не удалось загрузить артиста",
+      "playError": "Не удалось запустить трек",
+      "followError": "Не удалось обновить подписку",
+      "invalidId": "Артист не найден",
+      "backAria": "Назад",
+      "statsAria": "Статистика артиста",
+      "follow": "Подписаться",
+      "following": "Вы подписаны",
+      "followAria": "Подписаться на артиста",
+      "followingAria": "Отписаться от артиста",
+      "play": "Слушать",
+      "shuffle": "Вперемешку",
+      "topTracks": "Популярные треки",
+      "noTracks": "У артиста пока нет треков",
+      "albums": "Альбомы",
+      "about": "Об артисте",
+      "similar": "Похожие артисты",
+      "report": "Пожаловаться",
+      "reportSoon": "Жалоба скоро будет доступна",
+      "openExternal": "Открыть в источнике",
+      "stopPreview": "Остановить превью",
+      "listenSnippets": "Слушать их песни",
+      "sourcePlatform": "Платформа",
+      "followers_one": "{{count}} подписчик",
+      "followers_few": "{{count}} подписчика",
+      "followers_many": "{{count}} подписчиков",
+      "followers_other": "{{count}} подписчиков",
+      "followers": "{{count}} подписчиков",
+      "tracksCount_one": "{{count}} трек",
+      "tracksCount_few": "{{count}} трека",
+      "tracksCount_many": "{{count}} треков",
+      "tracksCount_other": "{{count}} треков",
+      "tracksCount": "{{count}} треков"
+    },
     "recap": {
       "profileEntry": "Итоги года",
       "closeAria": "Закрыть recap",
@@ -483,6 +517,18 @@
         "topByListeners": "Слушатели",
         "sortAsc": "Возрастание",
         "sortDesc": "Убывание"
+      },
+      "tasks": {
+        "cancelDone": "Отменено",
+        "cancelAllDone": "Отменено {{count}} задач",
+        "cancelFailed": "Не удалось отменить"
+      },
+      "schedules": {
+        "saveDone": "Расписание сохранено",
+        "deleteDone": "Расписание удалено",
+        "runDone": "Запущено немедленно",
+        "runFailed": "Не удалось запустить",
+        "toggleDone": "Обновлено"
       }
     },
     "achievements": {}
