@@ -188,6 +188,8 @@ export function App() {
   >(null)
   const [isInitialized, setIsInitialized] =
     useState(false)
+  const [forceUnblockInit, setForceUnblockInit] =
+    useState(false)
   const [needsAuth, setNeedsAuth] =
     useState(false)
   const [settingsOpen, setSettingsOpen] =
@@ -407,6 +409,18 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    if (isInitialized) return
+    const id = window.setTimeout(() => {
+      setForceUnblockInit(true)
+      setNeedsAuth(true)
+      setIsInitialized(true)
+    }, 12000)
+    return () => {
+      window.clearTimeout(id)
+    }
+  }, [isInitialized])
+
+  useEffect(() => {
     if (!isInitialized || needsAuth || !prefetch) return
     let cancelled = false
     api
@@ -524,6 +538,15 @@ export function App() {
           <span />
           <span />
         </div>
+        {forceUnblockInit && (
+          <button
+            type="button"
+            className="splash-retry-btn"
+            onClick={() => window.location.reload()}
+          >
+            Reload
+          </button>
+        )}
       </div>
     )
   }

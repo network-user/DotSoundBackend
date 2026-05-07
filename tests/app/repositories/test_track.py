@@ -83,6 +83,32 @@ async def test_search(
     assert tracks[0].title == "Needle"
 
 
+async def test_list_active_hides_youtube_tracks(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session)
+    repo = TrackRepository(session)
+    await repo.create(
+        title="Visible",
+        artist="A",
+        uploaded_by_id=user.id,
+        source_platform="soundcloud",
+    )
+    await repo.create(
+        title="Hidden",
+        artist="A",
+        uploaded_by_id=user.id,
+        source_platform="youtube",
+        imported_from="youtube",
+    )
+
+    tracks, total = await repo.list_active(offset=0, limit=20)
+
+    assert total == 1
+    assert len(tracks) == 1
+    assert tracks[0].title == "Visible"
+
+
 async def test_increment_play_count(
     session: AsyncSession,
 ) -> None:

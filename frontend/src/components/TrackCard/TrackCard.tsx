@@ -10,6 +10,7 @@ import { useLikes } from '@/store/LikesContext'
 import {
   usePlayerActions,
   usePlayerMeta,
+  usePlayerState,
 } from '@/store/PlayerContext'
 import { getInternalUserId } from '@/lib/telegram'
 import { api } from '@/lib/api'
@@ -52,6 +53,7 @@ export function TrackCard({
   const { t } = useTranslation()
   const { isLiked, toggleLike } = useLikes()
   const { track: currentTrack } = usePlayerMeta()
+  const { isPlaying } = usePlayerState()
   const { playTrack, addToQueue } = usePlayerActions()
   const [confirmingDelete, setConfirmingDelete] =
     useState(false)
@@ -59,8 +61,9 @@ export function TrackCard({
     typeof setTimeout
   > | null>(null)
 
-  const playing =
+  const isCurrentTrack =
     currentTrack?.id === track.id
+  const isTrackPlaying = isCurrentTrack && isPlaying
   const liked = isLiked(track.id)
   const internalId = getInternalUserId()
   const isOwner =
@@ -221,19 +224,19 @@ export function TrackCard({
   return (
     <LongPressMenu items={menuItems}>
       <div
-        className={`track-card re-tc-card${playing ? ' playing' : ''}${variant === 'expanded' ? ' track-card--expanded' : ''}`}
+        className={`track-card re-tc-card${isCurrentTrack ? ' playing' : ''}${variant === 'expanded' ? ' track-card--expanded' : ''}`}
         data-id={track.id}
         onClick={handleClick}
         role="button"
       >
         <div className={rowClass}>
           <div
-            className={`re-tc-cover-wrap${playing ? ' is-playing' : ''}`}
+            className={`re-tc-cover-wrap${isTrackPlaying ? ' is-playing' : ''}`}
           >
             {coverSrc ? (
               <BeatPulse
                 bpm={pulseBpm}
-                active={playing}
+                active={isTrackPlaying}
               >
                 <SharedCover
                   trackId={track.id}

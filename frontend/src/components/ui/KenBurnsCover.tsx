@@ -35,6 +35,7 @@ export function KenBurnsCover({
           src={src}
           alt={alt}
           loading="lazy"
+          draggable={false}
         />
       </div>
     )
@@ -50,6 +51,7 @@ export function KenBurnsCover({
         src={src}
         alt={alt}
         loading="lazy"
+        draggable={false}
         animate={{
           scale: [1, 1.06, 1.02, 1.08, 1],
           x: [0, 6, -4, 4, 0],

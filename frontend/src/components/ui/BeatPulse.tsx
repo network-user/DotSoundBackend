@@ -75,6 +75,7 @@ export function BeatPulse({
   return (
     <span
       ref={ref}
+      data-beat-active={active && !reduce ? 'true' : 'false'}
       className={[
         'beat-pulse-target',
         className,
