@@ -222,7 +222,9 @@ export function LikedView({ embedded = false }: LikedViewProps) {
         renderExtra={renderExtra}
       />
       {hasMore && (
-        <button
+        <MotionPress
+          variant="ghost"
+          haptic="light"
           className="load-more-btn"
           onClick={loadMore}
           disabled={loading}
@@ -230,7 +232,7 @@ export function LikedView({ embedded = false }: LikedViewProps) {
           {loading
             ? t('common.loading', 'Загрузка...')
             : t('common.showMore', 'Показать ещё')}
-        </button>
+        </MotionPress>
       )}
     </>
   )

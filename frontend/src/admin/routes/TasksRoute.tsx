@@ -9,6 +9,7 @@ import {
 import type { ColumnDef } from '@tanstack/react-table'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { showIsland } from '@/lib/island'
 import { lyricsTierAdminTitle } from '../lib/lyricsAdminLabels'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
@@ -279,14 +280,15 @@ function buildJobColumns(
     cell: (i) => {
       const id = i.getValue<string>()
       return (
-        <button
-          type="button"
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className="admin-link admin-mono"
           onClick={() => onOpen(id)}
           title={id}
         >
           {String(id).slice(0, 8)}
-        </button>
+        </MotionPress>
       )
     },
   },
@@ -420,8 +422,9 @@ function buildJobColumns(
         status === 'queued' || status === 'running'
       if (!cancellable) return null
       return (
-        <button
-          type="button"
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className="admin-link"
           onClick={(e) => {
             e.stopPropagation()
@@ -429,7 +432,7 @@ function buildJobColumns(
           }}
         >
           {cancelLabel}
-        </button>
+        </MotionPress>
       )
     },
   },
@@ -546,7 +549,18 @@ export function TasksRoute() {
       qc.invalidateQueries({
         queryKey: ['admin', 'tasks', 'lyrics-jobs'],
       })
-    } catch {}
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.admin.tasks.cancelDone'),
+        durationMs: 2000,
+      })
+    } catch {
+      showIsland({
+        kind: 'error',
+        title: t('redesign.admin.tasks.cancelFailed'),
+        durationMs: 4000,
+      })
+    }
   }
 
   const handleCancelAll = async () => {
@@ -564,8 +578,20 @@ export function TasksRoute() {
       qc.invalidateQueries({
         queryKey: ['admin', 'tasks', 'lyrics-jobs'],
       })
-    } catch {}
-    finally {
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.admin.tasks.cancelAllDone', {
+          count: queuedCount,
+        }),
+        durationMs: 2400,
+      })
+    } catch {
+      showIsland({
+        kind: 'error',
+        title: t('redesign.admin.tasks.cancelFailed'),
+        durationMs: 4000,
+      })
+    } finally {
       setBulkBusy(false)
     }
   }
@@ -625,14 +651,15 @@ export function TasksRoute() {
       header: 'ID',
       accessorKey: 'id',
       cell: (i) => (
-        <button
-          type="button"
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className="admin-link admin-mono"
           title={i.row.original.id}
           onClick={() => setBgDetailId(i.row.original.id)}
         >
           {String(i.row.original.id).slice(0, 8)}
-        </button>
+        </MotionPress>
       ),
     },
     {
@@ -703,8 +730,9 @@ export function TasksRoute() {
         return (
           <div className="admin-toolbar admin-toolbar--compact">
             {cancellable && (
-              <button
-                type="button"
+              <MotionPress
+                variant="ghost"
+                haptic="selection"
                 className="admin-link"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -712,11 +740,12 @@ export function TasksRoute() {
                 }}
               >
                 {t('admin.tasks.bg.actions.cancel')}
-              </button>
+              </MotionPress>
             )}
             {retryable && (
-              <button
-                type="button"
+              <MotionPress
+                variant="ghost"
+                haptic="selection"
                 className="admin-link"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -724,7 +753,7 @@ export function TasksRoute() {
                 }}
               >
                 {t('admin.tasks.bg.actions.retry')}
-              </button>
+              </MotionPress>
             )}
           </div>
         )
@@ -883,13 +912,14 @@ export function TasksRoute() {
               <h3 style={{ flex: 1 }}>
                 {t('admin.tasks.bg.detailTitle')}
               </h3>
-              <button
-                type="button"
+              <MotionPress
+                variant="ghost"
+                haptic="selection"
                 className="admin-link"
                 onClick={() => setBgDetailId(null)}
               >
                 {t('admin.tasks.bg.actions.close')}
-              </button>
+              </MotionPress>
             </div>
             {bgDetail.isLoading && (
               <p>{t('admin.tasks.detail.loading')}</p>

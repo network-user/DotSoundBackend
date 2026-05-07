@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { useToast } from '@/components/ui/Toast'
 import {
   clearAllOffline,
@@ -101,12 +102,15 @@ export function OfflineList() {
             </>
           )}
         </div>
-        <button
+        <MotionPress
+          type="button"
+          variant="ghost"
+          haptic="light"
           className="queue-action-btn"
           onClick={onClearAll}
         >
           Очистить всё
-        </button>
+        </MotionPress>
       </div>
       <div className="offline-list-rows">
         {items.map((it) => (
@@ -114,7 +118,10 @@ export function OfflineList() {
             key={it.trackId}
             className="offline-list-row"
           >
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="offline-list-main"
               onClick={() => playTrack(it.track)}
             >
@@ -137,14 +144,17 @@ export function OfflineList() {
                   {fmtBytes(it.bytes)}
                 </div>
               </div>
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="icon"
+              haptic="light"
               className="icon-btn offline-list-remove"
+              ariaLabel="Удалить"
               onClick={() => onRemove(it.trackId)}
-              aria-label="Удалить"
             >
               <Icon name="trash" size={16} />
-            </button>
+            </MotionPress>
           </div>
         ))}
       </div>

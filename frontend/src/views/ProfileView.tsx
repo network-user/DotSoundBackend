@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import {
   getInternalUserId,
@@ -12,6 +13,7 @@ import type {
 } from '@/types/api'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { ProfileHero } from '@/components/Profile/ProfileHero'
 import { ProfileStats } from '@/components/Profile/ProfileStats'
 import { ListenerStats } from '@/components/Profile/ListenerStats'
@@ -32,8 +34,13 @@ interface Props {
 export function ProfileView({
   onOpenSettings,
 }: Props) {
+  const { t } = useTranslation()
   const { playTrack } = usePlayerActions()
   const sound = useSound()
+  const fallbackName = t(
+    'redesign.library.profileNameFallback',
+    'Пользователь',
+  )
   const [tab, setTab] =
     useState<ProfileTab>('profile')
   const [stats, setStats] =
@@ -94,7 +101,7 @@ export function ProfileView({
             .filter(Boolean)
             .join(' ') ||
           tgUser?.first_name ||
-          'Пользователь'
+          fallbackName
         setDisplayName(name)
         setUsername(
           profile.username ||
@@ -110,7 +117,7 @@ export function ProfileView({
       })
       .catch(() =>
         setDisplayName(
-          tgUser?.first_name || 'Пользователь',
+          tgUser?.first_name || fallbackName,
         ),
       )
 
@@ -180,7 +187,7 @@ export function ProfileView({
 
   const currentAvatar =
     avatarSrc || tgUser?.photo_url || null
-  const shownName = displayName || 'Пользователь'
+  const shownName = displayName || fallbackName
   const feedbackTap = () => {
     hapticSelection()
     sound.play('tapSoft')
@@ -193,48 +200,64 @@ export function ProfileView({
     >
       <div className="profile-tabs-row">
         <div className="profile-tabs">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="selection"
             className={`profile-tab${tab === 'profile' ? ' active' : ''}`}
             onClick={() => {
               feedbackTap()
               setTab('profile')
             }}
           >
-            Профиль
-          </button>
-          <button
+            {t('profile.tabProfile', 'Профиль')}
+          </MotionPress>
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="selection"
             className={`profile-tab${tab === 'import' ? ' active' : ''}`}
             onClick={() => {
               feedbackTap()
               setTab('import')
             }}
           >
-            Импорт
-          </button>
-          <button
+            {t('profile.tabImport', 'Импорт')}
+          </MotionPress>
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="selection"
             className={`profile-tab${tab === 'complaints' ? ' active' : ''}`}
             onClick={() => {
               feedbackTap()
               setTab('complaints')
             }}
           >
-            Жалобы
-          </button>
+            {t('profile.tabComplaints', 'Жалобы')}
+          </MotionPress>
         </div>
         <div className="profile-header-actions">
           <NotificationBell />
           <ProfileAdminButton />
           <ProfileDebugMenu serverDebug={serverDebug} />
           {onOpenSettings && (
-            <button
+            <MotionPress
+              type="button"
+              variant="icon"
+              haptic="light"
               className="icon-btn profile-settings-btn"
+              ariaLabel={t(
+                'profile.openSettings',
+                'Настройки',
+              )}
               onClick={() => {
                 feedbackTap()
                 onOpenSettings()
               }}
             >
               <Icon name="settings" size={20} />
-            </button>
+            </MotionPress>
           )}
         </div>
       </div>

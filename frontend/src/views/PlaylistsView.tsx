@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 
 import { Icon } from '@/components/Icon/Icon'
 import { LongPressMenu } from '@/components/ui/LongPressMenu'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { useToast } from '@/components/ui/Toast'
 import { useSound } from '@/store/SoundContext'
@@ -305,31 +306,43 @@ export function PlaylistsView({
     return (
       <section id="view-playlists" className="view active">
         <div className="view-header view-header-detail">
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
             className="icon-btn back-btn"
+            ariaLabel={t('common.back', 'Назад')}
             onClick={() => {
               setScreen('list')
               setSelected(null)
               setShareOpen(false)
             }}
-            aria-label="Назад"
           >
-            <Icon name="chevron" size={20} className="back-chevron" />
-          </button>
+            <Icon
+              name="chevron"
+              size={20}
+              className="back-chevron"
+            />
+          </MotionPress>
           <div>
             <h2 className="view-detail-title">{selected.name}</h2>
             <span className="hint">{selected.tracks.length} треков</span>
           </div>
-          <button
+          <MotionPress
             type="button"
+            variant="icon"
+            haptic="light"
             className="icon-btn"
+            ariaLabel={t(
+              'redesign.library.playlistShare',
+              'Поделиться',
+            )}
             onClick={() => {
               void openShareModal()
             }}
-            aria-label="Поделиться"
           >
             <Icon name="share" size={18} />
-          </button>
+          </MotionPress>
         </div>
 
         {canEditSelected && (
@@ -437,24 +450,31 @@ export function PlaylistsView({
                   <h3 className="share-modal-title">Поделиться плейлистом</h3>
                   <p className="share-modal-subtitle">{selected.name}</p>
                 </div>
-                <button
+                <MotionPress
                   type="button"
+                  variant="icon"
+                  haptic="light"
                   className="icon-btn"
+                  ariaLabel={t(
+                    'redesign.library.playlistCopyLink',
+                    'Скопировать ссылку',
+                  )}
                   onClick={() => {
                     void handleCopyLink()
                   }}
-                  aria-label="Скопировать ссылку"
                 >
                   <Icon name="copy" size={16} />
-                </button>
-                <button
+                </MotionPress>
+                <MotionPress
                   type="button"
+                  variant="icon"
+                  haptic="light"
                   className="icon-btn"
+                  ariaLabel={t('common.close', 'Закрыть')}
                   onClick={() => setShareOpen(false)}
-                  aria-label="Закрыть"
                 >
                   <Icon name="x" size={18} />
-                </button>
+                </MotionPress>
               </div>
               {shareLoading ? (
                 <div className="share-modal-loading">
@@ -466,9 +486,11 @@ export function PlaylistsView({
                     const convId = item.conversation.id
                     const sending = shareSendingConvId === convId
                     return (
-                      <button
+                      <MotionPress
                         key={convId}
                         type="button"
+                        variant="ghost"
+                        haptic="light"
                         className="share-chat-row"
                         onClick={() => {
                           void handleShareToChat(convId)
@@ -495,7 +517,7 @@ export function PlaylistsView({
                         <span className="share-chat-action">
                           {sending ? 'Отправка...' : 'Отправить'}
                         </span>
-                      </button>
+                      </MotionPress>
                     )
                   })}
                 </div>
@@ -519,13 +541,19 @@ export function PlaylistsView({
         </div>
       )}
 
-      <button
+      <MotionPress
+        type="button"
+        variant="ghost"
+        haptic="light"
         className="create-playlist-btn"
         onClick={() => setCreating(true)}
       >
         <Icon name="plus" size={18} />
-        Создать плейлист
-      </button>
+        {t(
+          'redesign.library.playlistCreate',
+          'Создать плейлист',
+        )}
+      </MotionPress>
 
       {creating && (
         <div style={{ padding: '0 16px 16px' }}>
