@@ -15,7 +15,6 @@ import {
   usePlayerMeta,
   usePlayerState,
 } from '@/store/PlayerContext'
-import { Waveform } from '@/components/Waveform/Waveform'
 import { haptic } from '@/lib/telegram'
 import { useRipple } from '@/components/ui/Ripple'
 import {
@@ -79,9 +78,21 @@ export function PlayerBar() {
   const { isLiked, toggleLike } = useLikes()
   const [likeBurst, setLikeBurst] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
+  const [smoothPct, setSmoothPct] = useState(0)
   const overflowRef = useRef<HTMLDivElement>(null)
   const playRef = useRef<HTMLButtonElement>(null)
   useRipple(playRef)
+  const targetPct = duration ? (currentTime / duration) * 100 : 0
+
+  useEffect(() => {
+    const next = Math.max(0, Math.min(100, targetPct))
+    setSmoothPct((prev) => {
+      const diff = next - prev
+      if (Math.abs(diff) < 0.12) return next
+      const step = isPlaying ? 0.24 : 0.36
+      return prev + diff * step
+    })
+  }, [targetPct, isPlaying])
 
   useEffect(() => {
     if (!overflowOpen) return
@@ -115,7 +126,7 @@ export function PlayerBar() {
 
   if (!track) return null
 
-  const pct = duration ? (currentTime / duration) * 100 : 0
+  const pct = smoothPct
   const liked = isLiked(track.id)
 
   const coverSrc = track.cover_key
@@ -233,17 +244,6 @@ export function PlayerBar() {
             ) : (
               <Icon name="music" size={18} />
             )}
-            <div
-              className="pb-cover-wave"
-              aria-hidden
-            >
-              <Waveform
-                overlay
-                height={12}
-                bars={14}
-                className="pb-cover-waveform"
-              />
-            </div>
           </div>
         </div>
 

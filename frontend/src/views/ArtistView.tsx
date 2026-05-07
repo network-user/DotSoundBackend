@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import { ArtistCatalogReleasePanel } from '@/components/ArtistView/ArtistCatalogReleasePanel'
+import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { AmbientStage } from '@/components/ui/AmbientStage'
@@ -13,7 +15,11 @@ import { showIsland } from '@/lib/island'
 
 import { api, getApiErrorMessage } from '@/lib/api'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
-import { hapticNotification, setBackButton } from '@/lib/telegram'
+import {
+  getIsAdmin,
+  hapticNotification,
+  setBackButton,
+} from '@/lib/telegram'
 
 import {
   usePlayerActions,
@@ -22,8 +28,10 @@ import {
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 
 import type {
+  ArtistCatalogReleaseSummary,
   ArtistDetail,
   ArtistInfo,
+  DiscographyItem,
   Track,
 } from '@/types/api'
 
@@ -99,6 +107,15 @@ export function ArtistView() {
   const [followBusy, setFollowBusy] = useState(false)
   const [pinned, setPinned] = useState(false)
   const heroRef = useRef<HTMLDivElement | null>(null)
+  const [catalogReleases, setCatalogReleases] = useState<
+    ArtistCatalogReleaseSummary[] | null
+  >(null)
+  const [catalogReleasesError, setCatalogReleasesError] =
+    useState(false)
+  const [selectedReleaseId, setSelectedReleaseId] = useState<
+    number | null
+  >(null)
+  const isAdmin = getIsAdmin()
 
   const goBack = useCallback(() => {
     if (window.history.length > 1) {
@@ -109,9 +126,15 @@ export function ArtistView() {
   }, [navigate])
 
   useEffect(() => {
-    setBackButton(true, goBack)
-    return () => { setBackButton(false) }
-  }, [goBack])
+    const handler =
+      selectedReleaseId !== null
+        ? () => setSelectedReleaseId(null)
+        : goBack
+    setBackButton(true, handler)
+    return () => {
+      setBackButton(false)
+    }
+  }, [goBack, selectedReleaseId])
 
   useEffect(() => {
     const el = heroRef.current
@@ -186,6 +209,28 @@ export function ArtistView() {
     }
   }, [artistId, t])
 
+  useEffect(() => {
+    if (!Number.isFinite(artistId)) return
+    setSelectedReleaseId(null)
+    setCatalogReleases(null)
+    setCatalogReleasesError(false)
+    let cancelled = false
+    void api
+      .listArtistCatalogReleases(artistId)
+      .then((payload) => {
+        if (!cancelled) setCatalogReleases(payload.items)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCatalogReleases([])
+          setCatalogReleasesError(true)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [artistId])
+
   usePrefetchTracks(tracks, 'artist')
 
   const heroUrl = useMemo(() => artistImageUrl(detail), [detail])
@@ -259,12 +304,30 @@ export function ArtistView() {
     navigate(`/artist/${artistId}/stats`)
   }, [navigate, artistId])
 
+  const discography: DiscographyItem[] = useMemo(() => {
+    const raw = detail?.discography
+    return Array.isArray(raw) ? raw : []
+  }, [detail?.discography])
+
   if (!Number.isFinite(artistId)) {
     return (
       <section className="view active rf-artist">
         <div className="rf-artist__error">
           {t('redesign.artist.invalidId')}
         </div>
+      </section>
+    )
+  }
+
+  if (selectedReleaseId !== null) {
+    return (
+      <section className="view active rf-artist">
+        <ArtistCatalogReleasePanel
+          artistId={artistId}
+          releaseId={selectedReleaseId}
+          artistName={detail?.name ?? ''}
+          onBack={() => setSelectedReleaseId(null)}
+        />
       </section>
     )
   }
@@ -430,6 +493,132 @@ export function ArtistView() {
         variants={VARIANTS_FADE_UP}
         className="rf-artist__sections"
       >
+        {catalogReleases !== null && (
+          <section className="rf-artist__section">
+            <div className="artist-catalog-releases">
+              <div className="section-header">
+                <span className="section-title">
+                  {t('artist.catalog_releases_title')}{' '}
+                  ({catalogReleases.length})
+                </span>
+              </div>
+              {catalogReleasesError && (
+                <div className="artist-empty-info">
+                  {t('artist.catalog_releases_load_error')}
+                </div>
+              )}
+              {!catalogReleasesError &&
+                catalogReleases.length === 0 && (
+                  <div className="artist-empty-info">
+                    {isAdmin
+                      ? t('artist.catalog_releases_empty_admin')
+                      : t('artist.catalog_releases_empty')}
+                  </div>
+                )}
+              {!catalogReleasesError &&
+                catalogReleases.length > 0 && (
+                  <div className="artist-catalog-releases-grid">
+                    {catalogReleases.map((r) => {
+                      const y = r.released_at?.match(
+                        /^(\d{4})/,
+                      )?.[1]
+                      const metaBits: string[] = []
+                      if (y) metaBits.push(y)
+                      metaBits.push(
+                        t('artist.catalog_release_card_tracks', {
+                          count: r.track_count,
+                        }),
+                      )
+                      const isScStation =
+                        r.release_kind ===
+                        'dotsound_sc_artist_station'
+                      return (
+                        <MotionPress
+                          key={r.id}
+                          type="button"
+                          variant="subtle"
+                          haptic="light"
+                          className={
+                            isScStation
+                              ? 'artist-catalog-release-card artist-catalog-release-card-station'
+                              : 'artist-catalog-release-card'
+                          }
+                          onClick={() =>
+                            setSelectedReleaseId(r.id)
+                          }
+                        >
+                          <CoverImage
+                            coverKey={r.cover_key}
+                            size={56}
+                          />
+                          <div className="artist-catalog-release-card-text">
+                            <div className="artist-catalog-release-card-title">
+                              {r.title}
+                            </div>
+                            <div className="artist-catalog-release-card-meta">
+                              {metaBits.join(' · ')}
+                            </div>
+                            {isScStation && (
+                              <span className="artist-catalog-release-station-badge">
+                                {t(
+                                  'artist.catalog_release_station_badge',
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </MotionPress>
+                      )
+                    })}
+                  </div>
+                )}
+            </div>
+          </section>
+        )}
+
+        {discography.length > 0 && (
+          <section className="rf-artist__section">
+            <div className="artist-discography">
+              <div className="section-header">
+                <span className="section-title">
+                  {t('artist.discography_title')}{' '}
+                  ({discography.length})
+                </span>
+              </div>
+              {discography.map((item, i) => (
+                <div
+                  key={`${item.title}-${i}`}
+                  className="discography-item"
+                >
+                  {item.url ? (
+                    <a
+                      className="discography-title"
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {item.title}
+                    </a>
+                  ) : (
+                    <span className="discography-title">
+                      {item.title}
+                    </span>
+                  )}
+                  {item.year != null && (
+                    <span className="discography-year">
+                      {item.year}
+                    </span>
+                  )}
+                  {item.type && (
+                    <span className="discography-type">
+                      {item.type}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="rf-artist__section">
           <h2 className="rf-artist__section-title">
             {t('redesign.artist.topTracks')}

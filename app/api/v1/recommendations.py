@@ -412,10 +412,22 @@ async def get_discover(
         ArtistResponse.model_validate(a) for a in artists_raw
     ]
 
-    genre_rows = await db.execute(
+    genre_ranked = (
         select(
-            TrackModel.genre,
-            func.count(TrackModel.id).label("cnt"),
+            TrackModel.genre.label("genre"),
+            TrackModel.cover_key.label("cover_key"),
+            func.count(TrackModel.id)
+            .over(partition_by=TrackModel.genre)
+            .label("cnt"),
+            func.row_number()
+            .over(
+                partition_by=TrackModel.genre,
+                order_by=(
+                    TrackModel.play_count.desc(),
+                    TrackModel.id.desc(),
+                ),
+            )
+            .label("rn"),
         )
         .where(
             TrackModel.genre.isnot(None),
@@ -423,8 +435,16 @@ async def get_discover(
             TrackModel.is_active.is_(True),
             TrackModel.is_public.is_(True),
         )
-        .group_by(TrackModel.genre)
-        .order_by(desc("cnt"))
+        .subquery()
+    )
+    genre_rows = await db.execute(
+        select(
+            genre_ranked.c.genre,
+            genre_ranked.c.cnt,
+            genre_ranked.c.cover_key,
+        )
+        .where(genre_ranked.c.rn == 1)
+        .order_by(desc(genre_ranked.c.cnt))
         .limit(12)
     )
     genre_cards = [
@@ -432,6 +452,7 @@ async def get_discover(
             genre=str(row[0]),
             title=str(row[0]),
             track_count=int(row[1]),
+            cover_key=str(row[2]) if row[2] else None,
         )
         for row in genre_rows.all()
     ]

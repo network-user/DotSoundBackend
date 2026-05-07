@@ -1,5 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  CSSProperties,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { TrackCard } from '@/components/TrackCard/TrackCard'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
@@ -13,6 +20,7 @@ import type {
   BCSearchResult,
   DiscoverResponse,
   Playlist,
+  PlaylistWithTracks,
   SCSearchResult,
   SearchSuggestItem,
   Track,
@@ -55,8 +63,17 @@ function formatDuration(secs: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
 }
 
+function getGenreHue(genre: string): number {
+  let hash = 0
+  for (let i = 0; i < genre.length; i += 1) {
+    hash = (hash * 31 + genre.charCodeAt(i)) % 360
+  }
+  return Math.abs(hash)
+}
+
 export function SearchView({ onOpenArtist }: SearchViewProps) {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { playTrack } = usePlayerActions()
   const { toggleLike } = useLikes()
 
@@ -79,6 +96,9 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
 
   const [discover, setDiscover] = useState<DiscoverResponse | null>(null)
   const [discoverLoading, setDiscoverLoading] = useState(false)
+  const [featuredPlaylists, setFeaturedPlaylists] = useState<
+    PlaylistWithTracks[] | null
+  >(null)
 
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -114,13 +134,22 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   }, [])
 
   useEffect(() => {
-    if (!debouncedQuery.trim() && !discover && !discoverLoading) {
-      setDiscoverLoading(true)
-      api
-        .getDiscover(10, 8)
-        .then(setDiscover)
-        .catch(() => setDiscover(null))
-        .finally(() => setDiscoverLoading(false))
+    let cancelled = false
+    setDiscoverLoading(true)
+    void Promise.all([
+      api.getDiscover(10, 8).catch(() => null),
+      api.getFeaturedPlaylists(8).catch(() => []),
+    ])
+      .then(([d, pls]) => {
+        if (cancelled) return
+        setDiscover(d)
+        setFeaturedPlaylists(pls)
+      })
+      .finally(() => {
+        if (!cancelled) setDiscoverLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
   }, [])
 
@@ -334,14 +363,55 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   }
 
   const isSearching = tracks !== 'idle'
-  const hasResults =
-    Array.isArray(tracks) &&
-    (tracks.length > 0 ||
-      catalogArtists.length > 0 ||
-      catalogPlaylists.length > 0 ||
-      scResults.length > 0 ||
-      ytResults.length > 0 ||
-      bcResults.length > 0)
+
+  const idleExploreHasSurface = useMemo(() => {
+    const featOk =
+      featuredPlaylists !== null && featuredPlaylists.length > 0
+    if (!discover) return featOk
+    return (
+      featOk ||
+      discover.genre_cards.length > 0 ||
+      discover.recent_genres.length > 0 ||
+      discover.suggested_artists.length > 0 ||
+      discover.trending_tracks.length > 0
+    )
+  }, [discover, featuredPlaylists])
+
+  const tabHasResults = useMemo(() => {
+    if (!Array.isArray(tracks)) return true
+    switch (activeTab) {
+      case 'all':
+        return (
+          tracks.length > 0 ||
+          catalogArtists.length > 0 ||
+          catalogPlaylists.length > 0 ||
+          scResults.length > 0 ||
+          ytResults.length > 0 ||
+          bcResults.length > 0
+        )
+      case 'tracks':
+        return (
+          tracks.length > 0 ||
+          scResults.length > 0 ||
+          ytResults.length > 0 ||
+          bcResults.length > 0
+        )
+      case 'artists':
+        return catalogArtists.length > 0
+      case 'playlists':
+        return catalogPlaylists.length > 0
+      default:
+        return false
+    }
+  }, [
+    activeTab,
+    tracks,
+    catalogArtists,
+    catalogPlaylists,
+    scResults,
+    ytResults,
+    bcResults,
+  ])
 
   return (
     <section id="view-search" className="view active">
@@ -432,9 +502,66 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
             </div>
           )}
 
-          {discover && !discoverLoading && (
+          {!discoverLoading && (
             <div className="search-discover">
-              {discover.genre_cards.length > 0 && (
+              {featuredPlaylists !== null &&
+                featuredPlaylists.length > 0 && (
+                  <div className="search-discover-section">
+                    <p className="search-section-label">
+                      {t('search.featuredPlaylists')}
+                    </p>
+                    <div className="search-playlist-list">
+                      {featuredPlaylists.map((p) => (
+                        <div
+                          key={p.id}
+                          role="button"
+                          tabIndex={0}
+                          className="search-playlist-row"
+                          aria-label={t(
+                            'search.openPlaylistAria',
+                            { name: p.name },
+                          )}
+                          onClick={() =>
+                            navigate(`/playlist/${p.id}`)
+                          }
+                          onKeyDown={(e) => {
+                            if (
+                              e.key === 'Enter' ||
+                              e.key === ' '
+                            ) {
+                              e.preventDefault()
+                              navigate(`/playlist/${p.id}`)
+                            }
+                          }}
+                        >
+                          <div className="search-playlist-cover">
+                            {p.cover_key ? (
+                              <CoverImage
+                                coverKey={p.cover_key}
+                              />
+                            ) : (
+                              <Icon name="list" size={18} />
+                            )}
+                          </div>
+                          <div className="search-playlist-info">
+                            <p className="search-playlist-name">
+                              {p.name}
+                            </p>
+                            <p className="search-playlist-meta">
+                              {p.playlist_type !== 'user'
+                                ? t('search.editorialBadge')
+                                : p.is_public
+                                  ? t('search.publicBadge')
+                                  : t('search.privateBadge')}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {discover && discover.genre_cards.length > 0 && (
                 <div className="search-discover-section">
                   <p className="search-section-label">
                     {t('search.discoverGenres')}
@@ -448,7 +575,19 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                           type="button"
                           className="search-genre-card"
                           onClick={() => setQuery(card.genre)}
+                          style={
+                            {
+                              '--genre-hue': `${getGenreHue(card.genre)}deg`,
+                            } as CSSProperties
+                          }
                         >
+                          {card.cover_key && (
+                            <CoverImage
+                              coverKey={card.cover_key}
+                              className="search-genre-cover"
+                            />
+                          )}
+                          <span className="search-genre-overlay" />
                           <span className="search-genre-name">
                             {card.title}
                           </span>
@@ -463,7 +602,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                 </div>
               )}
 
-              {discover.recent_genres.length > 0 && (
+              {discover && discover.recent_genres.length > 0 && (
                 <div className="search-discover-section">
                   <p className="search-section-label">
                     {t('search.recentGenres')}
@@ -476,6 +615,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         className="search-genre-chip"
                         onClick={() => setQuery(g)}
                       >
+                        <Icon name="music-note" size={12} />
                         {g}
                       </button>
                     ))}
@@ -483,7 +623,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                 </div>
               )}
 
-              {discover.suggested_artists.length > 0 && (
+              {discover && discover.suggested_artists.length > 0 && (
                 <div className="search-discover-section">
                   <p className="search-section-label">
                     {t('search.discoverArtists')}
@@ -509,7 +649,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                 </div>
               )}
 
-              {discover.trending_tracks.length > 0 && (
+              {discover && discover.trending_tracks.length > 0 && (
                 <div className="search-discover-section">
                   <p className="search-section-label">
                     {t('search.discoverTrending')}
@@ -521,21 +661,12 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                 </div>
               )}
 
-              {history.length === 0 &&
-                discover.genre_cards.length === 0 &&
-                discover.trending_tracks.length === 0 && (
-                  <div className="search-idle-hint">
-                    <Icon name="search" size={32} />
-                    <p>{t('search.hint')}</p>
-                  </div>
-                )}
-            </div>
-          )}
-
-          {!discover && !discoverLoading && history.length === 0 && (
-            <div className="search-idle-hint">
-              <Icon name="search" size={32} />
-              <p>{t('search.hint')}</p>
+              {history.length === 0 && !idleExploreHasSurface && (
+                <div className="search-idle-hint">
+                  <Icon name="search" size={32} />
+                  <p>{t('search.hint')}</p>
+                </div>
+              )}
             </div>
           )}
         </>
@@ -619,17 +750,37 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
             </div>
           )}
 
-          {(activeTab === 'all' || activeTab === 'playlists') &&
-            catalogPlaylists.length > 0 && (
-              <div className="search-section">
-                <p className="search-section-label">
-                  {t('search.playlists')}
-                </p>
+          {((activeTab === 'all' &&
+            catalogPlaylists.length > 0) ||
+            activeTab === 'playlists') && (
+            <div className="search-section">
+              <p className="search-section-label">
+                {t('search.playlists')}
+              </p>
+              {catalogPlaylists.length > 0 ? (
                 <div className="search-playlist-list">
                   {catalogPlaylists.map((p) => (
                     <div
                       key={p.id}
+                      role="button"
+                      tabIndex={0}
                       className="search-playlist-row"
+                      aria-label={t(
+                        'search.openPlaylistAria',
+                        { name: p.name },
+                      )}
+                      onClick={() =>
+                        navigate(`/playlist/${p.id}`)
+                      }
+                      onKeyDown={(e) => {
+                        if (
+                          e.key === 'Enter' ||
+                          e.key === ' '
+                        ) {
+                          e.preventDefault()
+                          navigate(`/playlist/${p.id}`)
+                        }
+                      }}
                     >
                       <div className="search-playlist-cover">
                         {p.cover_key ? (
@@ -653,8 +804,13 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="search-catalog-empty">
+                  {t('search.playlistsTabEmpty')}
+                </p>
+              )}
+            </div>
+          )}
 
           {(activeTab === 'all' || activeTab === 'tracks') && (
             <>
@@ -917,7 +1073,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
             </>
           )}
 
-          {!hasResults && (
+          {!tabHasResults && (
             <p className="empty-hint">{t('search.notFound')}</p>
           )}
         </>

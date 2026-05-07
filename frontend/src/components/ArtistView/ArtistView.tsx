@@ -274,7 +274,7 @@ const stageProgress: Record<string, number> = {
   error: 100,
 }
 
-export function ArtistView({
+export function ArtistProfileStandalone({
   artistId,
   onClose,
   onSelectSimilarArtist,
