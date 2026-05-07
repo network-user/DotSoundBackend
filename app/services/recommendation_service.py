@@ -1357,7 +1357,7 @@ class RecommendationService:
         cand_features = [
             feat_by_id[t.id]
             for t in candidates
-            if t.id != seed.id
+            if t.id != seed.id and t.id in feat_by_id
         ]
         unseen_features = (
             [

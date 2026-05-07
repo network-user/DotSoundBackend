@@ -433,3 +433,23 @@
   font-size: 13px;
   font-weight: 600;
 }
+
+@media (max-width: 560px), (pointer: coarse) {
+  .re-chat-back.mp-press {
+    width: var(--tap);
+    height: var(--tap);
+  }
+}
+
+@media (pointer: coarse) {
+  .re-bubble-actions .bubble-action-btn.mp-press--icon {
+    width: var(--tap);
+    height: var(--tap);
+  }
+}
+
+@media (max-width: 560px) {
+  .track-card-actions .track-card-visibility {
+    display: none;
+  }
+}

@@ -3,14 +3,13 @@ import { useTranslation } from 'react-i18next'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { LikedView } from '@/views/LikedView'
 import { PlaylistsView } from '@/views/PlaylistsView'
-import { OfflineList } from '@/components/Profile/OfflineList'
 import { HistoryList } from '@/components/Profile/HistoryList'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { SPRING_LAYOUT, m } from '@/lib/motion'
 import { hapticSelection } from '@/lib/telegram'
 
-type Tab = 'liked' | 'playlists' | 'offline' | 'history'
+type Tab = 'liked' | 'playlists' | 'history'
 
 const STORAGE_KEY = 'library-tab'
 
@@ -20,7 +19,6 @@ const TABS: Array<{
 }> = [
   { id: 'liked', labelKey: 'library.tabLiked' },
   { id: 'playlists', labelKey: 'library.tabPlaylists' },
-  { id: 'offline', labelKey: 'library.tabOffline' },
   { id: 'history', labelKey: 'library.tabHistory' },
 ]
 
@@ -28,7 +26,6 @@ function isTab(s: string | null): s is Tab {
   return (
     s === 'liked' ||
     s === 'playlists' ||
-    s === 'offline' ||
     s === 'history'
   )
 }
@@ -145,7 +142,6 @@ export function LibraryView() {
         {tab === 'playlists' && (
           <PlaylistsView embedded />
         )}
-        {tab === 'offline' && <OfflineList />}
         {tab === 'history' && <HistoryList />}
       </div>
     </section>

@@ -76,6 +76,12 @@
   каталог релизов + дискография + `ArtistCatalogReleasePanel`, Telegram back для
   подэкрана релиза; legacy `components/ArtistView/ArtistView.tsx` переименован в
   `ArtistProfileStandalone` (не использовался в маршрутах).
+- [x] **Mini App responsive touch (2026-05-07)** — breakpoint ~560px: `MotionPress`
+  icon 36px на desktop fine-pointer / 44px на touch; PlayerBar элементы управления и
+  меню под `--tap`; на узкой ширине лайк и «назад» в overflow; главная —
+  collapsible quick grid (4+«Ещё»), hero колонкой на телефоне; `TrackCard` owner
+  кнопки через `MotionPress`, дубль visibility скрыт (есть long-press); чат —
+  укрупнённая кнопка назад и bubble actions на `pointer: coarse`.
 - [x] **Upload UX redesign + genre search** �?? UploadView/Upload tabs пол�?�?или
   iOS-like polish, добавлено �?мное combobox с ES-backed fuzzy hints и
   create-new-genre flow, пл�?с haptic feedback и акк�?�?а�?н�?е мик�?о-анима�?ии.
@@ -692,6 +698,9 @@
 - [x] **i18n batch 4: LegalView localization (2026-05-07)**: `frontend/src/views/LegalView.tsx` полностью переведен на i18n-ключи без hardcoded RU текста (заголовки разделов, абзацы, пункты списков и подписи ссылок), добавлены ключи `redesign.legal.*` в `frontend/src/locales/i18n_extra2_{ru,en}.json`; `npm run tsc -- --noEmit` и `npm run build` зелёные.
 - [x] **i18n batch 5: ChatView fallback cleanup (2026-05-07)**: в `frontend/src/views/ChatView.tsx` удалены все `defaultValue` и fallback-строки у `t(...)` (last-seen, saved-hint, block/unblock, empty/unread labels), оставлены только i18n-ключи `redesign.tracks.*`; `npm run tsc -- --noEmit` и `npm run build` зелёные.
 - [x] **i18n batch 6: NowPlayingView fallback cleanup (2026-05-07)**: в `frontend/src/views/NowPlayingView.tsx` удалены fallback-строки из `t(...)` для player labels/aria/tabs/about (оставлены только `redesign.player.*` ключи); `npm run tsc -- --noEmit` и `npm run build` зелёные.
+- [x] **i18n batch 7: TrackCard fallback cleanup (2026-05-07)**: в `frontend/src/components/TrackCard/TrackCard.tsx` удалены fallback-строки у `t(...)` в меню long-press (`like/unlike`, `addQueue`, `share`, `shareFail`, `longPressQueued`) — оставлены только i18n-ключи `redesign.tracks.*`; `npm run tsc -- --noEmit` и `npm run build` зелёные.
+- [x] **Disable track downloading in Mini App (2026-05-07)**: из `TrackCardSheet` удалена кнопка «Скачать» и связанная offline-cache логика (`downloadTrack/isCached/removeTrack`), а из `LibraryView` убрана вкладка «Скачанные» (`offline` tab + i18n keys `library.tabOffline`); `npm run build` зелёный.
+- [x] **Profile: вкладка дизлайков (2026-05-07)**: `GET /api/v1/dislikes/{user_id}` — только для авторизованного владельца (`403` если id не совпадает с `current_user`), пагинация и `source` как у лайков; репозиторий `list_disliked_tracks`, `DislikeService.list_disliked` + collapse вариантов; фронт: `DislikedView`, вкладка `profile.tabDislikes` в `ProfileView`, клиент `getDislikedTracks`, ключи `redesign.library.disliked*`; тесты `test_dislikes.py` / `test_dislike_service.py`.
 
 ## �?ла�?�?о�?м�? �?? б�?д�?�?ее
 

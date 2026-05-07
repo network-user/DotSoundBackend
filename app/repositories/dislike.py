@@ -1,8 +1,11 @@
+from datetime import datetime
+
 import structlog
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.dislike import Dislike
+from app.models.track import Track
 from app.repositories.base import BaseRepository
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -12,9 +15,30 @@ class DislikeRepository(BaseRepository[Dislike]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, Dislike)
 
-    async def get(
-        self, user_id: int, track_id: int
-    ) -> Dislike | None:
+    @staticmethod
+    def _exclude_hidden_sources():  # noqa: ANN205
+        hidden = ("youtube",)
+        source_platform = func.lower(func.coalesce(Track.source_platform, ""))
+        imported_from = func.lower(func.coalesce(Track.imported_from, ""))
+        return (~source_platform.in_(hidden)) & (~imported_from.in_(hidden))
+
+    @staticmethod
+    def _build_source_filter(
+        source_filter: str | None, base_clause: object
+    ) -> object:
+        if source_filter == "platform":
+            return and_(base_clause, Track.catalog_type == "ugc")
+        if source_filter == "soundcloud":
+            return and_(base_clause, Track.source == "soundcloud")
+        if source_filter == "other":
+            return and_(
+                base_clause,
+                Track.catalog_type != "ugc",
+                Track.source != "soundcloud",
+            )
+        return base_clause
+
+    async def get(self, user_id: int, track_id: int) -> Dislike | None:
         result = await self._session.execute(
             select(Dislike).where(
                 Dislike.user_id == user_id,
@@ -24,9 +48,7 @@ class DislikeRepository(BaseRepository[Dislike]):
         return result.scalar_one_or_none()
 
     async def add(self, user_id: int, track_id: int) -> Dislike:
-        return await self.create(
-            user_id=user_id, track_id=track_id
-        )
+        return await self.create(user_id=user_id, track_id=track_id)
 
     async def remove(self, user_id: int, track_id: int) -> bool:
         result = await self._session.execute(
@@ -46,9 +68,51 @@ class DislikeRepository(BaseRepository[Dislike]):
         if not track_ids:
             return False
         r = await self._session.execute(
-            select(Dislike.track_id).where(
+            select(Dislike.track_id)
+            .where(
                 Dislike.user_id == user_id,
                 Dislike.track_id.in_(track_ids),
-            ).limit(1)
+            )
+            .limit(1)
         )
         return r.scalar_one_or_none() is not None
+
+    async def list_disliked_tracks(
+        self,
+        user_id: int,
+        offset: int = 0,
+        limit: int = 20,
+        source_filter: str | None = None,
+    ) -> tuple[list[tuple[Track, datetime]], int]:
+        base_where = self._build_source_filter(
+            source_filter,
+            and_(
+                Dislike.user_id == user_id,
+                Track.is_active.is_(True),
+                self._exclude_hidden_sources(),
+            ),
+        )
+
+        count_result = await self._session.execute(
+            select(func.count())
+            .select_from(Dislike)
+            .join(Track, Track.id == Dislike.track_id)
+            .where(base_where)
+        )
+        total = count_result.scalar_one()
+
+        tracks_result = await self._session.execute(
+            select(Track, Dislike.created_at)
+            .join(Dislike, Dislike.track_id == Track.id)
+            .where(base_where)
+            .order_by(Dislike.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        rows = tracks_result.all()
+        logger.debug(
+            "db_disliked_tracks_listed",
+            user_id=user_id,
+            total=total,
+        )
+        return [(row[0], row[1]) for row in rows], total

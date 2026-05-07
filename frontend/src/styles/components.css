@@ -258,16 +258,29 @@
 
 .pb-ctl-v2 .ctrl-btn,
 .pb-ctl-v2 .icon-btn {
-  min-width: 36px;
-  min-height: 36px;
+  min-width: var(--tap);
+  min-height: var(--tap);
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 .pb-ctl-v2 .play-btn {
-  width: 40px;
-  height: 40px;
+  width: var(--tap);
+  height: var(--tap);
+}
+
+@media (min-width: 561px) and (pointer: fine) {
+  .pb-ctl-v2 .ctrl-btn,
+  .pb-ctl-v2 .icon-btn {
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .pb-ctl-v2 .play-btn {
+    width: 40px;
+    height: 40px;
+  }
 }
 
 .pb-ctl-v2 .play-btn.mp-press--icon {
@@ -392,10 +405,9 @@ button.empty-cta:focus-visible {
   outline-offset: 2px;
 }
 
-/* Hide secondary controls on the smallest screens
- * to keep the bar uncluttered. The overflow menu
- * still gives access to them. */
-@media (max-width: 480px) {
+/* Hide secondary controls on narrow / touch layouts.
+ * Overflow menu restores prev; like moved there on compact. */
+@media (max-width: 560px) {
   .pb-ctl-v2 .pb-like,
   .pb-ctl-v2 .pb-prev {
     display: none;
@@ -585,7 +597,13 @@ button.empty-cta:focus-visible {
   text-align: left;
   border-radius: var(--r-sm);
   cursor: pointer;
-  min-height: 40px;
+  min-height: var(--tap);
+}
+
+@media (min-width: 561px) and (pointer: fine) {
+  .pb-menu-item {
+    min-height: 40px;
+  }
 }
 
 .pb-menu-item:hover {

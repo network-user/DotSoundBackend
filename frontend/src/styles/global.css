@@ -384,6 +384,11 @@ body.monochrome #app {
   transition: transform 0.15s, background 0.15s;
   color: var(--text-muted);
 }
+.track-card-like.mp-press--icon {
+  padding: 0;
+  border-radius: var(--r-pill);
+  font-size: inherit;
+}
 .track-card-like:hover { background: var(--bg-card-hover); }
 .track-card-like:active { transform: scale(1.35); }
 .track-card-like.liked { color: var(--accent); }
@@ -406,12 +411,36 @@ body.monochrome #app {
   color: var(--text-muted);
   transition: color 0.15s, background 0.15s;
 }
+
+.track-card-visibility.mp-press--icon,
+.track-card-delete.mp-press--icon {
+  padding: 0;
+  border-radius: var(--r-pill);
+  font-size: inherit;
+}
 .track-card-visibility:hover,
 .track-card-delete:hover {
   background: var(--bg-card-hover);
   color: var(--text-secondary);
 }
 .track-card-delete:hover { color: #FF6B6B; }
+
+@media (max-width: 560px) {
+  .track-card {
+    padding: 10px 14px;
+    margin-left: 0;
+    margin-right: 0;
+    max-width: 100%;
+  }
+
+  .track-card-main-row {
+    gap: 10px;
+  }
+
+  .track-card-actions {
+    gap: 4px;
+  }
+}
 
 .track-badge {
   display: inline-flex;
