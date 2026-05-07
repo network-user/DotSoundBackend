@@ -30,6 +30,7 @@
     "tabTracks": "Tracks",
     "tabArtists": "Artists",
     "tabPlaylists": "Playlists",
+    "tabGenres": "Genres",
     "discoverGenres": "Genres",
     "recentGenres": "Your genres",
     "discoverArtists": "Artists",
@@ -37,7 +38,9 @@
     "playlists": "Playlists",
     "editorialBadge": "Editorial",
     "publicBadge": "Public",
-    "privateBadge": "Private"
+    "privateBadge": "Private",
+    "genresTabEmpty": "No genres found",
+    "genreTracksCount": "{{count}} tracks in genre \"{{genre}}\""
   },
   "liked": {
     "title": "Liked",

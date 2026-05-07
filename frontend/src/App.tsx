@@ -655,7 +655,6 @@ export function App() {
       />
       <ComplaintModal />
       <TrackCardSheet
-        onOpenAuthor={handleOpenAuthor}
         onOpenArtist={async (name) => {
           const res =
             await api.resolveArtistByName(name)

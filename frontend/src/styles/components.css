@@ -222,7 +222,7 @@
 }
 
 #pb-seek-wrap.pb-seek-zone #pb-seek {
-  height: 6px;
+  height: 7px;
   border-radius: var(--r-pill);
   background: linear-gradient(
     to right,
@@ -231,11 +231,11 @@
     var(--surface-2, #2a2a2a) var(--progress, 0%),
     var(--surface-2, #2a2a2a) 100%
   );
-  transition: background var(--dur-fast) linear;
+  transition: none;
 }
 
 #pb-seek-wrap.pb-seek-zone #pb-seek:hover {
-  height: 7px;
+  height: 8px;
 }
 
 #pb-row.pb-row-v2 {
@@ -425,9 +425,10 @@ button.empty-cta:focus-visible {
 .pb-volume-pop {
   position: absolute;
   right: 0;
-  bottom: calc(100% + var(--space-2));
-  width: 120px;
-  padding: var(--space-2) var(--space-3);
+  bottom: calc(100% + 2px);
+  width: 56px;
+  height: 204px;
+  padding: var(--space-2);
   border-radius: var(--r-md);
   border: 1px solid
     var(--glass-border, rgba(255, 255, 255, 0.08));
@@ -446,17 +447,33 @@ button.empty-cta:focus-visible {
   animation: menu-pop var(--dur-fast)
     var(--ease-standard);
   transform-origin: bottom right;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
 }
 
 .pb-volume-value {
   font-size: var(--fs-12);
-  color: var(--text-secondary, #b8b8b8);
-  margin-bottom: var(--space-1);
-  text-align: right;
+  color: var(--text, #fff);
+  text-align: center;
+  margin: 0;
+  position: relative;
+  z-index: 2;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
 .pb-volume-slider {
-  width: 100%;
+  width: 168px;
+  height: 24px;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  margin-top: 10px;
+  position: relative;
+  z-index: 1;
 }
 
 .pb-overflow-menu {

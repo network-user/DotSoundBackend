@@ -1079,6 +1079,7 @@ body.monochrome #app {
   z-index: 165;
   padding: 0;
   isolation: isolate;
+  overflow: visible;
 }
 
 #player-bar::before {
@@ -1092,6 +1093,23 @@ body.monochrome #app {
     rgba(255, 255, 255, 0.06),
     transparent 24%
   );
+}
+
+#player-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: var(--progress, 0%);
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.1) 58%,
+    rgba(255, 255, 255, 0.14) 100%
+  );
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  transition: none;
 }
 
 #player-bar > * {
@@ -1111,9 +1129,7 @@ body.monochrome #app {
   border-radius: 0;
   outline: none;
   display: block;
-  transition:
-    height var(--dur-fast) var(--ease-standard),
-    background var(--dur-fast) linear;
+  transition: height var(--dur-fast) var(--ease-standard);
 }
 #pb-seek:hover { height: 4px; }
 #pb-seek::-webkit-slider-thumb {
@@ -2489,7 +2505,7 @@ body.ds-perf-lite .tcs-video-pulse {
 .tcs-seek-wrap { margin-bottom: 4px; }
 .tcs-seek {
   width: 100%;
-  height: 3px;
+  height: 5px;
   -webkit-appearance: none;
   appearance: none;
   background: linear-gradient(
@@ -2499,31 +2515,31 @@ body.ds-perf-lite .tcs-video-pulse {
     var(--surface-2) var(--progress, 0%),
     var(--surface-2) 100%
   );
-  border-radius: 2px;
+  border-radius: 999px;
   outline: none;
   cursor: pointer;
-  transition: background var(--dur-fast) linear;
+  transition: background 70ms linear;
 }
 .tcs-seek::-webkit-slider-runnable-track {
-  height: 3px;
+  height: 5px;
   background: transparent;
-  border-radius: 2px;
+  border-radius: 999px;
 }
 .tcs-seek::-moz-range-track {
-  height: 3px;
+  height: 5px;
   background: transparent;
-  border-radius: 2px;
+  border-radius: 999px;
 }
 .tcs-seek::-moz-range-progress {
-  height: 3px;
+  height: 5px;
   background: var(--text, #fff);
-  border-radius: 2px;
+  border-radius: 999px;
 }
 .tcs-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 8px;
-  height: 8px;
-  margin-top: -4.5px;
+  width: 10px;
+  height: 10px;
+  margin-top: -2.5px;
   border-radius: 50%;
   background: var(--text, #fff);
   cursor: pointer;
@@ -2531,8 +2547,8 @@ body.ds-perf-lite .tcs-video-pulse {
   box-shadow: none;
 }
 .tcs-seek::-moz-range-thumb {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border: none;
   border-radius: 50%;
   background: var(--text, #fff);

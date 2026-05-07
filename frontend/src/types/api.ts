@@ -274,13 +274,6 @@ export interface AvatarResponse {
 
 // ── Track Card ──────────────────────────────────────────────────────────────
 
-export interface TrackAuthorInfo {
-  id: number
-  display_name: string | null
-  username: string | null
-  avatar_key: string | null
-}
-
 export interface TrackAlbumInfo {
   id: number
   title: string
@@ -296,7 +289,6 @@ export interface TrackCardResponse {
   play_count: number
   cover_url: string | null
   created_at: string
-  author: TrackAuthorInfo | null
   album: TrackAlbumInfo | null
   has_lyrics: boolean
   playback_variants?: TrackPlaybackVariantBrief[]

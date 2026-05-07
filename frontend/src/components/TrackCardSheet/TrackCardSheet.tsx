@@ -76,7 +76,6 @@ function hasPipSupport(): boolean {
 }
 
 interface Props {
-  onOpenAuthor: (authorId: number) => void
   onOpenArtist?: (name: string) => void
 }
 
@@ -101,7 +100,6 @@ function coverUrl(k: string, v: number) {
 }
 
 export function TrackCardSheet({
-  onOpenAuthor,
   onOpenArtist,
 }: Props) {
   const {
@@ -143,7 +141,6 @@ export function TrackCardSheet({
   const { t } = useTranslation()
   const reduce = useReducedMotion()
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
-  const [smoothPct, setSmoothPct] = useState(0)
   const sound = useSound()
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -174,8 +171,6 @@ export function TrackCardSheet({
   const [similarTracks, setSimilarTracks] =
     useState<Track[]>([])
   usePrefetchTracks(similarTracks, 'similar_in_card')
-  const [authorAvatarUrl, setAuthorAvatarUrl] =
-    useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [trackInfo, setTrackInfo] =
     useState<TrackInfoResponse | null>(null)
@@ -292,7 +287,6 @@ export function TrackCardSheet({
       setShowTrackInfo(false)
       setEditingLyrics(false)
       setShowEdit(false)
-      setAuthorAvatarUrl(null)
       setCoverKey(null)
       setCoverBusy(false)
       setVideoReady(false)
@@ -322,17 +316,6 @@ export function TrackCardSheet({
           return
         }
         setCard(c)
-        if (c.author?.id) {
-          api
-            .getAvatarUrl(c.author.id)
-            .then((r) => {
-              if (activeTrackRequestRef.current !== requestId) {
-                return
-              }
-              setAuthorAvatarUrl(r.avatar_url)
-            })
-            .catch(() => {})
-        }
       })
       .catch(() => {})
       .finally(() => {
@@ -486,14 +469,6 @@ export function TrackCardSheet({
       requestAnimationFrame(() => onOpenArtist(name))
     },
     [closeCard, onOpenArtist],
-  )
-
-  const goToAuthor = useCallback(
-    (authorId: number) => {
-      closeCard()
-      requestAnimationFrame(() => onOpenAuthor(authorId))
-    },
-    [closeCard, onOpenAuthor],
   )
 
   const handleBackdrop = (
@@ -762,16 +737,6 @@ export function TrackCardSheet({
   const handleAuthor = () => {
     if (track?.artist && onOpenArtist) {
       goToArtist(track.artist)
-      return
-    }
-    if (card?.author?.id) {
-      goToAuthor(card.author.id)
-    }
-  }
-
-  const handleUploader = () => {
-    if (card?.author?.id) {
-      goToAuthor(card.author.id)
     }
   }
 
@@ -965,17 +930,7 @@ export function TrackCardSheet({
   const pct = duration
     ? (currentTime / duration) * 100
     : 0
-  const displayPct = Math.max(0, Math.min(100, smoothPct))
-
-  useEffect(() => {
-    const next = Math.max(0, Math.min(100, pct))
-    setSmoothPct((prev) => {
-      const diff = next - prev
-      if (Math.abs(diff) < 0.12) return next
-      const step = isPlaying ? 0.22 : 0.34
-      return prev + diff * step
-    })
-  }, [pct, isPlaying])
+  const displayPct = Math.max(0, Math.min(100, pct))
 
   if (!exit.mounted || !track) return null
 
@@ -1372,37 +1327,6 @@ export function TrackCardSheet({
               </div>
             </div>
           )}
-          {card?.author && (
-            <div
-              className="tcs-author-row"
-              onClick={handleUploader}
-              title={t('trackSheet.goUploader')}
-            >
-              <div className="tcs-author-avatar">
-                {authorAvatarUrl ? (
-                  <img
-                    src={authorAvatarUrl}
-                    alt=""
-                  />
-                ) : (
-                  <Icon
-                    name="user"
-                    size={18}
-                  />
-                )}
-              </div>
-              <span className="tcs-author-name">
-                {card.author.display_name ||
-                  card.author.username ||
-                  t('trackSheet.uploader')}
-              </span>
-              <Icon
-                name="chevron"
-                size={16}
-                className="tcs-author-chevron"
-              />
-            </div>
-          )}
         </div>
         </div>
 
@@ -1582,7 +1506,7 @@ export function TrackCardSheet({
             variant="ghost"
             className="tcs-action-btn"
             haptic="light"
-            disabled={!track?.artist && !card?.author}
+            disabled={!track?.artist}
             onClick={handleAuthor}
           >
             <Icon name="user" size={20} />
