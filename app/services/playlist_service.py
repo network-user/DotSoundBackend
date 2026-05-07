@@ -1,16 +1,30 @@
+import asyncio
+import secrets
 
 import structlog
+from dotsound_private_core.services.playlist_cover_policy import (
+    PLAYLIST_COLLAGE_GRID_SIDE,
+    playlist_collage_cell_count,
+    should_attempt_auto_playlist_cover,
+    utcnow,
+)
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import s3
 from app.models.playlist import Playlist
 from app.models.playlist_collab import PlaylistCollaborator
 from app.models.track import Track
 from app.models.user import User
 from app.repositories.playlist import PlaylistRepository
-from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
+from app.services.playlist_cover_collage import (
+    build_playlist_cover_collage_webp,
+)
+from app.services.playlist_track_eligibility import (
+    ensure_track_addable_to_user_playlist,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -19,7 +33,6 @@ class PlaylistService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = PlaylistRepository(session)
-        self._track_repo = TrackRepository(session)
         self._user_repo = UserRepository(session)
 
     async def create(
@@ -39,9 +52,7 @@ class PlaylistService:
         )
         return playlist
 
-    async def get(
-        self, playlist_id: int
-    ) -> Playlist | None:
+    async def get(self, playlist_id: int) -> Playlist | None:
         return await self._repo.get_by_id(playlist_id)
 
     async def list_by_owner(
@@ -102,18 +113,18 @@ class PlaylistService:
         *,
         allow_admin: bool = False,
     ) -> None:
-        await self._get_can_write(
+        playlist = await self._get_can_write(
             playlist_id,
             requester_id,
             allow_admin=allow_admin,
         )
-        track = await self._track_repo.get_by_id(track_id)
-        if not track or not track.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Track not found",
-            )
+        await ensure_track_addable_to_user_playlist(
+            self._session,
+            track_id=track_id,
+            playlist_owner_id=playlist.owner_id,
+        )
         await self._repo.add_track(playlist_id, track_id, position)
+        await self._maybe_generate_collage_cover(playlist_id)
         logger.info(
             "playlist_track_added",
             playlist_id=playlist_id,
@@ -133,9 +144,7 @@ class PlaylistService:
             requester_id,
             allow_admin=allow_admin,
         )
-        found = await self._repo.remove_track(
-            playlist_id, track_id
-        )
+        found = await self._repo.remove_track(playlist_id, track_id)
         if not found:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -165,15 +174,143 @@ class PlaylistService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=str(exc),
             ) from exc
+        await self._maybe_generate_collage_cover(playlist_id)
 
-    async def get_tracks(
-        self, playlist_id: int
-    ) -> list[Track]:
+    async def get_tracks(self, playlist_id: int) -> list[Track]:
         await self._assert_exists(playlist_id)
         return await self._repo.get_tracks(playlist_id)
 
     async def list_featured(self, limit: int = 20) -> list[Playlist]:
         return await self._repo.list_featured(limit=limit)
+
+    async def upload_owner_cover(
+        self,
+        playlist_id: int,
+        *,
+        requester_id: int,
+        data: bytes,
+        content_type: str,
+    ) -> Playlist:
+        playlist = await self._get_owned(
+            playlist_id,
+            requester_id,
+        )
+        actor = await self._resolve_user(requester_id)
+        old_key = playlist.cover_key
+        key = await s3.upload_cover(
+            data,
+            content_type,
+            user_id=actor.id,
+            session=self._session,
+        )
+        playlist.cover_key = key
+        playlist.cover_auto_suppressed = False
+        await self._session.flush()
+        if old_key and old_key != key:
+            try:
+                await s3.delete_object(old_key)
+            except Exception:
+                logger.warning(
+                    "playlist_cover_old_delete_failed",
+                    playlist_id=playlist_id,
+                    cover_key=old_key,
+                )
+        return playlist
+
+    async def delete_owner_cover(
+        self,
+        playlist_id: int,
+        requester_id: int,
+    ) -> Playlist:
+        playlist = await self._get_owned(
+            playlist_id,
+            requester_id,
+        )
+        if playlist.cover_key:
+            prev = playlist.cover_key
+            try:
+                await s3.delete_object(prev)
+            except Exception:
+                logger.warning(
+                    "playlist_cover_delete_object_failed",
+                    playlist_id=playlist_id,
+                    cover_key=prev,
+                )
+        playlist.cover_key = None
+        playlist.cover_auto_suppressed = True
+        await self._session.flush()
+        return playlist
+
+    async def _maybe_generate_collage_cover(
+        self,
+        playlist_id: int,
+    ) -> None:
+        pl = await self._repo.get_by_id(playlist_id)
+        if not pl:
+            return
+        n_visible = await self._repo.count_visible_tracks(
+            playlist_id,
+        )
+        if not should_attempt_auto_playlist_cover(
+            playlist_type=pl.playlist_type,
+            cover_auto_suppressed=pl.cover_auto_suppressed,
+            collage_generated_at=pl.collage_generated_at,
+            cover_key=pl.cover_key,
+            visible_track_count=n_visible,
+        ):
+            return
+        cells = playlist_collage_cell_count()
+        tracks = await self._repo.get_tracks(playlist_id)
+        rng = secrets.SystemRandom()
+        pool = list(tracks)
+        rng.shuffle(pool)
+        picked = pool[:cells]
+        raws: list[bytes | None] = []
+        for t in picked:
+            if not t.cover_key:
+                raws.append(None)
+                continue
+            try:
+                blob = await s3.download_object(t.cover_key)
+                raws.append(blob)
+            except Exception:
+                logger.warning(
+                    "playlist_collage_track_cover_miss",
+                    track_id=t.id,
+                    playlist_id=playlist_id,
+                )
+                raws.append(None)
+        while len(raws) < cells:
+            raws.append(None)
+        try:
+            webp = await asyncio.to_thread(
+                build_playlist_cover_collage_webp,
+                raws,
+                grid_side=PLAYLIST_COLLAGE_GRID_SIDE,
+            )
+        except Exception:
+            logger.exception(
+                "playlist_collage_render_failed",
+                playlist_id=playlist_id,
+            )
+            return
+        key = f"playlist-covers/{pl.owner_id}/{playlist_id}.webp"
+        try:
+            await s3.upload_object(key, webp, "image/webp")
+        except Exception:
+            logger.exception(
+                "playlist_collage_upload_failed",
+                playlist_id=playlist_id,
+            )
+            return
+        pl.cover_key = key
+        pl.collage_generated_at = utcnow()
+        await self._session.flush()
+        logger.info(
+            "playlist_collage_generated",
+            playlist_id=playlist_id,
+            cover_key=key,
+        )
 
     async def _get_owned(
         self, playlist_id: int, requester_id: int
@@ -237,7 +374,7 @@ class PlaylistService:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Playlist not found",
-        )
+            )
         if playlist.owner_id == user.id:
             return playlist
         if allow_admin:
@@ -260,9 +397,7 @@ class PlaylistService:
             )
         return playlist
 
-    async def _assert_exists(
-        self, playlist_id: int
-    ) -> None:
+    async def _assert_exists(self, playlist_id: int) -> None:
         playlist = await self._repo.get_by_id(playlist_id)
         if not playlist:
             raise HTTPException(
@@ -274,7 +409,7 @@ class PlaylistService:
         user = await self._user_repo.get_by_id(user_id)
         if not user:
             user = await self._user_repo.get_by_telegram_id(user_id)
-        
+
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

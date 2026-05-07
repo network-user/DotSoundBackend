@@ -40,6 +40,7 @@ export interface Track {
   resume_position_seconds?: number | null
   last_listen_at?: string | null
   last_listen_seconds?: number | null
+  has_lyrics?: boolean
 }
 
 export interface TrackListResponse {
@@ -193,6 +194,9 @@ export interface Playlist {
   is_featured: boolean
   source_url: string | null
   cover_key: string | null
+  cover_auto_suppressed?: boolean
+  collage_generated_at?: string | null
+  cover_url?: string | null
   description: string | null
   created_at: string
   track_count?: number

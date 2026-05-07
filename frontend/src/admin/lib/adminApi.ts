@@ -671,6 +671,8 @@ export const adminApi = {
     is_active?: boolean
     without_lyrics?: boolean
     search?: string
+    for_playlist_owner_id?: number
+    playable_only?: boolean
   }) =>
     adminFetch<{
       items: Array<Record<string, unknown>>

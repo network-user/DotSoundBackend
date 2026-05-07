@@ -25,9 +25,7 @@ PLAYLIST_TYPE_AUTO_DAILY_MIX = "auto_daily_mix"
 
 class Playlist(Base, TimestampMixin):
     __tablename__ = "playlists"
-    __table_args__ = (
-        Index("ix_playlists_is_featured", "is_featured"),
-    )
+    __table_args__ = (Index("ix_playlists_is_featured", "is_featured"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
@@ -47,15 +45,15 @@ class Playlist(Base, TimestampMixin):
     is_featured: Mapped[bool] = mapped_column(
         Boolean, server_default="false", nullable=False
     )
-    source_url: Mapped[str | None] = mapped_column(
-        String(1024), nullable=True
+    source_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    cover_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    cover_auto_suppressed: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
     )
-    cover_key: Mapped[str | None] = mapped_column(
-        String(512), nullable=True
+    collage_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
-    description: Mapped[str | None] = mapped_column(
-        String(512), nullable=True
-    )
+    description: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
 
 class PlaylistTrack(Base):

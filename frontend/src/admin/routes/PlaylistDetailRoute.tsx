@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 import {
@@ -30,6 +30,8 @@ export function PlaylistDetailRoute() {
   const [addModal, setAddModal] = useState(false)
   const [addSearch, setAddSearch] = useState('')
   const [addPage, setAddPage] = useState(1)
+  const [adminFullCatalog, setAdminFullCatalog] =
+    useState(false)
   const [busy, setBusy] = useState(false)
 
   const detailQuery = useQuery({
@@ -155,15 +157,49 @@ export function PlaylistDetailRoute() {
   }
 
   const addQuery = useQuery({
-    queryKey: ['admin', 'playlists', 'pick-track', addPage, addSearch],
-    queryFn: () =>
-      adminApi.listTracks({
+    queryKey: [
+      'admin',
+      'playlists',
+      'pick-track',
+      playlistId,
+      addPage,
+      addSearch,
+      adminFullCatalog,
+      detailQuery.data?.owner_id,
+    ],
+    queryFn: () => {
+      const base = {
         page: addPage,
         size: 15,
         search: addSearch || undefined,
-      }),
-    enabled: addModal,
+      } as const
+      if (adminFullCatalog) {
+        return adminApi.listTracks(base)
+      }
+      const oid = detailQuery.data?.owner_id
+      if (oid == null) {
+        return adminApi.listTracks(base)
+      }
+      return adminApi.listTracks({
+        ...base,
+        for_playlist_owner_id: oid,
+        playable_only: true,
+      })
+    },
+    enabled:
+      addModal &&
+      (adminFullCatalog ||
+        detailQuery.data?.owner_id != null),
   })
+
+  const addPickItems = useMemo(() => {
+    const raw = addQuery.data?.items ?? []
+    const inPl = new Set(orderedTrackIds)
+    return raw.filter(
+      (it: Record<string, unknown>) =>
+        !inPl.has(it.id as number),
+    )
+  }, [addQuery.data?.items, orderedTrackIds])
 
   if (!Number.isFinite(playlistId) || playlistId <= 0) {
     return (
@@ -402,6 +438,7 @@ export function PlaylistDetailRoute() {
             setAddModal(true)
             setAddPage(1)
             setAddSearch('')
+            setAdminFullCatalog(false)
           }}
         >
           {t('admin.playlists.addTrack')}
@@ -428,6 +465,26 @@ export function PlaylistDetailRoute() {
                 }}
               />
             </div>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                marginBottom: 12,
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={adminFullCatalog}
+                onChange={(e) => {
+                  setAdminFullCatalog(e.target.checked)
+                  setAddPage(1)
+                }}
+              />
+              {t('admin.playlists.addTrackFullCatalog')}
+            </label>
             <ul
               style={{
                 listStyle: 'none',
@@ -437,7 +494,7 @@ export function PlaylistDetailRoute() {
                 overflow: 'auto',
               }}
             >
-              {(addQuery.data?.items ?? []).map(
+              {addPickItems.map(
                 (it: Record<string, unknown>) => {
                   const id = it.id as number
                   const ttl = String(it.title ?? '')
@@ -468,6 +525,14 @@ export function PlaylistDetailRoute() {
                 },
               )}
             </ul>
+            {addPickItems.length === 0 && !addQuery.isLoading && (
+              <p
+                className="admin-card__sub"
+                style={{ marginBottom: 12 }}
+              >
+                {t('admin.playlists.addTrackAllInPlaylist')}
+              </p>
+            )}
             <div className="admin-pagination">
               <MotionPress
                 variant="ghost"

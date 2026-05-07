@@ -136,39 +136,32 @@ async def _process_one(item: _QueueItem) -> str:
     """
     from app.core.db import AsyncSessionLocal
     from app.repositories.lyrics import LyricsRepository
-    from app.services.lyrics_worker import (
-        TRACK_LOCK_KEY_PREFIX,
-        generate_lyrics_task,
-    )
+    from app.services.lyrics_service import LyricsService
 
     async with AsyncSessionLocal() as session:
         repo = LyricsRepository(session)
         existing = await repo.get_by_track_id(item.track_id)
-    if existing is not None:
-        logger.debug(
-            "lyrics_global_skip_already_in_db",
-            track_id=item.track_id,
-        )
-        return "skipped"
-
-    redis = get_redis_client()
-    lock_held = await redis.exists(f"{TRACK_LOCK_KEY_PREFIX}{item.track_id}")
-    if lock_held:
-        logger.debug(
-            "lyrics_global_skip_locked",
-            track_id=item.track_id,
-        )
-        return "skipped"
+        if existing is not None and (existing.plain_text or "").strip():
+            logger.debug(
+                "lyrics_global_skip_already_in_db",
+                track_id=item.track_id,
+            )
+            return "skipped"
 
     try:
-        await generate_lyrics_task.kiq(
-            item.track_id,
-            with_sync=item.with_sync,
-            progress_id="",
-        )
+        async with AsyncSessionLocal() as session:
+            svc = LyricsService(session)
+            progress_id = await svc.enqueue_background_lyrics(
+                item.track_id,
+                requested_by_user_id=None,
+                with_sync=item.with_sync,
+                bypass_cache=False,
+            )
+            if not progress_id:
+                return "skipped"
     except Exception as exc:  # noqa: BLE001
         logger.warning(
-            "lyrics_global_kiq_failed",
+            "lyrics_global_enqueue_failed",
             track_id=item.track_id,
             error=str(exc),
         )

@@ -1,7 +1,10 @@
 import pytest
 from dirty_equals import IsPartialDict
 from httpx import AsyncClient
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.track import Track
 from tests.conftest import (
     auth_headers,
     create_test_track,
@@ -15,9 +18,7 @@ async def test_create_and_get_playlist(
     client: AsyncClient,
 ) -> None:
     owner = await create_test_user(client, 20001)
-    headers = await auth_headers(
-        client, owner["id"]
-    )
+    headers = await auth_headers(client, owner["id"])
 
     r = await client.post(
         "/api/v1/playlists",
@@ -38,20 +39,24 @@ async def test_create_and_get_playlist(
     )
     assert r2.status_code == 200
     assert r2.json() == IsPartialDict(
-        name="My Mix", tracks=[],
+        name="My Mix",
+        tracks=[],
     )
 
 
 async def test_add_and_remove_track(
     client: AsyncClient,
+    db_session: AsyncSession,
 ) -> None:
     owner = await create_test_user(client, 20002)
-    track = await create_test_track(
-        client, "pl_track", owner["id"]
+    track = await create_test_track(client, "pl_track", owner["id"])
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == track["id"])
+        .values(file_key="test/pl_track_mux.mp3")
     )
-    headers = await auth_headers(
-        client, owner["id"]
-    )
+    await db_session.commit()
+    headers = await auth_headers(client, owner["id"])
 
     pl = await client.post(
         "/api/v1/playlists",
@@ -77,8 +82,7 @@ async def test_add_and_remove_track(
     assert len(r_get.json()["tracks"]) == 1
 
     r_rm = await client.delete(
-        f"/api/v1/playlists/{playlist_id}"
-        f"/tracks/{track['id']}",
+        f"/api/v1/playlists/{playlist_id}" f"/tracks/{track['id']}",
         headers=headers,
     )
     assert r_rm.status_code == 204
@@ -94,9 +98,7 @@ async def test_delete_playlist(
     client: AsyncClient,
 ) -> None:
     owner = await create_test_user(client, 20003)
-    headers = await auth_headers(
-        client, owner["id"]
-    )
+    headers = await auth_headers(client, owner["id"])
 
     pl = await client.post(
         "/api/v1/playlists",
@@ -123,12 +125,8 @@ async def test_forbidden_update(
 ) -> None:
     owner = await create_test_user(client, 20004)
     other = await create_test_user(client, 20005)
-    owner_headers = await auth_headers(
-        client, owner["id"]
-    )
-    other_headers = await auth_headers(
-        client, other["id"]
-    )
+    owner_headers = await auth_headers(client, owner["id"])
+    other_headers = await auth_headers(client, other["id"])
 
     pl = await client.post(
         "/api/v1/playlists",

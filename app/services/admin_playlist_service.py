@@ -6,14 +6,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.playlist import (
     PLAYLIST_TYPE_EDITORIAL,
-    PLAYLIST_TYPE_IMPORTED_BC,
     PLAYLIST_TYPE_IMPORTED_SC,
     Playlist,
 )
 from app.models.track import Track
 from app.repositories.playlist import PlaylistRepository
-from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
+from app.services.playlist_track_eligibility import (
+    ensure_track_addable_to_user_playlist,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -22,7 +23,6 @@ class AdminPlaylistService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = PlaylistRepository(session)
-        self._track_repo = TrackRepository(session)
         self._user_repo = UserRepository(session)
 
     async def list_playlists(
@@ -197,12 +197,11 @@ class AdminPlaylistService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Playlist not found",
             )
-        track = await self._track_repo.get_by_id(track_id)
-        if not track or not track.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Track not found",
-            )
+        await ensure_track_addable_to_user_playlist(
+            self._session,
+            track_id=track_id,
+            playlist_owner_id=playlist.owner_id,
+        )
         inserted = await self._repo.add_track_at_end(
             playlist_id,
             track_id,

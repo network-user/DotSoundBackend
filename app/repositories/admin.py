@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist import TrackArtist
@@ -17,6 +17,7 @@ from app.models.complaint import Complaint
 from app.models.lyrics import TrackLyrics
 from app.models.track import Track
 from app.models.user import User
+from app.repositories.track import TrackRepository
 
 
 class AdminRepository:
@@ -30,11 +31,21 @@ class AdminRepository:
         size: int = 20,
         is_active: bool | None = None,
         without_lyrics: bool = False,
+        lyrics_catalog_miss_only: bool = False,
         search: str | None = None,
+        for_playlist_owner_id: int | None = None,
+        playable_only: bool = False,
     ) -> tuple[list[Track], int]:
         query = select(Track)
         count_query = select(func.count(Track.id))
-        if without_lyrics:
+        if lyrics_catalog_miss_only:
+            query = query.where(
+                Track.lyrics_catalog_miss_at.isnot(None),
+            )
+            count_query = count_query.where(
+                Track.lyrics_catalog_miss_at.isnot(None),
+            )
+        elif without_lyrics:
             query = query.outerjoin(
                 TrackLyrics, TrackLyrics.track_id == Track.id
             ).where(TrackLyrics.id.is_(None))
@@ -44,6 +55,37 @@ class AdminRepository:
         if is_active is not None:
             query = query.where(Track.is_active.is_(is_active))
             count_query = count_query.where(Track.is_active.is_(is_active))
+        if for_playlist_owner_id is not None:
+            tr = TrackRepository
+            pub = (
+                Track.is_active.is_(True)
+                & Track.is_public.is_(True)
+                & tr._exclude_hidden_sources()
+                & tr._playback_listing_allowed()
+            )
+            own = (
+                Track.is_active.is_(True)
+                & (Track.uploaded_by_id == for_playlist_owner_id)
+                & tr._exclude_hidden_sources()
+                & tr._playback_listing_allowed()
+            )
+            if playable_only:
+                playable = tr._playable_filter()
+                pub = and_(pub, playable)
+                own = and_(own, playable)
+            scope = or_(pub, own)
+            query = query.where(scope)
+            count_query = count_query.where(scope)
+        elif playable_only:
+            tr = TrackRepository
+            pl = and_(
+                Track.is_active.is_(True),
+                tr._exclude_hidden_sources(),
+                tr._playback_listing_allowed(),
+                tr._playable_filter(),
+            )
+            query = query.where(pl)
+            count_query = count_query.where(pl)
         if search:
             pattern = f"%{search}%"
             cond = Track.title.ilike(pattern) | Track.artist.ilike(pattern)

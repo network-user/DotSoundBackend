@@ -332,7 +332,9 @@
       "saveOrder": "Сохранить порядок",
       "addTrack": "Добавить трек",
       "addTrackTitle": "Выберите трек",
-      "addTrackSearch": "Поиск по названию/исполнителю…"
+      "addTrackSearch": "Поиск по названию/исполнителю…",
+      "addTrackFullCatalog": "Полный каталог (админ)",
+      "addTrackAllInPlaylist": "Нет подходящих треков или все уже в плейлисте."
     },
     "complaints": {
       "title": "Жалобы",

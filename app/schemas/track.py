@@ -56,6 +56,7 @@ class TrackResponse(BaseModel):
         default=None,
         ge=0,
     )
+    has_lyrics: bool = False
 
     @computed_field  # type: ignore[prop-decorator]
     @property

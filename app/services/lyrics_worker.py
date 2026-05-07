@@ -379,6 +379,60 @@ async def _release_track_lock(track_id: int, owner_token: str) -> None:
         logger.debug("lyrics_track_lock_release_failed", track_id=track_id)
 
 
+async def _mark_track_lyrics_catalog_miss(
+    session,
+    track_id: int,
+) -> None:
+    from datetime import datetime
+
+    row = await session.get(Track, track_id)
+    if row is None:
+        return
+    row.lyrics_catalog_miss_at = datetime.now(UTC)
+
+
+async def _close_lyrics_job_catalog_miss(
+    session,
+    *,
+    job,
+    progress_id: str,
+    log_line: str,
+) -> None:
+    from datetime import datetime
+
+    from app.core.observability import lyrics_job_observed
+
+    await _mark_track_lyrics_catalog_miss(session, int(job.track_id))
+    _close_job_attempt(job, status="miss", error="catalog_no_match")
+    job.status = "done"
+    job.finished_at = datetime.now(UTC)
+    started = job.started_at or job.created_at
+    duration_seconds = 0.0
+    if started:
+        started_aware = started
+        if started_aware.tzinfo is None:
+            started_aware = started_aware.replace(tzinfo=UTC)
+        duration_seconds = (
+            datetime.now(UTC) - started_aware
+        ).total_seconds()
+        job.duration_ms = int(duration_seconds * 1000)
+    try:
+        lyrics_job_observed(
+            tier=job.current_tier or "catalog_only",
+            status="catalog_miss",
+            duration_seconds=duration_seconds,
+        )
+    except Exception:
+        pass
+    logger.info(
+        "lyrics_job_catalog_miss_done",
+        job_id=job.id,
+        track_id=job.track_id,
+        progress_id=progress_id,
+        detail=log_line,
+    )
+
+
 async def _finalise(
     progress_id: str, terminal_state: str, log_line: str | None = None
 ) -> None:
@@ -1162,6 +1216,8 @@ async def _generate_lyrics_task_impl(
                     break
 
             if gen_result is None:
+                await _mark_track_lyrics_catalog_miss(session, track_id)
+                await session.commit()
                 await _finalise(
                     progress_id,
                     "not_found",
@@ -1582,24 +1638,18 @@ async def catalog_only_lyrics_task(
     bypass_cache: bool = False,
     job_id: str = "",
 ) -> dict:
-    """Tier 1: catalog-only lyrics fetch (no local ASR).
+    """Tier 1: catalog-only lyric resolution (no ASR escalation).
 
-    Calls PrivateCore's ``generate_lyrics`` with
-    ``disable_local_asr=True`` so faster-whisper is never imported
-    on the Backend. On a full hit the lyrics + LyricsJob are
-    saved and the job goes to ``status="done"``. If
-    ``with_sync=True`` but the catalog only returned plain text
-    (no ``synced_lines``), the job is *not* closed: we
-    :func:`handle_tier_miss` so the cascade can hand audio work to
-    the next tier (e.g. remote ASR) for time-aligned output. A pure
-    miss (``gen_result is None``) is handled the same way. On a miss
-    the cascade is asked for the next tier
-    (``lyrics_cascade.handle_tier_miss``).
+    ``disable_local_asr=True`` avoids in-process Whisper on the
+    backend. Lyrics are persisted when the catalog or priority
+    provider returns usable text.
 
-    The dev escape hatch ``LYRICS_ALLOW_LOCAL_ASR=true`` is
-    honoured only when ``DEBUG=true`` (config validator enforces
-    this) — when both flags are on the task downloads audio and
-    runs ASR in-process for fast local iteration.
+    Catalog misses (no text from providers) terminate the LyricsJob
+    without advancing to transcription tiers.
+
+    Plain text without ``synced_lines`` when ``with_sync=True`` is
+    persisted as plain text only; transcription tiers are not used
+    to recover timecodes.
     """
     from dotsound_private_core.services.lyrics_provider import (
         generate_lyrics,
@@ -1619,7 +1669,6 @@ async def catalog_only_lyrics_task(
     )
 
     use_local_asr = bool(settings.debug and settings.lyrics_allow_local_asr)
-    t0 = time.monotonic()
 
     async with AsyncSessionLocal() as session:
         track = await session.get(Track, track_id)
@@ -1739,31 +1788,23 @@ async def catalog_only_lyrics_task(
                     timeout=float(settings.lyrics_provider_timeout_seconds),
                 )
 
-            elapsed_ms = int((time.monotonic() - t0) * 1000)
-
             if gen_result is None:
                 if job is not None:
-                    from app.services.lyrics_cascade import (
-                        handle_tier_miss,
-                    )
-
-                    will_fallback = await handle_tier_miss(
+                    await _close_lyrics_job_catalog_miss(
                         session,
                         job=job,
-                        reason="catalog_miss",
-                        with_sync=with_sync,
-                        bypass_cache=bypass_cache,
+                        progress_id=progress_id,
+                        log_line=(
+                            "[catalog_only] no catalog lyrics — "
+                            "skipping transcription tiers"
+                        ),
                     )
                     await session.commit()
-                    if will_fallback:
-                        logger.info(
-                            "catalog_only_miss_fallback",
-                            job_id=job.id,
-                            elapsed_ms=elapsed_ms,
-                        )
-                        return {
-                            "status": "fallback",
-                        }
+                else:
+                    await _mark_track_lyrics_catalog_miss(
+                        session, track_id,
+                    )
+                    await session.commit()
                 await _finalise(
                     progress_id,
                     "not_found",
@@ -1775,73 +1816,74 @@ async def catalog_only_lyrics_task(
             if with_sync and not _payload_has_non_empty_synced(
                 payload
             ):
-                if job is not None:
-                    # Pre-save catalog text so ``remote_whisper`` can
-                    # align ASR word timings to etc. in
-                    # :func:`job_result` (PrivateCore opcode aligner).
-                    if (payload.get("text") or "").strip():
-                        try:
-                            repo_pre = LyricsRepository(session)
-                            await repo_pre.create_or_update(
-                                track_id=track_id,
-                                plain_text=payload["text"],
-                                source="auto",
-                                synced_lines=None,
-                                sync_quality=None,
-                                sync_profile=None,
-                                source_name=payload.get(
-                                    "source_name"
-                                ),
-                            )
-                        except Exception:
-                            logger.debug(
-                                "lyrics_pre_save_before_remote_failed",
-                                track_id=track_id,
-                            )
-                    from app.services.lyrics_cascade import (
-                        handle_tier_miss,
-                    )
-
-                    will_fallback = await handle_tier_miss(
-                        session,
-                        job=job,
-                        reason=(
-                            "catalog_plain_text_no_synced_lines"
-                        ),
-                        with_sync=with_sync,
-                        bypass_cache=bypass_cache,
-                    )
-                    await session.commit()
-                    if will_fallback:
-                        logger.info(
-                            "catalog_only_sync_unsatisfied_fallback",
-                            job_id=job.id,
+                trimmed = (payload.get("text") or "").strip()
+                if trimmed:
+                    if job is not None:
+                        await _save_catalog_result_and_close(
+                            session,
+                            job=job,
+                            payload=payload,
+                            progress_id=progress_id,
+                            with_sync=with_sync,
+                        )
+                        await session.commit()
+                        await _finalise(
+                            progress_id,
+                            "found",
+                            log_line=(
+                                "[catalog_only] saved plain text only "
+                                f"({len(trimmed)} chars; no timecodes)"
+                            ),
                         )
                         return {
-                            "status": "fallback",
+                            "status": "found",
+                            "from": "catalog",
                         }
+                    repo_l = LyricsRepository(session)
+                    await repo_l.create_or_update(
+                        track_id=track_id,
+                        plain_text=payload["text"],
+                        source="auto",
+                        synced_lines=None,
+                        sync_quality=None,
+                        sync_profile=None,
+                        source_name=payload.get("source_name"),
+                    )
+                    await session.commit()
                     await _finalise(
                         progress_id,
-                        "not_found",
+                        "found",
                         log_line=(
-                            "[catalog_only] with_sync: no timed lines "
-                            "and cascade has no further tier"
+                            "[catalog_only] plain text only "
+                            f"({len(trimmed)} chars; no timecodes)"
                         ),
                     )
                     return {
-                        "status": "not_found",
+                        "status": "found",
+                        "from": "catalog",
                     }
+                if job is not None:
+                    await _close_lyrics_job_catalog_miss(
+                        session,
+                        job=job,
+                        progress_id=progress_id,
+                        log_line=(
+                            "[catalog_only] synced lines missing and "
+                            "no plain text retained"
+                        ),
+                    )
+                    await session.commit()
+                else:
+                    await _mark_track_lyrics_catalog_miss(
+                        session, track_id,
+                    )
+                    await session.commit()
                 await _finalise(
                     progress_id,
                     "not_found",
-                    log_line=(
-                        "[catalog_only] with_sync needs timed lines; "
-                        "catalog has plain text only"
-                    ),
+                    log_line=("[catalog_only] no lyric text retained"),
                 )
-                return {
-                    "status": "not_found",
-                }
+                return {"status": "not_found"}
             try:
                 await set_cached_lyrics_result(artist, title, payload)
             except Exception:

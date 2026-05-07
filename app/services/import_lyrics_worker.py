@@ -25,7 +25,7 @@ from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
 from app.models.import_job import ImportJob
 from app.repositories.lyrics import LyricsRepository
-from app.services.lyrics_worker import generate_lyrics_task
+from app.services.lyrics_service import LyricsService
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -99,7 +99,7 @@ async def _enqueue_to_global_queue(
         if not isinstance(track_id, int):
             continue
         existing = await repo.get_by_track_id(track_id)
-        if existing is not None:
+        if existing is not None and (existing.plain_text or "").strip():
             skipped_total += 1
             continue
         try:
@@ -174,7 +174,7 @@ async def process_import_lyrics_task(job_id: int) -> None:
                 continue
 
             existing = await repo.get_by_track_id(track_id)
-            if existing is not None:
+            if existing is not None and (existing.plain_text or "").strip():
                 skipped_total += 1
                 logger.debug(
                     "import_lyrics_skip_existing",
@@ -184,15 +184,25 @@ async def process_import_lyrics_task(job_id: int) -> None:
                 continue
 
             try:
-                await generate_lyrics_task.kiq(
+                lyrics_svc = LyricsService(session)
+                progress_id = await lyrics_svc.enqueue_background_lyrics(
                     track_id,
+                    requested_by_user_id=None,
                     with_sync=True,
-                    progress_id="",
+                    bypass_cache=False,
                 )
-                enqueued_total += 1
+                if not progress_id:
+                    skipped_total += 1
+                    logger.debug(
+                        "import_lyrics_enqueue_skipped",
+                        job_id=job_id,
+                        track_id=track_id,
+                    )
+                else:
+                    enqueued_total += 1
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "import_lyrics_kiq_failed",
+                    "import_lyrics_enqueue_failed",
                     job_id=job_id,
                     track_id=track_id,
                     error=str(exc),

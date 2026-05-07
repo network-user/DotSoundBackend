@@ -84,6 +84,12 @@
   gap: var(--space-3);
 }
 
+.rp-now__topbar-spacer {
+  width: var(--tap);
+  height: var(--tap);
+  flex-shrink: 0;
+}
+
 .rp-now__handle {
   width: 36px;
   height: 4px;

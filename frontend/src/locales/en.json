@@ -332,7 +332,9 @@
       "saveOrder": "Save order",
       "addTrack": "Add track",
       "addTrackTitle": "Pick a track",
-      "addTrackSearch": "Search by title or artist…"
+      "addTrackSearch": "Search by title or artist…",
+      "addTrackFullCatalog": "Full catalog (admin)",
+      "addTrackAllInPlaylist": "No matching tracks, or every match is already in this playlist."
     },
     "complaints": {
       "title": "Complaints",

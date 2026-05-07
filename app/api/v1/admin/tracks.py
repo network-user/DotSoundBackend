@@ -82,7 +82,29 @@ async def admin_list_tracks(
     size: int = Query(20, ge=1, le=100),
     is_active: bool | None = Query(None),
     without_lyrics: bool = Query(False),
+    lyrics_catalog_miss_only: bool = Query(
+        False,
+        description=(
+            "Tracks where automated catalog lyric lookup finished "
+            "without text"
+        ),
+    ),
     search: str | None = Query(None, max_length=128),
+    for_playlist_owner_id: int | None = Query(
+        None,
+        ge=1,
+        description=(
+            "When set, restrict to catalog + this user's uploads "
+            "as for playlist add-picker"
+        ),
+    ),
+    playable_only: bool = Query(
+        False,
+        description=(
+            "With for_playlist_owner_id: require playable rows; alone: "
+            "all active tracks that pass listing playability"
+        ),
+    ),
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
 ) -> AdminTrackListResponse:
@@ -92,7 +114,10 @@ async def admin_list_tracks(
         size=size,
         is_active=is_active,
         without_lyrics=without_lyrics,
+        lyrics_catalog_miss_only=lyrics_catalog_miss_only,
         search=search,
+        for_playlist_owner_id=for_playlist_owner_id,
+        playable_only=playable_only,
     )
     return AdminTrackListResponse(
         items=[AdminTrackResponse.model_validate(t) for t in tracks],

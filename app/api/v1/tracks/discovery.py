@@ -76,6 +76,8 @@ async def cover_proxy(
 ) -> Response:
     _ALLOWED_PREFIXES = (
         "covers/",
+        "image-blobs/",
+        "playlist-covers/",
         "avatars/",
         "artists/",
         "chat_photos/",
