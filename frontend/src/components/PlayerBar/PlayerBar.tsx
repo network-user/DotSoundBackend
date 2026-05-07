@@ -6,6 +6,7 @@ import {
   type MouseEvent,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { type PanInfo } from 'framer-motion'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
@@ -48,6 +49,7 @@ const SWIPE_UP_THRESHOLD = 80
 
 export function PlayerBar() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const reduce = useReducedMotion()
   const {
     currentTime,
@@ -270,18 +272,19 @@ export function PlayerBar() {
                 {track.title}
               </p>
               {radioMode && (
-                <button
-                  type="button"
+                <MotionPress
+                  variant="ghost"
+                  haptic="selection"
                   className="player-radio-badge player-radio-badge--active"
                   onClick={(e) => {
                     e.stopPropagation()
                     navigate('/radio')
                   }}
-                  title="Режим радио"
+                  title={t('redesign.playerBar.radioMode')}
                 >
                   <span className="player-radio-badge__dot" />
-                  Радио
-                </button>
+                  {t('redesign.playerBar.radioMode')}
+                </MotionPress>
               )}
             </div>
             <p
@@ -402,8 +405,10 @@ export function PlayerBar() {
                 className="pb-overflow-menu"
                 role="menu"
               >
-                <button
+                <MotionPress
                   role="menuitem"
+                  variant="ghost"
+                  haptic="selection"
                   className="pb-menu-item"
                   onClick={() => {
                     setOverflowOpen(false)
@@ -411,10 +416,12 @@ export function PlayerBar() {
                   }}
                 >
                   <Icon name="queue" size={16} />
-                  Очередь
-                </button>
-                <button
+                  {t('redesign.playerBar.queueMenu')}
+                </MotionPress>
+                <MotionPress
                   role="menuitem"
+                  variant="ghost"
+                  haptic="selection"
                   className="pb-menu-item"
                   onClick={() => {
                     setOverflowOpen(false)
@@ -422,25 +429,27 @@ export function PlayerBar() {
                   }}
                 >
                   <Icon name="eq" size={16} />
-                  Эквалайзер
-                </button>
-                <button
+                  {t('redesign.playerBar.eqMenu')}
+                </MotionPress>
+                <MotionPress
                   role="menuitem"
+                  variant="ghost"
+                  haptic="selection"
                   className={`pb-menu-item ${shuffleOn ? 'active' : ''}`}
                   onClick={() => {
-                    haptic('light')
                     toggleShuffle()
                     setOverflowOpen(false)
                   }}
                 >
                   <Icon name="shuffle" size={16} />
-                  Перемешать
-                </button>
-                <button
+                  {t('redesign.playerBar.shuffleMenu')}
+                </MotionPress>
+                <MotionPress
                   role="menuitem"
+                  variant="ghost"
+                  haptic="selection"
                   className={`pb-menu-item ${repeatMode !== 'none' ? 'active' : ''}`}
                   onClick={() => {
-                    haptic('light')
                     toggleRepeat()
                     setOverflowOpen(false)
                   }}
@@ -455,9 +464,11 @@ export function PlayerBar() {
                     size={16}
                   />
                   {repeatTitle}
-                </button>
-                <button
+                </MotionPress>
+                <MotionPress
                   role="menuitem"
+                  variant="ghost"
+                  haptic="selection"
                   className="pb-menu-item pb-menu-item-danger"
                   onClick={() => {
                     setOverflowOpen(false)
@@ -465,8 +476,8 @@ export function PlayerBar() {
                   }}
                 >
                   <Icon name="x" size={16} />
-                  Остановить
-                </button>
+                  {t('redesign.playerBar.stopMenu')}
+                </MotionPress>
               </div>
             )}
           </div>

@@ -24,7 +24,7 @@ import { TrackInfoContent } from '@/components/TrackInfoContent/TrackInfoContent
 import { Waveform } from '@/components/Waveform/Waveform'
 import { WaveformBar } from '@/components/Waveform/WaveformBar'
 import { useExitTransition } from '@/hooks/useExitTransition'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import {
   downloadTrack,
   isCached,
@@ -142,7 +142,6 @@ export function TrackCardSheet({
   } = usePlayerActions()
   const { t } = useTranslation()
   const reduce = useReducedMotion()
-  const toast = useToast()
   const sound = useSound()
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -564,14 +563,18 @@ export function TrackCardSheet({
       await api.sendMessage(conversationId, '', opts)
       setShareOpen(false)
       sound.play('notificationSuccess')
-      toast.success('Отправлено')
+      showIsland({
+        kind: 'toast',
+        title: t('trackSheet.shareSent'),
+        durationMs: 2200,
+      })
     } catch {
       setShareError('Не удалось отправить')
       sound.play('notificationError')
     } finally {
       setShareSendingConvId(null)
     }
-  }, [sharePayload, toast, sound])
+  }, [sharePayload, sound])
 
   const handleCopyShare = useCallback(async () => {
     if (!sharePayload) return
@@ -588,8 +591,10 @@ export function TrackCardSheet({
         await navigator.clipboard.writeText(`${base}${path}`)
       }
       sound.play('notificationInfo')
-      toast.success('Ссылка скопирована', {
-        position: 'top',
+      showIsland({
+        kind: 'toast',
+        title: t('trackSheet.linkCopied'),
+        durationMs: 2000,
       })
     } catch {
       setShareError('Не удалось скопировать')
@@ -597,7 +602,7 @@ export function TrackCardSheet({
     } finally {
       setShareCopyBusy(false)
     }
-  }, [sharePayload, toast, sound])
+  }, [sharePayload, sound])
 
   const openAlbumEditor = useCallback(async () => {
     const albumId = relatedAlbumInfo?.id ?? track?.album_id ?? null
@@ -630,11 +635,15 @@ export function TrackCardSheet({
       )
       setAlbumEditOpen(true)
     } catch {
-      toast.error('Не удалось открыть редактор альбома')
+      showIsland({
+        kind: 'error',
+        title: t('trackSheet.albumEditorError'),
+        durationMs: 4000,
+      })
     } finally {
       setAlbumEditBusy(false)
     }
-  }, [relatedAlbumInfo?.id, track?.album_id, isAdmin, debugMode, track?.uploaded_by_id, toast])
+  }, [relatedAlbumInfo?.id, track?.album_id, isAdmin, debugMode, track?.uploaded_by_id, t])
 
   const refreshAlbumEditor = useCallback(async () => {
     if (!albumEditData) return
@@ -904,7 +913,11 @@ export function TrackCardSheet({
       await removeTrack(track.id)
       setDownloadState('idle')
       setDownloadPct(0)
-      toast.info(t('trackSheet.removedFromDownloads'))
+      showIsland({
+        kind: 'toast',
+        title: t('trackSheet.removedFromDownloads'),
+        durationMs: 2200,
+      })
       return
     }
     setDownloadState('downloading')
@@ -919,16 +932,18 @@ export function TrackCardSheet({
       })
       setDownloadState('cached')
       hapticNotification('success')
-      toast.success(
-        t('trackSheet.offlineReady'),
-      )
+      showIsland({
+        kind: 'toast',
+        title: t('trackSheet.offlineReady'),
+        durationMs: 2400,
+      })
     } catch (e) {
       setDownloadState('idle')
       const msg =
         e instanceof Error
           ? e.message
           : t('trackSheet.downloadError')
-      toast.error(msg)
+      showIsland({ kind: 'error', title: msg, durationMs: 4000 })
     }
   }
 
@@ -1032,9 +1047,11 @@ export function TrackCardSheet({
                       await v.requestPictureInPicture()
                     }
                   } catch {
-                    toast.warning(
-                      t('trackSheet.pipUnavailable'),
-                    )
+                    showIsland({
+                      kind: 'toast',
+                      title: t('trackSheet.pipUnavailable'),
+                      durationMs: 3000,
+                    })
                   }
                 }}
                 aria-label={t('trackSheet.pipAria')}
@@ -1887,7 +1904,11 @@ export function TrackCardSheet({
                       const full = await api.getTrack(v.track_id)
                       playTrack(full)
                     } catch {
-                      toast.error(t('trackSheet.sourceSwitchError', 'Не удалось переключить'))
+                      showIsland({
+                        kind: 'error',
+                        title: t('trackSheet.sourceSwitchError'),
+                        durationMs: 3500,
+                      })
                     }
                   }}
                 >
@@ -1949,11 +1970,11 @@ export function TrackCardSheet({
                     if (
                       !/^https?:\/\//i.test(u)
                     ) {
-                      toast.error(
-                        t(
-                          'trackSheet.streamDebugInvalid',
-                        ),
-                      )
+                      showIsland({
+                        kind: 'error',
+                        title: t('trackSheet.streamDebugInvalid'),
+                        durationMs: 3500,
+                      })
                       return
                     }
                     setThirdPartyStreamOverride(

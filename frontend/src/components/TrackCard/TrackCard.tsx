@@ -13,7 +13,7 @@ import {
 } from '@/store/PlayerContext'
 import { getInternalUserId } from '@/lib/telegram'
 import { api } from '@/lib/api'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { LongPressMenu } from '@/components/ui/LongPressMenu'
 import type { LongPressMenuItem } from '@/components/ui/LongPressMenu'
 import { MotionPress } from '@/components/ui/MotionPress'
@@ -53,7 +53,6 @@ export function TrackCard({
   const { isLiked, toggleLike } = useLikes()
   const { track: currentTrack } = usePlayerMeta()
   const { playTrack, addToQueue } = usePlayerActions()
-  const toast = useToast()
   const [confirmingDelete, setConfirmingDelete] =
     useState(false)
   const confirmTimerRef = useRef<ReturnType<
@@ -98,12 +97,11 @@ export function TrackCard({
         icon: 'queue',
         onPick: () => {
           addToQueue(track)
-          toast.success(
-            t(
-              'redesign.tracks.longPressQueued',
-              'Added to queue',
-            ),
-          )
+          showIsland({
+            kind: 'toast',
+            title: t('redesign.tracks.longPressQueued', 'Added to queue'),
+            durationMs: 2000,
+          })
         },
       },
       {
@@ -122,12 +120,11 @@ export function TrackCard({
               await navigator.clipboard.writeText(url)
             }
           } catch {
-            toast.error(
-              t(
-                'redesign.tracks.shareFail',
-                'Could not share',
-              ),
-            )
+            showIsland({
+              kind: 'error',
+              title: t('redesign.tracks.shareFail', 'Could not share'),
+              durationMs: 3500,
+            })
           }
         },
       },
@@ -166,7 +163,6 @@ export function TrackCard({
     isOwner,
     onVisibilityChanged,
     addToQueue,
-    toast,
     toggleLike,
   ])
 
