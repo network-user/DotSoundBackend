@@ -874,6 +874,7 @@ bounded-transport exception
 - [x] **Stage A (FullscreenLyrics) — Apple Music polish**: добавлен sticky header с маленькой обложкой через `BeatPulse` (bpm от трека, active=isPlaying) + meta-блок (title/artist) + close-кнопка на `MotionPress`. Playback controls (prev/play/next) на `MotionPress` + `MorphIcon` (`pause`/`play` filled). Стили в `frontend/src/styles/redesign-player.css` (`.rp-now-fl-*`).
 - [x] **i18n**: новые ключи в `frontend/src/locales/i18n_extra2_{ru,en}.json` под `redesign.tracks.*` (chat menu, chat header/status, chat empty/divider, TrackCardSheet close, message reactions).
 - [x] **Final acceptance**: `npx tsc --noEmit` — clean; `npm run build` — clean (vite + bundle-hygiene + admin-bundle), PWA precache 33 entries.
+- [x] **Stream 2/3 polish (Stage D / I)**: ProfileView (tabs+settings → MotionPress, локализованы 'profile.tabProfile/Import/Complaints'), PlaylistsView (back/share/copy/close/share-row/create-playlist → MotionPress), LikedView load-more → MotionPress, ListenerStats period chips → MotionPress, OfflineList (clear-all + play + remove → MotionPress), HistoryList (retry + play row → MotionPress), UploadStepDetails (artist-mode + lyrics-trigger → MotionPress), UploadComboBox (toggle/items/create → MotionPress).
 
 ## �?ла�?�?о�?м�? �?? б�?д�?�?ее
 

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { hapticNotification, hapticSelection } from '@/lib/telegram'
 import type { LyricsResponse } from '@/types/api'
 import { UploadComboBox } from './UploadComboBox'
@@ -100,8 +101,10 @@ export function UploadStepDetails(props: Props) {
           {t('redesign.upload.file.artistLabel')}
         </label>
         <div className="upload-artist-mode">
-          <button
+          <MotionPress
             type="button"
+            variant="ghost"
+            haptic="selection"
             className={`upload-artist-mode-btn${artistMode === 'profile' ? ' active' : ''}`}
             onClick={() => {
               if (!profileArtistName) {
@@ -116,9 +119,11 @@ export function UploadStepDetails(props: Props) {
             }}
           >
             {t('redesign.upload.file.artistModeProfile')}
-          </button>
-          <button
+          </MotionPress>
+          <MotionPress
             type="button"
+            variant="ghost"
+            haptic="selection"
             className={`upload-artist-mode-btn${artistMode === 'custom' ? ' active' : ''}`}
             onClick={() => {
               setArtistMode('custom')
@@ -126,7 +131,7 @@ export function UploadStepDetails(props: Props) {
             }}
           >
             {t('redesign.upload.file.artistModeCustom')}
-          </button>
+          </MotionPress>
         </div>
         {artistMode === 'profile' && (
           <p className="upload-artist-profile-note">
@@ -212,8 +217,10 @@ export function UploadStepDetails(props: Props) {
           <label className="form-label">
             {t('redesign.upload.file.lyricsLabel')}
           </label>
-          <button
+          <MotionPress
             type="button"
+            variant="ghost"
+            haptic="selection"
             className={`lyrics-editor-trigger${lyrics ? ' active' : ''}`}
             onClick={() => {
               hapticSelection()
@@ -223,7 +230,7 @@ export function UploadStepDetails(props: Props) {
             {lyrics
               ? t('redesign.upload.file.lyricsSet')
               : t('redesign.upload.file.lyricsAdd')}
-          </button>
+          </MotionPress>
         </div>
       )}
 

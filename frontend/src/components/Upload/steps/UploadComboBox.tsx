@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { hapticSelection, haptic } from '@/lib/telegram'
 
 interface Props {
@@ -41,8 +42,10 @@ export function UploadComboBox({
 
   return (
     <>
-      <button
+      <MotionPress
         type="button"
+        variant="ghost"
+        haptic="selection"
         className="genre-search-toggle ru-up-cb__toggle"
         onClick={() => {
           onToggleOpen()
@@ -55,7 +58,7 @@ export function UploadComboBox({
           name={open ? 'chevron-up' : 'chevron-down'}
           size={16}
         />
-      </button>
+      </MotionPress>
       {open && (
         <div
           className="genre-search-popover ru-up-cb__popover"
@@ -76,9 +79,11 @@ export function UploadComboBox({
           {!searching && results.length > 0 && (
             <div className="genre-search-list ru-up-cb__list">
               {results.map((item) => (
-                <button
+                <MotionPress
                   key={item}
                   type="button"
+                  variant="ghost"
+                  haptic="selection"
                   className={`genre-search-item ru-up-cb__item${
                     value.toLowerCase() === item.toLowerCase()
                       ? ' active'
@@ -90,13 +95,15 @@ export function UploadComboBox({
                   }}
                 >
                   {item}
-                </button>
+                </MotionPress>
               ))}
             </div>
           )}
           {!searching && query.trim() && !hasExact && (
-            <button
+            <MotionPress
               type="button"
+              variant="primary"
+              haptic="medium"
               className="genre-search-create ru-up-cb__create"
               onClick={() => {
                 onCreate(query.trim())
@@ -104,7 +111,7 @@ export function UploadComboBox({
               }}
             >
               {t(createKey, { name: query.trim() })}
-            </button>
+            </MotionPress>
           )}
           {!searching &&
             results.length === 0 &&
