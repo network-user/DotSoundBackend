@@ -1167,3 +1167,13 @@ ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyr
 
 - [x] **Stage H (recap / achievements)** — 2026-05-07: `RecapStoryStage` (9 слайдов, auto-advance, long-press pause, tap-зоны), `RecapView` + `/recap?tab=achievements` → `AchievementsView`, share sheet + `RecapShareCard` (9:16, TODO на реальный export без новых npm), `redesign-recap.css`, `getRecapSnapshotMock()` + `redesign.recap.*` в `i18n_extra2_*`.
 - [~] **Stage D (library): поиск, медиатека, лайки, плейлисты** — 2026-05-07: `redesign-library.css`, `SearchView` (чипы фильтра сущностей, motion), `LibraryView` (tabs + layoutId, daily mix `MotionPress`), `LikedView` (сортировка, чипы `MotionPress`, sticky-шапка), `PlaylistsView` (сетка, `LongPressMenu`, поток «поделиться» с экрана списка), ключи `redesign.library.*` в `i18n_extra2_*.json`. Дальше: polish профиль/настройки, Stage F (artist shell), отдельные коммиты после `tsc`/`build`.
+
+- [x] **Cross-cutting motion polish (batch 3)** — 2026-05-07: финальный проход MotionPress/MorphIcon по
+  `AchievementsView` (плитки достижений), `Notifications/NotificationBell` + `NotificationList` (колокольчик,
+  пункты меню, кнопки строк, more-vertical, close), все Import-модалки (`PlatformImportMethodModal`,
+  `SoundCloudPlaylistUrlModal`, `VkMusicUrlModal`, `SpotifyUrlModal`, `YandexMusicUrlModal`) и `ImportView`
+  (selectAll/deselectAll/cancel, queued/importing/done, cancel-confirm dialog), `Chat/VoiceRecorder` +
+  `VoicePlayer` (cancel/play/preview/send + waveform speed), `Settings/AccountDangerZone` и
+  `Settings/OAuthImportAccounts`. Inline-стили `style={{padding,gap,flex,...}}` вынесены в новые классы
+  `rf-import-*`, `settings-danger-zone__*`, `settings-badge--clickable` (`redesign-artist.css`, `global.css`).
+  TS clean (`npx tsc --noEmit`), `npm run build` зелёный, hygiene + admin-bundle проверки прошли.

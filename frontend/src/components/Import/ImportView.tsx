@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import type { ImportAudioInfo, ImportJobResponse } from '@/types/api'
 import { ImportSourcePicker } from './ImportSourcePicker'
+import { MotionPress } from '@/components/ui/MotionPress'
 import {
   fmtDuration,
   fmtSize,
@@ -373,25 +374,33 @@ export function ImportView({ active }: { active: boolean }) {
           </div>
 
           <div className="import-select-actions">
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="btn-secondary"
               onClick={selectAll}
             >
               {t('import.selectAll')}
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="btn-secondary"
               onClick={deselectAll}
             >
               {t('import.deselectAll')}
-            </button>
-            <button
-              className="btn-secondary"
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="btn-secondary rf-import-cancel-action"
               onClick={() => setCancelConfirmOpen(true)}
-              style={{ marginLeft: 'auto' }}
             >
               {t('playlists.cancel')}
-            </button>
+            </MotionPress>
           </div>
 
           <div className="import-track-list">
@@ -426,8 +435,11 @@ export function ImportView({ active }: { active: boolean }) {
             })}
           </div>
 
-          <div style={{ padding: '16px' }}>
-            <button
+          <div className="rf-import-action-row">
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
               className="btn-primary"
               disabled={selected.size === 0}
               onClick={handleStartImport}
@@ -435,7 +447,7 @@ export function ImportView({ active }: { active: boolean }) {
               {t('import.importBtn', {
                 count: selected.size,
               })}
-            </button>
+            </MotionPress>
           </div>
         </div>
       )}
@@ -472,15 +484,17 @@ export function ImportView({ active }: { active: boolean }) {
               {t('import.queueMsg')}
             </p>
           </div>
-          <div style={{ padding: '16px' }}>
-            <button
-              className="btn-secondary"
+          <div className="rf-import-action-row">
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="btn-secondary rf-import-action-full"
               onClick={() => setCancelConfirmOpen(true)}
               disabled={cancelling}
-              style={{ width: '100%' }}
             >
               {t('playlists.cancel')}
-            </button>
+            </MotionPress>
           </div>
         </div>
       )}
@@ -529,15 +543,17 @@ export function ImportView({ active }: { active: boolean }) {
           <p className="empty-hint">
             {t('import.importBackground')}
           </p>
-          <div style={{ padding: '0 16px 16px' }}>
-            <button
-              className="btn-secondary"
+          <div className="rf-import-action-row rf-import-action-row--bottom">
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="btn-secondary rf-import-action-full"
               onClick={() => setCancelConfirmOpen(true)}
               disabled={cancelling}
-              style={{ width: '100%' }}
             >
               {t('import.cancelImport')}
-            </button>
+            </MotionPress>
           </div>
         </div>
       )}
@@ -564,10 +580,16 @@ export function ImportView({ active }: { active: boolean }) {
           >
             {t('import.doneBody')}
           </p>
-          <div style={{ padding: '0 16px' }}>
-            <button className="btn-primary" onClick={handleReset}>
+          <div className="rf-import-action-row rf-import-action-row--bottom-clean">
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
+              className="btn-primary"
+              onClick={handleReset}
+            >
               {t('import.importMore')}
-            </button>
+            </MotionPress>
           </div>
         </div>
       )}
@@ -628,31 +650,29 @@ export function ImportView({ active }: { active: boolean }) {
             <p className="modal-hint">
               {t('import.cancelDialogBody')}
             </p>
-            <div
-              style={{
-                display: 'flex',
-                gap: 8,
-                flexWrap: 'wrap',
-              }}
-            >
-              <button
-                className="btn-secondary"
+            <div className="rf-import-confirm-row">
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
+                className="btn-secondary rf-import-confirm-btn"
                 onClick={() => setCancelConfirmOpen(false)}
                 disabled={cancelling}
-                style={{ flex: 1 }}
               >
                 {t('import.continueImport')}
-              </button>
-              <button
-                className="btn-primary"
+              </MotionPress>
+              <MotionPress
+                type="button"
+                variant="primary"
+                haptic="medium"
+                className="btn-primary rf-import-confirm-btn"
                 onClick={handleCancelConfirm}
                 disabled={cancelling}
-                style={{ flex: 1 }}
               >
                 {cancelling
                   ? t('import.cancelling')
                   : t('import.confirmCancel')}
-              </button>
+              </MotionPress>
             </div>
           </div>
         </div>

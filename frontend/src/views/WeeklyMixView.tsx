@@ -6,7 +6,7 @@ import { Icon } from '@/components/Icon/Icon'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
 import {
@@ -27,7 +27,6 @@ function mixCoverUrl(key: string | null): string | null {
 export function WeeklyMixView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const toast = useToast()
   const { playTrack, toggleShuffle } = usePlayerActions()
   const { shuffleOn } = usePlayerMeta()
   const [data, setData] = useState<WeeklyPlaylistResponse | null>(null)
@@ -99,7 +98,7 @@ export function WeeklyMixView() {
     try {
       await api.sendMessage(conversationId, shareUrl)
       setShareOpen(false)
-      toast.success('Ссылка отправлена')
+      showIsland({ kind: 'toast', title: t('redesign.library.shareLinkSent'), durationMs: 2200 })
     } catch {
       setShareError('Не удалось отправить')
     } finally {
@@ -110,9 +109,7 @@ export function WeeklyMixView() {
   const handleCopyLink = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(shareUrl)
-      toast.success('Ссылка скопирована', {
-        position: 'top',
-      })
+      showIsland({ kind: 'toast', title: t('redesign.library.shareLinkCopied'), durationMs: 2000 })
     } catch {
       setShareError('Не удалось скопировать ссылку')
     }
@@ -127,9 +124,9 @@ export function WeeklyMixView() {
     try {
       await playTrack(playList[0])
     } catch (e) {
-      toast.error(getApiErrorMessage(e, 'Playback error'))
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [playList, playTrack, toast])
+  }, [playList, playTrack, t])
 
   const handleShufflePlay = useCallback(async () => {
     if (!playList.length) return
@@ -139,9 +136,9 @@ export function WeeklyMixView() {
         playList[Math.floor(Math.random() * playList.length)]
       await playTrack(pick)
     } catch (e) {
-      toast.error(getApiErrorMessage(e, 'Playback error'))
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [playList, playTrack, shuffleOn, toggleShuffle, toast])
+  }, [playList, playTrack, shuffleOn, toggleShuffle, t])
 
   return (
     <section className="view active">

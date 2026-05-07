@@ -6,7 +6,7 @@ import { Icon } from '@/components/Icon/Icon'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
 import {
@@ -27,7 +27,6 @@ function mixCoverUrl(key: string | null): string | null {
 export function DailyMixView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const toast = useToast()
   const { playTrack, toggleShuffle } = usePlayerActions()
   const { shuffleOn } = usePlayerMeta()
   const [data, setData] = useState<DailyPlaylistResponse | null>(null)
@@ -110,7 +109,7 @@ export function DailyMixView() {
     try {
       await api.sendMessage(conversationId, shareUrl)
       setShareOpen(false)
-      toast.success('Ссылка отправлена')
+      showIsland({ kind: 'toast', title: t('redesign.library.shareLinkSent'), durationMs: 2200 })
     } catch {
       setShareError('Не удалось отправить')
     } finally {
@@ -121,9 +120,7 @@ export function DailyMixView() {
   const handleCopyLink = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(shareUrl)
-      toast.success('Ссылка скопирована', {
-        position: 'top',
-      })
+      showIsland({ kind: 'toast', title: t('redesign.library.shareLinkCopied'), durationMs: 2000 })
     } catch {
       setShareError('Не удалось скопировать ссылку')
     }

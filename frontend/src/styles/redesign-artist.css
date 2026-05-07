@@ -695,3 +695,41 @@
 .author-section-header {
   margin-top: 20px;
 }
+
+/* Import flow buttons (replacing inline styles) */
+.rf-import-cancel-action {
+  margin-left: auto;
+}
+
+.rf-import-action-row {
+  padding: 16px;
+}
+
+.rf-import-action-row--bottom {
+  padding: 16px;
+}
+
+.rf-import-action-row--bottom-clean {
+  padding: 0 16px;
+}
+
+.rf-import-action-full {
+  width: 100%;
+}
+
+.rf-import-confirm-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rf-import-confirm-btn {
+  flex: 1;
+}
+
+.rf-import-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}

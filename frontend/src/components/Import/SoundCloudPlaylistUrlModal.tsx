@@ -1,5 +1,6 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 
 interface Props {
   open: boolean
@@ -105,14 +106,17 @@ export function SoundCloudPlaylistUrlModal({
       <div className="modal-content">
         <div className="modal-header">
           <h3>Импорт из SoundCloud</h3>
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
             className="icon-btn"
+            ariaLabel="Закрыть"
             onClick={onClose}
             disabled={submitting}
-            aria-label="Закрыть"
           >
             <Icon name="x" size={18} />
-          </button>
+          </MotionPress>
         </div>
         <p className="modal-hint">
           Публичный плейлист: ссылка с{' '}
@@ -140,13 +144,16 @@ export function SoundCloudPlaylistUrlModal({
           />
         </div>
         {error && <div className="form-error">{error}</div>}
-        <button
+        <MotionPress
+          type="button"
+          variant="primary"
+          haptic="medium"
           className="btn-primary"
           disabled={submitting}
           onClick={() => void handleSubmit()}
         >
           {submitting ? 'Сканируем...' : 'Сканировать'}
-        </button>
+        </MotionPress>
       </div>
     </div>
   )

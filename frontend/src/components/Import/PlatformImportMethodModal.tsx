@@ -5,6 +5,7 @@ import {
 } from 'react'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { isTelegram, tg } from '@/lib/telegram'
 import { useToast } from '@/components/ui/Toast'
 import type {
@@ -187,15 +188,17 @@ export function PlatformImportMethodModal({
       <div className="modal-content">
         <div className="modal-header">
           <h3>Как импортировать из {name}</h3>
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
             className="icon-btn"
+            ariaLabel="Закрыть"
             onClick={onClose}
             disabled={submitting}
-            aria-label="Закрыть"
-            type="button"
           >
             <Icon name="x" size={18} />
-          </button>
+          </MotionPress>
         </div>
         <p className="modal-hint">{LINK_BLURBS[platform]}</p>
         <p
@@ -205,25 +208,22 @@ export function PlatformImportMethodModal({
           {ACCOUNT_BLURBS[platform]}
         </p>
         {error && <div className="form-error">{error}</div>}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 10,
-            marginTop: 16,
-          }}
-        >
-          <button
-            className="btn-primary"
+        <div className="rf-import-modal-actions">
+          <MotionPress
             type="button"
+            variant="primary"
+            haptic="medium"
+            className="btn-primary"
             disabled={submitting}
             onClick={handleByLink}
           >
             Вставить ссылку
-          </button>
-          <button
-            className="btn-secondary"
+          </MotionPress>
+          <MotionPress
             type="button"
+            variant="ghost"
+            haptic="medium"
+            className="btn-secondary"
             disabled={submitting}
             onClick={() => {
               void handleByAccount()
@@ -232,7 +232,7 @@ export function PlatformImportMethodModal({
             {submitting
               ? '…'
               : 'Войти в аккаунт ' + name}
-          </button>
+          </MotionPress>
         </div>
       </div>
     </div>

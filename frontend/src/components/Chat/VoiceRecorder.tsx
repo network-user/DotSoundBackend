@@ -5,6 +5,8 @@ import {
   useState,
 } from 'react'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
 import { safePlay } from '@/lib/safePlay'
 
 interface Props {
@@ -192,56 +194,72 @@ export function VoiceRecorder({
   if (phase === 'preview') {
     return (
       <div className="voice-recorder">
-        <button
+        <MotionPress
+          type="button"
+          variant="icon"
+          haptic="light"
           className="voice-cancel-btn"
           onClick={handleCancel}
         >
           <Icon name="x" size={20} />
-        </button>
-        <button
+        </MotionPress>
+        <MotionPress
+          type="button"
+          variant="icon"
+          haptic="medium"
           className="voice-play-preview"
           onClick={handlePlayPause}
         >
-          <Icon
+          <MorphIcon
             name={playing ? 'pause' : 'play'}
             size={18}
+            filled
           />
-        </button>
+        </MotionPress>
         <div className="voice-recording-indicator">
           <span className="voice-timer">
             {formatTime(seconds)}
           </span>
         </div>
-        <button
+        <MotionPress
+          type="button"
+          variant="primary"
+          haptic="medium"
           className="voice-send-btn"
           onClick={handleSend}
         >
           <Icon name="send" size={20} />
-        </button>
+        </MotionPress>
       </div>
     )
   }
 
   return (
     <div className="voice-recorder">
-      <button
+      <MotionPress
+        type="button"
+        variant="icon"
+        haptic="light"
         className="voice-cancel-btn"
         onClick={handleCancel}
       >
         <Icon name="x" size={20} />
-      </button>
+      </MotionPress>
       <div className="voice-recording-indicator">
         <span className="voice-pulse" />
         <span className="voice-timer">
           {formatTime(seconds)}
         </span>
       </div>
-      <button
+      <MotionPress
+        type="button"
+        variant="primary"
+        haptic="medium"
         className="voice-send-btn"
         onClick={handleStop}
       >
         <Icon name="check" size={20} />
-      </button>
+      </MotionPress>
     </div>
   )
 }
