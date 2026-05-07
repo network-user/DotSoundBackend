@@ -241,9 +241,6 @@ export function TrackCardSheet({
     (import.meta.env.DEV || isAdmin) &&
     track != null &&
     track.access_mode === 'third_party_stream'
-  const isTrackInfoUnavailable =
-    trackInfo?.status === 'not_found'
-
   useEffect(() => {
     if (
       !isCardOpen ||
@@ -1494,30 +1491,9 @@ export function TrackCardSheet({
             </span>
           </MotionPress>
 
-<<<<<<< HEAD
           <MotionPress
             type="button"
             variant="ghost"
-=======
-          <button
-            className={`tcs-action-btn${extrasOpen ? ' active' : ''}`}
-            onClick={() =>
-              setExtrasOpen(true)
-            }
-            aria-haspopup="dialog"
-            aria-expanded={extrasOpen}
-            aria-controls={
-              extrasOpen ? 'tcs-extras-sheet' : undefined
-            }
-          >
-            <Icon name="settings" size={20} />
-            <span className="tcs-action-label">
-              {t('trackSheet.more')}
-            </span>
-          </button>
-
-          <button
->>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
             className={`tcs-action-btn${showLyrics ? ' active' : ''}`}
             haptic="light"
             disabled={
@@ -1534,26 +1510,9 @@ export function TrackCardSheet({
             </span>
           </MotionPress>
 
-<<<<<<< HEAD
           <MotionPress
             type="button"
             variant="ghost"
-=======
-          <button
-            className={`tcs-action-btn${showTrackInfo ? ' active' : ''}`}
-            onClick={() =>
-              setShowTrackInfo((v) => !v)
-            }
-            disabled={isTrackInfoUnavailable}
-          >
-            <Icon name="info" size={20} />
-            <span className="tcs-action-label">
-              {t('trackSheet.aboutTrack')}
-            </span>
-          </button>
-
-          <button
->>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
             className={`tcs-action-btn${downloadState === 'cached' ? ' active' : ''}`}
             haptic="light"
             disabled={downloadState === 'downloading'}

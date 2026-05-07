@@ -14,7 +14,6 @@
 
 ---
 
-<<<<<<< HEAD
 ## Smart-buffering / pre-fetch (2026-05-06)
 
 - [x] **Smart predictive audio buffering (Mini App)** — единый
@@ -83,27 +82,6 @@
   controls. Реализова�?�? о�?дел�?н�?м backend/frontend п�?о�?одом после review
   г�?ани�?�? Backend/PrivateCore; �?ек�?�?ий UI испол�?з�?е�? с�?�?ес�?в�?�?�?ие
   `continue` / `personalized` / `user_choice` / fallback tracks.
-=======
-## Search + Playlists overhaul (2026-05-06)
-
-- [x] **DB: playlist editorial fields** — миграция `0081`: колонки `playlist_type`, `is_featured`, `source_url`, `cover_key`, `description` + индекс `ix_playlists_is_featured`.
-- [x] **Backend: admin playlist import/editorial API** — `POST /api/v1/admin/playlists/import` (SoundCloud по URL), `POST /api/v1/admin/playlists/editorial`, `PATCH /api/v1/admin/playlists/{id}` расширен `is_featured`/`description`.
-- [x] **Backend: GET /playlists/featured** — публичный endpoint для featured/editorial плейлистов с треками.
-- [x] **Backend: GET /recommendations/discover** — персонализированный discover: trending треки, популярные артисты, жанровые карточки, недавние жанры из истории прослушиваний.
-- [x] **Frontend: SearchView redesign** — табы All/Tracks/Artists/Playlists, empty-state с discover (жанры, артисты, trending), история поиска.
-- [x] **Frontend: PlaylistsView redesign** — секции «Рекомендованные» (featured), «Авто» (Weekly Top, Genre Mixes), «Мои плейлисты» с inline-create.
-- [x] **Frontend Admin: PlaylistsListRoute** — вкладки «Список», «Импорт из URL», «Создать редакционный» с inline-формами.
-- [x] **Frontend: Icon.tsx** — добавлены иконки `fire`, `music-note`, `import`.
-
-## Mini App / .sound UI (2026-05-04)
-
-- [x] **Admin + lyrics pipeline: жанр и настроение по тексту** - эвристика в PrivateCore (`text_genre_mood_infer`), автоприменение после `LyricsRepository.create_or_update`, batch prompt/import в админ-стеках и `LYRICS_DERIVED_GENRE_MOOD_ENABLED` в `.env.example`.
-- [x] **View Transitions + React** - `flushSync` в колбэке `startViewTransition` в `App.tsx` (иначе снимок «нового» кадра до коммита React - пустой/черный экран при смене вкладок/маршрутов).
-- [x] **Глобальный UI redesign .sound** - обновлены splash/loading, иконки PWA, домашний экран, поиск, чаты, профиль, admin shell и Telegram bot copy/keyboards без изменения backend API, PrivateCore и ComputeWorker.
-- [x] **Upload UX redesign + genre search** - UploadView/Upload tabs получили iOS-like polish, добавлено умное combobox с ES-backed fuzzy hints и create-new-genre flow, плюс haptic feedback и аккуратные микро-анимации.
-- [x] **Upload: profile-owned artist flow** - `one account -> one artist` ownership (backend by user id), unique-name enforcement with migration auto-dedupe, auto-rename owned artist on `display_name` update, and UploadFileTab mode switch (`I am this artist` vs manual artist).
-- [ ] **Home recommendations: richer highlight endpoint** - добавить отдельные данные для крупной карточки главного экрана: editorial label, reason/highlight metadata, стабильный hero image и компактные carousel controls. Реализовать отдельным backend/frontend проходом после review границы Backend/PrivateCore; текущий UI использует существующие `continue` / `personalized` / `user_choice` / fallback tracks.
->>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 
 ## Админка / альбомы (2026-05-04)
 
@@ -655,7 +633,6 @@
 - [x] Admin dashboard statistics: backend `/api/v1/admin/dashboard/stats` with period aggregations (today/7d/30d), plus frontend stats block with KPI cards and top tracks list.
 - [x] Admin tabs analytics expansion: track analytics (popular tracks + uploads timeline) and admin activity analytics (actions timeline + top admins) with period filters in `Tracks` and `Users` routes.
 
-<<<<<<< HEAD
 ## Session Updates (2026-05-07) — iOS Redesign 2026 stage closure
 
 - [x] **Stage E (Chat/TrackCardSheet) — visual rewrite**: ChatList rows wrapped in `LongPressMenu` (mute/pin/unpin/mark-unread/delete) with monochrome icons; ChatBubble переведён на `m.div` со spring-scale (own send) / fade-up (incoming), реакции через `MorphIcon` + `LongPressMenu`; ChatView rewrite — `glass--liquid` sticky header с `MotionPress`/`MorphIcon`, `AnimatePresence` для menu dropdown, локализация всех hardcoded строк (`redesign.tracks.*`); ChatsView large-title sticky header; TrackCardSheet — drag-down close (threshold 100 px), все action-buttons на `MotionPress` + `MorphIcon`. CSS: `frontend/src/styles/redesign-tracks.css`.
@@ -671,9 +648,6 @@
 - [x] **Final acceptance (batch 2)**: `npx tsc --noEmit` — clean; `npm run build` — clean.
 
 ## �?ла�?�?о�?м�? �?? б�?д�?�?ее
-=======
-## Платформы - будущее
->>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 
 - **Гибридный плеер**: для платформ с официальными embed-виджетами реализовать `access_mode="official_embed"` - храним embed URL, отрисовываем `<iframe>` вместо нативного плеера, отключаем EQ. Приоритет: YouTube (требует TOS раздел 5.D).
 - **VK Музыка**: OAuth уже реализован (`linked_accounts`, scope `audio`). Нужно добавить `VKStreamService` (получает HLS-URL через `audio.getById` с user OAuth token) и расширить `playback.py`. Отложено - российский сервис.
@@ -834,7 +808,6 @@
 - [x] Activation improvements (phase 2, 2026-05-06): backend persists onboarding activation timestamps (`auth_first_seen_at`, `first_play_at`), computes server-side `ms_from_auth_server`, and aggregates activation events in Redis for funnel metrics.
 - [x] Admin dashboard (2026-05-06): added activation funnel endpoint `/api/v1/admin/dashboard/activation-funnel` and KPI cards for auth->first-play time, onboarding completion rate, skip rate, and first-session plays.
 - [x] Onboarding UX (2026-05-06): resumable draft state in localStorage, feature-flag-aware smart skip (`feature.onboarding.smart_skip_enabled`), neutral calibration "skip" option, and import-progress CTA to listen to already imported tracks immediately.
-<<<<<<< HEAD
 
 - [x] Recsys: catalog station + album co-artist overlap weights in PrivateCore (`similarity_signal_policy`), `UserPrefs.similar_artist_weights`, hybrid `/artists/{id}/similar`, station-neighbor pool for `/recommendations/similar/{track_id}` (2026-05-07).
 
@@ -857,8 +830,3 @@
   на `MotionPress` (карточки источников, CTA в `empty/done/select/queued/importing`, оба confirm-модала), inline
   стили заменены классами `onboarding-import-*` в `global.css`; в `admin/routes/DashboardRoute` tick-кнопки
   metric slider также переведены на `MotionPress` (`icon` + `selection`). Проверки: `npx tsc --noEmit`, `npm run build`.
-=======
-- [x] Mini App track card UI update (2026-05-06): moved `Ещё` into the main action grid, replaced floating extras popover with dedicated bottom-sheet extras panel, and increased horizontal padding for core `TrackCardSheet` blocks to improve readability.
-- [x] Mini App TrackCardSheet spacing follow-up (2026-05-06): added stronger horizontal insets for `Источник`/external disclaimer, `Похожие треки`, and `О треке`, while restoring comments section padding to previous value.
-- [x] Mini App TrackCardSheet info toggle follow-up (2026-05-06): added a dedicated `О треке` action button and switched track-info loading/rendering to explicit on-demand toggle instead of automatic section display.
->>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0

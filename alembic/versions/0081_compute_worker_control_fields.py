@@ -1,7 +1,7 @@
 """compute_workers: claims pause + worker package version
 
-Revision ID: 0081
-Revises: 0080
+Revision ID: 0082
+Revises: 0081
 Create Date: 2026-05-06
 """
 
@@ -10,8 +10,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0081"
-down_revision = "0080"
+revision = "0082"
+down_revision = "0081"
 branch_labels = None
 depends_on = None
 

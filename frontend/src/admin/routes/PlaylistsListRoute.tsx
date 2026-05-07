@@ -186,7 +186,7 @@ export function PlaylistsListRoute() {
       id: 'featured',
       header: 'Featured',
       cell: ({ row }) => (
-        <Press
+        <MotionPress
           variant="ghost"
           onClick={() =>
             setFeaturedMutation.mutate({
@@ -196,7 +196,7 @@ export function PlaylistsListRoute() {
           }
         >
           {row.original.is_featured ? '★ Убрать' : '☆ Сделать Featured'}
-        </Press>
+        </MotionPress>
       ),
     },
     {
@@ -218,7 +218,6 @@ export function PlaylistsListRoute() {
   return (
     <section className="admin-card">
       <h1>{t('admin.playlists.title')}</h1>
-<<<<<<< HEAD
       <p className="admin-card__sub">
         {t('admin.playlists.listHint')}
       </p>
@@ -259,52 +258,6 @@ export function PlaylistsListRoute() {
         >
           {t('admin.common.next')}
         </MotionPress>
-=======
-
-      {/* Tab switcher */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 8,
-          marginBottom: 16,
-          borderBottom: '1px solid var(--admin-border)',
-          paddingBottom: 8,
-        }}
-      >
-        {(
-          [
-            ['list', 'Список'],
-            ['import', 'Импорт из URL'],
-            ['create', 'Создать редакционный'],
-          ] as [AdminTab, string][]
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            className={`admin-tab-btn${tab === id ? ' admin-tab-btn--active' : ''}`}
-            onClick={() => setTab(id)}
-            style={{
-              padding: '6px 14px',
-              borderRadius: 6,
-              border:
-                tab === id
-                  ? '1px solid var(--admin-accent)'
-                  : '1px solid var(--admin-border)',
-              background:
-                tab === id ? 'var(--admin-accent-dim)' : 'transparent',
-              color:
-                tab === id
-                  ? 'var(--admin-accent)'
-                  : 'var(--admin-text-muted)',
-              cursor: 'pointer',
-              fontSize: 13,
-              fontWeight: tab === id ? 600 : 400,
-            }}
-          >
-            {label}
-          </button>
-        ))}
->>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
       </div>
 
       {/* ── Tab: List ──────────────────────────────────────── */}
@@ -330,18 +283,18 @@ export function PlaylistsListRoute() {
             emptyHint={t('admin.playlists.empty')}
           />
           <div className="admin-pagination">
-            <Press
+            <MotionPress
               variant="ghost"
               disabled={page <= 1 || isFetching}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
               {t('admin.common.prev')}
-            </Press>
+            </MotionPress>
             <span>
               {page} / {totalPages} ·{' '}
               {t('admin.common.total', { count: total })}
             </span>
-            <Press
+            <MotionPress
               variant="ghost"
               disabled={page >= totalPages || isFetching}
               onClick={() =>
@@ -349,7 +302,7 @@ export function PlaylistsListRoute() {
               }
             >
               {t('admin.common.next')}
-            </Press>
+            </MotionPress>
           </div>
         </>
       )}
@@ -441,7 +394,7 @@ export function PlaylistsListRoute() {
               {importError}
             </p>
           )}
-          <Press
+          <MotionPress
             variant="primary"
             disabled={
               !importUrl.trim() || importMutation.isPending
@@ -451,7 +404,7 @@ export function PlaylistsListRoute() {
             {importMutation.isPending
               ? 'Импортируется...'
               : 'Импортировать'}
-          </Press>
+          </MotionPress>
           {importMutation.isPending && (
             <p
               style={{
@@ -553,7 +506,7 @@ export function PlaylistsListRoute() {
               {createError}
             </p>
           )}
-          <Press
+          <MotionPress
             variant="primary"
             disabled={
               !createName.trim() || createMutation.isPending
@@ -561,7 +514,7 @@ export function PlaylistsListRoute() {
             onClick={() => createMutation.mutate()}
           >
             {createMutation.isPending ? 'Создание...' : 'Создать'}
-          </Press>
+          </MotionPress>
         </div>
       )}
     </section>
