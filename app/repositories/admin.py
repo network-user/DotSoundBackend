@@ -59,6 +59,64 @@ class AdminRepository:
         total_result = await self._session.execute(count_query)
         return rows, int(total_result.scalar_one())
 
+    async def list_tracks_playback_unavailable(
+        self,
+        *,
+        page: int = 1,
+        size: int = 20,
+        search: str | None = None,
+    ) -> tuple[list[Track], int]:
+        q = select(Track).where(
+            Track.playback_last_failure_at.isnot(None),
+        )
+        cq = select(func.count(Track.id)).where(
+            Track.playback_last_failure_at.isnot(None),
+        )
+        if search:
+            pattern = f"%{search}%"
+            cond = Track.title.ilike(pattern) | Track.artist.ilike(pattern)
+            q = q.where(cond)
+            cq = cq.where(cond)
+        q = (
+            q.order_by(desc(Track.playback_last_failure_at))
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+        result = await self._session.execute(q)
+        rows = list(result.scalars().all())
+        total_result = await self._session.execute(cq)
+        return rows, int(total_result.scalar_one())
+
+    async def list_tracks_playback_suppressed(
+        self,
+        *,
+        page: int = 1,
+        size: int = 20,
+        search: str | None = None,
+    ) -> tuple[list[Track], int]:
+        q = select(Track).where(
+            Track.playback_suppressed_until.isnot(None),
+            Track.playback_suppressed_until > func.now(),
+        )
+        cq = select(func.count(Track.id)).where(
+            Track.playback_suppressed_until.isnot(None),
+            Track.playback_suppressed_until > func.now(),
+        )
+        if search:
+            pattern = f"%{search}%"
+            cond = Track.title.ilike(pattern) | Track.artist.ilike(pattern)
+            q = q.where(cond)
+            cq = cq.where(cond)
+        q = (
+            q.order_by(desc(Track.playback_suppressed_until))
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+        result = await self._session.execute(q)
+        rows = list(result.scalars().all())
+        total_result = await self._session.execute(cq)
+        return rows, int(total_result.scalar_one())
+
     async def list_tracks_for_artist(
         self,
         artist_id: int,

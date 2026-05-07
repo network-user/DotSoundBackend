@@ -53,14 +53,24 @@ class TrackService:
         )
         return tracks, total
 
-    async def get_track(self, track_id: int) -> Track | None:
+    @staticmethod
+    def _youtube_policy_hides(track: Track) -> bool:
+        sp = (track.source_platform or "").strip().lower()
+        im = (track.imported_from or "").strip().lower()
+        return sp == "youtube" or im == "youtube"
+
+    async def get_track(
+        self, track_id: int, *, viewer: User | None = None
+    ) -> Track | None:
+        from app.services.track_playback_health_service import (
+            is_track_playback_suppressed,
+        )
+
         track = await self._repo.get_by_id(track_id)
         if not track or not track.is_active:
             logger.warning("track_not_found", track_id=track_id)
             return None
-        source_platform = (track.source_platform or "").strip().lower()
-        imported_from = (track.imported_from or "").strip().lower()
-        if source_platform == "youtube" or imported_from == "youtube":
+        if self._youtube_policy_hides(track):
             logger.info(
                 "track_hidden_by_source_policy",
                 track_id=track_id,
@@ -68,7 +78,36 @@ class TrackService:
                 imported_from=track.imported_from,
             )
             return None
+        if is_track_playback_suppressed(track) and (
+            viewer is None or track.uploaded_by_id != viewer.id
+        ):
+            logger.info(
+                "track_hidden_playback_suppression",
+                track_id=track_id,
+            )
+            return None
         logger.debug("track_fetched", track_id=track_id)
+        return track
+
+    async def get_track_for_playback(
+        self,
+        track_id: int,
+    ) -> Track | None:
+        track = await self._repo.get_by_id(track_id)
+        if not track or not track.is_active:
+            logger.warning(
+                "track_not_found_playback",
+                track_id=track_id,
+            )
+            return None
+        if self._youtube_policy_hides(track):
+            logger.info(
+                "track_hidden_by_source_policy",
+                track_id=track_id,
+                source_platform=track.source_platform,
+                imported_from=track.imported_from,
+            )
+            return None
         return track
 
     async def search(

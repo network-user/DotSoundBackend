@@ -33,6 +33,10 @@ from app.services.public_playcount_service import (
 )
 from app.services.radio_service import RadioService
 from app.services.snippet_service import SnippetService
+from app.services.track_playback_health_service import (
+    TrackPlaybackHealthService,
+    playback_suppressed_blocks_streaming,
+)
 from app.services.track_response_build import (
     build_track_response,
     build_track_responses,
@@ -41,6 +45,11 @@ from app.services.track_service import TrackService
 
 router = APIRouter()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _http_exc_detail(exc: HTTPException) -> str:
+    d = exc.detail
+    return d if isinstance(d, str) else str(d)
 
 
 def _stream_ttl(source_platform: str | None) -> int:
@@ -329,13 +338,18 @@ async def stream_track(
 ) -> StreamResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
-    track = await service.get_track(track_id)
+    track = await service.get_track_for_playback(track_id)
     if not track:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
     _check_access(track, current_user)
+    if playback_suppressed_blocks_streaming(track, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Playback temporarily unavailable for this track",
+        )
     # Serve from local S3 cache when available — skips external API call.
     if track.audio_cache_status == "cached" and track.file_key:
         url = await s3.get_presigned_url(track.file_key)
@@ -365,13 +379,25 @@ async def stream_track(
                     "bandcamp" if spf == "bandcamp" else "youtube"
                 ),
             )
-        eff_track, stream_url, protocol = (
-            await _resolve_third_party_stream_with_recovery(
-                track,
-                session,
-                use_cache=True,
+        try:
+            eff_track, stream_url, protocol = (
+                await _resolve_third_party_stream_with_recovery(
+                    track,
+                    session,
+                    use_cache=True,
+                )
             )
-        )
+        except HTTPException as exc:
+            ph = TrackPlaybackHealthService(session)
+            await ph.record_server_recovery_exhausted(
+                track_id=track_id,
+                viewer_user_id=(
+                    current_user.id if current_user else None
+                ),
+                http_status=exc.status_code,
+                detail=_http_exc_detail(exc),
+            )
+            raise
         stream_track_id = int(getattr(eff_track, "id", track_id))
         stream_pf = getattr(eff_track, "source_platform", None)
         if protocol == "hls" or not _third_party_is_soundcloud(
@@ -424,6 +450,11 @@ async def play_track(
             detail="Track not found",
         )
     _check_access(track, current_user)
+    if playback_suppressed_blocks_streaming(track, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Playback temporarily unavailable for this track",
+        )
     if current_user is not None:
         fresh = await repo.get_by_id(track_id)
         if not fresh:
@@ -463,7 +494,10 @@ async def get_cover(
 ) -> StreamResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
-    track = await service.get_track(track_id)
+    track = await service.get_track(
+        track_id,
+        viewer=current_user,
+    )
     if not track or not track.cover_key:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -496,13 +530,18 @@ async def audio_stream(
 ) -> StreamingResponse | RedirectResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
-    track = await service.get_track(track_id)
+    track = await service.get_track_for_playback(track_id)
     if not track:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
     _check_access(track, current_user)
+    if playback_suppressed_blocks_streaming(track, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Playback temporarily unavailable for this track",
+        )
 
     if track.hls_manifest_key and not force_progressive:
         return RedirectResponse(
@@ -543,31 +582,66 @@ async def audio_stream(
             pass  # fall through to live proxy on storage error
 
     if track.access_mode == "third_party_stream":
-        eff_track, stream_url, protocol = (
-            await _resolve_third_party_stream_with_recovery(
-                track,
-                session,
-                use_cache=not _third_party_is_soundcloud(track),
+        try:
+            eff_track, stream_url, protocol = (
+                await _resolve_third_party_stream_with_recovery(
+                    track,
+                    session,
+                    use_cache=not _third_party_is_soundcloud(track),
+                )
             )
-        )
+        except HTTPException as exc:
+            ph = TrackPlaybackHealthService(session)
+            await ph.record_server_recovery_exhausted(
+                track_id=track_id,
+                viewer_user_id=(
+                    current_user.id if current_user else None
+                ),
+                http_status=exc.status_code,
+                detail=_http_exc_detail(exc),
+            )
+            raise
+        view_uid = current_user.id if current_user else None
         if getattr(eff_track, "source_platform", None) in (
             "bandcamp",
             "youtube",
         ):
-            return await _proxy_cors_bypass_third_party_audio(
-                request, eff_track, session
-            )
+            try:
+                return await _proxy_cors_bypass_third_party_audio(
+                    request,
+                    eff_track,
+                    session,
+                )
+            except HTTPException as exc:
+                ph = TrackPlaybackHealthService(session)
+                await ph.record_server_proxy_upstream(
+                    track_id=track_id,
+                    viewer_user_id=view_uid,
+                    http_status=exc.status_code,
+                    detail=_http_exc_detail(exc),
+                )
+                raise
         if _third_party_is_soundcloud(eff_track) and protocol != "hls":
-            return await _http_proxy_range_get(
-                request,
-                stream_url,
-                detail_fail="SoundCloud stream failed",
-                detail_error="SoundCloud stream error",
-                extra_headers={
-                    "User-Agent": settings.lyrics_sc_cdn_user_agent,
-                    "Referer": settings.lyrics_sc_cdn_referer,
-                },
-            )
+            try:
+                return await _http_proxy_range_get(
+                    request,
+                    stream_url,
+                    detail_fail="SoundCloud stream failed",
+                    detail_error="SoundCloud stream error",
+                    extra_headers={
+                        "User-Agent": settings.lyrics_sc_cdn_user_agent,
+                        "Referer": settings.lyrics_sc_cdn_referer,
+                    },
+                )
+            except HTTPException as exc:
+                ph = TrackPlaybackHealthService(session)
+                await ph.record_server_proxy_upstream(
+                    track_id=track_id,
+                    viewer_user_id=view_uid,
+                    http_status=exc.status_code,
+                    detail=_http_exc_detail(exc),
+                )
+                raise
         return RedirectResponse(url=stream_url, status_code=302)
 
     if not track.file_key:
@@ -764,7 +838,10 @@ async def get_share_links(
 ) -> ShareResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
-    track = await service.get_track(track_id)
+    track = await service.get_track(
+        track_id,
+        viewer=current_user,
+    )
     if not track:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -804,7 +881,10 @@ async def video_proxy(
     current_user: User | None = Depends(get_optional_user),
 ) -> Response:
     service = TrackService(session)
-    track = await service.get_track(track_id)
+    track = await service.get_track(
+        track_id,
+        viewer=current_user,
+    )
     if not track or not track.video_key:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -842,7 +922,10 @@ async def get_track(
 ) -> TrackResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
-    track = await service.get_track(track_id)
+    track = await service.get_track(
+        track_id,
+        viewer=current_user,
+    )
     if not track:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -15,6 +15,9 @@ from app.schemas.album import (
     AlbumWithTracksResponse,
 )
 from app.services.album_service import AlbumService
+from app.services.track_playback_health_service import (
+    is_track_playback_suppressed,
+)
 from app.services.track_response_build import dedupe_and_build_track_list
 
 router = APIRouter(prefix="/albums", tags=["albums"])
@@ -73,7 +76,14 @@ async def get_album(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Album not found",
         )
-    tracks = await dedupe_and_build_track_list(session, list(album.tracks))
+    raw_tracks = list(album.tracks)
+    if not is_owner and not is_admin:
+        raw_tracks = [
+            t
+            for t in raw_tracks
+            if not is_track_playback_suppressed(t)
+        ]
+    tracks = await dedupe_and_build_track_list(session, raw_tracks)
     return AlbumWithTracksResponse(
         **AlbumResponse.model_validate(album).model_dump(),
         tracks=tracks,

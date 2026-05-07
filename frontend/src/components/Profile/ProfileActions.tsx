@@ -2,6 +2,8 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { MIX_SHORTCUT_TILES } from '@/lib/homeShortcuts'
+import { isYearRecapSeasonActive } from '@/lib/recapSeason'
 import { useSound } from '@/store/SoundContext'
 
 interface ProfileActionsProps {
@@ -20,6 +22,30 @@ export function ProfileActions({ onOpenImport }: ProfileActionsProps) {
   const navigate = useNavigate()
   const sound = useSound()
   const tap = () => sound.play('tapSoft')
+
+  const recapRow: ActionRow | null =
+    isYearRecapSeasonActive()
+      ? {
+          id: 'profile-action-recap',
+          icon: 'sparkle',
+          label: t('redesign.recap.profileEntry'),
+          onClick: () => {
+            tap()
+            navigate('/recap')
+          },
+        }
+      : null
+
+  const mixRows: ActionRow[] =
+    MIX_SHORTCUT_TILES.map((tile) => ({
+      id: `profile-mix-${tile.labelKey}`,
+      icon: tile.profileIcon,
+      label: t(`redesign.home.${tile.labelKey}`),
+      onClick: () => {
+        tap()
+        navigate(tile.path)
+      },
+    }))
 
   const rows: ActionRow[] = [
     {
@@ -50,15 +76,6 @@ export function ProfileActions({ onOpenImport }: ProfileActionsProps) {
       },
     },
     {
-      id: 'profile-action-recap',
-      icon: 'sparkle',
-      label: t('redesign.recap.profileEntry'),
-      onClick: () => {
-        tap()
-        navigate('/recap')
-      },
-    },
-    {
       id: 'profile-action-liked',
       icon: 'heart',
       label: t('redesign.library.actionLiked', 'Понравившееся'),
@@ -67,6 +84,8 @@ export function ProfileActions({ onOpenImport }: ProfileActionsProps) {
         navigate('/library?tab=liked')
       },
     },
+    ...mixRows,
+    ...(recapRow ? [recapRow] : []),
   ]
 
   return (

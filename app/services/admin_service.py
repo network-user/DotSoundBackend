@@ -48,6 +48,43 @@ class AdminService:
             search=search,
         )
 
+    async def list_tracks_playback_unavailable(
+        self,
+        *,
+        page: int,
+        size: int,
+        search: str | None,
+    ) -> tuple[list[Track], int]:
+        return await self._repo.list_tracks_playback_unavailable(
+            page=page,
+            size=size,
+            search=search,
+        )
+
+    async def list_tracks_playback_suppressed(
+        self,
+        *,
+        page: int,
+        size: int,
+        search: str | None,
+    ) -> tuple[list[Track], int]:
+        return await self._repo.list_tracks_playback_suppressed(
+            page=page,
+            size=size,
+            search=search,
+        )
+
+    async def clear_track_playback_suppression(
+        self,
+        track_id: int,
+    ) -> Track | None:
+        from app.services.track_playback_health_service import (
+            TrackPlaybackHealthService,
+        )
+
+        svc = TrackPlaybackHealthService(self._session)
+        return await svc.clear_auto_suppression(track_id)
+
     async def list_tracks_for_artist(
         self,
         artist_id: int,

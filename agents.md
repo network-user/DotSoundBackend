@@ -159,6 +159,9 @@ Backend (file_validator.py):
   прослушиваний (qualify) + ранжирование плейлиста
   «Выбор пользователей»; `app/services/public_playcount_service.py`,
   `app/api/v1/recommendations.py`
+- `services/playback_health_policy.py` -- пороги серверных
+  ошибок воспроизведения и длительность авто-сокрытия; используется в
+  `app/services/track_playback_health_service.py`
 - `services/upload_policy.py` -- upload security: MIME allowlists,
   dangerous extensions, size limits, decision functions
 - `services/admin_security_policy.py` -- TTL admin-сессии, окно

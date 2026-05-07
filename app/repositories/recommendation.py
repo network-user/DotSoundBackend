@@ -12,6 +12,7 @@ from app.models.artist import TrackArtist
 from app.models.like import Like
 from app.models.listen_event import ListenEvent
 from app.models.track import Track
+from app.repositories.track import TrackRepository
 
 
 class RecommendationRepository:
@@ -41,6 +42,7 @@ class RecommendationRepository:
             Track.is_active.is_(True),
             Track.is_public.is_(True),
             self._exclude_hidden_sources(),
+            TrackRepository._playback_listing_allowed(),
         )
         if genre_filter:
             q = q.where(Track.genre.in_(genre_filter))
@@ -60,6 +62,7 @@ class RecommendationRepository:
             Track.is_active.is_(True),
             Track.is_public.is_(True),
             self._exclude_hidden_sources(),
+            TrackRepository._playback_listing_allowed(),
         )
         if genre_filter:
             q = q.where(Track.genre.in_(genre_filter))
@@ -144,6 +147,7 @@ class RecommendationRepository:
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
             )
             .order_by(Track.play_count.desc())
             .limit(limit)
@@ -162,6 +166,7 @@ class RecommendationRepository:
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
                 Track.created_at >= cutoff,
             )
             .order_by(Track.created_at.desc())
@@ -186,6 +191,7 @@ class RecommendationRepository:
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
                 TrackArtist.artist_id.in_(artist_ids),
             )
             .order_by(Track.created_at.desc())
@@ -230,7 +236,10 @@ class RecommendationRepository:
         result = await self._session.execute(
             select(Track)
             .join(subq, subq.c.track_id == Track.id)
-            .where(Track.is_active.is_(True))
+            .where(
+                Track.is_active.is_(True),
+                TrackRepository._playback_listing_allowed(),
+            )
         )
         return list(result.scalars().all())
 
@@ -241,6 +250,7 @@ class RecommendationRepository:
             select(Track).where(
                 Track.id.in_(ids),
                 self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
             )
         )
         id_order = {tid: i for i, tid in enumerate(ids)}
@@ -302,6 +312,7 @@ class RecommendationRepository:
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
             )
             .scalar_subquery()
         )

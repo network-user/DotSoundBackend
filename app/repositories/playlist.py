@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.playlist import Playlist, PlaylistTrack
 from app.models.track import Track
+from app.repositories.track import TrackRepository
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -279,6 +280,7 @@ class PlaylistRepository:
                 PlaylistTrack.playlist_id == playlist_id,
                 Track.is_active.is_(True),
                 self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
             )
             .order_by(PlaylistTrack.position)
         )

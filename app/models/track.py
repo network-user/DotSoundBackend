@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -174,6 +176,28 @@ class Track(Base, TimestampMixin):
     )
     audio_cache_status: Mapped[str | None] = mapped_column(
         String(20), nullable=True, index=True
+    )
+    playback_last_failure_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    playback_last_http_status: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    playback_last_failure_source: Mapped[str | None] = mapped_column(
+        String(48),
+        nullable=True,
+    )
+    playback_recovery_failed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    playback_suppressed_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
     )
 
     audio_blob: Mapped[AudioBlob | None] = relationship(

@@ -165,10 +165,12 @@ class OnboardingService:
         from sqlalchemy import func, select
 
         from app.models.track import Track
+        from app.repositories.track import TrackRepository
 
         q = select(Track).where(
             Track.is_active.is_(True),
             Track.is_public.is_(True),
+            TrackRepository._playback_listing_allowed(),
         )
         if genres:
             q = q.where(Track.genre.in_(genres))
@@ -185,6 +187,7 @@ class OnboardingService:
                 .where(
                     Track.is_active.is_(True),
                     Track.is_public.is_(True),
+                    TrackRepository._playback_listing_allowed(),
                 )
                 .order_by(Track.play_count.desc())
                 .limit(count)

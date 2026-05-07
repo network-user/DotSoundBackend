@@ -67,6 +67,9 @@ from app.models.search_event import SearchEvent
 from app.models.track import Track
 from app.models.track_audio_features import TrackAudioFeatures
 from app.models.track_info import TrackInfo
+from app.models.track_playback_failure_event import (
+    TrackPlaybackFailureEvent,
+)
 from app.models.track_preview_clip import TrackPreviewClip
 from app.models.track_similarity import TrackSimilarity
 from app.models.track_snippet import TrackSnippet
@@ -132,6 +135,7 @@ __all__ = [
     "TrackSimilarity",
     "TrackSnippet",
     "TrackArtist",
+    "TrackPlaybackFailureEvent",
     "TrackComment",
     "TrackLyrics",
     "TrackLyricsTranslation",

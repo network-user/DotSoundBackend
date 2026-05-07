@@ -101,6 +101,88 @@ async def admin_list_tracks(
     )
 
 
+@router.get(
+    "/tracks/playback-health/unavailable",
+    response_model=AdminTrackListResponse,
+    summary="[Admin] Tracks with recorded playback fetch failures",
+)
+@limiter.limit("60/minute")
+async def admin_list_playback_unavailable_tracks(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(25, ge=1, le=100),
+    search: str | None = Query(None, max_length=128),
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminTrackListResponse:
+    service = AdminService(session)
+    tracks, total = await service.list_tracks_playback_unavailable(
+        page=page,
+        size=size,
+        search=search,
+    )
+    return AdminTrackListResponse(
+        items=[AdminTrackResponse.model_validate(t) for t in tracks],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+@router.get(
+    "/tracks/playback-health/suppressed",
+    response_model=AdminTrackListResponse,
+    summary="[Admin] Tracks auto-suppressed from public playback feeds",
+)
+@limiter.limit("60/minute")
+async def admin_list_playback_suppressed_tracks(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(25, ge=1, le=100),
+    search: str | None = Query(None, max_length=128),
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminTrackListResponse:
+    service = AdminService(session)
+    tracks, total = await service.list_tracks_playback_suppressed(
+        page=page,
+        size=size,
+        search=search,
+    )
+    return AdminTrackListResponse(
+        items=[AdminTrackResponse.model_validate(t) for t in tracks],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+@router.post(
+    "/tracks/{track_id}/playback-health/clear-suppression",
+    response_model=AdminTrackResponse,
+    summary="[Admin] Clear auto playback suppression window",
+)
+@limiter.limit("60/minute")
+async def admin_clear_track_playback_suppression(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminTrackResponse:
+    service = AdminService(session)
+    track = await service.clear_track_playback_suppression(track_id)
+    if track is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    logger.info(
+        "admin_playback_suppression_cleared",
+        track_id=track_id,
+    )
+    return AdminTrackResponse.model_validate(track)
+
+
 @router.delete(
     "/tracks/{track_id}",
     status_code=status.HTTP_204_NO_CONTENT,

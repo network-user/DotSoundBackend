@@ -79,9 +79,16 @@
 - [x] **Mini App responsive touch (2026-05-07)** — breakpoint ~560px: `MotionPress`
   icon 36px на desktop fine-pointer / 44px на touch; PlayerBar элементы управления и
   меню под `--tap`; на узкой ширине лайк и «назад» в overflow; главная —
-  collapsible quick grid (4+«Ещё»), hero колонкой на телефоне; `TrackCard` owner
-  кнопки через `MotionPress`, дубль visibility скрыт (есть long-press); чат —
-  укрупнённая кнопка назад и bubble actions на `pointer: coarse`.
+  4 top quick-tile (`MIX_SHORTCUT_TILES` + `homeShortcuts.ts`), остальные миксы/радио
+  в `ProfileActions`; hero колонкой на телефоне; `TrackCard` owner кнопки через
+  `MotionPress`, дубль visibility скрыт на узком экране; чат — back/bubble coarse;
+  **итоги года** — пункт профиля и `/recap` только в декабре (`recapSeason.ts`),
+  иначе stub.
+- [x] **Редактирование аватарки профиля (2026-05-07)** — в режиме редактирования
+  `ProfileView`/`ProfileHero`: выбор JPEG/PNG/WebP до 2 МБ, превью через blob,
+  загрузка `POST /api/v1/users/me/avatar` при «Сохранить» (API уже было);
+  отмена сбрасывает черновик фото и имя до baseline; острова ошибок через
+  `showIsland`; ключи в `i18n_extra2_ru/en.json`.
 - [x] **Upload UX redesign + genre search** �?? UploadView/Upload tabs пол�?�?или
   iOS-like polish, добавлено �?мное combobox с ES-backed fuzzy hints и
   create-new-genre flow, пл�?с haptic feedback и акк�?�?а�?н�?е мик�?о-анима�?ии.
@@ -101,6 +108,7 @@
 - [x] **Admin: редактирование альбомов в UI** - колонка `tracks.album_position` (миграция `0071`), порядок треков в публичном `GET /albums/{id}`, API `/api/v1/admin/albums` (список, детали, PATCH, обложка, add/remove/reorder треков), маршруты `/admin/albums` и `/admin/albums/:albumId` (capability `tracks.manage`).
 - [x] **Admin: плейлисты** - API `/api/v1/admin/playlists`, UI `/admin/playlists` и `/admin/playlists/:playlistId` (метаданные, состав, порядок; уплотнение `playlist_tracks.position` после удаления).
 - [x] **Admin: artist catalog editor UX (2026-05-05)** - `ArtistCatalogEditor` release metadata + cover upload, per-track title/artist/description/cover, paged «all tracks» list; API `POST /api/v1/admin/tracks/{id}/cover`, `POST .../catalog/releases/{id}/cover`.
+- [x] **Playback health / auto-hide (2026-05-07)** — миграция `0083`, PrivateCore `playback_health_policy.py`, события `track_playback_failure_events`, колонки `tracks.playback_*`, авто-`playback_suppressed_until`, фильтр публичных выборок, запись при исчерпании fallback и ошибках upstream-прокси, админ-списки + вкладки в `TracksRoute`, API `playback-health/*`, снятие авто-hide; admin PATCH поддерживает `sc_url` / `source_url` / `canonical_source_url`.
 
 ## Подписки на артистов и статистика (2026-04-30)
 

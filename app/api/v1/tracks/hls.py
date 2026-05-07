@@ -7,8 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.rate_limit import limiter
-from app.dependencies import get_db
+from app.dependencies import get_db, get_optional_user
+from app.models.user import User
 from app.repositories.track import TrackRepository
+from app.services.track_playback_health_service import (
+    playback_suppressed_blocks_streaming,
+)
 
 router = APIRouter()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -27,6 +31,7 @@ async def hls_master(
     request: Request,
     track_id: int,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> Response:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     repo = TrackRepository(session)
@@ -40,6 +45,11 @@ async def hls_master(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not available",
+        )
+    if playback_suppressed_blocks_streaming(track, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Playback temporarily unavailable for this track",
         )
     data = await s3.download_object(track.hls_manifest_key)
     return Response(
@@ -59,6 +69,7 @@ async def hls_variant_playlist(
     track_id: int,
     variant: str,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> Response:
     structlog.contextvars.bind_contextvars(
         track_id=track_id, variant=variant
@@ -78,6 +89,11 @@ async def hls_variant_playlist(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not available",
+        )
+    if playback_suppressed_blocks_streaming(track, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Playback temporarily unavailable for this track",
         )
     key = f"hls/{track_id}/{variant}/playlist.m3u8"
     try:
@@ -105,6 +121,7 @@ async def hls_segment(
     variant: str,
     segment: str,
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> Response:
     structlog.contextvars.bind_contextvars(
         track_id=track_id, variant=variant, segment=segment
@@ -124,6 +141,11 @@ async def hls_segment(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not available",
+        )
+    if playback_suppressed_blocks_streaming(track, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Playback temporarily unavailable for this track",
         )
     if not segment.endswith(".ts") or not segment[:-3].isdigit():
         raise HTTPException(
