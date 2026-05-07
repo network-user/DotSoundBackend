@@ -269,7 +269,13 @@ async def _resolve_third_party_stream_with_recovery(
         )
         return eff_track, stream_url, protocol
     except HTTPException as exc:
-        if exc.status_code not in (403, 404, 410, 503):
+        # SoundCloud may return 502 when all transcodings are unavailable
+        # (e.g. both progressive and HLS manifests return 404). Treat this
+        # as recoverable to allow fallback refresh/replacement logic.
+        is_sc_502 = (
+            exc.status_code == 502 and _third_party_is_soundcloud(eff_track)
+        )
+        if exc.status_code not in (403, 404, 410, 503) and not is_sc_502:
             raise
 
         from app.config import settings as _settings

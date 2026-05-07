@@ -310,7 +310,11 @@
 }
 
 .rh-home-genre-card__cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: var(--bg-elevated);
+  color: color-mix(in srgb, var(--text-secondary) 65%, transparent);
 }
 
 .rh-home-genre-card__overlay {

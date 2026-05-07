@@ -347,9 +347,9 @@ export function PlayerBar() {
               active={isPlaying}
             >
               <MorphIcon
-                name="play"
-                filled={isPlaying}
-                size={16}
+                name={isPlaying ? 'pause' : 'play'}
+                filled
+                size={18}
               />
             </BeatPulse>
           </MotionPress>

@@ -60,6 +60,7 @@ interface HomeTrackTileProps {
 function HomeTrackTile({ track, onPlay }: HomeTrackTileProps) {
   const { t } = useTranslation()
   const src = coverUrl(track.cover_key)
+  const [coverFailed, setCoverFailed] = useState(false)
   const fallbackTitle = t('redesign.home.untitled')
   return (
     <button
@@ -69,7 +70,7 @@ function HomeTrackTile({ track, onPlay }: HomeTrackTileProps) {
       title={[track.title, track.artist].filter(Boolean).join(' — ')}
     >
       <div className="rh-home-tile__cover">
-        {src ? (
+        {src && !coverFailed ? (
           <img
             src={src}
             alt=""
@@ -77,6 +78,7 @@ function HomeTrackTile({ track, onPlay }: HomeTrackTileProps) {
             height={112}
             loading="lazy"
             decoding="async"
+            onError={() => setCoverFailed(true)}
           />
         ) : (
           <div className="rh-home-tile__ph">
@@ -102,6 +104,25 @@ interface HomeGenreMixCardProps {
   onOpen: () => void
   countLabel: string
   listenAria: string
+}
+
+function HomeGenreCell({ src }: { src: string | null }) {
+  const [failed, setFailed] = useState(false)
+  return (
+    <div className="rh-home-genre-card__cell">
+      {src && !failed ? (
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <Icon name="music" size={14} />
+      )}
+    </div>
+  )
 }
 
 function HomeGenreMixCard({
@@ -136,19 +157,7 @@ function HomeGenreMixCard({
     >
       <div className="rh-home-genre-card__mosaic">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            className="rh-home-genre-card__cell"
-          >
-            {covers[i] && (
-              <img
-                src={covers[i]}
-                alt=""
-                loading="lazy"
-                decoding="async"
-              />
-            )}
-          </div>
+          <HomeGenreCell key={i} src={covers[i] ?? null} />
         ))}
       </div>
       <div className="rh-home-genre-card__overlay" />
@@ -180,6 +189,28 @@ interface HomeTrackSnapSectionProps {
   onMore?: () => void
   moreLabel: string
   snapAria: string
+}
+
+function HomeArtistAvatar({ src }: { src: string | null }) {
+  const [failed, setFailed] = useState(false)
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt=""
+        width={64}
+        height={64}
+        loading="lazy"
+        decoding="async"
+        onError={() => setFailed(true)}
+      />
+    )
+  }
+  return (
+    <div className="rh-home-artist-chip__ph">
+      <Icon name="user" size={24} />
+    </div>
+  )
 }
 
 function HomeTrackSnapSection({
@@ -836,20 +867,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                         title={artist.name}
                       >
                         <div className="rh-home-artist-chip__avatar">
-                          {src ? (
-                            <img
-                              src={src}
-                              alt=""
-                              width={64}
-                              height={64}
-                              loading="lazy"
-                              decoding="async"
-                            />
-                          ) : (
-                            <div className="rh-home-artist-chip__ph">
-                              <Icon name="user" size={24} />
-                            </div>
-                          )}
+                          <HomeArtistAvatar src={src} />
                         </div>
                         <span className="rh-home-artist-chip__name">
                           {artist.name}
