@@ -22,6 +22,7 @@ class TrackRepository(BaseRepository[Track]):
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
                 self._exclude_hidden_sources(),
+                self._playback_listing_allowed(),
             )
             .distinct()
             .order_by(Track.genre.asc())
@@ -61,6 +62,13 @@ class TrackRepository(BaseRepository[Track]):
             ~imported_from.in_(hidden)
         )
 
+    @staticmethod
+    def _playback_listing_allowed():  # noqa: ANN205
+        return or_(
+            Track.playback_suppressed_until.is_(None),
+            Track.playback_suppressed_until <= func.now(),
+        )
+
     async def list_active(
         self,
         offset: int = 0,
@@ -72,6 +80,7 @@ class TrackRepository(BaseRepository[Track]):
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
             & self._exclude_hidden_sources()
+            & self._playback_listing_allowed()
         )
         if playable_only:
             condition = condition & self._playable_filter()
@@ -102,6 +111,7 @@ class TrackRepository(BaseRepository[Track]):
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
             & self._exclude_hidden_sources()
+            & self._playback_listing_allowed()
             & Track.id.in_(
                 select(TrackArtist.track_id).where(
                     TrackArtist.artist_id.in_(artist_ids)
@@ -138,6 +148,7 @@ class TrackRepository(BaseRepository[Track]):
                 condition
                 & Track.is_public.is_(True)
                 & self._exclude_hidden_sources()
+                & self._playback_listing_allowed()
             )
         total_result = await self._session.execute(
             select(func.count()).where(condition)
@@ -192,6 +203,7 @@ class TrackRepository(BaseRepository[Track]):
             select(Track).where(
                 Track.id.in_(track_ids),
                 self._exclude_hidden_sources(),
+                self._playback_listing_allowed(),
             )
         )
         by_id = {t.id: t for t in result.scalars().all()}
@@ -210,6 +222,7 @@ class TrackRepository(BaseRepository[Track]):
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
             & self._exclude_hidden_sources()
+            & self._playback_listing_allowed()
         )
         if genre_filter:
             genre_pattern = f"%{genre_filter.strip()}%"
@@ -263,6 +276,7 @@ class TrackRepository(BaseRepository[Track]):
         condition = (
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
+            & self._playback_listing_allowed()
             & (Track.source_platform == platform)
             & Track.title.ilike(pattern)
             & Track.duration_seconds.between(low, high)
@@ -291,6 +305,7 @@ class TrackRepository(BaseRepository[Track]):
         condition = (
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
+            & self._playback_listing_allowed()
             & (Track.source_platform == platform)
             & title_cond
         )
@@ -359,6 +374,13 @@ class TrackRepository(BaseRepository[Track]):
             "is_public",
         }
     )
+    _ADMIN_PATCHABLE = _UPDATABLE_FIELDS | frozenset(
+        {
+            "sc_url",
+            "source_url",
+            "canonical_source_url",
+        }
+    )
 
     async def update_track(
         self,
@@ -395,7 +417,7 @@ class TrackRepository(BaseRepository[Track]):
         values = {
             k: v
             for k, v in fields.items()
-            if k in self._UPDATABLE_FIELDS and v is not None
+            if k in self._ADMIN_PATCHABLE and v is not None
         }
         if not values:
             return None
@@ -496,6 +518,7 @@ class TrackRepository(BaseRepository[Track]):
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
             & self._exclude_hidden_sources()
+            & self._playback_listing_allowed()
             & (Track.id != track_id)
         )
 
@@ -540,6 +563,7 @@ class TrackRepository(BaseRepository[Track]):
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
             & self._exclude_hidden_sources()
+            & self._playback_listing_allowed()
             & (Track.id != track_id)
         )
         result = await self._session.execute(
@@ -567,6 +591,7 @@ class TrackRepository(BaseRepository[Track]):
                 Track.is_active.is_(True)
                 & Track.is_public.is_(True)
                 & self._exclude_hidden_sources()
+                & self._playback_listing_allowed()
                 & (Track.id != exclude_id)
             )
             .order_by(func.random())
@@ -584,6 +609,7 @@ class TrackRepository(BaseRepository[Track]):
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
             & self._exclude_hidden_sources()
+            & self._playback_listing_allowed()
             & (Track.uploaded_by_id == user_id)
         )
         total_result = await self._session.execute(
@@ -612,6 +638,7 @@ class TrackRepository(BaseRepository[Track]):
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
             & self._exclude_hidden_sources()
+            & self._playback_listing_allowed()
             & Track.uploaded_by_id.in_(user_ids)
         )
         total_result = await self._session.execute(
@@ -636,6 +663,7 @@ class TrackRepository(BaseRepository[Track]):
             & Track.is_active.is_(True)
             & Track.is_public.is_(True)
             & TrackRepository._exclude_hidden_sources()
+            & TrackRepository._playback_listing_allowed()
             & Track.duration_seconds.isnot(None)
         )
 

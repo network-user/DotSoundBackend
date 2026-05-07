@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import {
   getInternalUserId,
+  hapticNotification,
   hapticSelection,
   tg,
 } from '@/lib/telegram'
@@ -13,6 +18,7 @@ import type {
 } from '@/types/api'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { showIsland } from '@/lib/island'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { ProfileHero } from '@/components/Profile/ProfileHero'
 import { ProfileStats } from '@/components/Profile/ProfileStats'
@@ -57,11 +63,31 @@ export function ProfileView({
     string | null
   >(null)
   const [saving, setSaving] = useState(false)
+  const pendingBlobUrlRef =
+    useRef<string | null>(null)
+  const displayNameBaselineRef =
+    useRef('')
+  const [pendingAvatarPreview, setPendingAvatarPreview] =
+    useState<string | null>(null)
+  const [pendingAvatarFile, setPendingAvatarFile] =
+    useState<File | null>(null)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<number>>(new Set())
   const deleteTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
   const [serverDebug, setServerDebug] = useState(false)
 
   const tgUser = tg.initDataUnsafe?.user
+
+  useEffect(
+    () => () => {
+      if (pendingBlobUrlRef.current) {
+        URL.revokeObjectURL(
+          pendingBlobUrlRef.current,
+        )
+        pendingBlobUrlRef.current = null
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     api
@@ -127,14 +153,101 @@ export function ProfileView({
       .catch(() => {})
   }, [])
 
+  const clearPendingAvatar = () => {
+    if (pendingBlobUrlRef.current) {
+      URL.revokeObjectURL(
+        pendingBlobUrlRef.current,
+      )
+      pendingBlobUrlRef.current = null
+    }
+    setPendingAvatarPreview(null)
+    setPendingAvatarFile(null)
+  }
+
+  const handleAvatarFileChosen = (
+    file: File,
+  ) => {
+    if (pendingBlobUrlRef.current) {
+      URL.revokeObjectURL(
+        pendingBlobUrlRef.current,
+      )
+    }
+    const url = URL.createObjectURL(file)
+    pendingBlobUrlRef.current = url
+    setPendingAvatarPreview(url)
+    setPendingAvatarFile(file)
+  }
+
+  const handleAvatarRejected = (
+    reason: 'type' | 'size',
+  ) => {
+    const key =
+      reason === 'size'
+        ? 'redesign.library.profileAvatarTooLarge'
+        : 'redesign.library.profileAvatarInvalidType'
+    showIsland({
+      kind: 'error',
+      title: t(key),
+      iconName: 'alert-triangle',
+      durationMs: 4000,
+    })
+  }
+
+  const handleEditStart = () => {
+    displayNameBaselineRef.current = displayName
+    setEditMode(true)
+  }
+
+  const handleCancelEdit = () => {
+    setDisplayName(
+      displayNameBaselineRef.current,
+    )
+    clearPendingAvatar()
+    setEditMode(false)
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
+      if (pendingAvatarFile) {
+        const fd = new FormData()
+        fd.append(
+          'avatar',
+          pendingAvatarFile,
+        )
+        try {
+          const { avatar_url } =
+            await api.uploadAvatar(fd)
+          setAvatarSrc(avatar_url)
+          clearPendingAvatar()
+        } catch {
+          showIsland({
+            kind: 'error',
+            title: t(
+              'redesign.library.profileAvatarUploadFail',
+            ),
+            iconName: 'alert-triangle',
+            durationMs: 4000,
+          })
+          setSaving(false)
+          return
+        }
+      }
       if (displayName.trim()) {
         await api.updateProfile(displayName.trim())
       }
+      hapticNotification('success')
       setEditMode(false)
-    } catch {} finally {
+    } catch {
+      showIsland({
+        kind: 'error',
+        title: t(
+          'redesign.library.profileSaveFail',
+        ),
+        iconName: 'alert-triangle',
+        durationMs: 4000,
+      })
+    } finally {
       setSaving(false)
     }
   }
@@ -185,8 +298,12 @@ export function ProfileView({
     } catch {}
   }
 
-  const currentAvatar =
+  const currentAvatarRemote =
     avatarSrc || tgUser?.photo_url || null
+  const heroAvatarImage =
+    pendingAvatarPreview ||
+    currentAvatarRemote ||
+    null
   const shownName = displayName || fallbackName
   const feedbackTap = () => {
     hapticSelection()
@@ -276,16 +393,22 @@ export function ProfileView({
       {tab === 'profile' && (
         <>
           <ProfileHero
-            currentAvatar={currentAvatar}
+            avatarImageUrl={heroAvatarImage}
             shownName={shownName}
             username={username}
             editMode={editMode}
             displayName={displayName}
             saving={saving}
-            onEditStart={() => setEditMode(true)}
+            onEditStart={handleEditStart}
             onSave={handleSave}
-            onCancel={() => setEditMode(false)}
+            onCancel={handleCancelEdit}
             onDisplayNameChange={setDisplayName}
+            onAvatarFileSelected={
+              handleAvatarFileChosen
+            }
+            onAvatarRejected={
+              handleAvatarRejected
+            }
           />
           <ProfileStats stats={stats} />
           <ListenerStats />

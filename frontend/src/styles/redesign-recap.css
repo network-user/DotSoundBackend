@@ -3,6 +3,33 @@
  * Prefixes: .rh-recap-, .rh-share-, .rh-ach-
  */
 
+.rh-recap-season-closed {
+  min-height: min(72vh, 520px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-4);
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.rh-recap-season-closed__title {
+  margin: 0;
+  font-size: var(--fs-22);
+  font-weight: 700;
+  letter-spacing: var(--ls-snug);
+  color: var(--text, #fff);
+}
+
+.rh-recap-season-closed__hint {
+  margin: 0;
+  font-size: var(--fs-14);
+  max-width: 22rem;
+  line-height: var(--lh-normal);
+}
+
 .rh-recap-shell {
   min-height: 100dvh;
   background: radial-gradient(

@@ -6,6 +6,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.lyrics import LyricsRepository
 from app.repositories.track import TrackRepository
 from app.schemas.card import TrackAlbumInfo, TrackCardResponse
+from app.services.track_playback_health_service import (
+    is_track_playback_suppressed,
+)
 from app.services.track_response_build import build_track_response
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -30,6 +33,8 @@ class CardService:
             and track.uploaded_by_id == requester_id
         )
         if not track.is_public and not is_owner:
+            return None
+        if is_track_playback_suppressed(track) and not is_owner:
             return None
 
         album_info = None

@@ -2,7 +2,6 @@
   type KeyboardEvent,
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -23,7 +22,10 @@ import { usePlayerActions } from '@/store/PlayerContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { trackActivationEvent } from '@/lib/activation'
 import { usePullToRefresh } from '@/hooks/usePullToRefresh'
-import { useMatchMedia } from '@/hooks/useMatchMedia'
+import {
+  HOME_QUICK_VISIBLE_COUNT,
+  MIX_SHORTCUT_TILES,
+} from '@/lib/homeShortcuts'
 import type {
   FollowedArtistItem,
   GenreMixItem,
@@ -264,20 +266,6 @@ function HomeTrackSnapSection({
   )
 }
 
-const QUICK_NAV: {
-  morph?: string
-  useCalendarIcon?: true
-  labelKey: string
-  path: string
-}[] = [
-  { useCalendarIcon: true, labelKey: 'quickDaily', path: '/daily-mix' },
-  { morph: 'star', labelKey: 'quickWeekly', path: '/weekly-mix' },
-  { morph: 'flame', labelKey: 'quickTop', path: '/weekly-top' },
-  { morph: 'heart', labelKey: 'quickUserChoice', path: '/user-choice' },
-  { morph: 'library', labelKey: 'quickLiked', path: '/library?tab=liked' },
-  { morph: 'radio', labelKey: 'quickRadio', path: '/radio' },
-]
-
 interface HomeSectionConfig {
   key: string
   morePath?: string
@@ -302,23 +290,6 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   const navigate = useNavigate()
   const { playTrack, startRadio } = usePlayerActions()
   const brandLabel = useBrandLabel()
-  const compactHomeShortcuts =
-    useMatchMedia('(max-width: 560px)')
-  const [homeQuickExpanded, setHomeQuickExpanded] =
-    useState(false)
-
-  const homeQuickItems = useMemo(() => {
-    if (
-      compactHomeShortcuts &&
-      !homeQuickExpanded
-    ) {
-      return QUICK_NAV.slice(0, 4)
-    }
-    return QUICK_NAV
-  }, [
-    compactHomeShortcuts,
-    homeQuickExpanded,
-  ])
 
   const [me, setMe] = useState<UserResponse | null>(null)
   const [sections, setSections] = useState<HomeSection[] | null>(null)
@@ -399,12 +370,6 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     .flatMap((s) => s.tracks.slice(0, 1))
     .slice(0, 6)
   usePrefetchTracks(homeFirstTracks, 'home')
-
-  useEffect(() => {
-    if (!compactHomeShortcuts) {
-      setHomeQuickExpanded(false)
-    }
-  }, [compactHomeShortcuts])
 
   useEffect(() => {
     const main = document.getElementById('main')
@@ -697,10 +662,11 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
           </div>
         ) : null}
 
-        <div
-          className={`rh-home-quick${compactHomeShortcuts ? ' rh-home-quick--compact-shell' : ''}`}
-        >
-          {homeQuickItems.map((item) => (
+        <div className="rh-home-quick rh-home-quick--few-tiles">
+          {MIX_SHORTCUT_TILES.slice(
+            0,
+            HOME_QUICK_VISIBLE_COUNT,
+          ).map((item) => (
             <MotionPress
               key={item.path}
               variant="subtle"
@@ -711,9 +677,10 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                 className="rh-home-quick-card__icon"
                 aria-hidden
               >
-                {item.useCalendarIcon ? (
+                {'useCalendarIcon' in item &&
+                item.useCalendarIcon ? (
                   <Icon name="calendar" size={22} />
-                ) : item.morph ? (
+                ) : 'morph' in item ? (
                   <MorphIcon
                     name={item.morph}
                     filled
@@ -727,32 +694,6 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
             </MotionPress>
           ))}
         </div>
-        {compactHomeShortcuts &&
-          QUICK_NAV.length > 4 && (
-            <MotionPress
-              variant="ghost"
-              className="rh-home-quick-toggle glass--medium"
-              onClick={() =>
-                setHomeQuickExpanded((v) => !v)
-              }
-              haptic="selection"
-              aria-expanded={homeQuickExpanded}
-            >
-              <Icon
-                name={
-                  homeQuickExpanded
-                    ? 'chevron-up'
-                    : 'chevron-down'
-                }
-                size={18}
-              />
-              <span>
-                {homeQuickExpanded
-                  ? t('redesign.home.quickLess')
-                  : t('redesign.home.quickMore')}
-              </span>
-            </MotionPress>
-          )}
 
         {genreMixes === null ? (
           <div>

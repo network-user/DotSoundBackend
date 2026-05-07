@@ -26,6 +26,11 @@ interface TrackRow {
   is_active: boolean
   uploaded_by_id: number | null
   created_at: string
+  playback_last_failure_at?: string | null
+  playback_last_http_status?: number | null
+  playback_last_failure_source?: string | null
+  playback_recovery_failed_at?: string | null
+  playback_suppressed_until?: string | null
 }
 
 interface ContextState {
@@ -46,6 +51,9 @@ export function TracksRoute() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
   const [withoutLyricsOnly, setWithoutLyricsOnly] = useState(false)
+  const [listView, setListView] = useState<
+    'all' | 'playback_failures' | 'playback_suppressed'
+  >('all')
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [statsPeriod, setStatsPeriod] = useState<
@@ -80,14 +88,31 @@ export function TracksRoute() {
   const contextTextareaRef = useRef<HTMLTextAreaElement>(null)
 
   const { data, isFetching } = useQuery({
-    queryKey: ['admin', 'tracks', page, search, withoutLyricsOnly],
-    queryFn: () =>
-      adminApi.listTracks({
+    queryKey: [
+      'admin',
+      'tracks',
+      page,
+      search,
+      withoutLyricsOnly,
+      listView,
+    ],
+    queryFn: () => {
+      const base = {
         page,
         size: 25,
         search: search || undefined,
+      }
+      if (listView === 'playback_failures') {
+        return adminApi.listTracksPlaybackUnavailable(base)
+      }
+      if (listView === 'playback_suppressed') {
+        return adminApi.listTracksPlaybackSuppressed(base)
+      }
+      return adminApi.listTracks({
+        ...base,
         without_lyrics: withoutLyricsOnly || undefined,
-      }),
+      })
+    },
     placeholderData: keepPreviousData,
   })
   const trackStats = useQuery({
@@ -116,7 +141,7 @@ export function TracksRoute() {
 
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [page])
+  }, [page, listView])
 
   const refresh = () =>
     qc.invalidateQueries({ queryKey: ['admin', 'tracks'] })
@@ -137,6 +162,18 @@ export function TracksRoute() {
           message: (err as Error).message,
         }),
       )
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleClearPlaybackSuppression = async (id: number) => {
+    setBusyId(id)
+    try {
+      await adminApi.clearTrackPlaybackSuppression(id)
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
     } finally {
       setBusyId(null)
     }
@@ -402,6 +439,43 @@ export function TracksRoute() {
       ),
     },
     {
+      header: 'Playback',
+      id: 'playback_health',
+      cell: (i) => {
+        const r = i.row.original
+        const parts: string[] = []
+        if (r.playback_last_failure_source) {
+          parts.push(r.playback_last_failure_source)
+        }
+        if (
+          typeof r.playback_last_http_status === 'number'
+        ) {
+          parts.push(`HTTP ${r.playback_last_http_status}`)
+        }
+        if (r.playback_last_failure_at) {
+          parts.push(
+            new Date(
+              r.playback_last_failure_at,
+            ).toLocaleString(),
+          )
+        }
+        if (r.playback_suppressed_until) {
+          parts.push(
+            `hidden until ${new Date(
+              r.playback_suppressed_until,
+            ).toLocaleDateString()}`,
+          )
+        }
+        return parts.length ? (
+          <span style={{ fontSize: 12, lineHeight: 1.35 }}>
+            {parts.join(' · ')}
+          </span>
+        ) : (
+          '—'
+        )
+      },
+    },
+    {
       header: t('admin.tracks.colStatus'),
       accessorKey: 'is_active',
       cell: (i) =>
@@ -434,6 +508,17 @@ export function TracksRoute() {
               alignItems: 'center',
             }}
           >
+            {listView === 'playback_suppressed' && (
+              <MotionPress
+                variant="ghost"
+                onClick={() =>
+                  handleClearPlaybackSuppression(id)
+                }
+                disabled={busy}
+              >
+                Clear auto-hide
+              </MotionPress>
+            )}
             <MotionPress
               variant="ghost"
               onClick={() => handleTogglePlay(id)}
@@ -590,6 +675,31 @@ export function TracksRoute() {
             setPage(1)
           }}
         />
+        <AdminRangeSwitch
+          groupId="admin-tracks-list-scope"
+          value={listView}
+          onChange={(v) => {
+            setListView(
+              v as
+                | 'all'
+                | 'playback_failures'
+                | 'playback_suppressed',
+            )
+            setPage(1)
+            setSelectedIds(new Set())
+          }}
+          options={[
+            { value: 'all', label: 'All' },
+            {
+              value: 'playback_failures',
+              label: 'Playback issues',
+            },
+            {
+              value: 'playback_suppressed',
+              label: 'Auto-hidden',
+            },
+          ]}
+        />
         <label
           style={{
             display: 'inline-flex',
@@ -602,6 +712,7 @@ export function TracksRoute() {
           <input
             type="checkbox"
             checked={withoutLyricsOnly}
+            disabled={listView !== 'all'}
             onChange={(e) => {
               setWithoutLyricsOnly(e.target.checked)
               setPage(1)

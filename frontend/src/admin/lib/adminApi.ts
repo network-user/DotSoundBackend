@@ -678,6 +678,33 @@ export const adminApi = {
       page: number
       size: number
     }>('/tracks', { query: params }),
+  listTracksPlaybackUnavailable: (params: {
+    page?: number
+    size?: number
+    search?: string
+  }) =>
+    adminFetch<{
+      items: Array<Record<string, unknown>>
+      total: number
+      page: number
+      size: number
+    }>('/tracks/playback-health/unavailable', { query: params }),
+  listTracksPlaybackSuppressed: (params: {
+    page?: number
+    size?: number
+    search?: string
+  }) =>
+    adminFetch<{
+      items: Array<Record<string, unknown>>
+      total: number
+      page: number
+      size: number
+    }>('/tracks/playback-health/suppressed', { query: params }),
+  clearTrackPlaybackSuppression: (trackId: number) =>
+    adminFetch<Record<string, unknown>>(
+      `/tracks/${trackId}/playback-health/clear-suppression`,
+      { method: 'POST', body: {} },
+    ),
   listAdminAlbums: (params: {
     page?: number
     size?: number
@@ -1395,6 +1422,11 @@ export const adminApi = {
       title?: string
       artist?: string | null
       description?: string | null
+      genre?: string | null
+      is_public?: boolean
+      sc_url?: string | null
+      source_url?: string | null
+      canonical_source_url?: string | null
     },
   ) =>
     adminFetch<Record<string, unknown>>(`/tracks/${trackId}`, {

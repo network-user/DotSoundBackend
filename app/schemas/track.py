@@ -95,6 +95,9 @@ class TrackUpdateRequest(BaseModel):
     genre: str | None = Field(None, max_length=100)
     description: str | None = Field(None, max_length=2000)
     is_public: bool | None = None
+    sc_url: str | None = Field(None, max_length=4096)
+    source_url: str | None = Field(None, max_length=4096)
+    canonical_source_url: str | None = Field(None, max_length=4096)
 
 
 class StreamResponse(BaseModel):
