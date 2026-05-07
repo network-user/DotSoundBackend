@@ -349,6 +349,15 @@
           "429": "Too many uploads. Try again later."
         }
       },
+      "import": {
+        "title": "Import music",
+        "subtitle": "Bring your music to {{brand}}",
+        "comingSoon": "Soon",
+        "openSourceAria": "Open import from {{name}}",
+        "statusQueued": "Queued",
+        "statusImporting": "Importing",
+        "queuePos": "# {{n}}"
+      },
       "url": {
         "hint": "Import by link. The server handles preparation and validation.",
         "linkLabel": "Track link",
