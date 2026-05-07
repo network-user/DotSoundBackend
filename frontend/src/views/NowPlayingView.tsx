@@ -90,7 +90,6 @@ export function NowPlayingView() {
           <p style={{ padding: 24, textAlign: 'center' }}>
             {t(
               'redesign.player.emptyPlayback',
-              'Nothing is playing right now.',
             )}
           </p>
         </div>
@@ -155,15 +154,15 @@ export function NowPlayingView() {
   const tabs: { id: Tab; label: string }[] = [
     {
       id: 'now',
-      label: t('redesign.player.tabNow', 'Now'),
+      label: t('redesign.player.tabNow'),
     },
     {
       id: 'lyrics',
-      label: t('redesign.player.tabLyrics', 'Lyrics'),
+      label: t('redesign.player.tabLyrics'),
     },
     {
       id: 'queue',
-      label: t('redesign.player.tabQueue', 'Queue'),
+      label: t('redesign.player.tabQueue'),
     },
   ]
 
@@ -209,7 +208,6 @@ export function NowPlayingView() {
             variant="icon"
             ariaLabel={t(
               'redesign.player.close',
-              'Close',
             )}
             haptic="light"
             onClick={handleClose}
@@ -219,14 +217,12 @@ export function NowPlayingView() {
           <span className="rp-now__title">
             {t(
               'redesign.player.screenTitle',
-              'Now playing',
             )}
           </span>
           <MotionPress
             variant="icon"
             ariaLabel={t(
               'redesign.player.menu',
-              'Menu',
             )}
             haptic="light"
             onClick={() => {
@@ -283,7 +279,6 @@ export function NowPlayingView() {
               value={pct}
               aria-label={t(
                 'redesign.player.seekAria',
-                'Seek',
               )}
               onChange={(e) =>
                 seek(Number(e.currentTarget.value))
@@ -301,7 +296,6 @@ export function NowPlayingView() {
             variant="icon"
             ariaLabel={t(
               'redesign.player.prevAria',
-              'Previous track',
             )}
             haptic="light"
             onClick={() => playPrev()}
@@ -313,8 +307,8 @@ export function NowPlayingView() {
             className="rp-now__ctl-play"
             ariaLabel={
               isPlaying
-                ? t('redesign.player.pauseAria', 'Pause')
-                : t('redesign.player.playAria', 'Play')
+                ? t('redesign.player.pauseAria')
+                : t('redesign.player.playAria')
             }
             haptic="medium"
             onClick={() => togglePlay()}
@@ -334,7 +328,6 @@ export function NowPlayingView() {
             variant="icon"
             ariaLabel={t(
               'redesign.player.nextAria',
-              'Next track',
             )}
             haptic="light"
             onClick={() => playNext()}
@@ -360,11 +353,9 @@ export function NowPlayingView() {
                 liked
                   ? t(
                       'redesign.player.unlikeAria',
-                      'Unlike',
                     )
                   : t(
                       'redesign.player.likeAria',
-                      'Like',
                     )
               }
               aria-pressed={liked}
@@ -382,7 +373,6 @@ export function NowPlayingView() {
             variant="icon"
             ariaLabel={t(
               'redesign.player.shareAria',
-              'Share',
             )}
             onClick={handleShare}
           >
@@ -392,7 +382,6 @@ export function NowPlayingView() {
             variant="icon"
             ariaLabel={t(
               'redesign.player.openQueueAria',
-              'Open queue',
             )}
             onClick={() => {
               haptic('light')
@@ -448,7 +437,6 @@ export function NowPlayingView() {
               description={track.description}
               aboutLabel={t(
                 'redesign.player.aboutTrack',
-                'About',
               )}
             />
           )}

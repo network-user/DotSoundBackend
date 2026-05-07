@@ -1174,6 +1174,28 @@ export const adminApi = {
       method: 'PUT',
       body: data,
     }),
+  getRadioTuning: () =>
+    adminFetch<{
+      enabled: boolean
+      ab_split_percent_b: number
+      variant_a: Record<string, number>
+      variant_b: Record<string, number>
+    }>('/system/radio-tuning'),
+  updateRadioTuning: (data: {
+    enabled?: boolean
+    ab_split_percent_b?: number
+    variant_a?: Record<string, number>
+    variant_b?: Record<string, number>
+  }) =>
+    adminFetch<{
+      enabled: boolean
+      ab_split_percent_b: number
+      variant_a: Record<string, number>
+      variant_b: Record<string, number>
+    }>('/system/radio-tuning', {
+      method: 'PUT',
+      body: data,
+    }),
 
   catalogOverview: (artistId: number) =>
     adminFetch<{
