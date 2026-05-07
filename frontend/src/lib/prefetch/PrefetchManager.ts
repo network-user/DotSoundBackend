@@ -61,6 +61,14 @@ const SEGMENT_VARIANT_PREFERENCE = ['lo', 'hi'] as const
 
 const HOT_TTL_MS_FALLBACK = DEFAULT_PREFETCH_POLICY.inMemoryTtlSeconds * 1000
 
+const HOT_TIMESTAMPS_HARD_CAP = 256
+
+type FetchPriority = 'low' | 'high' | 'auto'
+
+interface FetchInitWithPriority extends RequestInit {
+  priority?: FetchPriority
+}
+
 function _isThirdPartyCacheableSafe(track: PrefetchInputTrack): boolean {
   const accessMode = (track as { access_mode?: string }).access_mode
   if (accessMode === 'third_party_stream') return false
@@ -144,6 +152,7 @@ export class PrefetchManager {
   )
   private warmTrackIds = new Set<number>()
   private cachedManifestTrackIds = new Set<number>()
+  private inFlightTrackIds = new Set<number>()
   private contextTasks = new Map<
     PrefetchContextName,
     PendingTask[]
@@ -153,7 +162,6 @@ export class PrefetchManager {
     args: FetchPolicyArgs,
   ) => Promise<PrefetchPolicySnapshot | null> = async () => null
   private boundNetworkListener: (() => void) | null = null
-  private bytesBudgetUsedHint = 0
 
   configurePolicyFetcher(
     fetcher: (
@@ -278,6 +286,9 @@ export class PrefetchManager {
         this._touchHot(track.id)
         continue
       }
+      if (this.inFlightTrackIds.has(track.id)) {
+        continue
+      }
       const accessMode = (track as { access_mode?: string }).access_mode
       if (
         accessMode === 'third_party_stream' &&
@@ -321,6 +332,7 @@ export class PrefetchManager {
         abort,
       }
       list.push(task)
+      this.inFlightTrackIds.add(track.id)
       scheduled += 1
       void this._runTask(task)
     }
@@ -345,6 +357,12 @@ export class PrefetchManager {
 
   private _touchHot(trackId: number): void {
     this.hotTimestamps.set(trackId, Date.now())
+    if (this.hotTimestamps.size > HOT_TIMESTAMPS_HARD_CAP) {
+      const firstKey = this.hotTimestamps.keys().next().value
+      if (typeof firstKey === 'number') {
+        this.hotTimestamps.delete(firstKey)
+      }
+    }
   }
 
   private _evictExpiredHot(): void {
@@ -362,35 +380,33 @@ export class PrefetchManager {
 
   private async _runTask(task: PendingTask): Promise<void> {
     const release = await this.semaphore.acquire()
+    let warmed = false
     try {
       if (task.abort.signal.aborted) return
       if (task.serverWarmOnly) {
         await this._warmThirdPartyServerCache(task)
         return
       }
-      let bytes = 0
       if (task.hlsManifestUrl) {
-        const ok = await this._warmHls(task)
-        if (ok > 0) bytes += ok
+        warmed = await this._warmHls(task)
       } else if (task.progressiveUrl) {
-        const ok = await this._warmProgressivePrefix(task)
-        if (ok > 0) bytes += ok
+        warmed = await this._warmProgressivePrefix(task)
       }
-      if (bytes > 0) {
+      if (warmed) {
         this.warmTrackIds.add(task.trackId)
         this._touchHot(task.trackId)
-        this.bytesBudgetUsedHint += bytes
         await persistWarmRecord({
           trackId: task.trackId,
           warmedAt: Date.now(),
           context: task.context,
-          bytes,
+          bytes: 0,
           sourcePlatform: task.sourcePlatform,
         })
       }
     } catch {
       /* swallow individual task failures */
     } finally {
+      this.inFlightTrackIds.delete(task.trackId)
       this._evictExpiredHot()
       release()
       this._removePending(task)
@@ -428,31 +444,30 @@ export class PrefetchManager {
     }
   }
 
-  private async _warmHls(task: PendingTask): Promise<number> {
-    if (!task.hlsManifestUrl) return 0
-    if (task.abort.signal.aborted) return 0
+  private async _warmHls(task: PendingTask): Promise<boolean> {
+    if (!task.hlsManifestUrl) return false
+    if (task.abort.signal.aborted) return false
     const masterRes = await this._safeFetch(
       task.hlsManifestUrl,
       task.abort.signal,
     )
-    if (!masterRes) return 0
+    if (!masterRes) return false
     const masterText = await masterRes.text().catch(() => '')
-    if (!masterText) return 0
+    if (!masterText) return false
     this.cachedManifestTrackIds.add(task.trackId)
 
     const variant = this._pickVariant(masterText)
-    if (!variant) return masterText.length
+    if (!variant) return true
 
-    if (task.abort.signal.aborted) return masterText.length
+    if (task.abort.signal.aborted) return true
     const variantUrl = _resolveVariantUrl(task.trackId, variant)
     const variantRes = await this._safeFetch(variantUrl, task.abort.signal)
-    if (!variantRes) return masterText.length
+    if (!variantRes) return true
     const variantText = await variantRes.text().catch(() => '')
-    if (!variantText) return masterText.length
+    if (!variantText) return true
 
     const segCount = Math.max(1, this.policy.warmSegmentsPerTrack)
     const segments = _firstNSegmentLines(variantText, segCount)
-    let bytes = masterText.length + variantText.length
     for (const segment of segments) {
       if (task.abort.signal.aborted) break
       const segUrl = _resolveSegmentUrl(
@@ -462,29 +477,29 @@ export class PrefetchManager {
       )
       const segRes = await this._safeFetch(segUrl, task.abort.signal)
       if (!segRes) continue
-      const len = Number(segRes.headers.get('content-length') || 0)
-      if (len > 0) {
-        bytes += len
-      } else {
-        const blob = await segRes.blob().catch(() => null)
-        if (blob) bytes += blob.size
+      try {
+        await segRes.body?.cancel()
+      } catch {
+        /* ignore */
       }
     }
-    return bytes
+    return true
   }
 
   private _pickVariant(masterText: string): string | null {
     for (const v of SEGMENT_VARIANT_PREFERENCE) {
-      if (masterText.includes(`/${v}/playlist.m3u8`)) return v
+      if (masterText.includes(`${v}/playlist.m3u8`)) return v
     }
     return SEGMENT_VARIANT_PREFERENCE[0]
   }
 
-  private async _warmProgressivePrefix(task: PendingTask): Promise<number> {
-    if (!task.progressiveUrl) return 0
-    if (task.abort.signal.aborted) return 0
+  private async _warmProgressivePrefix(
+    task: PendingTask,
+  ): Promise<boolean> {
+    if (!task.progressiveUrl) return false
+    if (task.abort.signal.aborted) return false
     const initBytes = Math.max(0, this.policy.initialBytesPerTrack)
-    if (initBytes <= 0) return 0
+    if (initBytes <= 0) return false
     const headers = new Headers()
     headers.set('Range', `bytes=0-${initBytes - 1}`)
     const res = await this._safeFetch(
@@ -492,9 +507,13 @@ export class PrefetchManager {
       task.abort.signal,
       headers,
     )
-    if (!res) return 0
-    const blob = await res.blob().catch(() => null)
-    return blob ? blob.size : initBytes
+    if (!res) return false
+    try {
+      await res.body?.cancel()
+    } catch {
+      /* ignore */
+    }
+    return true
   }
 
   private async _safeFetch(
@@ -503,12 +522,14 @@ export class PrefetchManager {
     headers?: Headers,
   ): Promise<Response | null> {
     try {
-      const res = await fetch(url, {
+      const init: FetchInitWithPriority = {
         signal,
         credentials: 'include',
         cache: 'default',
         headers,
-      })
+        priority: 'low',
+      }
+      const res = await fetch(url, init)
       if (!res.ok && res.status !== 206) return null
       return res
     } catch {
@@ -544,16 +565,17 @@ export class PrefetchManager {
     const records = await listWarmRecords()
     const cutoff =
       Date.now() - this.policy.persistentTtlSeconds * 1000
-    let pruned = 0
+    const drops: Promise<void>[] = []
     for (const rec of records) {
       if (rec.warmedAt < cutoff) {
-        await dropWarmRecord(rec.trackId)
-        pruned += 1
+        drops.push(dropWarmRecord(rec.trackId))
         continue
       }
       this.warmTrackIds.add(rec.trackId)
     }
-    void pruned
+    if (drops.length > 0) {
+      await Promise.all(drops)
+    }
   }
 }
 

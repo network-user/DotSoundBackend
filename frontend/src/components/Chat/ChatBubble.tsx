@@ -58,6 +58,7 @@ export function ChatBubble({
   usePrefetchTracks(
     sharedTrack ? [sharedTrack] : null,
     'chat_shared',
+    { additive: true },
   )
   const [sharedAlbum, setSharedAlbum] =
     useState<AlbumWithTracksRecord | null>(null)

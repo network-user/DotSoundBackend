@@ -166,3 +166,198 @@
 .ru-up-step-dot.is-active {
   background: var(--accent);
 }
+
+/* URL-import tab (SoundCloud / YouTube / Bandcamp) */
+
+.ru-up-url {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ru-up-url__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-lg, 14px);
+  background: var(--glass-medium-bg, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+}
+
+.ru-up-url__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md, 12px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.ru-up-url__head strong {
+  font-size: var(--fs-15);
+  font-weight: 700;
+  display: block;
+}
+
+.ru-up-url__hint {
+  margin: var(--space-1) 0 0;
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.ru-up-url__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ru-up-url__label {
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ru-up-url__input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-15);
+  box-sizing: border-box;
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.ru-up-url__input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
+}
+
+.ru-up-url__input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ru-up-url__input {
+    transition:
+      border-color 0.12s ease,
+      box-shadow 0.12s ease;
+  }
+}
+
+.ru-up-url__visibility {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--fs-14);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ru-up-url__visibility input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--text);
+  cursor: pointer;
+}
+
+.ru-up-url__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.ru-up-url__error {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: var(--fs-13);
+  color: var(--text);
+}
+
+.ru-up-url__preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--r-lg, 14px);
+  border: 1px solid var(--border);
+  background: var(--glass-medium-bg, rgba(255, 255, 255, 0.04));
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.ru-up-url__preview-cover {
+  border-radius: var(--r-md, 12px);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  aspect-ratio: 1 / 1;
+  width: min(180px, 60%);
+  align-self: center;
+}
+
+.ru-up-url__preview-cover .kenburns-cover,
+.ru-up-url__preview-cover .kenburns-cover img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.ru-up-url__preview-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: var(--surface);
+  color: var(--text-secondary);
+}
+
+.ru-up-url__preview-meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  text-align: center;
+}
+
+.ru-up-url__preview-meta strong {
+  font-size: var(--fs-16);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.ru-up-url__preview-meta span {
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+}
+
+.ru-up-url__preview-dur {
+  font-variant-numeric: tabular-nums;
+}
+
+.ru-up-url__preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+  margin-top: var(--space-2);
+}
