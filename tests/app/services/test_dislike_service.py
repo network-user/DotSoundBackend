@@ -94,6 +94,25 @@ async def test_is_disliked(
     assert await svc.is_disliked(uid, tid) is True
 
 
+async def test_list_disliked(
+    session: AsyncSession,
+) -> None:
+    uid = await _make_user(session)
+    tid = await _make_track(session, uid)
+
+    svc = DislikeService(session)
+    rows, total = await svc.list_disliked(uid)
+    assert rows == []
+    assert total == 0
+
+    await svc.toggle(uid, tid)
+    rows, total = await svc.list_disliked(uid)
+
+    assert total == 1
+    assert len(rows) == 1
+    assert rows[0][0].id == tid
+
+
 async def test_toggle_dislike_removes_like(
     session: AsyncSession,
 ) -> None:

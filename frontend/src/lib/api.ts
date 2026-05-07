@@ -47,6 +47,7 @@ import type {
   TrackUploadResponse,
   TwoFASetupResponse,
   UserLikesResponse,
+  UserDislikesResponse,
   OnboardingStatus,
   UserResponse,
   UserStatsResponse,
@@ -531,6 +532,22 @@ export const api = {
       params.set('source', sourceFilter)
     }
     return request(`/api/v1/likes/${userId}?${params}`)
+  },
+
+  getDislikedTracks(
+    userId: number,
+    page = 1,
+    size = 20,
+    sourceFilter?: string,
+  ): Promise<UserDislikesResponse> {
+    const params = new URLSearchParams({
+      page: String(page),
+      size: String(size),
+    })
+    if (sourceFilter && sourceFilter !== 'all') {
+      params.set('source', sourceFilter)
+    }
+    return request(`/api/v1/dislikes/${userId}?${params}`)
   },
 
   submitComplaint(body: ComplaintCreate): Promise<ComplaintSubmitResponse> {

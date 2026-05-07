@@ -84,8 +84,8 @@ export function TrackCard({
       {
         id: 'like',
         label: liked
-          ? t('redesign.tracks.unlike', 'Unlike')
-          : t('redesign.tracks.like', 'Like'),
+          ? t('redesign.tracks.unlike')
+          : t('redesign.tracks.like'),
         icon: 'heart',
         onPick: () => {
           void toggleLike(track.id)
@@ -95,21 +95,20 @@ export function TrackCard({
         id: 'queue',
         label: t(
           'redesign.tracks.addQueue',
-          'Add to queue',
         ),
         icon: 'queue',
         onPick: () => {
           addToQueue(track)
           showIsland({
             kind: 'toast',
-            title: t('redesign.tracks.longPressQueued', 'Added to queue'),
+            title: t('redesign.tracks.longPressQueued'),
             durationMs: 2000,
           })
         },
       },
       {
         id: 'share',
-        label: t('redesign.tracks.share', 'Share'),
+        label: t('redesign.tracks.share'),
         icon: 'share-arrow',
         onPick: async () => {
           const url = `${window.location.origin}/mini_app/track/${track.id}`
@@ -125,7 +124,7 @@ export function TrackCard({
           } catch {
             showIsland({
               kind: 'error',
-              title: t('redesign.tracks.shareFail', 'Could not share'),
+              title: t('redesign.tracks.shareFail'),
               durationMs: 3500,
             })
           }
@@ -376,40 +375,52 @@ export function TrackCard({
             </MotionPress>
             {isOwner && (
               <>
-                <button
+                <MotionPress
+                  variant="icon"
                   className="track-card-visibility"
                   title={
                     track.is_public
                       ? t('trackCard.private')
                       : t('trackCard.public')
                   }
-                  type="button"
+                  ariaLabel={
+                    track.is_public
+                      ? t('trackCard.private')
+                      : t('trackCard.public')
+                  }
+                  haptic="light"
                   onClick={handleToggleVisibility}
                 >
                   <Icon
                     name={
                       track.is_public ? 'eye' : 'lock'
                     }
-                    size={16}
+                    size={18}
                   />
-                </button>
-                <button
+                </MotionPress>
+                <MotionPress
+                  variant="icon"
                   className={`track-card-delete${confirmingDelete ? ' danger' : ''}`}
                   title={
                     confirmingDelete
                       ? t('trackCard.deleteConfirm')
                       : t('trackCard.delete')
                   }
-                  type="button"
+                  ariaLabel={
+                    confirmingDelete
+                      ? t('trackCard.deleteConfirm')
+                      : t('trackCard.delete')
+                  }
+                  haptic="medium"
                   onClick={handleDelete}
                 >
                   <Icon
                     name={
                       confirmingDelete ? 'check' : 'trash'
                     }
-                    size={16}
+                    size={18}
                   />
-                </button>
+                </MotionPress>
               </>
             )}
           </div>

@@ -25,11 +25,6 @@ import { Waveform } from '@/components/Waveform/Waveform'
 import { WaveformBar } from '@/components/Waveform/WaveformBar'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { showIsland } from '@/lib/island'
-import {
-  downloadTrack,
-  isCached,
-  removeTrack,
-} from '@/lib/offlineCache'
 import { useSound } from '@/store/SoundContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import {
@@ -37,7 +32,6 @@ import {
   getThirdPartyStreamOverride,
   setThirdPartyStreamOverride,
 } from '@/lib/streamDebugOverride'
-import { hapticNotification } from '@/lib/telegram'
 import type {
   AlbumWithTracksRecord,
   ChatListItem,
@@ -127,6 +121,7 @@ export function TrackCardSheet({
     openQueue,
     updateTrack,
     playTrack,
+    startRadio,
     skipForward,
     skipBackward,
     setPlaybackRate,
@@ -871,58 +866,6 @@ export function TrackCardSheet({
     Boolean(isCardOpen && track),
   )
 
-  const [downloadState, setDownloadState] = useState<
-    'idle' | 'downloading' | 'cached'
-  >('idle')
-  const [downloadPct, setDownloadPct] = useState(0)
-
-  useEffect(() => {
-    if (!track) return
-    isCached(track.id).then((c) =>
-      setDownloadState(c ? 'cached' : 'idle'),
-    )
-  }, [track?.id])
-
-  const handleDownload = async () => {
-    if (!track) return
-    if (downloadState === 'cached') {
-      await removeTrack(track.id)
-      setDownloadState('idle')
-      setDownloadPct(0)
-      showIsland({
-        kind: 'toast',
-        title: t('trackSheet.removedFromDownloads'),
-        durationMs: 2200,
-      })
-      return
-    }
-    setDownloadState('downloading')
-    setDownloadPct(0)
-    try {
-      await downloadTrack(track, (loaded, total) => {
-        if (total) {
-          setDownloadPct(
-            Math.round((loaded / total) * 100),
-          )
-        }
-      })
-      setDownloadState('cached')
-      hapticNotification('success')
-      showIsland({
-        kind: 'toast',
-        title: t('trackSheet.offlineReady'),
-        durationMs: 2400,
-      })
-    } catch (e) {
-      setDownloadState('idle')
-      const msg =
-        e instanceof Error
-          ? e.message
-          : t('trackSheet.downloadError')
-      showIsland({ kind: 'error', title: msg, durationMs: 4000 })
-    }
-  }
-
   const playbackVariants = useMemo((): TrackPlaybackVariantBrief[] => {
     if (!track) return []
     const fromTrack = track.playback_variants
@@ -1501,25 +1444,21 @@ export function TrackCardSheet({
           <MotionPress
             type="button"
             variant="ghost"
-            className={`tcs-action-btn${downloadState === 'cached' ? ' active' : ''}`}
+            className="tcs-action-btn"
             haptic="light"
-            disabled={downloadState === 'downloading'}
-            onClick={handleDownload}
+            onClick={() => {
+              void startRadio(track).catch(() => {
+                showIsland({
+                  kind: 'error',
+                  title: t('redesign.home.radioError'),
+                  durationMs: 3000,
+                })
+              })
+            }}
           >
-            <Icon
-              name={
-                downloadState === 'cached'
-                  ? 'check'
-                  : 'cloud-download'
-              }
-              size={20}
-            />
+            <Icon name="radio" size={20} />
             <span className="tcs-action-label">
-              {downloadState === 'cached'
-                ? t('trackSheet.downloaded')
-                : downloadState === 'downloading'
-                  ? `${downloadPct}%`
-                  : t('trackSheet.download')}
+              {t('trackSheet.radioFromTrack')}
             </span>
           </MotionPress>
 

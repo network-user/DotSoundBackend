@@ -50,7 +50,6 @@
   "library": {
     "tabLiked": "Favorites",
     "tabPlaylists": "Playlists",
-    "tabOffline": "Downloads",
     "tabHistory": "History"
   },
   "admin": {

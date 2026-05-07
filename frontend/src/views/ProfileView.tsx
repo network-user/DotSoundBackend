@@ -24,8 +24,9 @@ import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { ProfileAdminButton } from '@/components/Admin/ProfileAdminButton'
 import { ProfileDebugMenu } from '@/components/Admin/ProfileDebugMenu'
 import { MyComplaintsList } from '@/components/Profile/MyComplaintsList'
+import { DislikedView } from '@/views/DislikedView'
 
-type ProfileTab = 'profile' | 'import' | 'complaints'
+type ProfileTab = 'profile' | 'import' | 'complaints' | 'dislikes'
 
 interface Props {
   onOpenSettings?: () => void
@@ -235,6 +236,18 @@ export function ProfileView({
           >
             {t('profile.tabComplaints')}
           </MotionPress>
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="selection"
+            className={`profile-tab${tab === 'dislikes' ? ' active' : ''}`}
+            onClick={() => {
+              feedbackTap()
+              setTab('dislikes')
+            }}
+          >
+            {t('profile.tabDislikes')}
+          </MotionPress>
         </div>
         <div className="profile-header-actions">
           <NotificationBell />
@@ -295,6 +308,8 @@ export function ProfileView({
       )}
 
       {tab === 'complaints' && <MyComplaintsList />}
+
+      {tab === 'dislikes' && <DislikedView />}
     </section>
   )
 }

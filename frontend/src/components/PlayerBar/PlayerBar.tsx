@@ -27,6 +27,7 @@ import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import { SharedCover } from '@/components/ui/SharedCover'
+import { useMatchMedia } from '@/hooks/useMatchMedia'
 
 const PLATFORM_LABELS: Record<string, string> = {
   youtube: 'YouTube',
@@ -79,6 +80,9 @@ export function PlayerBar() {
     radioMode,
   } = usePlayerActions()
   const { isLiked, toggleLike } = useLikes()
+  const compactBarControls = useMatchMedia(
+    '(max-width: 560px)',
+  )
   const [likeBurst, setLikeBurst] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [volumePinned, setVolumePinned] = useState(false)
@@ -185,8 +189,7 @@ export function PlayerBar() {
     openCard()
   }
 
-  const handleLike = async (e: MouseEvent) => {
-    e.stopPropagation()
+  const runLikeToggle = async () => {
     if (!liked) {
       setLikeBurst(true)
       window.setTimeout(
@@ -196,6 +199,11 @@ export function PlayerBar() {
     }
     haptic(liked ? 'light' : 'medium')
     await toggleLike(track.id)
+  }
+
+  const handleLike = async (e: MouseEvent) => {
+    e.stopPropagation()
+    await runLikeToggle()
   }
 
   const handlePlay = (e: MouseEvent) => {
@@ -540,6 +548,46 @@ export function PlayerBar() {
                 className="pb-overflow-menu"
                 role="menu"
               >
+                {compactBarControls && (
+                  <>
+                    <MotionPress
+                      role="menuitem"
+                      variant="ghost"
+                      haptic="selection"
+                      className={`pb-menu-item${liked ? ' active' : ''}`}
+                      onClick={() => {
+                        setOverflowOpen(false)
+                        void runLikeToggle()
+                      }}
+                    >
+                      <MorphIcon
+                        name="heart"
+                        filled={liked}
+                        size={16}
+                      />
+                      {liked
+                        ? t(
+                            'redesign.playerBar.unlikeMenu',
+                          )
+                        : t(
+                            'redesign.playerBar.likeMenu',
+                          )}
+                    </MotionPress>
+                    <MotionPress
+                      role="menuitem"
+                      variant="ghost"
+                      haptic="selection"
+                      className="pb-menu-item"
+                      onClick={() => {
+                        setOverflowOpen(false)
+                        playPrev()
+                      }}
+                    >
+                      <Icon name="skip-back" size={16} />
+                      {t('redesign.player.prevAria')}
+                    </MotionPress>
+                  </>
+                )}
                 <MotionPress
                   role="menuitem"
                   variant="ghost"

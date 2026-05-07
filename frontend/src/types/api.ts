@@ -135,6 +135,17 @@ export interface UserLikesResponse {
   has_more: boolean
 }
 
+export interface DislikedTrack extends Track {
+  disliked_at: string
+}
+
+export interface UserDislikesResponse {
+  items: DislikedTrack[]
+  total: number
+  page: number
+  has_more: boolean
+}
+
 export interface ComplaintCreate {
   track_id: number
   reason: string

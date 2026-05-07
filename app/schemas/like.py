@@ -42,3 +42,14 @@ class DislikeToggleResponse(BaseModel):
     track_id: int
     disliked: bool
     playback_variant_track_ids: list[int] = Field(default_factory=list)
+
+
+class DislikedTrackResponse(TrackResponse):
+    disliked_at: datetime
+
+
+class UserDislikesResponse(BaseModel):
+    items: list[DislikedTrackResponse]
+    total: int
+    page: int = 1
+    has_more: bool = False
