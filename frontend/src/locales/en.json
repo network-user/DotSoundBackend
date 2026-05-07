@@ -63,6 +63,10 @@
   "profile": {
     "title": "Profile",
     "import": "Import",
+    "tabProfile": "Profile",
+    "tabImport": "Import",
+    "tabComplaints": "Complaints",
+    "openSettings": "Settings",
     "uploadTrack": "Upload track",
     "myPlaylists": "My playlists",
     "liked": "Liked"

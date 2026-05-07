@@ -1,5 +1,5 @@
-import json
 import hashlib
+import json
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -38,6 +38,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_client
+from app.core.observability import radio_request_observed
 from app.models.listen_event import ListenEvent as ListenEventModel
 from app.models.track import Track
 from app.models.user import User
@@ -1255,21 +1256,39 @@ class RecommendationService:
             if not can_fetch and last_key:
                 guarded = await redis.get(last_key)
                 if guarded:
-                    return await self._rec_repo.get_tracks_by_ids(
+                    tracks = await self._rec_repo.get_tracks_by_ids(
                         json.loads(guarded)
                     )
+                    radio_request_observed(
+                        surface="recommendations_radio",
+                        outcome="guarded",
+                        queue_size=len(tracks),
+                        guard_hit=True,
+                    )
+                    return tracks
         if cache_key:
             cached = await redis.get(cache_key)
             if cached:
-                return await self._rec_repo.get_tracks_by_ids(
+                tracks = await self._rec_repo.get_tracks_by_ids(
                     json.loads(cached)
                 )
+                radio_request_observed(
+                    surface="recommendations_radio",
+                    outcome="cache_hit",
+                    queue_size=len(tracks),
+                )
+                return tracks
 
         track_repo = TrackRepository(self._session)
         seed = await track_repo.get_by_id(
             seed_track_id
         )
         if not seed:
+            radio_request_observed(
+                surface="recommendations_radio",
+                outcome="seed_not_found",
+                queue_size=0,
+            )
             return []
 
         user_locale: str | None = None
@@ -1295,6 +1314,11 @@ class RecommendationService:
                 )
             )
         if not candidates:
+            radio_request_observed(
+                surface="recommendations_radio",
+                outcome="no_candidates",
+                queue_size=0,
+            )
             return []
 
         unseen: list[Track] = []
@@ -1378,6 +1402,11 @@ class RecommendationService:
                 surface="radio",
                 track_ids=[t.id for t in result],
             )
+        radio_request_observed(
+            surface="recommendations_radio",
+            outcome="fresh",
+            queue_size=len(result),
+        )
         return result
 
     async def get_global_top(

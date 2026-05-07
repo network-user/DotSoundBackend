@@ -35,7 +35,7 @@ export function GenreMixView() {
   const [title, setTitle] = useState<string>(
     genre
       ? `Mix: ${genre.charAt(0).toUpperCase()}${genre.slice(1)}`
-      : t('redesign.home.sectionGenreMixes', 'Жанровый микс'),
+      : t('redesign.home.sectionGenreMixes'),
   )
   const [shareOpen, setShareOpen] = useState(false)
   const [shareChats, setShareChats] = useState<ChatListItem[]>([])
@@ -151,7 +151,7 @@ export function GenreMixView() {
   const formatShareChatTitle = useCallback(
     (item: ChatListItem): string => {
       if (item.conversation.type === 'saved') {
-        return t('redesign.library.shareSaved', 'Избранное')
+        return t('redesign.library.shareSaved')
       }
       if (item.conversation.title?.trim()) {
         return item.conversation.title.trim()
@@ -167,7 +167,6 @@ export function GenreMixView() {
       if (peer?.username) return `@${peer.username}`
       return t('redesign.library.shareChatNumber', {
         id: item.conversation.id,
-        defaultValue: `Чат #${item.conversation.id}`,
       })
     },
     [t],
@@ -182,7 +181,7 @@ export function GenreMixView() {
       setShareChats(chats)
     } catch {
       setShareError(
-        t('redesign.library.shareLoadFail', 'Не удалось загрузить чаты'),
+        t('redesign.library.shareLoadFail'),
       )
     } finally {
       setShareLoading(false)
@@ -199,12 +198,12 @@ export function GenreMixView() {
         sound.play('notificationSuccess')
         showIsland({
           kind: 'toast',
-          title: t('redesign.library.shareLinkSent', 'Ссылка отправлена'),
+          title: t('redesign.library.shareLinkSent'),
           durationMs: 2200,
         })
       } catch {
         setShareError(
-          t('redesign.library.shareLinkSendFail', 'Не удалось отправить'),
+          t('redesign.library.shareLinkSendFail'),
         )
         sound.play('notificationError')
       } finally {
@@ -220,12 +219,12 @@ export function GenreMixView() {
       sound.play('notificationInfo')
       showIsland({
         kind: 'toast',
-        title: t('redesign.library.shareLinkCopied', 'Ссылка скопирована'),
+        title: t('redesign.library.shareLinkCopied'),
         durationMs: 2000,
       })
     } catch {
       setShareError(
-        t('redesign.library.shareLinkCopyFail', 'Не удалось скопировать ссылку'),
+        t('redesign.library.shareLinkCopyFail'),
       )
       sound.play('notificationError')
     }
@@ -247,13 +246,13 @@ export function GenreMixView() {
         setTracks(saved.tracks)
         showIsland({
           kind: 'toast',
-          title: t('redesign.home.mixEditSaved', 'Изменения сохранены'),
+          title: t('redesign.home.mixEditSaved'),
           durationMs: 2400,
         })
       } catch {
         showIsland({
           kind: 'error',
-          title: t('redesign.home.mixEditSaveFail', 'Не удалось сохранить изменения'),
+          title: t('redesign.home.mixEditSaveFail'),
           durationMs: 3500,
         })
       } finally {
@@ -346,7 +345,7 @@ export function GenreMixView() {
           variant="icon"
           haptic="light"
           className="icon-btn"
-          ariaLabel={t('redesign.home.back', 'Назад')}
+          ariaLabel={t('redesign.home.back')}
           onClick={() => navigate(-1)}
         >
           <Icon name="chevron" size={20} className="back-chevron" />
@@ -357,7 +356,6 @@ export function GenreMixView() {
             <span className="hint">
               {t('redesign.home.mixHeaderTracks', {
                 count: tracks.length,
-                defaultValue: `${tracks.length} треков`,
               })}
             </span>
           )}
@@ -370,7 +368,7 @@ export function GenreMixView() {
                 variant="icon"
                 haptic="light"
                 className="icon-btn"
-                ariaLabel={t('redesign.home.mixEditAria', 'Редактировать микс')}
+                ariaLabel={t('redesign.home.mixEditAria')}
                 onClick={() => {
                   void openEditMode()
                 }}
@@ -383,7 +381,7 @@ export function GenreMixView() {
               variant="icon"
               haptic="light"
               className="icon-btn"
-              ariaLabel={t('redesign.home.mixShareAria', 'Поделиться')}
+              ariaLabel={t('redesign.home.mixShareAria')}
               onClick={() => {
                 void openShareModal()
               }}
@@ -395,7 +393,7 @@ export function GenreMixView() {
               variant="icon"
               haptic="medium"
               className="icon-btn"
-              ariaLabel={t('redesign.home.mixPlayAllAria', 'Слушать всё')}
+              ariaLabel={t('redesign.home.mixPlayAllAria')}
               onClick={handlePlayAll}
             >
               <MorphIcon name="play" size={20} filled />
@@ -415,7 +413,6 @@ export function GenreMixView() {
               <p className="rh-mix-hero__hint">
                 {t('redesign.home.mixHeaderTracks', {
                   count: tracks.length,
-                  defaultValue: `${tracks.length} треков`,
                 })}
               </p>
               <div className="rh-mix-actions">
@@ -458,7 +455,6 @@ export function GenreMixView() {
           tracks={tracks}
           emptyMessage={t(
             'redesign.home.mixEmpty',
-            'В этом миксе пока нет треков',
           )}
         />
       </m.div>
@@ -474,10 +470,10 @@ export function GenreMixView() {
             <div className="share-modal-header">
               <div className="share-modal-title-wrap">
                 <h3 className="share-modal-title">
-                  {t('redesign.home.mixEditTitle', 'Редактирование микса')}
+                  {t('redesign.home.mixEditTitle')}
                 </h3>
                 <p className="share-modal-subtitle">
-                  {t('redesign.home.mixEditServerHint', 'Серверное сохранение')}
+                  {t('redesign.home.mixEditServerHint')}
                 </p>
               </div>
               <MotionPress
@@ -485,7 +481,7 @@ export function GenreMixView() {
                 variant="icon"
                 haptic="light"
                 className="icon-btn"
-                ariaLabel={t('redesign.library.shareClose', 'Закрыть')}
+                ariaLabel={t('redesign.library.shareClose')}
                 onClick={() => setEditOpen(false)}
               >
                 <Icon name="x" size={18} />
@@ -493,7 +489,7 @@ export function GenreMixView() {
             </div>
             <div className="form-group gm-edit-section">
               <label className="form-label">
-                {t('redesign.home.mixEditNameLabel', 'Название')}
+                {t('redesign.home.mixEditNameLabel')}
               </label>
               <input
                 className="form-input gm-edit-input"
@@ -511,8 +507,8 @@ export function GenreMixView() {
                 disabled={saveBusy}
               >
                 {saveBusy
-                  ? t('redesign.home.mixEditApplying', 'Сохранение...')
-                  : t('redesign.home.mixEditApply', 'Применить')}
+                  ? t('redesign.home.mixEditApplying')
+                  : t('redesign.home.mixEditApply')}
               </MotionPress>
             </div>
             <div className="gm-edit-add-row">
@@ -520,7 +516,6 @@ export function GenreMixView() {
                 className="form-input gm-edit-input"
                 placeholder={t(
                   'redesign.home.mixEditSearchPlaceholder',
-                  'Поиск треков: название или артист...',
                 )}
                 value={trackSearch}
                 onChange={(e) => setTrackSearch(e.target.value)}
@@ -531,7 +526,7 @@ export function GenreMixView() {
                 onChange={(e) => setAddTrackId(Number(e.target.value) || null)}
               >
                 <option value="">
-                  {t('redesign.home.mixEditAddPlaceholder', 'Добавить трек...')}
+                  {t('redesign.home.mixEditAddPlaceholder')}
                 </option>
                 {availableTracks.map((tr) => (
                   <option key={tr.id} value={tr.id}>
@@ -549,12 +544,12 @@ export function GenreMixView() {
                 }}
                 disabled={saveBusy}
               >
-                {t('redesign.home.mixEditAdd', 'Добавить')}
+                {t('redesign.home.mixEditAdd')}
               </MotionPress>
             </div>
             {searchLoading && (
               <p className="hint gm-edit-search-hint">
-                {t('redesign.home.mixEditSearching', 'Идёт поиск…')}
+                {t('redesign.home.mixEditSearching')}
               </p>
             )}
             <div className="gm-edit-list">
@@ -562,7 +557,7 @@ export function GenreMixView() {
                 <div key={tr.id} className="gm-edit-item">
                   <div className="gm-edit-item-main">
                     <span className="gm-edit-item-title">{tr.title}</span>
-                    <span className="gm-edit-item-artist">{tr.artist || '—'}</span>
+                    <span className="gm-edit-item-artist">{tr.artist || '-'}</span>
                   </div>
                   <div className="gm-edit-item-actions">
                     <MotionPress
@@ -570,7 +565,7 @@ export function GenreMixView() {
                       variant="icon"
                       haptic="light"
                       className="icon-btn gm-edit-icon-btn"
-                      ariaLabel={t('redesign.home.mixEditMoveUp', 'Выше')}
+                      ariaLabel={t('redesign.home.mixEditMoveUp')}
                       onClick={() => {
                         void moveTrack(idx, -1)
                       }}
@@ -583,7 +578,7 @@ export function GenreMixView() {
                       variant="icon"
                       haptic="light"
                       className="icon-btn gm-edit-icon-btn"
-                      ariaLabel={t('redesign.home.mixEditMoveDown', 'Ниже')}
+                      ariaLabel={t('redesign.home.mixEditMoveDown')}
                       onClick={() => {
                         void moveTrack(idx, 1)
                       }}
@@ -596,7 +591,7 @@ export function GenreMixView() {
                       variant="icon"
                       haptic="light"
                       className="icon-btn gm-edit-icon-btn"
-                      ariaLabel={t('redesign.home.mixEditRemove', 'Убрать')}
+                      ariaLabel={t('redesign.home.mixEditRemove')}
                       onClick={() => {
                         void removeTrack(tr.id)
                       }}
@@ -623,7 +618,7 @@ export function GenreMixView() {
             <div className="share-modal-header">
               <div className="share-modal-title-wrap">
                 <h3 className="share-modal-title">
-                  {t('redesign.library.shareTitleMix', 'Поделиться миксом')}
+                  {t('redesign.library.shareTitleMix')}
                 </h3>
                 <p className="share-modal-subtitle">{title}</p>
               </div>
@@ -632,7 +627,7 @@ export function GenreMixView() {
                 variant="icon"
                 haptic="light"
                 className="icon-btn"
-                ariaLabel={t('redesign.library.shareCopy', 'Скопировать ссылку')}
+                ariaLabel={t('redesign.library.shareCopy')}
                 onClick={() => {
                   void handleCopyLink()
                 }}
@@ -644,7 +639,7 @@ export function GenreMixView() {
                 variant="icon"
                 haptic="light"
                 className="icon-btn"
-                ariaLabel={t('redesign.library.shareClose', 'Закрыть')}
+                ariaLabel={t('redesign.library.shareClose')}
                 onClick={() => setShareOpen(false)}
               >
                 <Icon name="x" size={18} />
@@ -690,8 +685,8 @@ export function GenreMixView() {
                       </span>
                       <span className="share-chat-action">
                         {sending
-                          ? t('redesign.library.shareSending', 'Отправка...')
-                          : t('redesign.library.shareSend', 'Отправить')}
+                          ? t('redesign.library.shareSending')
+                          : t('redesign.library.shareSend')}
                       </span>
                     </MotionPress>
                   )
