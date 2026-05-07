@@ -67,6 +67,7 @@ class TrackService:
         page: int = 1,
         size: int = 20,
         playable_only: bool = False,
+        genre_filter: str | None = None,
     ) -> tuple[list[Track], int]:
         from app.config import settings
         from app.core.observability import (
@@ -80,7 +81,7 @@ class TrackService:
             and (settings.elasticsearch_url or "").strip()
             and es_available()
         )
-        if use_es:
+        if use_es and not genre_filter:
             es_hits = await search_query_service.es_search_tracks(
                 query,
                 page=page,
@@ -137,6 +138,7 @@ class TrackService:
             offset=offset,
             limit=size,
             playable_only=playable_only,
+            genre_filter=genre_filter,
         )
         logger.info(
             "tracks_searched",

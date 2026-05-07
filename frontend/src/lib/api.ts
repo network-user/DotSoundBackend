@@ -296,9 +296,15 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  getTracks(params?: { q?: string; size?: number; page?: number }): Promise<TrackListResponse> {
+  getTracks(params?: {
+    q?: string
+    genre?: string
+    size?: number
+    page?: number
+  }): Promise<TrackListResponse> {
     const sp = new URLSearchParams()
     if (params?.q) sp.set('q', params.q)
+    if (params?.genre) sp.set('genre', params.genre)
     if (params?.size) sp.set('size', String(params.size))
     if (params?.page) sp.set('page', String(params.page))
     const query = sp.toString() ? `?${sp}` : ''

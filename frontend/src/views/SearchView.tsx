@@ -1,5 +1,4 @@
 import {
-  CSSProperties,
   useEffect,
   useMemo,
   useRef,
@@ -63,14 +62,6 @@ function formatDuration(secs: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
 }
 
-function getGenreHue(genre: string): number {
-  let hash = 0
-  for (let i = 0; i < genre.length; i += 1) {
-    hash = (hash * 31 + genre.charCodeAt(i)) % 360
-  }
-  return Math.abs(hash)
-}
-
 export function SearchView({ onOpenArtist }: SearchViewProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -78,6 +69,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const { toggleLike } = useLikes()
 
   const [query, setQuery] = useState('')
+  const [genreFilter, setGenreFilter] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<SearchTab>('all')
 
   const [tracks, setTracks] = useState<Track[] | null | 'idle'>('idle')
@@ -215,7 +207,11 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     void (async () => {
       const [internal, sug, artistsRes] = await Promise.all([
         api
-          .getTracks({ q, size: 30 })
+          .getTracks({
+            q,
+            genre: genreFilter ?? undefined,
+            size: 30,
+          })
           .catch(() => ({
             items: [] as Track[],
             total: 0,
@@ -254,7 +250,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     return () => {
       cancelled = true
     }
-  }, [debouncedQuery])
+  }, [debouncedQuery, genreFilter])
 
   const ensureImported = async (
     result: SCSearchResult,
@@ -353,6 +349,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
 
   const clearSearch = () => {
     setQuery('')
+    setGenreFilter(null)
     setTracks('idle')
     setSCResults([])
     setYtResults([])
@@ -428,7 +425,10 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
             placeholder={t('search.placeholder')}
             autoComplete="off"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setGenreFilter(null)
+            }}
           />
           {query && (
             <button
@@ -477,7 +477,10 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                 <div
                   key={h}
                   className="search-history-item"
-                  onClick={() => setQuery(h)}
+                  onClick={() => {
+                    setQuery(h)
+                    setGenreFilter(null)
+                  }}
                 >
                   <Icon name="search" size={14} />
                   <span>{h}</span>
@@ -573,13 +576,13 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         <button
                           key={card.genre}
                           type="button"
-                          className="search-genre-card"
-                          onClick={() => setQuery(card.genre)}
-                          style={
-                            {
-                              '--genre-hue': `${getGenreHue(card.genre)}deg`,
-                            } as CSSProperties
-                          }
+                          className={`search-genre-card${
+                            card.cover_key ? '' : ' search-genre-card--skeleton'
+                          }`}
+                          onClick={() => {
+                            setQuery(card.genre)
+                            setGenreFilter(card.genre)
+                          }}
                         >
                           {card.cover_key && (
                             <CoverImage
@@ -613,7 +616,10 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         key={g}
                         type="button"
                         className="search-genre-chip"
-                        onClick={() => setQuery(g)}
+                        onClick={() => {
+                          setQuery(g)
+                          setGenreFilter(g)
+                        }}
                       >
                         <Icon name="music-note" size={12} />
                         {g}

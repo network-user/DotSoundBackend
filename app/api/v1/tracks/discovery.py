@@ -36,6 +36,7 @@ async def list_tracks(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     q: str | None = Query(None),
+    genre: str | None = Query(None),
     playable: bool = Query(False),
     session: AsyncSession = Depends(get_db),
 ) -> TrackListResponse:
@@ -49,6 +50,7 @@ async def list_tracks(
             page=page,
             size=size,
             playable_only=playable,
+            genre_filter=genre,
         )
     else:
         tracks, total = await service.list_tracks(

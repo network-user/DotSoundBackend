@@ -657,6 +657,7 @@
 - [x] **Final acceptance (batch 2)**: `npx tsc --noEmit` — clean; `npm run build` — clean.
 - [x] **Search screen blank-state fix**: восстановлен `SearchView` с discover empty-state (`/recommendations/discover`), табами `All/Tracks/Artists/Playlists`, и рендером результатов каталога + внешних источников; проверено через `npm run build`.
 - [x] **Search discover genres polish**: `GET /recommendations/discover` теперь отдает `cover_key` для genre cards (по top-track в жанре), `SearchView` использует cover + визуальный fallback, блок `Ваши жанры` приведен к общему UI-стилю.
+- [x] **Genre click search correctness**: добавлен явный `genre`-фильтр в `GET /api/v1/tracks` (route/service/repository), `SearchView` при клике по жанру передает `genre` в `api.getTracks`, чтобы выдача шла по жанру, а не только по title/artist.
 - [x] **Track card waveform + seek smoothness (2026-05-07)**: волна убрана из `PlayerBar` (нижнее состояние), в `TrackCardSheet` показывается только в открытой карточке и только при `isPlaying`; `WaveformBar` переведен на clip-based плавное заполнение прогресса; seek-индикаторы в `PlayerBar`/`TrackCardSheet` сглажены и убран визуальный «шлейф» у thumb; `npm run build` зеленый.
 
 ## �?ла�?�?о�?м�? �?? б�?д�?�?ее

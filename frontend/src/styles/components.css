@@ -417,6 +417,48 @@ button.empty-cta:focus-visible {
   display: inline-block;
 }
 
+.pb-volume-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.pb-volume-pop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-2));
+  width: 120px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-md);
+  border: 1px solid
+    var(--glass-border, rgba(255, 255, 255, 0.08));
+  background: var(--glass-bg, rgba(16, 16, 16, 0.88));
+  backdrop-filter: var(--glass-blur, blur(20px))
+    saturate(160%);
+  -webkit-backdrop-filter: var(
+      --glass-blur,
+      blur(20px)
+    )
+    saturate(160%);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+  z-index: var(--z-player);
+  animation: menu-pop var(--dur-fast)
+    var(--ease-standard);
+  transform-origin: bottom right;
+}
+
+.pb-volume-value {
+  font-size: var(--fs-12);
+  color: var(--text-secondary, #b8b8b8);
+  margin-bottom: var(--space-1);
+  text-align: right;
+}
+
+.pb-volume-slider {
+  width: 100%;
+}
+
 .pb-overflow-menu {
   position: absolute;
   bottom: calc(100% + var(--space-2));
