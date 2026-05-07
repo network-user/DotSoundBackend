@@ -9,7 +9,7 @@ import {
   LongPressMenu,
   type LongPressMenuItem,
 } from '@/components/ui/LongPressMenu'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 
 interface Props {
   items: ChatListItem[]
@@ -18,7 +18,6 @@ interface Props {
 export function ChatList({ items }: Props) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const toast = useToast()
   const [onlineMap, setOnlineMap] = useState<
     Record<number, boolean>
   >({})
@@ -82,7 +81,7 @@ export function ChatList({ items }: Props) {
     item: ChatListItem,
   ): LongPressMenuItem[] => {
     const soon = () =>
-      toast.info(t('redesign.tracks.chatActionSoon'))
+      showIsland({ kind: 'toast', title: t('redesign.tracks.chatActionSoon'), durationMs: 2000 })
     return [
       {
         id: 'mute',
@@ -123,14 +122,14 @@ export function ChatList({ items }: Props) {
               icon: 'pin',
               label: t('redesign.tracks.chatPin'),
               onTrigger: () => {
-                toast.info(t('redesign.tracks.chatActionSoon'))
+                showIsland({ kind: 'toast', title: t('redesign.tracks.chatActionSoon'), durationMs: 2000 })
               },
             }}
             rightAction={{
               icon: 'bookmark',
               label: t('redesign.tracks.chatArchive'),
               onTrigger: () => {
-                toast.info(t('redesign.tracks.chatActionSoon'))
+                showIsland({ kind: 'toast', title: t('redesign.tracks.chatActionSoon'), durationMs: 2000 })
               },
             }}
           >

@@ -7,7 +7,7 @@ import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { isTelegram, tg } from '@/lib/telegram'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import type {
   ImportJobResponse,
   OAuthLinkedProvider,
@@ -106,7 +106,6 @@ export function PlatformImportMethodModal({
   onPickByLink,
   onAccountScanReady,
 }: Props) {
-  const toast = useToast()
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -172,8 +171,12 @@ export function PlatformImportMethodModal({
         await api.startLinkedAccountConnect(provider)
       onClose()
       setSubmitting(false)
-      toast.info('Откроется страница входа. После возврата снова ' +
-        'запустите импорт и выберите «вход в аккаунт».')
+      showIsland({
+        kind: 'toast',
+        title: 'Откроется страница входа. После возврата снова ' +
+          'запустите импорт и выберите «вход в аккаунт».',
+        durationMs: 5000,
+      })
       openOAuthUrlInApp(authUrl)
     } catch (e) {
       setError(accountErrorMessage(e, platform))

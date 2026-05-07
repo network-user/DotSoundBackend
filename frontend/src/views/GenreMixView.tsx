@@ -8,7 +8,7 @@ import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { useSound } from '@/store/SoundContext'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
@@ -27,7 +27,6 @@ export function GenreMixView() {
   const { t } = useTranslation()
   const { genre } = useParams<{ genre: string }>()
   const navigate = useNavigate()
-  const toast = useToast()
   const { playTrack, toggleShuffle } = usePlayerActions()
   const { shuffleOn } = usePlayerMeta()
   const sound = useSound()
@@ -145,9 +144,9 @@ export function GenreMixView() {
         tracks[Math.floor(Math.random() * tracks.length)]
       await playTrack(pick)
     } catch (e) {
-      toast.error(getApiErrorMessage(e, 'Playback error'))
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [tracks, playTrack, shuffleOn, toggleShuffle, toast])
+  }, [tracks, playTrack, shuffleOn, toggleShuffle, t])
 
   const formatShareChatTitle = useCallback(
     (item: ChatListItem): string => {
@@ -198,9 +197,11 @@ export function GenreMixView() {
         await api.sendMessage(conversationId, shareUrl)
         setShareOpen(false)
         sound.play('notificationSuccess')
-        toast.success(
-          t('redesign.library.shareLinkSent', 'Ссылка отправлена'),
-        )
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.library.shareLinkSent', 'Ссылка отправлена'),
+          durationMs: 2200,
+        })
       } catch {
         setShareError(
           t('redesign.library.shareLinkSendFail', 'Не удалось отправить'),
@@ -210,24 +211,25 @@ export function GenreMixView() {
         setShareSendingConvId(null)
       }
     },
-    [shareUrl, toast, sound, t],
+    [shareUrl, sound, t],
   )
 
   const handleCopyLink = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(shareUrl)
       sound.play('notificationInfo')
-      toast.success(
-        t('redesign.library.shareLinkCopied', 'Ссылка скопирована'),
-        { position: 'top' },
-      )
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.library.shareLinkCopied', 'Ссылка скопирована'),
+        durationMs: 2000,
+      })
     } catch {
       setShareError(
         t('redesign.library.shareLinkCopyFail', 'Не удалось скопировать ссылку'),
       )
       sound.play('notificationError')
     }
-  }, [shareUrl, toast, sound, t])
+  }, [shareUrl, sound, t])
 
   const persistOverride = useCallback(
     async (nextTitle: string, nextTracks: Track[]) => {
@@ -243,19 +245,22 @@ export function GenreMixView() {
         )
         setTitle(saved.title)
         setTracks(saved.tracks)
-        toast.success(
-          t('redesign.home.mixEditSaved', 'Изменения сохранены'),
-          { position: 'top' },
-        )
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.home.mixEditSaved', 'Изменения сохранены'),
+          durationMs: 2400,
+        })
       } catch {
-        toast.error(
-          t('redesign.home.mixEditSaveFail', 'Не удалось сохранить изменения'),
-        )
+        showIsland({
+          kind: 'error',
+          title: t('redesign.home.mixEditSaveFail', 'Не удалось сохранить изменения'),
+          durationMs: 3500,
+        })
       } finally {
         setSaveBusy(false)
       }
     },
-    [normalizedGenre, canEditUi, toast, t],
+    [normalizedGenre, canEditUi, t],
   )
 
   const openEditMode = useCallback(async () => {

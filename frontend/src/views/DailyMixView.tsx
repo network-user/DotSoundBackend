@@ -115,7 +115,7 @@ export function DailyMixView() {
     } finally {
       setShareSendingConvId(null)
     }
-  }, [shareUrl, toast])
+  }, [shareUrl, t])
 
   const handleCopyLink = useCallback(async () => {
     try {
@@ -124,7 +124,7 @@ export function DailyMixView() {
     } catch {
       setShareError('Не удалось скопировать ссылку')
     }
-  }, [shareUrl, toast])
+  }, [shareUrl, t])
 
   const playList = internalTracks ?? []
   const heroArt = playList[0]
@@ -135,9 +135,9 @@ export function DailyMixView() {
     try {
       await playTrack(playList[0])
     } catch (e) {
-      toast.error(getApiErrorMessage(e, 'Playback error'))
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [playList, playTrack, toast])
+  }, [playList, playTrack, t])
 
   const handleShufflePlay = useCallback(async () => {
     if (!playList.length) return
@@ -147,9 +147,9 @@ export function DailyMixView() {
         playList[Math.floor(Math.random() * playList.length)]
       await playTrack(pick)
     } catch (e) {
-      toast.error(getApiErrorMessage(e, 'Playback error'))
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [playList, playTrack, shuffleOn, toggleShuffle, toast])
+  }, [playList, playTrack, shuffleOn, toggleShuffle, t])
 
   return (
     <section className="view active">

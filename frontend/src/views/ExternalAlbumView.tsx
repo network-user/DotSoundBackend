@@ -7,7 +7,7 @@ import { TrackList } from '@/components/TrackList/TrackList'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 
 import { api, getApiErrorMessage } from '@/lib/api'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
@@ -73,7 +73,6 @@ export function ExternalAlbumView() {
   const albumId = Number(idParam)
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const toast = useToast()
   const { playTrack } = usePlayerActions()
 
   const [album, setAlbum] =
@@ -135,11 +134,9 @@ export function ExternalAlbumView() {
     try {
       await playTrack(tracks[0])
     } catch (e) {
-      toast.error(
-        getApiErrorMessage(e, t('redesign.artist.playError')),
-      )
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [tracks, playTrack, toast, t])
+  }, [tracks, playTrack, t])
 
   const handleOpenSource = useCallback(() => {
     if (!sourceInfo.url) return

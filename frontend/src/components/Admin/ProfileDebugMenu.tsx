@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { api } from '@/lib/api'
 import { getIsAdmin } from '@/lib/telegram'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 
 export function ProfileDebugMenu({
   serverDebug,
@@ -10,7 +10,6 @@ export function ProfileDebugMenu({
 }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const toast = useToast()
 
   if (!getIsAdmin() || !serverDebug) {
     return null
@@ -21,12 +20,12 @@ export function ProfileDebugMenu({
     setBusy(true)
     try {
       await api.debugResetOnboarding()
-      toast.info('Онбординг сброшен — перезагрузка…')
+      showIsland({ kind: 'toast', title: 'Онбординг сброшен — перезагрузка…', durationMs: 2200 })
       window.setTimeout(() => {
         window.location.reload()
       }, 300)
     } catch {
-      toast.error('Не удалось сбросить')
+      showIsland({ kind: 'error', title: 'Не удалось сбросить', durationMs: 3500 })
       setBusy(false)
     }
   }

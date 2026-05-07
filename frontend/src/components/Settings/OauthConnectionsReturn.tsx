@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 
 const providerLabels: Record<string, string> = {
   spotify: 'Spotify',
@@ -17,7 +17,6 @@ const RETURN_ONCE_PREFIX = 'dotsound:oauthConnectionsReturn:'
 export function OauthConnectionsReturn() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const toast = useToast()
 
   useEffect(() => {
     const query = searchParams.toString()
@@ -34,18 +33,18 @@ export function OauthConnectionsReturn() {
 
     if (err === 'oauth_failed') {
       const name = providerLabels[providerParam] || 'сервис'
-      toast.error(`Не удалось подключить ${name}`)
+      showIsland({ kind: 'error', title: `Не удалось подключить ${name}`, durationMs: 4000 })
       navigate('/profile', { replace: true })
       return
     }
     if (connected) {
       const name = providerLabels[connected] || connected
-      toast.success(`Аккаунт ${name} подключён`)
+      showIsland({ kind: 'toast', title: `Аккаунт ${name} подключён`, durationMs: 2400 })
       navigate('/profile', { replace: true })
       return
     }
     navigate('/', { replace: true })
-  }, [navigate, searchParams, toast])
+  }, [navigate, searchParams])
 
   return (
     <div

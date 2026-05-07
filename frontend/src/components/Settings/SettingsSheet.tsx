@@ -15,7 +15,7 @@ import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { canInstallPwa } from '@/components/PwaInstall/InstallPrompt'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { useSound } from '@/store/SoundContext'
 import { AccountDangerZone } from './AccountDangerZone'
 import { LinkedAccounts } from './LinkedAccounts'
@@ -95,7 +95,6 @@ export function SettingsSheet({
 
   const exit = useExitTransition(open)
   if (!exit.mounted) return null
-  const toast = useToast()
   const installable = canInstallPwa()
   const feedbackTap = () => {
     hapticSelection()
@@ -162,8 +161,10 @@ export function SettingsSheet({
 
   const handleInstallHint = () => {
     feedbackTap()
-    toast.info(t('settings.pwaInstallHint'), {
-      duration: 7000,
+    showIsland({
+      kind: 'toast',
+      title: t('settings.pwaInstallHint'),
+      durationMs: 7000,
     })
   }
 
@@ -190,23 +191,25 @@ export function SettingsSheet({
   const handleTestSound = () => {
     feedbackTap()
     sound.playTest('tapSoft')
-    toast.info(
-      t('settings.testSoundFired', {
+    showIsland({
+      kind: 'toast',
+      title: t('settings.testSoundFired', {
         defaultValue: 'Тест звука отправлен',
       }),
-      { duration: 1200 },
-    )
+      durationMs: 1200,
+    })
   }
 
   const handleTestHaptic = () => {
     haptic('light')
     hapticNotification('success')
-    toast.info(
-      t('settings.testHapticFired', {
+    showIsland({
+      kind: 'toast',
+      title: t('settings.testHapticFired', {
         defaultValue: 'Тест вибрации отправлен',
       }),
-      { duration: 1200 },
-    )
+      durationMs: 1200,
+    })
   }
 
   return (

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import {
   clearAllOffline,
   getCachedTracks,
@@ -26,7 +26,6 @@ export function OfflineList() {
     quota: number
   }>({ used: 0, quota: 0 })
   const { playTrack } = usePlayerActions()
-  const toast = useToast()
 
   const reload = async () => {
     setLoading(true)
@@ -45,14 +44,14 @@ export function OfflineList() {
     setItems((prev) =>
       prev.filter((it) => it.trackId !== id),
     )
-    toast.info('Трек удалён из скачанных')
+    showIsland({ kind: 'toast', title: 'Трек удалён из скачанных', durationMs: 2200 })
   }
 
   const onClearAll = async () => {
     if (!items.length) return
     await clearAllOffline()
     await reload()
-    toast.info('Скачанные треки очищены')
+    showIsland({ kind: 'toast', title: 'Скачанные треки очищены', durationMs: 2200 })
   }
 
   const totalBytes = items.reduce(
