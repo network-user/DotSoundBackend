@@ -977,8 +977,10 @@ export function ArtistCatalogEditor({
           <ul className="admin-catalog-release-list">
             {releasesOrdered.map((rel, idx) => (
               <li key={rel.id}>
-                <button
+                <MotionPress
                   type="button"
+                  variant="subtle"
+                  haptic="light"
                   className={
                     selectedReleaseId === rel.id
                       ? 'admin-catalog-rel-selected'
@@ -1005,7 +1007,7 @@ export function ArtistCatalogEditor({
                       <span className="admin-tag">LOCK</span>
                     )}
                   </span>
-                </button>
+                </MotionPress>
                 <div className="admin-catalog-rel-actions">
                   <MotionPress
                     variant="ghost"
@@ -1422,8 +1424,10 @@ export function ArtistCatalogEditor({
                       const title = String(hit.title ?? '')
                       return (
                         <li key={id}>
-                          <button
+                          <MotionPress
                             type="button"
+                            variant="ghost"
+                            haptic="selection"
                             className="admin-link"
                             onClick={() => addTrackHit(hit)}
                           >
@@ -1431,7 +1435,7 @@ export function ArtistCatalogEditor({
                               {id}
                             </span>{' '}
                             {title}
-                          </button>
+                          </MotionPress>
                         </li>
                       )
                     })}
