@@ -559,24 +559,22 @@ export function ChatView() {
 
   const formatLastSeen = (ts: number) => {
     if (!ts) {
-      return t('redesign.tracks.chatLastSeenLong', 'давно')
+      return t('redesign.tracks.chatLastSeenLong')
     }
     const d = new Date(ts * 1000)
     const now = Date.now()
     const diff = (now - d.getTime()) / 1000
     if (diff < 60) {
-      return t('redesign.tracks.chatLastSeenJust', 'только что')
+      return t('redesign.tracks.chatLastSeenJust')
     }
     if (diff < 3600) {
       return t('redesign.tracks.chatLastSeenMin', {
         n: Math.floor(diff / 60),
-        defaultValue: '{{n}} мин назад',
       })
     }
     if (diff < 86400) {
       return t('redesign.tracks.chatLastSeenHour', {
         n: Math.floor(diff / 3600),
-        defaultValue: '{{n}} ч назад',
       })
     }
     return d.toLocaleDateString()
@@ -609,7 +607,6 @@ export function ChatView() {
       <span className="chat-status-text offline">
         {t('redesign.tracks.chatLastSeenPrefix', {
           when: formatLastSeen(peerLastSeen),
-          defaultValue: 'был(а) {{when}}',
         })}
       </span>
     )
@@ -660,7 +657,7 @@ export function ChatView() {
           <div className="chat-header-status re-chat-status">
             {peerStatus === 'self' ? (
               <span className="chat-status-text offline">
-                {t('redesign.tracks.chatSavedHint', 'личное пространство')}
+                {t('redesign.tracks.chatSavedHint')}
               </span>
             ) : (
               renderStatusLine()
@@ -722,8 +719,8 @@ export function ChatView() {
                       size={16}
                     />
                     {isBlocked
-                      ? t('redesign.tracks.chatUnblock', 'Разблокировать')
-                      : t('redesign.tracks.chatBlock', 'Заблокировать')}
+                      ? t('redesign.tracks.chatUnblock')
+                      : t('redesign.tracks.chatBlock')}
                   </MotionPress>
                 </m.div>
               )}
@@ -749,18 +746,12 @@ export function ChatView() {
                   {t('redesign.chats.savedTitle')}
                 </div>
                 <div className="chat-empty-desc">
-                  {t(
-                    'redesign.tracks.chatSavedDesc',
-                    'Сохраняйте сюда важные сообщения, ссылки на треки и заметки',
-                  )}
+                  {t('redesign.tracks.chatSavedDesc')}
                 </div>
               </>
             ) : (
               <div className="chat-empty-desc">
-                {t(
-                  'redesign.tracks.chatEmptyHint',
-                  'Напишите первое сообщение',
-                )}
+                {t('redesign.tracks.chatEmptyHint')}
               </div>
             )}
           </div>
@@ -799,10 +790,7 @@ export function ChatView() {
                 items.push(
                   <div key={`unread-${msg.id}`} className="chat-unread-separator">
                     <span>
-                      {t(
-                        'redesign.tracks.chatUnreadDivider',
-                        'Новые сообщения',
-                      )}
+                      {t('redesign.tracks.chatUnreadDivider')}
                     </span>
                   </div>
                 )

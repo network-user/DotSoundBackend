@@ -14,10 +14,10 @@ export function LegalView() {
     id: LegalDocId
     label: string
   }> = [
-    { id: 'copyright', label: 'Правообладателям' },
-    { id: 'terms', label: 'Пользовательское соглашение' },
-    { id: 'privacy', label: 'Политика данных' },
-    { id: 'upload-rules', label: 'Правила загрузки' },
+    { id: 'copyright', label: t('redesign.legal.docCopyright') },
+    { id: 'terms', label: t('redesign.legal.docTerms') },
+    { id: 'privacy', label: t('redesign.legal.docPrivacy') },
+    { id: 'upload-rules', label: t('redesign.legal.docUploadRules') },
   ]
 
   return (
@@ -28,21 +28,17 @@ export function LegalView() {
           haptic="selection"
           className="icon-btn"
           onClick={() => navigate(-1)}
-          aria-label={t('redesign.backAria', 'Back')}
+          aria-label={t('redesign.home.back')}
         >
           <Icon name="chevron" size={20} className="back-chevron" />
         </MotionPress>
-        <h1>{t('redesign.legal.title', 'Правообладателям')}</h1>
+        <h1>{t('redesign.legal.title')}</h1>
       </div>
 
       <div className="legal-content">
         <section className="legal-section">
-          <h2>Юридические документы</h2>
-          <p>
-            В приложении доступны основные документы, которые
-            объясняют модель контента, жалоб, пользовательской
-            загрузки и обработки данных.
-          </p>
+          <h2>{t('redesign.legal.docsTitle')}</h2>
+          <p>{t('redesign.legal.docsBody')}</p>
           <div className="legal-doc-list">
             {legalLinks.map((item) => (
               <MotionPress
@@ -59,117 +55,49 @@ export function LegalView() {
         </section>
 
         <section className="legal-section">
-          <h2>Статус сервиса</h2>
-          <p>
-            DotSound стремится действовать в модели
-            информационного посредника в соответствии
-            со ст. 1253.1 ГК РФ. В сервисе могут
-            присутствовать пользовательские материалы,
-            размещённые пользователями DotSound, а также
-            внешние треки, для которых DotSound хранит
-            метаданные и ссылку на оригинальный источник.
-          </p>
-          <p>
-            Для пользовательских загрузок аудиофайл может
-            размещаться в инфраструктуре DotSound. Для
-            внешних треков DotSound не должен
-            позиционировать себя как правообладатель и
-            обязан явно показывать источник материала.
-          </p>
+          <h2>{t('redesign.legal.statusTitle')}</h2>
+          <p>{t('redesign.legal.statusBody1')}</p>
+          <p>{t('redesign.legal.statusBody2')}</p>
         </section>
 
         <section className="legal-section">
-          <h2>Внешние источники</h2>
-          <p>
-            Для внешних треков DotSound хранит сведения
-            об источнике и ссылку на оригинальный
-            материал. Такие треки должны сопровождаться
-            указанием источника и ссылкой на оригинал.
-          </p>
-          <p>
-            В текущем MVP для отдельных внешних треков
-            доступ может предоставляться через поток
-            стороннего сервиса внутри интерфейса
-            DotSound без копирования аудиофайла в
-            инфраструктуру DotSound.
-          </p>
-          <p>
-            Если доступ к внешнему треку предоставлен с
-            нарушением прав, правообладатель может
-            направить уведомление для ограничения доступа
-            к карточке трека, метаданным и иной
-            информации, необходимой для его получения.
-          </p>
+          <h2>{t('redesign.legal.externalTitle')}</h2>
+          <p>{t('redesign.legal.externalBody1')}</p>
+          <p>{t('redesign.legal.externalBody2')}</p>
+          <p>{t('redesign.legal.externalBody3')}</p>
         </section>
 
         <section className="legal-section">
-          <h2>Уведомление правообладателя</h2>
-          <p>
-            Если вы являетесь правообладателем или
-            представителем правообладателя, используйте
-            кнопку «Жалоба» на карточке трека и выберите
-            тип обращения «Авторские права» или
-            «Смежные права».
-          </p>
-          <p>
-            В уведомлении укажите:
-          </p>
+          <h2>{t('redesign.legal.noticeTitle')}</h2>
+          <p>{t('redesign.legal.noticeBody1')}</p>
+          <p>{t('redesign.legal.noticeBody2')}</p>
           <ul>
-            <li>имя правообладателя или представителя</li>
-            <li>контактный e-mail</li>
-            <li>
-              ссылку на подтверждение прав
-              (официальный сайт, карточка дистрибьютора,
-              каталог лейбла и т.д.)
-            </li>
-            <li>ссылку на страницу трека в DotSound</li>
-            <li>описание нарушения</li>
+            <li>{t('redesign.legal.noticeItem1')}</li>
+            <li>{t('redesign.legal.noticeItem2')}</li>
+            <li>{t('redesign.legal.noticeItem3')}</li>
+            <li>{t('redesign.legal.noticeItem4')}</li>
+            <li>{t('redesign.legal.noticeItem5')}</li>
           </ul>
-          <p>
-            После получения надлежаще оформленного
-            уведомления DotSound проводит проверку и
-            принимает меры по ограничению доступа или
-            удалению спорной информации в сроки,
-            предусмотренные применимым законодательством.
-          </p>
+          <p>{t('redesign.legal.noticeBody3')}</p>
         </section>
 
         <section className="legal-section">
-          <h2>Правовая основа</h2>
+          <h2>{t('redesign.legal.basisTitle')}</h2>
           <ul>
-            <li>
-              Ст. 1253.1 ГК РФ — ответственность
-              информационного посредника
-            </li>
-            <li>
-              Ст. 1270 ГК РФ — использование произведения
-            </li>
-            <li>
-              Ст. 1301 ГК РФ — компенсация за
-              нарушение авторских прав
-            </li>
-            <li>
-              Ст. 15.7 149-ФЗ — внесудебные меры по
-              прекращению нарушения авторских и смежных
-              прав в сети Интернет
-            </li>
+            <li>{t('redesign.legal.basisItem1')}</li>
+            <li>{t('redesign.legal.basisItem2')}</li>
+            <li>{t('redesign.legal.basisItem3')}</li>
+            <li>{t('redesign.legal.basisItem4')}</li>
           </ul>
         </section>
 
         <section className="legal-section">
-          <h2>Контакты</h2>
-          <p>
-            По вопросам авторских и смежных прав
-            направляйте обращение через форму жалобы в
-            приложении. Публичные юридические тексты и
-            внутренняя правовая матрица сервиса
-            синхронизируются с фактической архитектурой
-            проекта и порядком модерации.
-          </p>
+          <h2>{t('redesign.legal.contactsTitle')}</h2>
+          <p>{t('redesign.legal.contactsBody')}</p>
         </section>
 
         <section className="legal-section">
-          <h2>Краткие ссылки</h2>
+          <h2>{t('redesign.legal.quickLinksTitle')}</h2>
           <ul>
             {legalLinks.map((item) => (
               <li key={item.id}>
