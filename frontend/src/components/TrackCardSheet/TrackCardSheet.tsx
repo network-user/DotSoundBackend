@@ -49,7 +49,13 @@ import type {
 import { CommentSection } from '@/components/Comments/CommentSection'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
+import { m, useReducedMotion } from '@/lib/motion'
+import { type PanInfo } from 'framer-motion'
 import { LyricsPanel } from './LyricsPanel'
+
+const TCS_DRAG_CLOSE_THRESHOLD = 100
 
 const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5]
 
@@ -135,9 +141,19 @@ export function TrackCardSheet({
     cancelSleepTimer,
   } = usePlayerActions()
   const { t } = useTranslation()
+  const reduce = useReducedMotion()
   const toast = useToast()
   const sound = useSound()
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  const handleSheetDragEnd = useCallback(
+    (_: unknown, info: PanInfo) => {
+      if (info.offset.y > TCS_DRAG_CLOSE_THRESHOLD) {
+        closeCard()
+      }
+    },
+    [closeCard],
+  )
   const {
     isLiked,
     toggleLike,
@@ -953,18 +969,30 @@ export function TrackCardSheet({
       className={`tcs-backdrop${exit.cls}`}
       onClick={handleBackdrop}
     >
-      <div
-        className={`tcs-sheet${hasActiveVideo ? ' tcs-video-mode' : ''}${exit.cls}`}
+      <m.div
+        className={`tcs-sheet re-tcs-sheet${hasActiveVideo ? ' tcs-video-mode' : ''}${exit.cls}`}
         ref={sheetRef}
+        drag={reduce ? false : 'y'}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={0.18}
+        dragMomentum={false}
+        onDragEnd={handleSheetDragEnd}
       >
-        <div className="tcs-handle" />
-        <button
+        <div
+          className="tcs-handle re-tcs-handle"
+          aria-label={t('redesign.tracks.tcsCloseAria')}
+          aria-hidden="true"
+        />
+        <MotionPress
+          type="button"
+          variant="icon"
           className="tcs-close"
+          ariaLabel={t('trackSheet.close')}
+          haptic="light"
           onClick={closeCard}
-          aria-label={t('trackSheet.close')}
         >
           <Icon name="x" size={22} />
-        </button>
+        </MotionPress>
 
         <div
           key={track.id}
@@ -1356,59 +1384,66 @@ export function TrackCardSheet({
             </div>
           </div>
           <div className="tcs-play-row">
-            <button
+            <MotionPress
+              type="button"
+              variant="icon"
               className="ctrl-btn"
+              ariaLabel={t('trackSheet.seekBack')}
+              haptic="light"
               onClick={() => skipBackward(15)}
-              aria-label={t('trackSheet.seekBack')}
-              title={t('trackSheet.seekBackTitle')}
             >
-              <Icon
-                name="rewind-5"
-                size={22}
-              />
-            </button>
-            <button
+              <Icon name="rewind-5" size={22} />
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="icon"
               className="ctrl-btn"
+              ariaLabel={t('redesign.player.prevAria')}
+              haptic="light"
               onClick={playPrev}
             >
-              <Icon
-                name="skip-back"
-                size={22}
-              />
-            </button>
-            <button
-              className={`play-btn${
+              <Icon name="skip-back" size={22} />
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="primary"
+              className={`play-btn re-tcs-play${
                 isPlaying ? ' play-btn--playing' : ''
               }`}
+              ariaLabel={
+                isPlaying
+                  ? t('redesign.player.pauseAria')
+                  : t('redesign.player.playAria')
+              }
+              haptic="medium"
               onClick={togglePlay}
             >
-              <Icon
-                name={
-                  isPlaying ? 'pause' : 'play'
-                }
+              <MorphIcon
+                name={isPlaying ? 'pause' : 'play'}
                 size={20}
+                filled
               />
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="icon"
               className="ctrl-btn"
+              ariaLabel={t('redesign.player.nextAria')}
+              haptic="light"
               onClick={playNext}
             >
-              <Icon
-                name="skip-forward"
-                size={22}
-              />
-            </button>
-            <button
+              <Icon name="skip-forward" size={22} />
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="icon"
               className="ctrl-btn"
+              ariaLabel={t('trackSheet.seekForward')}
+              haptic="light"
               onClick={() => skipForward(15)}
-              aria-label={t('trackSheet.seekForward')}
-              title={t('trackSheet.seekForwardTitle')}
             >
-              <Icon
-                name="forward-5"
-                size={22}
-              />
-            </button>
+              <Icon name="forward-5" size={22} />
+            </MotionPress>
           </div>
           <div
             className="tcs-extras-wrap"
@@ -1597,56 +1632,62 @@ export function TrackCardSheet({
         <div
           className={`tcs-actions${editingLyrics ? ' tcs-dimmed' : ''}`}
         >
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
             className={`tcs-action-btn${liked ? ' active' : ''}`}
+            haptic={liked ? 'light' : 'medium'}
             onClick={() => toggleLike(track.id)}
           >
-            <Icon
-              name={
-                liked ? 'heart' : 'heart-outline'
-              }
+            <MorphIcon
+              name="heart"
               size={20}
+              filled={liked}
             />
             <span className="tcs-action-label">
               {t('trackSheet.like')}
             </span>
-          </button>
+          </MotionPress>
 
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
             className={`tcs-action-btn${disliked ? ' active' : ''}`}
-            onClick={() =>
-              toggleDislike(track.id)
-            }
+            haptic="light"
+            onClick={() => toggleDislike(track.id)}
           >
-            <Icon
-              name="thumbs-down"
-              size={20}
-            />
+            <Icon name="thumbs-down" size={20} />
             <span className="tcs-action-label">
               {t('trackSheet.dislike')}
             </span>
-          </button>
+          </MotionPress>
 
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
             className={`tcs-action-btn${showLyrics ? ' active' : ''}`}
+            haptic="light"
+            disabled={
+              !card?.has_lyrics && !isOwner && !canEditUi
+            }
             onClick={() => {
               setShowLyrics((v) => !v)
               setEditingLyrics(false)
             }}
-            disabled={
-              !card?.has_lyrics && !isOwner && !canEditUi
-            }
           >
             <Icon name="text" size={20} />
             <span className="tcs-action-label">
               {t('trackSheet.lyrics')}
             </span>
-          </button>
+          </MotionPress>
 
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
             className={`tcs-action-btn${downloadState === 'cached' ? ' active' : ''}`}
-            onClick={handleDownload}
+            haptic="light"
             disabled={downloadState === 'downloading'}
+            onClick={handleDownload}
           >
             <Icon
               name={
@@ -1663,43 +1704,49 @@ export function TrackCardSheet({
                   ? `${downloadPct}%`
                   : t('trackSheet.download')}
             </span>
-          </button>
+          </MotionPress>
 
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
             className="tcs-action-btn"
-            onClick={handleAuthor}
+            haptic="light"
             disabled={!track?.artist && !card?.author}
+            onClick={handleAuthor}
           >
             <Icon name="user" size={20} />
             <span className="tcs-action-label">
               {t('trackSheet.toAuthor')}
             </span>
-          </button>
+          </MotionPress>
 
           {canEditUi && (
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
               className={`tcs-action-btn${showEdit ? ' active' : ''}`}
-              onClick={() =>
-                setShowEdit((v) => !v)
-              }
+              haptic="light"
+              onClick={() => setShowEdit((v) => !v)}
             >
               <Icon name="edit" size={20} />
               <span className="tcs-action-label">
                 {t('trackSheet.edit')}
               </span>
-            </button>
+            </MotionPress>
           )}
 
-
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
             className="tcs-action-btn"
+            haptic="light"
             onClick={openComplaint}
           >
             <Icon name="flag" size={20} />
             <span className="tcs-action-label">
               {t('trackSheet.complaint')}
             </span>
-          </button>
+          </MotionPress>
         </div>
 
         {showEdit && canEditUi && (
@@ -2351,7 +2398,7 @@ export function TrackCardSheet({
             <div className="loader" />
           </div>
         )}
-      </div>
+      </m.div>
     </div>
   )
 }

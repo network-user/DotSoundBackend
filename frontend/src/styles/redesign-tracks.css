@@ -78,6 +78,33 @@
   pointer-events: none;
 }
 
+.re-tcs-sheet {
+  touch-action: pan-y;
+  cursor: grab;
+}
+
+.re-tcs-sheet:active {
+  cursor: grabbing;
+}
+
+.re-tcs-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--text-muted, rgba(255, 255, 255, 0.4));
+  margin: 8px auto 4px;
+  opacity: 0.5;
+}
+
+.re-tcs-play.mp-press {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .re-chats-root {
   width: 100%;
   min-width: 0;
