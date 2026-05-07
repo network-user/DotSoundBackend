@@ -38,6 +38,35 @@ type SearchTab =
   | 'genres'
 
 const SEARCH_DEBOUNCE_MS = 300
+const GENRES_PAGE_SIZE = 24
+
+function normalizeGenre(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-zа-я0-9]+/gi, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
+function resolveCanonicalGenre(
+  value: string,
+  genres: string[],
+): string {
+  const trimmed = value.trim()
+  if (!trimmed || genres.length === 0) {
+    return trimmed
+  }
+  const exact = genres.find(
+    (genre) => genre.toLowerCase() === trimmed.toLowerCase(),
+  )
+  if (exact) return exact
+  const normalized = normalizeGenre(trimmed)
+  if (!normalized) return trimmed
+  const byNormalized = genres.find(
+    (genre) => normalizeGenre(genre) === normalized,
+  )
+  return byNormalized ?? trimmed
+}
 
 function mergeTracksBySuggestOrder(
   items: Track[],
@@ -84,6 +113,11 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const [catalogArtists, setCatalogArtists] = useState<ArtistInfo[]>([])
   const [catalogPlaylists, setCatalogPlaylists] = useState<Playlist[]>([])
   const [catalogGenres, setCatalogGenres] = useState<string[]>([])
+  const [allGenres, setAllGenres] = useState<string[]>([])
+  const [genreSearchTerm, setGenreSearchTerm] = useState('')
+  const [genresVisible, setGenresVisible] = useState(
+    GENRES_PAGE_SIZE,
+  )
 
   const [importedSC, setImportedSC] = useState<Record<string, Track>>({})
   const [importedYT, setImportedYT] = useState<Record<string, Track>>({})
@@ -101,6 +135,16 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
 
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
   const inputRef = useRef<HTMLInputElement>(null)
+  const requestSeqRef = useRef(0)
+  const activeGenreTerm = useMemo(() => {
+    if (genreFilter && genreFilter.trim()) {
+      return genreFilter.trim()
+    }
+    if (activeTab === 'genres' && debouncedQuery.trim()) {
+      return debouncedQuery.trim()
+    }
+    return null
+  }, [genreFilter, activeTab, debouncedQuery])
 
   const [history, setHistory] = useState<string[]>(() => {
     try {
@@ -153,7 +197,111 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   }, [])
 
   useEffect(() => {
+    if (genreFilter) {
+      setActiveTab('genres')
+      setGenreSearchTerm(genreFilter)
+    }
+  }, [genreFilter])
+
+  useEffect(() => {
+    if (activeTab !== 'genres') return
+    setGenresVisible(GENRES_PAGE_SIZE)
+  }, [activeTab, genreSearchTerm, genreFilter])
+
+  useEffect(() => {
+    if (activeTab !== 'genres') return
+    if (allGenres.length > 0) return
+    let cancelled = false
+    void api
+      .getTrackGenres()
+      .then((genres) => {
+        if (cancelled) return
+        const sortedGenres = [...genres].sort((a, b) =>
+          a.localeCompare(b, 'ru', {
+            sensitivity: 'base',
+          }),
+        )
+        setAllGenres(sortedGenres)
+      })
+      .catch(() => {
+        if (!cancelled) setAllGenres([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, allGenres.length])
+
+  useEffect(() => {
+    if (!activeGenreTerm) return
+    const reqId = ++requestSeqRef.current
+    setTracks(null)
+    setSearchTotal(0)
+    setSCResults([])
+    setYtResults([])
+    setBcResults([])
+    setCatalogArtists([])
+    setCatalogPlaylists([])
+    setCatalogGenres([])
+    let cancelled = false
+    void (async () => {
+      const genres = await api.getTrackGenres().catch(
+        () => [] as string[],
+      )
+      const canonicalGenre = resolveCanonicalGenre(
+        activeGenreTerm,
+        genres,
+      )
+      let internal = await api
+        .getTracks({
+          genre: canonicalGenre || activeGenreTerm,
+          size: 30,
+        })
+        .catch(() => ({
+          items: [] as Track[],
+          total: 0,
+          page: 1,
+          size: 30,
+        }))
+      if (internal.total === 0) {
+        internal = await api
+          .getTracks({
+            q: canonicalGenre || activeGenreTerm,
+            size: 30,
+          })
+          .catch(() => internal)
+      }
+      if (
+        cancelled ||
+        reqId !== requestSeqRef.current
+      ) {
+        return
+      }
+      const sortedGenres = [...genres].sort((a, b) =>
+        a.localeCompare(b, 'ru', { sensitivity: 'base' }),
+      )
+      setTracks(internal.items)
+      setSearchTotal(internal.total)
+      setCatalogGenres(sortedGenres)
+      setAllGenres(sortedGenres)
+      if (
+        canonicalGenre &&
+        canonicalGenre !== genreFilter
+      ) {
+        setGenreFilter(canonicalGenre)
+        setQuery(canonicalGenre)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [activeGenreTerm])
+
+  useEffect(() => {
+    if (activeGenreTerm) {
+      return
+    }
     if (!debouncedQuery.trim()) {
+      requestSeqRef.current += 1
       setTracks('idle')
       setSearchTotal(0)
       setSCResults([])
@@ -173,6 +321,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     setCatalogPlaylists([])
     setCatalogGenres([])
     saveToHistory(debouncedQuery.trim())
+    const reqId = ++requestSeqRef.current
     let cancelled = false
     const q = debouncedQuery
     const emptySuggest = { items: [] as SearchSuggestItem[] }
@@ -229,12 +378,10 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
       })
 
     void (async () => {
-      const trackQuery = genreFilter ? undefined : q
       const [internal, sug, artistsRes] = await Promise.all([
         api
           .getTracks({
-            q: trackQuery,
-            genre: genreFilter ?? undefined,
+            q,
             size: 30,
           })
           .catch(() => ({
@@ -251,37 +398,42 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
             total: 0,
           })),
       ])
-      if (cancelled) return
-      setSearchTotal(internal.total)
-      let merged: Track[]
-      if (genreFilter) {
-        merged = internal.items
-      } else {
-        const have = new Set(internal.items.map((t) => t.id))
-        const fromSuggest = sug.items
-          .filter((i) => i.kind === 'track')
-          .map((i) => i.id)
-        const missing = fromSuggest.filter((id) => !have.has(id))
-        const extra: Track[] = []
-        if (missing.length > 0) {
-          const loaded = await Promise.all(
-            missing.map((id) => api.getTrack(id).catch(() => null)),
-          )
-          for (const t of loaded) {
-            if (t) extra.push(t)
-          }
-        }
-        const combined = [...internal.items, ...extra]
-        merged = mergeTracksBySuggestOrder(combined, sug.items)
+      if (
+        cancelled ||
+        reqId !== requestSeqRef.current
+      ) {
+        return
       }
-      if (cancelled) return
+      setSearchTotal(internal.total)
+      const have = new Set(internal.items.map((t) => t.id))
+      const fromSuggest = sug.items
+        .filter((i) => i.kind === 'track')
+        .map((i) => i.id)
+      const missing = fromSuggest.filter((id) => !have.has(id))
+      const extra: Track[] = []
+      if (missing.length > 0) {
+        const loaded = await Promise.all(
+          missing.map((id) => api.getTrack(id).catch(() => null)),
+        )
+        for (const t of loaded) {
+          if (t) extra.push(t)
+        }
+      }
+      if (
+        cancelled ||
+        reqId !== requestSeqRef.current
+      ) {
+        return
+      }
+      const combined = [...internal.items, ...extra]
+      const merged = mergeTracksBySuggestOrder(combined, sug.items)
       setTracks(merged)
       setCatalogArtists(artistsRes.items)
     })()
     return () => {
       cancelled = true
     }
-  }, [debouncedQuery, genreFilter])
+  }, [debouncedQuery, activeGenreTerm])
 
   const ensureImported = async (
     result: SCSearchResult,
@@ -407,8 +559,43 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     )
   }, [discover, featuredPlaylists])
 
+  const baseGenreOptions = useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    const addGenre = (genre: string | null) => {
+      if (!genre) return
+      const trimmed = genre.trim()
+      if (!trimmed) return
+      if (seen.has(trimmed)) return
+      seen.add(trimmed)
+      out.push(trimmed)
+    }
+    addGenre(genreFilter)
+    for (const genre of allGenres) {
+      addGenre(genre)
+    }
+    return out
+  }, [allGenres, genreFilter])
+
+  const filteredGenreOptions = useMemo(() => {
+    const term = genreSearchTerm.trim().toLowerCase()
+    if (!term) return baseGenreOptions
+    return baseGenreOptions.filter((genre) =>
+      genre.toLowerCase().includes(term),
+    )
+  }, [baseGenreOptions, genreSearchTerm])
+
+  const visibleGenreOptions = useMemo(
+    () => filteredGenreOptions.slice(0, genresVisible),
+    [filteredGenreOptions, genresVisible],
+  )
+
+  const hasMoreGenreOptions =
+    filteredGenreOptions.length > genresVisible
+
   const tabHasResults = useMemo(() => {
     if (!Array.isArray(tracks)) return true
+    const genreOptionsCount = filteredGenreOptions.length
     switch (activeTab) {
       case 'all':
         return (
@@ -433,8 +620,8 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
         return catalogPlaylists.length > 0
       case 'genres':
         return (
-          catalogGenres.length > 0 ||
-          Boolean(genreFilter && tracks.length > 0)
+          genreOptionsCount > 0 ||
+          Boolean(activeGenreTerm && tracks.length > 0)
         )
       default:
         return false
@@ -444,7 +631,8 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     tracks,
     catalogArtists,
     catalogGenres,
-    genreFilter,
+    activeGenreTerm,
+    filteredGenreOptions,
     catalogPlaylists,
     scResults,
     ytResults,
@@ -869,39 +1057,78 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
               <p className="search-section-label">
                 {t('search.discoverGenres')}
               </p>
-              {(catalogGenres.length > 0 || genreFilter) ? (
-                <div className="search-genre-chips">
-                  {Array.from(
-                    new Set([
-                      ...(genreFilter ? [genreFilter] : []),
-                      ...catalogGenres,
-                    ]),
-                  ).map((g) => (
-                    <button
-                      key={g}
-                      type="button"
-                      className="search-genre-chip"
-                      onClick={() => {
-                        setQuery(g)
-                        setGenreFilter(g)
-                        setActiveTab('genres')
+              {(catalogGenres.length > 0 || activeGenreTerm) ? (
+                <>
+                  <div className="search-bar" style={{ marginBottom: 8 }}>
+                    <span className="search-icon">
+                      <Icon name="search" size={16} />
+                    </span>
+                    <input
+                      type="search"
+                      enterKeyHint="search"
+                      placeholder={t(
+                        'search.genresSearchPlaceholder',
+                        { defaultValue: 'Поиск жанра' },
+                      )}
+                      autoComplete="off"
+                      value={genreSearchTerm}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setGenreSearchTerm(value)
+                        if (
+                          genreFilter &&
+                          value.trim() !== genreFilter
+                        ) {
+                          setGenreFilter(null)
+                        }
                       }}
+                    />
+                  </div>
+                  <div className="search-genre-chips">
+                    {visibleGenreOptions.map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        className="search-genre-chip"
+                        onClick={() => {
+                          setQuery(g)
+                          setGenreSearchTerm(g)
+                          setGenreFilter(g)
+                          setActiveTab('genres')
+                        }}
+                      >
+                        <Icon name="music-note" size={12} />
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                  {hasMoreGenreOptions && (
+                    <button
+                      type="button"
+                      className="search-tab"
+                      style={{ marginTop: 8 }}
+                      onClick={() =>
+                        setGenresVisible(
+                          (prev) => prev + GENRES_PAGE_SIZE,
+                        )
+                      }
                     >
-                      <Icon name="music-note" size={12} />
-                      {g}
+                      {t('common.showMore', {
+                        defaultValue: 'Показать еще',
+                      })}
                     </button>
-                  ))}
-                </div>
+                  )}
+                </>
               ) : (
                 <p className="search-catalog-empty">
                   {t('search.genresTabEmpty')}
                 </p>
               )}
-              {activeTab === 'genres' && genreFilter && (
+              {activeTab === 'genres' && activeGenreTerm && (
                 <p className="search-catalog-empty" style={{ paddingTop: 8 }}>
                   {t('search.genreTracksCount', {
                     count: searchTotal,
-                    genre: genreFilter,
+                    genre: activeGenreTerm,
                   })}
                 </p>
               )}

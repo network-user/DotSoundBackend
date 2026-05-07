@@ -65,6 +65,7 @@ export function PlayerBar() {
   const {
     togglePlay,
     seek,
+    getPreciseTime,
     playNext,
     playPrev,
     openCard,
@@ -82,27 +83,15 @@ export function PlayerBar() {
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [volumePinned, setVolumePinned] = useState(false)
   const [volumeHover, setVolumeHover] = useState(false)
-  const [seekHoverPct, setSeekHoverPct] = useState<number | null>(null)
+  const [smoothCurrentTime, setSmoothCurrentTime] = useState(0)
   const overflowRef = useRef<HTMLDivElement>(null)
   const volumeRef = useRef<HTMLDivElement>(null)
-  const seekRef = useRef<HTMLInputElement>(null)
   const volumeCloseTimerRef = useRef<number | null>(null)
   const playRef = useRef<HTMLButtonElement>(null)
   useRipple(playRef)
-  const targetPct = duration ? (currentTime / duration) * 100 : 0
+  const targetPct = duration ? (smoothCurrentTime / duration) * 100 : 0
 
   const volumeOpen = volumePinned || volumeHover
-
-  const updateSeekHoverPct = (clientX: number) => {
-    const seekEl = seekRef.current
-    if (!seekEl) return
-    const rect = seekEl.getBoundingClientRect()
-    if (rect.width <= 0) return
-    const rawPct = ((clientX - rect.left) / rect.width) * 100
-    setSeekHoverPct(
-      Math.max(0, Math.min(100, Number(rawPct.toFixed(3)))),
-    )
-  }
 
   const clearVolumeCloseTimer = () => {
     if (volumeCloseTimerRef.current !== null) {
@@ -158,6 +147,26 @@ export function PlayerBar() {
       clearVolumeCloseTimer()
     }
   }, [overflowOpen, volumeOpen])
+
+  useEffect(() => {
+    setSmoothCurrentTime(currentTime)
+  }, [currentTime, track?.id])
+
+  useEffect(() => {
+    if (!isPlaying) {
+      setSmoothCurrentTime(currentTime)
+      return
+    }
+    let rafId = 0
+    const frame = () => {
+      setSmoothCurrentTime(getPreciseTime())
+      rafId = window.requestAnimationFrame(frame)
+    }
+    rafId = window.requestAnimationFrame(frame)
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [currentTime, getPreciseTime, isPlaying, track?.id])
 
   if (!track) return null
 
@@ -241,10 +250,6 @@ export function PlayerBar() {
       : volume < 0.5
         ? 'volume-low'
         : 'volume-high'
-  const seekPreviewSec =
-    seekHoverPct !== null && duration > 0
-      ? (seekHoverPct / 100) * duration
-      : 0
 
   return (
     <m.div
@@ -261,23 +266,8 @@ export function PlayerBar() {
       <div
         id="pb-seek-wrap"
         className="pb-seek-zone rp-player-seek"
-        onMouseMove={(e) => updateSeekHoverPct(e.clientX)}
-        onMouseLeave={() => setSeekHoverPct(null)}
       >
-        {seekHoverPct !== null && (
-          <div
-            className="pb-seek-preview"
-            style={
-              {
-                '--preview': `${seekHoverPct}%`,
-              } as CSSProperties
-            }
-          >
-            {fmt(seekPreviewSec)}
-          </div>
-        )}
         <m.input
-          ref={seekRef}
           type="range"
           id="pb-seek"
           min={0}
@@ -630,7 +620,7 @@ export function PlayerBar() {
       </div>
 
       <div id="pb-time">
-        <span>{fmt(currentTime)}</span>
+        <span>{fmt(smoothCurrentTime)}</span>
         <span>{fmt(duration)}</span>
       </div>
 
