@@ -27,6 +27,8 @@ async def _make_track(
     file_key: str = "k",
     genre: str | None = None,
     is_public: bool = True,
+    source_platform: str | None = None,
+    imported_from: str | None = None,
 ) -> int:
     repo = TrackRepository(session)
     track = await repo.create(
@@ -35,6 +37,8 @@ async def _make_track(
         uploaded_by_id=owner_id,
         genre=genre,
         is_public=is_public,
+        source_platform=source_platform,
+        imported_from=imported_from,
     )
     return track.id
 
@@ -82,6 +86,23 @@ async def test_get_track_not_found(
     svc = TrackService(session)
 
     track = await svc.get_track(9999)
+
+    assert track is None
+
+
+async def test_get_track_hidden_youtube_source(
+    session: AsyncSession,
+) -> None:
+    uid = await _make_user(session)
+    tid = await _make_track(
+        session,
+        uid,
+        source_platform="youtube",
+        imported_from="youtube",
+    )
+
+    svc = TrackService(session)
+    track = await svc.get_track(tid)
 
     assert track is None
 

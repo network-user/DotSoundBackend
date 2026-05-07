@@ -13,6 +13,19 @@ class UserTrackLibraryRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @staticmethod
+    def _exclude_hidden_sources():  # noqa: ANN205
+        hidden = ("youtube",)
+        source_platform = func.lower(
+            func.coalesce(Track.source_platform, "")
+        )
+        imported_from = func.lower(
+            func.coalesce(Track.imported_from, "")
+        )
+        return (~source_platform.in_(hidden)) & (
+            ~imported_from.in_(hidden)
+        )
+
     async def add(
         self,
         user_id: int,
@@ -72,6 +85,7 @@ class UserTrackLibraryRepository:
             .where(
                 UserTrackLibrary.user_id == user_id,
                 Track.is_active.is_(True),
+                self._exclude_hidden_sources(),
             )
         )
         if playable_only:
@@ -89,6 +103,7 @@ class UserTrackLibraryRepository:
             .where(
                 UserTrackLibrary.user_id == user_id,
                 Track.is_active.is_(True),
+                self._exclude_hidden_sources(),
             )
         )
         if playable_only:
@@ -111,6 +126,7 @@ class UserTrackLibraryRepository:
             .where(
                 UserTrackLibrary.user_id == user_id,
                 Track.is_active.is_(True),
+                self._exclude_hidden_sources(),
             )
         )
         return int(result.scalar_one())

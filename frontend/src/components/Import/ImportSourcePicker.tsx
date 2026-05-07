@@ -14,7 +14,7 @@ const SOURCES: Source[] = [
   { id: 'telegram', label: 'Telegram', icon: 'source-telegram', available: true },
   { id: 'yandex', label: 'Яндекс Музыка', icon: 'source-yandex', available: true },
   { id: 'vk', label: 'VK Музыка', icon: 'source-vk', available: false },
-  { id: 'spotify', label: 'Spotify', icon: 'source-spotify', available: true },
+  { id: 'spotify', label: 'Spotify', icon: 'source-spotify', available: false },
   { id: 'soundcloud', label: 'SoundCloud', icon: 'source-soundcloud', available: true },
 ]
 

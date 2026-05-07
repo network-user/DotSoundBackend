@@ -58,6 +58,16 @@ class TrackService:
         if not track or not track.is_active:
             logger.warning("track_not_found", track_id=track_id)
             return None
+        source_platform = (track.source_platform or "").strip().lower()
+        imported_from = (track.imported_from or "").strip().lower()
+        if source_platform == "youtube" or imported_from == "youtube":
+            logger.info(
+                "track_hidden_by_source_policy",
+                track_id=track_id,
+                source_platform=track.source_platform,
+                imported_from=track.imported_from,
+            )
+            return None
         logger.debug("track_fetched", track_id=track_id)
         return track
 

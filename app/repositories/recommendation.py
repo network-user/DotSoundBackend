@@ -18,6 +18,19 @@ class RecommendationRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @staticmethod
+    def _exclude_hidden_sources():  # noqa: ANN205
+        hidden = ("youtube",)
+        source_platform = func.lower(
+            func.coalesce(Track.source_platform, "")
+        )
+        imported_from = func.lower(
+            func.coalesce(Track.imported_from, "")
+        )
+        return (~source_platform.in_(hidden)) & (
+            ~imported_from.in_(hidden)
+        )
+
     async def get_candidate_tracks(
         self,
         limit: int = 200,
@@ -27,6 +40,7 @@ class RecommendationRepository:
         q = select(Track).where(
             Track.is_active.is_(True),
             Track.is_public.is_(True),
+            self._exclude_hidden_sources(),
         )
         if genre_filter:
             q = q.where(Track.genre.in_(genre_filter))
@@ -45,6 +59,7 @@ class RecommendationRepository:
         q = select(Track).where(
             Track.is_active.is_(True),
             Track.is_public.is_(True),
+            self._exclude_hidden_sources(),
         )
         if genre_filter:
             q = q.where(Track.genre.in_(genre_filter))
@@ -128,6 +143,7 @@ class RecommendationRepository:
             .where(
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
             )
             .order_by(Track.play_count.desc())
             .limit(limit)
@@ -145,6 +161,7 @@ class RecommendationRepository:
             .where(
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
                 Track.created_at >= cutoff,
             )
             .order_by(Track.created_at.desc())
@@ -168,6 +185,7 @@ class RecommendationRepository:
             .where(
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
                 TrackArtist.artist_id.in_(artist_ids),
             )
             .order_by(Track.created_at.desc())
@@ -220,7 +238,10 @@ class RecommendationRepository:
         if not ids:
             return []
         result = await self._session.execute(
-            select(Track).where(Track.id.in_(ids))
+            select(Track).where(
+                Track.id.in_(ids),
+                self._exclude_hidden_sources(),
+            )
         )
         id_order = {tid: i for i, tid in enumerate(ids)}
         tracks = list(result.scalars().all())
@@ -280,6 +301,7 @@ class RecommendationRepository:
             .where(
                 Track.is_active.is_(True),
                 Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
             )
             .scalar_subquery()
         )

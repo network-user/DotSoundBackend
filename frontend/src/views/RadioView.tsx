@@ -1,12 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
+import { AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
+import { Waveform } from '@/components/Waveform/Waveform'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
-import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 import { api } from '@/lib/api'
@@ -19,6 +25,7 @@ import {
 import {
   m,
   SPRING_BOUNCY,
+  SPRING_GENTLE,
   TWEEN_FAST,
   useReducedMotion,
 } from '@/lib/motion'
@@ -29,19 +36,26 @@ function coverUrl(key: string | null): string | null {
   return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
 }
 
-const MOOD_ICONS = [
-  'heart',
-  'search',
-  'flame',
-  'star',
-  'radio',
-  'bookmark',
-] as const
+// TODO(radio-moods): restore when mood-tagged radio API is ready.
+// const MOOD_ICONS = [
+//   'heart',
+//   'search',
+//   'flame',
+//   'star',
+//   'radio',
+//   'bookmark',
+// ] as const
+
+const DISC_SWIPE_THRESHOLD_PX = 42
+const DISC_SWIPE_MAX_OFFSET_PX = 92
+const DISC_SLIDE_DISTANCE_PX = 160
+const RADIO_WAVE_STYLE: 'style1' | 'style2' | 'style3' =
+  'style2'
 
 export function RadioView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { track: currentTrack } = usePlayerMeta()
+  const { track: currentTrack, queue } = usePlayerMeta()
   const { isPlaying } = usePlayerState()
   const {
     playNext,
@@ -54,8 +68,18 @@ export function RadioView() {
   const [historyTracks, setHistoryTracks] = useState<Track[]>([])
   const [slideDirection, setSlideDirection] = useState(1)
   const [isSwitching, setIsSwitching] = useState(false)
+  const [discDragX, setDiscDragX] = useState(0)
+  const [isDiscDragging, setIsDiscDragging] = useState(false)
+  const [radioPreviewTracks, setRadioPreviewTracks] = useState<
+    Track[]
+  >([])
   const historyRef = useRef<Track[]>([])
   const switchingRef = useRef(false)
+  const discPointerRef = useRef<{
+    pointerId: number
+    startX: number
+    offsetX: number
+  } | null>(null)
   const reduceMotion = useReducedMotion()
 
   const heroCover = currentTrack
@@ -64,6 +88,12 @@ export function RadioView() {
   const bpm = 120
   const discIsLive = radioMode && isPlaying
   const discSwipeEnabled = radioMode && Boolean(currentTrack)
+  const nextTrack = queue[0] ?? radioPreviewTracks[0] ?? null
+  const nextTrackCover = nextTrack
+    ? coverUrl(nextTrack.cover_key)
+    : null
+  const nextTrackTitle = nextTrack?.title ?? '—'
+  const nextTrackArtist = nextTrack?.artist ?? 'Очередь пока пуста'
 
   useEffect(() => {
     if (!currentTrack) return
@@ -82,22 +112,40 @@ export function RadioView() {
   }, [currentTrack, radioMode])
 
   useEffect(() => {
-    if (!radioMode || !currentTrack) return
+    if (!radioMode || !currentTrack) {
+      setRadioPreviewTracks([])
+      return
+    }
     let cancelled = false
+    const excludeIds = [
+      currentTrack.id,
+      ...historyRef.current.map((track) => track.id),
+      ...queue.map((track) => track.id),
+    ]
     api
-      .getRadio(currentTrack.id, 14)
+      .getRadio(currentTrack.id, 14, excludeIds)
       .then((res) => {
-        if (cancelled || !res.tracks.length) return
-        void getPrefetchManager().enqueue(res.tracks, {
+        if (cancelled) return
+        const candidates = res.tracks.filter(
+          (track) =>
+            track.id !== currentTrack.id &&
+            !queue.some((queuedTrack) => queuedTrack.id === track.id),
+        )
+        setRadioPreviewTracks(candidates)
+        if (!candidates.length) return
+        void getPrefetchManager().enqueue(candidates, {
           context: 'radio',
           replaceContext: true,
         })
       })
-      .catch(() => {})
+      .catch(() => {
+        if (cancelled) return
+        setRadioPreviewTracks([])
+      })
     return () => {
       cancelled = true
     }
-  }, [radioMode, currentTrack?.id])
+  }, [radioMode, currentTrack?.id, queue])
 
   const handleStartRadio = async () => {
     if (!currentTrack) return
@@ -110,20 +158,18 @@ export function RadioView() {
     stopRadio()
   }
 
-  // TODO(redesign-2026): когда появится mood-tagged radio API,
-  // прокинуть `moodId` в `startRadio` или новый эндпойнт.
-  // Сейчас mood — это quick-старт волны от текущего трека.
-  const handleMood = (_moodId: string) => {
-    if (!currentTrack) {
-      showIsland({
-        kind: 'toast',
-        title: t('redesign.home.radioPickTrackHint'),
-        durationMs: 3000,
-      })
-      return
-    }
-    void handleStartRadio()
-  }
+  // TODO(radio-moods): restore when mood-tagged radio API is ready.
+  // const handleMood = (_moodId: string) => {
+  //   if (!currentTrack) {
+  //     showIsland({
+  //       kind: 'toast',
+  //       title: t('redesign.home.radioPickTrackHint'),
+  //       durationMs: 3000,
+  //     })
+  //     return
+  //   }
+  //   void handleStartRadio()
+  // }
 
   const switchToPreviousRadioTrack = async () => {
     const previousTrack =
@@ -165,22 +211,88 @@ export function RadioView() {
     }
   }
 
-  const moodDefs = [
-    { id: 'chill', labelKey: 'radioMoodChill', hintKey: 'radioMoodHintChill' },
-    { id: 'focus', labelKey: 'radioMoodFocus', hintKey: 'radioMoodHintFocus' },
-    { id: 'gym', labelKey: 'radioMoodGym', hintKey: 'radioMoodHintGym' },
-    {
-      id: 'cinematic',
-      labelKey: 'radioMoodCinematic',
-      hintKey: 'radioMoodHintCinematic',
-    },
-    { id: 'retro', labelKey: 'radioMoodRetro', hintKey: 'radioMoodHintRetro' },
-    {
-      id: 'acoustic',
-      labelKey: 'radioMoodAcoustic',
-      hintKey: 'radioMoodHintAcoustic',
-    },
-  ]
+  const handleDiscPointerDown = (
+    e: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    if (!discSwipeEnabled || switchingRef.current) return
+    discPointerRef.current = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      offsetX: 0,
+    }
+    setIsDiscDragging(true)
+    setDiscDragX(0)
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const handleDiscPointerMove = (
+    e: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    const pointer = discPointerRef.current
+    if (!pointer || pointer.pointerId !== e.pointerId) return
+    const rawOffset = e.clientX - pointer.startX
+    const offset = Math.max(
+      -DISC_SWIPE_MAX_OFFSET_PX,
+      Math.min(DISC_SWIPE_MAX_OFFSET_PX, rawOffset),
+    )
+    pointer.offsetX = offset
+    setDiscDragX(offset)
+    if (Math.abs(offset) > 4) {
+      e.preventDefault()
+    }
+  }
+
+  const finishDiscPointer = (
+    e: ReactPointerEvent<HTMLDivElement>,
+  ) => {
+    const pointer = discPointerRef.current
+    if (!pointer || pointer.pointerId !== e.pointerId) return
+    discPointerRef.current = null
+    setIsDiscDragging(false)
+    setDiscDragX(0)
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+    if (pointer.offsetX <= -DISC_SWIPE_THRESHOLD_PX) {
+      void handleDiscSwipe('next')
+    } else if (pointer.offsetX >= DISC_SWIPE_THRESHOLD_PX) {
+      void handleDiscSwipe('previous')
+    }
+  }
+
+  // TODO(radio-moods): restore when mood-tagged radio API is ready.
+  // const moodDefs = [
+  //   {
+  //     id: 'chill',
+  //     labelKey: 'radioMoodChill',
+  //     hintKey: 'radioMoodHintChill',
+  //   },
+  //   {
+  //     id: 'focus',
+  //     labelKey: 'radioMoodFocus',
+  //     hintKey: 'radioMoodHintFocus',
+  //   },
+  //   {
+  //     id: 'gym',
+  //     labelKey: 'radioMoodGym',
+  //     hintKey: 'radioMoodHintGym',
+  //   },
+  //   {
+  //     id: 'cinematic',
+  //     labelKey: 'radioMoodCinematic',
+  //     hintKey: 'radioMoodHintCinematic',
+  //   },
+  //   {
+  //     id: 'retro',
+  //     labelKey: 'radioMoodRetro',
+  //     hintKey: 'radioMoodHintRetro',
+  //   },
+  //   {
+  //     id: 'acoustic',
+  //     labelKey: 'radioMoodAcoustic',
+  //     hintKey: 'radioMoodHintAcoustic',
+  //   },
+  // ]
 
   return (
     <section className="view active rh-radio-root">
@@ -223,6 +335,56 @@ export function RadioView() {
         className="rh-radio-hero"
       >
         <div className="rh-radio-hero__inner">
+          <div
+            className={[
+              'rh-radio-hero-wave-bg',
+              discIsLive && 'rh-radio-hero-wave-bg--live',
+              `rh-radio-hero-wave-bg--${RADIO_WAVE_STYLE}`,
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            aria-hidden
+          >
+            <div className="rh-radio-hero-wave-gradient" />
+            <Waveform
+              overlay
+              variant="radio"
+              height={
+                RADIO_WAVE_STYLE === 'style3'
+                  ? 112
+                  : RADIO_WAVE_STYLE === 'style2'
+                    ? 102
+                    : 84
+              }
+              bars={
+                RADIO_WAVE_STYLE === 'style3'
+                  ? 52
+                  : RADIO_WAVE_STYLE === 'style2'
+                    ? 44
+                    : 36
+              }
+              className="rh-radio-hero-waveform"
+            />
+            <Waveform
+              overlay
+              variant="radio"
+              height={
+                RADIO_WAVE_STYLE === 'style3'
+                  ? 92
+                  : RADIO_WAVE_STYLE === 'style2'
+                    ? 86
+                    : 70
+              }
+              bars={
+                RADIO_WAVE_STYLE === 'style3'
+                  ? 52
+                  : RADIO_WAVE_STYLE === 'style2'
+                    ? 44
+                    : 36
+              }
+              className="rh-radio-hero-waveform rh-radio-hero-waveform--reflection"
+            />
+          </div>
           <m.div
             className={[
               'rh-radio-disc-swipe',
@@ -231,20 +393,23 @@ export function RadioView() {
             ]
               .filter(Boolean)
               .join(' ')}
-            drag={discSwipeEnabled ? 'x' : false}
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={0.24}
-            onDragEnd={(_, info) => {
-              const offset = info.offset.x
-              const velocity = info.velocity.x
-              if (offset < -56 || velocity < -420) {
-                void handleDiscSwipe('next')
-              } else if (offset > 56 || velocity > 420) {
-                void handleDiscSwipe('previous')
-              }
+            onPointerDown={handleDiscPointerDown}
+            onPointerMove={handleDiscPointerMove}
+            onPointerUp={finishDiscPointer}
+            onPointerCancel={finishDiscPointer}
+            animate={{
+              x: discDragX,
+              rotate: reduceMotion ? 0 : discDragX / 18,
+              scale:
+                !reduceMotion && isDiscDragging ? 0.985 : 1,
             }}
-            animate={{ x: 0 }}
-            transition={reduceMotion ? TWEEN_FAST : SPRING_BOUNCY}
+            transition={
+              isDiscDragging
+                ? { duration: 0 }
+                : reduceMotion
+                  ? TWEEN_FAST
+                  : SPRING_BOUNCY
+            }
             aria-label={t('redesign.home.radioSwipeAria')}
             role="group"
           >
@@ -253,37 +418,64 @@ export function RadioView() {
               active={discIsLive}
               className="rh-radio-disc-pulse"
             >
-              <m.div
-                key={currentTrack?.id ?? 'empty'}
-                className="rh-radio-disc-slide"
-                initial={
-                  reduceMotion
-                    ? { opacity: 0 }
-                    : {
-                        opacity: 0,
-                        x: slideDirection * 72,
-                        scale: 0.94,
-                      }
-                }
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                transition={
-                  reduceMotion ? TWEEN_FAST : SPRING_BOUNCY
-                }
-              >
-                <div className="rh-radio-disc-wrap">
-                  {heroCover ? (
-                    <KenBurnsCover
-                      src={heroCover}
-                      alt=""
-                      active={discIsLive}
-                    />
-                  ) : (
-                    <div className="rh-radio-disc-placeholder">
-                      <Icon name="radio" size={48} />
+              <div className="rh-radio-disc-viewport">
+                <AnimatePresence initial={false} mode="wait">
+                  <m.div
+                    key={currentTrack?.id ?? 'empty'}
+                    className="rh-radio-disc-slide"
+                    initial={
+                      reduceMotion
+                        ? { opacity: 0 }
+                        : {
+                            opacity: 0,
+                            x:
+                              slideDirection *
+                              DISC_SLIDE_DISTANCE_PX,
+                            scale: 0.88,
+                            rotate: slideDirection * 8,
+                            filter: 'blur(10px)',
+                          }
+                    }
+                    animate={{
+                      opacity: 1,
+                      x: 0,
+                      scale: 1,
+                      rotate: 0,
+                      filter: 'blur(0px)',
+                    }}
+                    exit={
+                      reduceMotion
+                        ? { opacity: 0 }
+                        : {
+                            opacity: 0,
+                            x:
+                              slideDirection *
+                              -DISC_SLIDE_DISTANCE_PX,
+                            scale: 0.88,
+                            rotate: slideDirection * -8,
+                            filter: 'blur(10px)',
+                          }
+                    }
+                    transition={
+                      reduceMotion ? TWEEN_FAST : SPRING_GENTLE
+                    }
+                  >
+                    <div className="rh-radio-disc-wrap">
+                      {heroCover ? (
+                        <KenBurnsCover
+                          src={heroCover}
+                          alt=""
+                          active={discIsLive}
+                        />
+                      ) : (
+                        <div className="rh-radio-disc-placeholder">
+                          <Icon name="radio" size={48} />
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </m.div>
+                  </m.div>
+                </AnimatePresence>
+              </div>
             </BeatPulse>
           </m.div>
           <div className="rh-radio-hero__meta">
@@ -336,35 +528,61 @@ export function RadioView() {
         )}
       </div>
 
-      <div className="rh-radio-moods">
-        <div className="rh-radio-moods__title">
-          {t('redesign.home.radioMoodsTitle')}
+      <div className="rh-radio-next-card glass--liquid">
+        <div className="rh-radio-next-card__cover" aria-hidden>
+          {nextTrackCover ? (
+            <img src={nextTrackCover} alt="" />
+          ) : (
+            <Icon name="radio" size={22} />
+          )}
         </div>
-        <div className="rh-radio-moods__grid">
-          {moodDefs.map((mood, idx) => (
-            <MotionPress
-              key={mood.id}
-              variant="subtle"
-              className="rh-radio-mood-card glass--liquid"
-              onClick={() => handleMood(mood.id)}
-            >
-              <span className="rh-radio-mood-card__icon" aria-hidden>
-                <MorphIcon
-                  name={MOOD_ICONS[idx]}
-                  filled
-                  size={22}
-                />
-              </span>
-              <span className="rh-radio-mood-card__label">
-                {t(`redesign.home.${mood.labelKey}`)}
-              </span>
-              <span className="rh-radio-mood-card__hint">
-                {t(`redesign.home.${mood.hintKey}`)}
-              </span>
-            </MotionPress>
-          ))}
+        <div className="rh-radio-next-card__body">
+          <span className="rh-radio-next-card__label">
+            Следующий трек
+          </span>
+          <span className="rh-radio-next-card__title">
+            {nextTrackTitle}
+          </span>
+          <span className="rh-radio-next-card__artist">
+            {nextTrackArtist}
+          </span>
         </div>
       </div>
+
+      {/*
+        TODO(radio-moods): restore this section when mood-tagged
+        radio API is ready.
+
+        <div className="rh-radio-moods">
+          <div className="rh-radio-moods__title">
+            {t('redesign.home.radioMoodsTitle')}
+          </div>
+          <div className="rh-radio-moods__grid">
+            {moodDefs.map((mood, idx) => (
+              <MotionPress
+                key={mood.id}
+                variant="subtle"
+                className="rh-radio-mood-card glass--liquid"
+                onClick={() => handleMood(mood.id)}
+              >
+                <span className="rh-radio-mood-card__icon" aria-hidden>
+                  <MorphIcon
+                    name={MOOD_ICONS[idx]}
+                    filled
+                    size={22}
+                  />
+                </span>
+                <span className="rh-radio-mood-card__label">
+                  {t(`redesign.home.${mood.labelKey}`)}
+                </span>
+                <span className="rh-radio-mood-card__hint">
+                  {t(`redesign.home.${mood.hintKey}`)}
+                </span>
+              </MotionPress>
+            ))}
+          </div>
+        </div>
+      */}
 
       {historyTracks.length > 0 && (
         <>

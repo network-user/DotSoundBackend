@@ -14,6 +14,19 @@ class LikeRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    @staticmethod
+    def _exclude_hidden_sources():  # noqa: ANN205
+        hidden = ("youtube",)
+        source_platform = func.lower(
+            func.coalesce(Track.source_platform, "")
+        )
+        imported_from = func.lower(
+            func.coalesce(Track.imported_from, "")
+        )
+        return (~source_platform.in_(hidden)) & (
+            ~imported_from.in_(hidden)
+        )
+
     async def get(
         self, user_id: int, track_id: int
     ) -> Like | None:
@@ -63,7 +76,11 @@ class LikeRepository:
     ) -> tuple[list[tuple[Track, datetime]], int]:
         base_where = self._build_source_filter(
             source_filter,
-            and_(Like.user_id == user_id, Track.is_active.is_(True)),
+            and_(
+                Like.user_id == user_id,
+                Track.is_active.is_(True),
+                self._exclude_hidden_sources(),
+            ),
         )
 
         count_result = await self._session.execute(
@@ -112,6 +129,7 @@ class LikeRepository:
             .select_from(Like)
             .join(Track, Track.id == Like.track_id)
             .where(Track.uploaded_by_id == user_id, Track.is_active.is_(True))
+            .where(self._exclude_hidden_sources())
         )
         return result.scalar_one()
 
