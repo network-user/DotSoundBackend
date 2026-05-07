@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -198,3 +199,96 @@ async def test_refresh_daily_playlist_deletes_keys(
         for call in mock_redis.delete.call_args_list
     ]
     assert "rec:daily:1" in deleted_keys
+
+
+async def test_get_radio_guard_uses_last_queue(
+    session: AsyncSession,
+) -> None:
+    mock_redis = AsyncMock()
+    mock_redis.set = AsyncMock(return_value=None)
+    mock_redis.get = AsyncMock(
+        return_value=json.dumps([11, 12])
+    )
+    mock_tracks = [
+        SimpleNamespace(id=11),
+        SimpleNamespace(id=12),
+    ]
+
+    with patch(
+        f"{_MOD}.get_redis_client",
+        return_value=mock_redis,
+    ):
+        svc = RecommendationService(session)
+        svc._rec_repo.get_tracks_by_ids = AsyncMock(
+            return_value=mock_tracks
+        )
+        out = await svc.get_radio(
+            seed_track_id=5,
+            user_id=77,
+            exclude_ids=[1, 2],
+        )
+
+    assert [t.id for t in out] == [11, 12]
+    svc._rec_repo.get_tracks_by_ids.assert_called_once_with(
+        [11, 12]
+    )
+
+
+async def test_get_radio_cache_key_depends_on_exclude_ids(
+    session: AsyncSession,
+) -> None:
+    seed = SimpleNamespace(id=5)
+    candidate = SimpleNamespace(id=21)
+    feat_seed = SimpleNamespace(track_id=5)
+    feat_candidate = SimpleNamespace(track_id=21)
+    scored = [SimpleNamespace(track_id=21)]
+
+    mock_redis = AsyncMock()
+    mock_redis.set = AsyncMock(return_value=True)
+    mock_redis.get = AsyncMock(return_value=None)
+    mock_redis.setex = AsyncMock()
+
+    mock_track_repo = AsyncMock()
+    mock_track_repo.get_by_id = AsyncMock(return_value=seed)
+
+    with (
+        patch(
+            f"{_MOD}.get_redis_client",
+            return_value=mock_redis,
+        ),
+        patch(
+            "app.repositories.track.TrackRepository",
+            return_value=mock_track_repo,
+        ),
+        patch(
+            f"{_MOD}.build_radio_queue",
+            return_value=scored,
+        ),
+    ):
+        svc = RecommendationService(session)
+        svc._rec_repo.get_candidate_tracks = AsyncMock(
+            return_value=[candidate]
+        )
+        svc._tracks_to_features = AsyncMock(
+            return_value=[feat_seed, feat_candidate]
+        )
+        svc._telemetry.record_impressions = AsyncMock()
+
+        await svc.get_radio(
+            seed_track_id=5,
+            user_id=77,
+            exclude_ids=[100],
+        )
+        await svc.get_radio(
+            seed_track_id=5,
+            user_id=77,
+            exclude_ids=[101],
+        )
+
+    cache_calls = [
+        call.args[0]
+        for call in mock_redis.setex.call_args_list
+        if call.args[0].startswith("rec:radio:")
+    ]
+    assert len(cache_calls) >= 2
+    assert cache_calls[-1] != cache_calls[-2]

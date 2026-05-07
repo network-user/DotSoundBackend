@@ -37,8 +37,8 @@ from dotsound_private_core.services.signal_policy import (
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.redis import get_redis_client
 from app.core.observability import radio_request_observed
+from app.core.redis import get_redis_client
 from app.models.listen_event import ListenEvent as ListenEventModel
 from app.models.track import Track
 from app.models.user import User
