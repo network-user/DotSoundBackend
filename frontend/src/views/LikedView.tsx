@@ -24,12 +24,21 @@ type LikedSort = 'newest' | 'oldest' | 'artist'
 
 const PAGE_SIZE = 20
 
-function formatLikedAt(iso: string): string {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(iso))
+function formatLikedAt(iso: string, lang: string): string {
+  const safeLang = lang || 'en'
+  try {
+    return new Intl.DateTimeFormat(safeLang, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(iso))
+  } catch {
+    return new Intl.DateTimeFormat('en', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(iso))
+  }
 }
 
 const SOURCE_FILTERS: { key: SourceFilter; labelKey: string }[] = [
@@ -46,8 +55,9 @@ const SORT_OPTIONS: { key: LikedSort; labelKey: string }[] = [
 ]
 
 export function LikedView({ embedded = false }: LikedViewProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
+  const lang = i18n.language
   const [tracks, setTracks] = useState<LikedTrack[] | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -166,9 +176,9 @@ export function LikedView({ embedded = false }: LikedViewProps) {
 
   const filterBar = (
     <div
-      className="liked-source-filter rd-liked-source"
+      className="rd-liked-source"
       role="tablist"
-      aria-label={t('liked.sourceFilter', 'Фильтр по источнику')}
+      aria-label={t('redesign.library.sourceFilterAria')}
     >
       {SOURCE_FILTERS.map(({ key, labelKey }) => (
         <MotionPress
@@ -177,7 +187,7 @@ export function LikedView({ embedded = false }: LikedViewProps) {
           haptic="selection"
           role="tab"
           aria-selected={sourceFilter === key}
-          className={`rd-liked-chip liked-source-chip${sourceFilter === key ? ' active' : ''}`}
+          className="rd-liked-chip"
           data-active={sourceFilter === key ? 'true' : 'false'}
           onClick={() => {
             if (sourceFilter !== key) setSourceFilter(key)
@@ -193,12 +203,12 @@ export function LikedView({ embedded = false }: LikedViewProps) {
     (track: Track) => {
       const lt = track as LikedTrack
       return lt.liked_at ? (
-        <span className="liked-at-date">
-          {formatLikedAt(lt.liked_at)}
+        <span className="rd-liked-date">
+          {formatLikedAt(lt.liked_at, lang)}
         </span>
       ) : null
     },
-    [],
+    [lang],
   )
 
   const list = (
@@ -210,11 +220,11 @@ export function LikedView({ embedded = false }: LikedViewProps) {
       </div>
       <TrackList
         tracks={displayedTracks}
-        emptyMessage={t('liked.empty', 'Ты ещё ничего не лайкал')}
+        emptyMessage={t('redesign.library.likedEmpty')}
         emptyCta={
           embedded
             ? {
-                label: t('liked.findTracks', 'Найти треки'),
+                label: t('redesign.library.likedFindTracks'),
                 onClick: () => navigate('/search'),
               }
             : undefined
@@ -225,13 +235,13 @@ export function LikedView({ embedded = false }: LikedViewProps) {
         <MotionPress
           variant="ghost"
           haptic="light"
-          className="load-more-btn"
+          className="rd-liked-more"
           onClick={loadMore}
           disabled={loading}
         >
           {loading
-            ? t('common.loading', 'Загрузка...')
-            : t('common.showMore', 'Показать ещё')}
+            ? t('redesign.library.likedLoading')
+            : t('redesign.library.likedShowMore')}
         </MotionPress>
       )}
     </>
@@ -244,9 +254,9 @@ export function LikedView({ embedded = false }: LikedViewProps) {
   }
 
   return (
-    <section id="view-liked" className="view active">
-      <div className="view-header">
-        <h2>{t('liked.title', 'Мне нравится')}</h2>
+    <section id="view-liked" className="view active rd-liked">
+      <div className="view-header rd-liked-header">
+        <h2>{t('redesign.library.likedTitle')}</h2>
       </div>
       {list}
     </section>

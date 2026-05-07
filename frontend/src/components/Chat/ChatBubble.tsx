@@ -1,12 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
+import {
+  LongPressMenu,
+  type LongPressMenuItem,
+} from '@/components/ui/LongPressMenu'
+import { MorphIcon } from '@/components/ui/MorphIcon'
 import { VoicePlayer } from '@/components/Chat/VoicePlayer'
 import { api } from '@/lib/api'
 import { useBrandLabel } from '@/lib/brand'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
+import {
+  m,
+  SPRING_BOUNCY,
+  SPRING_GENTLE,
+  useReducedMotion,
+} from '@/lib/motion'
 import type {
   AlbumWithTracksRecord,
   ChatMessage,
@@ -27,11 +38,19 @@ interface Props {
   onViewPhoto?: (src: string) => void
 }
 
-const REACTIONS = [
-  'thumbs-up',
-  'heart',
-  'music',
-  'sparkle',
+interface ReactionItem {
+  type: string
+  icon: string
+  labelKey: string
+}
+
+const REACTION_ITEMS: ReactionItem[] = [
+  { type: 'heart', icon: 'heart', labelKey: 'redesign.chats.reactionHeart' },
+  { type: 'thumbs-up', icon: 'thumbs-up', labelKey: 'redesign.chats.reactionLike' },
+  { type: 'flame', icon: 'flame', labelKey: 'redesign.chats.reactionFire' },
+  { type: 'sparkle', icon: 'sparkle', labelKey: 'redesign.chats.reactionWow' },
+  { type: 'music', icon: 'music', labelKey: 'redesign.chats.reactionMusic' },
+  { type: 'star', icon: 'star', labelKey: 'redesign.chats.reactionStar' },
 ]
 const SHARED_TRACK_CACHE = new Map<number, Track>()
 const SHARED_ALBUM_CACHE =
@@ -49,9 +68,7 @@ export function ChatBubble({
 }: Props) {
   const { t } = useTranslation()
   const brandLabel = useBrandLabel()
-  const [showBar, setShowBar] = useState(false)
-  const [showReactions, setShowReactions] =
-    useState(false)
+  const reduce = useReducedMotion()
   const [imgLoaded, setImgLoaded] = useState(false)
   const [sharedTrack, setSharedTrack] = useState<Track | null>(null)
   const [sharedTrackLoading, setSharedTrackLoading] = useState(false)
@@ -85,11 +102,6 @@ export function ChatBubble({
       ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(photoAtt.file_key)}`
       : ''
 
-  const handleTap = () => {
-    if (message._uploading) return
-    setShowBar((p) => !p)
-  }
-
   const handlePhotoClick = () => {
     if (
       message._uploading ||
@@ -104,6 +116,35 @@ export function ChatBubble({
     message.is_system === true ||
     message.sender_role === 'admin' ||
     message.sender_role === 'system'
+
+  const menuItems = useMemo<LongPressMenuItem[]>(() => {
+    if (message._uploading) return []
+    const reactionItems: LongPressMenuItem[] = REACTION_ITEMS.map(
+      (r) => ({
+        id: `react-${r.type}`,
+        label: t(r.labelKey),
+        icon: r.icon,
+        onPick: () => onReaction(message.id, r.type),
+      }),
+    )
+    if (isMine) {
+      reactionItems.push({
+        id: 'delete',
+        label: t('redesign.chats.deleteMessage'),
+        icon: 'trash',
+        destructive: true,
+        onPick: () => onDelete(message.id),
+      })
+    }
+    return reactionItems
+  }, [
+    message._uploading,
+    message.id,
+    isMine,
+    onReaction,
+    onDelete,
+    t,
+  ])
 
   useEffect(() => {
     const sharedTrackId = message.shared_track_id
@@ -228,14 +269,32 @@ export function ChatBubble({
   }
 
   return (
-    <div
+    <m.div
       className={`chat-bubble-wrap re-bubble-wrap ${isMine ? 'mine' : 'theirs'}`}
+      initial={
+        reduce
+          ? { opacity: 0 }
+          : isMine
+            ? { opacity: 0, scale: 0.6 }
+            : { opacity: 0, y: 8 }
+      }
+      animate={
+        reduce
+          ? { opacity: 1 }
+          : { opacity: 1, scale: 1, y: 0 }
+      }
+      transition={
+        reduce ? { duration: 0 } : isMine ? SPRING_BOUNCY : SPRING_GENTLE
+      }
     >
-      <div
-        className={`chat-bubble re-bubble ${isMine ? 'mine' : 'theirs'} msg-appear re-bubble-appear ${message._uploading ? 'uploading' : ''}`}
-        onClick={handleTap}
+      <LongPressMenu
+        items={menuItems}
+        disabled={menuItems.length === 0}
       >
-        {message.reply_to_id && (
+        <div
+          className={`chat-bubble re-bubble ${isMine ? 'mine' : 'theirs'} ${message._uploading ? 'uploading' : ''}`}
+        >
+          {message.reply_to_id && (
           <div className="bubble-reply">
             {t('redesign.chats.replyTo', {
               id: message.reply_to_id,
@@ -480,7 +539,7 @@ export function ChatBubble({
                   key={i}
                   className="bubble-reaction bounce-in"
                 >
-                  <Icon
+                  <MorphIcon
                     name={r.reaction_type}
                     size={14}
                   />
@@ -490,65 +549,7 @@ export function ChatBubble({
           )}
         </div>
       </div>
-
-      {showBar && !message._uploading && (
-        <div
-          className={`bubble-action-bar ${isMine ? 'mine' : 'theirs'} scale-in re-bubble-actions`}
-        >
-          <MotionPress
-            type="button"
-            variant="icon"
-            className="bubble-action-btn"
-            ariaLabel={t('redesign.chats.addReaction')}
-            onClick={() => {
-              setShowReactions((p) => !p)
-              setShowBar(false)
-            }}
-          >
-            <Icon name="sparkle" size={16} />
-          </MotionPress>
-          <MotionPress
-            type="button"
-            variant="icon"
-            className="bubble-action-btn"
-            ariaLabel={t('redesign.chats.deleteMessage')}
-            onClick={() => {
-              onDelete(message.id)
-              setShowBar(false)
-            }}
-          >
-            <Icon name="trash" size={16} />
-          </MotionPress>
-        </div>
-      )}
-
-      {showReactions && (
-        <div
-          className="reaction-picker-overlay"
-          onClick={() => setShowReactions(false)}
-        >
-          <div
-            className="reaction-picker scale-in re-bubble-reactions"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {REACTIONS.map((r) => (
-              <MotionPress
-                key={r}
-                type="button"
-                variant="icon"
-                className="reaction-btn"
-                ariaLabel={r}
-                onClick={() => {
-                  onReaction(message.id, r)
-                  setShowReactions(false)
-                }}
-              >
-                <Icon name={r} size={24} />
-              </MotionPress>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+      </LongPressMenu>
+    </m.div>
   )
 }

@@ -59,6 +59,16 @@
   иконки PWA, дома�?ний эк�?ан, поиск, �?а�?�?, п�?о�?ил�?, admin shell и
   Telegram bot copy/keyboards без изменения backend API, PrivateCore и
   ComputeWorker.
+- [x] **iOS 2026 global redesign — Stage G (Admin) + Stage I (Upload/Import) + Phase 3 polish**
+  — AdminRangeSwitch, DataTable sticky-glass + MotionPress sort, StatusPill icons;
+  DashboardRoute/TasksRoute/SchedulesRoute/TracksRoute/UsersRoute/ArtistsRoute/ContainersRoute
+  migrated to MotionPress + AdminRangeSwitch + showIsland toasts; UploadFileTab split into
+  wizard steps (UploadStepAudio/Details/Cover/Preview + UploadComboBox); URL import tabs
+  unified via UrlImportTab; ImportActivityBanner → headless DynamicIsland driver;
+  toast.* → showIsland migration across HomeView/TrackCard/TrackCardSheet/TrackList/ArtistView;
+  PlayerBar overflow-menu → MotionPress; QueueSheet/NowPlayingView/SearchView/LegalView/
+  FullscreenLyrics bare buttons → MotionPress; dead .import-activity-banner CSS removed;
+  i18n keys added for all hardcoded RU strings.
 - [x] **Upload UX redesign + genre search** �?? UploadView/Upload tabs пол�?�?или
   iOS-like polish, добавлено �?мное combobox с ES-backed fuzzy hints и
   create-new-genre flow, пл�?с haptic feedback и акк�?�?а�?н�?е мик�?о-анима�?ии.
@@ -875,6 +885,10 @@ bounded-transport exception
 - [x] **i18n**: новые ключи в `frontend/src/locales/i18n_extra2_{ru,en}.json` под `redesign.tracks.*` (chat menu, chat header/status, chat empty/divider, TrackCardSheet close, message reactions).
 - [x] **Final acceptance**: `npx tsc --noEmit` — clean; `npm run build` — clean (vite + bundle-hygiene + admin-bundle), PWA precache 33 entries.
 - [x] **Stream 2/3 polish (Stage D / I)**: ProfileView (tabs+settings → MotionPress, локализованы 'profile.tabProfile/Import/Complaints'), PlaylistsView (back/share/copy/close/share-row/create-playlist → MotionPress), LikedView load-more → MotionPress, ListenerStats period chips → MotionPress, OfflineList (clear-all + play + remove → MotionPress), HistoryList (retry + play row → MotionPress), UploadStepDetails (artist-mode + lyrics-trigger → MotionPress), UploadComboBox (toggle/items/create → MotionPress).
+- [x] **Stage F (Artist views) + cross-cutting motion polish**: ArtistView — back/avatar/follow/snippet/source-tabs/admin-actions/bio-toggle/bio-more/catalog-cards/similar-arrows/similar-cards/listeners-toggle переведены на `MotionPress` + `MorphIcon` для play/pause превью, локализованы `redesign.artist.stopPreview/listenSnippets/sourcePlatform`; ArtistCatalogReleasePanel + ArtistAvatarViewer — back/close на `MotionPress`; AuthorView — back/follow на `MotionPress` + `Icon`, эмодзи `'👤'/'‹'/'✓'/'+'` заменены `Icon` (`user`/`chevron`/`check`/`bell`), inline-стили вынесены в CSS, hardcoded строки локализованы (`author.*`, `common.back`). Подмазаны pre-existing TS errors в AlbumView/PlaylistView/ExternalAlbumView/ExternalTrackView/GenreView (`return () => setBackButton(false)` → корректный void cleanup) и `'genre'` → `'genre_mix'` в `usePrefetchTracks`.
+- [x] **Stage A overlays + Equalizer + Settings + Comments + Auth**: LyricsPanel (action-row + redefine/auto choice grids на `MotionPress`, локализация `lyrics.detectAuto/enterManually/redefineHeader/redefineTextOnly/redefineWithTiming/redefineNeedsAudio`), LyricsEditor (cancel/back/undo/seek-±5/play-pause/save-text/save-sync на `MotionPress` + `MorphIcon`), Equalizer (header chip/reset/close + preview-toggle + track-picker + presets на `MotionPress` с `MorphIcon` для play, локализация `equalizer.*`), SettingsSheet (back/close/EQ/openInBrowser/installAsApp/aboutApp/logout/test-sound/test-haptic на `MotionPress`), ComplaintModal (close/mode-toggle/submit на `MotionPress`), CommentCard (reply/menu/vote/delete/pin/hide/hideForMe на `MotionPress`), CommentInput (send на `MotionPress` с локализацией placeholder), CommentSection (reply-cancel на `MotionPress`), TelegramAuth + EmailAuth (все кнопки на `MotionPress`, эмодзи `✓` убран из success-icon). Pre-existing синтаксические ошибки `)` после `showIsland({...})` в TrackCard.tsx и TrackCardSheet.tsx исправлены, лишние `toast` deps в useCallback убраны.
+- [x] **CSS уборка**: `redesign-artist.css` (`.rf-artist-snippet-wrap/btn/audio`, `.author-loader`, `.author-section-header`); `global.css` (`.eq-reset-confirm-label`, `.le-fs-save-btn`, `.lyrics-choice-back`, `.lyrics-choice-btn--disabled`); `i18n_extra2_{ru,en}.json` JSON-syntax bug `}` → `},` перед `"achievements": {}` пофикшен.
+- [x] **Final acceptance (batch 2)**: `npx tsc --noEmit` — clean; `npm run build` — clean.
 
 ## �?ла�?�?о�?м�? �?? б�?д�?�?ее
 

@@ -5,6 +5,10 @@ import { api } from '@/lib/api'
 import type { ChatListItem } from '@/types/api'
 import { Icon } from '@/components/Icon/Icon'
 import { SwipeRow } from '@/components/ui/SwipeRow'
+import {
+  LongPressMenu,
+  type LongPressMenuItem,
+} from '@/components/ui/LongPressMenu'
 import { useToast } from '@/components/ui/Toast'
 
 interface Props {
@@ -74,6 +78,42 @@ export function ChatList({ items }: Props) {
     })
   }
 
+  const buildMenuItems = (
+    item: ChatListItem,
+  ): LongPressMenuItem[] => {
+    const soon = () =>
+      toast.info(t('redesign.tracks.chatActionSoon'))
+    return [
+      {
+        id: 'mute',
+        label: t('redesign.tracks.chatMenuMute'),
+        icon: 'volume-off',
+        onPick: soon,
+      },
+      {
+        id: 'pin',
+        label: item.member.is_pinned
+          ? t('redesign.tracks.chatMenuUnpin')
+          : t('redesign.tracks.chatMenuPin'),
+        icon: 'pin',
+        onPick: soon,
+      },
+      {
+        id: 'unread',
+        label: t('redesign.tracks.chatMenuMarkUnread'),
+        icon: 'eye',
+        onPick: soon,
+      },
+      {
+        id: 'delete',
+        label: t('redesign.tracks.chatMenuDelete'),
+        icon: 'trash',
+        destructive: true,
+        onPick: soon,
+      },
+    ]
+  }
+
   return (
     <div className="chat-list re-chats-root">
       {items.map((item, i) => (
@@ -87,67 +127,68 @@ export function ChatList({ items }: Props) {
               },
             }}
             rightAction={{
-              icon: 'trash',
+              icon: 'bookmark',
               label: t('redesign.tracks.chatArchive'),
-              destructive: true,
               onTrigger: () => {
                 toast.info(t('redesign.tracks.chatActionSoon'))
               },
             }}
           >
-            <div
-              className="chat-list-item fade-in-stagger re-chats-item-inner"
-              role="button"
-              tabIndex={0}
-              style={{
-                animationDelay: `${i * 50}ms`,
-              }}
-              onClick={() => openChat(item)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  openChat(item)
-                }
-              }}
-            >
-              <div className="chat-list-avatar">
-                <Icon
-                  name={
-                    item.conversation.type === 'saved'
-                      ? 'heart'
-                      : 'user'
+            <LongPressMenu items={buildMenuItems(item)}>
+              <div
+                className="chat-list-item fade-in-stagger re-chats-item-inner"
+                role="button"
+                tabIndex={0}
+                style={{
+                  animationDelay: `${i * 50}ms`,
+                }}
+                onClick={() => openChat(item)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    openChat(item)
                   }
-                  size={24}
-                />
-                {onlineMap[item.conversation.id] && (
-                  <span className="presence-dot online list-dot" />
-                )}
-              </div>
-              <div className="chat-list-info">
-                <span className="chat-list-name">
-                  {chatDisplayName(item)}
-                  {item.member.is_pinned && (
-                    <Icon
-                      name="pin"
-                      size={12}
-                      className="chat-pin-icon"
-                    />
+                }}
+              >
+                <div className="chat-list-avatar">
+                  <Icon
+                    name={
+                      item.conversation.type === 'saved'
+                        ? 'heart'
+                        : 'user'
+                    }
+                    size={24}
+                  />
+                  {onlineMap[item.conversation.id] && (
+                    <span className="presence-dot online list-dot" />
                   )}
-                </span>
-                <span className="chat-list-preview">
-                  {item.last_message_at
-                    ? new Date(
-                        item.last_message_at,
-                      ).toLocaleString()
-                    : t('redesign.chats.noMessages')}
-                </span>
+                </div>
+                <div className="chat-list-info">
+                  <span className="chat-list-name">
+                    {chatDisplayName(item)}
+                    {item.member.is_pinned && (
+                      <Icon
+                        name="pin"
+                        size={12}
+                        className="chat-pin-icon"
+                      />
+                    )}
+                  </span>
+                  <span className="chat-list-preview">
+                    {item.last_message_at
+                      ? new Date(
+                          item.last_message_at,
+                        ).toLocaleString()
+                      : t('redesign.chats.noMessages')}
+                  </span>
+                </div>
+                <Icon
+                  name="chevron"
+                  size={16}
+                  className="chat-list-chevron"
+                />
               </div>
-              <Icon
-                name="chevron"
-                size={16}
-                className="chat-list-chevron"
-              />
-            </div>
+            </LongPressMenu>
           </SwipeRow>
         </div>
       ))}

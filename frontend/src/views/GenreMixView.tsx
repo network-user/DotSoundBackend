@@ -7,6 +7,7 @@ import { TrackList } from '@/components/TrackList/TrackList'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
 import { useToast } from '@/components/ui/Toast'
 import { useSound } from '@/store/SoundContext'
 import { api, getApiErrorMessage } from '@/lib/api'
@@ -35,7 +36,7 @@ export function GenreMixView() {
   const [title, setTitle] = useState<string>(
     genre
       ? `Mix: ${genre.charAt(0).toUpperCase()}${genre.slice(1)}`
-      : 'Жанровый микс',
+      : t('redesign.home.sectionGenreMixes', 'Жанровый микс'),
   )
   const [shareOpen, setShareOpen] = useState(false)
   const [shareChats, setShareChats] = useState<ChatListItem[]>([])
@@ -148,17 +149,30 @@ export function GenreMixView() {
     }
   }, [tracks, playTrack, shuffleOn, toggleShuffle, toast])
 
-  const formatShareChatTitle = useCallback((item: ChatListItem): string => {
-    if (item.conversation.type === 'saved') return 'Избранное'
-    if (item.conversation.title?.trim()) return item.conversation.title.trim()
-    const peer = item.peer
-    const name = peer?.display_name || [peer?.first_name, peer?.last_name]
-      .filter(Boolean)
-      .join(' ')
-    if (name && name.trim()) return name.trim()
-    if (peer?.username) return `@${peer.username}`
-    return `Чат #${item.conversation.id}`
-  }, [])
+  const formatShareChatTitle = useCallback(
+    (item: ChatListItem): string => {
+      if (item.conversation.type === 'saved') {
+        return t('redesign.library.shareSaved', 'Избранное')
+      }
+      if (item.conversation.title?.trim()) {
+        return item.conversation.title.trim()
+      }
+      const peer = item.peer
+      const name = peer?.display_name || [
+        peer?.first_name,
+        peer?.last_name,
+      ]
+        .filter(Boolean)
+        .join(' ')
+      if (name && name.trim()) return name.trim()
+      if (peer?.username) return `@${peer.username}`
+      return t('redesign.library.shareChatNumber', {
+        id: item.conversation.id,
+        defaultValue: `Чат #${item.conversation.id}`,
+      })
+    },
+    [t],
+  )
 
   const openShareModal = useCallback(async () => {
     setShareOpen(true)
@@ -168,66 +182,81 @@ export function GenreMixView() {
       const chats = await api.listChats()
       setShareChats(chats)
     } catch {
-      setShareError('Не удалось загрузить чаты')
+      setShareError(
+        t('redesign.library.shareLoadFail', 'Не удалось загрузить чаты'),
+      )
     } finally {
       setShareLoading(false)
     }
-  }, [])
+  }, [t])
 
-  const handleShareToChat = useCallback(async (conversationId: number) => {
-    setShareSendingConvId(conversationId)
-    setShareError(null)
-    try {
-      await api.sendMessage(conversationId, shareUrl)
-      setShareOpen(false)
-      sound.play('notificationSuccess')
-      toast.success('Ссылка отправлена')
-    } catch {
-      setShareError('Не удалось отправить')
-      sound.play('notificationError')
-    } finally {
-      setShareSendingConvId(null)
-    }
-  }, [shareUrl, toast, sound])
+  const handleShareToChat = useCallback(
+    async (conversationId: number) => {
+      setShareSendingConvId(conversationId)
+      setShareError(null)
+      try {
+        await api.sendMessage(conversationId, shareUrl)
+        setShareOpen(false)
+        sound.play('notificationSuccess')
+        toast.success(
+          t('redesign.library.shareLinkSent', 'Ссылка отправлена'),
+        )
+      } catch {
+        setShareError(
+          t('redesign.library.shareLinkSendFail', 'Не удалось отправить'),
+        )
+        sound.play('notificationError')
+      } finally {
+        setShareSendingConvId(null)
+      }
+    },
+    [shareUrl, toast, sound, t],
+  )
 
   const handleCopyLink = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(shareUrl)
       sound.play('notificationInfo')
-      toast.success('Ссылка скопирована', {
-        position: 'top',
-      })
+      toast.success(
+        t('redesign.library.shareLinkCopied', 'Ссылка скопирована'),
+        { position: 'top' },
+      )
     } catch {
-      setShareError('Не удалось скопировать ссылку')
+      setShareError(
+        t('redesign.library.shareLinkCopyFail', 'Не удалось скопировать ссылку'),
+      )
       sound.play('notificationError')
     }
-  }, [shareUrl, toast, sound])
+  }, [shareUrl, toast, sound, t])
 
-  const persistOverride = useCallback(async (
-    nextTitle: string,
-    nextTracks: Track[],
-  ) => {
-    if (!normalizedGenre || !canEditUi) return
-    setSaveBusy(true)
-    try {
-      const saved = await api.saveGenreMixOverride(
-        normalizedGenre,
-        {
-          title: nextTitle,
-          track_ids: nextTracks.map((t) => t.id),
-        },
-      )
-      setTitle(saved.title)
-      setTracks(saved.tracks)
-      toast.success('Изменения сохранены', {
-        position: 'top',
-      })
-    } catch {
-      toast.error('Не удалось сохранить изменения')
-    } finally {
-      setSaveBusy(false)
-    }
-  }, [normalizedGenre, canEditUi, toast])
+  const persistOverride = useCallback(
+    async (nextTitle: string, nextTracks: Track[]) => {
+      if (!normalizedGenre || !canEditUi) return
+      setSaveBusy(true)
+      try {
+        const saved = await api.saveGenreMixOverride(
+          normalizedGenre,
+          {
+            title: nextTitle,
+            track_ids: nextTracks.map((tr) => tr.id),
+          },
+        )
+        setTitle(saved.title)
+        setTracks(saved.tracks)
+        toast.success(
+          t('redesign.home.mixEditSaved', 'Изменения сохранены'),
+          { position: 'top' },
+        )
+      } catch {
+        toast.error(
+          t('redesign.home.mixEditSaveFail', 'Не удалось сохранить изменения'),
+        )
+      } finally {
+        setSaveBusy(false)
+      }
+    },
+    [normalizedGenre, canEditUi, toast, t],
+  )
 
   const openEditMode = useCallback(async () => {
     if (!canEditUi) return
@@ -242,20 +271,20 @@ export function GenreMixView() {
   }, [canEditUi, title])
 
   const availableTracks = useMemo(() => {
-    const inMix = new Set((tracks ?? []).map((t) => t.id))
+    const inMix = new Set((tracks ?? []).map((tr) => tr.id))
     const q = trackSearch.trim().toLowerCase()
     const local = trackPool
-      .filter((t) => !inMix.has(t.id))
-      .filter((t) => {
+      .filter((tr) => !inMix.has(tr.id))
+      .filter((tr) => {
         if (!q) return true
-        const hay = `${t.title} ${t.artist ?? ''}`.toLowerCase()
+        const hay = `${tr.title} ${tr.artist ?? ''}`.toLowerCase()
         return hay.includes(q)
       })
     const merged = [...local]
     for (const remote of searchResults) {
       if (
         !inMix.has(remote.id) &&
-        !merged.some((t) => t.id === remote.id)
+        !merged.some((tr) => tr.id === remote.id)
       ) {
         merged.push(remote)
       }
@@ -270,27 +299,33 @@ export function GenreMixView() {
     await persistOverride(nextTitle, nextTracks)
   }, [titleDraft, title, tracks, persistOverride])
 
-  const moveTrack = useCallback(async (index: number, dir: -1 | 1) => {
-    if (!tracks) return
-    const next = [...tracks]
-    const to = index + dir
-    if (to < 0 || to >= next.length) return
-    const tmp = next[index]
-    next[index] = next[to]
-    next[to] = tmp
-    setTracks(next)
-    await persistOverride(title, next)
-  }, [tracks, title, persistOverride])
+  const moveTrack = useCallback(
+    async (index: number, dir: -1 | 1) => {
+      if (!tracks) return
+      const next = [...tracks]
+      const to = index + dir
+      if (to < 0 || to >= next.length) return
+      const tmp = next[index]
+      next[index] = next[to]
+      next[to] = tmp
+      setTracks(next)
+      await persistOverride(title, next)
+    },
+    [tracks, title, persistOverride],
+  )
 
-  const removeTrack = useCallback(async (trackId: number) => {
-    const next = (tracks ?? []).filter((t) => t.id !== trackId)
-    setTracks(next)
-    await persistOverride(title, next)
-  }, [tracks, title, persistOverride])
+  const removeTrack = useCallback(
+    async (trackId: number) => {
+      const next = (tracks ?? []).filter((tr) => tr.id !== trackId)
+      setTracks(next)
+      await persistOverride(title, next)
+    },
+    [tracks, title, persistOverride],
+  )
 
   const addTrack = useCallback(async () => {
     if (!addTrackId) return
-    const candidate = availableTracks.find((t) => t.id === addTrackId)
+    const candidate = availableTracks.find((tr) => tr.id === addTrackId)
     if (!candidate) return
     const next = [...(tracks ?? []), candidate]
     setTracks(next)
@@ -301,26 +336,65 @@ export function GenreMixView() {
   return (
     <section className="view active">
       <div className="view-header">
-        <button className="icon-btn" onClick={() => navigate(-1)} aria-label="Назад">
+        <MotionPress
+          type="button"
+          variant="icon"
+          haptic="light"
+          className="icon-btn"
+          ariaLabel={t('redesign.home.back', 'Назад')}
+          onClick={() => navigate(-1)}
+        >
           <Icon name="chevron" size={20} className="back-chevron" />
-        </button>
-        <div style={{ flex: 1 }}>
+        </MotionPress>
+        <div className="rh-mix-headline">
           <h2>{title}</h2>
-          {tracks !== null && <span className="hint">{tracks.length} треков</span>}
+          {tracks !== null && (
+            <span className="hint">
+              {t('redesign.home.mixHeaderTracks', {
+                count: tracks.length,
+                defaultValue: `${tracks.length} треков`,
+              })}
+            </span>
+          )}
         </div>
         {tracks && tracks.length > 0 && (
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div className="rh-mix-header-actions">
             {canEditUi && (
-              <button className="icon-btn" onClick={() => { void openEditMode() }} aria-label="Редактировать микс">
+              <MotionPress
+                type="button"
+                variant="icon"
+                haptic="light"
+                className="icon-btn"
+                ariaLabel={t('redesign.home.mixEditAria', 'Редактировать микс')}
+                onClick={() => {
+                  void openEditMode()
+                }}
+              >
                 <Icon name="edit" size={18} />
-              </button>
+              </MotionPress>
             )}
-            <button className="icon-btn" onClick={() => { void openShareModal() }} aria-label="Поделиться">
+            <MotionPress
+              type="button"
+              variant="icon"
+              haptic="light"
+              className="icon-btn"
+              ariaLabel={t('redesign.home.mixShareAria', 'Поделиться')}
+              onClick={() => {
+                void openShareModal()
+              }}
+            >
               <Icon name="share" size={18} />
-            </button>
-            <button className="icon-btn" onClick={handlePlayAll} aria-label="Слушать всё">
-              <Icon name="play" size={20} />
-            </button>
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="icon"
+              haptic="medium"
+              className="icon-btn"
+              ariaLabel={t('redesign.home.mixPlayAllAria', 'Слушать всё')}
+              onClick={handlePlayAll}
+            >
+              <MorphIcon name="play" size={20} filled />
+            </MotionPress>
           </div>
         )}
       </div>
@@ -334,11 +408,15 @@ export function GenreMixView() {
             <div>
               <h1 className="rh-mix-hero__title">{title}</h1>
               <p className="rh-mix-hero__hint">
-                {tracks.length} треков
+                {t('redesign.home.mixHeaderTracks', {
+                  count: tracks.length,
+                  defaultValue: `${tracks.length} треков`,
+                })}
               </p>
               <div className="rh-mix-actions">
                 <MotionPress
                   variant="primary"
+                  haptic="medium"
                   onClick={() => {
                     void handlePlayAll()
                   }}
@@ -347,6 +425,7 @@ export function GenreMixView() {
                 </MotionPress>
                 <MotionPress
                   variant="ghost"
+                  haptic="light"
                   onClick={() => {
                     void handleShufflePlay()
                   }}
@@ -370,45 +449,74 @@ export function GenreMixView() {
         animate="visible"
         variants={VARIANTS_FADE_UP}
       >
-        <TrackList tracks={tracks} emptyMessage="В этом миксе пока нет треков" />
+        <TrackList
+          tracks={tracks}
+          emptyMessage={t(
+            'redesign.home.mixEmpty',
+            'В этом миксе пока нет треков',
+          )}
+        />
       </m.div>
 
       {editOpen && (
-        <div className="share-modal-overlay fade-in" onClick={(e) => {
-          if (e.target === e.currentTarget) setEditOpen(false)
-        }}>
+        <div
+          className="share-modal-overlay fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditOpen(false)
+          }}
+        >
           <div className="share-modal scale-in gm-edit-modal">
             <div className="share-modal-header">
               <div className="share-modal-title-wrap">
-                <h3 className="share-modal-title">Редактирование микса</h3>
-                <p className="share-modal-subtitle">Серверное сохранение</p>
+                <h3 className="share-modal-title">
+                  {t('redesign.home.mixEditTitle', 'Редактирование микса')}
+                </h3>
+                <p className="share-modal-subtitle">
+                  {t('redesign.home.mixEditServerHint', 'Серверное сохранение')}
+                </p>
               </div>
-              <button type="button" className="icon-btn" onClick={() => setEditOpen(false)} aria-label="Закрыть">
+              <MotionPress
+                type="button"
+                variant="icon"
+                haptic="light"
+                className="icon-btn"
+                ariaLabel={t('redesign.library.shareClose', 'Закрыть')}
+                onClick={() => setEditOpen(false)}
+              >
                 <Icon name="x" size={18} />
-              </button>
+              </MotionPress>
             </div>
             <div className="form-group gm-edit-section">
-              <label className="form-label">Название</label>
+              <label className="form-label">
+                {t('redesign.home.mixEditNameLabel', 'Название')}
+              </label>
               <input
                 className="form-input gm-edit-input"
                 value={titleDraft}
                 onChange={(e) => setTitleDraft(e.target.value)}
               />
-              <button
+              <MotionPress
                 type="button"
+                variant="primary"
+                haptic="medium"
                 className="btn-primary gm-edit-btn"
                 onClick={() => {
                   void applyTitle()
                 }}
                 disabled={saveBusy}
               >
-                {saveBusy ? 'Сохранение...' : 'Применить'}
-              </button>
+                {saveBusy
+                  ? t('redesign.home.mixEditApplying', 'Сохранение...')
+                  : t('redesign.home.mixEditApply', 'Применить')}
+              </MotionPress>
             </div>
             <div className="gm-edit-add-row">
               <input
                 className="form-input gm-edit-input"
-                placeholder="Поиск треков: название или артист..."
+                placeholder={t(
+                  'redesign.home.mixEditSearchPlaceholder',
+                  'Поиск треков: название или артист...',
+                )}
                 value={trackSearch}
                 onChange={(e) => setTrackSearch(e.target.value)}
               />
@@ -417,33 +525,80 @@ export function GenreMixView() {
                 value={addTrackId ?? ''}
                 onChange={(e) => setAddTrackId(Number(e.target.value) || null)}
               >
-                <option value="">Добавить трек...</option>
-                {availableTracks.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title} {t.artist ? `- ${t.artist}` : ''}
+                <option value="">
+                  {t('redesign.home.mixEditAddPlaceholder', 'Добавить трек...')}
+                </option>
+                {availableTracks.map((tr) => (
+                  <option key={tr.id} value={tr.id}>
+                    {tr.title} {tr.artist ? `- ${tr.artist}` : ''}
                   </option>
                 ))}
               </select>
-              <button type="button" className="btn-secondary gm-edit-btn" onClick={() => { void addTrack() }} disabled={saveBusy}>
-                Добавить
-              </button>
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
+                className="btn-secondary gm-edit-btn"
+                onClick={() => {
+                  void addTrack()
+                }}
+                disabled={saveBusy}
+              >
+                {t('redesign.home.mixEditAdd', 'Добавить')}
+              </MotionPress>
             </div>
             {searchLoading && (
-              <p className="hint" style={{ marginTop: 8 }}>Идёт поиск…</p>
+              <p className="hint gm-edit-search-hint">
+                {t('redesign.home.mixEditSearching', 'Идёт поиск…')}
+              </p>
             )}
             <div className="gm-edit-list">
-              {(tracks ?? []).map((t, idx) => (
-                <div key={t.id} className="gm-edit-item">
+              {(tracks ?? []).map((tr, idx) => (
+                <div key={tr.id} className="gm-edit-item">
                   <div className="gm-edit-item-main">
-                    <span className="gm-edit-item-title">{t.title}</span>
-                    <span className="gm-edit-item-artist">{t.artist || '—'}</span>
+                    <span className="gm-edit-item-title">{tr.title}</span>
+                    <span className="gm-edit-item-artist">{tr.artist || '—'}</span>
                   </div>
                   <div className="gm-edit-item-actions">
-                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => { void moveTrack(idx, -1) }} disabled={saveBusy}>↑</button>
-                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => { void moveTrack(idx, 1) }} disabled={saveBusy}>↓</button>
-                    <button type="button" className="icon-btn gm-edit-icon-btn" onClick={() => { void removeTrack(t.id) }} disabled={saveBusy}>
+                    <MotionPress
+                      type="button"
+                      variant="icon"
+                      haptic="light"
+                      className="icon-btn gm-edit-icon-btn"
+                      ariaLabel={t('redesign.home.mixEditMoveUp', 'Выше')}
+                      onClick={() => {
+                        void moveTrack(idx, -1)
+                      }}
+                      disabled={saveBusy}
+                    >
+                      <Icon name="chevron-up" size={14} />
+                    </MotionPress>
+                    <MotionPress
+                      type="button"
+                      variant="icon"
+                      haptic="light"
+                      className="icon-btn gm-edit-icon-btn"
+                      ariaLabel={t('redesign.home.mixEditMoveDown', 'Ниже')}
+                      onClick={() => {
+                        void moveTrack(idx, 1)
+                      }}
+                      disabled={saveBusy}
+                    >
+                      <Icon name="chevron-down" size={14} />
+                    </MotionPress>
+                    <MotionPress
+                      type="button"
+                      variant="icon"
+                      haptic="light"
+                      className="icon-btn gm-edit-icon-btn"
+                      ariaLabel={t('redesign.home.mixEditRemove', 'Убрать')}
+                      onClick={() => {
+                        void removeTrack(tr.id)
+                      }}
+                      disabled={saveBusy}
+                    >
                       <Icon name="x" size={14} />
-                    </button>
+                    </MotionPress>
                   </div>
                 </div>
               ))}
@@ -453,42 +608,94 @@ export function GenreMixView() {
       )}
 
       {shareOpen && (
-        <div className="share-modal-overlay fade-in" onClick={(e) => {
-          if (e.target === e.currentTarget) setShareOpen(false)
-        }}>
+        <div
+          className="share-modal-overlay fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShareOpen(false)
+          }}
+        >
           <div className="share-modal scale-in">
             <div className="share-modal-header">
               <div className="share-modal-title-wrap">
-                <h3 className="share-modal-title">Поделиться миксом</h3>
+                <h3 className="share-modal-title">
+                  {t('redesign.library.shareTitleMix', 'Поделиться миксом')}
+                </h3>
                 <p className="share-modal-subtitle">{title}</p>
               </div>
-              <button type="button" className="icon-btn" onClick={() => { void handleCopyLink() }} aria-label="Скопировать ссылку">
+              <MotionPress
+                type="button"
+                variant="icon"
+                haptic="light"
+                className="icon-btn"
+                ariaLabel={t('redesign.library.shareCopy', 'Скопировать ссылку')}
+                onClick={() => {
+                  void handleCopyLink()
+                }}
+              >
                 <Icon name="copy" size={16} />
-              </button>
-              <button type="button" className="icon-btn" onClick={() => setShareOpen(false)} aria-label="Закрыть">
+              </MotionPress>
+              <MotionPress
+                type="button"
+                variant="icon"
+                haptic="light"
+                className="icon-btn"
+                ariaLabel={t('redesign.library.shareClose', 'Закрыть')}
+                onClick={() => setShareOpen(false)}
+              >
                 <Icon name="x" size={18} />
-              </button>
+              </MotionPress>
             </div>
             {shareLoading ? (
-              <div className="share-modal-loading"><div className="loader" /></div>
+              <div className="share-modal-loading">
+                <div className="loader" />
+              </div>
             ) : (
               <div className="share-chat-list">
                 {shareChats.map((item) => {
                   const convId = item.conversation.id
                   const sending = shareSendingConvId === convId
                   return (
-                    <button key={convId} type="button" className="share-chat-row" onClick={() => { void handleShareToChat(convId) }} disabled={shareSendingConvId !== null}>
+                    <MotionPress
+                      key={convId}
+                      type="button"
+                      variant="ghost"
+                      haptic="light"
+                      className="share-chat-row"
+                      disabled={shareSendingConvId !== null}
+                      onClick={() => {
+                        void handleShareToChat(convId)
+                      }}
+                    >
                       <span className="share-chat-icon">
-                        <Icon name={item.conversation.type === 'group' ? 'users-following' : item.conversation.type === 'saved' ? 'heart' : 'user'} size={16} />
+                        <Icon
+                          name={
+                            item.conversation.type === 'group'
+                              ? 'users-following'
+                              : item.conversation.type === 'saved'
+                                ? 'heart'
+                                : 'user'
+                          }
+                          size={16}
+                        />
                       </span>
-                      <span className="share-chat-meta"><span className="share-chat-title">{formatShareChatTitle(item)}</span></span>
-                      <span className="share-chat-action">{sending ? 'Отправка...' : 'Отправить'}</span>
-                    </button>
+                      <span className="share-chat-meta">
+                        <span className="share-chat-title">
+                          {formatShareChatTitle(item)}
+                        </span>
+                      </span>
+                      <span className="share-chat-action">
+                        {sending
+                          ? t('redesign.library.shareSending', 'Отправка...')
+                          : t('redesign.library.shareSend', 'Отправить')}
+                      </span>
+                    </MotionPress>
                   )
                 })}
               </div>
             )}
-            {shareError && <div className="share-modal-error">{shareError}</div>}
+            {shareError && (
+              <div className="share-modal-error">{shareError}</div>
+            )}
           </div>
         </div>
       )}

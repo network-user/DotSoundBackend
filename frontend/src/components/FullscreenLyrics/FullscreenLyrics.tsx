@@ -283,13 +283,15 @@ export function FullscreenLyrics({
       className={`fl-toolbar${embed ? ' fl-toolbar--embed' : ''}`}
     >
       {hasWordTimes && (
-        <button
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className={`fl-toolbar-btn${karaokeActive ? ' fl-toolbar-btn-active' : ''}`}
           onClick={toggleKaraoke}
           aria-pressed={karaokeActive}
         >
           {t('lyrics.karaokeMode', 'Karaoke')}
-        </button>
+        </MotionPress>
       )}
       <label className="fl-offset">
         <span>{t('lyrics.syncOffset', 'Offset')}</span>

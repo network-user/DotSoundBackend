@@ -6,6 +6,7 @@ import { connectWS } from '@/lib/ws'
 import { useBrandLabel } from '@/lib/brand'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
+import { MotionPress } from '@/components/ui/MotionPress'
 import {
   dismissIsland,
   showIsland,
@@ -186,16 +187,18 @@ export function TelegramAuth({
                 {error}
               </div>
             )}
-            <button
-              className="btn-primary auth-tg-btn"
+            <MotionPress
               type="button"
+              variant="primary"
+              haptic="medium"
+              className="btn-primary auth-tg-btn"
               onClick={handleOpenBot}
               disabled={!configReady}
             >
               {!configReady
                 ? 'Загрузка…'
                 : 'Войти через Telegram'}
-            </button>
+            </MotionPress>
             {configReady &&
               botUsername.length > 0 &&
               botOpenUrl.length > 0 && (
@@ -209,12 +212,15 @@ export function TelegramAuth({
                 </a>
               )}
             {onEmail && (
-              <button
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
                 className="btn-secondary auth-back"
                 onClick={onEmail}
               >
                 Войти по email
-              </button>
+              </MotionPress>
             )}
           </>
         )}
@@ -269,16 +275,21 @@ export function TelegramAuth({
                 {error}
               </div>
             )}
-            <button
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
               className="btn-primary"
               onClick={handleVerifyCode}
               disabled={loading}
             >
               {loading ? 'Проверка...' : 'Войти'}
-            </button>
-            <button
-              className="btn-secondary auth-back"
+            </MotionPress>
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="light"
+              className="btn-secondary auth-back"
               onClick={() => {
                 setStep('welcome')
                 setCode('')
@@ -287,7 +298,7 @@ export function TelegramAuth({
               }}
             >
               Назад
-            </button>
+            </MotionPress>
           </>
         )}
 

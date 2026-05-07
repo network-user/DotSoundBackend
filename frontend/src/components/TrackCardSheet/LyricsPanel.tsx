@@ -12,6 +12,7 @@ import {
 } from '@/store/PlayerContext'
 import { useLyricsTask } from '@/store/lyricsTaskStore'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import type { LyricsResponse } from '@/types/api'
 import { LyricsEditor } from './LyricsEditor'
 
@@ -598,7 +599,10 @@ export function LyricsPanel({
           <div className="lyrics-choice-grid">
             {lyricsChoiceStep === 'root' ? (
               <>
-                <button
+                <MotionPress
+                  type="button"
+                  variant="subtle"
+                  haptic="light"
                   className="lyrics-choice-btn"
                   onClick={() => {
                     setLyricsChoiceStep('auto')
@@ -607,28 +611,43 @@ export function LyricsPanel({
                   <Icon name="sparkle" size={22} />
                   <div>
                     <span className="lyrics-choice-label">
-                      Определить автоматически
+                      {t(
+                        'lyrics.detectAuto',
+                        'Определить автоматически',
+                      )}
                     </span>
                     <span className="lyrics-choice-hint">
-                      Авто + Дебаг режимы
+                      {t(
+                        'lyrics.detectAutoHint',
+                        'Авто + Дебаг режимы',
+                      )}
                     </span>
                   </div>
-                </button>
+                </MotionPress>
 
-                <button
+                <MotionPress
+                  type="button"
+                  variant="subtle"
+                  haptic="light"
                   className="lyrics-choice-btn"
                   onClick={() => setEditing(true)}
                 >
                   <Icon name="text" size={22} />
                   <div>
                     <span className="lyrics-choice-label">
-                      Ввести вручную
+                      {t(
+                        'lyrics.enterManually',
+                        'Ввести вручную',
+                      )}
                     </span>
                     <span className="lyrics-choice-hint">
-                      Текст с таймкодами или без
+                      {t(
+                        'lyrics.enterManuallyHint',
+                        'Текст с таймкодами или без',
+                      )}
                     </span>
                   </div>
-                </button>
+                </MotionPress>
               </>
             ) : (
               <>
@@ -771,40 +790,69 @@ export function LyricsPanel({
       <div className="lyrics-panel">
         <div className="lyrics-empty-state">
           <p className="lyrics-empty-msg">
-            Выберите сценарий переопределения
+            {t(
+              'lyrics.redefineHeader',
+              'Выберите сценарий переопределения',
+            )}
           </p>
           <div className="lyrics-choice-grid">
-            <button
+            <MotionPress
+              type="button"
+              variant="subtle"
+              haptic="light"
               className="lyrics-choice-btn"
               onClick={() => handleRedefine(false)}
             >
               <Icon name="sparkle" size={22} />
               <div>
                 <span className="lyrics-choice-label">
-                  Только текст
+                  {t(
+                    'lyrics.redefineTextOnly',
+                    'Только текст',
+                  )}
                 </span>
                 <span className="lyrics-choice-hint">
-                  Без таймкодов
+                  {t(
+                    'lyrics.redefineTextOnlyHint',
+                    'Без таймкодов',
+                  )}
                 </span>
               </div>
-            </button>
+            </MotionPress>
 
-            <button
-              className="lyrics-choice-btn"
+            <MotionPress
+              type="button"
+              variant="subtle"
+              haptic="light"
+              className={
+                hasAudio
+                  ? 'lyrics-choice-btn'
+                  : 'lyrics-choice-btn lyrics-choice-btn--disabled'
+              }
               onClick={() => handleRedefine(true)}
               disabled={!hasAudio}
-              style={!hasAudio ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
             >
               <Icon name="sparkle" size={22} />
               <div>
                 <span className="lyrics-choice-label">
-                  Текст + таймкоды
+                  {t(
+                    'lyrics.redefineWithTiming',
+                    'Текст + таймкоды',
+                  )}
                 </span>
                 <span className="lyrics-choice-hint">
-                  {!hasAudio ? 'Требуется аудиофайл' : 'С синхронизацией'}
+                  {!hasAudio
+                    ? t(
+                        'lyrics.redefineNeedsAudio',
+                        'Требуется аудиофайл',
+                      )
+                    : t(
+                        'lyrics.redefineWithTimingHint',
+                        'С синхронизацией',
+                      )}
                 </span>
               </div>
-            </button>
+            </MotionPress>
 
             {isAdmin && (
               <>
@@ -820,7 +868,10 @@ export function LyricsPanel({
                   Админ-режим (обход кеша):
                 </div>
 
-                <button
+                <MotionPress
+                  type="button"
+                  variant="subtle"
+                  haptic="light"
                   className="lyrics-choice-btn"
                   onClick={() =>
                     handleRedefine(false, true)
@@ -835,19 +886,21 @@ export function LyricsPanel({
                       Прямой запрос bypass_cache=true
                     </span>
                   </div>
-                </button>
+                </MotionPress>
 
-                <button
-                  className="lyrics-choice-btn"
+                <MotionPress
+                  type="button"
+                  variant="subtle"
+                  haptic="light"
+                  className={
+                    hasAudio
+                      ? 'lyrics-choice-btn'
+                      : 'lyrics-choice-btn lyrics-choice-btn--disabled'
+                  }
                   onClick={() =>
                     handleRedefine(true, true)
                   }
                   disabled={!hasAudio}
-                  style={
-                    !hasAudio
-                      ? { opacity: 0.5, cursor: 'not-allowed' }
-                      : undefined
-                  }
                 >
                   <Icon name="settings" size={22} />
                   <div>
@@ -860,17 +913,19 @@ export function LyricsPanel({
                         : 'С принудительным bypass_cache'}
                     </span>
                   </div>
-                </button>
+                </MotionPress>
               </>
             )}
 
-            <button
-              className="btn-secondary"
-              style={{ gridColumn: '1 / -1' }}
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="btn-secondary lyrics-choice-back"
               onClick={() => setLyricsChoiceStep('root')}
             >
-              Назад
-            </button>
+              {t('common.back', 'Назад')}
+            </MotionPress>
           </div>
         </div>
       </div>
@@ -1034,36 +1089,48 @@ export function LyricsPanel({
 
       {canEdit && (
         <div className="lyrics-actions">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
             className="lyrics-action-btn"
             onClick={() => setEditing(true)}
           >
             <Icon name="text" size={15} />
             {t('lyrics.edit', 'Редактировать')}
-          </button>
-          <button
+          </MotionPress>
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
             className="lyrics-action-btn"
             onClick={() => setLyricsChoiceStep('redefine')}
           >
             <Icon name="sparkle" size={15} />
             {t('lyrics.redefine', 'Переопределить')}
-          </button>
+          </MotionPress>
           {!hasSyncData && hasAudio && (
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="lyrics-action-btn"
               onClick={() => handleGenerate(true)}
             >
               <Icon name="eq" size={15} />
               {t('lyrics.addSync', 'Таймкоды')}
-            </button>
+            </MotionPress>
           )}
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="medium"
             className="lyrics-action-btn lyrics-action-btn--danger"
             onClick={handleDelete}
           >
             <Icon name="trash" size={15} />
             {t('lyrics.delete', 'Удалить')}
-          </button>
+          </MotionPress>
         </div>
       )}
     </div>

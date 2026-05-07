@@ -2,7 +2,8 @@ import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TrackCard } from '@/components/TrackCard/TrackCard'
 import { SwipeRow } from '@/components/ui/SwipeRow'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { useLikes } from '@/store/LikesContext'
 import { usePlayerActions } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
@@ -28,7 +29,6 @@ export function TrackList({
   const { t } = useTranslation()
   const { isLiked, toggleLike } = useLikes()
   const { addToQueue } = usePlayerActions()
-  const toast = useToast()
 
   if (tracks === null) {
     return (
@@ -44,13 +44,14 @@ export function TrackList({
         <div className="empty-state-block">
           <p className="empty-hint">{emptyMessage}</p>
           {emptyCta && (
-            <button
-              type="button"
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
               className="empty-cta"
               onClick={emptyCta.onClick}
             >
               {emptyCta.label}
-            </button>
+            </MotionPress>
           )}
         </div>
       </div>
@@ -88,12 +89,14 @@ export function TrackList({
                 ),
                 onTrigger: () => {
                   addToQueue(tr)
-                  toast.success(
-                    t(
+                  showIsland({
+                    kind: 'toast',
+                    title: t(
                       'redesign.tracks.longPressQueued',
                       'Added to queue',
                     ),
-                  )
+                    durationMs: 2000,
+                  })
                 },
               }}
             >
