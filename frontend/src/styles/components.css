@@ -214,19 +214,18 @@
 /* ---------- PlayerBar v2 ---------- */
 
 #pb-seek-wrap.pb-seek-zone {
-  /* Bigger hit-area for the scrubber: padding around
-   * the visible track makes the touch zone ~24px tall
-   * while the track itself is only 4–6px. */
-  padding: 12px 10px;
-  margin: 0 -10px;
+  padding: 0;
+  margin: 0;
   cursor: pointer;
   position: relative;
-  touch-action: none;
+  touch-action: pan-x;
 }
 
 #pb-seek-wrap.pb-seek-zone #pb-seek {
+  width: 100%;
+  margin: 0;
   height: var(--pb-track-h, 4px);
-  border-radius: var(--r-pill);
+  border-radius: 0;
   background: linear-gradient(
     to right,
     var(--accent, #fff) 0,
@@ -239,24 +238,6 @@
 
 #pb-seek-wrap.pb-seek-zone #pb-seek:hover {
   height: var(--pb-track-h, 4px);
-}
-
-.pb-seek-preview {
-  position: absolute;
-  left: var(--preview, 0%);
-  top: -14px;
-  transform: translateX(-50%);
-  padding: 2px 6px;
-  border-radius: var(--r-sm);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(12, 13, 17, 0.9);
-  color: var(--text, #fff);
-  font-size: 11px;
-  line-height: 1.1;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 3;
 }
 
 #pb-row.pb-row-v2 {

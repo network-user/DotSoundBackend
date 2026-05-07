@@ -119,6 +119,7 @@ export function TrackCardSheet({
     setVolume,
     togglePlay,
     seek,
+    getPreciseTime,
     playNext,
     playPrev,
     openLyrics,
@@ -172,6 +173,7 @@ export function TrackCardSheet({
     useState<Track[]>([])
   usePrefetchTracks(similarTracks, 'similar_in_card')
   const [loading, setLoading] = useState(false)
+  const [smoothCurrentTime, setSmoothCurrentTime] = useState(0)
   const [trackInfo, setTrackInfo] =
     useState<TrackInfoResponse | null>(null)
   const [trackInfoRefreshing, setTrackInfoRefreshing] =
@@ -928,9 +930,29 @@ export function TrackCardSheet({
     return card?.playback_variants ?? []
   }, [track, card])
   const pct = duration
-    ? (currentTime / duration) * 100
+    ? (smoothCurrentTime / duration) * 100
     : 0
   const displayPct = Math.max(0, Math.min(100, pct))
+
+  useEffect(() => {
+    setSmoothCurrentTime(currentTime)
+  }, [currentTime, track?.id])
+
+  useEffect(() => {
+    if (!isPlaying) {
+      setSmoothCurrentTime(currentTime)
+      return
+    }
+    let rafId = 0
+    const frame = () => {
+      setSmoothCurrentTime(getPreciseTime())
+      rafId = window.requestAnimationFrame(frame)
+    }
+    rafId = window.requestAnimationFrame(frame)
+    return () => {
+      window.cancelAnimationFrame(rafId)
+    }
+  }, [currentTime, getPreciseTime, isPlaying, track?.id])
 
   if (!exit.mounted || !track) return null
 
@@ -1356,7 +1378,7 @@ export function TrackCardSheet({
             />
             )}
             <div className="tcs-time">
-              <span>{fmt(currentTime)}</span>
+              <span>{fmt(smoothCurrentTime)}</span>
               <span>{fmt(duration)}</span>
             </div>
           </div>

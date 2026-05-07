@@ -1064,9 +1064,9 @@ body.monochrome #app {
 
 /* ?????? Player bar (Liquid Glass) ?????? */
 #player-bar {
-  --pb-seek-offset: 12px;
-  --pb-track-h: 6px;
-  --pb-thumb: 10px;
+  --pb-seek-offset: 0px;
+  --pb-track-h: 8px;
+  --pb-thumb: 12px;
   --pb-fill: clamp(0%, var(--progress, 0%), 100%);
   position: fixed;
   bottom: calc(
@@ -1132,12 +1132,12 @@ body.monochrome #app {
 
 #pb-seek {
   width: 100%;
-  height: var(--pb-track-h);
+  height: 12px;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
-  border-radius: var(--r-pill);
+  border-radius: 0;
   outline: none;
   display: block;
   transition: none;
@@ -1162,7 +1162,7 @@ body.monochrome #app {
 }
 #pb-seek::-webkit-slider-runnable-track {
   height: var(--pb-track-h);
-  border-radius: var(--r-pill);
+  border-radius: 0;
   background: linear-gradient(
     to right,
     var(--accent) 0%,
@@ -1173,12 +1173,12 @@ body.monochrome #app {
 }
 #pb-seek::-moz-range-track {
   height: var(--pb-track-h);
-  border-radius: var(--r-pill);
+  border-radius: 0;
   background: var(--surface-2);
 }
 #pb-seek::-moz-range-progress {
   height: var(--pb-track-h);
-  border-radius: var(--r-pill);
+  border-radius: 0;
   background: var(--accent);
 }
 #pb-seek::-moz-range-thumb {
@@ -2558,12 +2558,26 @@ body.ds-perf-lite .tcs-video-pulse {
   min-height: 36px;
   padding: 0 4px;
 }
-.tcs-seek-wrap { margin-bottom: 4px; }
+.tcs-seek-wrap {
+  margin-bottom: 4px;
+  padding: 10px 0;
+  margin-top: -10px;
+  margin-bottom: -6px;
+}
 .tcs-seek {
   width: 100%;
-  height: 5px;
+  height: 24px;
   -webkit-appearance: none;
   appearance: none;
+  background: transparent;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+  touch-action: pan-x;
+  transition: none;
+}
+.tcs-seek::-webkit-slider-runnable-track {
+  height: 5px;
   background: linear-gradient(
     to right,
     var(--text, #fff) 0%,
@@ -2572,18 +2586,10 @@ body.ds-perf-lite .tcs-video-pulse {
     var(--surface-2) 100%
   );
   border-radius: 999px;
-  outline: none;
-  cursor: pointer;
-  transition: background 70ms linear;
-}
-.tcs-seek::-webkit-slider-runnable-track {
-  height: 5px;
-  background: transparent;
-  border-radius: 999px;
 }
 .tcs-seek::-moz-range-track {
   height: 5px;
-  background: transparent;
+  background: var(--surface-2);
   border-radius: 999px;
 }
 .tcs-seek::-moz-range-progress {
@@ -2610,6 +2616,10 @@ body.ds-perf-lite .tcs-video-pulse {
   background: var(--text, #fff);
   cursor: pointer;
   box-shadow: none;
+}
+.tcs-seek:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.24);
+  outline-offset: 4px;
 }
 .tcs-time {
   display: flex;

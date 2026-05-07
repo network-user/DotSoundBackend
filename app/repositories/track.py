@@ -16,7 +16,12 @@ class TrackRepository(BaseRepository[Track]):
     async def get_unique_genres(self) -> list[str]:
         result = await self._session.execute(
             select(Track.genre)
-            .where(Track.genre.isnot(None), Track.genre != "")
+            .where(
+                Track.genre.isnot(None),
+                Track.genre != "",
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+            )
             .distinct()
             .order_by(Track.genre.asc())
         )
