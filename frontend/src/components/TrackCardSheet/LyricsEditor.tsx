@@ -12,6 +12,8 @@ import {
   usePlayerState,
 } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
 import type {
   LyricsResponse,
   SyncedLine,
@@ -268,12 +270,16 @@ export function LyricsEditor({
               ? t('lyrics.editor.titleEdit')
               : t('lyrics.editor.titleAdd')}
           </span>
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
             className="icon-btn"
+            ariaLabel={t('common.close', 'Закрыть')}
             onClick={onCancel}
           >
             <Icon name="x" size={16} />
-          </button>
+          </MotionPress>
         </div>
         <textarea
           className="form-input le-textarea"
@@ -289,21 +295,27 @@ export function LyricsEditor({
           <div className="form-error">{error}</div>
         )}
         <div className="le-actions">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="medium"
             className="btn-secondary"
             onClick={handleSaveText}
             disabled={saving || !plainText.trim()}
           >
             {t('lyrics.editor.saveText')}
-          </button>
+          </MotionPress>
           {plainText.trim() && (
-            <button
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
               className="btn-primary"
               onClick={enterSync}
               disabled={saving}
             >
               {t('lyrics.editor.addTimecodes')}
-            </button>
+            </MotionPress>
           )}
         </div>
       </div>
@@ -322,24 +334,32 @@ export function LyricsEditor({
       aria-label={t('lyrics.editor.timecodeModeAria')}
     >
       <div className="le-fs-header">
-        <button
+        <MotionPress
+          type="button"
+          variant="icon"
+          haptic="light"
           className="icon-btn"
+          ariaLabel={t('common.back', 'Назад')}
           onClick={() => setStep('text')}
         >
           <Icon name="undo" size={18} />
-        </button>
+        </MotionPress>
         <span className="le-fs-time">
           {msToDisplay(
             Math.round(currentTime * 1000),
           )}
         </span>
-        <button
+        <MotionPress
+          type="button"
+          variant="icon"
+          haptic="light"
           className="icon-btn"
+          ariaLabel={t('common.undo', 'Отменить')}
           onClick={undoLast}
           disabled={!history.length}
         >
           <Icon name="undo" size={18} />
-        </button>
+        </MotionPress>
       </div>
 
       <div className="le-fs-seek">
@@ -356,29 +376,46 @@ export function LyricsEditor({
       </div>
 
       <div className="le-fs-controls">
-        <button
+        <MotionPress
+          type="button"
+          variant="icon"
+          haptic="light"
           className="ctrl-btn"
+          ariaLabel={t('player.seekBack', '-5 секунд')}
           onClick={() => seekRelative(-5)}
         >
           <Icon name="rewind-5" size={20} />
-        </button>
-        <button
+        </MotionPress>
+        <MotionPress
+          type="button"
+          variant="icon"
+          haptic="medium"
           className={`play-btn${
             isPlaying ? ' play-btn--playing' : ''
           }`}
+          ariaLabel={
+            isPlaying
+              ? t('player.pause', 'Пауза')
+              : t('player.play', 'Воспроизвести')
+          }
           onClick={togglePlay}
         >
-          <Icon
+          <MorphIcon
             name={isPlaying ? 'pause' : 'play'}
             size={18}
+            filled
           />
-        </button>
-        <button
+        </MotionPress>
+        <MotionPress
+          type="button"
+          variant="icon"
+          haptic="light"
           className="ctrl-btn"
+          ariaLabel={t('player.seekFwd', '+5 секунд')}
           onClick={() => seekRelative(5)}
         >
           <Icon name="forward-5" size={20} />
-        </button>
+        </MotionPress>
       </div>
 
       <div
@@ -425,25 +462,29 @@ export function LyricsEditor({
       )}
 
       <div className="le-fs-save">
-        <button
-          className="btn-secondary"
+        <MotionPress
+          type="button"
+          variant="ghost"
+          haptic="medium"
+          className="btn-secondary le-fs-save-btn"
           onClick={handleSaveText}
           disabled={saving}
-          style={{ flex: 1 }}
         >
           {t('lyrics.editor.noTimecodes')}
-        </button>
-        <button
-          className="btn-primary"
+        </MotionPress>
+        <MotionPress
+          type="button"
+          variant="primary"
+          haptic="medium"
+          className="btn-primary le-fs-save-btn"
           onClick={handleSaveSync}
           disabled={
             saving ||
             timecodes.every((tc) => tc === null)
           }
-          style={{ flex: 1 }}
         >
           {t('lyrics.editor.save')}
-        </button>
+        </MotionPress>
       </div>
     </div>
   )

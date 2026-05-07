@@ -113,8 +113,8 @@ export function ChatsView({
 
   return (
     <div className={`view re-chats-view${active ? ' active' : ''}`}>
-      <div className="chats-header">
-        <h2 className="chats-title">
+      <div className="chats-header re-chats-header">
+        <h2 className="chats-title re-chats-header__title">
           {t('redesign.chats.title')}
         </h2>
         <NotificationBell />

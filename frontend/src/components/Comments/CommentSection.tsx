@@ -10,6 +10,7 @@ import { getInternalUserId } from '@/lib/telegram'
 import { onWS } from '@/lib/ws'
 import { CommentCard } from '@/components/Comments/CommentCard'
 import { CommentInput } from '@/components/Comments/CommentInput'
+import { MotionPress } from '@/components/ui/MotionPress'
 import {
   usePlayerActions,
   usePlayerMeta,
@@ -242,13 +243,15 @@ export function CommentSection({
                 `User #${replyTo.user_id}`,
             })}
           </span>
-          <button
+          <MotionPress
             type="button"
+            variant="ghost"
+            haptic="light"
             className="comment-reply-cancel"
             onClick={() => setReplyTo(null)}
           >
             {t('trackSheet.replyCancel')}
-          </button>
+          </MotionPress>
         </div>
       )}
       <CommentInput onSubmit={handleAdd} />

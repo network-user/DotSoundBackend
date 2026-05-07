@@ -6,6 +6,7 @@ import { connectWS } from '@/lib/ws'
 import { useBrandLabel } from '@/lib/brand'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
+import { MotionPress } from '@/components/ui/MotionPress'
 import {
   dismissIsland,
   showIsland,
@@ -262,7 +263,10 @@ export function EmailAuth({
                 {error}
               </div>
             )}
-            <button
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
               className="btn-primary auth-tg-btn"
               onClick={handleRequestLink}
               disabled={loading}
@@ -270,13 +274,16 @@ export function EmailAuth({
               {loading
                 ? 'Отправка...'
                 : 'Получить ссылку'}
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="btn-secondary auth-back"
               onClick={onBack}
             >
               Назад
-            </button>
+            </MotionPress>
           </>
         )}
 
@@ -292,7 +299,10 @@ export function EmailAuth({
               <br />
               Перейдите по ней для входа
             </p>
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="btn-secondary auth-back"
               onClick={() => {
                 setStep('email')
@@ -300,7 +310,7 @@ export function EmailAuth({
               }}
             >
               Отправить заново
-            </button>
+            </MotionPress>
           </>
         )}
 
@@ -351,7 +361,10 @@ export function EmailAuth({
                 {error}
               </div>
             )}
-            <button
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
               className="btn-primary"
               onClick={handleVerifyTotp}
               disabled={loading}
@@ -359,9 +372,12 @@ export function EmailAuth({
               {loading
                 ? 'Проверка...'
                 : 'Подтвердить'}
-            </button>
+            </MotionPress>
             {!fallbackMode && (
-              <button
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
                 className="btn-secondary auth-back"
                 onClick={handleRequestFallback}
                 disabled={fallbackSent}
@@ -369,16 +385,15 @@ export function EmailAuth({
                 {fallbackSent
                   ? 'Код отправлен на email'
                   : 'Получить код на email'}
-              </button>
+              </MotionPress>
             )}
           </>
         )}
 
         {step === 'success' && (
           <>
-            <div className="auth-success-icon">
-              ✓
-            </div>
+            <div className="auth-success-icon" />
+
             <h2 className="auth-title">
               Вход выполнен
             </h2>

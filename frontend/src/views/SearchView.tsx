@@ -10,6 +10,7 @@ import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { useDebounce } from '@/hooks/useDebounce'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
 import {
   SPRING_GENTLE,
   TWEEN_FAST,
@@ -382,7 +383,16 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
           onBlur={() => setInputFocused(false)}
         />
         {query && (
-          <button type="button" className="icon-btn" onClick={clearSearch}><Icon name="x" size={16} /></button>
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
+            className="icon-btn"
+            ariaLabel={t('redesign.tracks.chatBackAria', 'Очистить')}
+            onClick={clearSearch}
+          >
+            <Icon name="x" size={16} />
+          </MotionPress>
         )}
         </m.div>
       </div>
@@ -393,21 +403,28 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
           role="tablist"
           aria-label={t('redesign.library.searchFiltersAria')}
         >
-          {ENTITY_FILTERS.map((f) => (
-            <MotionPress
-              key={f.id}
-              variant="subtle"
-              haptic="selection"
-              role="tab"
-              aria-selected={entityFilter === f.id}
-              className="rd-search-chip"
-              data-active={entityFilter === f.id ? 'true' : 'false'}
-              onClick={() => setEntityFilter(f.id)}
-            >
-              <Icon name={f.icon} size={14} />
-              <span>{t(f.labelKey)}</span>
-            </MotionPress>
-          ))}
+          {ENTITY_FILTERS.map((f) => {
+            const active = entityFilter === f.id
+            return (
+              <MotionPress
+                key={f.id}
+                variant="subtle"
+                haptic="selection"
+                role="tab"
+                aria-selected={active}
+                className="rd-search-chip"
+                data-active={active ? 'true' : 'false'}
+                onClick={() => setEntityFilter(f.id)}
+              >
+                <MorphIcon
+                  name={f.icon}
+                  size={14}
+                  filled={active}
+                />
+                <span>{t(f.labelKey)}</span>
+              </MotionPress>
+            )
+          })}
         </div>
       )}
 
@@ -427,12 +444,19 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
             <div key={h} className="search-history-item" onClick={() => setQuery(h)}>
               <Icon name="search" size={14} />
               <span>{h}</span>
-              <button
+              <MotionPress
+                type="button"
+                variant="icon"
+                haptic="light"
                 className="icon-btn"
-                onClick={(e) => { e.stopPropagation(); removeFromHistory(h) }}
+                ariaLabel={t('redesign.library.shareClose', 'Удалить')}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeFromHistory(h)
+                }}
               >
                 <Icon name="x" size={12} />
-              </button>
+              </MotionPress>
             </div>
           ))}
         </div>
@@ -594,15 +618,16 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                       className="track-card-actions"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <button
+                      <MotionPress
+                        variant="ghost"
+                        haptic="selection"
                         className="track-card-like"
                         title={t('search.addAndLike')}
                         onClick={(e) => handleLikeYT(e, r)}
                         disabled={importingYt === r.video_id}
-                        type="button"
                       >
                         <Icon name="heart-outline" size={18} />
-                      </button>
+                      </MotionPress>
                       <span className="sc-play-hint sc-play-hint--yt">
                         {importingYt === r.video_id
                           ? '...'
@@ -681,15 +706,16 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                       className="track-card-actions"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      <button
+                      <MotionPress
+                        variant="ghost"
+                        haptic="selection"
                         className="track-card-like"
                         title={t('search.addAndLike')}
                         onClick={(e) => handleLikeBC(e, r)}
                         disabled={importingBc === r.track_url}
-                        type="button"
                       >
                         <Icon name="heart-outline" size={18} />
-                      </button>
+                      </MotionPress>
                       <span className="sc-play-hint sc-play-hint--bc">
                         {importingBc === r.track_url
                           ? '...'
@@ -751,14 +777,16 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                       </span>
                     </div>
                     <div className="track-card-actions" onClick={(e) => e.stopPropagation()}>
-                      <button
+                      <MotionPress
+                        variant="ghost"
+                        haptic="selection"
                         className="track-card-like"
                         title={t('search.addAndLike')}
                         onClick={(e) => handleLikeSC(e, r)}
                         disabled={importing === r.sc_url}
                       >
                         <Icon name="heart-outline" size={18} />
-                      </button>
+                      </MotionPress>
                       <span className="sc-play-hint">
                         {importing === r.sc_url
                           ? '...'

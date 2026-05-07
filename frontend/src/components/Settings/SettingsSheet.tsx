@@ -12,6 +12,7 @@ import {
   setBackButton,
 } from '@/lib/telegram'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { canInstallPwa } from '@/components/PwaInstall/InstallPrompt'
 import { useToast } from '@/components/ui/Toast'
@@ -219,10 +220,13 @@ export function SettingsSheet({
       <div className={`settings-sheet${exit.cls}`}>
         <div className="settings-handle" />
         <div className="settings-header">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
             className="settings-back"
+            ariaLabel={t('common.back')}
             onClick={onClose}
-            aria-label={t('common.back')}
           >
             <Icon
               name="chevron"
@@ -232,21 +236,27 @@ export function SettingsSheet({
             <span className="settings-back-label">
               {t('common.back')}
             </span>
-          </button>
+          </MotionPress>
           <span className="settings-title">
             {t('settings.title')}
           </span>
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
             className="icon-btn settings-close"
+            ariaLabel={t('common.close')}
             onClick={onClose}
-            aria-label={t('common.close')}
           >
             <Icon name="x" size={18} />
-          </button>
+          </MotionPress>
         </div>
 
         <div className="settings-list">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
             className="settings-item"
             onClick={handleEq}
           >
@@ -257,7 +267,7 @@ export function SettingsSheet({
               size={16}
               className="settings-chevron"
             />
-          </button>
+          </MotionPress>
 
           <div
             className="settings-item"
@@ -352,8 +362,10 @@ export function SettingsSheet({
               })}
             </span>
             <div className="settings-inline-actions">
-              <button
+              <MotionPress
                 type="button"
+                variant="ghost"
+                haptic="selection"
                 className="settings-mini-btn"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -363,9 +375,11 @@ export function SettingsSheet({
                 {t('settings.testSound', {
                   defaultValue: 'Звук',
                 })}
-              </button>
-              <button
+              </MotionPress>
+              <MotionPress
                 type="button"
+                variant="ghost"
+                haptic="selection"
                 className="settings-mini-btn"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -375,7 +389,7 @@ export function SettingsSheet({
                 {t('settings.testHaptic', {
                   defaultValue: 'Вибро',
                 })}
-              </button>
+              </MotionPress>
             </div>
           </div>
 
@@ -392,7 +406,10 @@ export function SettingsSheet({
             </select>
           </div>
 
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
             className="settings-item"
             onClick={handleOpenBrowser}
           >
@@ -405,10 +422,13 @@ export function SettingsSheet({
               size={16}
               className="settings-chevron"
             />
-          </button>
+          </MotionPress>
 
           {installable && (
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="settings-item"
               onClick={handleInstallHint}
             >
@@ -421,7 +441,7 @@ export function SettingsSheet({
                 size={16}
                 className="settings-chevron"
               />
-            </button>
+            </MotionPress>
           )}
 
           <div className="settings-hint">
@@ -438,6 +458,7 @@ export function SettingsSheet({
           />
 
           <button
+            type="button"
             className="settings-item disabled"
             disabled
           >
@@ -451,7 +472,12 @@ export function SettingsSheet({
             </span>
           </button>
 
-          <button className="settings-item">
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="settings-item"
+          >
             <Icon name="info" size={20} />
             <span>
               {t('settings.aboutApp')}
@@ -459,19 +485,22 @@ export function SettingsSheet({
             <span className="settings-version">
               v0.1.0
             </span>
-          </button>
+          </MotionPress>
 
           <AccountDangerZone />
         </div>
 
         <div className="settings-footer">
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="medium"
             className="settings-logout"
             onClick={onLogout}
           >
             <Icon name="log-out" size={18} />
             {t('settings.logOut')}
-          </button>
+          </MotionPress>
         </div>
       </div>
     </div>

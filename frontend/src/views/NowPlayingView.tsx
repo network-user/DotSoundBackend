@@ -421,9 +421,11 @@ export function NowPlayingView() {
             transition={SPRING_GENTLE}
           />
           {tabs.map((it) => (
-            <button
+            <MotionPress
               key={it.id}
               role="tab"
+              variant="ghost"
+              haptic="selection"
               aria-selected={tab === it.id}
               className={[
                 'rp-now__tab',
@@ -436,7 +438,7 @@ export function NowPlayingView() {
               onClick={() => handleTab(it.id)}
             >
               {it.label}
-            </button>
+            </MotionPress>
           ))}
         </div>
 

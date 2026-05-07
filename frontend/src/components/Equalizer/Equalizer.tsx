@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { type PanInfo } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import {
   usePlayerActions,
@@ -7,6 +8,8 @@ import {
   usePlayerState,
 } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { hapticTick, haptic } from '@/lib/telegram'
 import type { Track } from '@/types/api'
@@ -35,6 +38,7 @@ const PRESETS: Record<string, number[]> = {
 const PRESET_NAMES = Object.keys(PRESETS)
 
 export function Equalizer() {
+  const { t } = useTranslation()
   const reduceMotion = useReducedMotion()
   const { isPlaying } = usePlayerState()
   const {
@@ -90,7 +94,9 @@ export function Equalizer() {
       )
       if (ownTracks.length > 0) {
         setPreviewTracks(ownTracks)
-        setPreviewSource('Мои треки')
+        setPreviewSource(
+          t('equalizer.sourceMine', 'Мои треки'),
+        )
         return
       }
 
@@ -102,10 +108,18 @@ export function Equalizer() {
           (item) => item.is_active,
         ),
       )
-      setPreviewSource('Рекомендованные')
+      setPreviewSource(
+        t(
+          'equalizer.sourceRecommended',
+          'Рекомендованные',
+        ),
+      )
     } catch {
       setPreviewError(
-        'Не удалось загрузить треки для проверки',
+        t(
+          'equalizer.previewError',
+          'Не удалось загрузить треки для проверки',
+        ),
       )
     } finally {
       setPreviewLoading(false)
@@ -165,22 +179,41 @@ export function Equalizer() {
         <div className="eq-header">
           <div className="eq-header-main">
             <span className="eq-title">
-              Эквалайзер
+              {t('equalizer.title', 'Эквалайзер')}
             </span>
             <span className="eq-subtitle">
-              {eqPreset || 'Custom'}
+              {eqPreset ||
+                t('equalizer.custom', 'Custom')}
             </span>
           </div>
           <div className="eq-header-actions">
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="selection"
               className={`chip${eqBypassed ? ' active' : ''}`}
               onClick={toggleEqBypass}
             >
-              {eqBypassed ? 'Без EQ' : 'С EQ'}
-            </button>
-            <button
+              {eqBypassed
+                ? t('equalizer.eqOff', 'Без EQ')
+                : t('equalizer.eqOn', 'С EQ')}
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="icon"
+              haptic="medium"
               className={`icon-btn${confirmReset ? ' eq-reset-confirm' : ''}`}
-              title={confirmReset ? 'Нажмите ещё раз для сброса' : 'Сбросить EQ'}
+              title={
+                confirmReset
+                  ? t(
+                      'equalizer.resetConfirm',
+                      'Нажмите ещё раз для сброса',
+                    )
+                  : t(
+                      'equalizer.resetTitle',
+                      'Сбросить EQ',
+                    )
+              }
               onClick={() => {
                 if (confirmReset) {
                   if (confirmResetTimerRef.current) clearTimeout(confirmResetTimerRef.current)
@@ -192,19 +225,27 @@ export function Equalizer() {
                 }
               }}
             >
-              {confirmReset
-                ? <span style={{ fontSize: 12, fontWeight: 600 }}>Сбросить?</span>
-                : <Icon name="undo" size={18} />
-              }
-            </button>
-            <button
-              className="icon-btn"
+              {confirmReset ? (
+                <span className="eq-reset-confirm-label">
+                  {t(
+                    'equalizer.resetAsk',
+                    'Сбросить?',
+                  )}
+                </span>
+              ) : (
+                <Icon name="undo" size={18} />
+              )}
+            </MotionPress>
+            <MotionPress
               type="button"
+              variant="icon"
+              haptic="light"
+              className="icon-btn"
+              ariaLabel={t('common.close', 'Закрыть')}
               onClick={closeEq}
-              aria-label="Закрыть"
             >
               <Icon name="x" size={18} />
-            </button>
+            </MotionPress>
           </div>
         </div>
 
@@ -214,8 +255,14 @@ export function Equalizer() {
               <div className="eq-preview-info">
                 <span className="eq-preview-label">
                   {isPlaying
-                    ? 'Проверка на текущем треке'
-                    : 'Текущий трек готов для проверки'}
+                    ? t(
+                        'equalizer.previewCurrentPlaying',
+                        'Проверка на текущем треке',
+                      )
+                    : t(
+                        'equalizer.previewCurrentReady',
+                        'Текущий трек готов для проверки',
+                      )}
                 </span>
                 <strong className="eq-preview-title">
                   {track.title}
@@ -224,38 +271,64 @@ export function Equalizer() {
                   {track.artist || '—'}
                 </span>
               </div>
-              <button
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="selection"
                 className="eq-preview-toggle"
                 onClick={toggleEqBypass}
               >
                 {eqBypassed
-                  ? 'Включить EQ'
-                  : 'Сравнить с оригиналом'}
-              </button>
+                  ? t(
+                      'equalizer.enableEq',
+                      'Включить EQ',
+                    )
+                  : t(
+                      'equalizer.compareOriginal',
+                      'Сравнить с оригиналом',
+                    )}
+              </MotionPress>
             </>
           ) : (
             <>
               <div className="eq-preview-info">
                 <span className="eq-preview-label">
-                  Ничего не играет
+                  {t(
+                    'equalizer.nothingPlaying',
+                    'Ничего не играет',
+                  )}
                 </span>
                 <strong className="eq-preview-title">
-                  Запустите трек для проверки
+                  {t(
+                    'equalizer.startTrackForPreview',
+                    'Запустите трек для проверки',
+                  )}
                 </strong>
                 <span className="eq-preview-artist">
-                  Сначала покажем ваши треки,
-                  потом популярные
+                  {t(
+                    'equalizer.previewSourceHint',
+                    'Сначала покажем ваши треки, потом популярные',
+                  )}
                 </span>
               </div>
-              <button
+              <MotionPress
+                type="button"
+                variant="primary"
+                haptic="medium"
                 className="eq-preview-toggle"
                 onClick={loadPreviewTracks}
                 disabled={previewLoading}
               >
                 {previewLoading
-                  ? 'Загружаем...'
-                  : 'Запустить для проверки'}
-              </button>
+                  ? t(
+                      'equalizer.loading',
+                      'Загружаем...',
+                    )
+                  : t(
+                      'equalizer.startPreview',
+                      'Запустить для проверки',
+                    )}
+              </MotionPress>
             </>
           )}
         </div>
@@ -266,20 +339,30 @@ export function Equalizer() {
               <span className="eq-track-picker-title">
                 {previewSource}
               </span>
-              <button
+              <MotionPress
+                type="button"
+                variant="icon"
+                haptic="light"
                 className="icon-btn"
+                ariaLabel={t(
+                  'common.close',
+                  'Закрыть',
+                )}
                 onClick={() => {
                   setPreviewTracks([])
                   setPreviewSource(null)
                 }}
               >
                 <Icon name="x" size={16} />
-              </button>
+              </MotionPress>
             </div>
             <div className="eq-track-picker-list">
               {previewTracks.map((item) => (
-                <button
+                <MotionPress
                   key={item.id}
+                  type="button"
+                  variant="ghost"
+                  haptic="light"
                   className="eq-track-option"
                   onClick={() =>
                     handlePreviewTrack(item)
@@ -293,11 +376,12 @@ export function Equalizer() {
                       {item.artist || '—'}
                     </span>
                   </div>
-                  <Icon
+                  <MorphIcon
                     name="play"
                     size={14}
+                    filled
                   />
-                </button>
+                </MotionPress>
               ))}
             </div>
           </div>
@@ -311,17 +395,20 @@ export function Equalizer() {
 
         <div className="eq-presets">
           {PRESET_NAMES.map((name) => (
-            <button
+            <MotionPress
               key={name}
+              type="button"
+              variant="ghost"
+              haptic="selection"
               className={`chip${eqPreset === name ? ' active' : ''}`}
               onClick={() => handlePreset(name)}
             >
               {name}
-            </button>
+            </MotionPress>
           ))}
           {eqPreset === null && (
             <span className="chip active">
-              Custom
+              {t('equalizer.custom', 'Custom')}
             </span>
           )}
         </div>

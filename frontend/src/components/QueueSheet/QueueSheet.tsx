@@ -11,6 +11,7 @@ import type { Track } from '@/types/api'
 import { SwipeRow } from '@/components/ui/SwipeRow'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import { MorphIcon } from '@/components/ui/MorphIcon'
+import { MotionPress } from '@/components/ui/MotionPress'
 
 export type QueuePanelContentProps = {
   inline?: boolean
@@ -122,16 +123,14 @@ export function QueuePanelContent({
                 'Up next',
               )}
             </span>
-            <button
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
               className="queue-action-btn"
               onClick={clearQueue}
-              type="button"
             >
-              {t(
-                'redesign.player.queueClear',
-                'Clear',
-              )}
-            </button>
+              {t('redesign.player.queueClear', 'Clear')}
+            </MotionPress>
           </div>
           {queue.map((tr, idx) => (
             <div
@@ -199,17 +198,15 @@ export function QueuePanelContent({
         <span className="queue-title">
           {t('redesign.player.queueTitle', 'Queue')}
         </span>
-        <button
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className="icon-btn"
           onClick={closeQueue}
-          aria-label={t(
-            'redesign.player.queueClose',
-            'Close',
-          )}
-          type="button"
+          aria-label={t('redesign.player.queueClose', 'Close')}
         >
           <Icon name="x" size={18} />
-        </button>
+        </MotionPress>
       </div>
       {inner}
     </>
@@ -271,10 +268,11 @@ function QueueRow({
           <Icon name="more-vertical" size={14} />
         </span>
       )}
-      <button
+      <MotionPress
+        variant="ghost"
+        haptic="selection"
         className="queue-row-main"
         onClick={onClick}
-        type="button"
       >
         <span className="queue-cover">
           {cover ? (
@@ -305,19 +303,20 @@ function QueueRow({
             </BeatPulse>
           </span>
         )}
-      </button>
+      </MotionPress>
       {onRemove && (
-        <button
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className="icon-btn queue-remove"
           onClick={onRemove}
           aria-label={t(
             'redesign.player.queueRemoveAria',
             'Remove from queue',
           )}
-          type="button"
         >
           <Icon name="x" size={14} />
-        </button>
+        </MotionPress>
       )}
     </div>
   )
