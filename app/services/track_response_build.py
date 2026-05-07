@@ -61,9 +61,7 @@ async def build_track_response(
                         catalog_type=r.catalog_type,
                         source_platform=r.source_platform,
                         source_name=r.source_name,
-                        is_primary_for_display=(
-                            r.id == primary.id
-                        ),
+                        is_primary_for_display=(r.id == primary.id),
                     )
                 )
             enriched = base.model_copy(

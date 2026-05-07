@@ -6,6 +6,7 @@ synchronously and never touches the network. Every assertion is
 about how the orchestrator *chooses* to sequence work — not about
 the downstream lyrics worker itself.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -27,14 +28,10 @@ _MOD = "app.services.import_lyrics_worker"
 def _force_legacy_per_job_orchestrator(monkeypatch):
     from app.config import settings
 
-    monkeypatch.setattr(
-        settings, "lyrics_global_orchestrator_enabled", False
-    )
+    monkeypatch.setattr(settings, "lyrics_global_orchestrator_enabled", False)
 
 
-async def _make_user(
-    session: AsyncSession, telegram_id: int = 9100
-) -> User:
+async def _make_user(session: AsyncSession, telegram_id: int = 9100) -> User:
     user = User(
         telegram_id=telegram_id,
         username=f"u{telegram_id}",
@@ -75,8 +72,7 @@ async def _make_job_with_tracks(
         status="done",
         tracks_data={
             "imported": [
-                {"track_id": tid, "status": "done"}
-                for tid in track_ids
+                {"track_id": tid, "status": "done"} for tid in track_ids
             ]
         },
     )
@@ -125,9 +121,7 @@ async def test_skips_tracks_with_existing_lyrics(
     )
     await session.flush()
 
-    job = await _make_job_with_tracks(
-        session, user.id, [t1.id, t2.id, t3.id]
-    )
+    job = await _make_job_with_tracks(session, user.id, [t1.id, t2.id, t3.id])
     await session.commit()
     mock_session_local.return_value = _session_ctx(session)
     inst, aq = _enqueue_stub()
@@ -160,12 +154,9 @@ async def test_pacing_between_tracks_uses_uniform_delay(
 ) -> None:
     user = await _make_user(session, telegram_id=9102)
     tracks = [
-        await _make_track(session, user.id, title=f"t{i}")
-        for i in range(3)
+        await _make_track(session, user.id, title=f"t{i}") for i in range(3)
     ]
-    job = await _make_job_with_tracks(
-        session, user.id, [t.id for t in tracks]
-    )
+    job = await _make_job_with_tracks(session, user.id, [t.id for t in tracks])
     await session.commit()
     mock_session_local.return_value = _session_ctx(session)
     mock_svc_cls.return_value = _enqueue_stub()[0]
@@ -205,12 +196,9 @@ async def test_cooldown_applied_after_block_signal(
     # cooldown value, not a uniform sample.
     user = await _make_user(session, telegram_id=9103)
     tracks = [
-        await _make_track(session, user.id, title=f"t{i}")
-        for i in range(3)
+        await _make_track(session, user.id, title=f"t{i}") for i in range(3)
     ]
-    job = await _make_job_with_tracks(
-        session, user.id, [t.id for t in tracks]
-    )
+    job = await _make_job_with_tracks(session, user.id, [t.id for t in tracks])
     await session.commit()
     mock_session_local.return_value = _session_ctx(session)
     mock_svc_cls.return_value = _enqueue_stub()[0]
@@ -272,9 +260,7 @@ async def test_early_exit_after_max_consecutive_blocks(
         await _make_track(session, user.id, title=f"t{i}")
         for i in range(total)
     ]
-    job = await _make_job_with_tracks(
-        session, user.id, [t.id for t in tracks]
-    )
+    job = await _make_job_with_tracks(session, user.id, [t.id for t in tracks])
     await session.commit()
     mock_session_local.return_value = _session_ctx(session)
     inst, aq = _enqueue_stub()

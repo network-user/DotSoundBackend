@@ -7,10 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.lyrics import TrackLyrics
-from app.models.track import Track
 from app.models.lyrics_translation import (
     TrackLyricsTranslation,
 )
+from app.models.track import Track
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -37,7 +37,8 @@ class LyricsRepository:
         return bool(raw and raw.strip())
 
     async def nonempty_plain_track_ids(
-        self, track_ids: list[int],
+        self,
+        track_ids: list[int],
     ) -> set[int]:
         if not track_ids:
             return set()
@@ -160,10 +161,7 @@ class LyricsRepository:
     ) -> list[TrackLyricsTranslation]:
         result = await self._session.execute(
             select(TrackLyricsTranslation)
-            .where(
-                TrackLyricsTranslation.track_lyrics_id
-                == track_lyrics_id
-            )
+            .where(TrackLyricsTranslation.track_lyrics_id == track_lyrics_id)
             .order_by(TrackLyricsTranslation.language_code.asc())
         )
         return list(result.scalars().all())
@@ -206,8 +204,7 @@ class LyricsRepository:
     ) -> bool:
         result = await self._session.execute(
             delete(TrackLyricsTranslation).where(
-                TrackLyricsTranslation.track_lyrics_id
-                == track_lyrics_id,
+                TrackLyricsTranslation.track_lyrics_id == track_lyrics_id,
                 TrackLyricsTranslation.language_code
                 == language_code.strip().lower(),
             )

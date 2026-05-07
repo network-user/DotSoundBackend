@@ -1459,11 +1459,6 @@ export function TrackCardSheet({
               variant="ghost"
               className={`tcs-action-btn${showLyrics ? ' active' : ''}`}
               haptic="light"
-              disabled={
-                !card?.has_lyrics &&
-                !isOwner &&
-                !canEditUi
-              }
               onClick={() => {
                 setShowLyrics((v) => !v)
                 setEditingLyrics(false)

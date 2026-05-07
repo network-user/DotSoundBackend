@@ -112,12 +112,14 @@ class AdminService:
             )
         if track.access_mode == "third_party_stream":
             try:
-                eff, _url, protocol = (
-                    await _resolve_third_party_stream_with_recovery(
-                        track,
-                        self._session,
-                        use_cache=False,
-                    )
+                (
+                    eff,
+                    _url,
+                    protocol,
+                ) = await _resolve_third_party_stream_with_recovery(
+                    track,
+                    self._session,
+                    use_cache=False,
                 )
                 eid = int(getattr(eff, "id", track_id))
                 return AdminPlaybackVerifyResponse(
@@ -206,9 +208,7 @@ class AdminService:
         await ab.try_release_for_track(track)
         await self._session.refresh(track)
         try:
-            await s3.delete_objects_by_prefix(
-                f"hls/{track_id}/"
-            )
+            await s3.delete_objects_by_prefix(f"hls/{track_id}/")
         except Exception:
             logger.warning(
                 "admin_hls_prefix_delete_failed",
@@ -290,9 +290,7 @@ class AdminService:
         )
 
         repo = TrackRepository(self._session)
-        out = await repo.admin_update_track(
-            track_id=track_id, **fields
-        )
+        out = await repo.admin_update_track(track_id=track_id, **fields)
         if out:
             await schedule_reindex_track(out.id)
         return out
@@ -398,9 +396,7 @@ class AdminService:
         track_hidden = False
         if action == "accept":
             complaint.is_resolved = True
-            track = await self._repo.get_track(
-                complaint.track_id
-            )
+            track = await self._repo.get_track(complaint.track_id)
             if track is not None and track.is_active:
                 track.is_active = False
                 from app.services.audio_blob_service import (
@@ -415,17 +411,10 @@ class AdminService:
         elif action == "in_progress":
             pass
         else:
-            raise AdminServiceError(
-                f"unknown action: {action}"
-            )
+            raise AdminServiceError(f"unknown action: {action}")
         if note:
-            comment = (
-                f"\n\n[moderator note "
-                f"({action})]: {note}"
-            )
-            complaint.reason = (
-                complaint.reason + comment
-            )[:6000]
+            comment = f"\n\n[moderator note " f"({action})]: {note}"
+            complaint.reason = (complaint.reason + comment)[:6000]
         await self._session.flush()
         return complaint, track_hidden
 

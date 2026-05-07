@@ -33,7 +33,8 @@ async def sweep_once(*, batch_size: int = 40) -> dict[str, Any]:
         q = (
             select(Track.id)
             .outerjoin(
-                TrackLyrics, TrackLyrics.track_id == Track.id,
+                TrackLyrics,
+                TrackLyrics.track_id == Track.id,
             )
             .where(
                 Track.is_active.is_(True),
@@ -72,8 +73,11 @@ async def sweep_once(*, batch_size: int = 40) -> dict[str, Any]:
 
 
 @broker.task
-async def lyrics_discovery_sweep_task(batch_size: int = 40) -> dict[
-    str, Any,
+async def lyrics_discovery_sweep_task(
+    batch_size: int = 40,
+) -> dict[
+    str,
+    Any,
 ]:
     return await sweep_once(batch_size=batch_size)
 

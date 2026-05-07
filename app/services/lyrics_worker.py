@@ -10,10 +10,12 @@ import tempfile
 import time
 import unicodedata
 import uuid
+from contextlib import suppress
 from datetime import UTC
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from taskiq import TaskiqEvents, TaskiqState
 
 from app.config import settings
@@ -21,6 +23,7 @@ from app.core import s3
 from app.core.db import AsyncSessionLocal
 from app.core.redis import get_redis_client
 from app.core.tkq import broker
+from app.models.lyrics_job import LyricsJob
 from app.models.track import Track
 from app.repositories.lyrics import LyricsRepository
 
@@ -380,7 +383,7 @@ async def _release_track_lock(track_id: int, owner_token: str) -> None:
 
 
 async def _mark_track_lyrics_catalog_miss(
-    session,
+    session: AsyncSession,
     track_id: int,
 ) -> None:
     from datetime import datetime
@@ -392,9 +395,9 @@ async def _mark_track_lyrics_catalog_miss(
 
 
 async def _close_lyrics_job_catalog_miss(
-    session,
+    session: AsyncSession,
     *,
-    job,
+    job: LyricsJob,
     progress_id: str,
     log_line: str,
 ) -> None:
@@ -412,18 +415,14 @@ async def _close_lyrics_job_catalog_miss(
         started_aware = started
         if started_aware.tzinfo is None:
             started_aware = started_aware.replace(tzinfo=UTC)
-        duration_seconds = (
-            datetime.now(UTC) - started_aware
-        ).total_seconds()
+        duration_seconds = (datetime.now(UTC) - started_aware).total_seconds()
         job.duration_ms = int(duration_seconds * 1000)
-    try:
+    with suppress(Exception):
         lyrics_job_observed(
             tier=job.current_tier or "catalog_only",
             status="catalog_miss",
             duration_seconds=duration_seconds,
         )
-    except Exception:
-        pass
     logger.info(
         "lyrics_job_catalog_miss_done",
         job_id=job.id,
@@ -1066,8 +1065,10 @@ async def _generate_lyrics_task_impl(
                 await _clear_cancel(progress_id)
                 return {"status": "cancelled"}
 
-            if use_local_asr and with_sync and (
-                track.file_key or getattr(track, "sc_url", None)
+            if (
+                use_local_asr
+                and with_sync
+                and (track.file_key or getattr(track, "sc_url", None))
             ):
                 await _log(
                     "downloading_audio",
@@ -1616,9 +1617,7 @@ async def _save_catalog_result_and_close(
     if started:
         if started.tzinfo is None:
             started = started.replace(tzinfo=UTC)
-        duration_seconds = (
-            datetime.now(UTC) - started
-        ).total_seconds()
+        duration_seconds = (datetime.now(UTC) - started).total_seconds()
         job.duration_ms = int(duration_seconds * 1000)
     try:
         lyrics_job_observed(
@@ -1802,7 +1801,8 @@ async def catalog_only_lyrics_task(
                     await session.commit()
                 else:
                     await _mark_track_lyrics_catalog_miss(
-                        session, track_id,
+                        session,
+                        track_id,
                     )
                     await session.commit()
                 await _finalise(
@@ -1813,9 +1813,7 @@ async def catalog_only_lyrics_task(
                 return {"status": "not_found"}
 
             payload = _result_to_payload(gen_result)
-            if with_sync and not _payload_has_non_empty_synced(
-                payload
-            ):
+            if with_sync and not _payload_has_non_empty_synced(payload):
                 trimmed = (payload.get("text") or "").strip()
                 if trimmed:
                     if job is not None:
@@ -1875,7 +1873,8 @@ async def catalog_only_lyrics_task(
                     await session.commit()
                 else:
                     await _mark_track_lyrics_catalog_miss(
-                        session, track_id,
+                        session,
+                        track_id,
                     )
                     await session.commit()
                 await _finalise(
@@ -2006,9 +2005,7 @@ async def speechkit_lyrics_task(
                 "status": "error",
                 "detail": "track_not_found",
             }
-        if not track.file_key and not getattr(
-            track, "sc_url", None
-        ):
+        if not track.file_key and not getattr(track, "sc_url", None):
             await _finalise(
                 progress_id,
                 "error",
@@ -2031,16 +2028,12 @@ async def speechkit_lyrics_task(
         presigned: str | None = None
         if track.file_key:
             try:
-                presigned = await s3.get_presigned_url(
-                    track.file_key
-                )
+                presigned = await s3.get_presigned_url(track.file_key)
             except Exception as exc:
                 await _finalise(
                     progress_id,
                     "error",
-                    log_line=(
-                        f"[speechkit] presign failed: {exc}"
-                    ),
+                    log_line=(f"[speechkit] presign failed: {exc}"),
                 )
                 return {"status": "error"}
         else:
@@ -2060,26 +2053,18 @@ async def speechkit_lyrics_task(
                 )
                 return {"status": "error", "detail": "no_sc"}
             try:
-                sc = SoundCloudService(
-                    settings.sc_client_id, session
-                )
-                presigned, _ = await sc.get_stream_info(
-                    track.sc_url
-                )
+                sc = SoundCloudService(settings.sc_client_id, session)
+                presigned, _ = await sc.get_stream_info(track.sc_url)
             except Exception as exc:
                 await _finalise(
                     progress_id,
                     "error",
-                    log_line=(
-                        f"[speechkit] SC stream URL failed: {exc}"
-                    ),
+                    log_line=(f"[speechkit] SC stream URL failed: {exc}"),
                 )
                 return {"status": "error"}
 
         try:
-            audio_seconds = float(
-                getattr(track, "duration_seconds", 0) or 0
-            )
+            audio_seconds = float(getattr(track, "duration_seconds", 0) or 0)
         except Exception:
             audio_seconds = 0.0
 
@@ -2111,9 +2096,7 @@ async def speechkit_lyrics_task(
             await _finalise(
                 progress_id,
                 "error",
-                log_line=(
-                    f"[speechkit] gated: {exc}"
-                ),
+                log_line=(f"[speechkit] gated: {exc}"),
             )
             return {
                 "status": "error",
@@ -2142,9 +2125,7 @@ async def speechkit_lyrics_task(
             await _finalise(
                 progress_id,
                 "error",
-                log_line=(
-                    f"[speechkit] error: {exc}"
-                ),
+                log_line=(f"[speechkit] error: {exc}"),
             )
             return {"status": "error"}
 
@@ -2170,12 +2151,8 @@ async def speechkit_lyrics_task(
             started = job.started_at or job.created_at
             if started:
                 if started.tzinfo is None:
-                    started = started.replace(
-                        tzinfo=UTC
-                    )
-                duration = (
-                    datetime.now(UTC) - started
-                ).total_seconds()
+                    started = started.replace(tzinfo=UTC)
+                duration = (datetime.now(UTC) - started).total_seconds()
                 job.duration_ms = int(duration * 1000)
                 try:
                     from app.core.observability import (
