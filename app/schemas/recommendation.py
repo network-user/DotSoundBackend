@@ -68,6 +68,15 @@ class WeeklyTopPlaylistResponse(BaseModel):
     window_days: int
 
 
+class ForgottenTreasuresPlaylistResponse(BaseModel):
+    tracks: list[TrackResponse]
+    generated_at: str
+    expires_at: str
+    score_version: str
+    min_like_age_days: int
+    silence_days: int
+
+
 class GenreMixItemResponse(BaseModel):
     genre: str
     title: str

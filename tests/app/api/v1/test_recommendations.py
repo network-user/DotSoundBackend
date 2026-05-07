@@ -1,11 +1,15 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.like import Like
 from tests.conftest import (
     auth_headers,
     create_test_user,
 )
+from tests.factories import TrackFactory
 
 pytestmark = pytest.mark.anyio
 
@@ -52,8 +56,9 @@ async def test_home_highlights_populated(
     await db_session.commit()
 
     # Create an incomplete listen event for this track
+    from datetime import UTC, datetime
+
     from app.models.listen_event import ListenEvent
-    from datetime import datetime, UTC
     listen = ListenEvent(
         user_id=1,  # Fixed ID for the first user in tests
         track_id=track.id,
@@ -194,3 +199,49 @@ async def test_weekly_top_ok(
     assert "window_days" in data
     assert data["window_days"] == 7
     assert isinstance(data["tracks"], list)
+
+
+async def test_forgotten_treasures_unauthenticated(
+    client: AsyncClient,
+) -> None:
+    r = await client.get(
+        "/api/v1/recommendations/forgotten-treasures",
+    )
+    assert r.status_code == 401
+
+
+async def test_forgotten_treasures_ok(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 70209)
+    headers = await auth_headers(client, user["id"])
+    track = TrackFactory.create(file_key="k/ft.mp3")
+    db_session.add(track)
+    await db_session.commit()
+
+    liked_at = datetime.now(UTC) - timedelta(days=60)
+    db_session.add(
+        Like(
+            user_id=user["id"],
+            track_id=track.id,
+            created_at=liked_at,
+        )
+    )
+    await db_session.commit()
+
+    r = await client.get(
+        "/api/v1/recommendations/forgotten-treasures?limit=25",
+        headers=headers,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert "tracks" in data
+    assert "generated_at" in data
+    assert "expires_at" in data
+    assert "score_version" in data
+    assert "min_like_age_days" in data
+    assert "silence_days" in data
+    assert isinstance(data["tracks"], list)
+    assert len(data["tracks"]) == 1
+    assert data["tracks"][0]["id"] == track.id

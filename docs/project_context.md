@@ -66,6 +66,8 @@ frontend/src/
 
 **Плейлист «Выбор пользователей» (recs):** `GET /api/v1/recommendations/user-choice` (JWT) — ранжирование в PrivateCore (`playcount_policy`: смесь `play_count` и лайков за 7 суток); на главной секция `user_choice` из `GET /api/v1/recommendations/home`. Публичный `play_count`: для залогиненных — `POST /api/v1/signals/listen` + политика PrivateCore + дедуп Redis; для гостя — `POST /api/v1/tracks/{id}/play` с дедупом по IP+трек.
 
+**Динамический плейлист «Забытые сокровища»:** `GET /api/v1/recommendations/forgotten-treasures` (JWT) — треки из лайков пользователя, лайк не моложе порога и без прослушиваний в «окне тишины»; ранжирование (`forgotten_treasures_policy`) и пороговые константы в PrivateCore.
+
 **Онбординг — превью по жанру (recsys):** таблицы `genre_samples` и `track_preview_clips` (миграция `0059`), `GenreSamplesService`, публичные `GET /api/v1/onboarding/genres/{genre}/preview-queue` (требуется JWT) и `GET /api/v1/track-preview/{track_id}/segment.mp4` (15s AAC в fMP4). Кураторский список: `GET/POST/DELETE /api/v1/admin/genre-samples` с capability `recsys.genre_samples.manage`.
 
 ---

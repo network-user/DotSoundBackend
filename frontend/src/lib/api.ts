@@ -560,8 +560,18 @@ export const api = {
     })
   },
 
-  getPlaylists(): Promise<Playlist[]> {
-    return request('/api/v1/playlists')
+  getPlaylists(
+    params?: { page?: number; size?: number },
+  ): Promise<Playlist[]> {
+    const sp = new URLSearchParams()
+    if (params?.page != null) {
+      sp.set('page', String(params.page))
+    }
+    if (params?.size != null) {
+      sp.set('size', String(params.size))
+    }
+    const qs = sp.toString() ? `?${sp}` : ''
+    return request(`/api/v1/playlists${qs}`)
   },
 
   getFeaturedPlaylists(
@@ -1888,6 +1898,17 @@ export const api = {
   ): Promise<import('@/types/api').WeeklyTopPlaylistResponse> {
     return request(
       `/api/v1/recommendations/weekly-top?limit=${limit}`,
+    )
+  },
+
+  getForgottenTreasuresPlaylist(
+    limit = 50,
+  ): Promise<
+    import('@/types/api').ForgottenTreasuresPlaylistResponse
+  > {
+    return request(
+      `/api/v1/recommendations/forgotten-treasures`
+      + `?limit=${limit}`,
     )
   },
 
