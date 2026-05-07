@@ -4,6 +4,7 @@ import { api } from '@/lib/api'
 import { sendWS } from '@/lib/ws'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
 import { PhotoPreview } from '@/components/Chat/PhotoPreview'
 import { VoiceRecorder } from '@/components/Chat/VoiceRecorder'
 
@@ -195,13 +196,14 @@ export function ChatInput({
       {text.trim() ? (
         <MotionPress
           type="button"
-          variant="icon"
-          className="chat-input-btn chat-send-btn"
+          variant="primary"
+          className="chat-input-btn chat-send-btn re-chat-send"
           ariaLabel={t('redesign.tracks.send')}
+          haptic="medium"
           disabled={isOverLimit}
           onClick={handleSubmit}
         >
-          <Icon name="send" size={20} />
+          <MorphIcon name="arrow-up" size={18} filled />
         </MotionPress>
       ) : (
         <MotionPress
