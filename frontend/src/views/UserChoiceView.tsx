@@ -63,7 +63,9 @@ export function UserChoiceView() {
   usePrefetchTracks(tracks ?? null, 'user_choice')
 
   const formatShareChatTitle = useCallback((item: ChatListItem): string => {
-    if (item.conversation.type === 'saved') return 'Избранное'
+    if (item.conversation.type === 'saved') {
+      return t('redesign.library.shareSaved')
+    }
     if (item.conversation.title?.trim()) return item.conversation.title.trim()
     const peer = item.peer
     const name = peer?.display_name || [peer?.first_name, peer?.last_name]
@@ -71,8 +73,10 @@ export function UserChoiceView() {
       .join(' ')
     if (name && name.trim()) return name.trim()
     if (peer?.username) return `@${peer.username}`
-    return `Чат #${item.conversation.id}`
-  }, [])
+    return t('redesign.library.shareChatNumber', {
+      id: item.conversation.id,
+    })
+  }, [t])
 
   const openShareModal = useCallback(async () => {
     setShareOpen(true)
@@ -82,11 +86,11 @@ export function UserChoiceView() {
       const chats = await api.listChats()
       setShareChats(chats)
     } catch {
-      setShareError('Не удалось загрузить чаты')
+      setShareError(t('redesign.library.shareLoadFail'))
     } finally {
       setShareLoading(false)
     }
-  }, [])
+  }, [t])
 
   const handleShareToChat = useCallback(async (conversationId: number) => {
     setShareSendingConvId(conversationId)
@@ -96,7 +100,7 @@ export function UserChoiceView() {
       setShareOpen(false)
       showIsland({ kind: 'toast', title: t('redesign.library.shareLinkSent'), durationMs: 2200 })
     } catch {
-      setShareError('Не удалось отправить')
+      setShareError(t('redesign.library.shareLinkSendFail'))
     } finally {
       setShareSendingConvId(null)
     }
@@ -107,7 +111,7 @@ export function UserChoiceView() {
       await navigator.clipboard.writeText(shareUrl)
       showIsland({ kind: 'toast', title: t('redesign.library.shareLinkCopied'), durationMs: 2000 })
     } catch {
-      setShareError('Не удалось скопировать ссылку')
+      setShareError(t('redesign.library.shareLinkCopyFail'))
     }
   }, [shareUrl, t])
 
@@ -152,7 +156,7 @@ export function UserChoiceView() {
           onClick={() => {
             void openShareModal()
           }}
-          aria-label="Поделиться"
+          aria-label={t('redesign.home.mixShareAria')}
         >
           <Icon name="share" size={18} />
         </button>
@@ -208,13 +212,27 @@ export function UserChoiceView() {
           <div className="share-modal scale-in">
             <div className="share-modal-header">
               <div className="share-modal-title-wrap">
-                <h3 className="share-modal-title">Поделиться плейлистом</h3>
+                <h3 className="share-modal-title">
+                  {t('redesign.library.shareTitleMix')}
+                </h3>
                 <p className="share-modal-subtitle">{t('userChoice.title')}</p>
               </div>
-              <button type="button" className="icon-btn" onClick={() => { void handleCopyLink() }} aria-label="Скопировать ссылку">
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => {
+                  void handleCopyLink()
+                }}
+                aria-label={t('redesign.library.shareCopy')}
+              >
                 <Icon name="copy" size={16} />
               </button>
-              <button type="button" className="icon-btn" onClick={() => setShareOpen(false)} aria-label="Закрыть">
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setShareOpen(false)}
+                aria-label={t('redesign.library.shareClose')}
+              >
                 <Icon name="x" size={18} />
               </button>
             </div>
@@ -231,7 +249,11 @@ export function UserChoiceView() {
                         <Icon name={item.conversation.type === 'group' ? 'users-following' : item.conversation.type === 'saved' ? 'heart' : 'user'} size={16} />
                       </span>
                       <span className="share-chat-meta"><span className="share-chat-title">{formatShareChatTitle(item)}</span></span>
-                      <span className="share-chat-action">{sending ? 'Отправка...' : 'Отправить'}</span>
+                      <span className="share-chat-action">
+                        {sending
+                          ? t('redesign.library.shareSending')
+                          : t('redesign.library.shareSend')}
+                      </span>
                     </button>
                   )
                 })}
