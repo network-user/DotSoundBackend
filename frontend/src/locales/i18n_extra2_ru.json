@@ -95,7 +95,10 @@
       "radioMoodHintRetro": "Ностальгия",
       "radioMoodHintAcoustic": "Тепло и воздух",
       "mixPlayAll": "Слушать всё",
-      "mixShuffle": "Вперемешку"
+      "mixShuffle": "Вперемешку",
+      "untitled": "Без названия",
+      "back": "Назад",
+      "radioPickTrackHint": "Запустите любой трек, чтобы включить волну в этом настроении"
     },
     "library": {
       "searchFilterAll": "Всё",
@@ -420,7 +423,25 @@
       "profileSubtitle": "Сессия администратора и возможности из последнего манифеста.",
       "profileSessionExpires": "Истекает",
       "profileCapabilities": "Возможности",
-      "profileCapsEmpty": "Нет данных о возможностях."
+      "profileCapsEmpty": "Нет данных о возможностях.",
+      "dashboard": {
+        "rangeMinutes": "{{n}}м",
+        "rangeHours": "{{n}}ч",
+        "rangeDay": "24ч",
+        "rangeAllTime": "Всё время",
+        "rangeInterval": "Интервал",
+        "orderOldest": "Сначала старые",
+        "orderNewest": "Сначала новые",
+        "live": "Live",
+        "periodToday": "Сегодня",
+        "period7d": "7 дней",
+        "period30d": "30 дней",
+        "periodAll": "Всё",
+        "topByPlays": "Прослушивания",
+        "topByListeners": "Слушатели",
+        "sortAsc": "Возрастание",
+        "sortDesc": "Убывание"
+      }
     },
     "achievements": {}
   },

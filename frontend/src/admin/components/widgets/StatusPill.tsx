@@ -1,4 +1,5 @@
 import { ReactNode } from 'react'
+import { Icon } from '@/components/Icon/Icon'
 
 export type StatusKind =
   | 'ok'
@@ -12,6 +13,13 @@ interface Props {
   title?: string
 }
 
+const ICON_FOR_KIND: Record<StatusKind, string> = {
+  ok: 'circle',
+  warn: 'alert-triangle',
+  error: 'x',
+  unknown: 'info',
+}
+
 export function StatusPill({
   kind,
   children,
@@ -19,14 +27,16 @@ export function StatusPill({
 }: Props) {
   return (
     <span
-      className={`status-pill status-pill--${kind}`}
+      className={`status-pill status-pill--${kind} adm-r-status-pill`}
       role="status"
       title={title}
     >
       <span
-        className={`status-pill__dot status-pill__dot--${kind}`}
+        className="adm-r-status-pill__icon"
         aria-hidden="true"
-      />
+      >
+        <Icon name={ICON_FOR_KIND[kind]} size={12} />
+      </span>
       {children}
     </span>
   )

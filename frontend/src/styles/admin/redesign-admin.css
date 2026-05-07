@@ -339,3 +339,158 @@
 .adm-r-profile-logout {
   margin-top: var(--space-2);
 }
+
+/* Status pill outline icon */
+
+.admin-shell .adm-r-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.admin-shell .adm-r-status-pill__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* DataTable sticky-glass header + MotionPress sort */
+
+.adm-r-table-wrap {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg, 14px);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.adm-r-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.adm-r-table__head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(20, 20, 20, 0.78);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+}
+
+.adm-r-table__th {
+  text-align: left;
+  font-size: var(--fs-12);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  padding: var(--space-2) var(--space-3);
+  white-space: nowrap;
+}
+
+.adm-r-table .admin-table__sort-btn.adm-r-table__sort {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--r-md, 10px);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: var(--fs-12);
+}
+
+.adm-r-table .admin-table__sort-btn.adm-r-table__sort:hover {
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.adm-r-table__sort-ind {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-1);
+}
+
+.adm-r-table__cell {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-14);
+}
+
+.adm-r-table__row:last-child .adm-r-table__cell {
+  border-bottom: 0;
+}
+
+.adm-r-table__row:hover .adm-r-table__cell {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.adm-r-table__empty {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: var(--space-6) var(--space-4);
+  font-size: var(--fs-13);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-r-table__row:hover .adm-r-table__cell {
+    background: transparent;
+  }
+}
+
+/* Admin range switch with layoutId pill indicator */
+
+.admin-shell .admin-range-switch.adm-r-range {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.admin-shell .adm-r-range__btn.admin-range-switch__btn {
+  position: relative;
+  border-radius: var(--r-pill);
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  overflow: hidden;
+}
+
+.admin-shell .adm-r-range__btn.admin-range-switch__btn:hover {
+  color: var(--text);
+}
+
+.admin-shell .adm-r-range__btn.admin-range-switch__btn.is-active {
+  color: var(--text);
+  background: transparent;
+}
+
+.admin-shell .adm-r-range__btn.admin-range-switch__btn.is-active::before {
+  display: none;
+}
+
+.adm-r-range__indicator {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-pill);
+  background: var(--glass-medium-bg, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.adm-r-range__label {
+  position: relative;
+  z-index: 1;
+}
