@@ -196,6 +196,20 @@ export function WaveformBar({
             />
           </clipPath>
         </defs>
+        <rect
+          x={0}
+          y={0}
+          width={total}
+          height={1}
+          fill="var(--clr-waveform-glass-idle, rgba(255,255,255,0.04))"
+        />
+        <rect
+          x={0}
+          y={0}
+          width={playedUnits}
+          height={1}
+          fill="var(--clr-waveform-glass-played, rgba(255,255,255,0.18))"
+        />
         {data.map((amp, i) => {
           const x = i + gap / 2
           const bh = Math.max(0.04, amp)

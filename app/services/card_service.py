@@ -5,8 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.lyrics import LyricsRepository
 from app.repositories.track import TrackRepository
-from app.repositories.user import UserRepository
-from app.schemas.card import TrackAlbumInfo, TrackAuthorInfo, TrackCardResponse
+from app.schemas.card import TrackAlbumInfo, TrackCardResponse
 from app.services.track_response_build import build_track_response
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -16,7 +15,6 @@ class CardService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._track_repo = TrackRepository(session)
-        self._user_repo = UserRepository(session)
         self._lyrics_repo = LyricsRepository(session)
 
     async def get_card(
@@ -33,17 +31,6 @@ class CardService:
         )
         if not track.is_public and not is_owner:
             return None
-
-        author = None
-        if track.uploaded_by_id:
-            user = await self._user_repo.get_by_id(track.uploaded_by_id)
-            if user:
-                author = TrackAuthorInfo(
-                    id=user.id,
-                    display_name=user.display_name,
-                    username=user.username,
-                    avatar_key=user.avatar_key,
-                )
 
         album_info = None
         if track.album_id:
@@ -74,7 +61,6 @@ class CardService:
             play_count=track.play_count,
             cover_url=cover_url,
             created_at=track.created_at,
-            author=author,
             album=album_info,
             has_lyrics=lyrics is not None,
             playback_variants=enriched.playback_variants,

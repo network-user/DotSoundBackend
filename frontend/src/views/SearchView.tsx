@@ -30,7 +30,12 @@ type SearchViewProps = {
   onOpenArtist?: (id: number) => void
 }
 
-type SearchTab = 'all' | 'tracks' | 'artists' | 'playlists'
+type SearchTab =
+  | 'all'
+  | 'tracks'
+  | 'artists'
+  | 'playlists'
+  | 'genres'
 
 const SEARCH_DEBOUNCE_MS = 300
 
@@ -78,6 +83,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const [bcResults, setBcResults] = useState<BCSearchResult[]>([])
   const [catalogArtists, setCatalogArtists] = useState<ArtistInfo[]>([])
   const [catalogPlaylists, setCatalogPlaylists] = useState<Playlist[]>([])
+  const [catalogGenres, setCatalogGenres] = useState<string[]>([])
 
   const [importedSC, setImportedSC] = useState<Record<string, Track>>({})
   const [importedYT, setImportedYT] = useState<Record<string, Track>>({})
@@ -91,6 +97,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const [featuredPlaylists, setFeaturedPlaylists] = useState<
     PlaylistWithTracks[] | null
   >(null)
+  const [searchTotal, setSearchTotal] = useState(0)
 
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -148,19 +155,23 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   useEffect(() => {
     if (!debouncedQuery.trim()) {
       setTracks('idle')
+      setSearchTotal(0)
       setSCResults([])
       setYtResults([])
       setBcResults([])
       setCatalogArtists([])
       setCatalogPlaylists([])
+      setCatalogGenres([])
       return
     }
     setTracks(null)
+    setSearchTotal(0)
     setSCResults([])
     setYtResults([])
     setBcResults([])
     setCatalogArtists([])
     setCatalogPlaylists([])
+    setCatalogGenres([])
     saveToHistory(debouncedQuery.trim())
     let cancelled = false
     const q = debouncedQuery
@@ -204,11 +215,25 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
         if (!cancelled) setCatalogPlaylists([])
       })
 
+    api
+      .getTrackGenres()
+      .then((genres) => {
+        if (cancelled) return
+        const lq = q.toLowerCase()
+        setCatalogGenres(
+          genres.filter((g) => g.toLowerCase().includes(lq)),
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogGenres([])
+      })
+
     void (async () => {
+      const trackQuery = genreFilter ? undefined : q
       const [internal, sug, artistsRes] = await Promise.all([
         api
           .getTracks({
-            q,
+            q: trackQuery,
             genre: genreFilter ?? undefined,
             size: 30,
           })
@@ -227,23 +252,29 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
           })),
       ])
       if (cancelled) return
-      const have = new Set(internal.items.map((t) => t.id))
-      const fromSuggest = sug.items
-        .filter((i) => i.kind === 'track')
-        .map((i) => i.id)
-      const missing = fromSuggest.filter((id) => !have.has(id))
-      const extra: Track[] = []
-      if (missing.length > 0) {
-        const loaded = await Promise.all(
-          missing.map((id) => api.getTrack(id).catch(() => null)),
-        )
-        for (const t of loaded) {
-          if (t) extra.push(t)
+      setSearchTotal(internal.total)
+      let merged: Track[]
+      if (genreFilter) {
+        merged = internal.items
+      } else {
+        const have = new Set(internal.items.map((t) => t.id))
+        const fromSuggest = sug.items
+          .filter((i) => i.kind === 'track')
+          .map((i) => i.id)
+        const missing = fromSuggest.filter((id) => !have.has(id))
+        const extra: Track[] = []
+        if (missing.length > 0) {
+          const loaded = await Promise.all(
+            missing.map((id) => api.getTrack(id).catch(() => null)),
+          )
+          for (const t of loaded) {
+            if (t) extra.push(t)
+          }
         }
+        const combined = [...internal.items, ...extra]
+        merged = mergeTracksBySuggestOrder(combined, sug.items)
       }
       if (cancelled) return
-      const combined = [...internal.items, ...extra]
-      const merged = mergeTracksBySuggestOrder(combined, sug.items)
       setTracks(merged)
       setCatalogArtists(artistsRes.items)
     })()
@@ -350,12 +381,14 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const clearSearch = () => {
     setQuery('')
     setGenreFilter(null)
+    setSearchTotal(0)
     setTracks('idle')
     setSCResults([])
     setYtResults([])
     setBcResults([])
     setCatalogArtists([])
     setCatalogPlaylists([])
+    setCatalogGenres([])
     inputRef.current?.focus()
   }
 
@@ -381,6 +414,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
         return (
           tracks.length > 0 ||
           catalogArtists.length > 0 ||
+          catalogGenres.length > 0 ||
           catalogPlaylists.length > 0 ||
           scResults.length > 0 ||
           ytResults.length > 0 ||
@@ -397,6 +431,11 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
         return catalogArtists.length > 0
       case 'playlists':
         return catalogPlaylists.length > 0
+      case 'genres':
+        return (
+          catalogGenres.length > 0 ||
+          Boolean(genreFilter && tracks.length > 0)
+        )
       default:
         return false
     }
@@ -404,6 +443,8 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     activeTab,
     tracks,
     catalogArtists,
+    catalogGenres,
+    genreFilter,
     catalogPlaylists,
     scResults,
     ytResults,
@@ -449,6 +490,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                 ['tracks', t('search.tabTracks')],
                 ['artists', t('search.tabArtists')],
                 ['playlists', t('search.tabPlaylists')],
+                ['genres', t('search.tabGenres')],
               ] as [SearchTab, string][]
             ).map(([tab, label]) => (
               <button
@@ -582,6 +624,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                           onClick={() => {
                             setQuery(card.genre)
                             setGenreFilter(card.genre)
+                            setActiveTab('genres')
                           }}
                         >
                           {card.cover_key && (
@@ -619,6 +662,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         onClick={() => {
                           setQuery(g)
                           setGenreFilter(g)
+                          setActiveTab('genres')
                         }}
                       >
                         <Icon name="music-note" size={12} />
@@ -814,6 +858,55 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                 <p className="search-catalog-empty">
                   {t('search.playlistsTabEmpty')}
                 </p>
+              )}
+            </div>
+          )}
+
+          {((activeTab === 'all' &&
+            (catalogGenres.length > 0 || Boolean(genreFilter))) ||
+            activeTab === 'genres') && (
+            <div className="search-section">
+              <p className="search-section-label">
+                {t('search.discoverGenres')}
+              </p>
+              {(catalogGenres.length > 0 || genreFilter) ? (
+                <div className="search-genre-chips">
+                  {Array.from(
+                    new Set([
+                      ...(genreFilter ? [genreFilter] : []),
+                      ...catalogGenres,
+                    ]),
+                  ).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      className="search-genre-chip"
+                      onClick={() => {
+                        setQuery(g)
+                        setGenreFilter(g)
+                        setActiveTab('genres')
+                      }}
+                    >
+                      <Icon name="music-note" size={12} />
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="search-catalog-empty">
+                  {t('search.genresTabEmpty')}
+                </p>
+              )}
+              {activeTab === 'genres' && genreFilter && (
+                <p className="search-catalog-empty" style={{ paddingTop: 8 }}>
+                  {t('search.genreTracksCount', {
+                    count: searchTotal,
+                    genre: genreFilter,
+                  })}
+                </p>
+              )}
+              {activeTab === 'genres' && tracks.length > 0 && (
+                <TrackList tracks={tracks} emptyMessage="" />
               )}
             </div>
           )}

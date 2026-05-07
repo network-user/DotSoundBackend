@@ -80,23 +80,31 @@ export function PlayerBar() {
   const { isLiked, toggleLike } = useLikes()
   const [likeBurst, setLikeBurst] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
-  const [volumeOpen, setVolumeOpen] = useState(false)
-  const [smoothPct, setSmoothPct] = useState(0)
+  const [volumePinned, setVolumePinned] = useState(false)
+  const [volumeHover, setVolumeHover] = useState(false)
   const overflowRef = useRef<HTMLDivElement>(null)
   const volumeRef = useRef<HTMLDivElement>(null)
+  const volumeCloseTimerRef = useRef<number | null>(null)
   const playRef = useRef<HTMLButtonElement>(null)
   useRipple(playRef)
   const targetPct = duration ? (currentTime / duration) * 100 : 0
 
-  useEffect(() => {
-    const next = Math.max(0, Math.min(100, targetPct))
-    setSmoothPct((prev) => {
-      const diff = next - prev
-      if (Math.abs(diff) < 0.12) return next
-      const step = isPlaying ? 0.24 : 0.36
-      return prev + diff * step
-    })
-  }, [targetPct, isPlaying])
+  const volumeOpen = volumePinned || volumeHover
+
+  const clearVolumeCloseTimer = () => {
+    if (volumeCloseTimerRef.current !== null) {
+      window.clearTimeout(volumeCloseTimerRef.current)
+      volumeCloseTimerRef.current = null
+    }
+  }
+
+  const scheduleVolumeClose = () => {
+    clearVolumeCloseTimer()
+    volumeCloseTimerRef.current = window.setTimeout(() => {
+      setVolumeHover(false)
+      volumeCloseTimerRef.current = null
+    }, 180)
+  }
 
   useEffect(() => {
     if (!overflowOpen && !volumeOpen) return
@@ -109,12 +117,18 @@ export function PlayerBar() {
       const inVolume =
         volumeRef.current?.contains(target) ?? false
       if (!inOverflow) setOverflowOpen(false)
-      if (!inVolume) setVolumeOpen(false)
+      if (!inVolume) {
+        clearVolumeCloseTimer()
+        setVolumePinned(false)
+        setVolumeHover(false)
+      }
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        clearVolumeCloseTimer()
         setOverflowOpen(false)
-        setVolumeOpen(false)
+        setVolumePinned(false)
+        setVolumeHover(false)
       }
     }
     document.addEventListener(
@@ -128,12 +142,16 @@ export function PlayerBar() {
         onDocClick,
       )
       window.removeEventListener('keydown', onKey)
+      clearVolumeCloseTimer()
     }
   }, [overflowOpen, volumeOpen])
 
   if (!track) return null
 
-  const pct = smoothPct
+  const pct = Math.max(
+    0,
+    Math.min(100, Number(targetPct.toFixed(3))),
+  )
   const liked = isLiked(track.id)
 
   const coverSrc = track.cover_key
@@ -189,6 +207,9 @@ export function PlayerBar() {
   const seekStyle = {
     '--progress': `${pct}%`,
   } as CSSProperties
+  const playerBarStyle = {
+    '--progress': `${pct}%`,
+  } as CSSProperties
 
   const repeatTitle =
     repeatMode === 'none'
@@ -212,6 +233,7 @@ export function PlayerBar() {
     <m.div
       id="player-bar"
       className="rp-player-bar"
+      style={playerBarStyle}
       drag={reduce ? false : 'y'}
       dragConstraints={{ top: -8, bottom: 0 }}
       dragElastic={0.25}
@@ -376,34 +398,41 @@ export function PlayerBar() {
           >
             <Icon name="skip-forward" size={18} />
           </MotionPress>
-          <MotionPress
-            variant="icon"
-            className={`icon-btn pb-like${liked ? ' liked' : ''}${
-              likeBurst ? ' pb-like-burst' : ''
-            }`}
-            onClick={handleLike}
-            ariaLabel={
-              liked ? 'Убрать лайк' : 'Лайк'
-            }
-            aria-pressed={liked}
-            haptic={liked ? 'light' : 'medium'}
-          >
-            <MorphIcon
-              name="heart"
-              filled={liked}
-              size={18}
-            />
-          </MotionPress>
           <div
             className="pb-volume-wrap"
             ref={volumeRef}
+            onMouseEnter={() => {
+              clearVolumeCloseTimer()
+              setVolumeHover(true)
+            }}
+            onMouseLeave={() => {
+              if (!volumePinned) {
+                scheduleVolumeClose()
+              }
+            }}
+            onFocusCapture={() => {
+              clearVolumeCloseTimer()
+              setVolumeHover(true)
+            }}
+            onBlurCapture={(e) => {
+              if (
+                !e.currentTarget.contains(
+                  e.relatedTarget as Node | null,
+                )
+              ) {
+                if (!volumePinned) {
+                  scheduleVolumeClose()
+                }
+              }
+            }}
           >
             <MotionPress
               variant="icon"
               className="ctrl-btn pb-volume-btn"
               onClick={(e) => {
                 e.stopPropagation()
-                setVolumeOpen((v) => !v)
+                clearVolumeCloseTimer()
+                setVolumePinned((v) => !v)
                 setOverflowOpen(false)
               }}
               ariaLabel="Громкость"
@@ -442,17 +471,34 @@ export function PlayerBar() {
               </div>
             )}
           </div>
-          <div
-            className="pb-overflow-wrap"
-            ref={overflowRef}
+          <MotionPress
+            variant="icon"
+            className={`icon-btn pb-like${liked ? ' liked' : ''}${
+              likeBurst ? ' pb-like-burst' : ''
+            }`}
+            onClick={handleLike}
+            ariaLabel={
+              liked ? 'Убрать лайк' : 'Лайк'
+            }
+            aria-pressed={liked}
+            haptic={liked ? 'light' : 'medium'}
           >
+            <MorphIcon
+              name="heart"
+              filled={liked}
+              size={18}
+            />
+          </MotionPress>
+          <div className="pb-overflow-wrap" ref={overflowRef}>
             <MotionPress
               variant="icon"
               className="ctrl-btn pb-overflow-btn"
               onClick={(e) => {
                 e.stopPropagation()
                 setOverflowOpen((v) => !v)
-                setVolumeOpen(false)
+                clearVolumeCloseTimer()
+                setVolumePinned(false)
+                setVolumeHover(false)
               }}
               ariaLabel="Дополнительно"
               aria-expanded={overflowOpen}

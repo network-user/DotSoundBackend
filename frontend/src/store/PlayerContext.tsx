@@ -295,7 +295,7 @@ const PlayerContext =
 const _SAVE_INTERVAL = 5000
 
 /** Min interval between React time updates (progress, lyrics UI). */
-const PLAYER_UI_TIME_MS = 100
+const PLAYER_UI_TIME_MS = 40
 
 function _saveState(t: Track | null, s: number) {
   if (!t) return

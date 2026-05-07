@@ -727,7 +727,7 @@ async def post_track_snippet(
 @router.get(
     "/{track_id}/card",
     response_model=TrackCardResponse,
-    summary="Get full track card (track info + author + album + has_lyrics)",
+    summary="Get full track card (track info + album + has_lyrics)",
 )
 @limiter.limit("300/minute")
 async def get_track_card(

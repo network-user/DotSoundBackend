@@ -30,6 +30,7 @@
     "tabTracks": "Треки",
     "tabArtists": "Артисты",
     "tabPlaylists": "Плейлисты",
+    "tabGenres": "Жанры",
     "discoverGenres": "Жанры",
     "recentGenres": "Ваши жанры",
     "discoverArtists": "Артисты",
@@ -37,7 +38,9 @@
     "playlists": "Плейлисты",
     "editorialBadge": "Редакционный",
     "publicBadge": "Публичный",
-    "privateBadge": "Приватный"
+    "privateBadge": "Приватный",
+    "genresTabEmpty": "Жанров не найдено",
+    "genreTracksCount": "{{count}} треков в жанре «{{genre}}»"
   },
   "liked": {
     "title": "Мне нравится",

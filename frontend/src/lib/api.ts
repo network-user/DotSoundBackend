@@ -326,6 +326,10 @@ export const api = {
     return request(`/api/v1/tracks/my?page=${page}&size=${size}`)
   },
 
+  getTrackGenres(): Promise<string[]> {
+    return request('/api/v1/tracks/genres')
+  },
+
   getMyLibrary(
     page = 1,
     size = 50,

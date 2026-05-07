@@ -172,26 +172,29 @@ class TrackRepository(BaseRepository[Track]):
         playable_only: bool = False,
         genre_filter: str | None = None,
     ) -> tuple[list[Track], int]:
-        pattern = f"%{query}%"
-        search_cond = (
-            Track.title.ilike(pattern)
-            | Track.artist.ilike(pattern)
-            | Track.genre.ilike(pattern)
-        )
-        base = (
-            Track.is_active.is_(True)
-            & Track.is_public.is_(True)
-            & search_cond
-        )
+        q = query.strip()
+        base = Track.is_active.is_(True) & Track.is_public.is_(True)
         if genre_filter:
-            genre_pattern = f"%{genre_filter}%"
+            genre_pattern = f"%{genre_filter.strip()}%"
             base = base & Track.genre.ilike(genre_pattern)
+        elif q:
+            pattern = f"%{q}%"
+            base = base & (
+                Track.title.ilike(pattern)
+                | Track.artist.ilike(pattern)
+                | Track.genre.ilike(pattern)
+            )
         condition = (
             base & self._playable_filter()
             if playable_only
             else base
         )
-        logger.debug("db_search_tracks", query=query, offset=offset)
+        logger.debug(
+            "db_search_tracks",
+            query=query,
+            genre_filter=genre_filter,
+            offset=offset,
+        )
         total_result = await self._session.execute(
             select(func.count()).where(condition)
         )

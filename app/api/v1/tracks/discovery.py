@@ -41,12 +41,13 @@ async def list_tracks(
     session: AsyncSession = Depends(get_db),
 ) -> TrackListResponse:
     service = TrackService(session)
-    if q:
+    if q or genre:
+        effective_query = q or genre or ""
         structlog.contextvars.bind_contextvars(
-            search_query=q
+            search_query=effective_query
         )
         tracks, total = await service.search(
-            q,
+            effective_query,
             page=page,
             size=size,
             playable_only=playable,
