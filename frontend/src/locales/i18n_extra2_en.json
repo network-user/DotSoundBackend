@@ -70,6 +70,9 @@
       "emptyRadio": "Open radio",
       "emptySearch": "Search tracks",
       "emptyNoTracks": "No tracks yet — try again later",
+      "playError": "Playback error",
+      "radioError": "Could not start radio",
+      "startError": "Could not start",
       "nfTitle": "Page not found",
       "nfHint": "Redirect in {{n}}s…",
       "nfHome": "Home",
@@ -275,7 +278,13 @@
       "followers": "{{count}} followers",
       "tracksCount_one": "{{count}} track",
       "tracksCount_other": "{{count}} tracks",
-      "tracksCount": "{{count}} tracks"
+      "tracksCount": "{{count}} tracks",
+      "genreTabTop": "Top tracks",
+      "genreTabNew": "New",
+      "genreTabArtists": "Artists",
+      "genreTabSoon": "Coming soon",
+      "badgeExternal": "External source",
+      "badgeLicensed": "Licensed"
     },
     "recap": {
       "profileEntry": "Year in review",
@@ -527,10 +536,21 @@
         "toggleDone": "Updated"
       }
     },
+    "playerBar": {
+      "queueMenu": "Queue",
+      "eqMenu": "Equalizer",
+      "shuffleMenu": "Shuffle",
+      "stopMenu": "Stop",
+      "radioMode": "Radio mode"
+    },
     "achievements": {}
   },
   "trackSheet": {
     "shareError": "Could not get the link",
+    "shareSent": "Sent",
+    "linkCopied": "Link copied",
+    "albumEditorError": "Could not open album editor",
+    "sourceSwitchError": "Could not switch source",
     "removedFromDownloads": "Removed from downloads",
     "offlineReady": "Track is available offline",
     "downloadError": "Download error",

@@ -83,7 +83,6 @@ import { useOptionalPrefetch } from '@/store/PrefetchContext'
 import { tg, getInitData } from '@/lib/telegram'
 import { AuthScreen } from '@/components/Auth/AuthScreen'
 import { Onboarding } from '@/components/Onboarding/Onboarding'
-import { ArtistView } from '@/components/ArtistView/ArtistView'
 import { AuthorView } from '@/components/AuthorView/AuthorView'
 import { BottomNav } from '@/components/BottomNav/BottomNav'
 import { ComplaintModal } from '@/components/ComplaintModal/ComplaintModal'
@@ -125,6 +124,12 @@ const WeeklyTopView = lazy(() => import('@/views/WeeklyTopView').then(m => ({ de
 const RadioView = lazy(() => import('@/views/RadioView').then(m => ({ default: m.RadioView })))
 const GenreMixView = lazy(() => import('@/views/GenreMixView').then(m => ({ default: m.GenreMixView })))
 const ArtistStatsView = lazy(() => import('@/views/ArtistStatsView').then(m => ({ default: m.ArtistStatsView })))
+const ArtistView = lazy(() => import('@/views/ArtistView').then(m => ({ default: m.ArtistView })))
+const AlbumView = lazy(() => import('@/views/AlbumView').then(m => ({ default: m.AlbumView })))
+const PlaylistView = lazy(() => import('@/views/PlaylistView').then(m => ({ default: m.PlaylistView })))
+const GenreView = lazy(() => import('@/views/GenreView').then(m => ({ default: m.GenreView })))
+const ExternalTrackView = lazy(() => import('@/views/ExternalTrackView').then(m => ({ default: m.ExternalTrackView })))
+const ExternalAlbumView = lazy(() => import('@/views/ExternalAlbumView').then(m => ({ default: m.ExternalAlbumView })))
 const NowPlayingView = lazy(() => import('@/views/NowPlayingView').then(m => ({ default: m.NowPlayingView })))
 const RecapView = lazy(() => import('@/views/RecapView').then(m => ({ default: m.RecapView })))
 const AdminApp = lazy(() =>
@@ -187,9 +192,6 @@ export function App() {
     useState(false)
   const [settingsOpen, setSettingsOpen] =
     useState(false)
-  const [artistId, setArtistId] = useState<
-    number | null
-  >(null)
   const [authError, setAuthError] = useState<
     string | null
   >(null)
@@ -452,7 +454,6 @@ export function App() {
   }, [needsAuth])
 
   useEffect(() => {
-    setArtistId(null)
     setAuthorId(null)
   }, [location.pathname])
 
@@ -539,7 +540,7 @@ export function App() {
             path="/"
             element={
               <HomeView
-                onOpenArtist={(id) => setArtistId(id)}
+                onOpenArtist={(id) => navigate(`/artist/${id}`)}
               />
             }
           />
@@ -547,7 +548,7 @@ export function App() {
             path="/search"
             element={
               <SearchView
-                onOpenArtist={(id) => setArtistId(id)}
+                onOpenArtist={(id) => navigate(`/artist/${id}`)}
               />
             }
           />
@@ -610,6 +611,12 @@ export function App() {
           <Route path="/radio" element={<RadioView />} />
           <Route path="/genre-mix/:genre" element={<GenreMixView />} />
           <Route path="/artist/:id/stats" element={<ArtistStatsView />} />
+          <Route path="/artist/:id" element={<ArtistView />} />
+          <Route path="/album/:id" element={<AlbumView />} />
+          <Route path="/playlist/:id" element={<PlaylistView />} />
+          <Route path="/genre/:slug" element={<GenreView />} />
+          <Route path="/external/track/:id" element={<ExternalTrackView />} />
+          <Route path="/external/album/:id" element={<ExternalAlbumView />} />
           <Route path="/now-playing" element={<NowPlayingView />} />
           <Route path="/recap" element={<RecapView />} />
           <Route path="/admin/*" element={<AdminApp />} />
@@ -635,22 +642,13 @@ export function App() {
         onOpenArtist={async (name) => {
           const res =
             await api.resolveArtistByName(name)
-          if (res) setArtistId(res.id)
+          if (res) navigate(`/artist/${res.id}`)
         }}
       />
       {authorId !== null && (
         <AuthorView
           authorId={authorId}
           onClose={handleCloseAuthor}
-        />
-      )}
-      {artistId !== null && (
-        <ArtistView
-          artistId={artistId}
-          onClose={() => setArtistId(null)}
-          onSelectSimilarArtist={(id) =>
-            setArtistId(id)
-          }
         />
       )}
       <BottomNav />
