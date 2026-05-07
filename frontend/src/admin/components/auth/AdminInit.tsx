@@ -140,15 +140,17 @@ export function AdminInit() {
       ) : (
         <div className="admin-auth-qr admin-auth-qr--placeholder" />
       )}
-      <button
+      <MotionPress
         type="button"
+        variant="ghost"
+        haptic="selection"
         className="admin-auth-toggle"
         onClick={() => setShowSecret((v) => !v)}
       >
         {showSecret
           ? t('admin.init.hideSecret')
           : t('admin.init.showSecret')}
-      </button>
+      </MotionPress>
       {showSecret && secret && (
         <code className="admin-auth-secret">
           {secret}

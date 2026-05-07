@@ -151,16 +151,18 @@ export function LyricsJobDetail({
               {jobId}
             </h2>
           </div>
-          <button
+          <MotionPress
             type="button"
+            variant="icon"
+            haptic="light"
             className="admin-jobdetail-close"
             onClick={onClose}
-            aria-label={t(
+            ariaLabel={t(
               'admin.tasks.detail.close',
             )}
           >
             <Icon name="x" size={18} />
-          </button>
+          </MotionPress>
         </header>
 
         {isLoading && (
