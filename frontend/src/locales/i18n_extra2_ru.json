@@ -70,6 +70,9 @@
       "emptyRadio": "Открыть радио",
       "emptySearch": "Искать треки",
       "emptyNoTracks": "Пока нет треков — попробуйте позже",
+      "playError": "Ошибка воспроизведения",
+      "radioError": "Не удалось запустить волну",
+      "startError": "Не удалось запустить",
       "nfTitle": "Страница не найдена",
       "nfHint": "Переход через {{n}} с…",
       "nfHome": "На главную",
@@ -279,7 +282,13 @@
       "tracksCount_few": "{{count}} трека",
       "tracksCount_many": "{{count}} треков",
       "tracksCount_other": "{{count}} треков",
-      "tracksCount": "{{count}} треков"
+      "tracksCount": "{{count}} треков",
+      "genreTabTop": "Популярное",
+      "genreTabNew": "Новое",
+      "genreTabArtists": "Артисты",
+      "genreTabSoon": "Скоро будет доступно",
+      "badgeExternal": "Внешний источник",
+      "badgeLicensed": "Лицензировано"
     },
     "recap": {
       "profileEntry": "Итоги года",
@@ -531,10 +540,21 @@
         "toggleDone": "Обновлено"
       }
     },
+    "playerBar": {
+      "queueMenu": "Очередь",
+      "eqMenu": "Эквалайзер",
+      "shuffleMenu": "Перемешать",
+      "stopMenu": "Остановить",
+      "radioMode": "Режим радио"
+    },
     "achievements": {}
   },
   "trackSheet": {
     "shareError": "Не удалось получить ссылку",
+    "shareSent": "Отправлено",
+    "linkCopied": "Ссылка скопирована",
+    "albumEditorError": "Не удалось открыть редактор альбома",
+    "sourceSwitchError": "Не удалось переключить источник",
     "removedFromDownloads": "Удалено из скачанных",
     "offlineReady": "Трек доступен офлайн",
     "downloadError": "Ошибка скачивания",
