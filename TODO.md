@@ -937,3 +937,8 @@
 - [x] Динамический плейлист **«Забытые сокровища»**: PrivateCore `forgotten_treasures_policy`, Backend
   `GET /api/v1/recommendations/forgotten-treasures`, Mini App `/forgotten-treasures` + prefetch context
   `forgotten_treasures`; pytest (PrivateCore ranking + API), `npm run build` зелёный.
+
+- [ ] **Техдолг: полный прогон качества после серии изменений (2026-05-08)** — довести до конца и зелёного CI:
+  `make test` (или `poetry run pytest -v`), `make lint` (ruff + black --check + mypy по `app/`),
+  `python scripts/check_docs_sync.py`. Частичный прогон `pytest` до прерывания уже показывал несколько падений —
+  после полного прогона зафиксировать список упавших модулей и закрыть регрессии.
