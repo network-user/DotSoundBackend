@@ -6,8 +6,9 @@ import {
   usePlayerMeta,
 } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { useExitTransition } from '@/hooks/useExitTransition'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { hapticNotification } from '@/lib/telegram'
 
 type ReasonType =
@@ -45,7 +46,6 @@ export function ComplaintModal() {
   const exit = useExitTransition(
     Boolean(isComplaintOpen && track),
   )
-  const toast = useToast()
   if (!exit.mounted || !track) return null
 
   const isRightsholderNotice = mode === 'rightsholder'
@@ -104,7 +104,7 @@ export function ComplaintModal() {
         : 'Жалоба принята и будет рассмотрена.'
       hapticNotification('success')
       try {
-        toast.success(msg)
+        showIsland({ kind: 'toast', title: msg, durationMs: 3000 })
       } catch {
         tg.showAlert(msg)
       }
@@ -141,13 +141,16 @@ export function ComplaintModal() {
               ? 'Уведомление правообладателя'
               : 'Жалоба на контент'}
           </h3>
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
             className="icon-btn"
+            ariaLabel="Закрыть"
             onClick={closeComplaint}
-            aria-label="Закрыть"
           >
             <Icon name="x" size={18} />
-          </button>
+          </MotionPress>
         </div>
         <p className="modal-hint">
           {isRightsholderNotice
@@ -167,20 +170,30 @@ export function ComplaintModal() {
         <div className="form-group">
           <label className="form-label">Режим обращения</label>
           <div className="legal-doc-list">
-            <button
+            <MotionPress
               type="button"
+              variant={
+                mode === 'user' ? 'primary' : 'ghost'
+              }
+              haptic="selection"
               className="btn-secondary"
               onClick={() => setMode('user')}
             >
               Обычная жалоба
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
               type="button"
+              variant={
+                mode === 'rightsholder'
+                  ? 'primary'
+                  : 'ghost'
+              }
+              haptic="selection"
               className="btn-secondary"
               onClick={() => setMode('rightsholder')}
             >
               Правообладатель
-            </button>
+            </MotionPress>
           </div>
         </div>
         {isRightsholderNotice && (
@@ -262,7 +275,10 @@ export function ComplaintModal() {
           </>
         )}
         {error && <div className="form-error">{error}</div>}
-        <button
+        <MotionPress
+          type="button"
+          variant="primary"
+          haptic="medium"
           className="btn-primary"
           disabled={submitting}
           onClick={handleSubmit}
@@ -270,7 +286,7 @@ export function ComplaintModal() {
           {isRightsholderNotice
             ? 'Отправить уведомление'
             : 'Отправить жалобу'}
-        </button>
+        </MotionPress>
       </div>
     </div>
   )

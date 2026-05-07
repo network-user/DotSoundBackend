@@ -7,7 +7,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import {
   computeWorkerPillKind,
   computeWorkerPillLabel,
@@ -34,6 +34,9 @@ interface WorkerRow {
   last_seen_at: string | null
   last_ip: string | null
   created_at: string | null
+  worker_package_version?: string | null
+  claims_paused_until?: string | null
+  claims_pause_reason?: string | null
 }
 
 interface TierAttempt {
@@ -156,7 +159,7 @@ function LyricsJobRoutingControls({
           </option>
         ))}
       </select>
-      <Press
+      <MotionPress
         variant="ghost"
         disabled={disabled || isPending}
         onClick={() =>
@@ -169,7 +172,7 @@ function LyricsJobRoutingControls({
         {t(
           'admin.audioCompute.jobTable.applyRouting',
         )}
-      </Press>
+      </MotionPress>
     </div>
   )
 }
@@ -276,7 +279,7 @@ function GenericComputeJobRoutingControls({
           )}
         </label>
       )}
-      <Press
+      <MotionPress
         variant="ghost"
         disabled={disabled || isPending}
         onClick={() =>
@@ -290,7 +293,7 @@ function GenericComputeJobRoutingControls({
         {t(
           'admin.audioCompute.jobTable.applyRouting',
         )}
-      </Press>
+      </MotionPress>
     </div>
   )
 }
@@ -1040,7 +1043,7 @@ export function AudioComputeRoute() {
             return null
           }
           return (
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={async () => {
                 const ok = await showConfirm(
@@ -1059,7 +1062,7 @@ export function AudioComputeRoute() {
               {t(
                 'admin.audioCompute.jobTable.cancel',
               )}
-            </Press>
+            </MotionPress>
           )
         },
       },
@@ -1067,7 +1070,7 @@ export function AudioComputeRoute() {
         header: '',
         id: 'trace',
         cell: (i) => (
-          <Press
+          <MotionPress
             variant="ghost"
             onClick={() =>
               setTraceJobId(
@@ -1078,7 +1081,7 @@ export function AudioComputeRoute() {
             {t(
               'admin.audioCompute.jobTable.trace',
             )}
-          </Press>
+          </MotionPress>
         ),
       },
     ],
@@ -1326,14 +1329,14 @@ export function AudioComputeRoute() {
           {liveCascade.map((tier, idx) => (
             <li key={tier}>
               <code>{tier}</code>{' '}
-              <Press
+              <MotionPress
                 variant="ghost"
                 disabled={idx === 0}
                 onClick={() => moveTier(tier, -1)}
               >
                 ↑
-              </Press>{' '}
-              <Press
+              </MotionPress>{' '}
+              <MotionPress
                 variant="ghost"
                 disabled={
                   idx === liveCascade.length - 1
@@ -1341,15 +1344,15 @@ export function AudioComputeRoute() {
                 onClick={() => moveTier(tier, 1)}
               >
                 ↓
-              </Press>{' '}
-              <Press
+              </MotionPress>{' '}
+              <MotionPress
                 variant="ghost"
                 onClick={() => toggleTier(tier)}
               >
                 {t(
                   'admin.audioCompute.cascade.remove',
                 )}
-              </Press>
+              </MotionPress>
             </li>
           ))}
         </ol>
@@ -1357,15 +1360,15 @@ export function AudioComputeRoute() {
           {ALL_TIERS.filter(
             (x) => !liveCascade.includes(x),
           ).map((tier) => (
-            <Press
+            <MotionPress
               key={tier}
               variant="ghost"
               onClick={() => toggleTier(tier)}
             >
               + {tier}
-            </Press>
+            </MotionPress>
           ))}
-          <Press
+          <MotionPress
             variant="ghost"
             disabled={
               !pendingCascade ||
@@ -1377,9 +1380,9 @@ export function AudioComputeRoute() {
             }
           >
             {t('admin.audioCompute.cascade.save')}
-          </Press>
+          </MotionPress>
           {pendingCascade && (
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() =>
                 setPendingCascade(null)
@@ -1388,7 +1391,7 @@ export function AudioComputeRoute() {
               {t(
                 'admin.audioCompute.cascade.discard',
               )}
-            </Press>
+            </MotionPress>
           )}
         </div>
       </section>
@@ -1465,7 +1468,7 @@ export function AudioComputeRoute() {
                 ₽
               </code>
             </p>
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() => resetSpend.mutate()}
               disabled={resetSpend.isPending}
@@ -1473,7 +1476,7 @@ export function AudioComputeRoute() {
               {t(
                 'admin.audioCompute.speechkit.resetSpend',
               )}
-            </Press>
+            </MotionPress>
           </div>
         )}
       </section>
@@ -1585,7 +1588,7 @@ export function AudioComputeRoute() {
               )}
             </span>
             {cidrPresets.map((preset) => (
-              <Press
+              <MotionPress
                 key={preset.label}
                 variant="ghost"
                 title={preset.hint}
@@ -1594,7 +1597,7 @@ export function AudioComputeRoute() {
                 }
               >
                 {preset.label}
-              </Press>
+              </MotionPress>
             ))}
           </div>
           {cidrParsed.length > 0 && (
@@ -1646,7 +1649,7 @@ export function AudioComputeRoute() {
               </label>
             </div>
           )}
-          <Press
+          <MotionPress
             variant="ghost"
             disabled={
               !newName ||
@@ -1671,7 +1674,7 @@ export function AudioComputeRoute() {
             }
           >
             {t('admin.audioCompute.workerForm.create')}
-          </Press>
+          </MotionPress>
         </div>
         {showSecret && (
           <div className="admin-card admin-card--inline">
@@ -1683,7 +1686,7 @@ export function AudioComputeRoute() {
             <code className="admin-mono">
               {showSecret}
             </code>
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() =>
                 setShowSecret(null)
@@ -1692,7 +1695,7 @@ export function AudioComputeRoute() {
               {t(
                 'admin.audioCompute.workerForm.dismiss',
               )}
-            </Press>
+            </MotionPress>
           </div>
         )}
         <DataTable
@@ -1711,7 +1714,7 @@ export function AudioComputeRoute() {
                       gap: 4,
                     }}
                   >
-                    <Press
+                    <MotionPress
                       variant="ghost"
                       onClick={() =>
                         setDrawerWorkerId(row.id)
@@ -1720,9 +1723,9 @@ export function AudioComputeRoute() {
                       {t(
                         'admin.audioCompute.workerForm.open',
                       )}
-                    </Press>
+                    </MotionPress>
                     {row.revoked_at && (
-                      <Press
+                      <MotionPress
                         variant="ghost"
                         onClick={async () => {
                           const ok = await showConfirm(
@@ -1747,7 +1750,7 @@ export function AudioComputeRoute() {
                         {t(
                           'admin.audioCompute.workerForm.deleteFromList',
                         )}
-                      </Press>
+                      </MotionPress>
                     )}
                   </div>
                 )
@@ -1818,8 +1821,8 @@ export function AudioComputeRoute() {
             gap: '0.75rem',
           }}
         >
-          <Press
-            variant="default"
+          <MotionPress
+            variant="ghost"
             onClick={async () => {
               const ok = await showConfirm(
                 t(
@@ -1835,7 +1838,7 @@ export function AudioComputeRoute() {
             {t(
               'admin.audioCompute.jobTable.reapLeases',
             )}
-          </Press>
+          </MotionPress>
           {reapNotice !== null && (
             <span className="admin-card__sub">
               {t(
@@ -1878,8 +1881,8 @@ export function AudioComputeRoute() {
             )}
             style={{ minWidth: 220 }}
           />
-          <Press
-            variant="default"
+          <MotionPress
+            variant="ghost"
             onClick={() => {
               const p = progressToCancel.trim()
               if (p.length < 16) return
@@ -1893,7 +1896,7 @@ export function AudioComputeRoute() {
             {t(
               'admin.audioCompute.jobTable.cancelByProgress',
             )}
-          </Press>
+          </MotionPress>
         </div>
         <DataTable
           columns={jobColumns}
@@ -1934,14 +1937,14 @@ export function AudioComputeRoute() {
           <h2>
             {t('admin.audioCompute.jobTable.trace')} ·{' '}
             <code>{traceJob.id}</code>{' '}
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() => setTraceJobId(null)}
             >
               {t(
                 'admin.audioCompute.jobTable.close',
               )}
-            </Press>
+            </MotionPress>
           </h2>
           <p>
             {t(

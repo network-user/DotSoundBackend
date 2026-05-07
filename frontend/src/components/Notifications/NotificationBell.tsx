@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { onWS } from '@/lib/ws'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { NotificationList } from '@/components/Notifications/NotificationList'
 
 export function NotificationBell() {
@@ -38,14 +39,17 @@ export function NotificationBell() {
 
   return (
     <div className="notification-bell-wrapper">
-      <button
+      <MotionPress
+        type="button"
+        variant="icon"
+        haptic="light"
         className="notification-bell-btn"
-        onClick={handleOpen}
-        aria-label={
+        ariaLabel={
           count > 0
             ? `${t('notifications.title')} (${count})`
             : t('notifications.title')
         }
+        onClick={handleOpen}
       >
         <Icon name="bell" size={20} />
         {count > 0 && (
@@ -53,7 +57,7 @@ export function NotificationBell() {
             {count > 99 ? '99+' : count}
           </span>
         )}
-      </button>
+      </MotionPress>
       <NotificationList
         open={open}
         onClose={() => setOpen(false)}

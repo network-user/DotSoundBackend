@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../../lib/adminApi'
 import { computeFingerprint } from '../../lib/fingerprint'
 import { useAdminAuth } from '../../store/adminAuthStore'
@@ -68,19 +68,21 @@ export function AdminLogin() {
           void handleSubmit()
         }}
       >
-        <TotpInput
-          value={code}
-          onChange={setCode}
-          onComplete={handleSubmit}
-          autoFocus
-          disabled={busy}
-        />
+        <div className="adm-r-admin-totp">
+          <TotpInput
+            value={code}
+            onChange={setCode}
+            onComplete={handleSubmit}
+            autoFocus
+            disabled={busy}
+          />
+        </div>
         {error && (
           <div className="admin-auth-error">
             {error}
           </div>
         )}
-        <Press
+        <MotionPress
           type="submit"
           variant="primary"
           disabled={busy || code.length < 6}
@@ -88,7 +90,7 @@ export function AdminLogin() {
           {busy
             ? t('admin.auth.signingIn')
             : t('admin.auth.signIn')}
-        </Press>
+        </MotionPress>
       </form>
     </div>
   )

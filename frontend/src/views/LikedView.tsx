@@ -1,9 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { TrackList } from '@/components/TrackList/TrackList'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
 import { getUserId } from '@/lib/telegram'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type { LikedTrack, Track } from '@/types/api'
 
 interface LikedViewProps {
@@ -12,31 +20,51 @@ interface LikedViewProps {
 
 type SourceFilter = 'all' | 'platform' | 'soundcloud' | 'other'
 
+type LikedSort = 'newest' | 'oldest' | 'artist'
+
 const PAGE_SIZE = 20
 
-function formatLikedAt(iso: string): string {
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(new Date(iso))
+function formatLikedAt(iso: string, lang: string): string {
+  const safeLang = lang || 'en'
+  try {
+    return new Intl.DateTimeFormat(safeLang, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(iso))
+  } catch {
+    return new Intl.DateTimeFormat('en', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date(iso))
+  }
 }
 
-const SOURCE_FILTERS: { key: SourceFilter; label: string }[] = [
-  { key: 'all', label: 'Все' },
-  { key: 'platform', label: 'Платформа' },
-  { key: 'soundcloud', label: 'SoundCloud' },
-  { key: 'other', label: 'Другие' },
+const SOURCE_FILTERS: { key: SourceFilter; labelKey: string }[] = [
+  { key: 'all', labelKey: 'redesign.library.sourceAll' },
+  { key: 'platform', labelKey: 'redesign.library.sourcePlatform' },
+  { key: 'soundcloud', labelKey: 'redesign.library.sourceSoundcloud' },
+  { key: 'other', labelKey: 'redesign.library.sourceOther' },
+]
+
+const SORT_OPTIONS: { key: LikedSort; labelKey: string }[] = [
+  { key: 'newest', labelKey: 'redesign.library.sortNewest' },
+  { key: 'oldest', labelKey: 'redesign.library.sortOldest' },
+  { key: 'artist', labelKey: 'redesign.library.sortArtist' },
 ]
 
 export function LikedView({ embedded = false }: LikedViewProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const navigate = useNavigate()
+  const lang = i18n.language
   const [tracks, setTracks] = useState<LikedTrack[] | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
   const [sourceFilter, setSourceFilter] =
     useState<SourceFilter>('all')
+  const [sortOrder, setSortOrder] =
+    useState<LikedSort>('newest')
   const pageRef = useRef(1)
 
   const fetchPage = useCallback(
@@ -76,29 +104,97 @@ export function LikedView({ embedded = false }: LikedViewProps) {
     fetchPage(1, sourceFilter, true)
   }, [sourceFilter, fetchPage])
 
+  const displayedTracks = useMemo(() => {
+    if (!tracks || tracks.length === 0) return tracks
+    const copy = [...tracks]
+    if (sortOrder === 'oldest') {
+      copy.sort((a, b) => {
+        const da = a.liked_at
+          ? new Date(a.liked_at).getTime()
+          : 0
+        const db = b.liked_at
+          ? new Date(b.liked_at).getTime()
+          : 0
+        return da - db
+      })
+    } else if (sortOrder === 'artist') {
+      copy.sort((a, b) => {
+        const aa = (a.artist ?? '').localeCompare(
+          b.artist ?? '',
+          undefined,
+          { sensitivity: 'base' },
+        )
+        if (aa !== 0) return aa
+        return a.title.localeCompare(b.title, undefined, {
+          sensitivity: 'base',
+        })
+      })
+    }
+    return copy
+  }, [tracks, sortOrder])
+
+  usePrefetchTracks(displayedTracks ?? null, 'library')
+
   const loadMore = useCallback(async () => {
     if (loading || !hasMore) return
     fetchPage(pageRef.current + 1, sourceFilter, false)
   }, [loading, hasMore, sourceFilter, fetchPage])
 
+  const headerMeta =
+    Array.isArray(tracks) && tracks.length > 0 ? (
+      <p className="rd-liked-meta">
+        {t('redesign.library.likedLoaded', {
+          count: tracks.length,
+        })}
+      </p>
+    ) : null
+
+  const sortBar = (
+    <div
+      className="rd-liked-sort"
+      role="tablist"
+      aria-label={t('redesign.library.sortAria')}
+    >
+      {SORT_OPTIONS.map(({ key, labelKey }) => (
+        <MotionPress
+          key={key}
+          variant="subtle"
+          haptic="selection"
+          role="tab"
+          aria-selected={sortOrder === key}
+          className="rd-liked-chip liked-source-chip"
+          data-active={sortOrder === key ? 'true' : 'false'}
+          onClick={() => {
+            if (sortOrder !== key) setSortOrder(key)
+          }}
+        >
+          {t(labelKey)}
+        </MotionPress>
+      ))}
+    </div>
+  )
+
   const filterBar = (
     <div
-      className="liked-source-filter"
+      className="rd-liked-source"
       role="tablist"
-      aria-label={t('liked.sourceFilter', 'Фильтр по источнику')}
+      aria-label={t('redesign.library.sourceFilterAria')}
     >
-      {SOURCE_FILTERS.map(({ key, label }) => (
-        <button
+      {SOURCE_FILTERS.map(({ key, labelKey }) => (
+        <MotionPress
           key={key}
+          variant="subtle"
+          haptic="selection"
           role="tab"
           aria-selected={sourceFilter === key}
-          className={`liked-source-chip${sourceFilter === key ? ' active' : ''}`}
+          className="rd-liked-chip"
+          data-active={sourceFilter === key ? 'true' : 'false'}
           onClick={() => {
             if (sourceFilter !== key) setSourceFilter(key)
           }}
         >
-          {label}
-        </button>
+          {t(labelKey)}
+        </MotionPress>
       ))}
     </div>
   )
@@ -107,24 +203,28 @@ export function LikedView({ embedded = false }: LikedViewProps) {
     (track: Track) => {
       const lt = track as LikedTrack
       return lt.liked_at ? (
-        <span className="liked-at-date">
-          {formatLikedAt(lt.liked_at)}
+        <span className="rd-liked-date">
+          {formatLikedAt(lt.liked_at, lang)}
         </span>
       ) : null
     },
-    [],
+    [lang],
   )
 
   const list = (
     <>
-      {filterBar}
+      <div className="rd-liked-top">
+        {headerMeta}
+        {sortBar}
+        {filterBar}
+      </div>
       <TrackList
-        tracks={tracks}
-        emptyMessage={t('liked.empty', 'Ты ещё ничего не лайкал')}
+        tracks={displayedTracks}
+        emptyMessage={t('redesign.library.likedEmpty')}
         emptyCta={
           embedded
             ? {
-                label: t('liked.findTracks', 'Найти треки'),
+                label: t('redesign.library.likedFindTracks'),
                 onClick: () => navigate('/search'),
               }
             : undefined
@@ -132,15 +232,17 @@ export function LikedView({ embedded = false }: LikedViewProps) {
         renderExtra={renderExtra}
       />
       {hasMore && (
-        <button
-          className="load-more-btn"
+        <MotionPress
+          variant="ghost"
+          haptic="light"
+          className="rd-liked-more"
           onClick={loadMore}
           disabled={loading}
         >
           {loading
-            ? t('common.loading', 'Загрузка...')
-            : t('common.showMore', 'Показать ещё')}
-        </button>
+            ? t('redesign.library.likedLoading')
+            : t('redesign.library.likedShowMore')}
+        </MotionPress>
       )}
     </>
   )
@@ -152,9 +254,9 @@ export function LikedView({ embedded = false }: LikedViewProps) {
   }
 
   return (
-    <section id="view-liked" className="view active">
-      <div className="view-header">
-        <h2>{t('liked.title', 'Мне нравится')}</h2>
+    <section id="view-liked" className="view active rd-liked">
+      <div className="view-header rd-liked-header">
+        <h2>{t('redesign.library.likedTitle')}</h2>
       </div>
       {list}
     </section>

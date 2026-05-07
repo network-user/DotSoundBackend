@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { Icon } from '@/components/Icon/Icon'
 import { useAdminPrompt } from '../layout/AdminPromptContext'
 import { lyricsTierAdminTitle } from '../../lib/lyricsAdminLabels'
@@ -151,16 +151,18 @@ export function LyricsJobDetail({
               {jobId}
             </h2>
           </div>
-          <button
+          <MotionPress
             type="button"
+            variant="icon"
+            haptic="light"
             className="admin-jobdetail-close"
             onClick={onClose}
-            aria-label={t(
+            ariaLabel={t(
               'admin.tasks.detail.close',
             )}
           >
             <Icon name="x" size={18} />
-          </button>
+          </MotionPress>
         </header>
 
         {isLoading && (
@@ -372,14 +374,14 @@ export function LyricsJobDetail({
             </section>
 
             <footer className="admin-jobdetail-foot">
-              <Press
+              <MotionPress
                 variant="ghost"
                 onClick={onClose}
               >
                 {t('admin.tasks.detail.close')}
-              </Press>
+              </MotionPress>
               {cancellable && (
-                <Press
+                <MotionPress
                   className="admin-jobdetail-cancel-btn"
                   disabled={cancelMutation.isPending}
                   onClick={async () => {
@@ -400,7 +402,7 @@ export function LyricsJobDetail({
                     : t(
                         'admin.tasks.detail.cancel',
                       )}
-                </Press>
+                </MotionPress>
               )}
               {cancelMutation.isError && (
                 <span className="admin-jobdetail-cancel-error">

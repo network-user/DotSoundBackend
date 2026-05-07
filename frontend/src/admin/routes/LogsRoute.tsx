@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../lib/adminApi'
 import { LiveLogStream } from '../components/widgets/LiveLogStream'
 
@@ -64,12 +64,12 @@ export function LogsRoute() {
       <div>
         <h1>{t('admin.logs.title')}</h1>
         <div className="admin-toolbar">
-          <Press
+          <MotionPress
             variant="ghost"
             onClick={() => setMode('history')}
           >
             {t('admin.logs.switchHistory')}
-          </Press>
+          </MotionPress>
         </div>
         <LiveLogStream />
       </div>
@@ -80,12 +80,12 @@ export function LogsRoute() {
     <div>
       <h1>{t('admin.logs.title')}</h1>
       <div className="admin-toolbar">
-        <Press
+        <MotionPress
           variant="ghost"
           onClick={() => setMode('live')}
         >
           {t('admin.logs.switchLive')}
-        </Press>
+        </MotionPress>
       </div>
       <div className="admin-toolbar admin-toolbar--wrap">
         <input
@@ -132,14 +132,14 @@ export function LogsRoute() {
           <option value="360">6h</option>
           <option value="1440">24h</option>
         </select>
-        <Press
+        <MotionPress
           variant="ghost"
           onClick={() => refetch()}
           disabled={isFetching}
         >
           {t('admin.logs.refresh')}
-        </Press>
-        <Press
+        </MotionPress>
+        <MotionPress
           variant="ghost"
           onClick={() =>
             setRunning((v) => !v)
@@ -148,7 +148,7 @@ export function LogsRoute() {
           {running
             ? t('admin.logs.pause')
             : t('admin.logs.resume')}
-        </Press>
+        </MotionPress>
       </div>
       {error && (
         <div className="admin-error">

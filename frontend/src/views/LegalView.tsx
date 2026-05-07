@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import {
   LEGAL_DOCS,
   type LegalDocId,
@@ -7,6 +9,7 @@ import {
 
 export function LegalView() {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const legalLinks: Array<{
     id: LegalDocId
     label: string
@@ -20,13 +23,16 @@ export function LegalView() {
   return (
     <div className="legal-view">
       <div className="legal-header">
-        <button
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className="icon-btn"
           onClick={() => navigate(-1)}
+          aria-label={t('redesign.backAria', 'Back')}
         >
           <Icon name="chevron" size={20} className="back-chevron" />
-        </button>
-        <h1>Правообладателям</h1>
+        </MotionPress>
+        <h1>{t('redesign.legal.title', 'Правообладателям')}</h1>
       </div>
 
       <div className="legal-content">
@@ -39,13 +45,15 @@ export function LegalView() {
           </p>
           <div className="legal-doc-list">
             {legalLinks.map((item) => (
-              <button
+              <MotionPress
                 key={item.id}
+                variant="ghost"
+                haptic="selection"
                 className="btn-secondary"
                 onClick={() => navigate(`/legal/${item.id}`)}
               >
                 {item.label}
-              </button>
+              </MotionPress>
             ))}
           </div>
         </section>
@@ -165,12 +173,14 @@ export function LegalView() {
           <ul>
             {legalLinks.map((item) => (
               <li key={item.id}>
-                <button
+                <MotionPress
+                  variant="ghost"
+                  haptic="selection"
                   className="linklike-btn"
                   onClick={() => navigate(`/legal/${item.id}`)}
                 >
                   {LEGAL_DOCS[item.id].title}
-                </button>
+                </MotionPress>
               </li>
             ))}
           </ul>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '@/components/Icon/Icon'
-import { useToast } from '@/components/ui/Toast'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { showIsland } from '@/lib/island'
 import {
   clearAllOffline,
   getCachedTracks,
@@ -25,7 +26,6 @@ export function OfflineList() {
     quota: number
   }>({ used: 0, quota: 0 })
   const { playTrack } = usePlayerActions()
-  const toast = useToast()
 
   const reload = async () => {
     setLoading(true)
@@ -44,14 +44,14 @@ export function OfflineList() {
     setItems((prev) =>
       prev.filter((it) => it.trackId !== id),
     )
-    toast.info('Трек удалён из скачанных')
+    showIsland({ kind: 'toast', title: 'Трек удалён из скачанных', durationMs: 2200 })
   }
 
   const onClearAll = async () => {
     if (!items.length) return
     await clearAllOffline()
     await reload()
-    toast.info('Скачанные треки очищены')
+    showIsland({ kind: 'toast', title: 'Скачанные треки очищены', durationMs: 2200 })
   }
 
   const totalBytes = items.reduce(
@@ -101,12 +101,15 @@ export function OfflineList() {
             </>
           )}
         </div>
-        <button
+        <MotionPress
+          type="button"
+          variant="ghost"
+          haptic="light"
           className="queue-action-btn"
           onClick={onClearAll}
         >
           Очистить всё
-        </button>
+        </MotionPress>
       </div>
       <div className="offline-list-rows">
         {items.map((it) => (
@@ -114,7 +117,10 @@ export function OfflineList() {
             key={it.trackId}
             className="offline-list-row"
           >
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="offline-list-main"
               onClick={() => playTrack(it.track)}
             >
@@ -137,14 +143,17 @@ export function OfflineList() {
                   {fmtBytes(it.bytes)}
                 </div>
               </div>
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="icon"
+              haptic="light"
               className="icon-btn offline-list-remove"
+              ariaLabel="Удалить"
               onClick={() => onRemove(it.trackId)}
-              aria-label="Удалить"
             >
               <Icon name="trash" size={16} />
-            </button>
+            </MotionPress>
           </div>
         ))}
       </div>

@@ -5,7 +5,7 @@ import {
   useContext,
   useState,
 } from 'react'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { Sheet } from '@/components/ui/Sheet'
 import { adminApi } from '../../lib/adminApi'
 import { TotpInput } from './TotpInput'
@@ -104,14 +104,14 @@ export function StepUpProvider({
             </div>
           )}
           <div className="admin-stepup-actions">
-            <Press
+            <MotionPress
               variant="ghost"
               onClick={() => close(false)}
               disabled={busy}
             >
               Cancel
-            </Press>
-            <Press
+            </MotionPress>
+            <MotionPress
               variant="primary"
               onClick={handleConfirm}
               disabled={
@@ -119,7 +119,7 @@ export function StepUpProvider({
               }
             >
               {busy ? 'Confirming…' : 'Confirm'}
-            </Press>
+            </MotionPress>
           </div>
         </div>
       </Sheet>

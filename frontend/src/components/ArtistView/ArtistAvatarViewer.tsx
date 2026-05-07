@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 
 interface Props {
   src: string
@@ -38,14 +39,16 @@ export function ArtistAvatarViewer({
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <button
+      <MotionPress
         type="button"
+        variant="icon"
+        haptic="light"
         className="artist-avatar-viewer-close"
+        ariaLabel={t('artist.avatar_close')}
         onClick={onClose}
-        aria-label={t('artist.avatar_close')}
       >
         <Icon name="x" size={20} />
-      </button>
+      </MotionPress>
       <img
         src={src}
         alt={alt}

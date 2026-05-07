@@ -8,6 +8,20 @@ import {
   ChartPoint,
   LineChart,
 } from '../components/charts/LineChart'
+import type { Variants } from 'framer-motion'
+import {
+  m,
+  VARIANTS_FADE_UP,
+} from '@/lib/motion'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { AdminRangeSwitch } from '../components/widgets/AdminRangeSwitch'
+
+const ADMIN_DASH_KPI_STAGGER: Variants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.06 },
+  },
+}
 
 function formatBytes(bytes: number): string {
   if (!bytes) return '0 B'
@@ -181,6 +195,45 @@ export function DashboardRoute() {
     })
   }, [data?.generated_at, data?.users.online_now])
 
+  const onlinePoints = flattenRange(
+    onlineHistory.data,
+  )
+  const rpsPoints = flattenRange(rpsHistory.data)
+  const latencyPoints = flattenRange(
+    latencyHistory.data,
+  )
+  const baseOnlinePoints =
+    onlinePoints.length > 0
+      ? onlinePoints
+      : onlineFallback
+  const displayOnlinePoints = useMemo(() => {
+    const source =
+      onlineRangeMode === 'all'
+        ? onlineFallback
+        : baseOnlinePoints
+    const sorted = [...source].sort((a, b) =>
+      onlineSortDir === 'asc'
+        ? a.ts - b.ts
+        : b.ts - a.ts,
+    )
+    return sorted
+  }, [
+    onlineRangeMode,
+    onlineFallback,
+    baseOnlinePoints,
+    onlineSortDir,
+  ])
+  const onlineTrend = useMemo(
+    () => calcTrend(displayOnlinePoints),
+    [displayOnlinePoints],
+  )
+  const trendClass =
+    onlineTrend > 2
+      ? 'up'
+      : onlineTrend < -2
+        ? 'down'
+        : 'flat'
+
   if (isLoading) {
     return <div>{t('admin.dashboard.loading')}</div>
   }
@@ -202,36 +255,6 @@ export function DashboardRoute() {
       unknown: 0,
     }
   const total = containers.data?.total || 0
-  const onlinePoints = flattenRange(onlineHistory.data)
-  const rpsPoints = flattenRange(rpsHistory.data)
-  const latencyPoints = flattenRange(latencyHistory.data)
-  const baseOnlinePoints =
-    onlinePoints.length > 0 ? onlinePoints : onlineFallback
-  const displayOnlinePoints = useMemo(() => {
-    const source =
-      onlineRangeMode === 'all'
-        ? onlineFallback
-        : baseOnlinePoints
-    const sorted = [...source].sort((a, b) =>
-      onlineSortDir === 'asc' ? a.ts - b.ts : b.ts - a.ts,
-    )
-    return sorted
-  }, [
-    onlineRangeMode,
-    onlineFallback,
-    baseOnlinePoints,
-    onlineSortDir,
-  ])
-  const onlineTrend = useMemo(
-    () => calcTrend(displayOnlinePoints),
-    [displayOnlinePoints],
-  )
-  const trendClass =
-    onlineTrend > 2
-      ? 'up'
-      : onlineTrend < -2
-        ? 'down'
-        : 'flat'
 
   return (
     <div className="admin-dashboard">
@@ -243,65 +266,73 @@ export function DashboardRoute() {
             {t('admin.dashboard.onlineHistory.subtitle')}
           </p>
         </div>
-        <div className="admin-range-switch" role="tablist">
+        <div className="admin-range-switch adm-r-range" role="tablist">
           {[15, 60, 360, 1440].map((value) => (
-            <button
+            <MotionPress
               key={value}
               type="button"
-              className={`admin-range-switch__btn${
+              variant="ghost"
+              haptic="selection"
+              className={`admin-range-switch__btn adm-r-range__btn${
                 value === minutes ? ' is-active' : ''
               }`}
               onClick={() => setMinutes(value)}
             >
               {value < 60
-                ? `${value}m`
+                ? t('redesign.admin.dashboard.rangeMinutes', { n: value })
                 : value < 1440
-                  ? `${Math.floor(value / 60)}h`
-                  : '24h'}
-            </button>
+                  ? t('redesign.admin.dashboard.rangeHours', {
+                      n: Math.floor(value / 60),
+                    })
+                  : t('redesign.admin.dashboard.rangeDay')}
+            </MotionPress>
           ))}
-          <button
+          <MotionPress
             type="button"
-            className={`admin-range-switch__btn${
+            variant="ghost"
+            haptic="selection"
+            className={`admin-range-switch__btn adm-r-range__btn${
               onlineRangeMode === 'all' ? ' is-active' : ''
             }`}
             onClick={() => setOnlineRangeMode('all')}
           >
-            All-time
-          </button>
-          <button
+            {t('redesign.admin.dashboard.rangeAllTime')}
+          </MotionPress>
+          <MotionPress
             type="button"
-            className={`admin-range-switch__btn${
-              onlineRangeMode === 'range'
-                ? ' is-active'
-                : ''
+            variant="ghost"
+            haptic="selection"
+            className={`admin-range-switch__btn adm-r-range__btn${
+              onlineRangeMode === 'range' ? ' is-active' : ''
             }`}
             onClick={() => setOnlineRangeMode('range')}
           >
-            Interval
-          </button>
-          <button
+            {t('redesign.admin.dashboard.rangeInterval')}
+          </MotionPress>
+          <MotionPress
             type="button"
-            className="admin-range-switch__btn"
+            variant="ghost"
+            haptic="selection"
+            className="admin-range-switch__btn adm-r-range__btn"
             onClick={() =>
-              setOnlineSortDir((v) =>
-                v === 'asc' ? 'desc' : 'asc',
-              )
+              setOnlineSortDir((v) => (v === 'asc' ? 'desc' : 'asc'))
             }
           >
             {onlineSortDir === 'asc'
-              ? 'Oldest first'
-              : 'Newest first'}
-          </button>
-          <button
+              ? t('redesign.admin.dashboard.orderOldest')
+              : t('redesign.admin.dashboard.orderNewest')}
+          </MotionPress>
+          <MotionPress
             type="button"
-            className={`admin-range-switch__btn${
+            variant="ghost"
+            haptic="selection"
+            className={`admin-range-switch__btn adm-r-range__btn${
               live ? ' is-active' : ''
             }`}
             onClick={() => setLive((v) => !v)}
           >
-            Live
-          </button>
+            {t('redesign.admin.dashboard.live')}
+          </MotionPress>
         </div>
       </section>
 
@@ -339,20 +370,29 @@ export function DashboardRoute() {
               {t('admin.dashboard.stats.subtitle')}
             </p>
           </div>
-          <div className="admin-range-switch" role="tablist">
-            {(['today', '7d', '30d', 'all'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={`admin-range-switch__btn${
-                  statsPeriod === value ? ' is-active' : ''
-                }`}
-                onClick={() => setStatsPeriod(value)}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
+          <AdminRangeSwitch
+            groupId="dash-stats-period"
+            value={statsPeriod}
+            onChange={setStatsPeriod}
+            options={[
+              {
+                value: 'today',
+                label: t('redesign.admin.dashboard.periodToday'),
+              },
+              {
+                value: '7d',
+                label: t('redesign.admin.dashboard.period7d'),
+              },
+              {
+                value: '30d',
+                label: t('redesign.admin.dashboard.period30d'),
+              },
+              {
+                value: 'all',
+                label: t('redesign.admin.dashboard.periodAll'),
+              },
+            ]}
+          />
         </div>
         {stats.isLoading || !stats.data ? (
           <div className="admin-skeleton admin-skeleton--card" />
@@ -378,14 +418,16 @@ export function DashboardRoute() {
               />
               <div className="admin-metric-slider__ticks">
                 {metricOptions.map((opt, idx) => (
-                  <button
+                  <MotionPress
                     key={opt.value}
                     type="button"
+                    variant="icon"
+                    haptic="selection"
                     className={`admin-metric-slider__tick${
                       idx === metricIndex ? ' is-active' : ''
                     }`}
                     onClick={() => setStatsMetric(opt.value)}
-                    aria-label={opt.label}
+                    ariaLabel={opt.label}
                   />
                 ))}
               </div>
@@ -483,40 +525,39 @@ export function DashboardRoute() {
             <div className="admin-card admin-dashboard__toplist">
               <div className="admin-dashboard__toplist-head">
                 <h3>{t('admin.dashboard.stats.topTracks')}</h3>
-                <div className="admin-range-switch">
-                  <button
+                <div className="admin-range-switch adm-r-range">
+                  <AdminRangeSwitch
+                    groupId="dash-top-sort-by"
+                    value={topSortBy}
+                    onChange={setTopSortBy}
+                    options={[
+                      {
+                        value: 'plays',
+                        label: t('redesign.admin.dashboard.topByPlays'),
+                      },
+                      {
+                        value: 'unique_listeners',
+                        label: t(
+                          'redesign.admin.dashboard.topByListeners',
+                        ),
+                      },
+                    ]}
+                  />
+                  <MotionPress
                     type="button"
-                    className={`admin-range-switch__btn${
-                      topSortBy === 'plays' ? ' is-active' : ''
-                    }`}
-                    onClick={() => setTopSortBy('plays')}
-                  >
-                    Plays
-                  </button>
-                  <button
-                    type="button"
-                    className={`admin-range-switch__btn${
-                      topSortBy === 'unique_listeners'
-                        ? ' is-active'
-                        : ''
-                    }`}
-                    onClick={() =>
-                      setTopSortBy('unique_listeners')
-                    }
-                  >
-                    Listeners
-                  </button>
-                  <button
-                    type="button"
-                    className="admin-range-switch__btn"
+                    variant="ghost"
+                    haptic="selection"
+                    className="admin-range-switch__btn adm-r-range__btn"
                     onClick={() =>
                       setTopSortDir((v) =>
                         v === 'desc' ? 'asc' : 'desc',
                       )
                     }
                   >
-                    {topSortDir === 'desc' ? 'Desc' : 'Asc'}
-                  </button>
+                    {topSortDir === 'desc'
+                      ? t('redesign.admin.dashboard.sortDesc')
+                      : t('redesign.admin.dashboard.sortAsc')}
+                  </MotionPress>
                 </div>
               </div>
               {stats.data.top_tracks.length === 0 ? (
@@ -559,113 +600,156 @@ export function DashboardRoute() {
         )}
       </section>
 
-      <section className="kpi-grid">
+      <m.section
+        className="kpi-grid adm-r-dash-kpi-stagger"
+        variants={ADMIN_DASH_KPI_STAGGER}
+        initial="hidden"
+        animate="visible"
+      >
         {activation.data && (
           <>
-            <KpiCard
-              label="Auth -> First Play (sec)"
-              value={activation.data.avg_auth_to_first_play_seconds}
-            />
-            <KpiCard
-              label="Onboarding Completion Rate"
-              value={
-                activation.data.users.auth_success
-                  ? `${Math.round(
-                      (activation.data.users.onboarding_complete /
-                        activation.data.users.auth_success) *
-                        100,
-                    )}%`
-                  : '0%'
-              }
-            />
-            <KpiCard
-              label="Skip Onboarding Rate"
-              value={`${Math.round(activation.data.skip_rate * 100)}%`}
-              accent={
-                activation.data.skip_rate > 0.4 ? 'warn' : 'default'
-              }
-            />
-            <KpiCard
-              label="First Session Plays"
-              value={activation.data.first_session_plays_count}
-            />
+            <m.div variants={VARIANTS_FADE_UP}>
+              <KpiCard
+                label="Auth -> First Play (sec)"
+                value={
+                  activation.data.avg_auth_to_first_play_seconds
+                }
+              />
+            </m.div>
+            <m.div variants={VARIANTS_FADE_UP}>
+              <KpiCard
+                label="Onboarding Completion Rate"
+                value={
+                  activation.data.users.auth_success
+                    ? `${Math.round(
+                        (activation.data.users.onboarding_complete /
+                          activation.data.users.auth_success) *
+                          100,
+                      )}%`
+                    : '0%'
+                }
+              />
+            </m.div>
+            <m.div variants={VARIANTS_FADE_UP}>
+              <KpiCard
+                label="Skip Onboarding Rate"
+                value={`${Math.round(activation.data.skip_rate * 100)}%`}
+                accent={
+                  activation.data.skip_rate > 0.4
+                    ? 'warn'
+                    : 'default'
+                }
+              />
+            </m.div>
+            <m.div variants={VARIANTS_FADE_UP}>
+              <KpiCard
+                label="First Session Plays"
+                value={
+                  activation.data.first_session_plays_count
+                }
+              />
+            </m.div>
           </>
         )}
-        <KpiCard
-          label={t(
-            'admin.dashboard.kpi.onlineNow',
-          )}
-          value={data.users.online_now}
-          hint={
-            <>
-              {t(
-                'admin.dashboard.kpi.activeAccounts',
-                { count: data.users.active },
-              )}
-              <span
-                className={`admin-kpi-trend admin-kpi-trend--${trendClass}`}
-              >
-                {onlineTrend > 0 ? '+' : ''}
-                {onlineTrend.toFixed(1)}%
-              </span>
-            </>
-          }
-        />
-        <KpiCard
-          label={t(
-            'admin.dashboard.kpi.usersTotal',
-          )}
-          value={data.users.total}
-          hint={t(
-            'admin.dashboard.kpi.newIn24h',
-            { count: data.users.new_24h },
-          )}
-        />
-        <KpiCard
-          label={t('admin.dashboard.kpi.tracks')}
-          value={data.tracks.total}
-          hint={t(
-            'admin.dashboard.kpi.newIn24h',
-            { count: data.tracks.new_24h },
-          )}
-        />
-        <KpiCard
-          label={t('admin.dashboard.kpi.storage')}
-          value={formatBytes(
-            data.tracks.storage_bytes,
-          )}
-        />
-        <KpiCard
-          label={t(
-            'admin.dashboard.kpi.openComplaints',
-          )}
-          value={data.complaints.open}
-          accent={
-            data.complaints.open > 0
-              ? 'warn'
-              : 'default'
-          }
-        />
-        <KpiCard
-          label={t(
-            'admin.dashboard.kpi.activeJobs',
-          )}
-          value={data.jobs.active}
-          hint={
-            data.jobs.failed_1h
-              ? t(
-                  'admin.dashboard.kpi.failedIn1h',
-                  { count: data.jobs.failed_1h },
-                )
-              : t('admin.dashboard.kpi.noFailures')
-          }
-          accent={
-            data.jobs.failed_1h > 0
-              ? 'warn'
-              : 'default'
-          }
-        />
-      </section>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t(
+              'admin.dashboard.kpi.onlineNow',
+            )}
+            value={data.users.online_now}
+            hint={
+              <>
+                {t(
+                  'admin.dashboard.kpi.activeAccounts',
+                  {
+                    count: data.users.active,
+                  },
+                )}
+                <span
+                  className={`admin-kpi-trend admin-kpi-trend--${trendClass}`}
+                >
+                  {onlineTrend > 0 ? '+' : ''}
+                  {onlineTrend.toFixed(1)}%
+                </span>
+              </>
+            }
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t(
+              'admin.dashboard.kpi.usersTotal',
+            )}
+            value={data.users.total}
+            hint={t(
+              'admin.dashboard.kpi.newIn24h',
+              {
+                count: data.users.new_24h,
+              },
+            )}
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t('admin.dashboard.kpi.tracks')}
+            value={data.tracks.total}
+            hint={t(
+              'admin.dashboard.kpi.newIn24h',
+              {
+                count: data.tracks.new_24h,
+              },
+            )}
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t(
+              'admin.dashboard.kpi.storage',
+            )}
+            value={formatBytes(
+              data.tracks.storage_bytes,
+            )}
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t(
+              'admin.dashboard.kpi.openComplaints',
+            )}
+            value={data.complaints.open}
+            accent={
+              data.complaints.open > 0
+                ? 'warn'
+                : 'default'
+            }
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label={t(
+              'admin.dashboard.kpi.activeJobs',
+            )}
+            value={data.jobs.active}
+            hint={
+              data.jobs.failed_1h
+                ? t(
+                    'admin.dashboard.kpi.failedIn1h',
+                    {
+                      count: data.jobs.failed_1h,
+                    },
+                  )
+                : t(
+                    'admin.dashboard.kpi.noFailures',
+                  )
+            }
+            accent={
+              data.jobs.failed_1h > 0
+                ? 'warn'
+                : 'default'
+            }
+          />
+        </m.div>
+      </m.section>
 
       <section className="kpi-grid kpi-grid--charts">
         <article className="admin-card">

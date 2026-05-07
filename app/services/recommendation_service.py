@@ -5,9 +5,6 @@ from typing import Any
 
 import structlog
 from dotsound_private_core.services.recommendation_engine import (
-    ListenEvent as RecListenEvent,
-)
-from dotsound_private_core.services.recommendation_engine import (
     MAX_GENRE_MIXES,
     TrackFeatures,
     UserPrefs,
@@ -18,6 +15,9 @@ from dotsound_private_core.services.recommendation_engine import (
     merge_hybrid_playlist,
     score_tracks_for_user,
     select_similar_tracks,
+)
+from dotsound_private_core.services.recommendation_engine import (
+    ListenEvent as RecListenEvent,
 )
 from dotsound_private_core.services.recommendation_language_policy import (
     LOCALE_RU_BONUS,
@@ -46,11 +46,11 @@ from app.repositories.artist_catalog import (
 from app.repositories.artist_follow import (
     ArtistFollowRepository,
 )
-from app.repositories.preference import (
-    PreferenceRepository,
-)
 from app.repositories.genre_mix_override import (
     GenreMixOverrideRepository,
+)
+from app.repositories.preference import (
+    PreferenceRepository,
 )
 from app.repositories.recommendation import (
     RecommendationRepository,
@@ -232,13 +232,16 @@ class RecommendationService:
                 onboarding_artist_ids + followed_artist_ids
             )
         )
-        similar_artist_ids = (
-            await self._catalog_repo.get_similar_artist_ids_from_stations(
-                merged_artist_ids
+        if merged_artist_ids:
+            cat_repo = self._catalog_repo
+            similar_artist_ids, similar_artist_weights = (
+                await cat_repo.get_similar_artist_recommendation_signals(
+                    merged_artist_ids,
+                )
             )
-            if merged_artist_ids
-            else []
-        )
+        else:
+            similar_artist_ids = []
+            similar_artist_weights = {}
 
         return (
             UserPrefs(
@@ -249,6 +252,7 @@ class RecommendationService:
                 ),
                 preferred_artist_ids=merged_artist_ids,
                 similar_artist_ids=similar_artist_ids,
+                similar_artist_weights=similar_artist_weights,
                 preferred_moods=(
                     pref.preferred_moods or []
                     if pref
@@ -619,7 +623,9 @@ class RecommendationService:
                             {
                                 "track": t,
                                 "label": "Выбор пользователей",
-                                "reason": "Популярно в DotSound на этой неделе",
+                                "reason": (
+                                    "Популярно в DotSound на этой неделе"
+                                ),
                             }
                         )
                         highlight_track_ids.add(t.id)
@@ -799,6 +805,9 @@ class RecommendationService:
     async def get_similar(
         self, track_id: int, limit: int = 10
     ) -> list[Track]:
+        from app.repositories.artist import (
+            ArtistRepository,
+        )
         from app.repositories.track import (
             TrackRepository,
         )
@@ -807,6 +816,20 @@ class RecommendationService:
         seed = await track_repo.get_by_id(track_id)
         if not seed:
             return []
+
+        artist_repo = ArtistRepository(self._session)
+        linked = await artist_repo.get_track_artists(track_id)
+        seed_artist_ids = [a.id for a in linked]
+
+        neighbor_ids: list[int] = []
+        if seed_artist_ids:
+            neighbor_ids = await (
+                self._catalog_repo.get_station_neighbor_track_ids_for_artists(
+                    seed_artist_ids,
+                    exclude_track_ids=frozenset({seed.id}),
+                    limit=120,
+                )
+            )
 
         candidates = (
             await self._rec_repo.get_candidate_tracks_stratified(
@@ -819,10 +842,31 @@ class RecommendationService:
                 exclude_ids={seed.id},
             )
         )
-        if not candidates:
+
+        neighbor_pick = [
+            tid
+            for tid in neighbor_ids
+            if tid != seed.id
+        ][:80]
+        extra_tracks: list[Track] = []
+        if neighbor_pick:
+            extra_tracks = (
+                await self._rec_repo.get_tracks_by_ids(
+                    neighbor_pick
+                )
+            )
+
+        by_id: dict[int, Track] = {
+            t.id: t for t in candidates
+        }
+        for t in extra_tracks:
+            by_id.setdefault(t.id, t)
+        merged_candidates = list(by_id.values())
+
+        if not merged_candidates:
             return []
 
-        all_tracks = [seed] + candidates
+        all_tracks = [seed] + merged_candidates
         features = await self._tracks_to_features(
             all_tracks
         )
@@ -830,9 +874,16 @@ class RecommendationService:
         candidate_feats = features[1:]
 
         scored = select_similar_tracks(
-            seed_feat, candidate_feats, limit=limit
+            seed_feat,
+            candidate_feats,
+            limit=limit,
+            station_neighbor_track_ids=(
+                frozenset(neighbor_ids)
+                if neighbor_ids
+                else None
+            ),
         )
-        track_map = {t.id: t for t in candidates}
+        track_map = {t.id: t for t in merged_candidates}
         return [
             track_map[s.track_id]
             for s in scored

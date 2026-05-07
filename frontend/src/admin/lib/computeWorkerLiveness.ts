@@ -13,6 +13,7 @@ export type WorkerLivenessReadout = {
   suspended_reason: string | null
   suspended_until: string | null
   revoked_at: string | null
+  claims_paused_until?: string | null
 }
 
 export function suspendedNow(
@@ -24,6 +25,19 @@ export function suspendedNow(
   return (
     new Date(
       row.suspended_until,
+    ).getTime() > Date.now()
+  )
+}
+
+export function claimsPausedNow(
+  row: Pick<WorkerLivenessReadout, 'claims_paused_until'>,
+): boolean {
+  if (!row.claims_paused_until) {
+    return false
+  }
+  return (
+    new Date(
+      row.claims_paused_until,
     ).getTime() > Date.now()
   )
 }
@@ -52,6 +66,9 @@ export function computeWorkerPillKind(
     return 'error'
   }
   if (suspendedNow(row)) {
+    return 'warn'
+  }
+  if (claimsPausedNow(row)) {
     return 'warn'
   }
   if (!row.active) {
@@ -97,6 +114,14 @@ export function computeWorkerPillLabel(
       s = `${s} · ${r}`
     }
     return s
+  }
+  if (claimsPausedNow(row)) {
+    const until = row.claims_paused_until
+      ? fmtUntil(row.claims_paused_until)
+      : '–'
+    return t(`${w}.claimsPausedUntil`, {
+      until,
+    })
   }
   if (!row.active) {
     return t(`${w}.accountDisabled`)

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
-import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
 import { safePlay } from '@/lib/safePlay'
 
 interface Props {
@@ -60,9 +61,19 @@ export function VoicePlayer({ fileKey, duration, waveform }: Props) {
 
   return (
     <div className="voice-player">
-      <button className="voice-play-btn" onClick={togglePlay}>
-        <Icon name={playing ? 'pause' : 'play'} size={18} />
-      </button>
+      <MotionPress
+        type="button"
+        variant="icon"
+        haptic="medium"
+        className="voice-play-btn"
+        onClick={togglePlay}
+      >
+        <MorphIcon
+          name={playing ? 'pause' : 'play'}
+          size={18}
+          filled
+        />
+      </MotionPress>
       <div className="voice-waveform">
         {Array.from({ length: barCount }).map((_, i) => {
           const val = waveform[i] ?? 0.2
@@ -78,9 +89,15 @@ export function VoicePlayer({ fileKey, duration, waveform }: Props) {
       </div>
       <div className="voice-meta">
         <span className="voice-duration">{formatTime(duration)}</span>
-        <button className="voice-speed-btn" onClick={cycleSpeed}>
+        <MotionPress
+          type="button"
+          variant="ghost"
+          haptic="selection"
+          className="voice-speed-btn"
+          onClick={cycleSpeed}
+        >
           {SPEEDS[speedIdx]}x
-        </button>
+        </MotionPress>
       </div>
     </div>
   )

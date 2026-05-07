@@ -234,7 +234,69 @@ to card edges.
 1. Replace literal spacing with `--space-*`.
 2. Replace literal duration values with `--dur-*` and easing.
 3. Replace bespoke colour values with the monochrome tokens.
-4. Use `Press`/`Sheet`/`EmptyState`/`SkeletonList` instead of
-   re-implementing them in component files.
-5. Run `npx tsc --noEmit` and the visual smoke test before
+4. Use `MotionPress` (not bare `<button>`) for every interactive
+   button in redesigned surfaces.
+5. Use `showIsland()` / `dismissIsland()` from `lib/island` instead
+   of `useToast()` for all user-facing notifications. `Toast` /
+   `useToast` are retained for legacy surfaces only and should not
+   be used in new code.
+6. Run `npx tsc --noEmit` and the visual smoke test before
    committing.
+
+## Redesign 2026 primitives
+
+The big-bang iOS-style redesign (branch `redesign/ios-2026`) adds
+a new layer of primitives in `frontend/src/components/ui/` powered
+by `framer-motion`. Strict monochrome and `prefers-reduced-motion`
+rules continue to apply. Single source of truth for shared APIs is
+`docs/redesign-2026/SHARED-CONTRACTS.md` — do not duplicate that
+document here.
+
+Highlights:
+
+- `MotionPress` — spring-button replacement for `Press` in new
+  surfaces; variants `primary | ghost | icon | subtle`, integrates
+  Telegram haptics.
+- `MorphIcon` — outline ↔ filled icon morph for `heart`, `play`,
+  `pause`, `star`, `bookmark`, `home`, `search`, `library`,
+  `chats`, `profile`, `radio`, `users-following`, `flame`.
+- `SwipeRow` — left/right swipe-actions row with rubber-band and
+  threshold-armed haptic.
+- `LongPressMenu` — iOS-style context menu over any trigger.
+- `DynamicIslandHost` + `lib/island.ts` — single top-of-screen
+  pill for toasts, progress, now-playing, errors. Use
+  `showIsland()` / `dismissIsland()` from `lib/island`.
+- `AmbientStage` — three-layer radial gradient backdrop driven by
+  `lib/coverPalette.ts` (32×32 downsample, top-3 clusters,
+  desaturated to monochrome).
+- `KenBurnsCover` — slow pan/zoom over a still cover image.
+- `BeatPulse` — phase-locked subtle pulse driven by BPM.
+- `HorizontalSnap` — accessible snap-carousel with optional dots,
+  arrows on `≥md`, and per-card parallax.
+- `SharedCover` — `m.img` with `layoutId={cover-${trackId}}` for
+  shared-element transitions between PlayerBar, NowPlaying and
+  TrackCard surfaces.
+- `AdminRangeSwitch` — segmented control for admin surfaces.
+  Uses `LayoutGroup` + `layoutId` pill indicator (Framer Motion),
+  `MotionPress` per option, `role="tablist"`, `prefers-reduced-motion`
+  aware. Lives in `frontend/src/admin/components/widgets/`.
+
+Motion presets live in `frontend/src/lib/motion.ts`
+(`SPRING_GENTLE/SNAPPY/BOUNCY/LAYOUT`, `TWEEN_FAST/SLOW`, plus
+`VARIANTS_FADE_UP/SCALE_IN/PAGE_SLIDE/SHEET_SLIDE_UP`). The app
+is wrapped in `<LazyMotion features={domAnimation}>` so consumers
+import the lowercase `m` alias instead of `motion` to keep the
+bundle small.
+
+Typography: the redesign keeps the strict monochrome palette but
+swaps the body `font-family` to a system-ui cascade
+(`--font-stack-system` — SF Pro on iOS, Roboto on Android). New
+display-scale tokens `--fs-lt: 34px`, `--fs-tt: 28px` and
+negative letter-spacing tokens (`--ls-display`, `--ls-tight`,
+`--ls-snug`) bring Apple-style large titles.
+
+CSS scaffolding lives in `frontend/src/styles/redesign-shared.css`
+(primitives) plus per-stage placeholders
+(`redesign-player.css`, `redesign-nav.css`, …). All scaffolds are
+imported once from `main.tsx`.
+

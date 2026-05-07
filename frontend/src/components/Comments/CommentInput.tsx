@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 
 const MAX_COMMENT = 1000
 const COUNTER_SHOW = 800
@@ -9,6 +11,7 @@ interface Props {
 }
 
 export function CommentInput({ onSubmit }: Props) {
+  const { t } = useTranslation()
   const [text, setText] = useState('')
   const isOver = text.length > MAX_COMMENT
   const showCount = text.length >= COUNTER_SHOW
@@ -29,7 +32,10 @@ export function CommentInput({ onSubmit }: Props) {
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleSubmit()
           }}
-          placeholder="Написать комментарий..."
+          placeholder={t(
+            'trackSheet.commentPlaceholder',
+            'Написать комментарий...',
+          )}
           maxLength={MAX_COMMENT + 50}
         />
         {showCount && (
@@ -40,13 +46,20 @@ export function CommentInput({ onSubmit }: Props) {
           </span>
         )}
       </div>
-      <button
+      <MotionPress
+        type="button"
+        variant="primary"
+        haptic="medium"
         className="comment-send-btn"
+        ariaLabel={t(
+          'trackSheet.commentSend',
+          'Отправить',
+        )}
         onClick={handleSubmit}
         disabled={!text.trim() || isOver}
       >
         <Icon name="send" size={18} />
-      </button>
+      </MotionPress>
     </div>
   )
 }

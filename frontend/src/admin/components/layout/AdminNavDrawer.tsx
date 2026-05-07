@@ -3,10 +3,10 @@ import {
   useEffect,
   useRef,
 } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useBrandLabel } from '@/lib/brand'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { AdminMenu } from './AdminMenu'
 
 export function AdminNavDrawer({
@@ -21,6 +21,7 @@ export function AdminNavDrawer({
   const { t } = useTranslation()
   const brandLabel = useBrandLabel()
   const { pathname } = useLocation()
+  const navigate = useNavigate()
   const pathRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -73,15 +74,24 @@ export function AdminNavDrawer({
             onClose()
           }}
         />
-        <div className="admin-nav-drawer__foot">
-          <Press
+        <div className="admin-nav-drawer__foot adm-r-nav-drawer-foot">
+          <MotionPress
+            variant="ghost"
+            onClick={() => {
+              onClose()
+              navigate('/admin/profile')
+            }}
+          >
+            {t('redesign.admin.profileTitle')}
+          </MotionPress>
+          <MotionPress
             variant="ghost"
             onClick={() => {
               void onLogout()
             }}
           >
             {t('admin.shell.signOut')}
-          </Press>
+          </MotionPress>
         </div>
       </div>
     </div>

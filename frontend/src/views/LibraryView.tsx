@@ -6,6 +6,8 @@ import { PlaylistsView } from '@/views/PlaylistsView'
 import { OfflineList } from '@/components/Profile/OfflineList'
 import { HistoryList } from '@/components/Profile/HistoryList'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { SPRING_LAYOUT, m } from '@/lib/motion'
 import { hapticSelection } from '@/lib/telegram'
 
 type Tab = 'liked' | 'playlists' | 'offline' | 'history'
@@ -89,41 +91,54 @@ export function LibraryView() {
       id="view-library"
       className="view active"
     >
-      <div style={{ padding: '8px 16px 0' }}>
-        <button
-          className="playlist-card"
-          style={{ width: '100%' }}
+      <div className="rd-lib-top">
+        <MotionPress
+          variant="subtle"
+          haptic="selection"
+          className="rd-lib-daily playlist-card"
           onClick={() => navigate('/daily-mix')}
         >
           <div className="playlist-cover" aria-hidden>
             <Icon name="calendar" size={26} />
           </div>
-          <div style={{ flex: 1, textAlign: 'left' }}>
-            <div style={{ fontWeight: 600, fontSize: 15 }}>
+          <div className="rd-lib-daily__meta">
+            <div className="rd-lib-daily__title">
               {t('home.dayPlaylistTitle')}
             </div>
-            <div
-              className="hint"
-              style={{ fontSize: 12 }}
-            >
+            <div className="rd-lib-daily__hint hint">
               {t('home.dayPlaylistHint')}
             </div>
           </div>
           <Icon name="chevron" size={18} />
-        </button>
+        </MotionPress>
       </div>
 
-      <div className="library-tabs">
-        {TABS.map((row) => (
-          <button
-            key={row.id}
-            type="button"
-            className={`library-tab${tab === row.id ? ' active' : ''}`}
-            onClick={() => handleTab(row.id)}
-          >
-            {t(row.labelKey)}
-          </button>
-        ))}
+      <div className="library-tabs rd-lib-tabs">
+        {TABS.map((row) => {
+          const active = tab === row.id
+          return (
+            <MotionPress
+              key={row.id}
+              type="button"
+              variant="ghost"
+              haptic="selection"
+              data-active={active ? 'true' : 'false'}
+              className={`rd-lib-tab library-tab${active ? ' active' : ''}`}
+              onClick={() => handleTab(row.id)}
+            >
+              {active && (
+                <m.span
+                  className="rd-lib-tab-pill"
+                  layoutId="library-tab-pill"
+                  transition={SPRING_LAYOUT}
+                />
+              )}
+              <span className="rd-lib-tab-label">
+                {t(row.labelKey)}
+              </span>
+            </MotionPress>
+          )
+        })}
       </div>
       <div className="library-content">
         {tab === 'liked' && <LikedView embedded />}

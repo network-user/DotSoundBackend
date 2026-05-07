@@ -101,6 +101,51 @@ export default defineConfig({
             },
           },
           {
+            urlPattern:
+              /\/api\/v1\/tracks\/\d+\/hls\/(?:master|[^/]+\/playlist)\.m3u8/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'hls-manifests-cache',
+              expiration: {
+                maxEntries: 80,
+                maxAgeSeconds: 60 * 60,
+                purgeOnQuotaError: true,
+              },
+            },
+          },
+          {
+            urlPattern: /\/api\/v1\/tracks\/\d+\/hls\/[^/]+\/\d+\.ts/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'hls-segments-cache',
+              expiration: {
+                maxEntries: 240,
+                maxAgeSeconds: 60 * 60 * 24,
+                purgeOnQuotaError: true,
+              },
+              rangeRequests: true,
+              cacheableResponse: {
+                statuses: [200, 206],
+              },
+            },
+          },
+          {
+            urlPattern: /\/api\/v1\/tracks\/\d+\/audio(?:\?.*)?$/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'progressive-audio-cache',
+              expiration: {
+                maxEntries: 24,
+                maxAgeSeconds: 60 * 60 * 24,
+                purgeOnQuotaError: true,
+              },
+              rangeRequests: true,
+              cacheableResponse: {
+                statuses: [200, 206],
+              },
+            },
+          },
+          {
             urlPattern: /^https?:\/\/.*\/api\//,
             handler: 'NetworkFirst',
             options: {

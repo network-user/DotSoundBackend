@@ -113,9 +113,20 @@
 - **.env snippet** — копируется одной кнопкой (без секрета —
   его всё равно надо знать заранее).
 - **Recent events** — последние 100 событий из Redis Stream
-  `worker_events:{id}`. Обновляется каждые 5 сек. Каждое
-  событие имеет цветной pill: green = ок, yellow = warn,
-  red = проблема.
+  `worker_events:{id}`. Пока drawer открыт, список также
+  подписывается на admin WebSocket (`worker_logs` + `worker_id`)
+  с быстрым циклом на сервере; при отсутствии WS остаётся
+  периодический REST‑снимок (каждые 5 с). Каждое событие
+  имеет цветной pill: green = ок, yellow = warn, red = проблема.
+- **Claim pause / drain** — мягкая пауза: Backend перестаёт
+  выдавать новые lease на lyrics ASR и на generic compute для
+  этого воркера до `claims_paused_until` или до **Resume claims**.
+  Отмена running lyrics job из админки ставит токен в heartbeat
+  (`cancel_job_ids`), чтобы воркер по возможности остановился
+  между стадиями пайплайна.
+- **Package version** — из заголовка `X-Worker-Package-Version`
+  на heartbeat; опциональный пол `COMPUTE_WORKER_MIN_PACKAGE_VERSION`
+  в `.env` Backend добавляет в ответ флаг «ниже минимума».
 - **Dangerous actions:**
   - **Rotate secret** — двухшаговое подтверждение.
     После rotate'а старый секрет мгновенно невалиден,

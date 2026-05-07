@@ -7,7 +7,9 @@ import {
   hapticNotification,
 } from '@/lib/telegram'
 import { TrackList } from '@/components/TrackList/TrackList'
-import { useToast } from '@/components/ui/Toast'
+import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { showIsland } from '@/lib/island'
 import { queueMutation } from '@/lib/pendingEvents'
 import type { AuthorProfile, Track, UserStatsResponse } from '@/types/api'
 
@@ -29,7 +31,6 @@ interface Props {
 
 export function AuthorView({ authorId, onClose }: Props) {
   const { t } = useTranslation()
-  const toast = useToast()
   const [author, setAuthor] = useState<AuthorProfile | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [stats, setStats] = useState<UserStatsResponse | null>(null)
@@ -100,11 +101,14 @@ export function AuthorView({ authorId, onClose }: Props) {
       setFollowing(prevFollowing)
       setStats(prevStats)
       hapticNotification('error')
-      const msg = getApiErrorMessage(
-        e,
-        t('artist.follow_failed', 'Не удалось обновить подписку'),
-      )
-      toast.error(msg)
+      showIsland({
+        kind: 'error',
+        title: getApiErrorMessage(
+          e,
+          t('artist.follow_failed', 'Не удалось обновить подписку'),
+        ),
+        durationMs: 4000,
+      })
     }
     setFollowLoading(false)
   }
@@ -115,13 +119,20 @@ export function AuthorView({ authorId, onClose }: Props) {
     <div className="author-view">
       {/* Header */}
       <div className="author-view-header">
-        <button className="author-back-btn icon-btn" onClick={onClose}>
-          ‹ Назад
-        </button>
+        <MotionPress
+          type="button"
+          variant="ghost"
+          haptic="light"
+          className="author-back-btn icon-btn"
+          onClick={onClose}
+        >
+          <Icon name="chevron" size={18} />
+          {t('common.back', { defaultValue: 'Назад' })}
+        </MotionPress>
       </div>
 
       {loading ? (
-        <div className="loader" style={{ marginTop: 48 }} />
+        <div className="loader author-loader" />
       ) : author ? (
         <>
           {/* Hero */}
@@ -134,7 +145,7 @@ export function AuthorView({ authorId, onClose }: Props) {
                   onError={(e) => { e.currentTarget.style.display = 'none' }}
                 />
               ) : (
-                '👤'
+                <Icon name="user" size={28} />
               )}
             </div>
             <h2 className="author-name">
@@ -146,17 +157,28 @@ export function AuthorView({ authorId, onClose }: Props) {
 
             {/* Follow button (hide for own profile) */}
             {!isOwnProfile && internalId && (
-              <button
+              <MotionPress
+                type="button"
+                variant={following ? 'subtle' : 'primary'}
+                haptic="medium"
                 className={`author-follow-btn${following ? ' following' : ''}`}
                 onClick={handleFollow}
                 disabled={followLoading}
               >
+                <Icon
+                  name={following ? 'check' : 'bell'}
+                  size={14}
+                />
                 {followLoading
                   ? '...'
                   : following
-                    ? '✓ Подписан'
-                    : '+ Подписаться'}
-              </button>
+                    ? t('artist.following', {
+                        defaultValue: 'Подписан',
+                      })
+                    : t('artist.follow', {
+                        defaultValue: 'Подписаться',
+                      })}
+              </MotionPress>
             )}
           </div>
 
@@ -165,34 +187,51 @@ export function AuthorView({ authorId, onClose }: Props) {
             <div className="profile-stats">
               <div className="stat-item">
                 <div className="stat-value">{stats.total_tracks}</div>
-                <div className="stat-label">Треков</div>
+                <div className="stat-label">
+                  {t('author.statsTracks', 'Треков')}
+                </div>
               </div>
               <div className="stat-item">
                 <div className="stat-value">{fmtCount(stats.total_plays)}</div>
-                <div className="stat-label">Прослушиваний</div>
+                <div className="stat-label">
+                  {t('author.statsPlays', 'Прослушиваний')}
+                </div>
               </div>
               <div className="stat-item">
                 <div className="stat-value">{fmtCount(stats.followers_count ?? 0)}</div>
-                <div className="stat-label">Подписчиков</div>
+                <div className="stat-label">
+                  {t('author.statsFollowers', 'Подписчиков')}
+                </div>
               </div>
               <div className="stat-item">
                 <div className="stat-value">{fmtCount(stats.total_likes)}</div>
-                <div className="stat-label">Лайков</div>
+                <div className="stat-label">
+                  {t('author.statsLikes', 'Лайков')}
+                </div>
               </div>
             </div>
           )}
 
           {/* Track list */}
-          <div className="section-header" style={{ marginTop: 20 }}>
-            <span className="section-title">Треки · {tracksTotal}</span>
+          <div className="section-header author-section-header">
+            <span className="section-title">
+              {t('author.tracksTitle', 'Треки')} · {tracksTotal}
+            </span>
           </div>
           <TrackList tracks={tracks} />
           {tracks.length === 0 && !loading && (
-            <p className="empty-hint">Нет публичных треков</p>
+            <p className="empty-hint">
+              {t(
+                'author.emptyTracks',
+                'Нет публичных треков',
+              )}
+            </p>
           )}
         </>
       ) : (
-        <p className="empty-hint">Автор не найден</p>
+        <p className="empty-hint">
+          {t('author.notFound', 'Автор не найден')}
+        </p>
       )}
     </div>
   )

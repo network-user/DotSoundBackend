@@ -6,6 +6,12 @@ import {
 } from 'react'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import {
+  showIsland,
+  updateIsland,
+  dismissIsland,
+} from '@/lib/island'
 import { SoundCloudPlaylistUrlModal } from '@/components/Import/SoundCloudPlaylistUrlModal'
 import { SpotifyUrlModal } from '@/components/Import/SpotifyUrlModal'
 import { VkMusicUrlModal } from '@/components/Import/VkMusicUrlModal'
@@ -57,12 +63,72 @@ export function OnboardingImportStep({ onDone }: Props) {
   )
   const [cancelling, setCancelling] = useState(false)
   const pollCountRef = useRef(0)
+  const islandIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     api
       .getOnboardingStatus()
       .then(setStatus)
       .catch(() => setStatus(null))
+  }, [])
+
+  useEffect(() => {
+    if (
+      (flow !== 'queued' && flow !== 'importing') ||
+      !job
+    ) {
+      if (islandIdRef.current) {
+        dismissIsland(islandIdRef.current)
+        islandIdRef.current = null
+      }
+      return
+    }
+    const total = job.total_tracks || 1
+    const done =
+      (job.completed_tracks ?? 0) +
+      (job.failed_tracks ?? 0)
+    const progress = Math.min(1, done / total)
+    const title =
+      flow === 'queued'
+        ? 'Импорт в очереди'
+        : 'Идёт импорт'
+    const hint =
+      flow === 'queued'
+        ? job.queue_position
+          ? `Позиция: ${job.queue_position}`
+          : 'Ждём свободный слот'
+        : `${done} / ${job.total_tracks}`
+    if (islandIdRef.current) {
+      updateIsland(islandIdRef.current, {
+        title,
+        hint,
+        progress,
+      })
+    } else {
+      islandIdRef.current = showIsland({
+        kind: 'progress',
+        title,
+        hint,
+        progress,
+        durationMs: Infinity,
+      })
+    }
+  }, [
+    flow,
+    job?.id,
+    job?.completed_tracks,
+    job?.failed_tracks,
+    job?.total_tracks,
+    job?.queue_position,
+  ])
+
+  useEffect(() => {
+    return () => {
+      if (islandIdRef.current) {
+        dismissIsland(islandIdRef.current)
+        islandIdRef.current = null
+      }
+    }
   }, [])
 
   useEffect(() => {
@@ -372,22 +438,26 @@ export function OnboardingImportStep({ onDone }: Props) {
           </p>
         )}
         <div className="onboarding-import-footer-btns">
-          <button
+          <MotionPress
             type="button"
+            variant="ghost"
+            haptic="light"
             className="onboarding-skip"
             onClick={backToSources}
             disabled={busy}
           >
             К источникам
-          </button>
-          <button
+          </MotionPress>
+          <MotionPress
             type="button"
+            variant="primary"
+            haptic="medium"
             className="onboarding-next"
             onClick={continueAfterImport}
             disabled={busy}
           >
             {busy ? '…' : 'Продолжить к жанрам'}
-          </button>
+          </MotionPress>
         </div>
       </div>
     )
@@ -415,27 +485,29 @@ export function OnboardingImportStep({ onDone }: Props) {
             {err}
           </p>
         )}
-        <div className="onboarding-import-footer-btns" style={{ marginTop: 20 }}>
+        <div className="onboarding-import-footer-btns onboarding-import-footer-btns--stacked">
           {hasImportedTracks && (
-            <button
+            <MotionPress
               type="button"
-              className="btn-secondary"
-              style={{ maxWidth: '100%', width: '100%' }}
+              variant="ghost"
+              haptic="light"
+              className="btn-secondary onboarding-import-btn-full"
               onClick={continueAfterImport}
               disabled={busy}
             >
               {busy ? '…' : 'Слушать уже готовые треки'}
-            </button>
+            </MotionPress>
           )}
-          <button
+          <MotionPress
             type="button"
-            className="onboarding-next"
-            style={{ maxWidth: '100%', width: '100%' }}
+            variant="primary"
+            haptic="medium"
+            className="onboarding-next onboarding-import-btn-full"
             onClick={continueAfterImport}
             disabled={busy}
           >
             {busy ? '…' : 'Продолжить к жанрам'}
-          </button>
+          </MotionPress>
         </div>
       </div>
     )
@@ -463,28 +535,33 @@ export function OnboardingImportStep({ onDone }: Props) {
           </p>
 
           <div className="import-select-actions">
-            <button
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="light"
               className="btn-secondary"
               onClick={selectAll}
             >
               Все
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="light"
               className="btn-secondary"
               onClick={deselectAll}
             >
               Снять
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
               type="button"
-              className="btn-secondary"
+              variant="ghost"
+              haptic="light"
+              className="btn-secondary onboarding-import-cancel-push"
               onClick={() => setCancelConfirmOpen(true)}
-              style={{ marginLeft: 'auto' }}
             >
               Отмена
-            </button>
+            </MotionPress>
           </div>
 
           <div className="import-track-list">
@@ -532,18 +609,19 @@ export function OnboardingImportStep({ onDone }: Props) {
             })}
           </div>
 
-          <div style={{ padding: '8px 0 0' }}>
-            <button
+          <div className="onboarding-import-select-cta-wrap">
+            <MotionPress
               type="button"
-              className="onboarding-next"
-              style={{ width: '100%' }}
+              variant="primary"
+              haptic="medium"
+              className="onboarding-next onboarding-import-select-cta"
               disabled={selected.size === 0 || busy}
               onClick={handleStartImport}
             >
               {busy
                 ? '…'
                 : `Импорт (${selected.size})`}
-            </button>
+            </MotionPress>
           </div>
         </div>
         {cancelConfirmOpen && (
@@ -566,27 +644,27 @@ export function OnboardingImportStep({ onDone }: Props) {
                 &nbsp;источника
                 {'.'}
               </p>
-              <div
-                style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
-              >
-                <button
+              <div className="onboarding-import-confirm-row">
+                <MotionPress
                   type="button"
-                  className="btn-secondary"
+                  variant="ghost"
+                  haptic="light"
+                  className="btn-secondary onboarding-import-confirm-btn"
                   onClick={() => setCancelConfirmOpen(false)}
                   disabled={cancelling}
-                  style={{ flex: 1 }}
                 >
                   Нет
-                </button>
-                <button
+                </MotionPress>
+                <MotionPress
                   type="button"
-                  className="btn-primary"
+                  variant="primary"
+                  haptic="medium"
+                  className="btn-primary onboarding-import-confirm-btn"
                   onClick={backToSources}
                   disabled={cancelling}
-                  style={{ flex: 1 }}
                 >
                   К источникам
-                </button>
+                </MotionPress>
               </div>
             </div>
           </div>
@@ -627,37 +705,36 @@ export function OnboardingImportStep({ onDone }: Props) {
             >
               <div className="loader" style={{ margin: 0 }} />
             </div>
-            <button
+            <MotionPress
               type="button"
-              className="btn-secondary"
-              style={{ width: '100%' }}
+              variant="ghost"
+              haptic="light"
+              className="btn-secondary onboarding-import-btn-full"
               onClick={() => setCancelConfirmOpen(true)}
             >
               Отменить
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
               type="button"
-              className="onboarding-skip"
-              style={{
-                width: '100%',
-                marginTop: 8,
-                border: 0,
-              }}
+              variant="ghost"
+              haptic="light"
+              className="onboarding-skip onboarding-import-btn-full onboarding-import-action-spaced onboarding-import-skip-flat"
               onClick={continueAfterImport}
               disabled={busy}
             >
               К жанрам, импорт пойдёт в фоне
-            </button>
+            </MotionPress>
             {hasImportedTracks && (
-              <button
+              <MotionPress
                 type="button"
-                className="btn-secondary"
-                style={{ width: '100%', marginTop: 8 }}
+                variant="ghost"
+                haptic="light"
+                className="btn-secondary onboarding-import-btn-full onboarding-import-action-spaced"
                 onClick={continueAfterImport}
                 disabled={busy}
               >
                 {busy ? '…' : 'Слушать уже готовые треки'}
-              </button>
+              </MotionPress>
             )}
           </div>
         )}
@@ -715,37 +792,36 @@ export function OnboardingImportStep({ onDone }: Props) {
               &nbsp;панели
               {'. '}
             </p>
-            <button
+            <MotionPress
               type="button"
-              className="btn-secondary"
-              style={{ width: '100%', marginTop: 8 }}
+              variant="ghost"
+              haptic="light"
+              className="btn-secondary onboarding-import-btn-full onboarding-import-action-spaced"
               onClick={() => setCancelConfirmOpen(true)}
             >
               Отменить импорт
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
               type="button"
-              className="onboarding-skip"
-              style={{
-                width: '100%',
-                marginTop: 8,
-                border: 0,
-              }}
+              variant="ghost"
+              haptic="light"
+              className="onboarding-skip onboarding-import-btn-full onboarding-import-action-spaced onboarding-import-skip-flat"
               onClick={continueAfterImport}
               disabled={busy}
             >
               К жанрам, импорт пойдёт в фоне
-            </button>
+            </MotionPress>
             {hasImportedTracks && (
-              <button
+              <MotionPress
                 type="button"
-                className="btn-secondary"
-                style={{ width: '100%', marginTop: 8 }}
+                variant="ghost"
+                haptic="light"
+                className="btn-secondary onboarding-import-btn-full onboarding-import-action-spaced"
                 onClick={continueAfterImport}
                 disabled={busy}
               >
                 {busy ? '…' : 'Слушать уже готовые треки'}
-              </button>
+              </MotionPress>
             )}
           </div>
         )}
@@ -771,27 +847,27 @@ export function OnboardingImportStep({ onDone }: Props) {
                 &nbsp;сброшен
                 {'. '}
               </p>
-              <div
-                style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
-              >
-                <button
+              <div className="onboarding-import-confirm-row">
+                <MotionPress
                   type="button"
-                  className="btn-secondary"
+                  variant="ghost"
+                  haptic="light"
+                  className="btn-secondary onboarding-import-confirm-btn"
                   onClick={() => setCancelConfirmOpen(false)}
                   disabled={cancelling}
-                  style={{ flex: 1 }}
                 >
                   Продолжить
-                </button>
-                <button
+                </MotionPress>
+                <MotionPress
                   type="button"
-                  className="btn-primary"
+                  variant="primary"
+                  haptic="medium"
+                  className="btn-primary onboarding-import-confirm-btn"
                   onClick={handleCancelConfirm}
                   disabled={cancelling}
-                  style={{ flex: 1 }}
                 >
                   {cancelling ? '…' : 'Отменить'}
-                </button>
+                </MotionPress>
               </div>
             </div>
           </div>
@@ -851,8 +927,10 @@ export function OnboardingImportStep({ onDone }: Props) {
 
       <div className="onboarding-import-cards">
         {showTg && (
-          <button
+          <MotionPress
             type="button"
+            variant="subtle"
+            haptic="light"
             className="onboarding-import-card"
             onClick={onTelegram}
             disabled={busy}
@@ -862,11 +940,13 @@ export function OnboardingImportStep({ onDone }: Props) {
             </span>
             <span className="onboarding-import-card-title">Telegram</span>
             <span className="hint">Аудио из вашего профиля</span>
-          </button>
+          </MotionPress>
         )}
 
-        <button
+        <MotionPress
           type="button"
+          variant="subtle"
+          haptic="light"
           className="onboarding-import-card"
           onClick={() => setYandexOpen(true)}
           disabled={busy}
@@ -878,10 +958,12 @@ export function OnboardingImportStep({ onDone }: Props) {
             Яндекс.Музыка
           </span>
           <span className="hint">Ссылка на плейлист или альбом</span>
-        </button>
+        </MotionPress>
 
-        <button
+        <MotionPress
           type="button"
+          variant="subtle"
+          haptic="light"
           className="onboarding-import-card"
           disabled={true}
         >
@@ -890,10 +972,12 @@ export function OnboardingImportStep({ onDone }: Props) {
           </span>
           <span className="onboarding-import-card-title">VK Музыка</span>
           <span className="hint">Временно недоступно</span>
-        </button>
+        </MotionPress>
 
-        <button
+        <MotionPress
           type="button"
+          variant="subtle"
+          haptic="light"
           className="onboarding-import-card"
           onClick={() => setImportMethod('spotify')}
           disabled={busy}
@@ -903,10 +987,12 @@ export function OnboardingImportStep({ onDone }: Props) {
           </span>
           <span className="onboarding-import-card-title">Spotify</span>
           <span className="hint">Ссылка или вход в аккаунт</span>
-        </button>
+        </MotionPress>
 
-        <button
+        <MotionPress
           type="button"
+          variant="subtle"
+          haptic="light"
           className="onboarding-import-card"
           onClick={() => setScOpen(true)}
           disabled={busy}
@@ -916,26 +1002,30 @@ export function OnboardingImportStep({ onDone }: Props) {
           </span>
           <span className="onboarding-import-card-title">SoundCloud</span>
           <span className="hint">Публичный плейлист (/sets/)</span>
-        </button>
+        </MotionPress>
       </div>
 
       <div className="onboarding-import-footer-btns">
-        <button
+        <MotionPress
           type="button"
+          variant="ghost"
+          haptic="light"
           className="onboarding-skip"
           onClick={finish}
           disabled={busy}
         >
           Позже
-        </button>
-        <button
+        </MotionPress>
+        <MotionPress
           type="button"
+          variant="primary"
+          haptic="medium"
           className="onboarding-next"
           onClick={finish}
           disabled={busy}
         >
           {busy ? '…' : 'Далее к жанрам'}
-        </button>
+        </MotionPress>
       </div>
 
       <YandexMusicUrlModal

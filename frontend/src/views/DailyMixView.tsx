@@ -3,17 +3,32 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { Icon } from '@/components/Icon/Icon'
-import { useToast } from '@/components/ui/Toast'
-import { api } from '@/lib/api'
+import { AmbientStage } from '@/components/ui/AmbientStage'
+import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { showIsland } from '@/lib/island'
+import { api, getApiErrorMessage } from '@/lib/api'
+import { VARIANTS_FADE_UP, m } from '@/lib/motion'
+import {
+  usePlayerActions,
+  usePlayerMeta,
+} from '@/store/PlayerContext'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type {
   ChatListItem,
   DailyPlaylistResponse,
 } from '@/types/api'
 
+function mixCoverUrl(key: string | null): string | null {
+  if (!key) return null
+  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+}
+
 export function DailyMixView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const toast = useToast()
+  const { playTrack, toggleShuffle } = usePlayerActions()
+  const { shuffleOn } = usePlayerMeta()
   const [data, setData] = useState<DailyPlaylistResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -56,6 +71,8 @@ export function DailyMixView() {
   const internalTracks = loading ? null : (data?.internal_tracks ?? [])
   const externalTracks = data?.external_tracks ?? []
 
+  usePrefetchTracks(internalTracks ?? null, 'daily_mix')
+
   const formatShareChatTitle = useCallback((item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {
       return 'Избранное'
@@ -92,24 +109,47 @@ export function DailyMixView() {
     try {
       await api.sendMessage(conversationId, shareUrl)
       setShareOpen(false)
-      toast.success('Ссылка отправлена')
+      showIsland({ kind: 'toast', title: t('redesign.library.shareLinkSent'), durationMs: 2200 })
     } catch {
       setShareError('Не удалось отправить')
     } finally {
       setShareSendingConvId(null)
     }
-  }, [shareUrl, toast])
+  }, [shareUrl, t])
 
   const handleCopyLink = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(shareUrl)
-      toast.success('Ссылка скопирована', {
-        position: 'top',
-      })
+      showIsland({ kind: 'toast', title: t('redesign.library.shareLinkCopied'), durationMs: 2000 })
     } catch {
       setShareError('Не удалось скопировать ссылку')
     }
-  }, [shareUrl, toast])
+  }, [shareUrl, t])
+
+  const playList = internalTracks ?? []
+  const heroArt = playList[0]
+  const heroUrl = heroArt ? mixCoverUrl(heroArt.cover_key) : null
+
+  const handlePlayAll = useCallback(async () => {
+    if (!playList.length) return
+    try {
+      await playTrack(playList[0])
+    } catch (e) {
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
+    }
+  }, [playList, playTrack, t])
+
+  const handleShufflePlay = useCallback(async () => {
+    if (!playList.length) return
+    try {
+      if (!shuffleOn) toggleShuffle()
+      const pick =
+        playList[Math.floor(Math.random() * playList.length)]
+      await playTrack(pick)
+    } catch (e) {
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
+    }
+  }, [playList, playTrack, shuffleOn, toggleShuffle, t])
 
   return (
     <section className="view active">
@@ -144,10 +184,51 @@ export function DailyMixView() {
         </button>
       </div>
 
-      <TrackList
-        tracks={internalTracks}
-        emptyMessage={t('dailyMix.empty')}
-      />
+      {!loading && heroUrl && (
+        <AmbientStage
+          coverUrl={heroUrl}
+          className="rh-mix-hero"
+        >
+          <div className="rh-mix-hero__inner">
+            <div>
+              <h1 className="rh-mix-hero__title">{t('dailyMix.title')}</h1>
+              <p className="rh-mix-hero__hint">{t('dailyMix.hint')}</p>
+              <div className="rh-mix-actions">
+                <MotionPress
+                  variant="primary"
+                  onClick={() => {
+                    void handlePlayAll()
+                  }}
+                >
+                  {t('redesign.home.mixPlayAll')}
+                </MotionPress>
+                <MotionPress
+                  variant="ghost"
+                  onClick={() => {
+                    void handleShufflePlay()
+                  }}
+                >
+                  {t('redesign.home.mixShuffle')}
+                </MotionPress>
+              </div>
+            </div>
+            <div className="rh-mix-hero__cover">
+              <KenBurnsCover src={heroUrl} alt="" />
+            </div>
+          </div>
+        </AmbientStage>
+      )}
+
+      <m.div
+        initial="hidden"
+        animate="visible"
+        variants={VARIANTS_FADE_UP}
+      >
+        <TrackList
+          tracks={internalTracks}
+          emptyMessage={t('dailyMix.empty')}
+        />
+      </m.div>
 
       {!loading && externalTracks.length > 0 && (
         <>

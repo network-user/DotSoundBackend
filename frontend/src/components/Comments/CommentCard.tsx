@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import type { TrackComment } from '@/types/api'
 
 interface Props {
@@ -50,48 +51,58 @@ export function CommentCard({
         </span>
         <div className="comment-header-actions">
           {onReply && (
-            <button
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="light"
               className="comment-reply-link"
               onClick={onReply}
             >
               {t('trackSheet.replyAction')}
-            </button>
+            </MotionPress>
           )}
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
             className="comment-menu-btn"
             onClick={() => setShowMenu(!showMenu)}
-            type="button"
           >
             <Icon name="info" size={14} />
-          </button>
+          </MotionPress>
         </div>
       </div>
       <p className="comment-text" dir="auto">{comment.text}</p>
       <div className="comment-actions">
-        <button
-          className="comment-vote-btn"
+        <MotionPress
           type="button"
+          variant="ghost"
+          haptic="selection"
+          className="comment-vote-btn"
           onClick={() => onVote(comment.id, true)}
         >
           <Icon name="thumbs-up" size={14} />
           <span className="vote-count">{comment.likes}</span>
-        </button>
-        <button
-          className="comment-vote-btn"
+        </MotionPress>
+        <MotionPress
           type="button"
+          variant="ghost"
+          haptic="selection"
+          className="comment-vote-btn"
           onClick={() => onVote(comment.id, false)}
         >
           <Icon name="thumbs-down" size={14} />
           <span className="vote-count">{comment.dislikes}</span>
-        </button>
+        </MotionPress>
       </div>
 
       {showMenu && (
         <div className="comment-context-menu scale-in">
           {(isMine || isOwner) && (
-            <button
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="medium"
               onClick={() => {
                 onDelete(comment.id)
                 setShowMenu(false)
@@ -99,11 +110,13 @@ export function CommentCard({
             >
               <Icon name="trash" size={14} />{' '}
               {t('trackSheet.commentDelete')}
-            </button>
+            </MotionPress>
           )}
           {isOwner && isRootComment && (
-            <button
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="light"
               onClick={() => {
                 onPin(comment.id, comment.is_pinned)
                 setShowMenu(false)
@@ -113,11 +126,13 @@ export function CommentCard({
               {comment.is_pinned
                 ? t('trackSheet.commentUnpin')
                 : t('trackSheet.commentPin')}
-            </button>
+            </MotionPress>
           )}
           {isOwner && (
-            <button
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="light"
               onClick={() => {
                 onHide(comment.id)
                 setShowMenu(false)
@@ -125,10 +140,12 @@ export function CommentCard({
             >
               <Icon name="eye" size={14} />{' '}
               {t('trackSheet.commentHideAll')}
-            </button>
+            </MotionPress>
           )}
-          <button
+          <MotionPress
             type="button"
+            variant="ghost"
+            haptic="light"
             onClick={() => {
               onHideForMe(comment.id)
               setShowMenu(false)
@@ -136,7 +153,7 @@ export function CommentCard({
           >
             <Icon name="eye" size={14} />{' '}
             {t('trackSheet.commentHideSelf')}
-          </button>
+          </MotionPress>
         </div>
       )}
     </div>

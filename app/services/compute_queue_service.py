@@ -27,6 +27,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.compute_job import ComputeJob
+from app.models.compute_worker import ComputeWorker
+from app.services.worker_job_control import worker_claims_blocked
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__
@@ -206,6 +208,18 @@ async def claim_next(
     if not job_types:
         return None
     now = _now()
+    cw = (
+        await session.execute(
+            select(ComputeWorker).where(
+                ComputeWorker.id == worker_id,
+            ),
+        )
+    ).scalar_one_or_none()
+    if cw is None or cw.revoked_at is not None:
+        return None
+    if worker_claims_blocked(cw, now=now):
+        return None
+
     select_stmt = (
         select(ComputeJob.id)
         .where(

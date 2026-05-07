@@ -24,13 +24,14 @@ import { TrackInfoContent } from '@/components/TrackInfoContent/TrackInfoContent
 import { Waveform } from '@/components/Waveform/Waveform'
 import { WaveformBar } from '@/components/Waveform/WaveformBar'
 import { useExitTransition } from '@/hooks/useExitTransition'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import {
   downloadTrack,
   isCached,
   removeTrack,
 } from '@/lib/offlineCache'
 import { useSound } from '@/store/SoundContext'
+import { usePrefetchTracks } from '@/store/PrefetchContext'
 import {
   clearThirdPartyStreamOverride,
   getThirdPartyStreamOverride,
@@ -46,7 +47,15 @@ import type {
   TrackPlaybackVariantBrief,
 } from '@/types/api'
 import { CommentSection } from '@/components/Comments/CommentSection'
+import { AmbientStage } from '@/components/ui/AmbientStage'
+import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
+import { m, useReducedMotion } from '@/lib/motion'
+import { type PanInfo } from 'framer-motion'
 import { LyricsPanel } from './LyricsPanel'
+
+const TCS_DRAG_CLOSE_THRESHOLD = 100
 
 const SPEED_OPTIONS = [0.75, 1, 1.25, 1.5]
 
@@ -132,9 +141,18 @@ export function TrackCardSheet({
     cancelSleepTimer,
   } = usePlayerActions()
   const { t } = useTranslation()
-  const toast = useToast()
+  const reduce = useReducedMotion()
   const sound = useSound()
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  const handleSheetDragEnd = useCallback(
+    (_: unknown, info: PanInfo) => {
+      if (info.offset.y > TCS_DRAG_CLOSE_THRESHOLD) {
+        closeCard()
+      }
+    },
+    [closeCard],
+  )
   const {
     isLiked,
     toggleLike,
@@ -153,6 +171,7 @@ export function TrackCardSheet({
   const [showEdit, setShowEdit] = useState(false)
   const [similarTracks, setSimilarTracks] =
     useState<Track[]>([])
+  usePrefetchTracks(similarTracks, 'similar_in_card')
   const [authorAvatarUrl, setAuthorAvatarUrl] =
     useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -473,7 +492,7 @@ export function TrackCardSheet({
 
   const formatShareChatTitle = useCallback((item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {
-      return 'Избранное'
+      return t('redesign.chats.savedTitle')
     }
     if (item.conversation.title?.trim()) {
       return item.conversation.title.trim()
@@ -489,8 +508,10 @@ export function TrackCardSheet({
     if (peer?.username) {
       return `@${peer.username}`
     }
-    return `Чат #${item.conversation.id}`
-  }, [])
+    return t('redesign.chats.chatNumber', {
+      id: item.conversation.id,
+    })
+  }, [t])
 
   const openShareModal = useCallback(async (payload: {
     id: number
@@ -539,14 +560,18 @@ export function TrackCardSheet({
       await api.sendMessage(conversationId, '', opts)
       setShareOpen(false)
       sound.play('notificationSuccess')
-      toast.success('Отправлено')
+      showIsland({
+        kind: 'toast',
+        title: t('trackSheet.shareSent'),
+        durationMs: 2200,
+      })
     } catch {
       setShareError('Не удалось отправить')
       sound.play('notificationError')
     } finally {
       setShareSendingConvId(null)
     }
-  }, [sharePayload, toast, sound])
+  }, [sharePayload, sound])
 
   const handleCopyShare = useCallback(async () => {
     if (!sharePayload) return
@@ -563,8 +588,10 @@ export function TrackCardSheet({
         await navigator.clipboard.writeText(`${base}${path}`)
       }
       sound.play('notificationInfo')
-      toast.success('Ссылка скопирована', {
-        position: 'top',
+      showIsland({
+        kind: 'toast',
+        title: t('trackSheet.linkCopied'),
+        durationMs: 2000,
       })
     } catch {
       setShareError('Не удалось скопировать')
@@ -572,7 +599,7 @@ export function TrackCardSheet({
     } finally {
       setShareCopyBusy(false)
     }
-  }, [sharePayload, toast, sound])
+  }, [sharePayload, sound])
 
   const openAlbumEditor = useCallback(async () => {
     const albumId = relatedAlbumInfo?.id ?? track?.album_id ?? null
@@ -605,11 +632,15 @@ export function TrackCardSheet({
       )
       setAlbumEditOpen(true)
     } catch {
-      toast.error('Не удалось открыть редактор альбома')
+      showIsland({
+        kind: 'error',
+        title: t('trackSheet.albumEditorError'),
+        durationMs: 4000,
+      })
     } finally {
       setAlbumEditBusy(false)
     }
-  }, [relatedAlbumInfo?.id, track?.album_id, isAdmin, debugMode, track?.uploaded_by_id, toast])
+  }, [relatedAlbumInfo?.id, track?.album_id, isAdmin, debugMode, track?.uploaded_by_id, t])
 
   const refreshAlbumEditor = useCallback(async () => {
     if (!albumEditData) return
@@ -879,7 +910,11 @@ export function TrackCardSheet({
       await removeTrack(track.id)
       setDownloadState('idle')
       setDownloadPct(0)
-      toast.info(t('trackSheet.removedFromDownloads'))
+      showIsland({
+        kind: 'toast',
+        title: t('trackSheet.removedFromDownloads'),
+        durationMs: 2200,
+      })
       return
     }
     setDownloadState('downloading')
@@ -894,16 +929,18 @@ export function TrackCardSheet({
       })
       setDownloadState('cached')
       hapticNotification('success')
-      toast.success(
-        t('trackSheet.offlineReady'),
-      )
+      showIsland({
+        kind: 'toast',
+        title: t('trackSheet.offlineReady'),
+        durationMs: 2400,
+      })
     } catch (e) {
       setDownloadState('idle')
       const msg =
         e instanceof Error
           ? e.message
           : t('trackSheet.downloadError')
-      toast.error(msg)
+      showIsland({ kind: 'error', title: msg, durationMs: 4000 })
     }
   }
 
@@ -944,18 +981,30 @@ export function TrackCardSheet({
       className={`tcs-backdrop${exit.cls}`}
       onClick={handleBackdrop}
     >
-      <div
-        className={`tcs-sheet${hasActiveVideo ? ' tcs-video-mode' : ''}${exit.cls}`}
+      <m.div
+        className={`tcs-sheet re-tcs-sheet${hasActiveVideo ? ' tcs-video-mode' : ''}${exit.cls}`}
         ref={sheetRef}
+        drag={reduce ? false : 'y'}
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={0.18}
+        dragMomentum={false}
+        onDragEnd={handleSheetDragEnd}
       >
-        <div className="tcs-handle" />
-        <button
+        <div
+          className="tcs-handle re-tcs-handle"
+          aria-label={t('redesign.tracks.tcsCloseAria')}
+          aria-hidden="true"
+        />
+        <MotionPress
+          type="button"
+          variant="icon"
           className="tcs-close"
+          ariaLabel={t('trackSheet.close')}
+          haptic="light"
           onClick={closeCard}
-          aria-label={t('trackSheet.close')}
         >
           <Icon name="x" size={22} />
-        </button>
+        </MotionPress>
 
         <div
           key={track.id}
@@ -995,9 +1044,11 @@ export function TrackCardSheet({
                       await v.requestPictureInPicture()
                     }
                   } catch {
-                    toast.warning(
-                      t('trackSheet.pipUnavailable'),
-                    )
+                    showIsland({
+                      kind: 'toast',
+                      title: t('trackSheet.pipUnavailable'),
+                      durationMs: 3000,
+                    })
                   }
                 }}
                 aria-label={t('trackSheet.pipAria')}
@@ -1026,19 +1077,33 @@ export function TrackCardSheet({
           )}
 
         {!hasActiveVideo && !showLyrics && (
-          <div className="tcs-cover-wrap">
+          <div className="tcs-cover-wrap re-tcs-wrap">
             {coverBusy && (
               <div className="tcs-cover-loading">
                 <div className="loader" />
               </div>
             )}
             {coverSrc && !coverFailed ? (
-              <img
-                className="tcs-cover"
-                src={coverSrc}
-                alt=""
-                onError={() => setCoverFailed(true)}
-              />
+              <div className="re-tcs-cover-stack">
+                <AmbientStage
+                  coverUrl={coverSrc}
+                  className="re-tcs-ambient"
+                >
+                  <KenBurnsCover
+                    src={coverSrc}
+                    alt=""
+                    duration={20}
+                    className="re-tcs-kb"
+                  />
+                </AmbientStage>
+                <img
+                  src={coverSrc}
+                  alt=""
+                  className="re-tcs-cover-probe"
+                  onError={() => setCoverFailed(true)}
+                  aria-hidden
+                />
+              </div>
             ) : (
               <div className="tcs-cover-placeholder">
                 <Icon name="music" size={72} />
@@ -1333,95 +1398,107 @@ export function TrackCardSheet({
             </div>
           </div>
           <div className="tcs-play-row">
-            <button
+            <MotionPress
+              type="button"
+              variant="icon"
               className="ctrl-btn"
+              ariaLabel={t('trackSheet.seekBack')}
+              haptic="light"
               onClick={() => skipBackward(15)}
-              aria-label={t('trackSheet.seekBack')}
-              title={t('trackSheet.seekBackTitle')}
             >
-              <Icon
-                name="rewind-5"
-                size={22}
-              />
-            </button>
-            <button
+              <Icon name="rewind-5" size={22} />
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="icon"
               className="ctrl-btn"
+              ariaLabel={t('redesign.player.prevAria')}
+              haptic="light"
               onClick={playPrev}
             >
-              <Icon
-                name="skip-back"
-                size={22}
-              />
-            </button>
-            <button
-              className={`play-btn${
+              <Icon name="skip-back" size={22} />
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="primary"
+              className={`play-btn re-tcs-play${
                 isPlaying ? ' play-btn--playing' : ''
               }`}
+              ariaLabel={
+                isPlaying
+                  ? t('redesign.player.pauseAria')
+                  : t('redesign.player.playAria')
+              }
+              haptic="medium"
               onClick={togglePlay}
             >
-              <Icon
-                name={
-                  isPlaying ? 'pause' : 'play'
-                }
+              <MorphIcon
+                name={isPlaying ? 'pause' : 'play'}
                 size={20}
+                filled
               />
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="icon"
               className="ctrl-btn"
+              ariaLabel={t('redesign.player.nextAria')}
+              haptic="light"
               onClick={playNext}
             >
-              <Icon
-                name="skip-forward"
-                size={22}
-              />
-            </button>
-            <button
+              <Icon name="skip-forward" size={22} />
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="icon"
               className="ctrl-btn"
+              ariaLabel={t('trackSheet.seekForward')}
+              haptic="light"
               onClick={() => skipForward(15)}
-              aria-label={t('trackSheet.seekForward')}
-              title={t('trackSheet.seekForwardTitle')}
             >
-              <Icon
-                name="forward-5"
-                size={22}
-              />
-            </button>
+              <Icon name="forward-5" size={22} />
+            </MotionPress>
           </div>
         </div>
 
         <div
           className={`tcs-actions${editingLyrics ? ' tcs-dimmed' : ''}`}
         >
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
             className={`tcs-action-btn${liked ? ' active' : ''}`}
+            haptic={liked ? 'light' : 'medium'}
             onClick={() => toggleLike(track.id)}
           >
-            <Icon
-              name={
-                liked ? 'heart' : 'heart-outline'
-              }
+            <MorphIcon
+              name="heart"
               size={20}
+              filled={liked}
             />
             <span className="tcs-action-label">
               {t('trackSheet.like')}
             </span>
-          </button>
+          </MotionPress>
 
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
             className={`tcs-action-btn${disliked ? ' active' : ''}`}
-            onClick={() =>
-              toggleDislike(track.id)
-            }
+            haptic="light"
+            onClick={() => toggleDislike(track.id)}
           >
-            <Icon
-              name="thumbs-down"
-              size={20}
-            />
+            <Icon name="thumbs-down" size={20} />
             <span className="tcs-action-label">
               {t('trackSheet.dislike')}
             </span>
-          </button>
+          </MotionPress>
 
+<<<<<<< HEAD
+          <MotionPress
+            type="button"
+            variant="ghost"
+=======
           <button
             className={`tcs-action-btn${extrasOpen ? ' active' : ''}`}
             onClick={() =>
@@ -1440,21 +1517,28 @@ export function TrackCardSheet({
           </button>
 
           <button
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
             className={`tcs-action-btn${showLyrics ? ' active' : ''}`}
+            haptic="light"
+            disabled={
+              !card?.has_lyrics && !isOwner && !canEditUi
+            }
             onClick={() => {
               setShowLyrics((v) => !v)
               setEditingLyrics(false)
             }}
-            disabled={
-              !card?.has_lyrics && !isOwner && !canEditUi
-            }
           >
             <Icon name="text" size={20} />
             <span className="tcs-action-label">
               {t('trackSheet.lyrics')}
             </span>
-          </button>
+          </MotionPress>
 
+<<<<<<< HEAD
+          <MotionPress
+            type="button"
+            variant="ghost"
+=======
           <button
             className={`tcs-action-btn${showTrackInfo ? ' active' : ''}`}
             onClick={() =>
@@ -1469,9 +1553,11 @@ export function TrackCardSheet({
           </button>
 
           <button
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
             className={`tcs-action-btn${downloadState === 'cached' ? ' active' : ''}`}
-            onClick={handleDownload}
+            haptic="light"
             disabled={downloadState === 'downloading'}
+            onClick={handleDownload}
           >
             <Icon
               name={
@@ -1488,43 +1574,49 @@ export function TrackCardSheet({
                   ? `${downloadPct}%`
                   : t('trackSheet.download')}
             </span>
-          </button>
+          </MotionPress>
 
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
             className="tcs-action-btn"
-            onClick={handleAuthor}
+            haptic="light"
             disabled={!track?.artist && !card?.author}
+            onClick={handleAuthor}
           >
             <Icon name="user" size={20} />
             <span className="tcs-action-label">
               {t('trackSheet.toAuthor')}
             </span>
-          </button>
+          </MotionPress>
 
           {canEditUi && (
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
               className={`tcs-action-btn${showEdit ? ' active' : ''}`}
-              onClick={() =>
-                setShowEdit((v) => !v)
-              }
+              haptic="light"
+              onClick={() => setShowEdit((v) => !v)}
             >
               <Icon name="edit" size={20} />
               <span className="tcs-action-label">
                 {t('trackSheet.edit')}
               </span>
-            </button>
+            </MotionPress>
           )}
 
-
-          <button
+          <MotionPress
+            type="button"
+            variant="ghost"
             className="tcs-action-btn"
+            haptic="light"
             onClick={openComplaint}
           >
             <Icon name="flag" size={20} />
             <span className="tcs-action-label">
               {t('trackSheet.complaint')}
             </span>
-          </button>
+          </MotionPress>
         </div>
 
         {extrasOpen && (
@@ -1856,7 +1948,11 @@ export function TrackCardSheet({
                       const full = await api.getTrack(v.track_id)
                       playTrack(full)
                     } catch {
-                      toast.error(t('trackSheet.sourceSwitchError', 'Не удалось переключить'))
+                      showIsland({
+                        kind: 'error',
+                        title: t('trackSheet.sourceSwitchError'),
+                        durationMs: 3500,
+                      })
                     }
                   }}
                 >
@@ -1918,11 +2014,11 @@ export function TrackCardSheet({
                     if (
                       !/^https?:\/\//i.test(u)
                     ) {
-                      toast.error(
-                        t(
-                          'trackSheet.streamDebugInvalid',
-                        ),
-                      )
+                      showIsland({
+                        kind: 'error',
+                        title: t('trackSheet.streamDebugInvalid'),
+                        durationMs: 3500,
+                      })
                       return
                     }
                     setThirdPartyStreamOverride(
@@ -2365,7 +2461,7 @@ export function TrackCardSheet({
             <div className="loader" />
           </div>
         )}
-      </div>
+      </m.div>
     </div>
   )
 }

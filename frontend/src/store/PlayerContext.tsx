@@ -11,7 +11,8 @@ import {
 import Hls from 'hls.js'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
+import i18n from '@/lib/i18n'
 import {
   getCachedAudioUrl,
   trackProgressiveAudioUrl,
@@ -22,6 +23,7 @@ import {
   inferStreamTypeFromUrl,
 } from '@/lib/streamDebugOverride'
 import { isBenignPlayError, safePlay } from '@/lib/safePlay'
+import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
 import type { Track } from '@/types/api'
 
 const EQ_FREQUENCIES = [
@@ -435,7 +437,6 @@ export function PlayerProvider({
 }: {
   children: ReactNode
 }) {
-  const toast = useToast()
   const initialEqRef = useRef(_loadEqState())
   const audioRef = useRef<HTMLAudioElement>(null)
   const hlsRef = useRef<Hls | null>(null)
@@ -1097,12 +1098,14 @@ export function PlayerProvider({
           a,
           t,
         ).catch((err) =>
-          toast.error(
-            getApiErrorMessage(
+          showIsland({
+            kind: 'error',
+            title: getApiErrorMessage(
               err,
-              'Ошибка воспроизведения трека',
+              i18n.t('redesign.playerErrors.playback'),
             ),
-          ),
+            durationMs: 4000,
+          }),
         )
         return
       }
@@ -1133,22 +1136,30 @@ export function PlayerProvider({
               }
             })
             .catch((err) =>
-              toast.error(
-                getApiErrorMessage(
+              showIsland({
+                kind: 'error',
+                title: getApiErrorMessage(
                   err,
-                  'Не удалось обновить ссылку на трек',
+                  i18n.t('redesign.playerErrors.refreshUrl'),
                 ),
-              ),
+                durationMs: 4000,
+              }),
             )
           return
         }
       }
-      toast.error('Ошибка воспроизведения трека')
+      showIsland({
+        kind: 'error',
+        title: i18n.t('redesign.playerErrors.playback'),
+        durationMs: 4000,
+      })
     }
     const onStalled = () => {
       try {
-        toast.warning('Буферизация…', {
-          duration: 1800,
+        showIsland({
+          kind: 'toast',
+          title: i18n.t('redesign.playerErrors.buffering'),
+          durationMs: 1800,
         })
       } catch {
         /* ignore */
@@ -1441,12 +1452,14 @@ export function PlayerProvider({
       console.error('playTrack error', e)
       streamLoadFailedTrackIdRef.current =
         newTrack.id
-      toast.error(
-        getApiErrorMessage(
+      showIsland({
+        kind: 'error',
+        title: getApiErrorMessage(
           e,
-          'Ошибка воспроизведения трека',
+          i18n.t('redesign.playerErrors.playback'),
         ),
-      )
+        durationMs: 4000,
+      })
     }
   }
 
@@ -1564,6 +1577,12 @@ export function PlayerProvider({
     if (!track) return
     let cancelled = false
 
+    try {
+      getPrefetchManager().markPlaybackStart(track.id)
+    } catch {
+      /* ignore telemetry failures */
+    }
+
     const teardownPreloadHls = () => {
       if (preloadHlsRef.current) {
         try {
@@ -1630,6 +1649,14 @@ export function PlayerProvider({
           tracks: res.tracks,
         }
         preloadFirst(res.tracks)
+        try {
+          void getPrefetchManager().enqueue(res.tracks, {
+            context: 'playback',
+            replaceContext: true,
+          })
+        } catch {
+          /* ignore */
+        }
       })
       .catch(() => {
         api.getTrackQueue(track.id, 3)
@@ -1640,6 +1667,17 @@ export function PlayerProvider({
               tracks: res.next_tracks,
             }
             preloadFirst(res.next_tracks)
+            try {
+              void getPrefetchManager().enqueue(
+                res.next_tracks,
+                {
+                  context: 'queue',
+                  replaceContext: true,
+                },
+              )
+            } catch {
+              /* ignore */
+            }
           })
           .catch(() => {})
       })
@@ -1691,9 +1729,11 @@ export function PlayerProvider({
       }
       void safePlay(a, {
         onNotAllowed: () =>
-          toast.error(
-            'Браузер заблокировал воспроизведение',
-          ),
+          showIsland({
+            kind: 'error',
+            title: i18n.t('redesign.playerErrors.blockedByBrowser'),
+            durationMs: 4000,
+          }),
       })
     } else a.pause()
   }

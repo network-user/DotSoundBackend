@@ -1,5 +1,6 @@
 import { useRef, type MouseEvent } from 'react'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { usePreviewQueue } from '@/hooks/usePreviewQueue'
 
 interface Props {
@@ -60,26 +61,29 @@ export function OnboardingGenreScreen({
       <div className="onboarding-chips">
         {availableGenres.map(g => (
           <div key={g} className="onboarding-genre-row">
-            <button
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="light"
               className={`onboarding-chip${
                 selectedGenres.includes(g) ? ' selected' : ''
               }`}
               onClick={() => onToggleGenre(g)}
             >
               {g}
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
               type="button"
+              variant="icon"
+              haptic="light"
               className="onboarding-genre-preview"
+              ariaLabel="Превью жанра"
               onClick={ev => {
-                void onPlayPreview(g, ev)
+                void onPlayPreview(g, ev as MouseEvent)
               }}
-              title="Превью жанра"
-              aria-label="Превью жанра"
             >
               <Icon name="play" size={16} />
-            </button>
+            </MotionPress>
           </div>
         ))}
       </div>

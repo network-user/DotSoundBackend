@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
 
 interface ListenerStats {
@@ -79,9 +80,11 @@ export function ListenerStats() {
           )}
         >
           {PERIODS.map((p) => (
-            <button
+            <MotionPress
               key={p.id}
               type="button"
+              variant="ghost"
+              haptic="selection"
               role="tab"
               aria-selected={period === p.id}
               className={`pb-extras-btn${
@@ -90,7 +93,7 @@ export function ListenerStats() {
               onClick={() => setPeriod(p.id)}
             >
               {t(p.key, p.defaultLabel)}
-            </button>
+            </MotionPress>
           ))}
         </div>
       </div>

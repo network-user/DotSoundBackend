@@ -31,8 +31,10 @@ import { AlbumDetailRoute } from './routes/AlbumDetailRoute'
 import { AlbumsListRoute } from './routes/AlbumsListRoute'
 import { PlaylistDetailRoute } from './routes/PlaylistDetailRoute'
 import { PlaylistsListRoute } from './routes/PlaylistsListRoute'
+import { AdminProfileRoute } from './routes/AdminProfileRoute'
 import { TracksRoute } from './routes/TracksRoute'
 import { UsersRoute } from './routes/UsersRoute'
+import '@/styles/admin/redesign-admin.css'
 import './styles/admin.css'
 
 const queryClient = new QueryClient({
@@ -126,7 +128,7 @@ function AuthGate({
 
   if (status === 'loading') {
     return (
-      <div className="admin-auth-screen">
+      <div className="admin-auth-screen adm-r-auth-stage">
         <div className="admin-auth-card">
           {t('admin.auth.checking')}
         </div>
@@ -135,7 +137,7 @@ function AuthGate({
   }
   if (status === 'unauth') {
     return (
-      <div className="admin-auth-screen">
+      <div className="admin-auth-screen adm-r-auth-stage">
         <div className="admin-auth-card">
           <h2>{t('admin.auth.adminOnly')}</h2>
           <p>{t('admin.auth.adminOnlyHint')}</p>
@@ -145,21 +147,21 @@ function AuthGate({
   }
   if (status === 'needs_init') {
     return (
-      <div className="admin-auth-screen">
+      <div className="admin-auth-screen adm-r-auth-stage">
         <AdminInit />
       </div>
     )
   }
   if (status === 'needs_login') {
     return (
-      <div className="admin-auth-screen">
+      <div className="admin-auth-screen adm-r-auth-stage">
         <AdminLogin />
       </div>
     )
   }
   if (status === 'needs_device_approval') {
     return (
-      <div className="admin-auth-screen">
+      <div className="admin-auth-screen adm-r-auth-stage">
         <DeviceApproval />
       </div>
     )
@@ -173,85 +175,88 @@ export function AdminApp() {
       <AuthGate>
         <StepUpProvider>
           <AdminPromptProvider>
-            <AdminShell>
             {/* Mounted under outer <Route path="/admin/*">,
-              * so all paths here are relative — the /admin
-              * prefix is consumed by the parent route. */}
+             * so paths below are relative to /admin. */}
             <Routes>
-              <Route
-                index
-                element={<DashboardRoute />}
-              />
-              <Route
-                path="users"
-                element={<UsersRoute />}
-              />
-              <Route
-                path="tracks"
-                element={<TracksRoute />}
-              />
-              <Route
-                path="albums"
-                element={<AlbumsListRoute />}
-              />
-              <Route
-                path="albums/:albumId"
-                element={<AlbumDetailRoute />}
-              />
-              <Route
-                path="playlists"
-                element={<PlaylistsListRoute />}
-              />
-              <Route
-                path="playlists/:playlistId"
-                element={<PlaylistDetailRoute />}
-              />
-              <Route
-                path="complaints"
-                element={<ComplaintsRoute />}
-              />
-              <Route
-                path="artists"
-                element={<ArtistsRoute />}
-              />
-              <Route
-                path="audio-compute"
-                element={<AudioComputeRoute />}
-              />
-              <Route
-                path="tasks"
-                element={<TasksRoute />}
-              />
-              <Route
-                path="schedules"
-                element={<SchedulesRoute />}
-              />
-              <Route
-                path="logs"
-                element={<LogsRoute />}
-              />
-              <Route
-                path="metrics"
-                element={<MetricsRoute />}
-              />
-              <Route
-                path="containers"
-                element={<ContainersRoute />}
-              />
-              <Route
-                path="audit"
-                element={<AuditRoute />}
-              />
-              <Route
-                path="security"
-                element={<SecurityRoute />}
-              />
-              <Route
-                path="settings"
-                element={<SettingsRoute />}
-              />
+              <Route element={<AdminShell />}>
+                <Route
+                  index
+                  element={<DashboardRoute />}
+                />
+                <Route
+                  path="users"
+                  element={<UsersRoute />}
+                />
+                <Route
+                  path="tracks"
+                  element={<TracksRoute />}
+                />
+                <Route
+                  path="albums"
+                  element={<AlbumsListRoute />}
+                />
+                <Route
+                  path="albums/:albumId"
+                  element={<AlbumDetailRoute />}
+                />
+                <Route
+                  path="playlists"
+                  element={<PlaylistsListRoute />}
+                />
+                <Route
+                  path="playlists/:playlistId"
+                  element={<PlaylistDetailRoute />}
+                />
+                <Route
+                  path="complaints"
+                  element={<ComplaintsRoute />}
+                />
+                <Route
+                  path="artists"
+                  element={<ArtistsRoute />}
+                />
+                <Route
+                  path="audio-compute"
+                  element={<AudioComputeRoute />}
+                />
+                <Route
+                  path="tasks"
+                  element={<TasksRoute />}
+                />
+                <Route
+                  path="schedules"
+                  element={<SchedulesRoute />}
+                />
+                <Route
+                  path="logs"
+                  element={<LogsRoute />}
+                />
+                <Route
+                  path="metrics"
+                  element={<MetricsRoute />}
+                />
+                <Route
+                  path="containers"
+                  element={<ContainersRoute />}
+                />
+                <Route
+                  path="audit"
+                  element={<AuditRoute />}
+                />
+                <Route
+                  path="security"
+                  element={<SecurityRoute />}
+                />
+                <Route
+                  path="settings"
+                  element={<SettingsRoute />}
+                />
+                <Route
+                  path="profile"
+                  element={<AdminProfileRoute />}
+                />
+              </Route>
             </Routes>
-            </AdminShell>
           </AdminPromptProvider>
         </StepUpProvider>
       </AuthGate>

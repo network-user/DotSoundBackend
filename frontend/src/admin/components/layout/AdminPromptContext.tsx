@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Press } from '@/components/ui/Press'
+import { MotionPress } from '@/components/ui/MotionPress'
 
 type ConfirmOpts = {
   title?: string
@@ -122,14 +122,14 @@ function PromptHost({ state }: { state: PromptState | null }) {
         <div className="admin-prompt__actions">
           {isConfirm ? (
             <>
-              <Press
+              <MotionPress
                 ref={firstBtnRef}
                 variant="ghost"
                 onClick={() => state.onFinish(false)}
               >
                 {t('admin.common.cancel')}
-              </Press>
-              <Press
+              </MotionPress>
+              <MotionPress
                 variant="primary"
                 className={
                   state.danger
@@ -139,16 +139,16 @@ function PromptHost({ state }: { state: PromptState | null }) {
                 onClick={() => state.onFinish(true)}
               >
                 {t('admin.common.confirm')}
-              </Press>
+              </MotionPress>
             </>
           ) : (
-            <Press
+            <MotionPress
               ref={firstBtnRef}
               variant="primary"
               onClick={() => state.onFinish()}
             >
               {t('admin.common.ok')}
-            </Press>
+            </MotionPress>
           )}
         </div>
       </div>

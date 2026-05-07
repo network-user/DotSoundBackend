@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
 import {
   usePlayerActions,
@@ -92,14 +93,15 @@ export function HistoryList() {
             : 'Включи треки — история строится из твоих прослушиваний в аккаунте. Текущий плейлист в плеере тоже отображается выше, когда играет музыка.'}
         </div>
         {loadError && (
-          <button
+          <MotionPress
             type="button"
-            className="empty-cta"
-            style={{ marginTop: 12 }}
+            variant="ghost"
+            haptic="light"
+            className="empty-cta re-history-retry"
             onClick={load}
           >
             Повторить
-          </button>
+          </MotionPress>
         )}
       </div>
     )
@@ -118,8 +120,10 @@ export function HistoryList() {
             key={`h-${t.id}-${i}`}
             className="offline-list-row"
           >
-            <button
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="light"
               className="offline-list-main"
               onClick={() => playTrack(t)}
             >
@@ -141,7 +145,7 @@ export function HistoryList() {
                   {t.artist || '—'}
                 </div>
               </div>
-            </button>
+            </MotionPress>
           </div>
         ))}
       </div>

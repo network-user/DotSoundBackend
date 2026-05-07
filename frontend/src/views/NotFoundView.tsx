@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 
 const REDIRECT_DELAY = 4
 
@@ -25,28 +26,24 @@ export function NotFoundView() {
 
   return (
     <section id="view-not-found" className="view active not-found-view">
-      <div className="not-found-panel">
-        <p className="not-found-code" aria-hidden="true">
+      <div className="rh-nf-panel">
+        <p className="rh-nf-code" aria-hidden="true">
           404
         </p>
-        <h2 className="not-found-title">
-          {t('notFound.title', 'Страница не найдена')}
+        <h2 className="rh-nf-title">
+          {t('redesign.home.nfTitle')}
         </h2>
-        <p className="not-found-hint">
-          {t('notFound.redirect', 'Переход через {{n}} с…', {
-            n: countdown,
-          })}
+        <p className="rh-nf-hint">
+          {t('redesign.home.nfHint', { n: countdown })}
         </p>
-        <button
-          type="button"
-          className="not-found-home-btn"
+        <MotionPress
+          variant="primary"
+          className="rh-nf-home"
           onClick={() => navigate('/', { replace: true })}
         >
-          <span className="not-found-home-btn-icon" aria-hidden>
-            <Icon name="home" size={18} />
-          </span>
-          <span>{t('notFound.goHome', 'На главную')}</span>
-        </button>
+          <Icon name="home" size={18} />
+          <span>{t('redesign.home.nfHome')}</span>
+        </MotionPress>
       </div>
     </section>
   )

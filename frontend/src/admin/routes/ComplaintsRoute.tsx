@@ -6,13 +6,22 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Press } from '@/components/ui/Press'
+import { AnimatePresence } from 'framer-motion'
+import {
+  m,
+  SPRING_GENTLE,
+  TWEEN_FAST,
+  useReducedMotion,
+} from '@/lib/motion'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
+import { showIsland } from '@/lib/island'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
 import { KpiCard } from '../components/widgets/KpiCard'
 import { Sparkline } from '../components/charts/Sparkline'
+import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 
 interface ComplaintRow {
   id: number
@@ -43,102 +52,27 @@ async function resolveAction(
   }
 }
 
-function ActionsCell({
-  complaint,
-  onChange,
-}: {
-  complaint: ComplaintRow
-  onChange: () => void
-}) {
-  const [busy, setBusy] = useState(false)
-  const [hint, setHint] = useState<string | null>(
-    null,
-  )
-
-  const handle = async (
-    action: 'accept' | 'dismiss' | 'in_progress',
-  ) => {
-    setBusy(true)
-    setHint(null)
-    const note =
-      action === 'accept'
-        ? window.prompt(
-            'Краткий комментарий пользователю (опц.):',
-          ) || undefined
-        : undefined
-    const res = await resolveAction(
-      complaint.id,
-      action,
-      note,
-    )
-    setBusy(false)
-    if (!res.ok && res.error === 'not_implemented') {
-      setHint('Endpoint не реализован на backend')
-    } else if (!res.ok) {
-      setHint(`Ошибка ${res.error}`)
-    } else {
-      setHint('OK')
-      onChange()
-    }
-  }
-
-  if (complaint.is_resolved) return null
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        gap: 6,
-        flexWrap: 'wrap',
-      }}
-    >
-      <Press
-        variant="primary"
-        disabled={busy}
-        onClick={() => handle('accept')}
-      >
-        Принять
-      </Press>
-      <Press
-        variant="ghost"
-        disabled={busy}
-        onClick={() => handle('dismiss')}
-      >
-        Отклонить
-      </Press>
-      <Press
-        variant="ghost"
-        disabled={busy}
-        onClick={() => handle('in_progress')}
-      >
-        В работе
-      </Press>
-      {hint && (
-        <span
-          style={{
-            fontSize: 12,
-            color: 'var(--text-secondary)',
-          }}
-        >
-          {hint}
-        </span>
-      )}
-    </div>
-  )
-}
-
 export function ComplaintsRoute() {
   const { t } = useTranslation()
+  const { showConfirm } = useAdminPrompt()
   const queryClient = useQueryClient()
+  const reduce = useReducedMotion()
   const [page, setPage] = useState(1)
   const [unresolvedOnly, setUnresolvedOnly] =
     useState(true)
+  const [acceptNote, setAcceptNote] = useState('')
+  const [rejectNote, setRejectNote] = useState('')
+  const [busyId, setBusyId] = useState<number | null>(
+    null,
+  )
+
   const queryKey = [
     'admin',
     'complaints',
     page,
     unresolvedOnly,
   ] as const
+
   const { data, isFetching } = useQuery({
     queryKey,
     queryFn: () =>
@@ -152,6 +86,92 @@ export function ComplaintsRoute() {
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey })
+
+  const rows =
+    (data?.items || []) as unknown as ComplaintRow[]
+
+  const unresolvedSorted = useMemo(() => {
+    return rows
+      .filter((r) => !r.is_resolved)
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() -
+          new Date(b.created_at).getTime(),
+      )
+  }, [rows])
+
+  const current = unresolvedSorted[0] ?? null
+
+  const trackMeta = useQuery({
+    queryKey: ['admin', 'complaint-track', current?.track_id],
+    queryFn: () => api.getTrack(current!.track_id),
+    enabled: Boolean(current?.track_id),
+  })
+
+  async function runResolve(
+    complaint: ComplaintRow,
+    action: 'accept' | 'dismiss' | 'in_progress',
+  ) {
+    setBusyId(complaint.id)
+    try {
+      const note =
+        action === 'accept'
+          ? acceptNote.trim() || undefined
+          : action === 'dismiss'
+            ? rejectNote.trim() || undefined
+            : undefined
+      const res = await resolveAction(
+        complaint.id,
+        action,
+        note,
+      )
+      if (!res.ok && res.error === 'not_implemented') {
+        showIsland({
+          kind: 'error',
+          title: t('redesign.admin.complaintEndpointMissing'),
+          durationMs: 5000,
+        })
+        return
+      }
+      if (!res.ok) {
+        showIsland({
+          kind: 'error',
+          title: t('redesign.admin.complaintActionFailed'),
+          hint: res.error ?? '',
+          durationMs: 4500,
+        })
+        return
+      }
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.admin.complaintSaved'),
+        durationMs: 2400,
+      })
+      setAcceptNote('')
+      setRejectNote('')
+      refresh()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  async function handleAccept(c: ComplaintRow) {
+    await runResolve(c, 'accept')
+  }
+
+  async function handleDismiss(c: ComplaintRow) {
+    const ok = await showConfirm(
+      t('redesign.admin.complaintDismissConfirm'),
+      { danger: true },
+    )
+    if (!ok) return
+    await runResolve(c, 'dismiss')
+  }
+
+  async function handleProgress(c: ComplaintRow) {
+    await runResolve(c, 'in_progress')
+  }
 
   const columns: ColumnDef<ComplaintRow>[] = [
     {
@@ -182,16 +202,6 @@ export function ComplaintsRoute() {
           i.row.original.created_at,
         ).toLocaleString(),
     },
-    {
-      header: 'Действия',
-      id: 'actions',
-      cell: (i) => (
-        <ActionsCell
-          complaint={i.row.original}
-          onChange={refresh}
-        />
-      ),
-    },
   ]
 
   const total = data?.total || 0
@@ -199,10 +209,10 @@ export function ComplaintsRoute() {
     1,
     Math.ceil(total / 25),
   )
-  const rows =
-    (data?.items || []) as unknown as ComplaintRow[]
   const openCount = rows.filter((r) => !r.is_resolved).length
-  const resolvedCount = rows.filter((r) => r.is_resolved).length
+  const resolvedCount = rows.filter(
+    (r) => r.is_resolved,
+  ).length
   const sparkline = useMemo(() => {
     const buckets = new Map<string, number>()
     for (const row of rows) {
@@ -215,34 +225,163 @@ export function ComplaintsRoute() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([, value]) => value)
   }, [rows])
+
+  const stepTransition = reduce ? TWEEN_FAST : SPRING_GENTLE
+
   return (
     <div>
       <h1>{t('admin.complaints.title')}</h1>
-      <section className="kpi-grid">
+
+      <section className="adm-r-complaint-queue glass--medium admin-card">
+        <h2 className="adm-r-complaint-queue__title">
+          {t('redesign.admin.complaintQueueTitle')}
+        </h2>
+        <p className="admin-card__sub">
+          {t('redesign.admin.complaintQueueHint')}
+        </p>
+        <AnimatePresence mode="wait">
+          {current ? (
+            <m.div
+              key={current.id}
+              className="adm-r-complaint-queue__card"
+              initial={
+                reduce
+                  ? false
+                  : { opacity: 0, y: 16 }
+              }
+              animate={{ opacity: 1, y: 0 }}
+              exit={
+                reduce
+                  ? undefined
+                  : { opacity: 0, y: -12 }
+              }
+              transition={stepTransition}
+            >
+              <div className="adm-r-complaint-queue__head">
+                <span className="admin-mono">
+                  #{current.id}
+                </span>
+                <span>
+                  {t('redesign.admin.complaintTrack')}{' '}
+                  {current.track_id}
+                </span>
+              </div>
+              {trackMeta.data && (
+                <p className="adm-r-complaint-queue__track-title">
+                  {trackMeta.data.title}
+                  {trackMeta.data.artist
+                    ? ` — ${trackMeta.data.artist}`
+                    : ''}
+                </p>
+              )}
+              <p className="adm-r-complaint-queue__reason">
+                {current.reason}
+              </p>
+              <div className="adm-r-complaint-queue__chips">
+                <span className="glass--medium adm-r-chip">
+                  {current.reason_type}
+                </span>
+                <span className="glass--medium adm-r-chip">
+                  {new Date(
+                    current.created_at,
+                  ).toLocaleString()}
+                </span>
+              </div>
+              <label className="adm-r-complaint-queue__label">
+                {t('redesign.admin.complaintAcceptNote')}
+                <textarea
+                  className="adm-r-complaint-queue__textarea"
+                  rows={2}
+                  value={acceptNote}
+                  onChange={(e) =>
+                    setAcceptNote(e.target.value)
+                  }
+                  disabled={busyId !== null}
+                />
+              </label>
+              <label className="adm-r-complaint-queue__label">
+                {t('redesign.admin.complaintRejectNote')}
+                <textarea
+                  className="adm-r-complaint-queue__textarea"
+                  rows={2}
+                  value={rejectNote}
+                  onChange={(e) =>
+                    setRejectNote(e.target.value)
+                  }
+                  disabled={busyId !== null}
+                />
+              </label>
+              <div className="adm-r-complaint-queue__actions">
+                <MotionPress
+                  variant="primary"
+                  disabled={busyId !== null}
+                  onClick={() => void handleAccept(current)}
+                >
+                  {busyId === current.id
+                    ? t('admin.common.loading')
+                    : t('redesign.admin.complaintAccept')}
+                </MotionPress>
+                <MotionPress
+                  variant="ghost"
+                  disabled={busyId !== null}
+                  onClick={() =>
+                    void handleDismiss(current)
+                  }
+                >
+                  {t('redesign.admin.complaintReject')}
+                </MotionPress>
+                <MotionPress
+                  variant="ghost"
+                  disabled={busyId !== null}
+                  onClick={() =>
+                    void handleProgress(current)
+                  }
+                >
+                  {t('redesign.admin.complaintProgress')}
+                </MotionPress>
+              </div>
+            </m.div>
+          ) : (
+            <m.p
+              key="empty"
+              className="adm-r-complaint-queue__empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              {t('redesign.admin.complaintQueueEmpty')}
+            </m.p>
+          )}
+        </AnimatePresence>
+      </section>
+
+      <section className="kpi-grid adm-r-kpi-stagger">
         <KpiCard
           label={t('admin.complaints.title')}
           value={total}
           hint={t('admin.common.total', { count: total })}
         />
         <KpiCard
-          label="Open"
+          label={t('redesign.admin.complaintKpiOpen')}
           value={openCount}
           accent={openCount > 0 ? 'warn' : 'default'}
         />
         <KpiCard
-          label="Resolved"
+          label={t('redesign.admin.complaintKpiResolved')}
           value={resolvedCount}
           hint={
             sparkline.length > 1 ? (
               <Sparkline
                 data={sparkline}
-                ariaLabel="Complaints sparkline"
+                ariaLabel={t(
+                  'redesign.admin.complaintSparklineAria',
+                )}
               />
             ) : undefined
           }
         />
       </section>
-      <div className="admin-toolbar">
+      <div className="admin-toolbar adm-r-toolbar-sticky">
         <label className="admin-checkbox">
           <input
             type="checkbox"
@@ -262,7 +401,7 @@ export function ComplaintsRoute() {
         rows={rows}
       />
       <div className="admin-pagination">
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={page <= 1 || isFetching}
           onClick={() =>
@@ -270,12 +409,12 @@ export function ComplaintsRoute() {
           }
         >
           {t('admin.common.prev')}
-        </Press>
+        </MotionPress>
         <span>
           {page} / {totalPages} ·{' '}
           {t('admin.common.total', { count: total })}
         </span>
-        <Press
+        <MotionPress
           variant="ghost"
           disabled={
             page >= totalPages || isFetching
@@ -283,7 +422,7 @@ export function ComplaintsRoute() {
           onClick={() => setPage((p) => p + 1)}
         >
           {t('admin.common.next')}
-        </Press>
+        </MotionPress>
       </div>
     </div>
   )

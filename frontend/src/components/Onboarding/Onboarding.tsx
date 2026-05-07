@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
+import { AnimatePresence } from 'framer-motion'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { OnboardingImportStep } from '@/components/Onboarding/OnboardingImportStep'
 import { OnboardingGenreScreen } from '@/components/Onboarding/OnboardingGenreScreen'
-import { useToast } from '@/components/ui/Toast'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
+import { useTranslation } from 'react-i18next'
+import { showIsland } from '@/lib/island'
+import {
+  m,
+  SPRING_GENTLE,
+  TWEEN_FAST,
+  useReducedMotion,
+} from '@/lib/motion'
 import { trackActivationEvent } from '@/lib/activation'
 import type { Track } from '@/types/api'
 
@@ -65,9 +75,12 @@ function formatEtaSeconds(sec: number): string {
 }
 
 export function Onboarding({ onComplete }: Props) {
-  const toast = useToast()
+  const { t } = useTranslation()
+  const reduceMotion = useReducedMotion()
   const [includeImport, setIncludeImport] = useState(false)
   const [step, setStep] = useState<Step>('genres')
+  const prevStepRef = useRef<Step>('genres')
+  const directionRef = useRef<1 | -1>(1)
   const [genres, setGenres] = useState<string[]>([])
   const [availableGenres, setAvailableGenres] = useState<string[]>([])
   const [artists, setArtists] = useState<
@@ -233,9 +246,11 @@ export function Onboarding({ onComplete }: Props) {
       trackActivationEvent('onboarding_step_complete', {
         meta: { step: 'genres', count: genres.length },
       })
-      toast.success(
-        `Готово, ${genres.length} жанров — обновляем подборки`,
-      )
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.onboardingMsg.genresDone', { count: genres.length }),
+        durationMs: 2400,
+      })
       loadArtists(genres)
       setStep('artists')
     } else if (step === 'artists') {
@@ -246,9 +261,11 @@ export function Onboarding({ onComplete }: Props) {
         },
       })
       if (selectedArtists.length) {
-        toast.success(
-          `Подписались на ${selectedArtists.length} артистов`,
-        )
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.artistsDone', { count: selectedArtists.length }),
+          durationMs: 2400,
+        })
       }
       setStep('moods')
     } else if (step === 'moods') {
@@ -265,11 +282,19 @@ export function Onboarding({ onComplete }: Props) {
             count: selectedMoods.length,
           },
         })
-        toast.success('Профиль сохранён, осталось 1 шаг')
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.profileSaved'),
+          durationMs: 2400,
+        })
         await loadCalibrationTracks()
         setStep('calibration')
       } catch {
-        toast.error('Не удалось сохранить, попробуйте ещё раз')
+        showIsland({
+          kind: 'error',
+          title: t('redesign.onboardingMsg.saveFail'),
+          durationMs: 3500,
+        })
       }
       setSaving(false)
     } else if (step === 'calibration') {
@@ -300,11 +325,19 @@ export function Onboarding({ onComplete }: Props) {
         trackActivationEvent('onboarding_complete', {
           meta: { calibrated: filteredItems.length },
         })
-        toast.success('Готово — подборки обновлены')
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.calibrationDone'),
+          durationMs: 2400,
+        })
         localStorage.removeItem(ONBOARDING_DRAFT_KEY)
         onComplete()
       } catch {
-        toast.error('Не удалось завершить, попробуйте ещё раз')
+        showIsland({
+          kind: 'error',
+          title: t('redesign.onboardingMsg.finishFail'),
+          durationMs: 3500,
+        })
       }
       setSaving(false)
     }
@@ -322,15 +355,23 @@ export function Onboarding({ onComplete }: Props) {
         },
       })
       if (res.applied_genres.length) {
-        toast.info(
-          'Подобрали стартовые жанры — настроить можно в профиле позже',
-        )
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.smartGenresApplied'),
+          durationMs: 3500,
+        })
       } else if (!res.enabled) {
-        toast.info('Smart skip выключен флагом, просто завершаем шаг')
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.smartDisabled'),
+          durationMs: 3500,
+        })
       } else {
-        toast.info(
-          'Запустим без настройки — поправим в профиле позже',
-        )
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.smartFallback'),
+          durationMs: 3500,
+        })
       }
       localStorage.removeItem(ONBOARDING_DRAFT_KEY)
       onComplete()
@@ -340,7 +381,11 @@ export function Onboarding({ onComplete }: Props) {
         localStorage.removeItem(ONBOARDING_DRAFT_KEY)
         onComplete()
       } catch {
-        toast.error('Не удалось пропустить, попробуйте ещё раз')
+        showIsland({
+          kind: 'error',
+          title: t('redesign.onboardingMsg.skipFail'),
+          durationMs: 3500,
+        })
       }
     }
     setSaving(false)
@@ -363,6 +408,32 @@ export function Onboarding({ onComplete }: Props) {
 
   const stepIndex = stepOrder.indexOf(step)
   const dotCount = stepOrder.length
+
+  useEffect(() => {
+    const prevIdx = stepOrder.indexOf(prevStepRef.current)
+    if (prevIdx >= 0 && stepIndex >= 0) {
+      directionRef.current = stepIndex >= prevIdx ? 1 : -1
+    }
+    prevStepRef.current = step
+  }, [step, stepIndex, stepOrder])
+
+  const slideVariants = reduceMotion
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+      }
+    : {
+        initial: (dir: 1 | -1) => ({
+          x: dir === 1 ? '8%' : '-8%',
+          opacity: 0,
+        }),
+        animate: { x: 0, opacity: 1 },
+        exit: (dir: 1 | -1) => ({
+          x: dir === 1 ? '-8%' : '8%',
+          opacity: 0,
+        }),
+      }
   const remainingSec = stepOrder
     .slice(stepIndex)
     .reduce((acc, s) => acc + STEP_HINTS[s].etaSec, 0)
@@ -405,184 +476,260 @@ export function Onboarding({ onComplete }: Props) {
           {stepHint.reason}
         </div>
 
-        {step === 'import' && (
-          <OnboardingImportStep onDone={onImportDone} />
-        )}
+        <AnimatePresence
+          mode="wait"
+          custom={directionRef.current}
+        >
+          <m.div
+            key={step}
+            custom={directionRef.current}
+            variants={slideVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={
+              reduceMotion ? TWEEN_FAST : SPRING_GENTLE
+            }
+            className="onboarding-step-wrap re-onb-step-wrap"
+          >
+            {step === 'import' && (
+              <OnboardingImportStep onDone={onImportDone} />
+            )}
 
-        {step === 'genres' && (
-          <OnboardingGenreScreen
-            availableGenres={availableGenres}
-            selectedGenres={genres}
-            onToggleGenre={toggleGenre}
-          />
-        )}
+            {step === 'genres' && (
+              <OnboardingGenreScreen
+                availableGenres={availableGenres}
+                selectedGenres={genres}
+                onToggleGenre={toggleGenre}
+              />
+            )}
 
-        {step === 'artists' && (
-          <div className="onboarding-step">
-            <h2 className="onboarding-title">Любимые исполнители</h2>
-            <p className="onboarding-subtitle">
-              Выберите исполнителей или пропустите
-            </p>
-            <div className="onboarding-artists-grid">
-              {artists.map(a => (
-                <button
-                  key={a.id}
-                  className={`onboarding-artist-card${
-                    selectedArtists.includes(a.id) ? ' selected' : ''
-                  }`}
-                  onClick={() => toggleArtist(a.id)}
-                >
-                  {a.image_key ? (
-                    <CoverImage coverKey={a.image_key} />
-                  ) : (
-                    <div className="onboarding-artist-placeholder">
-                      <Icon name="user" size={24} />
-                    </div>
-                  )}
-                  <span className="onboarding-artist-name">
-                    {a.name}
-                  </span>
-                </button>
-              ))}
-              {artists.length === 0 && (
-                <p className="onboarding-empty">
-                  Артисты появятся по мере наполнения каталога
+            {step === 'artists' && (
+              <div className="onboarding-step">
+                <h2 className="onboarding-title">
+                  Любимые исполнители
+                </h2>
+                <p className="onboarding-subtitle">
+                  Выберите исполнителей или пропустите
                 </p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {step === 'moods' && (
-          <div className="onboarding-step">
-            <h2 className="onboarding-title">Настроение</h2>
-            <p className="onboarding-subtitle">
-              Какую атмосферу предпочитаете?
-            </p>
-            <div className="onboarding-chips">
-              {MOODS.map(m => (
-                <button
-                  key={m.id}
-                  className={`onboarding-chip${
-                    selectedMoods.includes(m.id) ? ' selected' : ''
-                  }`}
-                  onClick={() => toggleMood(m.id)}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {step === 'calibration' && (
-          <div className="onboarding-step">
-            <h2 className="onboarding-title">Оцените треки</h2>
-            <p className="onboarding-subtitle">
-              Это поможет подобрать музыку для вас. Нажмите на трек, чтобы прослушать превью.
-            </p>
-            <div className="onboarding-calibration-list">
-              {calibrationTracks.map(t => (
-                <div
-                  key={t.id}
-                  className={`onboarding-calibration-item${playingTrackId === t.id ? ' playing' : ''}`}
-                >
-                  <button 
-                    className="onboarding-calibration-play-area"
-                    onClick={() => playSnippet(t.id)}
-                    style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0 }}
-                  >
-                    <div style={{ position: 'relative' }}>
-                      <CoverImage coverKey={t.cover_key} />
-                      {playingTrackId === t.id && (
-                        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '4px', color: '#fff' }}>
-                          <Icon name="pause" size={24} />
+                <div className="onboarding-artists-grid">
+                  {artists.map(a => (
+                    <MotionPress
+                      key={a.id}
+                      type="button"
+                      variant="ghost"
+                      haptic="light"
+                      className={`onboarding-artist-card${
+                        selectedArtists.includes(a.id)
+                          ? ' selected'
+                          : ''
+                      }`}
+                      onClick={() => toggleArtist(a.id)}
+                    >
+                      {a.image_key ? (
+                        <CoverImage coverKey={a.image_key} />
+                      ) : (
+                        <div className="onboarding-artist-placeholder">
+                          <Icon name="user" size={24} />
                         </div>
                       )}
-                    </div>
-                    <div className="onboarding-calibration-info">
-                      <span className="onboarding-calibration-title">
-                        {t.title}
+                      <span className="onboarding-artist-name">
+                        {a.name}
                       </span>
-                      <span className="onboarding-calibration-artist">
-                        {t.artist ?? '—'}
-                      </span>
-                    </div>
-                  </button>
-                  <div className="onboarding-calibration-actions">
-                    <button
-                      className={`icon-btn${
-                        calibrationResults[t.id] === 'like'
-                          ? ' active'
-                          : ''
-                      }`}
-                      onClick={() =>
-                        setCalibrationResults(prev => ({
-                          ...prev,
-                          [t.id]: 'like',
-                        }))
-                      }
-                    >
-                      <Icon name="heart" size={20} />
-                    </button>
-                    <button
-                      className={`icon-btn${
-                        calibrationResults[t.id] === 'dislike'
-                          ? ' active'
-                          : ''
-                      }`}
-                      onClick={() =>
-                        setCalibrationResults(prev => ({
-                          ...prev,
-                          [t.id]: 'dislike',
-                        }))
-                      }
-                    >
-                      <Icon name="thumbs-down" size={20} />
-                    </button>
-                    <button
-                      className={`icon-btn${
-                        calibrationResults[t.id] === 'skip'
-                          ? ' active'
-                          : ''
-                      }`}
-                      onClick={() =>
-                        setCalibrationResults(prev => ({
-                          ...prev,
-                          [t.id]: 'skip',
-                        }))
-                      }
-                      title="Нейтрально, пропустить"
-                    >
-                      <Icon name="x" size={18} />
-                    </button>
-                  </div>
+                    </MotionPress>
+                  ))}
+                  {artists.length === 0 && (
+                    <p className="onboarding-empty">
+                      Артисты появятся по мере наполнения
+                      каталога
+                    </p>
+                  )}
                 </div>
-              ))}
-            </div>
-            {calibrationTracks.length > 0 && (
-              <button 
-                className="btn-secondary" 
-                onClick={handleLoadMoreCalibration}
-                disabled={saving}
-                style={{ marginTop: 16, width: '100%' }}
-              >
-                Показать другие треки
-              </button>
+              </div>
             )}
-          </div>
-        )}
+
+            {step === 'moods' && (
+              <div className="onboarding-step">
+                <h2 className="onboarding-title">Настроение</h2>
+                <p className="onboarding-subtitle">
+                  Какую атмосферу предпочитаете?
+                </p>
+                <div className="onboarding-chips">
+                  {MOODS.map(mood => (
+                    <MotionPress
+                      key={mood.id}
+                      type="button"
+                      variant="ghost"
+                      haptic="light"
+                      className={`onboarding-chip${
+                        selectedMoods.includes(mood.id)
+                          ? ' selected'
+                          : ''
+                      }`}
+                      onClick={() => toggleMood(mood.id)}
+                    >
+                      {mood.label}
+                    </MotionPress>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {step === 'calibration' && (
+              <div className="onboarding-step">
+                <h2 className="onboarding-title">
+                  Оцените треки
+                </h2>
+                <p className="onboarding-subtitle">
+                  Это поможет подобрать музыку для вас.
+                  Нажмите на трек, чтобы прослушать превью.
+                </p>
+                <div className="onboarding-calibration-list">
+                  {calibrationTracks.map(tr => (
+                    <div
+                      key={tr.id}
+                      className={`onboarding-calibration-item re-onb-cal-item${
+                        playingTrackId === tr.id
+                          ? ' playing'
+                          : ''
+                      }`}
+                    >
+                      <MotionPress
+                        type="button"
+                        variant="ghost"
+                        haptic="light"
+                        className="onboarding-calibration-play-area re-onb-cal-play"
+                        onClick={() => playSnippet(tr.id)}
+                      >
+                        <div className="re-onb-cal-cover">
+                          <CoverImage
+                            coverKey={tr.cover_key}
+                          />
+                          {playingTrackId === tr.id && (
+                            <div className="re-onb-cal-cover-overlay">
+                              <MorphIcon
+                                name="pause"
+                                size={22}
+                                filled
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div className="onboarding-calibration-info">
+                          <span className="onboarding-calibration-title">
+                            {tr.title}
+                          </span>
+                          <span className="onboarding-calibration-artist">
+                            {tr.artist ?? '—'}
+                          </span>
+                        </div>
+                      </MotionPress>
+                      <div className="onboarding-calibration-actions">
+                        <MotionPress
+                          type="button"
+                          variant="icon"
+                          haptic="light"
+                          className={`icon-btn${
+                            calibrationResults[tr.id] ===
+                            'like'
+                              ? ' active'
+                              : ''
+                          }`}
+                          onClick={() =>
+                            setCalibrationResults(prev => ({
+                              ...prev,
+                              [tr.id]: 'like',
+                            }))
+                          }
+                        >
+                          <MorphIcon
+                            name="heart"
+                            size={20}
+                            filled={
+                              calibrationResults[tr.id] ===
+                              'like'
+                            }
+                          />
+                        </MotionPress>
+                        <MotionPress
+                          type="button"
+                          variant="icon"
+                          haptic="light"
+                          className={`icon-btn${
+                            calibrationResults[tr.id] ===
+                            'dislike'
+                              ? ' active'
+                              : ''
+                          }`}
+                          onClick={() =>
+                            setCalibrationResults(prev => ({
+                              ...prev,
+                              [tr.id]: 'dislike',
+                            }))
+                          }
+                        >
+                          <Icon
+                            name="thumbs-down"
+                            size={20}
+                          />
+                        </MotionPress>
+                        <MotionPress
+                          type="button"
+                          variant="icon"
+                          haptic="light"
+                          className={`icon-btn${
+                            calibrationResults[tr.id] ===
+                            'skip'
+                              ? ' active'
+                              : ''
+                          }`}
+                          onClick={() =>
+                            setCalibrationResults(prev => ({
+                              ...prev,
+                              [tr.id]: 'skip',
+                            }))
+                          }
+                          ariaLabel="Нейтрально, пропустить"
+                        >
+                          <Icon name="x" size={18} />
+                        </MotionPress>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {calibrationTracks.length > 0 && (
+                  <MotionPress
+                    type="button"
+                    variant="ghost"
+                    haptic="light"
+                    className="btn-secondary re-onb-cal-more"
+                    onClick={handleLoadMoreCalibration}
+                    disabled={saving}
+                  >
+                    Показать другие треки
+                  </MotionPress>
+                )}
+              </div>
+            )}
+          </m.div>
+        </AnimatePresence>
 
         {step !== 'import' && (
           <div className="onboarding-footer">
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="onboarding-skip"
               onClick={handleSkip}
               disabled={saving}
             >
               Пропустить
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
               className="onboarding-next"
               onClick={handleNext}
               disabled={
@@ -595,11 +742,16 @@ export function Onboarding({ onComplete }: Props) {
                 : step === 'calibration'
                   ? 'Готово'
                   : 'Далее'}
-            </button>
+            </MotionPress>
           </div>
         )}
       </div>
-      <audio ref={audioRef} onEnded={() => setPlayingTrackId(null)} preload="none" style={{ display: 'none' }} />
+      <audio
+        ref={audioRef}
+        onEnded={() => setPlayingTrackId(null)}
+        preload="none"
+        className="re-onb-hidden-audio"
+      />
     </div>
   )
 }

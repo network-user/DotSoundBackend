@@ -1,8 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { setInternalUserId } from '@/lib/telegram'
 import { connectWS } from '@/lib/ws'
 import { useBrandLabel } from '@/lib/brand'
+import { AmbientStage } from '@/components/ui/AmbientStage'
+import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
+import { MotionPress } from '@/components/ui/MotionPress'
+import {
+  dismissIsland,
+  showIsland,
+} from '@/lib/island'
+
+const AUTH_KB_SRC =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'>" +
+      "<rect width='24' height='24' fill='%23242424'/></svg>",
+  )
 
 function notifyAuthReady(token: string | null): void {
   if (token) {
@@ -36,7 +51,9 @@ export function EmailAuth({
   onAuth,
   onBack,
 }: Props) {
+  const { t } = useTranslation()
   const brandLabel = useBrandLabel()
+  const progressRef = useRef<string | null>(null)
   const successTimer = useRef<ReturnType<
     typeof setTimeout
   > | null>(null)
@@ -52,6 +69,30 @@ export function EmailAuth({
     fallbackMode,
     setFallbackMode,
   ] = useState(false)
+
+  useEffect(() => {
+    if (!loading) {
+      if (progressRef.current) {
+        dismissIsland(progressRef.current)
+        progressRef.current = null
+      }
+      return
+    }
+    const id = showIsland({
+      kind: 'progress',
+      title: t(
+        'redesign.nav.authWorking',
+        'Signing in…',
+      ),
+    })
+    progressRef.current = id
+    return () => {
+      dismissIsland(id)
+      if (progressRef.current === id) {
+        progressRef.current = null
+      }
+    }
+  }, [loading, t])
   const [fallbackSent, setFallbackSent] =
     useState(false)
 
@@ -178,8 +219,19 @@ export function EmailAuth({
   }
 
   return (
-    <div className="auth-screen">
-      <div className="auth-card">
+    <div className="auth-screen rb-auth-screen">
+      <AmbientStage
+        coverUrl={null}
+        className="rb-auth__stage"
+      >
+        <KenBurnsCover
+          src={AUTH_KB_SRC}
+          alt=""
+          duration={22}
+          className="rb-auth__kb"
+        />
+      </AmbientStage>
+      <div className="auth-card rb-auth__card glass--strong">
         <div className="auth-logo">{brandLabel}</div>
 
         {step === 'email' && (
@@ -211,7 +263,10 @@ export function EmailAuth({
                 {error}
               </div>
             )}
-            <button
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
               className="btn-primary auth-tg-btn"
               onClick={handleRequestLink}
               disabled={loading}
@@ -219,13 +274,16 @@ export function EmailAuth({
               {loading
                 ? 'Отправка...'
                 : 'Получить ссылку'}
-            </button>
-            <button
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="btn-secondary auth-back"
               onClick={onBack}
             >
               Назад
-            </button>
+            </MotionPress>
           </>
         )}
 
@@ -241,7 +299,10 @@ export function EmailAuth({
               <br />
               Перейдите по ней для входа
             </p>
-            <button
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
               className="btn-secondary auth-back"
               onClick={() => {
                 setStep('email')
@@ -249,7 +310,7 @@ export function EmailAuth({
               }}
             >
               Отправить заново
-            </button>
+            </MotionPress>
           </>
         )}
 
@@ -300,7 +361,10 @@ export function EmailAuth({
                 {error}
               </div>
             )}
-            <button
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
               className="btn-primary"
               onClick={handleVerifyTotp}
               disabled={loading}
@@ -308,9 +372,12 @@ export function EmailAuth({
               {loading
                 ? 'Проверка...'
                 : 'Подтвердить'}
-            </button>
+            </MotionPress>
             {!fallbackMode && (
-              <button
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
                 className="btn-secondary auth-back"
                 onClick={handleRequestFallback}
                 disabled={fallbackSent}
@@ -318,16 +385,15 @@ export function EmailAuth({
                 {fallbackSent
                   ? 'Код отправлен на email'
                   : 'Получить код на email'}
-              </button>
+              </MotionPress>
             )}
           </>
         )}
 
         {step === 'success' && (
           <>
-            <div className="auth-success-icon">
-              ✓
-            </div>
+            <div className="auth-success-icon" />
+
             <h2 className="auth-title">
               Вход выполнен
             </h2>
