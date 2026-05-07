@@ -477,9 +477,9 @@ export function PlaylistsView({
                 <option value="">
                   {t('redesign.library.playlistAddOption')}
                 </option>
-                {availableTracks.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.title} {t.artist ? `- ${t.artist}` : ''}
+                {availableTracks.map((tr) => (
+                  <option key={tr.id} value={tr.id}>
+                    {tr.title} {tr.artist ? `- ${tr.artist}` : ''}
                   </option>
                 ))}
               </select>
@@ -503,39 +503,36 @@ export function PlaylistsView({
 
         {canEditSelected && (
           <div className="rd-pl-edit-rows">
-            {selected.tracks.map((t, idx) => (
-              <div
-                key={t.id}
-                className="rd-pl-edit-row"
-              >
-                <span className="rd-pl-edit-row-title">{t.title}</span>
+            {selected.tracks.map((tr, idx) => (
+              <div key={tr.id} className="rd-pl-edit-row">
+                <span className="rd-pl-edit-row-title">{tr.title}</span>
                 <MotionPress
                   type="button"
                   variant="icon"
                   haptic="selection"
                   className="icon-btn"
-                  ariaLabel="up"
+                  ariaLabel={t('redesign.library.playlistMoveUp')}
                   onClick={() => void moveTrack(idx, -1)}
                 >
-                  <Icon name="chevron" size={14} className="rd-pl-up" />
+                  <Icon name="chevron-up" size={14} />
                 </MotionPress>
                 <MotionPress
                   type="button"
                   variant="icon"
                   haptic="selection"
                   className="icon-btn"
-                  ariaLabel="down"
+                  ariaLabel={t('redesign.library.playlistMoveDown')}
                   onClick={() => void moveTrack(idx, 1)}
                 >
-                  <Icon name="chevron" size={14} className="rd-pl-down" />
+                  <Icon name="chevron-down" size={14} />
                 </MotionPress>
                 <MotionPress
                   type="button"
                   variant="icon"
                   haptic="medium"
                   className="icon-btn"
-                  ariaLabel={t.title}
-                  onClick={() => void handleRemoveTrack(t.id)}
+                  ariaLabel={tr.title}
+                  onClick={() => void handleRemoveTrack(tr.id)}
                 >
                   <Icon name="x" size={14} />
                 </MotionPress>

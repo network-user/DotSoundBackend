@@ -171,6 +171,8 @@
       "playlistTracksCount_many": "{{count}} треков",
       "playlistTracksCount_other": "{{count}} треков",
       "playlistTracksCount": "{{count}} треков",
+      "playlistMoveUp": "Выше",
+      "playlistMoveDown": "Ниже",
       "playlistMenuRename": "Переименовать",
       "playlistMenuDuplicate": "Дублировать",
       "playlistMenuDelete": "Удалить",

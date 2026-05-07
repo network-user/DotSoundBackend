@@ -347,14 +347,6 @@
   text-overflow: ellipsis;
 }
 
-.rd-pl-up {
-  transform: rotate(90deg);
-}
-
-.rd-pl-down {
-  transform: rotate(-90deg);
-}
-
 .rd-pl-rename-body {
   padding: var(--space-4);
   display: flex;
