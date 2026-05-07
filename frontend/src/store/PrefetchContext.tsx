@@ -170,32 +170,42 @@ export function useOptionalPrefetch(): PrefetchContextValue | null {
  * Convenience: prefetch a static list of tracks every time the
  * list identity changes for the given context. Pass ``null`` /
  * empty arrays freely; the hook bails out without scheduling.
+ *
+ * - ``replaceContext`` is ``true`` by default: a fresh list for the
+ *   same context cancels the previous warm-set. This is the right
+ *   default for view-level contexts (Home, Playlist, etc.).
+ * - For "fan-in" contexts where many components contribute one or
+ *   two tracks each (e.g. ``chat_shared``) pass ``additive: true``
+ *   so siblings do not stomp on each other.
+ * - We deliberately do NOT cancel the context on unmount: that is
+ *   what made many small components (chat bubbles, virtualised
+ *   lists) cancel work scheduled by their siblings.
  */
 export function usePrefetchTracks(
   tracks: PrefetchInputTrack[] | null | undefined,
   context: PrefetchContextName,
-  options?: { lookaheadOverride?: number; enabled?: boolean },
+  options?: {
+    lookaheadOverride?: number
+    enabled?: boolean
+    additive?: boolean
+  },
 ): void {
   const ctx = useOptionalPrefetch()
   const enabledFlag = options?.enabled ?? true
   const lookaheadOverride = options?.lookaheadOverride
+  const additive = options?.additive ?? false
+  const idKey = useMemo(
+    () => (tracks ?? []).map((t) => t.id).join(','),
+    [tracks],
+  )
   useEffect(() => {
     if (!ctx || !enabledFlag) return
     if (!tracks || tracks.length === 0) return
     void ctx.prefetch(tracks, {
       context,
-      replaceContext: true,
+      replaceContext: !additive,
       lookaheadOverride,
     })
-    return () => {
-      ctx.cancelContext(context)
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    ctx,
-    enabledFlag,
-    context,
-    lookaheadOverride,
-    tracks?.map((t) => t.id).join(','),
-  ])
+  }, [ctx, enabledFlag, context, lookaheadOverride, additive, idKey])
 }
