@@ -143,8 +143,10 @@ export function AchievementsView() {
               },
             ]}
           >
-            <button
+            <MotionPress
               type="button"
+              variant="subtle"
+              haptic="selection"
               className={[
                 'glass--medium',
                 'rh-ach-tile',
@@ -164,7 +166,7 @@ export function AchievementsView() {
               <span className="rh-ach-tile-label">
                 {t(`redesign.recap.${a.titleKey}`)}
               </span>
-            </button>
+            </MotionPress>
           </LongPressMenu>
         ))}
       </div>

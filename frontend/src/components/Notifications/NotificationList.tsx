@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { onWS } from '@/lib/ws'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import {
   resolveNotificationText,
@@ -328,8 +329,10 @@ export function NotificationList({
           role="menu"
         >
           <li role="none">
-            <button
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="light"
               role="menuitem"
               className="notification-menu-item"
               onClick={(e) => {
@@ -343,11 +346,13 @@ export function NotificationList({
               disabled={menuN.is_read}
             >
               {t('notifications.markRead')}
-            </button>
+            </MotionPress>
           </li>
           <li role="none">
-            <button
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="light"
               role="menuitem"
               className="notification-menu-item"
               onClick={(e) => {
@@ -361,11 +366,13 @@ export function NotificationList({
               disabled={!menuN.is_read}
             >
               {t('notifications.markUnread')}
-            </button>
+            </MotionPress>
           </li>
           <li role="none">
-            <button
+            <MotionPress
               type="button"
+              variant="ghost"
+              haptic="medium"
               role="menuitem"
               className="notification-menu-item danger"
               onClick={(e) => {
@@ -376,7 +383,7 @@ export function NotificationList({
               }}
             >
               {t('notifications.delete')}
-            </button>
+            </MotionPress>
           </li>
         </ul>,
         document.body,
@@ -396,14 +403,17 @@ export function NotificationList({
           <h3>
             {t('notifications.title')}
           </h3>
-          <button
-            onClick={onClose}
-            aria-label={t(
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
+            ariaLabel={t(
               'notifications.closeAria',
             )}
+            onClick={onClose}
           >
             <Icon name="x" size={18} />
-          </button>
+          </MotionPress>
         </div>
         {loading ? (
           <div className="notification-skeleton">
@@ -444,8 +454,10 @@ export function NotificationList({
                   className="notification-item-row"
                   data-notif-id={n.id}
                 >
-                  <button
+                  <MotionPress
                     type="button"
+                    variant="ghost"
+                    haptic="light"
                     className={`notification-item${
                       n.is_read
                         ? ''
@@ -484,12 +496,20 @@ export function NotificationList({
                         i18n.language,
                       )}
                     </span>
-                  </button>
+                  </MotionPress>
                   <div className="notification-item-menu">
-                    <button
+                    <MotionPress
                       type="button"
+                      variant="icon"
+                      haptic="light"
                       className="notification-more"
                       data-notif-menu-anchor={n.id}
+                      ariaLabel={t(
+                        'notifications.moreActions',
+                      )}
+                      aria-expanded={
+                        menuOpenId === n.id
+                      }
                       onClick={(e) => {
                         e.stopPropagation()
                         if (
@@ -504,18 +524,12 @@ export function NotificationList({
                           setMenuOpenId(n.id)
                         }
                       }}
-                      aria-label={t(
-                        'notifications.moreActions',
-                      )}
-                      aria-expanded={
-                        menuOpenId === n.id
-                      }
                     >
                       <Icon
                         name="more-vertical"
                         size={24}
                       />
-                    </button>
+                    </MotionPress>
                   </div>
                 </div>
               )
