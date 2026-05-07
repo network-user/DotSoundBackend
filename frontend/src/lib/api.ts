@@ -8,6 +8,7 @@ import type {
   ArtistCatalogReleaseDetail,
   ArtistCatalogReleaseListPayload,
   ArtistDetail,
+  ArtistItemsResponse,
   ArtistFollowToggleResponse,
   ArtistFollowStatusResponse,
   ArtistListenersResponse,
@@ -60,10 +61,28 @@ import type {
   PlaylistInviteOut,
   AlbumRecord,
   AlbumWithTracksRecord,
+  AcceptedResponse,
   AdjacentTracksResponse,
+  AuthConfigResponse,
+  BlockListResponse,
+  ChatActivityResponse,
   ColistenRoomState,
+  ConversationRefResponse,
+  DailyMixResponse,
+  EqSettingsResponse,
+  FollowingStatusResponse,
   HomePageResponse,
+  LinkStatusResponse,
+  LinkTelegramCodeResponse,
+  MessageResponse,
+  OkResponse,
+  PrefetchPolicyResponse,
+  ResolveArtistResponse,
+  SearchUserItem,
+  SimilarTracksResponse,
+  StatusResponse,
   TrackQueueResponse,
+  UnreadCountResponse,
   UserListeningStatsResponse,
   ArtistListPayload,
 } from '@/types/api'
@@ -798,7 +817,7 @@ export const api = {
   cancelLyricsGeneration(
     trackId: number,
     taskId: string,
-  ): Promise<{ status: string }> {
+  ): Promise<StatusResponse> {
     return request(
       `/api/v1/tracks/${trackId}/lyrics/auto/cancel?task_id=${taskId}`,
       {
@@ -842,7 +861,9 @@ export const api = {
     return request(`/api/v1/users/${targetUserId}/follow`, { method: 'POST' })
   },
 
-  getFollowStatus(targetUserId: number): Promise<{ following: boolean }> {
+  getFollowStatus(
+    targetUserId: number,
+  ): Promise<FollowingStatusResponse> {
     return request(`/api/v1/users/${targetUserId}/follow/status`)
   },
 
@@ -975,7 +996,7 @@ export const api = {
       action: 'accept' | 'dismiss' | 'in_progress'
       note?: string
     },
-  ): Promise<{ ok: boolean }> {
+  ): Promise<OkResponse> {
     return request(
       `/api/v1/admin/complaints/${id}`,
       {
@@ -988,10 +1009,7 @@ export const api = {
     )
   },
 
-  getAuthConfig(): Promise<{
-    bot_username: string
-    debug?: boolean
-  }> {
+  getAuthConfig(): Promise<AuthConfigResponse> {
     return request('/api/v1/auth/config')
   },
 
@@ -1017,7 +1035,7 @@ export const api = {
 
   requestMagicLink(
     email: string,
-  ): Promise<{ message: string }> {
+  ): Promise<MessageResponse> {
     return request('/api/v1/auth/email/request', {
       method: 'POST',
       headers: {
@@ -1112,7 +1130,7 @@ export const api = {
 
   request2FAEmailFallback(
     sessionToken: string,
-  ): Promise<{ status: string }> {
+  ): Promise<StatusResponse> {
     return request(
       '/api/v1/auth/2fa/email-fallback',
       {
@@ -1162,7 +1180,7 @@ export const api = {
 
   confirm2FA(
     code: string,
-  ): Promise<{ status: string }> {
+  ): Promise<StatusResponse> {
     return request('/api/v1/auth/2fa/confirm', {
       method: 'POST',
       headers: {
@@ -1174,7 +1192,7 @@ export const api = {
 
   disable2FA(
     code: string,
-  ): Promise<{ status: string }> {
+  ): Promise<StatusResponse> {
     return request('/api/v1/auth/2fa', {
       method: 'DELETE',
       headers: {
@@ -1184,12 +1202,7 @@ export const api = {
     })
   },
 
-  getLinkStatus(): Promise<{
-    telegram_linked: boolean
-    email_linked: boolean
-    email: string | null
-    telegram_username: string | null
-  }> {
+  getLinkStatus(): Promise<LinkStatusResponse> {
     return request(
       '/api/v1/account/link-status',
     )
@@ -1197,7 +1210,7 @@ export const api = {
 
   requestLinkEmail(
     email: string,
-  ): Promise<{ status: string }> {
+  ): Promise<StatusResponse> {
     return request(
       '/api/v1/account/link/email',
       {
@@ -1212,7 +1225,7 @@ export const api = {
 
   verifyLinkEmail(
     token: string,
-  ): Promise<{ status: string }> {
+  ): Promise<StatusResponse> {
     return request(
       '/api/v1/account/link/email/verify',
       {
@@ -1225,11 +1238,7 @@ export const api = {
     )
   },
 
-  generateLinkTelegramCode(): Promise<{
-    code: string
-    bot_username: string
-    deep_link: string
-  }> {
+  generateLinkTelegramCode(): Promise<LinkTelegramCodeResponse> {
     return request(
       '/api/v1/account/link/telegram/generate-code',
       { method: 'POST' },
@@ -1238,7 +1247,7 @@ export const api = {
 
   mergeAccounts(
     sourceAccountToken: string,
-  ): Promise<{ status: string }> {
+  ): Promise<StatusResponse> {
     return request('/api/v1/account/merge', {
       method: 'POST',
       headers: {
@@ -1405,10 +1414,7 @@ export const api = {
     )
   },
 
-  getEqSettings(): Promise<{
-    preset: string | null
-    bands: number[]
-  }> {
+  getEqSettings(): Promise<EqSettingsResponse> {
     return request('/api/v1/users/me/eq')
   },
 
@@ -1417,20 +1423,7 @@ export const api = {
     save_data?: boolean
     downlink?: number | null
     quota_bytes?: number | null
-  }): Promise<{
-    enabled: boolean
-    algorithm_version: string
-    hot_pool_size: number
-    warm_segments_per_track: number
-    initial_bytes_per_track: number
-    max_storage_bytes: number
-    in_memory_ttl_seconds: number
-    persistent_ttl_seconds: number
-    eviction_policy: string
-    concurrent_prefetch_limit: number
-    skip_third_party_audio_cache: boolean
-    lookahead_by_context: Record<string, number>
-  }> {
+  }): Promise<PrefetchPolicyResponse> {
     const qs = new URLSearchParams()
     if (params.effective_type) {
       qs.set('effective_type', params.effective_type)
@@ -1453,7 +1446,7 @@ export const api = {
 
   warmTrackStreamCache(
     trackIds: number[],
-  ): Promise<{ accepted: number }> {
+  ): Promise<AcceptedResponse> {
     return request('/api/v1/tracks/prefetch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1476,7 +1469,9 @@ export const api = {
 
   // ── Chats ──────────────────────────────────────────
 
-  createDM(targetUserId: number): Promise<{ conversation: { id: number } }> {
+  createDM(
+    targetUserId: number,
+  ): Promise<ConversationRefResponse> {
     return request('/api/v1/chats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1484,7 +1479,10 @@ export const api = {
     })
   },
 
-  createGroup(title: string, memberIds: number[]): Promise<{ conversation: { id: number } }> {
+  createGroup(
+    title: string,
+    memberIds: number[],
+  ): Promise<ConversationRefResponse> {
     return request('/api/v1/chats', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1500,18 +1498,14 @@ export const api = {
     return request(`/api/v1/chats/${convId}`)
   },
 
-  searchUsers(q: string, limit = 20): Promise<{
-    id: number
-    username: string | null
-    first_name: string
-    last_name: string | null
-    display_name: string | null
-    avatar_key: string | null
-  }[]> {
+  searchUsers(
+    q: string,
+    limit = 20,
+  ): Promise<SearchUserItem[]> {
     return request(`/api/v1/chats/search-users?q=${encodeURIComponent(q)}&limit=${limit}`)
   },
 
-  getSavedChat(): Promise<{ conversation: { id: number } }> {
+  getSavedChat(): Promise<ConversationRefResponse> {
     return request('/api/v1/chats/saved')
   },
 
@@ -1562,13 +1556,7 @@ export const api = {
     )
   },
 
-  getActivity(convId: number): Promise<{
-    activities: {
-      activity: string
-      user_id: number
-      ts: number
-    }[]
-  }> {
+  getActivity(convId: number): Promise<ChatActivityResponse> {
     return request(
       `/api/v1/chats/${convId}/activity`,
     )
@@ -1690,7 +1678,7 @@ export const api = {
     return request(`/api/v1/users/${userId}/block`, { method: 'DELETE' })
   },
 
-  listBlocks(): Promise<{ blocked_user_ids: number[] }> {
+  listBlocks(): Promise<BlockListResponse> {
     return request('/api/v1/blocks')
   },
 
@@ -1703,7 +1691,7 @@ export const api = {
     return request(`/api/v1/notifications?${sp}`)
   },
 
-  getUnreadCount(): Promise<{ count: number }> {
+  getUnreadCount(): Promise<UnreadCountResponse> {
     return request('/api/v1/notifications/unread-count')
   },
 
@@ -1868,11 +1856,13 @@ export const api = {
     return request('/api/v1/recommendations/home')
   },
 
-  getSimilarTracks(trackId: number): Promise<{ seed_track_id: number; tracks: Track[] }> {
+  getSimilarTracks(
+    trackId: number,
+  ): Promise<SimilarTracksResponse> {
     return request(`/api/v1/recommendations/similar/${trackId}`)
   },
 
-  getDailyMix(): Promise<{ tracks: Track[]; generated_at: string }> {
+  getDailyMix(): Promise<DailyMixResponse> {
     return request('/api/v1/recommendations/daily-mix')
   },
 
@@ -1912,7 +1902,7 @@ export const api = {
   getArtists(
     q?: string,
     limit = 20,
-  ): Promise<{ items: ArtistInfo[]; total: number }> {
+  ): Promise<ArtistItemsResponse> {
     const sp = new URLSearchParams()
     if (q) sp.set('q', q)
     sp.set('limit', String(limit))
@@ -1970,9 +1960,11 @@ export const api = {
     )
   },
 
-  async resolveArtistByName(name: string): Promise<{ id: number } | null> {
+  async resolveArtistByName(
+    name: string,
+  ): Promise<ResolveArtistResponse | null> {
     try {
-      return await request<{ id: number }>(
+      return await request<ResolveArtistResponse>(
         `/api/v1/artists/resolve?name=${encodeURIComponent(name)}`,
         { method: 'POST' },
       )
@@ -2003,7 +1995,7 @@ export const api = {
 
   requestAccountDeletion(
     confirmation: string,
-  ): Promise<{ status: string }> {
+  ): Promise<StatusResponse> {
     return request('/api/v1/users/me', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },

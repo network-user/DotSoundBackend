@@ -19,6 +19,8 @@ from app.repositories.track import TrackRepository
 from app.services.youtube_service import YouTubeService, _canonical_yt_url
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+_RADIO_SKIP_GUARD_SECONDS = 1
+_RADIO_LAST_QUEUE_TTL = 20
 
 
 def _mat_key(user_id: int) -> str:
@@ -72,8 +74,35 @@ class RadioService:
         count: int,
         current: User | None,
     ) -> tuple[list[Track], str | None]:
+        if current is not None:
+            redis = get_redis_client()
+            guard_key = (
+                f"radio:guard:{current.id}:{seed.id}"
+            )
+            last_key = f"radio:last:{current.id}:{seed.id}"
+            can_fetch = await redis.set(
+                guard_key,
+                "1",
+                ex=_RADIO_SKIP_GUARD_SECONDS,
+                nx=True,
+            )
+            if not can_fetch:
+                cached_ids = await redis.get(last_key)
+                if cached_ids:
+                    tracks = await self._repo.get_by_ids_preserve_order(
+                        [int(tid) for tid in cached_ids.split(",") if tid]
+                    )
+                    return tracks, "guarded"
+
         if not self._settings.radio_enabled:
             rows = await self._repo.get_next_tracks(seed.id, count)
+            if current is not None and rows:
+                redis = get_redis_client()
+                await redis.setex(
+                    f"radio:last:{current.id}:{seed.id}",
+                    _RADIO_LAST_QUEUE_TTL,
+                    ",".join(str(t.id) for t in rows),
+                )
             return rows, "catalog"
 
         cap = min(
@@ -160,4 +189,11 @@ class RadioService:
         if not ids:
             return [], source_tag
         out = await self._repo.get_by_ids_preserve_order(ids)
+        if current is not None and out:
+            redis = get_redis_client()
+            await redis.setex(
+                f"radio:last:{current.id}:{seed.id}",
+                _RADIO_LAST_QUEUE_TTL,
+                ",".join(str(t.id) for t in out),
+            )
         return out, source_tag

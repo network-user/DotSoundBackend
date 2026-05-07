@@ -93,7 +93,8 @@ export function RadioView() {
     ? coverUrl(nextTrack.cover_key)
     : null
   const nextTrackTitle = nextTrack?.title ?? '—'
-  const nextTrackArtist = nextTrack?.artist ?? 'Очередь пока пуста'
+  const nextTrackArtist =
+    nextTrack?.artist ?? t('redesign.home.radioQueueEmpty')
 
   useEffect(() => {
     if (!currentTrack) return
@@ -538,7 +539,7 @@ export function RadioView() {
         </div>
         <div className="rh-radio-next-card__body">
           <span className="rh-radio-next-card__label">
-            Следующий трек
+            {t('redesign.home.radioNextTrack')}
           </span>
           <span className="rh-radio-next-card__title">
             {nextTrackTitle}

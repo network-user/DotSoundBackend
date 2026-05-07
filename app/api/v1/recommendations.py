@@ -250,7 +250,7 @@ async def get_radio(
                 int(x)
                 for x in exclude_ids.split(",")
                 if x.strip()
-            ][:30]
+            ][:200]
         except ValueError:
             exclude = []
     svc = RecommendationService(db)
