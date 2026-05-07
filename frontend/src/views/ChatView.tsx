@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { api } from '@/lib/api'
 import { onWS, isWSConnected, sendWS } from '@/lib/ws'
@@ -7,15 +8,20 @@ import { ChatBubble } from '@/components/Chat/ChatBubble'
 import { ChatInput } from '@/components/Chat/ChatInput'
 import { PhotoViewer } from '@/components/Chat/PhotoViewer'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
+import {
+  m,
+  SPRING_GENTLE,
+  TWEEN_FAST,
+  useReducedMotion,
+} from '@/lib/motion'
+import { AnimatePresence } from 'framer-motion'
 import type { ChatMessage } from '@/types/api'
 
-const ACTIVITY_LABELS: Record<string, string> = {
-  typing: 'печатает...',
-  recording_audio: 'записывает аудио...',
-  sending_photo: 'отправляет фото...',
-}
-
 export function ChatView() {
+  const { t } = useTranslation()
+  const reduce = useReducedMotion()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -23,6 +29,15 @@ export function ChatView() {
   const title = (location.state as { title?: string } | null)?.title ?? null
   const onBack = () => navigate('/chats')
   const active = true
+
+  const activityLabels = useMemo<Record<string, string>>(
+    () => ({
+      typing: t('redesign.tracks.chatTyping'),
+      recording_audio: t('redesign.tracks.chatRecording'),
+      sending_photo: t('redesign.tracks.chatSendingPhoto'),
+    }),
+    [t],
+  )
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(true)
   const [initialLastRead, setInitialLastRead] = useState<number | null>(null)
@@ -540,38 +555,59 @@ export function ChatView() {
   }
 
   const formatLastSeen = (ts: number) => {
-    if (!ts) return 'давно'
+    if (!ts) {
+      return t('redesign.tracks.chatLastSeenLong', 'давно')
+    }
     const d = new Date(ts * 1000)
     const now = Date.now()
     const diff = (now - d.getTime()) / 1000
-    if (diff < 60) return 'только что'
-    if (diff < 3600) return `${Math.floor(diff / 60)} мин. назад`
-    if (diff < 86400) return `${Math.floor(diff / 3600)} ч. назад`
+    if (diff < 60) {
+      return t('redesign.tracks.chatLastSeenJust', 'только что')
+    }
+    if (diff < 3600) {
+      return t('redesign.tracks.chatLastSeenMin', {
+        n: Math.floor(diff / 60),
+        defaultValue: '{{n}} мин назад',
+      })
+    }
+    if (diff < 86400) {
+      return t('redesign.tracks.chatLastSeenHour', {
+        n: Math.floor(diff / 3600),
+        defaultValue: '{{n}} ч назад',
+      })
+    }
     return d.toLocaleDateString()
   }
 
   const renderStatusLine = () => {
     if (peerStatus === 'self') return null
-    if (peerActivity && ACTIVITY_LABELS[peerActivity]) {
+    if (peerActivity && activityLabels[peerActivity]) {
       return (
         <span className="chat-status-text activity">
-          {ACTIVITY_LABELS[peerActivity]}
+          {activityLabels[peerActivity]}
         </span>
       )
     }
     if (peerStatus === 'online') {
-      return <span className="chat-status-text online">в сети</span>
+      return (
+        <span className="chat-status-text online">
+          {t('redesign.tracks.chatStatusOnline')}
+        </span>
+      )
     }
     if (!peerLastSeen) {
       return (
         <span className="chat-status-text offline">
-          не в сети
+          {t('redesign.tracks.chatStatusOffline')}
         </span>
       )
     }
     return (
       <span className="chat-status-text offline">
-        был(а) {formatLastSeen(peerLastSeen)}
+        {t('redesign.tracks.chatLastSeenPrefix', {
+          when: formatLastSeen(peerLastSeen),
+          defaultValue: 'был(а) {{when}}',
+        })}
       </span>
     )
   }
@@ -579,27 +615,36 @@ export function ChatView() {
   if (!active) return null
 
   return (
-    <div className="chat-view slide-in">
-      <div className="chat-view-header">
-        <button
-          className="chat-back-btn"
+    <div className="chat-view re-chat slide-in">
+      <m.div
+        className="chat-view-header re-chat-header glass--liquid"
+        initial={
+          reduce
+            ? { opacity: 0 }
+            : { opacity: 0, y: -8 }
+        }
+        animate={{ opacity: 1, y: 0 }}
+        transition={reduce ? { duration: 0 } : SPRING_GENTLE}
+      >
+        <MotionPress
+          type="button"
+          variant="icon"
+          className="chat-back-btn re-chat-back"
+          ariaLabel={t('redesign.tracks.chatBackAria')}
+          haptic="light"
           onClick={onBack}
         >
-          <Icon
-            name="chevron"
-            size={20}
-            className="chat-back-icon"
-          />
-        </button>
+          <MorphIcon name="chevron-left" size={22} />
+        </MotionPress>
         {peerStatus === 'self' && (
-          <div className="chat-header-avatar saved">
-            <Icon name="heart" size={20} />
+          <div className="chat-header-avatar re-chat-avatar saved">
+            <MorphIcon name="heart" size={20} filled />
           </div>
         )}
-        <div className="chat-header-info">
-          <div className="chat-header-top">
-            <span className="chat-view-title">
-              {title || 'Чат'}
+        <div className="chat-header-info re-chat-info">
+          <div className="chat-header-top re-chat-info-top">
+            <span className="chat-view-title re-chat-title">
+              {title || t('redesign.chats.chatNumber', { id: conversationId ?? '' })}
             </span>
             {peerActivity ? (
               <span className="presence-dot activity-pulse" />
@@ -609,10 +654,10 @@ export function ChatView() {
               )
             )}
           </div>
-          <div className="chat-header-status">
+          <div className="chat-header-status re-chat-status">
             {peerStatus === 'self' ? (
               <span className="chat-status-text offline">
-                личное пространство
+                {t('redesign.tracks.chatSavedHint', 'личное пространство')}
               </span>
             ) : (
               renderStatusLine()
@@ -621,11 +666,15 @@ export function ChatView() {
         </div>
         {peerStatus !== 'self' && (
           <div
-            className="chat-menu-wrap"
+            className="chat-menu-wrap re-chat-menu-wrap"
             ref={menuRef}
           >
-            <button
-              className="chat-menu-btn icon-btn"
+            <MotionPress
+              type="button"
+              variant="icon"
+              className="chat-menu-btn"
+              ariaLabel={t('redesign.tracks.chatHeaderMenu')}
+              haptic="light"
               onClick={() =>
                 setMenuOpen((v) => !v)
               }
@@ -634,30 +683,51 @@ export function ChatView() {
                 name="more-vertical"
                 size={20}
               />
-            </button>
-            {menuOpen && (
-              <div className="chat-dropdown scale-in">
-                <button
-                  className="chat-dropdown-item"
-                  onClick={handleBlock}
+            </MotionPress>
+            <AnimatePresence>
+              {menuOpen && (
+                <m.div
+                  key="chat-menu-dropdown"
+                  className="chat-dropdown re-chat-dropdown glass--strong"
+                  initial={
+                    reduce
+                      ? { opacity: 0 }
+                      : { opacity: 0, scale: 0.96, y: -4 }
+                  }
+                  animate={
+                    reduce
+                      ? { opacity: 1 }
+                      : { opacity: 1, scale: 1, y: 0 }
+                  }
+                  exit={
+                    reduce
+                      ? { opacity: 0 }
+                      : { opacity: 0, scale: 0.98, y: -4 }
+                  }
+                  transition={
+                    reduce ? { duration: 0 } : TWEEN_FAST
+                  }
                 >
-                  <Icon
-                    name={
-                      isBlocked
-                        ? 'check'
-                        : 'block'
-                    }
-                    size={16}
-                  />
-                  {isBlocked
-                    ? 'Разблокировать'
-                    : 'Заблокировать'}
-                </button>
-              </div>
-            )}
+                  <MotionPress
+                    type="button"
+                    variant="ghost"
+                    className="chat-dropdown-item re-chat-dropdown-item"
+                    onClick={handleBlock}
+                  >
+                    <Icon
+                      name={isBlocked ? 'check' : 'block'}
+                      size={16}
+                    />
+                    {isBlocked
+                      ? t('redesign.tracks.chatUnblock', 'Разблокировать')
+                      : t('redesign.tracks.chatBlock', 'Заблокировать')}
+                  </MotionPress>
+                </m.div>
+              )}
+            </AnimatePresence>
           </div>
         )}
-      </div>
+      </m.div>
       <div className="chat-messages" ref={listRef}>
         {loading ? (
           <div className="chat-skeleton">
@@ -666,19 +736,29 @@ export function ChatView() {
             ))}
           </div>
         ) : messages.length === 0 ? (
-          <div className="chat-empty-state">
+          <div className="chat-empty-state re-chat-empty">
             {peerStatus === 'self' ? (
               <>
                 <div className="chat-empty-icon">
-                  <Icon name="heart" size={32} />
+                  <MorphIcon name="heart" size={32} filled />
                 </div>
-                <div className="chat-empty-title">Избранное</div>
+                <div className="chat-empty-title">
+                  {t('redesign.chats.savedTitle')}
+                </div>
                 <div className="chat-empty-desc">
-                  Сохраняйте сюда важные сообщения, ссылки на треки и заметки
+                  {t(
+                    'redesign.tracks.chatSavedDesc',
+                    'Сохраняйте сюда важные сообщения, ссылки на треки и заметки',
+                  )}
                 </div>
               </>
             ) : (
-              <div className="chat-empty-desc">Напишите первое сообщение</div>
+              <div className="chat-empty-desc">
+                {t(
+                  'redesign.tracks.chatEmptyHint',
+                  'Напишите первое сообщение',
+                )}
+              </div>
             )}
           </div>
         ) : (
@@ -715,7 +795,12 @@ export function ChatView() {
               ) {
                 items.push(
                   <div key={`unread-${msg.id}`} className="chat-unread-separator">
-                    <span>Новые сообщения</span>
+                    <span>
+                      {t(
+                        'redesign.tracks.chatUnreadDivider',
+                        'Новые сообщения',
+                      )}
+                    </span>
                   </div>
                 )
                 currentUnreadRendered = true
@@ -743,9 +828,9 @@ export function ChatView() {
           <div className="typing-indicator">
             <span /><span /><span />
             {peerActivity !== 'typing' &&
-              ACTIVITY_LABELS[peerActivity] && (
+              activityLabels[peerActivity] && (
                 <span className="activity-label">
-                  {ACTIVITY_LABELS[peerActivity]}
+                  {activityLabels[peerActivity]}
                 </span>
               )}
           </div>
