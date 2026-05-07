@@ -221,9 +221,13 @@ non-intrusive.
 1. Replace literal spacing with `--space-*`.
 2. Replace literal duration values with `--dur-*` and easing.
 3. Replace bespoke colour values with the monochrome tokens.
-4. Use `Press`/`Sheet`/`EmptyState`/`SkeletonList` instead of
-   re-implementing them in component files.
-5. Run `npx tsc --noEmit` and the visual smoke test before
+4. Use `MotionPress` (not bare `<button>`) for every interactive
+   button in redesigned surfaces.
+5. Use `showIsland()` / `dismissIsland()` from `lib/island` instead
+   of `useToast()` for all user-facing notifications. `Toast` /
+   `useToast` are retained for legacy surfaces only and should not
+   be used in new code.
+6. Run `npx tsc --noEmit` and the visual smoke test before
    committing.
 
 ## Redesign 2026 primitives
@@ -259,6 +263,10 @@ Highlights:
 - `SharedCover` — `m.img` with `layoutId={cover-${trackId}}` for
   shared-element transitions between PlayerBar, NowPlaying and
   TrackCard surfaces.
+- `AdminRangeSwitch` — segmented control for admin surfaces.
+  Uses `LayoutGroup` + `layoutId` pill indicator (Framer Motion),
+  `MotionPress` per option, `role="tablist"`, `prefers-reduced-motion`
+  aware. Lives in `frontend/src/admin/components/widgets/`.
 
 Motion presets live in `frontend/src/lib/motion.ts`
 (`SPRING_GENTLE/SNAPPY/BOUNCY/LAYOUT`, `TWEEN_FAST/SLOW`, plus
