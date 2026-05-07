@@ -48,6 +48,10 @@
 
 ## Mini App / .sound UI (2026-05-04)
 
+- [x] **Профиль: дизлайки в блоке действий + адаптив (2026-05-08)** — убран четвёртый таб
+  сверху; «Дизлайки» в `ProfileActions` после «Понравившееся»; подшапка «К профилю» +
+  заголовок; вкладка «Профиль» активна и для подэкрана дизлайков; сетка действий 3–4
+  колонки от 640/960px; блок «Ваше прослушивание» в карточке (`ListenerStats` + CSS).
 - [x] **Добавление треков в плейлист (2026-05-08)** — `PlaylistsView`: пустое поле — первая
   страница каталога (12 playable) и «Ещё из каталога»; текстовый запрос **от 2 символов**
   — поиск по каталогу с той же пагинацией; **1 символ** — только фильтр медиатеки;
@@ -869,7 +873,7 @@
     - [ ] Карточки "Топ артистов/треков" месяца для шеринга.
     - [ ] Детальная статистика в профиле (часы прослушивания, любимые жанры).
     - [ ] Секция "Ваш топ" на главной.
-    - [ ] **Динамические плейлисты**
+- [ ] **Динамические плейлисты**
     - [x] "Weekly Top 50" -- 2026-05-06: PrivateCore weekly_top_policy (rank_weekly_top_tracks, blend log(listens_7d)+log(likes_7d), WEEKLY_TOP_SCORE_VERSION); Backend RecommendationRepository.get_qualified_listens_7d_counts, RecommendationService.get_weekly_top_playlist with Redis cache (TTL 30 min), GET /api/v1/recommendations/weekly-top; Frontend WeeklyTopView (/weekly-top), api.getWeeklyTopPlaylist, WeeklyTopPlaylistResponse type, flame icon, Home quick-grid card.
     - [x] **«Забытые сокровища»** (лайкнутое давно, без прослушиваний в окне) — PrivateCore `forgotten_treasures_policy` (пороги лайка ≥21d, тишина ≥14d, `rank_forgotten_treasure_tracks`); Backend `RecommendationRepository.list_forgotten_treasure_rows`, `GET /api/v1/recommendations/forgotten-treasures` (JWT, per-user); Mini App `ForgottenTreasuresView` `/forgotten-treasures`, тайл в быстрых разделах после «Выбор»; prefetch context `forgotten_treasures`.
 - [ ] **PWA Offline Mode (v2) [High Priority]**

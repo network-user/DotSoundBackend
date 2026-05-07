@@ -8132,6 +8132,76 @@ html.ds-low-glass .tcs-sheet {
   gap: 4px;
 }
 
+.profile-subview-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.profile-subview-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px 6px 6px;
+  margin: 0;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.profile-subview-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listener-stats {
+  margin: 12px 16px 0;
+  padding: 14px 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-elevated);
+  box-sizing: border-box;
+}
+
+.listener-stats .profile-stats {
+  margin: 10px 0 0;
+}
+
+.listener-stats__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.listener-stats__title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.35;
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.listener-stats__periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+  flex: 0 1 auto;
+}
+
 .profile-hero {
   align-items: flex-start;
   text-align: left;
@@ -8273,6 +8343,18 @@ html.ds-low-glass .tcs-sheet {
   right: 12px;
   top: 14px;
   color: var(--text-muted);
+}
+
+@media (min-width: 640px) {
+  .profile-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 960px) {
+  .profile-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
 .my-tracks-section .section-header {
