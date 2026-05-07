@@ -95,7 +95,10 @@
       "radioMoodHintRetro": "Nostalgic",
       "radioMoodHintAcoustic": "Warm and airy",
       "mixPlayAll": "Play all",
-      "mixShuffle": "Shuffle"
+      "mixShuffle": "Shuffle",
+      "untitled": "Untitled",
+      "back": "Back",
+      "radioPickTrackHint": "Play any track to start a wave in this mood"
     },
     "library": {
       "searchFilterAll": "All",
@@ -420,7 +423,25 @@
       "profileSubtitle": "Admin session and capabilities from the latest manifest.",
       "profileSessionExpires": "Expires",
       "profileCapabilities": "Capabilities",
-      "profileCapsEmpty": "No capability metadata loaded yet."
+      "profileCapsEmpty": "No capability metadata loaded yet.",
+      "dashboard": {
+        "rangeMinutes": "{{n}}m",
+        "rangeHours": "{{n}}h",
+        "rangeDay": "24h",
+        "rangeAllTime": "All-time",
+        "rangeInterval": "Interval",
+        "orderOldest": "Oldest first",
+        "orderNewest": "Newest first",
+        "live": "Live",
+        "periodToday": "Today",
+        "period7d": "7 days",
+        "period30d": "30 days",
+        "periodAll": "All",
+        "topByPlays": "Plays",
+        "topByListeners": "Listeners",
+        "sortAsc": "Asc",
+        "sortDesc": "Desc"
+      }
     },
     "achievements": {}
   },

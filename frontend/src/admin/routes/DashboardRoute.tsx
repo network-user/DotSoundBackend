@@ -13,6 +13,8 @@ import {
   m,
   VARIANTS_FADE_UP,
 } from '@/lib/motion'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { AdminRangeSwitch } from '../components/widgets/AdminRangeSwitch'
 
 const ADMIN_DASH_KPI_STAGGER: Variants = {
   hidden: {},
@@ -264,65 +266,73 @@ export function DashboardRoute() {
             {t('admin.dashboard.onlineHistory.subtitle')}
           </p>
         </div>
-        <div className="admin-range-switch" role="tablist">
+        <div className="admin-range-switch adm-r-range" role="tablist">
           {[15, 60, 360, 1440].map((value) => (
-            <button
+            <MotionPress
               key={value}
               type="button"
-              className={`admin-range-switch__btn${
+              variant="ghost"
+              haptic="selection"
+              className={`admin-range-switch__btn adm-r-range__btn${
                 value === minutes ? ' is-active' : ''
               }`}
               onClick={() => setMinutes(value)}
             >
               {value < 60
-                ? `${value}m`
+                ? t('redesign.admin.dashboard.rangeMinutes', { n: value })
                 : value < 1440
-                  ? `${Math.floor(value / 60)}h`
-                  : '24h'}
-            </button>
+                  ? t('redesign.admin.dashboard.rangeHours', {
+                      n: Math.floor(value / 60),
+                    })
+                  : t('redesign.admin.dashboard.rangeDay')}
+            </MotionPress>
           ))}
-          <button
+          <MotionPress
             type="button"
-            className={`admin-range-switch__btn${
+            variant="ghost"
+            haptic="selection"
+            className={`admin-range-switch__btn adm-r-range__btn${
               onlineRangeMode === 'all' ? ' is-active' : ''
             }`}
             onClick={() => setOnlineRangeMode('all')}
           >
-            All-time
-          </button>
-          <button
+            {t('redesign.admin.dashboard.rangeAllTime')}
+          </MotionPress>
+          <MotionPress
             type="button"
-            className={`admin-range-switch__btn${
-              onlineRangeMode === 'range'
-                ? ' is-active'
-                : ''
+            variant="ghost"
+            haptic="selection"
+            className={`admin-range-switch__btn adm-r-range__btn${
+              onlineRangeMode === 'range' ? ' is-active' : ''
             }`}
             onClick={() => setOnlineRangeMode('range')}
           >
-            Interval
-          </button>
-          <button
+            {t('redesign.admin.dashboard.rangeInterval')}
+          </MotionPress>
+          <MotionPress
             type="button"
-            className="admin-range-switch__btn"
+            variant="ghost"
+            haptic="selection"
+            className="admin-range-switch__btn adm-r-range__btn"
             onClick={() =>
-              setOnlineSortDir((v) =>
-                v === 'asc' ? 'desc' : 'asc',
-              )
+              setOnlineSortDir((v) => (v === 'asc' ? 'desc' : 'asc'))
             }
           >
             {onlineSortDir === 'asc'
-              ? 'Oldest first'
-              : 'Newest first'}
-          </button>
-          <button
+              ? t('redesign.admin.dashboard.orderOldest')
+              : t('redesign.admin.dashboard.orderNewest')}
+          </MotionPress>
+          <MotionPress
             type="button"
-            className={`admin-range-switch__btn${
+            variant="ghost"
+            haptic="selection"
+            className={`admin-range-switch__btn adm-r-range__btn${
               live ? ' is-active' : ''
             }`}
             onClick={() => setLive((v) => !v)}
           >
-            Live
-          </button>
+            {t('redesign.admin.dashboard.live')}
+          </MotionPress>
         </div>
       </section>
 
@@ -360,20 +370,29 @@ export function DashboardRoute() {
               {t('admin.dashboard.stats.subtitle')}
             </p>
           </div>
-          <div className="admin-range-switch" role="tablist">
-            {(['today', '7d', '30d', 'all'] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={`admin-range-switch__btn${
-                  statsPeriod === value ? ' is-active' : ''
-                }`}
-                onClick={() => setStatsPeriod(value)}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
+          <AdminRangeSwitch
+            groupId="dash-stats-period"
+            value={statsPeriod}
+            onChange={setStatsPeriod}
+            options={[
+              {
+                value: 'today',
+                label: t('redesign.admin.dashboard.periodToday'),
+              },
+              {
+                value: '7d',
+                label: t('redesign.admin.dashboard.period7d'),
+              },
+              {
+                value: '30d',
+                label: t('redesign.admin.dashboard.period30d'),
+              },
+              {
+                value: 'all',
+                label: t('redesign.admin.dashboard.periodAll'),
+              },
+            ]}
+          />
         </div>
         {stats.isLoading || !stats.data ? (
           <div className="admin-skeleton admin-skeleton--card" />
@@ -504,40 +523,39 @@ export function DashboardRoute() {
             <div className="admin-card admin-dashboard__toplist">
               <div className="admin-dashboard__toplist-head">
                 <h3>{t('admin.dashboard.stats.topTracks')}</h3>
-                <div className="admin-range-switch">
-                  <button
+                <div className="admin-range-switch adm-r-range">
+                  <AdminRangeSwitch
+                    groupId="dash-top-sort-by"
+                    value={topSortBy}
+                    onChange={setTopSortBy}
+                    options={[
+                      {
+                        value: 'plays',
+                        label: t('redesign.admin.dashboard.topByPlays'),
+                      },
+                      {
+                        value: 'unique_listeners',
+                        label: t(
+                          'redesign.admin.dashboard.topByListeners',
+                        ),
+                      },
+                    ]}
+                  />
+                  <MotionPress
                     type="button"
-                    className={`admin-range-switch__btn${
-                      topSortBy === 'plays' ? ' is-active' : ''
-                    }`}
-                    onClick={() => setTopSortBy('plays')}
-                  >
-                    Plays
-                  </button>
-                  <button
-                    type="button"
-                    className={`admin-range-switch__btn${
-                      topSortBy === 'unique_listeners'
-                        ? ' is-active'
-                        : ''
-                    }`}
-                    onClick={() =>
-                      setTopSortBy('unique_listeners')
-                    }
-                  >
-                    Listeners
-                  </button>
-                  <button
-                    type="button"
-                    className="admin-range-switch__btn"
+                    variant="ghost"
+                    haptic="selection"
+                    className="admin-range-switch__btn adm-r-range__btn"
                     onClick={() =>
                       setTopSortDir((v) =>
                         v === 'desc' ? 'asc' : 'desc',
                       )
                     }
                   >
-                    {topSortDir === 'desc' ? 'Desc' : 'Asc'}
-                  </button>
+                    {topSortDir === 'desc'
+                      ? t('redesign.admin.dashboard.sortDesc')
+                      : t('redesign.admin.dashboard.sortAsc')}
+                  </MotionPress>
                 </div>
               </div>
               {stats.data.top_tracks.length === 0 ? (
