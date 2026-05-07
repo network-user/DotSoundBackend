@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { api } from '@/lib/api'
-import { onWS, isWSConnected, sendWS } from '@/lib/ws'
+import { onWS, isWSConnected } from '@/lib/ws'
 import { getInternalUserId } from '@/lib/telegram'
 import { ChatBubble } from '@/components/Chat/ChatBubble'
 import { ChatInput } from '@/components/Chat/ChatInput'
+import { ChatDevPanel } from '@/components/Chat/ChatDevPanel'
 import { PhotoViewer } from '@/components/Chat/PhotoViewer'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
@@ -260,6 +261,7 @@ export function ChatView() {
     )
       return
     const poll = async () => {
+      if (isWSConnected()) return
       try {
         const res =
           await api.getActivity(conversationId)
@@ -276,13 +278,14 @@ export function ChatView() {
         }
       } catch {}
     }
-    const interval = setInterval(poll, 1000)
+    const interval = setInterval(poll, 4000)
     return () => clearInterval(interval)
   }, [conversationId, peerStatus])
 
   useEffect(() => {
     if (!conversationId) return
     const interval = setInterval(async () => {
+      if (isWSConnected()) return
       try {
         const msgs =
           await api.getMessages(conversationId)
@@ -302,7 +305,7 @@ export function ChatView() {
           return sorted
         })
       } catch {}
-    }, 3_000)
+    }, 8_000)
     return () => clearInterval(interval)
   }, [conversationId])
 
@@ -848,212 +851,17 @@ export function ChatView() {
           onClose={() => setViewingPhoto(null)}
         />
       )}
-      {!devOpen && (
-        <button
-          style={{
-            position: 'fixed',
-            bottom: 80,
-            right: 10,
-            width: 32,
-            height: 32,
-            borderRadius: '50%',
-            background: 'rgba(40,40,40,0.85)',
-            border:
-              '1px solid rgba(255,255,255,0.12)',
-            color: 'rgba(255,255,255,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            zIndex: 9999,
-            backdropFilter: 'blur(6px)',
-          }}
-          onClick={() => setDevOpen(true)}
-        >
-          <Icon name="settings" size={14} />
-        </button>
-      )}
-      {devOpen && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 80,
-            left: 8,
-            right: 8,
-            background: 'rgba(10,10,10,0.95)',
-            border:
-              '1px solid rgba(255,255,255,0.12)',
-            borderRadius: 10,
-            padding: '8px 10px',
-            fontSize: 10,
-            fontFamily: 'monospace',
-            color: 'rgba(255,255,255,0.7)',
-            zIndex: 9999,
-            maxHeight: '40vh',
-            overflow: 'auto',
-            backdropFilter: 'blur(8px)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              marginBottom: 6,
-              flexWrap: 'wrap',
-            }}
-          >
-            <span
-              style={{
-                fontWeight: 700,
-                color: '#fff',
-                fontSize: 11,
-              }}
-            >
-              DevTools
-            </span>
-            <span
-              style={{
-                padding: '1px 5px',
-                borderRadius: 4,
-                fontSize: 9,
-                background: isWSConnected()
-                  ? 'rgba(74,222,128,0.2)'
-                  : 'rgba(239,68,68,0.2)',
-                color: isWSConnected()
-                  ? '#4ade80'
-                  : '#ef4444',
-              }}
-            >
-              WS{' '}
-              {isWSConnected()
-                ? 'OPEN'
-                : 'CLOSED'}
-            </span>
-            <span>
-              peer:{String(peerId)}
-            </span>
-            <span>me:{String(myId)}</span>
-            <div
-              style={{
-                marginLeft: 'auto',
-                display: 'flex',
-                gap: 4,
-              }}
-            >
-              <button
-                style={{
-                  fontSize: 9,
-                  padding: '3px 8px',
-                  background:
-                    'rgba(255,255,255,0.08)',
-                  color: '#fff',
-                  border:
-                    '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                }}
-                onClick={() => {
-                  if (!conversationId) return
-                  addDebug(
-                    `SEND typing ws=${isWSConnected()}`,
-                  )
-                  sendWS({
-                    event: 'activity',
-                    conversation_id:
-                      conversationId,
-                    activity: 'typing',
-                  })
-                  api
-                    .postActivity(
-                      conversationId,
-                      'typing',
-                    )
-                    .then(() =>
-                      addDebug(
-                        'REST typing OK',
-                      ),
-                    )
-                    .catch((e: Error) =>
-                      addDebug(
-                        `REST err: ${e.message}`,
-                      ),
-                    )
-                }}
-              >
-                Test typing
-              </button>
-              <button
-                style={{
-                  fontSize: 9,
-                  padding: '3px 8px',
-                  background:
-                    'rgba(255,255,255,0.08)',
-                  color: '#fff',
-                  border:
-                    '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                }}
-                onClick={() =>
-                  setDebugLog([])
-                }
-              >
-                Clear
-              </button>
-              <button
-                style={{
-                  fontSize: 9,
-                  padding: '3px 8px',
-                  background:
-                    'rgba(255,255,255,0.08)',
-                  color: '#fff',
-                  border:
-                    '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                }}
-                onClick={() =>
-                  setDevOpen(false)
-                }
-              >
-                Close
-              </button>
-            </div>
-          </div>
-          <div
-            style={{
-              borderTop:
-                '1px solid rgba(255,255,255,0.08)',
-              paddingTop: 4,
-            }}
-          >
-            {debugLog.length === 0 ? (
-              <div
-                style={{
-                  opacity: 0.3,
-                  padding: 4,
-                }}
-              >
-                No events yet
-              </div>
-            ) : (
-              debugLog.map((line, i) => (
-                <div
-                  key={i}
-                  style={{
-                    padding: '1px 0',
-                    borderBottom:
-                      '1px solid rgba(255,255,255,0.03)',
-                  }}
-                >
-                  {line}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      )}
+      <ChatDevPanel
+        open={devOpen}
+        onOpen={() => setDevOpen(true)}
+        onClose={() => setDevOpen(false)}
+        conversationId={conversationId}
+        peerId={peerId}
+        myId={myId}
+        debugLog={debugLog}
+        onClearLog={() => setDebugLog([])}
+        onAddDebug={addDebug}
+      />
     </div>
   )
 }
