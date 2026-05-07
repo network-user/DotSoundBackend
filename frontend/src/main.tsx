@@ -6,7 +6,6 @@ import { AdminProvider } from '@/components/Admin/AdminContext'
 import { LikesProvider } from '@/store/LikesContext'
 import { PlayerProvider } from '@/store/PlayerContext'
 import { PrefetchProvider } from '@/store/PrefetchContext'
-import { ToastProvider } from '@/components/ui/Toast'
 import { SoundProvider } from '@/store/SoundContext'
 import { api } from '@/lib/api'
 import { installGlassPerformanceClass } from '@/lib/glassPerformance'
@@ -52,19 +51,17 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <LazyMotion features={domAnimation}>
       <BrowserRouter basename="/mini_app">
-        <ToastProvider>
-          <SoundProvider>
-            <AdminProvider>
-              <PrefetchProvider>
-                <PlayerProvider>
-                  <LikesProvider>
-                    <App />
-                  </LikesProvider>
-                </PlayerProvider>
-              </PrefetchProvider>
-            </AdminProvider>
-          </SoundProvider>
-        </ToastProvider>
+        <SoundProvider>
+          <AdminProvider>
+            <PrefetchProvider>
+              <PlayerProvider>
+                <LikesProvider>
+                  <App />
+                </LikesProvider>
+              </PlayerProvider>
+            </PrefetchProvider>
+          </AdminProvider>
+        </SoundProvider>
       </BrowserRouter>
     </LazyMotion>
   </StrictMode>,

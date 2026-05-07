@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && node scripts/bundle-hygiene-check.mjs && node scripts/check-admin-bundle.mjs",
+    "build": "tsc --noEmit && node scripts/check-no-legacy-toast.mjs && vite build && node scripts/bundle-hygiene-check.mjs && node scripts/check-admin-bundle.mjs",
     "build:bundle-only": "vite build",
     "preview": "vite preview --base /mini_app/",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "e2e": "playwright test --pass-with-no-tests",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && node scripts/check-no-legacy-toast.mjs",
     "gen:icons": "node scripts/generate-png-icons.mjs"
   },
   "dependencies": {
