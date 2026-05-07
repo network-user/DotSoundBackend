@@ -593,6 +593,28 @@
       "stopMenu": "Stop",
       "radioMode": "Radio mode"
     },
+    "playerErrors": {
+      "playback": "Playback error",
+      "refreshUrl": "Could not refresh the track URL",
+      "buffering": "Buffering…",
+      "blockedByBrowser": "Browser blocked playback"
+    },
+    "likesErrors": {
+      "likeFail": "Could not update like",
+      "dislikeFail": "Could not update dislike"
+    },
+    "onboardingMsg": {
+      "genresDone": "Done, {{count}} genres — refreshing recommendations",
+      "artistsDone": "Subscribed to {{count}} artists",
+      "profileSaved": "Profile saved, 1 step left",
+      "saveFail": "Could not save, please try again",
+      "calibrationDone": "Done — recommendations refreshed",
+      "finishFail": "Could not finish, please try again",
+      "smartGenresApplied": "Picked starting genres — you can tweak them in the profile later",
+      "smartDisabled": "Smart skip is disabled by a flag, finishing the step",
+      "smartFallback": "Continuing without setup — you can adjust this in the profile",
+      "skipFail": "Could not skip, please try again"
+    },
     "achievements": {}
   },
   "trackSheet": {

@@ -8,7 +8,7 @@ import { BeatPulse } from '@/components/ui/BeatPulse'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { api } from '@/lib/api'
 import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
 import {
@@ -34,7 +34,6 @@ const MOOD_ICONS = [
 export function RadioView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const toast = useToast()
   const { track: currentTrack } = usePlayerMeta()
   const {
     startRadio,
@@ -100,7 +99,11 @@ export function RadioView() {
   // Сейчас mood — это quick-старт волны от текущего трека.
   const handleMood = (_moodId: string) => {
     if (!currentTrack) {
-      toast.info(t('redesign.home.radioPickTrackHint'))
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.home.radioPickTrackHint'),
+        durationMs: 3000,
+      })
       return
     }
     void handleStartRadio()

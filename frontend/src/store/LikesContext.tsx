@@ -10,7 +10,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { getUserId } from '@/lib/telegram'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { queueMutation } from '@/lib/pendingEvents'
 
 function _isNetworkError(e: unknown): boolean {
@@ -50,7 +50,6 @@ function _withIds(
 
 export function LikesProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation()
-  const toast = useToast()
   const [likedIds, setLikedIds] = useState<Set<number>>(new Set())
   const [dislikedIds, setDislikedIds] = useState<Set<number>>(new Set())
   const [authTick, setAuthTick] = useState(0)
@@ -112,13 +111,16 @@ export function LikesProvider({ children }: { children: ReactNode }) {
       }
       setLikedIds(prevLiked)
       setDislikedIds(prevDisliked)
-      const msg = getApiErrorMessage(
-        e,
-        t('likes.like_failed', 'Не удалось обновить лайк'),
-      )
-      toast.error(msg)
+      showIsland({
+        kind: 'error',
+        title: getApiErrorMessage(
+          e,
+          t('redesign.likesErrors.likeFail'),
+        ),
+        durationMs: 3500,
+      })
     }
-  }, [likedIds, dislikedIds, t, toast])
+  }, [likedIds, dislikedIds, t])
 
   const toggleDislike = useCallback(async (trackId: number) => {
     const uid = getUserId()
@@ -154,13 +156,16 @@ export function LikesProvider({ children }: { children: ReactNode }) {
       }
       setLikedIds(prevLiked)
       setDislikedIds(prevDisliked)
-      const msg = getApiErrorMessage(
-        e,
-        t('likes.dislike_failed', 'Не удалось обновить дизлайк'),
-      )
-      toast.error(msg)
+      showIsland({
+        kind: 'error',
+        title: getApiErrorMessage(
+          e,
+          t('redesign.likesErrors.dislikeFail'),
+        ),
+        durationMs: 3500,
+      })
     }
-  }, [likedIds, dislikedIds, t, toast])
+  }, [likedIds, dislikedIds, t])
 
   const value = useMemo(
     () => ({ isLiked, isDisliked, toggleLike, toggleDislike, reloadLikes }),
