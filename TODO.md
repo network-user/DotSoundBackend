@@ -664,6 +664,7 @@
 - [x] **PlayerBar volume quick entry (2026-05-07)**: в мини-плеер добавлена отдельная точка входа `volume` (иконка `volume-off/low/high`) с popover-слайдером `0..100%`, чтобы регулировать громкость без открытия карточки трека; закрытие по клику вне/`Esc`; стили в `frontend/src/styles/components.css`; `npm run build` зеленый.
 - [x] **PlayerBar volume UX follow-up (2026-05-07)**: popover громкости переведен в вертикальный формат (вертикальный слайдер + компактный стек), а кнопку громкости перенесена ближе к транспортным контролам (перед like), чтобы доступ был быстрее в мини-плеере; `npm run build` зеленый.
 - [x] **TrackCard: remove uploader block (2026-05-07)**: удалён блок «кто добавил трек» (аватар+ник) из `TrackCardSheet`; в backend `TrackCardResponse` больше не возвращает `author`, `CardService` перестал подгружать пользователя для карточки; обновлены frontend типы `TrackCardResponse` и schema-тесты `tests/app/schemas/test_card.py`.
+- [x] **PlayerBar progress sync fix (2026-05-07)**: устранён рассинхрон верхней seek-линии и нижней glass-заливки в мини-плеере — оба слоя теперь используют единый `--progress` без двойного сглаживания, фон `#player-bar::after` выровнен по геометрии thumb (`--pb-fill` с компенсацией половины thumb), убраны рывки от hover/tap изменения толщины seek, добавлены согласованные WebKit/Firefox стили трека/прогресса/ползунка; `npm run build` зелёный.
 
 ## �?ла�?�?о�?м�? �?? б�?д�?�?ее
 

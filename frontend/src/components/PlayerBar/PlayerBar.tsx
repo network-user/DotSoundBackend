@@ -82,14 +82,27 @@ export function PlayerBar() {
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [volumePinned, setVolumePinned] = useState(false)
   const [volumeHover, setVolumeHover] = useState(false)
+  const [seekHoverPct, setSeekHoverPct] = useState<number | null>(null)
   const overflowRef = useRef<HTMLDivElement>(null)
   const volumeRef = useRef<HTMLDivElement>(null)
+  const seekRef = useRef<HTMLInputElement>(null)
   const volumeCloseTimerRef = useRef<number | null>(null)
   const playRef = useRef<HTMLButtonElement>(null)
   useRipple(playRef)
   const targetPct = duration ? (currentTime / duration) * 100 : 0
 
   const volumeOpen = volumePinned || volumeHover
+
+  const updateSeekHoverPct = (clientX: number) => {
+    const seekEl = seekRef.current
+    if (!seekEl) return
+    const rect = seekEl.getBoundingClientRect()
+    if (rect.width <= 0) return
+    const rawPct = ((clientX - rect.left) / rect.width) * 100
+    setSeekHoverPct(
+      Math.max(0, Math.min(100, Number(rawPct.toFixed(3)))),
+    )
+  }
 
   const clearVolumeCloseTimer = () => {
     if (volumeCloseTimerRef.current !== null) {
@@ -228,6 +241,10 @@ export function PlayerBar() {
       : volume < 0.5
         ? 'volume-low'
         : 'volume-high'
+  const seekPreviewSec =
+    seekHoverPct !== null && duration > 0
+      ? (seekHoverPct / 100) * duration
+      : 0
 
   return (
     <m.div
@@ -244,8 +261,23 @@ export function PlayerBar() {
       <div
         id="pb-seek-wrap"
         className="pb-seek-zone rp-player-seek"
+        onMouseMove={(e) => updateSeekHoverPct(e.clientX)}
+        onMouseLeave={() => setSeekHoverPct(null)}
       >
+        {seekHoverPct !== null && (
+          <div
+            className="pb-seek-preview"
+            style={
+              {
+                '--preview': `${seekHoverPct}%`,
+              } as CSSProperties
+            }
+          >
+            {fmt(seekPreviewSec)}
+          </div>
+        )}
         <m.input
+          ref={seekRef}
           type="range"
           id="pb-seek"
           min={0}
@@ -256,9 +288,6 @@ export function PlayerBar() {
           aria-label="Перемотка трека"
           onChange={(e) =>
             seek(Number(e.currentTarget.value))
-          }
-          whileTap={
-            reduce ? undefined : { scaleY: 1.5 }
           }
           transition={SPRING_SNAPPY}
         />
@@ -451,23 +480,30 @@ export function PlayerBar() {
                 aria-label="Регулировка громкости"
                 onClick={(e) => e.stopPropagation()}
               >
+                <div className="pb-volume-slider-wrap">
+                  <input
+                    type="range"
+                    className="pb-volume-slider"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={volumePct}
+                    style={
+                      {
+                        '--progress': `${volumePct}%`,
+                      } as CSSProperties
+                    }
+                    onChange={(e) =>
+                      setVolume(
+                        Number(e.currentTarget.value) / 100,
+                      )
+                    }
+                    aria-label="Громкость плеера"
+                  />
+                </div>
                 <div className="pb-volume-value">
                   {volumePct}%
                 </div>
-                <input
-                  type="range"
-                  className="pb-volume-slider"
-                  min={0}
-                  max={100}
-                  step={1}
-                  value={volumePct}
-                  onChange={(e) =>
-                    setVolume(
-                      Number(e.currentTarget.value) / 100,
-                    )
-                  }
-                  aria-label="Громкость плеера"
-                />
               </div>
             )}
           </div>
