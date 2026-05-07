@@ -662,6 +662,11 @@ button.empty-cta:focus-visible {
   mix-blend-mode: soft-light;
 }
 
+body.ds-perf-lite .glass__highlight,
+body.ds-perf-lite .glass__noise {
+  display: none;
+}
+
 .glass--bordered {
   border: 1px solid var(--glass-edge);
   box-shadow:
@@ -1151,6 +1156,11 @@ button.empty-cta:focus-visible {
     animation: none;
     height: 8px;
   }
+}
+
+body.ds-perf-lite .queue-eq-bars span {
+  animation: none;
+  height: 8px;
 }
 
 /* ---------- Waveform ---------- */

@@ -201,17 +201,8 @@
 }
 
 .rh-home-snap-page > * {
-  transform: translateX(
-    calc(var(--snap-parallax, 0) * var(--rh-parallax-shift))
-  );
-  will-change: transform;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .rh-home-snap-page > * {
-    transform: none;
-    will-change: auto;
-  }
+  transform: none;
+  will-change: auto;
 }
 
 .rh-home-tile {

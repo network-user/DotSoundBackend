@@ -26,6 +26,7 @@ export function BeatPulse({
       : Date.now(),
   )
   const rafRef = useRef<number | null>(null)
+  const lastPaintRef = useRef<number>(0)
 
   useEffect(() => {
     if (reduce || !active) {
@@ -39,9 +40,15 @@ export function BeatPulse({
     }
     const periodMs = 60000 / Math.max(40, Math.min(220, bpm))
     let stopped = false
+    const targetFrameMs = 1000 / 20
 
     const tick = (t: number) => {
       if (stopped) return
+      if (t - lastPaintRef.current < targetFrameMs) {
+        rafRef.current = requestAnimationFrame(tick)
+        return
+      }
+      lastPaintRef.current = t
       const elapsed = t - startRef.current
       const phase =
         Math.abs(

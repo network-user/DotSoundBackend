@@ -89,11 +89,11 @@
   /* Liquid Glass system.
    * Use via GlassSurface primitive or apply tokens directly. */
   --glass-blur-soft:    blur(10px);
-  --glass-blur-medium:  blur(18px);
-  --glass-blur-strong:  blur(28px);
-  --glass-saturate:     saturate(160%);
-  --glass-backdrop-fixed: blur(20px) saturate(160%);
-  --glass-backdrop-fixed-player: blur(20px) saturate(160%)
+  --glass-blur-medium:  blur(14px);
+  --glass-blur-strong:  blur(20px);
+  --glass-saturate:     saturate(135%);
+  --glass-backdrop-fixed: blur(14px) saturate(135%);
+  --glass-backdrop-fixed-player: blur(14px) saturate(135%)
     brightness(1.05);
   --glass-tint-1:       rgba(18, 18, 18, 0.50);
   --glass-tint-2:       rgba(16, 16, 16, 0.70);
@@ -140,6 +140,17 @@
   --z-install: 150;
 }
 
+body.ds-perf-lite {
+  --glass-blur-soft: blur(4px);
+  --glass-blur-medium: blur(8px);
+  --glass-blur-strong: blur(12px);
+  --glass-saturate: saturate(110%);
+  --glass-backdrop-fixed: blur(8px) saturate(110%);
+  --glass-backdrop-fixed-player: blur(8px) saturate(110%)
+    brightness(1.02);
+  --glass-noise-opacity: 0;
+}
+
 /* Palette: strictly monochrome. The colour tokens defined in
  * global.css (`--bg`, `--text`, `--accent`, `--surface`, …) are
  * the single source of truth and are intentionally NOT overridden
@@ -156,5 +167,18 @@
     --dur-xslow:   0ms;
     --dur-hero:    0ms;
     --press-scale: 1;
+  }
+}
+
+@media (prefers-reduced-data: reduce), (pointer: coarse) {
+  :root {
+    --glass-blur-soft: blur(4px);
+    --glass-blur-medium: blur(8px);
+    --glass-blur-strong: blur(12px);
+    --glass-saturate: saturate(110%);
+    --glass-backdrop-fixed: blur(8px) saturate(110%);
+    --glass-backdrop-fixed-player: blur(8px) saturate(110%)
+      brightness(1.02);
+    --glass-noise-opacity: 0;
   }
 }
