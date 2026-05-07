@@ -8,6 +8,7 @@ export interface KenBurnsCoverProps {
   alt?: string
   duration?: number
   className?: string
+  active?: boolean
 }
 
 export function KenBurnsCover({
@@ -15,10 +16,11 @@ export function KenBurnsCover({
   alt = '',
   duration = 18,
   className,
+  active = true,
 }: KenBurnsCoverProps) {
   const reduce = useReducedMotion()
 
-  if (reduce) {
+  if (reduce || !active) {
     return (
       <div
         className={[

@@ -554,6 +554,39 @@
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
 }
 
+.rh-radio-disc-swipe {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-pill);
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.rh-radio-disc-swipe--enabled {
+  cursor: grab;
+}
+
+.rh-radio-disc-swipe--enabled:active {
+  cursor: grabbing;
+}
+
+.rh-radio-disc-swipe--switching {
+  pointer-events: none;
+}
+
+.rh-radio-disc-pulse {
+  transform:
+    translateY(calc(var(--bp-phase, 0) * -8px))
+    scale(calc(1 + var(--bp-phase, 0) * 0.055));
+  transition: transform 90ms linear;
+}
+
+.rh-radio-disc-slide {
+  display: inline-flex;
+  border-radius: inherit;
+}
+
 .rh-radio-disc-wrap .kenburns-cover,
 .rh-radio-disc-wrap .kenburns-cover img {
   width: 100%;
@@ -682,6 +715,13 @@
   text-align: center;
   font-size: var(--fs-14);
   color: var(--text-secondary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rh-radio-disc-pulse {
+    transform: none;
+    transition: none;
+  }
 }
 
 .rh-nf-panel {

@@ -14,7 +14,14 @@ import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
 import {
   usePlayerActions,
   usePlayerMeta,
+  usePlayerState,
 } from '@/store/PlayerContext'
+import {
+  m,
+  SPRING_BOUNCY,
+  TWEEN_FAST,
+  useReducedMotion,
+} from '@/lib/motion'
 import type { Track } from '@/types/api'
 
 function coverUrl(key: string | null): string | null {
@@ -35,19 +42,28 @@ export function RadioView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { track: currentTrack } = usePlayerMeta()
+  const { isPlaying } = usePlayerState()
   const {
+    playNext,
+    playTrack,
     startRadio,
     stopRadio,
     radioMode,
   } = usePlayerActions()
 
   const [historyTracks, setHistoryTracks] = useState<Track[]>([])
+  const [slideDirection, setSlideDirection] = useState(1)
+  const [isSwitching, setIsSwitching] = useState(false)
   const historyRef = useRef<Track[]>([])
+  const switchingRef = useRef(false)
+  const reduceMotion = useReducedMotion()
 
   const heroCover = currentTrack
     ? coverUrl(currentTrack.cover_key)
     : null
   const bpm = 120
+  const discIsLive = radioMode && isPlaying
+  const discSwipeEnabled = radioMode && Boolean(currentTrack)
 
   useEffect(() => {
     if (!currentTrack) return
@@ -109,6 +125,46 @@ export function RadioView() {
     void handleStartRadio()
   }
 
+  const switchToPreviousRadioTrack = async () => {
+    const previousTrack =
+      historyRef.current.length > 1
+        ? historyRef.current[historyRef.current.length - 2]
+        : null
+    if (!previousTrack) return false
+    historyRef.current = historyRef.current.slice(0, -1)
+    setHistoryTracks([...historyRef.current].reverse())
+    await playTrack(previousTrack)
+    return true
+  }
+
+  const handleDiscSwipe = async (
+    direction: 'next' | 'previous',
+  ) => {
+    if (!discSwipeEnabled || switchingRef.current) return
+    switchingRef.current = true
+    setIsSwitching(true)
+    setSlideDirection(direction === 'next' ? 1 : -1)
+    try {
+      const changed =
+        direction === 'next'
+          ? await playNext()
+          : await switchToPreviousRadioTrack()
+      if (!changed) {
+        showIsland({
+          kind: 'toast',
+          title:
+            direction === 'next'
+              ? t('redesign.home.radioNextUnavailable')
+              : t('redesign.home.radioPrevUnavailable'),
+          durationMs: 2200,
+        })
+      }
+    } finally {
+      switchingRef.current = false
+      setIsSwitching(false)
+    }
+  }
+
   const moodDefs = [
     { id: 'chill', labelKey: 'radioMoodChill', hintKey: 'radioMoodHintChill' },
     { id: 'focus', labelKey: 'radioMoodFocus', hintKey: 'radioMoodHintFocus' },
@@ -167,17 +223,69 @@ export function RadioView() {
         className="rh-radio-hero"
       >
         <div className="rh-radio-hero__inner">
-          <BeatPulse bpm={bpm} active={radioMode}>
-            <div className="rh-radio-disc-wrap">
-              {heroCover ? (
-                <KenBurnsCover src={heroCover} alt="" />
-              ) : (
-                <div className="rh-radio-disc-placeholder">
-                  <Icon name="radio" size={48} />
+          <m.div
+            className={[
+              'rh-radio-disc-swipe',
+              discSwipeEnabled && 'rh-radio-disc-swipe--enabled',
+              isSwitching && 'rh-radio-disc-swipe--switching',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            drag={discSwipeEnabled ? 'x' : false}
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.24}
+            onDragEnd={(_, info) => {
+              const offset = info.offset.x
+              const velocity = info.velocity.x
+              if (offset < -56 || velocity < -420) {
+                void handleDiscSwipe('next')
+              } else if (offset > 56 || velocity > 420) {
+                void handleDiscSwipe('previous')
+              }
+            }}
+            animate={{ x: 0 }}
+            transition={reduceMotion ? TWEEN_FAST : SPRING_BOUNCY}
+            aria-label={t('redesign.home.radioSwipeAria')}
+            role="group"
+          >
+            <BeatPulse
+              bpm={bpm}
+              active={discIsLive}
+              className="rh-radio-disc-pulse"
+            >
+              <m.div
+                key={currentTrack?.id ?? 'empty'}
+                className="rh-radio-disc-slide"
+                initial={
+                  reduceMotion
+                    ? { opacity: 0 }
+                    : {
+                        opacity: 0,
+                        x: slideDirection * 72,
+                        scale: 0.94,
+                      }
+                }
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                transition={
+                  reduceMotion ? TWEEN_FAST : SPRING_BOUNCY
+                }
+              >
+                <div className="rh-radio-disc-wrap">
+                  {heroCover ? (
+                    <KenBurnsCover
+                      src={heroCover}
+                      alt=""
+                      active={discIsLive}
+                    />
+                  ) : (
+                    <div className="rh-radio-disc-placeholder">
+                      <Icon name="radio" size={48} />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          </BeatPulse>
+              </m.div>
+            </BeatPulse>
+          </m.div>
           <div className="rh-radio-hero__meta">
             <h2>
               {currentTrack?.title ?? '—'}
