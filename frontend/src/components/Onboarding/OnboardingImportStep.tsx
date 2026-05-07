@@ -6,6 +6,11 @@ import {
 } from 'react'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
+import {
+  showIsland,
+  updateIsland,
+  dismissIsland,
+} from '@/lib/island'
 import { SoundCloudPlaylistUrlModal } from '@/components/Import/SoundCloudPlaylistUrlModal'
 import { SpotifyUrlModal } from '@/components/Import/SpotifyUrlModal'
 import { VkMusicUrlModal } from '@/components/Import/VkMusicUrlModal'
@@ -57,12 +62,72 @@ export function OnboardingImportStep({ onDone }: Props) {
   )
   const [cancelling, setCancelling] = useState(false)
   const pollCountRef = useRef(0)
+  const islandIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     api
       .getOnboardingStatus()
       .then(setStatus)
       .catch(() => setStatus(null))
+  }, [])
+
+  useEffect(() => {
+    if (
+      (flow !== 'queued' && flow !== 'importing') ||
+      !job
+    ) {
+      if (islandIdRef.current) {
+        dismissIsland(islandIdRef.current)
+        islandIdRef.current = null
+      }
+      return
+    }
+    const total = job.total_tracks || 1
+    const done =
+      (job.completed_tracks ?? 0) +
+      (job.failed_tracks ?? 0)
+    const progress = Math.min(1, done / total)
+    const title =
+      flow === 'queued'
+        ? 'Импорт в очереди'
+        : 'Идёт импорт'
+    const hint =
+      flow === 'queued'
+        ? job.queue_position
+          ? `Позиция: ${job.queue_position}`
+          : 'Ждём свободный слот'
+        : `${done} / ${job.total_tracks}`
+    if (islandIdRef.current) {
+      updateIsland(islandIdRef.current, {
+        title,
+        hint,
+        progress,
+      })
+    } else {
+      islandIdRef.current = showIsland({
+        kind: 'progress',
+        title,
+        hint,
+        progress,
+        durationMs: Infinity,
+      })
+    }
+  }, [
+    flow,
+    job?.id,
+    job?.completed_tracks,
+    job?.failed_tracks,
+    job?.total_tracks,
+    job?.queue_position,
+  ])
+
+  useEffect(() => {
+    return () => {
+      if (islandIdRef.current) {
+        dismissIsland(islandIdRef.current)
+        islandIdRef.current = null
+      }
+    }
   }, [])
 
   useEffect(() => {
