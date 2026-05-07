@@ -6,7 +6,7 @@ import { Icon } from '@/components/Icon/Icon'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 
 import { api, getApiErrorMessage } from '@/lib/api'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
@@ -54,7 +54,6 @@ export function ExternalTrackView() {
   const trackId = Number(idParam)
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const toast = useToast()
   const { playTrack } = usePlayerActions()
 
   const [track, setTrack] = useState<Track | null>(null)
@@ -122,11 +121,9 @@ export function ExternalTrackView() {
     try {
       await playTrack(track)
     } catch (e) {
-      toast.error(
-        getApiErrorMessage(e, t('redesign.artist.playError')),
-      )
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [track, playTrack, toast, t])
+  }, [track, playTrack, t])
 
   const handleOpenSource = useCallback(() => {
     if (!sourceUrl) return

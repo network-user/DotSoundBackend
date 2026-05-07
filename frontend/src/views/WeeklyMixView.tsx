@@ -104,7 +104,7 @@ export function WeeklyMixView() {
     } finally {
       setShareSendingConvId(null)
     }
-  }, [shareUrl, toast])
+  }, [shareUrl, t])
 
   const handleCopyLink = useCallback(async () => {
     try {
@@ -113,7 +113,7 @@ export function WeeklyMixView() {
     } catch {
       setShareError('Не удалось скопировать ссылку')
     }
-  }, [shareUrl, toast])
+  }, [shareUrl, t])
 
   const playList = internalTracks ?? []
   const heroArt = playList[0]

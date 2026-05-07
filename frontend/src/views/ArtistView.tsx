@@ -9,7 +9,7 @@ import { HorizontalSnap } from '@/components/ui/HorizontalSnap'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 
 import { api, getApiErrorMessage } from '@/lib/api'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
@@ -85,7 +85,6 @@ export function ArtistView() {
   const artistId = Number(idParam)
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const toast = useToast()
 
   const { playTrack, toggleShuffle } = usePlayerActions()
   const { shuffleOn } = usePlayerMeta()
@@ -204,9 +203,9 @@ export function ArtistView() {
     try {
       await playTrack(tracks[0])
     } catch (e) {
-      toast.error(getApiErrorMessage(e, t('redesign.artist.playError')))
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [tracks, playTrack, toast, t])
+  }, [tracks, playTrack, t])
 
   const handleShuffle = useCallback(async () => {
     if (!tracks || tracks.length === 0) return
@@ -216,9 +215,9 @@ export function ArtistView() {
         tracks[Math.floor(Math.random() * tracks.length)]
       await playTrack(pick)
     } catch (e) {
-      toast.error(getApiErrorMessage(e, t('redesign.artist.playError')))
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [tracks, shuffleOn, toggleShuffle, playTrack, toast, t])
+  }, [tracks, shuffleOn, toggleShuffle, playTrack, t])
 
   const handleFollow = useCallback(async () => {
     if (!Number.isFinite(artistId) || followBusy) return
@@ -229,13 +228,15 @@ export function ArtistView() {
       setFollowerCount(res.follower_count)
       hapticNotification('success')
     } catch (e) {
-      toast.error(
-        getApiErrorMessage(e, t('redesign.artist.followError')),
-      )
+      showIsland({
+        kind: 'error',
+        title: getApiErrorMessage(e, t('redesign.artist.followError')),
+        durationMs: 4000,
+      })
     } finally {
       setFollowBusy(false)
     }
-  }, [artistId, followBusy, toast, t])
+  }, [artistId, followBusy, t])
 
   const handleOpenSource = useCallback(() => {
     if (!sourcePageUrl) return
@@ -506,7 +507,7 @@ export function ArtistView() {
             variant="ghost"
             haptic="light"
             onClick={() => {
-              toast.info(t('redesign.artist.reportSoon'))
+              showIsland({ kind: 'toast', title: t('redesign.artist.reportSoon'), durationMs: 2400 })
             }}
             className="rf-artist__footer-btn"
           >

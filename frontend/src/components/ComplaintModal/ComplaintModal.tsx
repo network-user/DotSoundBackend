@@ -8,7 +8,7 @@ import {
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { useExitTransition } from '@/hooks/useExitTransition'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { hapticNotification } from '@/lib/telegram'
 
 type ReasonType =
@@ -46,7 +46,6 @@ export function ComplaintModal() {
   const exit = useExitTransition(
     Boolean(isComplaintOpen && track),
   )
-  const toast = useToast()
   if (!exit.mounted || !track) return null
 
   const isRightsholderNotice = mode === 'rightsholder'
@@ -105,7 +104,7 @@ export function ComplaintModal() {
         : 'Жалоба принята и будет рассмотрена.'
       hapticNotification('success')
       try {
-        toast.success(msg)
+        showIsland({ kind: 'toast', title: msg, durationMs: 3000 })
       } catch {
         tg.showAlert(msg)
       }

@@ -100,7 +100,7 @@ export function UserChoiceView() {
     } finally {
       setShareSendingConvId(null)
     }
-  }, [shareUrl, toast])
+  }, [shareUrl, t])
 
   const handleCopyLink = useCallback(async () => {
     try {
@@ -109,7 +109,7 @@ export function UserChoiceView() {
     } catch {
       setShareError('Не удалось скопировать ссылку')
     }
-  }, [shareUrl, toast])
+  }, [shareUrl, t])
 
   const playList = tracks ?? []
   const heroArt = playList[0]

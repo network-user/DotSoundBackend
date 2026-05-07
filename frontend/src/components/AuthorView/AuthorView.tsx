@@ -9,7 +9,7 @@ import {
 import { TrackList } from '@/components/TrackList/TrackList'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { queueMutation } from '@/lib/pendingEvents'
 import type { AuthorProfile, Track, UserStatsResponse } from '@/types/api'
 
@@ -31,7 +31,6 @@ interface Props {
 
 export function AuthorView({ authorId, onClose }: Props) {
   const { t } = useTranslation()
-  const toast = useToast()
   const [author, setAuthor] = useState<AuthorProfile | null>(null)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [stats, setStats] = useState<UserStatsResponse | null>(null)
@@ -102,11 +101,14 @@ export function AuthorView({ authorId, onClose }: Props) {
       setFollowing(prevFollowing)
       setStats(prevStats)
       hapticNotification('error')
-      const msg = getApiErrorMessage(
-        e,
-        t('artist.follow_failed', 'Не удалось обновить подписку'),
-      )
-      toast.error(msg)
+      showIsland({
+        kind: 'error',
+        title: getApiErrorMessage(
+          e,
+          t('artist.follow_failed', 'Не удалось обновить подписку'),
+        ),
+        durationMs: 4000,
+      })
     }
     setFollowLoading(false)
   }

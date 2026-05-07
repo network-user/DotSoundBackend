@@ -5,7 +5,7 @@ import { Icon } from '@/components/Icon/Icon'
 import { LongPressMenu } from '@/components/ui/LongPressMenu'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { TrackList } from '@/components/TrackList/TrackList'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { useSound } from '@/store/SoundContext'
 import { api } from '@/lib/api'
 import {
@@ -13,7 +13,6 @@ import {
   getUserId,
   setBackButton,
 } from '@/lib/telegram'
-import { showIsland } from '@/lib/island'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type {
   ChatListItem,
@@ -32,7 +31,6 @@ export function PlaylistsView({
   embedded = false,
 }: PlaylistsViewProps) {
   const { t } = useTranslation()
-  const toast = useToast()
   const sound = useSound()
   const [screen, setScreen] = useState<Screen>('list')
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null)
@@ -140,10 +138,10 @@ export function PlaylistsView({
         setSelected(detail)
         setScreen('detail')
       } catch {
-        toast.error(t('redesign.library.playlistOpenFail'))
+        showIsland({ kind: 'error', title: t('redesign.library.playlistOpenFail'), durationMs: 3500 })
       }
     },
-    [toast, t],
+    [t],
   )
 
   const handleCreate = useCallback(async () => {
@@ -228,11 +226,11 @@ export function PlaylistsView({
       })
       setRenameOpen(null)
     } catch {
-      toast.error(t('redesign.library.playlistRenameFail'))
+      showIsland({ kind: 'error', title: t('redesign.library.playlistRenameFail'), durationMs: 3500 })
     } finally {
       setRenameBusy(false)
     }
-  }, [renameOpen, renameValue, loadPlaylists, t, toast])
+  }, [renameOpen, renameValue, loadPlaylists, t])
 
   const handleDuplicate = useCallback(
     async (p: Playlist) => {
@@ -259,10 +257,10 @@ export function PlaylistsView({
           durationMs: 2000,
         })
       } catch {
-        toast.error(t('redesign.library.playlistDuplicateFail'))
+        showIsland({ kind: 'error', title: t('redesign.library.playlistDuplicateFail'), durationMs: 3500 })
       }
     },
-    [loadPlaylists, t, toast],
+    [loadPlaylists, t],
   )
 
   const handleDelete = useCallback(
@@ -280,10 +278,10 @@ export function PlaylistsView({
           durationMs: 2000,
         })
       } catch {
-        toast.error(t('redesign.library.playlistDeleteFail'))
+        showIsland({ kind: 'error', title: t('redesign.library.playlistDeleteFail'), durationMs: 3500 })
       }
     },
-    [loadPlaylists, t, toast],
+    [loadPlaylists, t],
   )
 
   const availableTracks = useMemo(() => {
@@ -371,11 +369,9 @@ export function PlaylistsView({
     try {
       await navigator.clipboard.writeText(url)
       sound.play('notificationInfo')
-      toast.success(t('redesign.library.shareCopyDone'), {
-        position: 'top',
-      })
+      showIsland({ kind: 'toast', title: t('redesign.library.shareCopyDone'), durationMs: 2000 })
     } catch {
-      toast.error(t('redesign.library.shareCopyFail'))
+      showIsland({ kind: 'error', title: t('redesign.library.shareCopyFail'), durationMs: 3500 })
       sound.play('notificationError')
     }
   }

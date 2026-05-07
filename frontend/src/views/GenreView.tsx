@@ -5,7 +5,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 
 import { api, getApiErrorMessage } from '@/lib/api'
 import { VARIANTS_FADE_UP, m, SPRING_GENTLE } from '@/lib/motion'
@@ -31,7 +31,6 @@ export function GenreView() {
   const { slug } = useParams<{ slug: string }>()
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const toast = useToast()
 
   const { playTrack, toggleShuffle } = usePlayerActions()
   const { shuffleOn } = usePlayerMeta()
@@ -90,11 +89,9 @@ export function GenreView() {
     try {
       await playTrack(tracks[0])
     } catch (e) {
-      toast.error(
-        getApiErrorMessage(e, t('redesign.artist.playError')),
-      )
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [tracks, playTrack, toast, t])
+  }, [tracks, playTrack, t])
 
   const handleShuffle = useCallback(async () => {
     if (!tracks || tracks.length === 0) return
@@ -104,11 +101,9 @@ export function GenreView() {
         tracks[Math.floor(Math.random() * tracks.length)]
       await playTrack(pick)
     } catch (e) {
-      toast.error(
-        getApiErrorMessage(e, t('redesign.artist.playError')),
-      )
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [tracks, shuffleOn, toggleShuffle, playTrack, toast, t])
+  }, [tracks, shuffleOn, toggleShuffle, playTrack, t])
 
   if (!slug) {
     return (

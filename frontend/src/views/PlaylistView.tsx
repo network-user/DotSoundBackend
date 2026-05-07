@@ -7,7 +7,7 @@ import { TrackList } from '@/components/TrackList/TrackList'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 
 import { api, getApiErrorMessage } from '@/lib/api'
 import { VARIANTS_FADE_UP, m } from '@/lib/motion'
@@ -51,7 +51,6 @@ export function PlaylistView() {
   const playlistId = Number(idParam)
   const navigate = useNavigate()
   const { t } = useTranslation()
-  const toast = useToast()
 
   const { playTrack, toggleShuffle } = usePlayerActions()
   const { shuffleOn } = usePlayerMeta()
@@ -116,11 +115,9 @@ export function PlaylistView() {
     try {
       await playTrack(tracks[0])
     } catch (e) {
-      toast.error(
-        getApiErrorMessage(e, t('redesign.artist.playError')),
-      )
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [tracks, playTrack, toast, t])
+  }, [tracks, playTrack, t])
 
   const handleShuffle = useCallback(async () => {
     if (!tracks || tracks.length === 0) return
@@ -130,11 +127,9 @@ export function PlaylistView() {
         tracks[Math.floor(Math.random() * tracks.length)]
       await playTrack(pick)
     } catch (e) {
-      toast.error(
-        getApiErrorMessage(e, t('redesign.artist.playError')),
-      )
+      showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
-  }, [tracks, shuffleOn, toggleShuffle, playTrack, toast, t])
+  }, [tracks, shuffleOn, toggleShuffle, playTrack, t])
 
   if (!Number.isFinite(playlistId)) {
     return (

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { MotionPress } from '@/components/ui/MotionPress'
 import {
   m,
@@ -113,7 +113,6 @@ export function InstallPrompt() {
   const promptRef =
     useRef<BeforeInstallPromptEvent | null>(null)
   const bipEventReceived = useRef(false)
-  const toast = useToast()
 
   useEffect(() => {
     if (isTelegram()) return
@@ -147,7 +146,7 @@ export function InstallPrompt() {
       } catch {
         /* ignore */
       }
-      toast.success(t('pwa.installed'))
+      showIsland({ kind: 'toast', title: t('pwa.installed'), durationMs: 2400 })
       hapticNotification('success')
     }
 
@@ -193,7 +192,7 @@ export function InstallPrompt() {
         onInstalled,
       )
     }
-  }, [toast, t])
+  }, [t])
 
   if (!visible || panelMode === null) {
     return null

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { onWS } from '@/lib/ws'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { hapticNotification } from '@/lib/telegram'
 import { useSound } from '@/store/SoundContext'
 import {
@@ -74,7 +74,6 @@ function eventToNotif(
 }
 
 export function SystemEventListener() {
-  const toast = useToast()
   const { t } = useTranslation()
   const sound = useSound()
 
@@ -88,35 +87,37 @@ export function SystemEventListener() {
       )
       if (!nLike.type && !message) return
       const kind = TOAST_BY_TYPE[nLike.type] || 'info'
-      const importToastOpts =
-        nLike.type ===
-          'import_completed' ||
+      const isImportEvent =
+        nLike.type === 'import_completed' ||
         nLike.type === 'import_failed'
-          ? { duration: 10_000 }
-          : undefined
+      const durationMs = isImportEvent ? 10_000 : 4500
       if (kind === 'success') {
-        toast.success(
-          message || t('notifications.toast.fallbackSuccess'),
-          importToastOpts,
-        )
+        showIsland({
+          kind: 'toast',
+          title: message || t('notifications.toast.fallbackSuccess'),
+          durationMs,
+        })
         sound.play('notificationSuccess')
       } else if (kind === 'warning') {
-        toast.warning(
-          message || t('notifications.toast.fallbackWarning'),
-          importToastOpts,
-        )
+        showIsland({
+          kind: 'toast',
+          title: message || t('notifications.toast.fallbackWarning'),
+          durationMs,
+        })
         sound.play('notificationWarning')
       } else if (kind === 'error') {
-        toast.error(
-          message || t('notifications.toast.fallbackError'),
-          importToastOpts,
-        )
+        showIsland({
+          kind: 'error',
+          title: message || t('notifications.toast.fallbackError'),
+          durationMs,
+        })
         sound.play('notificationError')
       } else {
-        toast.info(
-          message || t('notifications.toast.fallbackInfo'),
-          importToastOpts,
-        )
+        showIsland({
+          kind: 'toast',
+          title: message || t('notifications.toast.fallbackInfo'),
+          durationMs,
+        })
         sound.play('notificationInfo')
       }
       const haptic = HAPTIC_BY_TYPE[nLike.type]
@@ -150,7 +151,7 @@ export function SystemEventListener() {
       offComplaint()
       offWarning()
     }
-  }, [toast, t, sound])
+  }, [t, sound])
 
   return null
 }
