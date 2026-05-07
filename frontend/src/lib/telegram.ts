@@ -104,18 +104,18 @@ export function isTelegram(): boolean {
 }
 
 const VIBRATE_MAP: Record<HapticImpact, number> = {
-  light: 10,
-  medium: 18,
-  heavy: 28,
+  light: 1,
+  medium: 2,
+  heavy: 3,
 }
 
 const VIBRATE_NOTIF: Record<
   'success' | 'warning' | 'error',
   number | number[]
 > = {
-  success: [10, 30, 10],
-  warning: [20, 40, 20],
-  error: [40, 30, 40],
+  success: 1,
+  warning: 2,
+  error: 3,
 }
 
 export function haptic(
@@ -127,8 +127,11 @@ export function haptic(
       (WebApp as any).HapticFeedback
       ?? (window as any).Telegram?.WebApp
         ?.HapticFeedback
-    if (tgHaptic?.impactOccurred) {
-      tgHaptic.impactOccurred(kind)
+    if (tgHaptic?.selectionChanged) {
+      tgHaptic.selectionChanged()
+      tgTriggered = true
+    } else if (tgHaptic?.impactOccurred) {
+      tgHaptic.impactOccurred('light')
       tgTriggered = true
     }
   } catch {
@@ -139,7 +142,7 @@ export function haptic(
       if (!tgTriggered) {
         navigator.vibrate(VIBRATE_MAP[kind])
       } else {
-        navigator.vibrate(4)
+        navigator.vibrate(1)
       }
     }
   } catch {
@@ -156,8 +159,14 @@ export function hapticNotification(
       (WebApp as any).HapticFeedback
       ?? (window as any).Telegram?.WebApp
         ?.HapticFeedback
-    if (tgHaptic?.notificationOccurred) {
-      tgHaptic.notificationOccurred(kind)
+    if (tgHaptic?.selectionChanged) {
+      tgHaptic.selectionChanged()
+      tgTriggered = true
+    } else if (tgHaptic?.impactOccurred) {
+      tgHaptic.impactOccurred('light')
+      tgTriggered = true
+    } else if (tgHaptic?.notificationOccurred) {
+      tgHaptic.notificationOccurred('success')
       tgTriggered = true
     }
   } catch {
@@ -168,7 +177,7 @@ export function hapticNotification(
       if (!tgTriggered) {
         navigator.vibrate(VIBRATE_NOTIF[kind])
       } else {
-        navigator.vibrate(8)
+        navigator.vibrate(1)
       }
     }
   } catch {
@@ -196,7 +205,7 @@ export function hapticSelection(): void {
   try {
     if ('vibrate' in navigator) {
       if (!tgTriggered) {
-        navigator.vibrate(4)
+        navigator.vibrate(1)
       } else {
         navigator.vibrate(1)
       }
