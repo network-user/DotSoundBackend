@@ -402,7 +402,16 @@ async def scan_spotify_account(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ImportJobResponse:
-    return await _scan_account("spotify", body, session, current_user)
+    # Temporary disable: Spotify import via OAuth account is paused.
+    # Keep the old call commented for quick rollback.
+    # return await _scan_account("spotify", body, session, current_user)
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail=(
+            "Spotify account import is temporarily disabled. "
+            "Use Spotify public playlist/album URL import instead."
+        ),
+    )
 
 
 @router.post(

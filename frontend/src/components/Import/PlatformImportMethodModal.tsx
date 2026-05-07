@@ -44,8 +44,8 @@ const LINK_BLURBS: Record<ImportPlatform, string> = {
 
 const ACCOUNT_BLURBS: Record<ImportPlatform, string> = {
   spotify:
-    'Импортируем треки из библиотеки Spotify: сохранённые треки (после ' +
-    'согласия в окне входа).',
+    'Вход в аккаунт Spotify для импорта временно отключён. ' +
+    'Используйте импорт по публичной ссылке.',
   vk:
     'Импортируем аудио, доступные вашему профилю VK (после согласия ' +
     'и входа).',
@@ -140,6 +140,56 @@ export function PlatformImportMethodModal({
   const handleByAccount = async () => {
     if (submitting) return
     setError('')
+
+    if (platform === 'spotify') {
+      // Temporary disable: OAuth Spotify import paused.
+      // Keep old account-import flow below in comments for quick restore.
+      //
+      // setSubmitting(true)
+      // const provider = oauthProvider(platform)
+      // try {
+      //   const list = await api.getLinkedAccounts()
+      //   const acc = list.find(
+      //     a => a.provider === provider,
+      //   )
+      //   if (acc?.connected) {
+      //     const j = await api.startSpotifyAccountImport({
+      //       source: 'liked',
+      //     })
+      //     if (j.status === 'failed') {
+      //       setError(
+      //         j.tracks_data?.error_message
+      //           || 'Сервис не вернул треки. Попробуйте по ссылке.',
+      //       )
+      //       setSubmitting(false)
+      //       return
+      //     }
+      //     onClose()
+      //     onAccountScanReady(j)
+      //     setSubmitting(false)
+      //     return
+      //   }
+      //   const { auth_url: authUrl } =
+      //     await api.startLinkedAccountConnect(provider)
+      //   onClose()
+      //   setSubmitting(false)
+      //   showIsland({
+      //     kind: 'toast',
+      //     title: 'Откроется страница входа. После возврата снова ' +
+      //       'запустите импорт и выберите «вход в аккаунт».',
+      //     durationMs: 5000,
+      //   })
+      //   openOAuthUrlInApp(authUrl)
+      // } catch (e) {
+      //   setError(accountErrorMessage(e, platform))
+      //   setSubmitting(false)
+      // }
+      setError(
+        'Вход через Spotify временно недоступен. Используйте импорт по ссылке.',
+      )
+      return
+    }
+
     setSubmitting(true)
     const provider = oauthProvider(platform)
     try {
@@ -148,12 +198,17 @@ export function PlatformImportMethodModal({
         a => a.provider === provider,
       )
       if (acc?.connected) {
-        const j =
-          platform === 'spotify'
-            ? await api.startSpotifyAccountImport({
-                source: 'liked',
-              })
-            : await api.startVkAccountImport({ source: 'liked' })
+        // Spotify branch is temporarily disabled above.
+        // Keep the previous branch for quick restore.
+        // const j =
+        //   platform === 'spotify'
+        //     ? await api.startSpotifyAccountImport({
+        //         source: 'liked',
+        //       })
+        //     : await api.startVkAccountImport({ source: 'liked' })
+        const j = await api.startVkAccountImport({
+          source: 'liked',
+        })
         if (j.status === 'failed') {
           setError(
             j.tracks_data?.error_message
@@ -227,12 +282,14 @@ export function PlatformImportMethodModal({
             variant="ghost"
             haptic="medium"
             className="btn-secondary"
-            disabled={submitting}
+            disabled={submitting || platform === 'spotify'}
             onClick={() => {
               void handleByAccount()
             }}
           >
-            {submitting
+            {platform === 'spotify'
+              ? 'Вход в Spotify временно отключён'
+              : submitting
               ? '…'
               : 'Войти в аккаунт ' + name}
           </MotionPress>
