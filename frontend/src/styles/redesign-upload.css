@@ -284,6 +284,87 @@
   font-size: var(--fs-14);
 }
 
+/* Import source picker (.ri-imp-*) */
+
+.ru-imp-root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-3);
+}
+
+.ru-imp-header h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-lt);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.06;
+}
+
+.ru-imp-subtitle {
+  font-size: var(--fs-14);
+  color: var(--text-secondary);
+}
+
+.ru-imp-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ru-imp-row.mp-press,
+.ru-imp-row.mp-press--ghost {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-md, 12px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: left;
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.ru-imp-row--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ru-imp-row__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md, 12px);
+  background: var(--glass-medium-bg, rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--border);
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.ru-imp-row__label {
+  flex: 1;
+  font-size: var(--fs-15);
+  font-weight: 600;
+}
+
+.ru-imp-row__chevron {
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+}
+
+.ru-imp-row__badge {
+  font-size: var(--fs-12);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--glass-medium-bg, rgba(255, 255, 255, 0.04));
+  color: var(--text-secondary);
+}
+
 /* URL-import tab (SoundCloud / YouTube / Bandcamp) */
 
 .ru-up-url {
