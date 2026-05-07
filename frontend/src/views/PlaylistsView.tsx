@@ -5,7 +5,13 @@ import { Icon } from '@/components/Icon/Icon'
 import { LongPressMenu } from '@/components/ui/LongPressMenu'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { TrackList } from '@/components/TrackList/TrackList'
+<<<<<<< HEAD
 import { showIsland } from '@/lib/island'
+=======
+import { CoverImage } from '@/components/CoverImage/CoverImage'
+import { useToast } from '@/components/ui/Toast'
+import { usePlayerActions } from '@/store/PlayerContext'
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 import { useSound } from '@/store/SoundContext'
 import { api } from '@/lib/api'
 import {
@@ -19,22 +25,79 @@ import type {
   Playlist,
   PlaylistWithTracks,
   Track,
+  WeeklyTopPlaylistResponse,
+  GenreMixesResponse,
 } from '@/types/api'
 
 interface PlaylistsViewProps {
   embedded?: boolean
+  onNavigate?: (path: string) => void
 }
 
 type Screen = 'list' | 'detail'
 
+const AUTO_TYPE_LABELS: Record<string, string> = {
+  auto_weekly_top: 'Топ недели',
+  auto_genre_mix: 'Жанровый микс',
+  auto_daily_mix: 'Дневной микс',
+  editorial: 'Редакционный',
+  imported_sc: 'Из SoundCloud',
+  imported_bc: 'Из Bandcamp',
+}
+
+function PlaylistCover({
+  playlist,
+  size = 56,
+}: {
+  playlist: Playlist | { cover_key?: string | null; name: string }
+  size?: number
+}) {
+  const coverKey = 'cover_key' in playlist ? playlist.cover_key : null
+  if (coverKey) {
+    return (
+      <CoverImage
+        coverKey={coverKey}
+        className="playlist-cover-img"
+        style={{ width: size, height: size }}
+      />
+    )
+  }
+  return (
+    <div
+      className="playlist-cover"
+      style={{ width: size, height: size }}
+    >
+      <Icon name="list" size={size * 0.36} />
+    </div>
+  )
+}
+
+function formatPlaylistMeta(p: Playlist): string {
+  if (AUTO_TYPE_LABELS[p.playlist_type]) {
+    return AUTO_TYPE_LABELS[p.playlist_type]
+  }
+  return p.is_public ? 'Публичный' : 'Приватный'
+}
+
 export function PlaylistsView({
   embedded = false,
+  onNavigate,
 }: PlaylistsViewProps) {
   const { t } = useTranslation()
   const sound = useSound()
+  const { playTrack } = usePlayerActions()
   const [screen, setScreen] = useState<Screen>('list')
   const [playlists, setPlaylists] = useState<Playlist[] | null>(null)
-  const [selected, setSelected] = useState<PlaylistWithTracks | null>(null)
+  const [featuredPlaylists, setFeaturedPlaylists] = useState<
+    PlaylistWithTracks[]
+  >([])
+  const [weeklyTop, setWeeklyTop] =
+    useState<WeeklyTopPlaylistResponse | null>(null)
+  const [genreMixes, setGenreMixes] =
+    useState<GenreMixesResponse | null>(null)
+  const [selected, setSelected] = useState<PlaylistWithTracks | null>(
+    null,
+  )
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
   const [loading, setLoading] = useState(false)
@@ -58,9 +121,7 @@ export function PlaylistsView({
   const uid = getUserId()
   const isAdmin = getIsAdmin()
   const canEditSelected = Boolean(
-    selected &&
-    uid &&
-    (selected.owner_id === uid || isAdmin),
+    selected && uid && (selected.owner_id === uid || isAdmin),
   )
 
   usePrefetchTracks(
@@ -79,7 +140,23 @@ export function PlaylistsView({
 
   useEffect(() => {
     loadPlaylists()
+<<<<<<< HEAD
   }, [loadPlaylists])
+=======
+    api
+      .getFeaturedPlaylists(6)
+      .then(setFeaturedPlaylists)
+      .catch(() => setFeaturedPlaylists([]))
+    api
+      .getWeeklyTopPlaylist()
+      .then(setWeeklyTop)
+      .catch(() => setWeeklyTop(null))
+    api
+      .getGenreMixes()
+      .then(setGenreMixes)
+      .catch(() => setGenreMixes(null))
+  }, [])
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 
   useEffect(() => {
     if (screen !== 'detail') return
@@ -95,9 +172,10 @@ export function PlaylistsView({
     setEditName(selected.name)
     setEditPublic(selected.is_public)
     if (canEditSelected) {
-      api.getMyLibrary(1, 100, false).then((res) => {
-        setMyTracks(res.items)
-      }).catch(() => setMyTracks([]))
+      api
+        .getMyLibrary(1, 100, false)
+        .then((res) => setMyTracks(res.items))
+        .catch(() => setMyTracks([]))
     }
   }, [selected?.id, canEditSelected])
 
@@ -112,7 +190,8 @@ export function PlaylistsView({
     let cancelled = false
     const timer = window.setTimeout(() => {
       setSearchLoading(true)
-      api.getTracks({ q, size: 30, page: 1 })
+      api
+        .getTracks({ q, size: 30, page: 1 })
         .then((res) => {
           if (cancelled) return
           setSearchResults(res.items)
@@ -291,9 +370,9 @@ export function PlaylistsView({
     const q = trackSearch.trim().toLowerCase()
     const base = q
       ? local.filter((t) => {
-        const hay = `${t.title} ${t.artist ?? ''}`.toLowerCase()
-        return hay.includes(q)
-      })
+          const hay = `${t.title} ${t.artist ?? ''}`.toLowerCase()
+          return hay.includes(q)
+        })
       : local
     const merged = [...base]
     for (const remote of searchResults) {
@@ -308,16 +387,19 @@ export function PlaylistsView({
   }, [selected, myTracks, trackSearch, searchResults])
 
   const formatShareChatTitle = (item: ChatListItem): string => {
+<<<<<<< HEAD
     if (item.conversation.type === 'saved') {
       return t('redesign.library.shareChatSaved')
     }
     if (item.conversation.title?.trim()) {
+=======
+    if (item.conversation.type === 'saved') return 'Избранное'
+    if (item.conversation.title?.trim())
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
       return item.conversation.title.trim()
-    }
     const peer = item.peer
-    const name = peer?.display_name || [peer?.first_name, peer?.last_name]
-      .filter(Boolean)
-      .join(' ')
+    const name = peer?.display_name ||
+      [peer?.first_name, peer?.last_name].filter(Boolean).join(' ')
     if (name && name.trim()) return name.trim()
     if (peer?.username) return `@${peer.username}`
     return t('redesign.library.shareChatFallback', {
@@ -369,13 +451,18 @@ export function PlaylistsView({
     try {
       await navigator.clipboard.writeText(url)
       sound.play('notificationInfo')
+<<<<<<< HEAD
       showIsland({ kind: 'toast', title: t('redesign.library.shareCopyDone'), durationMs: 2000 })
+=======
+      toast.success('Ссылка скопирована', { position: 'top' })
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
     } catch {
       showIsland({ kind: 'error', title: t('redesign.library.shareCopyFail'), durationMs: 3500 })
       sound.play('notificationError')
     }
   }
 
+  /* ── Detail screen ──────────────────────────────────────── */
   if (screen === 'detail' && selected) {
     return (
       <section id="view-playlists" className="view active">
@@ -401,9 +488,13 @@ export function PlaylistsView({
           <div className="rd-pl-detail-meta">
             <h2 className="view-detail-title">{selected.name}</h2>
             <span className="hint">
+<<<<<<< HEAD
               {t('redesign.library.playlistTracksCount', {
                 count: selected.tracks.length,
               })}
+=======
+              {selected.tracks.length} треков
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
             </span>
           </div>
           <MotionPress
@@ -411,14 +502,31 @@ export function PlaylistsView({
             variant="icon"
             haptic="light"
             className="icon-btn"
+<<<<<<< HEAD
             ariaLabel={t('redesign.library.playlistShare')}
             onClick={() => {
               void openShareModal()
             }}
+=======
+            onClick={() => void openShareModal()}
+            aria-label="Поделиться"
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
           >
             <Icon name="share" size={18} />
           </MotionPress>
         </div>
+
+        {selected.description && (
+          <p
+            style={{
+              padding: '0 16px 12px',
+              color: 'var(--text-secondary)',
+              fontSize: 13,
+            }}
+          >
+            {selected.description}
+          </p>
+        )}
 
         {canEditSelected && (
           <div className="rd-pl-edit">
@@ -432,7 +540,14 @@ export function PlaylistsView({
                 onChange={(e) => setEditName(e.target.value)}
               />
             </div>
+<<<<<<< HEAD
             <label className="hint rd-pl-edit-public">
+=======
+            <label
+              className="hint"
+              style={{ display: 'block', marginBottom: 12 }}
+            >
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
               <input
                 type="checkbox"
                 checked={editPublic}
@@ -445,16 +560,26 @@ export function PlaylistsView({
               variant="primary"
               haptic="medium"
               className="btn-primary"
-              onClick={() => {
-                void handleSaveMeta()
-              }}
+              onClick={() => void handleSaveMeta()}
               disabled={editBusy}
             >
+<<<<<<< HEAD
               {editBusy
                 ? t('redesign.library.playlistSaving')
                 : t('redesign.library.playlistSave')}
             </MotionPress>
             <div className="rd-pl-add-row">
+=======
+              {editBusy ? 'Сохранение...' : 'Сохранить'}
+            </button>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                marginTop: 12,
+              }}
+            >
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
               <input
                 className="form-input rd-pl-add-search"
                 placeholder={t(
@@ -479,6 +604,7 @@ export function PlaylistsView({
                   </option>
                 ))}
               </select>
+<<<<<<< HEAD
               <MotionPress
                 type="button"
                 variant="ghost"
@@ -492,12 +618,25 @@ export function PlaylistsView({
             {searchLoading && (
               <p className="hint rd-pl-search-hint">
                 {t('redesign.library.playlistSearching')}
+=======
+              <button
+                className="btn-secondary"
+                onClick={() => void handleAddTrack()}
+              >
+                Добавить
+              </button>
+            </div>
+            {searchLoading && (
+              <p className="hint" style={{ marginTop: 8 }}>
+                Идёт поиск…
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
               </p>
             )}
           </div>
         )}
 
         {canEditSelected && (
+<<<<<<< HEAD
           <div className="rd-pl-edit-rows">
             {selected.tracks.map((tr, idx) => (
               <div key={tr.id} className="rd-pl-edit-row">
@@ -529,6 +668,35 @@ export function PlaylistsView({
                   className="icon-btn"
                   ariaLabel={tr.title}
                   onClick={() => void handleRemoveTrack(tr.id)}
+=======
+          <div style={{ padding: '0 16px 16px' }}>
+            {selected.tracks.map((t, idx) => (
+              <div
+                key={t.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 8,
+                }}
+              >
+                <span style={{ flex: 1 }}>{t.title}</span>
+                <button
+                  className="icon-btn"
+                  onClick={() => void moveTrack(idx, -1)}
+                >
+                  ↑
+                </button>
+                <button
+                  className="icon-btn"
+                  onClick={() => void moveTrack(idx, 1)}
+                >
+                  ↓
+                </button>
+                <button
+                  className="icon-btn"
+                  onClick={() => void handleRemoveTrack(t.id)}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
                 >
                   <Icon name="x" size={14} />
                 </MotionPress>
@@ -546,28 +714,39 @@ export function PlaylistsView({
           <div
             className="share-modal-overlay fade-in"
             onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setShareOpen(false)
-              }
+              if (e.target === e.currentTarget) setShareOpen(false)
             }}
           >
             <div className="share-modal scale-in">
               <div className="share-modal-header">
                 <div className="share-modal-title-wrap">
                   <h3 className="share-modal-title">
+<<<<<<< HEAD
                     {t('redesign.library.shareModalTitle')}
                   </h3>
                   <p className="share-modal-subtitle">{selected.name}</p>
+=======
+                    Поделиться плейлистом
+                  </h3>
+                  <p className="share-modal-subtitle">
+                    {selected.name}
+                  </p>
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
                 </div>
                 <MotionPress
                   type="button"
                   variant="icon"
                   haptic="light"
                   className="icon-btn"
+<<<<<<< HEAD
                   ariaLabel={t('redesign.library.playlistCopyLink')}
                   onClick={() => {
                     void handleCopyLink()
                   }}
+=======
+                  onClick={() => void handleCopyLink()}
+                  aria-label="Скопировать ссылку"
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
                 >
                   <Icon name="copy" size={16} />
                 </MotionPress>
@@ -598,9 +777,9 @@ export function PlaylistsView({
                         variant="ghost"
                         haptic="light"
                         className="share-chat-row"
-                        onClick={() => {
+                        onClick={() =>
                           void handleShareToChat(convId)
-                        }}
+                        }
                         disabled={shareSendingConvId !== null}
                       >
                         <span className="share-chat-icon">
@@ -608,7 +787,8 @@ export function PlaylistsView({
                             name={
                               item.conversation.type === 'group'
                                 ? 'users-following'
-                                : item.conversation.type === 'saved'
+                                : item.conversation.type ===
+                                    'saved'
                                   ? 'heart'
                                   : 'user'
                             }
@@ -640,6 +820,14 @@ export function PlaylistsView({
     )
   }
 
+  /* ── List screen ────────────────────────────────────────── */
+  const userPlaylists = (playlists ?? []).filter(
+    (p) => p.playlist_type === 'user',
+  )
+  const autoPlaylists = (playlists ?? []).filter(
+    (p) => p.playlist_type !== 'user',
+  )
+
   return (
     <section id="view-playlists" className="view active">
       {!embedded && (
@@ -651,6 +839,7 @@ export function PlaylistsView({
         </div>
       )}
 
+<<<<<<< HEAD
       <MotionPress
         type="button"
         variant="ghost"
@@ -661,6 +850,160 @@ export function PlaylistsView({
         <Icon name="plus" size={18} />
         {t('redesign.library.playlistCreate')}
       </MotionPress>
+=======
+      {/* ── Featured / Editorial section ─────────────────── */}
+      {featuredPlaylists.length > 0 && (
+        <div className="playlists-featured-section">
+          <p className="search-section-label" style={{ padding: '0 16px 10px' }}>
+            Рекомендованные
+          </p>
+          <div className="playlists-featured-scroll">
+            {featuredPlaylists.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="playlist-featured-card"
+                onClick={() => void openPlaylist(p)}
+              >
+                <div className="playlist-featured-cover">
+                  {p.cover_key ? (
+                    <CoverImage coverKey={p.cover_key} />
+                  ) : (
+                    <Icon name="list" size={24} />
+                  )}
+                </div>
+                <div className="playlist-featured-info">
+                  <p className="playlist-featured-name">{p.name}</p>
+                  {p.description && (
+                    <p className="playlist-featured-desc">
+                      {p.description}
+                    </p>
+                  )}
+                  <p className="playlist-featured-meta">
+                    {p.tracks.length} треков
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Auto-generated playlists ─────────────────────── */}
+      <div className="playlists-auto-section">
+        {weeklyTop && weeklyTop.tracks.length > 0 && (
+          <button
+            type="button"
+            className="playlist-auto-card"
+            onClick={() =>
+              onNavigate?.('/weekly-top')
+            }
+          >
+            <div className="playlist-auto-icon">
+              <Icon name="fire" size={22} />
+            </div>
+            <div className="playlist-auto-info">
+              <p className="playlist-auto-name">Топ недели</p>
+              <p className="playlist-auto-meta">
+                {weeklyTop.tracks.length} треков
+              </p>
+            </div>
+            <Icon
+              name="chevron"
+              size={16}
+              className="playlist-auto-chevron"
+            />
+          </button>
+        )}
+
+        {genreMixes && genreMixes.mixes.length > 0 && (
+          <>
+            <p
+              className="search-section-label"
+              style={{
+                padding: '16px 16px 8px',
+                display: 'block',
+              }}
+            >
+              Жанровые миксы
+            </p>
+            {genreMixes.mixes.map((mix) => (
+              <button
+                key={mix.genre}
+                type="button"
+                className="playlist-auto-card"
+                onClick={() =>
+                  onNavigate?.(`/genre-mix/${mix.genre}`)
+                }
+              >
+                <div className="playlist-auto-icon">
+                  <Icon name="music-note" size={20} />
+                </div>
+                <div className="playlist-auto-info">
+                  <p className="playlist-auto-name">{mix.title}</p>
+                  <p className="playlist-auto-meta">
+                    {mix.tracks.length} треков
+                  </p>
+                </div>
+                <Icon
+                  name="chevron"
+                  size={16}
+                  className="playlist-auto-chevron"
+                />
+              </button>
+            ))}
+          </>
+        )}
+
+        {autoPlaylists.length > 0 && (
+          <>
+            {autoPlaylists.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="playlist-auto-card"
+                onClick={() => void openPlaylist(p)}
+              >
+                <PlaylistCover playlist={p} size={44} />
+                <div className="playlist-auto-info">
+                  <p className="playlist-auto-name">{p.name}</p>
+                  <p className="playlist-auto-meta">
+                    {formatPlaylistMeta(p)}
+                  </p>
+                </div>
+                <Icon
+                  name="chevron"
+                  size={16}
+                  className="playlist-auto-chevron"
+                />
+              </button>
+            ))}
+          </>
+        )}
+      </div>
+
+      {/* ── User playlists ────────────────────────────────── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '16px 16px 8px',
+        }}
+      >
+        <p className="search-section-label" style={{ padding: 0 }}>
+          Мои плейлисты
+        </p>
+        <button
+          className="playlist-create-inline"
+          onClick={() => setCreating(true)}
+          type="button"
+        >
+          <Icon name="plus" size={16} />
+          Создать
+        </button>
+      </div>
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 
       {creating && (
         <div className="rd-pl-create-form">
@@ -674,7 +1017,7 @@ export function PlaylistsView({
               placeholder={t('redesign.library.playlistNamePlaceholder')}
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+              onKeyDown={(e) => e.key === 'Enter' && void handleCreate()}
               autoFocus
             />
           </div>
@@ -696,10 +1039,16 @@ export function PlaylistsView({
               variant="primary"
               haptic="medium"
               id="create-playlist-submit"
+<<<<<<< HEAD
               className="btn-primary rd-pl-create-action"
               onClick={() => {
                 void handleCreate()
               }}
+=======
+              className="btn-primary"
+              style={{ flex: 1, padding: '12px' }}
+              onClick={() => void handleCreate()}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
               disabled={!newName.trim() || loading}
             >
               {loading ? (
@@ -714,6 +1063,7 @@ export function PlaylistsView({
 
       {playlists === null && <div className="loader" />}
 
+<<<<<<< HEAD
       {playlists !== null && playlists.length === 0 && !creating && (
         <div className="empty-hint">
           <strong>{t('redesign.library.playlistsEmpty')}</strong>
@@ -796,6 +1146,29 @@ export function PlaylistsView({
                       )}
                     </div>
                   </div>
+=======
+      {playlists !== null &&
+        userPlaylists.length === 0 &&
+        !creating && (
+          <div className="empty-hint" style={{ padding: '12px 16px' }}>
+            Создай свою первую подборку
+          </div>
+        )}
+
+      {userPlaylists.length > 0 && (
+        <div className="playlist-list">
+          {userPlaylists.map((p) => (
+            <div
+              key={p.id}
+              className="playlist-card"
+              onClick={() => void openPlaylist(p)}
+            >
+              <PlaylistCover playlist={p} size={48} />
+              <div className="playlist-info">
+                <div className="playlist-name">{p.name}</div>
+                <div className="playlist-meta">
+                  {formatPlaylistMeta(p)}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
                 </div>
               </LongPressMenu>
             )

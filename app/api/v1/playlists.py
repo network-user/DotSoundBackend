@@ -27,6 +27,28 @@ router = APIRouter(prefix="/playlists", tags=["playlists"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
+@router.get(
+    "/featured",
+    response_model=list[PlaylistWithTracksResponse],
+    summary="Get featured/editorial playlists",
+)
+@limiter.limit("120/minute")
+async def get_featured_playlists(
+    request: Request,
+    limit: int = Query(10, ge=1, le=30),
+    session: AsyncSession = Depends(get_db),
+) -> list[PlaylistWithTracksResponse]:
+    service = PlaylistService(session)
+    playlists = await service.list_featured(limit=limit)
+    results = []
+    for p in playlists:
+        tracks = await service.get_tracks(p.id)
+        resp = PlaylistWithTracksResponse.model_validate(p)
+        resp.tracks = await dedupe_and_build_track_list(session, tracks)
+        results.append(resp)
+    return results
+
+
 @router.post(
     "",
     response_model=PlaylistResponse,

@@ -128,6 +128,7 @@
     "sourceTg": "source: Telegram",
     "unlike": "Remove like",
     "like": "Like",
+    "info": "Info",
     "public": "Make public",
     "private": "Make private",
     "deleteConfirm": "Tap again to delete the track",

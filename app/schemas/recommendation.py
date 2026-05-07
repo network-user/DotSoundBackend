@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+from app.schemas.artist import ArtistResponse
 from app.schemas.track import TrackResponse
 
 
@@ -80,3 +81,17 @@ class GenreMixesResponse(BaseModel):
 class GenreMixOverrideRequest(BaseModel):
     title: str
     track_ids: list[int]
+
+
+class DiscoverGenreCard(BaseModel):
+    genre: str
+    title: str
+    cover_key: str | None = None
+    track_count: int = 0
+
+
+class DiscoverResponse(BaseModel):
+    trending_tracks: list[TrackResponse]
+    suggested_artists: list[ArtistResponse]
+    genre_cards: list[DiscoverGenreCard]
+    recent_genres: list[str]

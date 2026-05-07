@@ -511,6 +511,25 @@ export const api = {
     return request('/api/v1/playlists')
   },
 
+  getFeaturedPlaylists(
+    limit = 10,
+  ): Promise<PlaylistWithTracks[]> {
+    return request(
+      `/api/v1/playlists/featured?limit=${limit}`,
+    )
+  },
+
+  getDiscover(
+    trendingLimit = 10,
+    artistLimit = 8,
+  ): Promise<
+    import('@/types/api').DiscoverResponse
+  > {
+    return request(
+      `/api/v1/recommendations/discover?trending_limit=${trendingLimit}&artist_limit=${artistLimit}`,
+    )
+  },
+
   getPlaylist(id: number): Promise<PlaylistWithTracks> {
     return request(`/api/v1/playlists/${id}`)
   },

@@ -764,6 +764,11 @@ export const adminApi = {
         name: string
         owner_id: number
         is_public: boolean
+        playlist_type: string
+        is_featured: boolean
+        description: string | null
+        cover_key: string | null
+        source_url: string | null
         created_at: string
         track_count: number
       }>
@@ -777,6 +782,11 @@ export const adminApi = {
       name: string
       owner_id: number
       is_public: boolean
+      playlist_type: string
+      is_featured: boolean
+      description: string | null
+      cover_key: string | null
+      source_url: string | null
       created_at: string
       tracks: Array<{
         id: number
@@ -790,11 +800,33 @@ export const adminApi = {
       name?: string
       is_public?: boolean
       owner_id?: number
+      is_featured?: boolean
+      description?: string
     },
   ) =>
     adminFetch<Record<string, unknown>>(
       `/playlists/${playlistId}`,
       { method: 'PATCH', body },
+    ),
+  importAdminPlaylist: (body: {
+    source_url: string
+    name?: string
+    make_featured?: boolean
+    make_public?: boolean
+  }) =>
+    adminFetch<Record<string, unknown>>(
+      '/playlists/import',
+      { method: 'POST', body },
+    ),
+  createEditorialPlaylist: (body: {
+    name: string
+    description?: string
+    is_featured?: boolean
+    is_public?: boolean
+  }) =>
+    adminFetch<Record<string, unknown>>(
+      '/playlists/editorial',
+      { method: 'POST', body },
     ),
   addAdminPlaylistTrack: (playlistId: number, trackId: number) =>
     adminFetch<void>(
