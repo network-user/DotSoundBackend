@@ -650,6 +650,16 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
+  width: 100%;
+}
+
+.rh-radio-header__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.rh-radio-history-head {
+  padding-top: var(--space-3);
 }
 
 .rh-radio-active-bar {
@@ -717,4 +727,18 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.rh-mix-headline {
+  flex: 1;
+  min-width: 0;
+}
+
+.rh-mix-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.gm-edit-search-hint {
+  margin-top: 8px;
 }

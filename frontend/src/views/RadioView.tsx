@@ -95,44 +95,31 @@ export function RadioView() {
     stopRadio()
   }
 
-  const handleMood = () => {
+  // TODO(redesign-2026): когда появится mood-tagged radio API,
+  // прокинуть `moodId` в `startRadio` или новый эндпойнт.
+  // Сейчас mood — это quick-старт волны от текущего трека.
+  const handleMood = (_moodId: string) => {
     if (!currentTrack) {
-      toast.info(t('redesign.home.radioPickTrack'))
+      toast.info(t('redesign.home.radioPickTrackHint'))
       return
     }
     void handleStartRadio()
   }
 
   const moodDefs = [
-    {
-      id: 'chill',
-      label: t('redesign.home.radioMoodChill'),
-      hint: t('redesign.home.radioMoodHintChill'),
-    },
-    {
-      id: 'focus',
-      label: t('redesign.home.radioMoodFocus'),
-      hint: t('redesign.home.radioMoodHintFocus'),
-    },
-    {
-      id: 'gym',
-      label: t('redesign.home.radioMoodGym'),
-      hint: t('redesign.home.radioMoodHintGym'),
-    },
+    { id: 'chill', labelKey: 'radioMoodChill', hintKey: 'radioMoodHintChill' },
+    { id: 'focus', labelKey: 'radioMoodFocus', hintKey: 'radioMoodHintFocus' },
+    { id: 'gym', labelKey: 'radioMoodGym', hintKey: 'radioMoodHintGym' },
     {
       id: 'cinematic',
-      label: t('redesign.home.radioMoodCinematic'),
-      hint: t('redesign.home.radioMoodHintCinematic'),
+      labelKey: 'radioMoodCinematic',
+      hintKey: 'radioMoodHintCinematic',
     },
-    {
-      id: 'retro',
-      label: t('redesign.home.radioMoodRetro'),
-      hint: t('redesign.home.radioMoodHintRetro'),
-    },
+    { id: 'retro', labelKey: 'radioMoodRetro', hintKey: 'radioMoodHintRetro' },
     {
       id: 'acoustic',
-      label: t('redesign.home.radioMoodAcoustic'),
-      hint: t('redesign.home.radioMoodHintAcoustic'),
+      labelKey: 'radioMoodAcoustic',
+      hintKey: 'radioMoodHintAcoustic',
     },
   ]
 
@@ -143,7 +130,7 @@ export function RadioView() {
           type="button"
           className="icon-btn"
           onClick={() => navigate(-1)}
-          aria-label="Назад"
+          aria-label={t('redesign.home.back')}
         >
           <Icon
             name="chevron"
@@ -151,7 +138,7 @@ export function RadioView() {
             className="back-chevron"
           />
         </button>
-        <div style={{ flex: 1 }}>
+        <div className="rh-radio-header__meta">
           <h2>{t('redesign.home.radioTitle')}</h2>
           <span className="hint">
             {radioMode
@@ -206,7 +193,6 @@ export function RadioView() {
           <MotionPress
             variant="primary"
             className="rh-radio-start"
-            style={{ width: '100%' }}
             onClick={() => {
               void handleStartRadio()
             }}
@@ -249,7 +235,7 @@ export function RadioView() {
               key={mood.id}
               variant="subtle"
               className="rh-radio-mood-card glass--liquid"
-              onClick={handleMood}
+              onClick={() => handleMood(mood.id)}
             >
               <span className="rh-radio-mood-card__icon" aria-hidden>
                 <MorphIcon
@@ -259,10 +245,10 @@ export function RadioView() {
                 />
               </span>
               <span className="rh-radio-mood-card__label">
-                {mood.label}
+                {t(`redesign.home.${mood.labelKey}`)}
               </span>
               <span className="rh-radio-mood-card__hint">
-                {mood.hint}
+                {t(`redesign.home.${mood.hintKey}`)}
               </span>
             </MotionPress>
           ))}
@@ -271,7 +257,7 @@ export function RadioView() {
 
       {historyTracks.length > 0 && (
         <>
-          <div className="rh-home-section-head" style={{ paddingTop: 12 }}>
+          <div className="rh-home-section-head rh-radio-history-head">
             <span className="rh-home-section-head__title">
               {t('redesign.home.radioHistory')}
             </span>

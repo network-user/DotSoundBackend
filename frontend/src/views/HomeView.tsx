@@ -13,7 +13,7 @@ import { HorizontalSnap } from '@/components/ui/HorizontalSnap'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { useToast } from '@/components/ui/Toast'
+import { showIsland } from '@/lib/island'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { useBrandLabel } from '@/lib/brand'
@@ -58,7 +58,9 @@ interface HomeTrackTileProps {
 }
 
 function HomeTrackTile({ track, onPlay }: HomeTrackTileProps) {
+  const { t } = useTranslation()
   const src = coverUrl(track.cover_key)
+  const fallbackTitle = t('redesign.home.untitled')
   return (
     <button
       type="button"
@@ -83,7 +85,7 @@ function HomeTrackTile({ track, onPlay }: HomeTrackTileProps) {
         )}
       </div>
       <div className="rh-home-tile__title">
-        {track.title || 'Без названия'}
+        {track.title || fallbackTitle}
       </div>
       {track.artist && (
         <div className="rh-home-tile__artist">
@@ -243,6 +245,21 @@ const QUICK_NAV: {
   { morph: 'radio', labelKey: 'quickRadio', path: '/radio' },
 ]
 
+interface HomeSectionConfig {
+  key: string
+  morePath?: string
+}
+
+/** Секции, которые рендерятся одинаковым HomeTrackSnapSection ниже hero/recent. */
+const HOME_TRACK_SECTIONS: HomeSectionConfig[] = [
+  { key: 'personalized' },
+  { key: 'new_releases', morePath: '/search' },
+  { key: 'genre_popular' },
+  { key: 'user_choice', morePath: '/user-choice' },
+  { key: 'fav_artists' },
+  { key: 'popular' },
+]
+
 interface HomeViewProps {
   onOpenArtist?: (id: number) => void
 }
@@ -250,7 +267,6 @@ interface HomeViewProps {
 export function HomeView({ onOpenArtist }: HomeViewProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const toast = useToast()
   const { playTrack, startRadio } = usePlayerActions()
   const brandLabel = useBrandLabel()
 
@@ -374,10 +390,14 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         await playTrack(track)
         trackActivationEvent('home_first_play')
       } catch (e) {
-        toast.error(getApiErrorMessage(e, 'Ошибка воспроизведения'))
+        showIsland({
+          kind: 'error',
+          title: getApiErrorMessage(e, t('redesign.home.playError')),
+          durationMs: 4000,
+        })
       }
     },
-    [playTrack, toast],
+    [playTrack, t],
   )
 
   const handlePlayAll = useCallback(
@@ -387,10 +407,14 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         await playTrack(tracks[0])
         trackActivationEvent('home_play_all')
       } catch (e) {
-        toast.error(getApiErrorMessage(e, 'Ошибка воспроизведения'))
+        showIsland({
+          kind: 'error',
+          title: getApiErrorMessage(e, t('redesign.home.playError')),
+          durationMs: 4000,
+        })
       }
     },
-    [playTrack, toast],
+    [playTrack, t],
   )
 
   const handleStartRadio = useCallback(
@@ -399,10 +423,14 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         await startRadio(track)
         trackActivationEvent('home_start_radio')
       } catch (e) {
-        toast.error(getApiErrorMessage(e, 'Не удалось запустить волну'))
+        showIsland({
+          kind: 'error',
+          title: getApiErrorMessage(e, t('redesign.home.radioError')),
+          durationMs: 4000,
+        })
       }
     },
-    [startRadio, toast],
+    [startRadio, t],
   )
 
   const handleStartFirstSession = useCallback(async () => {
@@ -438,21 +466,33 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         const data = await api.getTracks({ size: 30 })
         candidates.push(...data.items)
       } catch {
-        toast.error(t('redesign.home.emptyNoTracks'))
+        showIsland({
+          kind: 'error',
+          title: t('redesign.home.emptyNoTracks'),
+          durationMs: 3500,
+        })
         return
       }
     }
     if (!candidates.length) {
-      toast.info(t('redesign.home.emptyNoTracks'))
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.home.emptyNoTracks'),
+        durationMs: 3500,
+      })
       return
     }
     try {
       await startRadio(candidates[0])
       trackActivationEvent('home_first_session_start')
     } catch (e) {
-      toast.error(getApiErrorMessage(e, 'Не удалось запустить'))
+      showIsland({
+        kind: 'error',
+        title: getApiErrorMessage(e, t('redesign.home.startError')),
+        durationMs: 4000,
+      })
     }
-  }, [sections, fallbackTracks, genreMixes, startRadio, toast, t])
+  }, [sections, fallbackTracks, genreMixes, startRadio, t])
 
   const hour = new Date().getHours()
   const greeting =
@@ -554,7 +594,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                     {featuredEyebrow}
                   </span>
                   <h1 className="rh-home-hero__title">
-                    {featuredTrack.title || 'Без названия'}
+                    {featuredTrack.title || t('redesign.home.untitled')}
                   </h1>
                   <p className="rh-home-hero__artist">
                     {featuredTrack.artist || brandLabel}
@@ -827,72 +867,23 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         ) : null}
 
         {sections &&
-          sectionMap.get('personalized') && (
-            <HomeTrackSnapSection
-              title={sectionMap.get('personalized')!.title}
-              tracks={sectionMap.get('personalized')!.tracks}
-              onPlay={handlePlay}
-              moreLabel={t('redesign.home.more')}
-              snapAria={sectionMap.get('personalized')!.title}
-            />
-          )}
-
-        {sections &&
-          sectionMap.get('new_releases') && (
-            <HomeTrackSnapSection
-              title={sectionMap.get('new_releases')!.title}
-              tracks={sectionMap.get('new_releases')!.tracks}
-              onPlay={handlePlay}
-              onMore={() => navigate('/search')}
-              moreLabel={t('redesign.home.more')}
-              snapAria={sectionMap.get('new_releases')!.title}
-            />
-          )}
-
-        {sections &&
-          sectionMap.get('genre_popular') && (
-            <HomeTrackSnapSection
-              title={sectionMap.get('genre_popular')!.title}
-              tracks={sectionMap.get('genre_popular')!.tracks}
-              onPlay={handlePlay}
-              moreLabel={t('redesign.home.more')}
-              snapAria={sectionMap.get('genre_popular')!.title}
-            />
-          )}
-
-        {sections &&
-          sectionMap.get('user_choice') && (
-            <HomeTrackSnapSection
-              title={sectionMap.get('user_choice')!.title}
-              tracks={sectionMap.get('user_choice')!.tracks}
-              onPlay={handlePlay}
-              onMore={() => navigate('/user-choice')}
-              moreLabel={t('redesign.home.more')}
-              snapAria={sectionMap.get('user_choice')!.title}
-            />
-          )}
-
-        {sections &&
-          sectionMap.get('fav_artists') && (
-            <HomeTrackSnapSection
-              title={sectionMap.get('fav_artists')!.title}
-              tracks={sectionMap.get('fav_artists')!.tracks}
-              onPlay={handlePlay}
-              moreLabel={t('redesign.home.more')}
-              snapAria={sectionMap.get('fav_artists')!.title}
-            />
-          )}
-
-        {sections &&
-          sectionMap.get('popular') && (
-            <HomeTrackSnapSection
-              title={sectionMap.get('popular')!.title}
-              tracks={sectionMap.get('popular')!.tracks}
-              onPlay={handlePlay}
-              moreLabel={t('redesign.home.more')}
-              snapAria={sectionMap.get('popular')!.title}
-            />
-          )}
+          HOME_TRACK_SECTIONS.map(({ key, morePath }) => {
+            const s = sectionMap.get(key)
+            if (!s) return null
+            return (
+              <HomeTrackSnapSection
+                key={key}
+                title={s.title}
+                tracks={s.tracks}
+                onPlay={handlePlay}
+                onMore={
+                  morePath ? () => navigate(morePath) : undefined
+                }
+                moreLabel={t('redesign.home.more')}
+                snapAria={s.title}
+              />
+            )
+          })}
 
         {!sections && fallbackTracks !== null && fallbackTracks.length > 0 && (
           <HomeTrackSnapSection
