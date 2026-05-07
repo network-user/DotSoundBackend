@@ -278,6 +278,48 @@ export interface LinkTelegramCodeResponse {
   deep_link: string
 }
 
+export interface AdminManifestMenuItem {
+  id: string
+  label: string
+  route: string
+  icon?: string
+  capability?: string | null
+}
+
+export interface AdminManifestSlotAction {
+  id: string
+  label: string
+  capability: string
+  icon?: string
+  action: string
+  confirm?: boolean
+}
+
+export interface AdminManifestResponse {
+  capabilities: string[]
+  menu: AdminManifestMenuItem[]
+  slots: Record<string, AdminManifestSlotAction[]>
+  adminBundleUrl: string
+  issuedAt: number
+  expiresIn: number
+  locale: string
+}
+
+export interface MyComplaintItem {
+  id: number
+  track_id: number
+  reason: string
+  reason_type: string
+  is_resolved: boolean
+  track_hidden?: boolean
+  created_at: string
+  resolution_note?: string | null
+}
+
+export interface MyComplaintsResponse {
+  items: MyComplaintItem[]
+}
+
 export interface OnboardingStatus {
   onboarding_completed: boolean
   calibration_completed: boolean
@@ -481,6 +523,22 @@ export interface UnreadCountResponse {
   count: number
 }
 
+export interface UserPresenceResponse {
+  user_id: number
+  status: string
+  last_seen: number
+}
+
+export interface ChatPresenceMember {
+  status: string
+  last_seen: number
+}
+
+export interface ChatPresenceResponse {
+  conversation_id: number
+  members: Record<string, ChatPresenceMember>
+}
+
 export interface SimilarTracksResponse {
   seed_track_id: number
   tracks: Track[]
@@ -498,6 +556,29 @@ export interface ArtistItemsResponse {
 
 export interface ResolveArtistResponse {
   id: number
+}
+
+export interface OnboardingGenrePreviewResponse {
+  items: Track[]
+}
+
+export interface OnboardingArtistItem {
+  id: number
+  name: string
+  image_key: string | null
+}
+
+export interface SmartSkipResponse {
+  applied_genres: string[]
+  applied_artist_ids: number[]
+  applied_moods: string[]
+  enabled: boolean
+}
+
+export interface RadioResponse {
+  seed_type: string
+  seed_id: string
+  tracks: Track[]
 }
 
 export interface LinkedPlaylistItem {
@@ -893,6 +974,11 @@ export interface FollowedArtistItem {
   source: string
   bio: string | null
   track_count: number
+}
+
+export interface FollowedArtistListResponse {
+  items: FollowedArtistItem[]
+  total: number
 }
 
 export interface GenreMixItem {

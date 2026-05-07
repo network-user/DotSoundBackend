@@ -55,6 +55,8 @@ import type {
   YTSearchResult,
   ConnectOAuthResponse,
   AccountImportBody,
+  AdminManifestResponse,
+  ChatPresenceResponse,
   OAuthLinkedProvider,
   FollowListResponse,
   LinkedPlaylistsResponse,
@@ -80,11 +82,21 @@ import type {
   ResolveArtistResponse,
   SearchUserItem,
   SimilarTracksResponse,
+  SmartSkipResponse,
   StatusResponse,
+  OnboardingGenrePreviewResponse,
+  OnboardingArtistItem,
+  RadioResponse,
+  MyComplaintsResponse,
+  UserPresenceResponse,
   TrackQueueResponse,
   UnreadCountResponse,
   UserListeningStatsResponse,
   ArtistListPayload,
+  FollowedArtistItem,
+  FollowedArtistListResponse,
+  GenreMixesResponse,
+  GenreMixItem,
 } from '@/types/api'
 
 let accessToken: string | null = null
@@ -826,31 +838,7 @@ export const api = {
     )
   },
 
-  getAdminManifest(locale?: string): Promise<{
-    capabilities: string[]
-    menu: Array<{
-      id: string
-      label: string
-      route: string
-      icon?: string
-      capability?: string | null
-    }>
-    slots: Record<
-      string,
-      Array<{
-        id: string
-        label: string
-        capability: string
-        icon?: string
-        action: string
-        confirm?: boolean
-      }>
-    >
-    adminBundleUrl: string
-    issuedAt: number
-    expiresIn: number
-    locale: string
-  }> {
+  getAdminManifest(locale?: string): Promise<AdminManifestResponse> {
     const qs = locale ? `?locale=${encodeURIComponent(locale)}` : ''
     return request(`/api/v1/admin/manifest${qs}`)
   },
@@ -975,18 +963,7 @@ export const api = {
     onAccountBlocked = cb
   },
 
-  getMyComplaints(): Promise<{
-    items: Array<{
-      id: number
-      track_id: number
-      reason: string
-      reason_type: string
-      is_resolved: boolean
-      track_hidden?: boolean
-      created_at: string
-      resolution_note?: string | null
-    }>
-  }> {
+  getMyComplaints(): Promise<MyComplaintsResponse> {
     return request('/api/v1/users/me/complaints')
   },
 
@@ -1724,18 +1701,11 @@ export const api = {
 
   // ── Presence ───────────────────────────────────────
 
-  getUserPresence(userId: number): Promise<{
-    user_id: number
-    status: string
-    last_seen: number
-  }> {
+  getUserPresence(userId: number): Promise<UserPresenceResponse> {
     return request(`/api/v1/users/${userId}/presence`)
   },
 
-  getChatPresence(convId: number): Promise<{
-    conversation_id: number
-    members: Record<string, { status: string; last_seen: number }>
-  }> {
+  getChatPresence(convId: number): Promise<ChatPresenceResponse> {
     return request(`/api/v1/chats/${convId}/presence`)
   },
 
@@ -1764,7 +1734,7 @@ export const api = {
   fetchGenrePreviewQueue(
     genre: string,
     limit: number = 10,
-  ): Promise<{ items: Track[] }> {
+  ): Promise<OnboardingGenrePreviewResponse> {
     const q = new URLSearchParams()
     if (limit) q.set('limit', String(limit))
     const qs = q.toString() ? `?${q.toString()}` : ''
@@ -1779,7 +1749,9 @@ export const api = {
     return `/api/v1/track-preview/${trackId}/segment.mp4`
   },
 
-  getOnboardingArtists(genres?: string[]): Promise<{ id: number; name: string; image_key: string | null }[]> {
+  getOnboardingArtists(
+    genres?: string[],
+  ): Promise<OnboardingArtistItem[]> {
     const params = genres?.length ? `?genres=${genres.join(',')}` : ''
     return request(`/api/v1/onboarding/artists${params}`)
   },
@@ -1812,12 +1784,7 @@ export const api = {
     return request('/api/v1/onboarding/complete', { method: 'POST' })
   },
 
-  smartSkipOnboarding(): Promise<{
-    applied_genres: string[]
-    applied_artist_ids: number[]
-    applied_moods: string[]
-    enabled: boolean
-  }> {
+  smartSkipOnboarding(): Promise<SmartSkipResponse> {
     return request('/api/v1/onboarding/smart-skip', {
       method: 'POST',
     })
@@ -2194,17 +2161,17 @@ export const api = {
 
   getFollowedArtistsList(
     limit = 50,
-  ): Promise<{ items: import('@/types/api').FollowedArtistItem[]; total: number }> {
+  ): Promise<FollowedArtistListResponse> {
     return request(`/api/v1/artists/followed?limit=${limit}`)
   },
 
-  getGenreMixes(): Promise<{ mixes: import('@/types/api').GenreMixItem[] }> {
+  getGenreMixes(): Promise<GenreMixesResponse> {
     return request('/api/v1/recommendations/genre-mixes')
   },
 
   getGenreMix(
     genre: string,
-  ): Promise<import('@/types/api').GenreMixItem> {
+  ): Promise<GenreMixItem> {
     return request(
       `/api/v1/recommendations/genre-mixes/${encodeURIComponent(genre)}`,
     )
@@ -2216,7 +2183,7 @@ export const api = {
       title: string
       track_ids: number[]
     },
-  ): Promise<import('@/types/api').GenreMixItem> {
+  ): Promise<GenreMixItem> {
     return request(
       `/api/v1/recommendations/genre-mixes/${encodeURIComponent(genre)}`,
       {
@@ -2231,7 +2198,7 @@ export const api = {
     seedTrackId: number,
     queueSize?: number,
     excludeIds?: number[],
-  ): Promise<{ seed_type: string; seed_id: string; tracks: Track[] }> {
+  ): Promise<RadioResponse> {
     const qs = new URLSearchParams()
     qs.set('seed_track_id', String(seedTrackId))
     if (queueSize) qs.set('queue_size', String(queueSize))

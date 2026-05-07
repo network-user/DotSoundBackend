@@ -39,7 +39,6 @@ export function ProfileView({
   const sound = useSound()
   const fallbackName = t(
     'redesign.library.profileNameFallback',
-    'Пользователь',
   )
   const [tab, setTab] =
     useState<ProfileTab>('profile')
@@ -210,7 +209,7 @@ export function ProfileView({
               setTab('profile')
             }}
           >
-            {t('profile.tabProfile', 'Профиль')}
+            {t('profile.tabProfile')}
           </MotionPress>
           <MotionPress
             type="button"
@@ -222,7 +221,7 @@ export function ProfileView({
               setTab('import')
             }}
           >
-            {t('profile.tabImport', 'Импорт')}
+            {t('profile.tabImport')}
           </MotionPress>
           <MotionPress
             type="button"
@@ -234,7 +233,7 @@ export function ProfileView({
               setTab('complaints')
             }}
           >
-            {t('profile.tabComplaints', 'Жалобы')}
+            {t('profile.tabComplaints')}
           </MotionPress>
         </div>
         <div className="profile-header-actions">
@@ -249,7 +248,6 @@ export function ProfileView({
               className="icon-btn profile-settings-btn"
               ariaLabel={t(
                 'profile.openSettings',
-                'Настройки',
               )}
               onClick={() => {
                 feedbackTap()

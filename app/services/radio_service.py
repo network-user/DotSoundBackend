@@ -12,6 +12,7 @@ from dotsound_private_core.services.radio_policy import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import AppSettings
+from app.core.observability import radio_request_observed
 from app.core.redis import get_redis_client
 from app.models.track import Track
 from app.models.user import User
@@ -92,6 +93,12 @@ class RadioService:
                     tracks = await self._repo.get_by_ids_preserve_order(
                         [int(tid) for tid in cached_ids.split(",") if tid]
                     )
+                    radio_request_observed(
+                        surface="track_radio",
+                        outcome="guarded",
+                        queue_size=len(tracks),
+                        guard_hit=True,
+                    )
                     return tracks, "guarded"
 
         if not self._settings.radio_enabled:
@@ -103,6 +110,11 @@ class RadioService:
                     _RADIO_LAST_QUEUE_TTL,
                     ",".join(str(t.id) for t in rows),
                 )
+            radio_request_observed(
+                surface="track_radio",
+                outcome="catalog",
+                queue_size=len(rows),
+            )
             return rows, "catalog"
 
         cap = min(
@@ -187,6 +199,11 @@ class RadioService:
         )
         ids = cap_queue_ids(merged, cap)
         if not ids:
+            radio_request_observed(
+                surface="track_radio",
+                outcome="empty",
+                queue_size=0,
+            )
             return [], source_tag
         out = await self._repo.get_by_ids_preserve_order(ids)
         if current is not None and out:
@@ -196,4 +213,9 @@ class RadioService:
                 _RADIO_LAST_QUEUE_TTL,
                 ",".join(str(t.id) for t in out),
             )
+        radio_request_observed(
+            surface="track_radio",
+            outcome=source_tag or "catalog",
+            queue_size=len(out),
+        )
         return out, source_tag

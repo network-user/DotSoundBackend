@@ -63,6 +63,10 @@
   "profile": {
     "title": "Профиль",
     "import": "Импорт",
+    "tabProfile": "Профиль",
+    "tabImport": "Импорт",
+    "tabComplaints": "Жалобы",
+    "openSettings": "Настройки",
     "uploadTrack": "Загрузить трек",
     "myPlaylists": "Мои плейлисты",
     "liked": "Понравившееся"

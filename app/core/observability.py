@@ -32,6 +32,9 @@ _PROM_TIER_FALLBACK_TOTAL = None
 _PROM_HMAC_AUTH_FAILURES = None
 _PROM_WORKER_ANOMALY_TOTAL = None
 _PROM_ELASTICSEARCH_QUERIES = None
+_PROM_RADIO_REQUESTS = None
+_PROM_RADIO_GUARD_HITS = None
+_PROM_RADIO_QUEUE_SIZE = None
 
 
 def _is_internal_ip(client_host: str | None) -> bool:
@@ -103,6 +106,9 @@ def setup_metrics(application: object) -> None:
     global _PROM_HMAC_AUTH_FAILURES
     global _PROM_WORKER_ANOMALY_TOTAL
     global _PROM_ELASTICSEARCH_QUERIES
+    global _PROM_RADIO_REQUESTS
+    global _PROM_RADIO_GUARD_HITS
+    global _PROM_RADIO_QUEUE_SIZE
 
     _PROM_LYRICS_JOBS_TOTAL = Counter(
         "lyrics_jobs_total",
@@ -170,6 +176,25 @@ def setup_metrics(application: object) -> None:
         "elasticsearch_query_total",
         "Elasticsearch read paths (search/suggest) by outcome.",
         ["op", "outcome"],
+        registry=registry,
+    )
+    _PROM_RADIO_REQUESTS = Counter(
+        "radio_requests_total",
+        "Radio queue requests by surface and outcome.",
+        ["surface", "outcome"],
+        registry=registry,
+    )
+    _PROM_RADIO_GUARD_HITS = Counter(
+        "radio_guard_hits_total",
+        "Rate-limiter guard hits in radio flows.",
+        ["surface"],
+        registry=registry,
+    )
+    _PROM_RADIO_QUEUE_SIZE = Histogram(
+        "radio_queue_size",
+        "Returned radio queue size per request.",
+        ["surface"],
+        buckets=(0, 1, 3, 5, 10, 20, 30, 50),
         registry=registry,
     )
 
@@ -432,3 +457,23 @@ def speechkit_budget_remaining_set(rub: float) -> None:
 def elasticsearch_query_observed(*, op: str, outcome: str) -> None:
     if _PROM_ELASTICSEARCH_QUERIES is not None:
         _PROM_ELASTICSEARCH_QUERIES.labels(op=op, outcome=outcome).inc()
+
+
+def radio_request_observed(
+    *,
+    surface: str,
+    outcome: str,
+    queue_size: int,
+    guard_hit: bool = False,
+) -> None:
+    if _PROM_RADIO_REQUESTS is not None:
+        _PROM_RADIO_REQUESTS.labels(
+            surface=surface,
+            outcome=outcome,
+        ).inc()
+    if _PROM_RADIO_QUEUE_SIZE is not None:
+        _PROM_RADIO_QUEUE_SIZE.labels(surface=surface).observe(
+            max(0, int(queue_size))
+        )
+    if guard_hit and _PROM_RADIO_GUARD_HITS is not None:
+        _PROM_RADIO_GUARD_HITS.labels(surface=surface).inc()
