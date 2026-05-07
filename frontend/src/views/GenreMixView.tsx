@@ -136,7 +136,6 @@ export function GenreMixView() {
     await playTrack(tracks[0])
   }, [tracks, playTrack])
 
-<<<<<<< HEAD
   const handleShufflePlay = useCallback(async () => {
     if (!tracks || !tracks.length) return
     try {
@@ -173,20 +172,6 @@ export function GenreMixView() {
     },
     [t],
   )
-=======
-  const formatShareChatTitle = useCallback((item: ChatListItem): string => {
-    if (!item?.conversation) return 'Чат'
-    if (item.conversation.type === 'saved') return 'Избранное'
-    if (item.conversation.title?.trim()) return item.conversation.title.trim()
-    const peer = item.peer
-    const name = peer?.display_name || [peer?.first_name, peer?.last_name]
-      .filter(Boolean)
-      .join(' ')
-    if (name && name.trim()) return name.trim()
-    if (peer?.username) return `@${peer.username}`
-    return `Чат #${item.conversation.id}`
-  }, [])
->>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 
   const openShareModal = useCallback(async () => {
     setShareOpen(true)

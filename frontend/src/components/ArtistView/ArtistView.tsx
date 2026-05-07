@@ -888,7 +888,6 @@ export function ArtistView({
         )}
 
         {/* Listen Snippets Button */}
-<<<<<<< HEAD
         {tracks && tracks.length > 0 && (
           <div className="rf-artist-snippet-wrap">
             <MotionPress
@@ -896,12 +895,6 @@ export function ArtistView({
               variant="primary"
               haptic="medium"
               className="btn-primary rf-artist-snippet-btn"
-=======
-        {tracks && tracks.length > 0 && tracks[snippetIndex] && (
-          <div style={{ marginTop: 12 }}>
-            <button
-              className="btn-primary"
->>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
               onClick={toggleSnippet}
             >
               <MorphIcon
