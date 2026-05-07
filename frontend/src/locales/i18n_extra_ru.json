@@ -114,7 +114,10 @@
     "artistsEmpty": "Артистов в каталоге не найдено",
     "catalogArtistRowAria": "Открыть карточку артиста: {{name}}",
     "catalogArtistBadge": "Артист каталога",
-    "platformTracks": "Треки"
+    "platformTracks": "Треки",
+    "featuredPlaylists": "Подборки редакции",
+    "openPlaylistAria": "Открыть плейлист: {{name}}",
+    "playlistsTabEmpty": "Плейлисты по запросу не найдены"
   },
   "trackCard": {
     "queued": "Добавлено в очередь",

@@ -206,11 +206,30 @@ class ArtistRepository(BaseRepository[Artist]):
         artist_id: int,
         limit: int = 100,
     ) -> list[int]:
-        result = await self._session.execute(
+        """Track ids where this artist shares top billing (min position).
+
+        Excludes tracks where the artist is only a featured credit
+        (higher position than another artist on the same track).
+        """
+        min_pos = (
+            select(
+                TrackArtist.track_id.label("tid"),
+                func.min(TrackArtist.position).label("mp"),
+            )
+            .group_by(TrackArtist.track_id)
+            .subquery()
+        )
+        stmt = (
             select(TrackArtist.track_id)
+            .join(
+                min_pos,
+                (TrackArtist.track_id == min_pos.c.tid)
+                & (TrackArtist.position == min_pos.c.mp),
+            )
             .where(TrackArtist.artist_id == artist_id)
             .limit(limit)
         )
+        result = await self._session.execute(stmt)
         return list(result.scalars().all())
 
     async def update_soundcloud_identity(

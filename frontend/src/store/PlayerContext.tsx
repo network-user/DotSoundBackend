@@ -662,6 +662,9 @@ export function PlayerProvider({
   const _initAudioCtx = useCallback(() => {
     const audio = audioRef.current
     if (!audio || audioCtxRef.current) return
+    const perfLite =
+      typeof document !== 'undefined' &&
+      document.body.classList.contains('ds-perf-lite')
     const ctx = new AudioContext()
     audioCtxRef.current = ctx
     const src = ctx.createMediaElementSource(audio)
@@ -680,10 +683,16 @@ export function PlayerProvider({
     const out = ctx.createGain()
     postEqGainRef.current = out
 
-    const analyser = ctx.createAnalyser()
-    analyser.fftSize = 256
-    analyser.smoothingTimeConstant = 0.82
-    analyserRef.current = analyser
+    const analyser = perfLite
+      ? null
+      : ctx.createAnalyser()
+    if (analyser) {
+      analyser.fftSize = 256
+      analyser.smoothingTimeConstant = 0.86
+      analyserRef.current = analyser
+    } else {
+      analyserRef.current = null
+    }
 
     let prev: AudioNode = src
     for (const f of filters) {
@@ -691,8 +700,10 @@ export function PlayerProvider({
       prev = f
     }
     prev.connect(out)
-    out.connect(analyser)
-    analyser.connect(ctx.destination)
+    out.connect(ctx.destination)
+    if (analyser) {
+      out.connect(analyser)
+    }
     applyEqBands()
   }, [applyEqBands])
 

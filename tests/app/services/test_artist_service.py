@@ -173,3 +173,36 @@ async def test_get_track_artists(
 
     artists = await svc.get_track_artists(tid)
     assert len(artists) >= 2
+
+
+async def test_list_artist_tracks_primary_billing_only(
+    db_session: AsyncSession,
+) -> None:
+    uid = await _make_user(db_session)
+    tid_collab = await _make_track(
+        db_session, title="Collab", owner_id=uid
+    )
+    tid_solo = await _make_track(
+        db_session, title="Solo", owner_id=uid
+    )
+
+    svc = ArtistService(db_session)
+    await svc.resolve_and_link(
+        tid_collab, "AlphaName feat. BetaName"
+    )
+    await svc.resolve_and_link(tid_solo, "BetaName")
+
+    beta_id = (await svc.get_track_artists(tid_solo))[0].id
+    tracks_b, total_b = await svc.list_artist_tracks(
+        beta_id, page=1, size=20
+    )
+    assert total_b == 1
+    assert len(tracks_b) == 1
+    assert tracks_b[0].id == tid_solo
+
+    alpha_id = (await svc.get_track_artists(tid_collab))[0].id
+    tracks_a, total_a = await svc.list_artist_tracks(
+        alpha_id, page=1, size=20
+    )
+    assert total_a == 1
+    assert tracks_a[0].id == tid_collab

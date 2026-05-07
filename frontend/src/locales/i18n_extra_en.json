@@ -114,7 +114,10 @@
     "artistsEmpty": "No matching catalog artists",
     "catalogArtistRowAria": "Open artist profile: {{name}}",
     "catalogArtistBadge": "Catalog artist",
-    "platformTracks": "Tracks"
+    "platformTracks": "Tracks",
+    "featuredPlaylists": "Editorial picks",
+    "openPlaylistAria": "Open playlist: {{name}}",
+    "playlistsTabEmpty": "No playlists match this search"
   },
   "trackCard": {
     "queued": "Added to queue",

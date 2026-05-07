@@ -143,6 +143,7 @@ export function TrackCardSheet({
   const { t } = useTranslation()
   const reduce = useReducedMotion()
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
+  const [smoothPct, setSmoothPct] = useState(0)
   const sound = useSound()
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -961,6 +962,20 @@ export function TrackCardSheet({
     if (fromTrack && fromTrack.length > 0) return fromTrack
     return card?.playback_variants ?? []
   }, [track, card])
+  const pct = duration
+    ? (currentTime / duration) * 100
+    : 0
+  const displayPct = Math.max(0, Math.min(100, smoothPct))
+
+  useEffect(() => {
+    const next = Math.max(0, Math.min(100, pct))
+    setSmoothPct((prev) => {
+      const diff = next - prev
+      if (Math.abs(diff) < 0.12) return next
+      const step = isPlaying ? 0.22 : 0.34
+      return prev + diff * step
+    })
+  }, [pct, isPlaying])
 
   if (!exit.mounted || !track) return null
 
@@ -978,14 +993,16 @@ export function TrackCardSheet({
     isAdmin || debugMode || import.meta.env.DEV
   const liked = isLiked(track.id)
   const disliked = isDisliked(track.id)
-  const pct = duration
-    ? (currentTime / duration) * 100
-    : 0
 
   const hasActiveVideo =
     !!videoSrc && videoEnabled
   const visualMode =
     showLyrics || hasActiveVideo
+  const perfLite =
+    isCoarsePointer ||
+    (typeof document !== 'undefined' &&
+      document.body.classList.contains('ds-perf-lite'))
+  const useRichCoverVisuals = !perfLite && isPlaying
 
   return (
     <div
@@ -1096,17 +1113,26 @@ export function TrackCardSheet({
             )}
             {coverSrc && !coverFailed ? (
               <div className="re-tcs-cover-stack">
-                <AmbientStage
-                  coverUrl={coverSrc}
-                  className="re-tcs-ambient"
-                >
-                  <KenBurnsCover
+                {useRichCoverVisuals ? (
+                  <AmbientStage
+                    coverUrl={coverSrc}
+                    className="re-tcs-ambient"
+                  >
+                    <KenBurnsCover
+                      src={coverSrc}
+                      alt=""
+                      duration={20}
+                      className="re-tcs-kb"
+                    />
+                  </AmbientStage>
+                ) : (
+                  <img
                     src={coverSrc}
                     alt=""
-                    duration={20}
-                    className="re-tcs-kb"
+                    className="re-tcs-cover-probe"
+                    loading="lazy"
                   />
-                </AmbientStage>
+                )}
                 <img
                   src={coverSrc}
                   alt=""
@@ -1120,15 +1146,17 @@ export function TrackCardSheet({
                 <Icon name="music" size={72} />
               </div>
             )}
-            <div className="tcs-cover-wave-area" aria-hidden>
-              <div className="tcs-cover-wave-gradient" />
-              <Waveform
-                overlay
-                height={64}
-                bars={36}
-                className="tcs-cover-waveform"
-              />
-            </div>
+            {useRichCoverVisuals && (
+              <div className="tcs-cover-wave-area" aria-hidden>
+                <div className="tcs-cover-wave-gradient" />
+                <Waveform
+                  overlay
+                  height={64}
+                  bars={perfLite ? 18 : 36}
+                  className="tcs-cover-waveform"
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -1383,7 +1411,7 @@ export function TrackCardSheet({
             {track.waveform_data && track.waveform_data.length > 0 ? (
               <WaveformBar
                 data={track.waveform_data}
-                progress={pct}
+                progress={displayPct}
                 onSeek={seek}
                 height={40}
                 className="tcs-waveform-bar"
@@ -1396,11 +1424,11 @@ export function TrackCardSheet({
               min={0}
               max={100}
               step={0.1}
-              value={pct}
+              value={displayPct}
               onChange={(e) =>
                 seek(Number(e.target.value))
               }
-              style={{ ['--progress' as string]: `${pct}%` }}
+              style={{ ['--progress' as string]: `${displayPct}%` }}
             />
             )}
             <div className="tcs-time">

@@ -16,7 +16,8 @@ interface Props {
 const REDUCED_MOTION_QUERY =
   '(prefers-reduced-motion: reduce)'
 
-const SPECTRUM_INTERVAL_MS = Math.round(1000 / 12)
+const SPECTRUM_INTERVAL_MS = Math.round(1000 / 10)
+const SPECTRUM_INTERVAL_LITE_MS = Math.round(1000 / 7)
 
 const MAX_CANVAS_DPR = 1.25
 
@@ -164,6 +165,9 @@ export function Waveform({
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
+    const perfLite =
+      typeof document !== 'undefined' &&
+      document.body.classList.contains('ds-perf-lite')
     const reduced = window.matchMedia(
       REDUCED_MOTION_QUERY,
     ).matches
@@ -286,7 +290,9 @@ export function Waveform({
     tick()
     intervalRef.current = window.setInterval(
       tick,
-      SPECTRUM_INTERVAL_MS,
+      perfLite
+        ? SPECTRUM_INTERVAL_LITE_MS
+        : SPECTRUM_INTERVAL_MS,
     )
 
     return () => {

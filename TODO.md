@@ -69,6 +69,13 @@
   PlayerBar overflow-menu → MotionPress; QueueSheet/NowPlayingView/SearchView/LegalView/
   FullscreenLyrics bare buttons → MotionPress; dead .import-activity-banner CSS removed;
   i18n keys added for all hardcoded RU strings.
+- [x] **Search + Artist route regressions (2026-05-07)** — `SearchView`: параллельная
+  загрузка `getDiscover` + `getFeaturedPlaylists`, секция редакционных плейлистов,
+  исправлен пустой hint при непустом discover, навигация на `/playlist/:id` из строк
+  поиска, `tabHasResults` и пустой стейт вкладки «Плейлисты». `ArtistView` (route):
+  каталог релизов + дискография + `ArtistCatalogReleasePanel`, Telegram back для
+  подэкрана релиза; legacy `components/ArtistView/ArtistView.tsx` переименован в
+  `ArtistProfileStandalone` (не использовался в маршрутах).
 - [x] **Upload UX redesign + genre search** �?? UploadView/Upload tabs пол�?�?или
   iOS-like polish, добавлено �?мное combobox с ES-backed fuzzy hints и
   create-new-genre flow, пл�?с haptic feedback и акк�?�?а�?н�?е мик�?о-анима�?ии.
@@ -649,6 +656,8 @@
 - [x] **CSS уборка**: `redesign-artist.css` (`.rf-artist-snippet-wrap/btn/audio`, `.author-loader`, `.author-section-header`); `global.css` (`.eq-reset-confirm-label`, `.le-fs-save-btn`, `.lyrics-choice-back`, `.lyrics-choice-btn--disabled`); `i18n_extra2_{ru,en}.json` JSON-syntax bug `}` → `},` перед `"achievements": {}` пофикшен.
 - [x] **Final acceptance (batch 2)**: `npx tsc --noEmit` — clean; `npm run build` — clean.
 - [x] **Search screen blank-state fix**: восстановлен `SearchView` с discover empty-state (`/recommendations/discover`), табами `All/Tracks/Artists/Playlists`, и рендером результатов каталога + внешних источников; проверено через `npm run build`.
+- [x] **Search discover genres polish**: `GET /recommendations/discover` теперь отдает `cover_key` для genre cards (по top-track в жанре), `SearchView` использует cover + визуальный fallback, блок `Ваши жанры` приведен к общему UI-стилю.
+- [x] **Track card waveform + seek smoothness (2026-05-07)**: волна убрана из `PlayerBar` (нижнее состояние), в `TrackCardSheet` показывается только в открытой карточке и только при `isPlaying`; `WaveformBar` переведен на clip-based плавное заполнение прогресса; seek-индикаторы в `PlayerBar`/`TrackCardSheet` сглажены и убран визуальный «шлейф» у thumb; `npm run build` зеленый.
 
 ## �?ла�?�?о�?м�? �?? б�?д�?�?ее
 

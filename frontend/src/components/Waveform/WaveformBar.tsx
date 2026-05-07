@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react'
 
 interface Props {
   data: number[]
@@ -26,6 +31,7 @@ export function WaveformBar({
   className,
   durationSec,
 }: Props) {
+  const clipId = useId()
   const total = data.length || 1
   const svgRef = useRef<SVGSVGElement | null>(null)
   const draggingRef = useRef(false)
@@ -143,7 +149,8 @@ export function WaveformBar({
 
   const barW = 0.55
   const gap = (1 - barW) / total
-  const splitAt = (progress / 100) * total
+  const clampedProgress = Math.max(0, Math.min(100, progress))
+  const playedUnits = (clampedProgress / 100) * total
 
   const tipPct = hoverPct ?? progress
   const tipSec = durationSec ? (tipPct / 100) * durationSec : null
@@ -174,31 +181,53 @@ export function WaveformBar({
         tabIndex={0}
         aria-label="Seek bar"
         role="slider"
-        aria-valuenow={Math.round(progress)}
+        aria-valuenow={Math.round(clampedProgress)}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuetext={tipSec != null ? _fmt(tipSec) : undefined}
       >
+        <defs>
+          <clipPath id={clipId}>
+            <rect
+              x={0}
+              y={0}
+              width={playedUnits}
+              height={1}
+            />
+          </clipPath>
+        </defs>
         {data.map((amp, i) => {
           const x = i + gap / 2
           const bh = Math.max(0.04, amp)
           const y = (1 - bh) / 2
-          const played = i < splitAt
           return (
             <rect
-              key={i}
+              key={`idle-${i}`}
               x={x}
               y={y}
               width={barW}
               height={bh}
-              fill={
-                played
-                  ? 'var(--clr-accent, #fff)'
-                  : 'var(--clr-waveform-idle, rgba(255,255,255,0.22))'
-              }
+              fill="var(--clr-waveform-idle, rgba(255,255,255,0.22))"
             />
           )
         })}
+        <g clipPath={`url(#${clipId})`}>
+          {data.map((amp, i) => {
+            const x = i + gap / 2
+            const bh = Math.max(0.04, amp)
+            const y = (1 - bh) / 2
+            return (
+              <rect
+                key={`played-${i}`}
+                x={x}
+                y={y}
+                width={barW}
+                height={bh}
+                fill="var(--clr-accent, #fff)"
+              />
+            )
+          })}
+        </g>
       </svg>
       {showTip && hoverPct != null && tipSec != null && (
         <div

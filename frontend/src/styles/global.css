@@ -1111,18 +1111,21 @@ body.monochrome #app {
   border-radius: 0;
   outline: none;
   display: block;
-  transition: height var(--dur-fast) var(--ease-standard);
+  transition:
+    height var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) linear;
 }
 #pb-seek:hover { height: 4px; }
 #pb-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.3);
+  box-shadow: none;
+  border: none;
 }
 #pb-seek::-webkit-slider-runnable-track {
   background: linear-gradient(
@@ -2499,6 +2502,7 @@ body.ds-perf-lite .tcs-video-pulse {
   border-radius: 2px;
   outline: none;
   cursor: pointer;
+  transition: background var(--dur-fast) linear;
 }
 .tcs-seek::-webkit-slider-runnable-track {
   height: 3px;
@@ -2517,20 +2521,23 @@ body.ds-perf-lite .tcs-video-pulse {
 }
 .tcs-seek::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
   margin-top: -4.5px;
   border-radius: 50%;
   background: var(--text, #fff);
   cursor: pointer;
+  border: none;
+  box-shadow: none;
 }
 .tcs-seek::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
   border: none;
   border-radius: 50%;
   background: var(--text, #fff);
   cursor: pointer;
+  box-shadow: none;
 }
 .tcs-time {
   display: flex;
@@ -8394,31 +8401,56 @@ html.ds-low-glass .tcs-sheet {
 }
 .search-genre-card {
   position: relative;
-  height: 72px;
-  border-radius: 12px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
+  height: 88px;
+  border-radius: 14px;
+  background:
+    linear-gradient(
+      135deg,
+      hsl(var(--genre-hue, 220deg) 50% 30%) 0%,
+      hsl(calc(var(--genre-hue, 220deg) + 28deg) 55% 20%) 100%
+    );
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-end;
-  padding: 10px 12px;
+  padding: 12px;
   overflow: hidden;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: transform 0.16s ease, filter 0.16s ease;
 }
 .search-genre-card:active {
-  background: var(--bg-glass);
+  transform: translateY(1px) scale(0.99);
+  filter: brightness(0.95);
+}
+.search-genre-cover {
+  position: absolute;
+  inset: 0;
+}
+.search-genre-overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.08) 0%,
+      rgba(0, 0, 0, 0.62) 100%
+    );
 }
 .search-genre-name {
+  position: relative;
+  z-index: 1;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
+  font-weight: 700;
+  color: #fff;
   text-align: left;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
 .search-genre-count {
+  position: relative;
+  z-index: 1;
   font-size: 11px;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.86);
   margin-top: 2px;
 }
 
@@ -8430,14 +8462,17 @@ html.ds-low-glass .tcs-sheet {
   padding: 0 16px;
 }
 .search-genre-chip {
-  height: 32px;
+  height: 34px;
   padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
+  border: 1px solid color-mix(in srgb, var(--text-primary) 14%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 84%, var(--accent) 16%);
+  color: var(--text-primary);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
