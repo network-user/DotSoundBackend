@@ -2,7 +2,7 @@ import uuid
 
 import structlog
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lyrics import TrackLyrics
@@ -298,9 +298,7 @@ class LyricsService:
             return None
 
         lyrics_row = await self._repo.get_by_track_id(track_id)
-        if lyrics_row is not None and (
-            (lyrics_row.plain_text or "").strip()
-        ):
+        if lyrics_row is not None and ((lyrics_row.plain_text or "").strip()):
             logger.debug(
                 "lyrics_background_skip_has_plain_text",
                 track_id=track_id,
@@ -403,9 +401,6 @@ class LyricsService:
 
         Returns: progress_id for tracking the new generation task
         """
-        from sqlalchemy import update
-
-        from app.models.track import Track
         from app.services.lyrics_worker import (
             invalidate_cached_lyrics_for_track,
             set_cached_lyrics_result,

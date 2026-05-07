@@ -85,8 +85,8 @@ async def enqueue(track_id: int, with_sync: bool) -> None:
     """Push a track onto the shared lyrics queue.
 
     Used by ``import_lyrics_worker.process_import_lyrics_task``
-    when the global orchestrator is enabled. ``with_sync`` is
-    forwarded verbatim to ``generate_lyrics_task``.
+    when the global orchestrator is enabled.
+    ``with_sync`` is forwarded to Lyrics background dispatch.
     """
     redis = get_redis_client()
     await redis.rpush(

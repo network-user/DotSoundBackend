@@ -26,10 +26,7 @@ class CardService:
         track = await self._track_repo.get_by_id(track_id)
         if not track or not track.is_active:
             return None
-        is_owner = (
-            requester_id
-            and track.uploaded_by_id == requester_id
-        )
+        is_owner = requester_id and track.uploaded_by_id == requester_id
         if not track.is_public and not is_owner:
             return None
         if is_track_playback_suppressed(track) and not is_owner:
@@ -38,6 +35,7 @@ class CardService:
         album_info = None
         if track.album_id:
             from app.repositories.album import AlbumRepository
+
             album_repo = AlbumRepository(self._session)
             album = await album_repo.get_by_id(track.album_id)
             if album:

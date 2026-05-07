@@ -21,8 +21,7 @@ _JOB = {
     "id": "lyrics-discovery-sweep-hourly",
     "name": "Enqueue catalog lyrics sweep for tracks without lyrics",
     "task_name": (
-        "app.services.lyrics_discovery_sweep:"
-        "lyrics_discovery_sweep_task"
+        "app.services.lyrics_discovery_sweep:" "lyrics_discovery_sweep_task"
     ),
     "cron": "20 * * * *",
     "queue": "default",

@@ -1,16 +1,10 @@
 """Post-import lyrics orchestrator.
 
-Enqueued as a fire-and-forget Taskiq task at the end of a
-successful external-import job. Walks through the imported
-tracks and spawns a :func:`generate_lyrics_task` per track with
-a randomised pause in between, plus a circuit-breaker that
-extends the pause (or bails out entirely) when the upstream
-proxy reports a block-like failure.
-
-The orchestrator itself never calls the provider directly — it
-only enqueues the existing ``generate_lyrics_task``, which
-handles caching, DB persistence and the actual lyrics cascade.
-This keeps ASR out of this file's hot path completely.
+Enqueued at the end of a successful external-import job. Schedules
+:meth:`LyricsService.enqueue_background_lyrics` per imported
+track so catalog-only LyricsJob tiers run consistently with new
+uploads. Pacing and proxy block circuit-breaking match the legacy
+generator loop.
 """
 
 from __future__ import annotations
