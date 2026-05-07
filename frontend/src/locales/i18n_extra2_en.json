@@ -246,7 +246,37 @@
       "reactionMusic": "Music",
       "reactionStar": "Star"
     },
-    "artist": {},
+    "artist": {
+      "loadError": "Could not load artist",
+      "playError": "Could not start playback",
+      "followError": "Could not update follow status",
+      "invalidId": "Artist not found",
+      "backAria": "Back",
+      "statsAria": "Artist stats",
+      "follow": "Follow",
+      "following": "Following",
+      "followAria": "Follow artist",
+      "followingAria": "Unfollow artist",
+      "play": "Play",
+      "shuffle": "Shuffle",
+      "topTracks": "Top tracks",
+      "noTracks": "No tracks yet",
+      "albums": "Albums",
+      "about": "About",
+      "similar": "Similar artists",
+      "report": "Report",
+      "reportSoon": "Report flow coming soon",
+      "openExternal": "Open at source",
+      "stopPreview": "Stop preview",
+      "listenSnippets": "Listen to their songs",
+      "sourcePlatform": "Platform",
+      "followers_one": "{{count}} follower",
+      "followers_other": "{{count}} followers",
+      "followers": "{{count}} followers",
+      "tracksCount_one": "{{count}} track",
+      "tracksCount_other": "{{count}} tracks",
+      "tracksCount": "{{count}} tracks"
+    },
     "recap": {
       "profileEntry": "Year in review",
       "closeAria": "Close recap",
@@ -483,6 +513,18 @@
         "topByListeners": "Listeners",
         "sortAsc": "Asc",
         "sortDesc": "Desc"
+      },
+      "tasks": {
+        "cancelDone": "Cancelled",
+        "cancelAllDone": "Cancelled {{count}} jobs",
+        "cancelFailed": "Could not cancel"
+      },
+      "schedules": {
+        "saveDone": "Schedule saved",
+        "deleteDone": "Schedule deleted",
+        "runDone": "Triggered immediately",
+        "runFailed": "Could not run",
+        "toggleDone": "Updated"
       }
     },
     "achievements": {}

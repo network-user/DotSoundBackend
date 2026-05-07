@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { AdminRangeSwitch } from '../components/widgets/AdminRangeSwitch'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { trackProgressiveAudioUrl } from '@/lib/offlineCache'
@@ -359,13 +360,14 @@ export function TracksRoute() {
       header: t('admin.tracks.colTitle'),
       accessorKey: 'title',
       cell: (i) => (
-        <button
-          type="button"
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className="admin-link"
           onClick={() => handleOpen(i.row.original.id)}
         >
           {i.row.original.title}
-        </button>
+        </MotionPress>
       ),
     },
     {
@@ -521,21 +523,30 @@ export function TracksRoute() {
       </section>
       <section className="admin-card">
         <div className="admin-dashboard__toplist-head">
-          <h2>Track analytics</h2>
-          <div className="admin-range-switch">
-            {(['today', '7d', '30d', 'all'] as const).map((period) => (
-              <button
-                key={period}
-                type="button"
-                className={`admin-range-switch__btn${
-                  statsPeriod === period ? ' is-active' : ''
-                }`}
-                onClick={() => setStatsPeriod(period)}
-              >
-                {period}
-              </button>
-            ))}
-          </div>
+          <h2>{t('admin.tracks.analyticsTitle', 'Track analytics')}</h2>
+          <AdminRangeSwitch
+            groupId="tracks-stats-period"
+            value={statsPeriod}
+            onChange={setStatsPeriod}
+            options={[
+              {
+                value: 'today',
+                label: t('redesign.admin.dashboard.periodToday'),
+              },
+              {
+                value: '7d',
+                label: t('redesign.admin.dashboard.period7d'),
+              },
+              {
+                value: '30d',
+                label: t('redesign.admin.dashboard.period30d'),
+              },
+              {
+                value: 'all',
+                label: t('redesign.admin.dashboard.periodAll'),
+              },
+            ]}
+          />
         </div>
         {trackStats.isLoading || !trackStats.data ? (
           <div className="admin-skeleton admin-skeleton--card" />

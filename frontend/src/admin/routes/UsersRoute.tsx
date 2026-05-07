@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { AdminRangeSwitch } from '../components/widgets/AdminRangeSwitch'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
@@ -317,21 +318,30 @@ export function UsersRoute() {
       </section>
       <section className="admin-card">
         <div className="admin-dashboard__toplist-head">
-          <h2>Admin activity</h2>
-          <div className="admin-range-switch">
-            {(['today', '7d', '30d', 'all'] as const).map((period) => (
-              <button
-                key={period}
-                type="button"
-                className={`admin-range-switch__btn${
-                  statsPeriod === period ? ' is-active' : ''
-                }`}
-                onClick={() => setStatsPeriod(period)}
-              >
-                {period}
-              </button>
-            ))}
-          </div>
+          <h2>{t('admin.users.activityTitle', 'Admin activity')}</h2>
+          <AdminRangeSwitch
+            groupId="users-stats-period"
+            value={statsPeriod}
+            onChange={setStatsPeriod}
+            options={[
+              {
+                value: 'today',
+                label: t('redesign.admin.dashboard.periodToday'),
+              },
+              {
+                value: '7d',
+                label: t('redesign.admin.dashboard.period7d'),
+              },
+              {
+                value: '30d',
+                label: t('redesign.admin.dashboard.period30d'),
+              },
+              {
+                value: 'all',
+                label: t('redesign.admin.dashboard.periodAll'),
+              },
+            ]}
+          />
         </div>
         {adminStats.isLoading || !adminStats.data ? (
           <div className="admin-skeleton admin-skeleton--card" />
@@ -463,9 +473,10 @@ export function UsersRoute() {
             </h3>
             <div className="admin-dm-templates">
               {DM_TEMPLATES.map((tpl) => (
-                <button
+                <MotionPress
                   key={tpl.id}
-                  type="button"
+                  variant="ghost"
+                  haptic="selection"
                   className="admin-dm-template-btn"
                   onClick={() =>
                     setMessageText(t(tpl.textKey))
@@ -473,7 +484,7 @@ export function UsersRoute() {
                   title={t(tpl.textKey)}
                 >
                   {t(tpl.labelKey)}
-                </button>
+                </MotionPress>
               ))}
             </div>
             <textarea

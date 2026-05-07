@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
+import { MotionPress } from '@/components/ui/MotionPress'
 import { adminApi } from '../lib/adminApi'
 import { StatusPill } from '../components/widgets/StatusPill'
 import { DataTable } from '../components/widgets/DataTable'
@@ -130,12 +131,14 @@ export function ContainersRoute() {
           { count: data?.total || 0 },
         )}{' '}
         ·{' '}
-        <button
+        <MotionPress
+          variant="ghost"
+          haptic="selection"
           className="admin-link"
           onClick={() => refetch()}
         >
           {t('admin.logs.refresh')}
-        </button>
+        </MotionPress>
       </p>
       <DataTable
         columns={columns}
