@@ -1,6 +1,8 @@
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import HTTPException
 from fastapi.responses import Response
 from httpx import AsyncClient
 from sqlalchemy import update
@@ -435,3 +437,60 @@ async def test_soundcloud_hls_stream_and_audio_redirect(
     assert body["url"] == hls
     assert r2.status_code == 302
     assert r2.headers["location"] == hls
+
+
+async def test_recovery_handles_soundcloud_502_as_recoverable() -> None:
+    from app.api.v1.tracks.playback import (
+        _resolve_third_party_stream_with_recovery,
+    )
+
+    original = SimpleNamespace(
+        id=100,
+        source_platform="soundcloud",
+        sc_url="https://soundcloud.com/a/original",
+    )
+    replacement = SimpleNamespace(
+        id=101,
+        source_platform="soundcloud",
+        sc_url="https://soundcloud.com/a/replacement",
+    )
+
+    async def fake_resolve(
+        track: object,
+        _session: object,
+        *,
+        use_cache: bool = True,
+    ) -> tuple[str, str]:
+        if track is original:
+            raise HTTPException(status_code=502, detail="upstream failed")
+        return "https://media.sndcdn.com/repl.mp3", "progressive"
+
+    fallback_mock = AsyncMock(return_value=replacement)
+    with (
+        patch(
+            "app.api.v1.tracks.playback._resolve_third_party_stream",
+            new=fake_resolve,
+        ),
+        patch(
+            "app.services.track_fallback_service.TrackFallbackService."
+            "find_and_apply_fallback",
+            new=fallback_mock,
+        ),
+        patch(
+            "app.services.track_fallback_service.TrackFallbackService."
+            "try_refresh_sc_url",
+            new=AsyncMock(return_value=False),
+        ),
+    ):
+        eff_track, stream_url, protocol = (
+            await _resolve_third_party_stream_with_recovery(
+                original,
+                session=object(),  # type: ignore[arg-type]
+                use_cache=True,
+            )
+        )
+
+    assert eff_track is replacement
+    assert stream_url == "https://media.sndcdn.com/repl.mp3"
+    assert protocol == "progressive"
+    fallback_mock.assert_awaited_once_with(original)

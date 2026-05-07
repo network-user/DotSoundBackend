@@ -15,7 +15,7 @@ export interface IslandEntry extends IslandPayload {
   createdAt: number
 }
 
-type Listener = (entries: IslandEntry[]) => void
+type Listener = () => void
 
 let entries: IslandEntry[] = []
 const listeners = new Set<Listener>()
@@ -23,7 +23,7 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>()
 let counter = 0
 
 function notify() {
-  for (const fn of listeners) fn(entries.slice())
+  for (const fn of listeners) fn()
 }
 
 function makeId(): string {
@@ -90,12 +90,12 @@ export function dismissIsland(id?: string): void {
 
 export function subscribeIsland(listener: Listener): () => void {
   listeners.add(listener)
-  listener(entries.slice())
+  listener()
   return () => {
     listeners.delete(listener)
   }
 }
 
 export function getIslandSnapshot(): IslandEntry[] {
-  return entries.slice()
+  return entries
 }
