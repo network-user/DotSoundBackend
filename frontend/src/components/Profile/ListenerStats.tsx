@@ -58,22 +58,14 @@ export function ListenerStats() {
   const topGenre = data?.top_genres?.[0]
 
   return (
-    <div className="listener-stats" style={{ marginTop: 12 }}>
-      <div
-        className="listener-stats__header"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 8,
-        }}
-      >
-        <div style={{ fontWeight: 600, fontSize: 14 }}>
+    <div className="listener-stats">
+      <div className="listener-stats__header">
+        <div className="listener-stats__title">
           {t('profile.listenStats.title', 'Ваше прослушивание')}
         </div>
         <div
           role="tablist"
-          style={{ display: 'flex', gap: 4 }}
+          className="listener-stats__periods"
           aria-label={t(
             'profile.listenStats.periodAria',
             'Период статистики',

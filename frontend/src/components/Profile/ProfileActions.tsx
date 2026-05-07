@@ -8,6 +8,7 @@ import { useSound } from '@/store/SoundContext'
 
 interface ProfileActionsProps {
   onOpenImport: () => void
+  onOpenDislikes: () => void
 }
 
 interface ActionRow {
@@ -17,7 +18,10 @@ interface ActionRow {
   onClick: () => void
 }
 
-export function ProfileActions({ onOpenImport }: ProfileActionsProps) {
+export function ProfileActions({
+  onOpenImport,
+  onOpenDislikes,
+}: ProfileActionsProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const sound = useSound()
@@ -82,6 +86,15 @@ export function ProfileActions({ onOpenImport }: ProfileActionsProps) {
       onClick: () => {
         tap()
         navigate('/library?tab=liked')
+      },
+    },
+    {
+      id: 'profile-action-dislikes',
+      icon: 'thumbs-down',
+      label: t('profile.tabDislikes'),
+      onClick: () => {
+        tap()
+        onOpenDislikes()
       },
     },
     ...mixRows,

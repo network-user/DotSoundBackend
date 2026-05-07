@@ -321,7 +321,11 @@ export function ProfileView({
             type="button"
             variant="ghost"
             haptic="selection"
-            className={`profile-tab${tab === 'profile' ? ' active' : ''}`}
+            className={`profile-tab${
+              tab === 'profile' || tab === 'dislikes'
+                ? ' active'
+                : ''
+            }`}
             onClick={() => {
               feedbackTap()
               setTab('profile')
@@ -353,18 +357,6 @@ export function ProfileView({
           >
             {t('profile.tabComplaints')}
           </MotionPress>
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="selection"
-            className={`profile-tab${tab === 'dislikes' ? ' active' : ''}`}
-            onClick={() => {
-              feedbackTap()
-              setTab('dislikes')
-            }}
-          >
-            {t('profile.tabDislikes')}
-          </MotionPress>
         </div>
         <div className="profile-header-actions">
           <NotificationBell />
@@ -390,6 +382,27 @@ export function ProfileView({
         </div>
       </div>
 
+      {tab === 'dislikes' && (
+        <div className="profile-subview-head">
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="selection"
+            className="profile-subview-back"
+            onClick={() => {
+              feedbackTap()
+              setTab('profile')
+            }}
+          >
+            <Icon name="chevron-left" size={18} />
+            <span>{t('profile.backToProfile')}</span>
+          </MotionPress>
+          <span className="profile-subview-title">
+            {t('profile.tabDislikes')}
+          </span>
+        </div>
+      )}
+
       {tab === 'profile' && (
         <>
           <ProfileHero
@@ -414,6 +427,7 @@ export function ProfileView({
           <ListenerStats />
           <ProfileActions
             onOpenImport={() => setTab('import')}
+            onOpenDislikes={() => setTab('dislikes')}
           />
           <ProfileTrackList
             tracks={myTracks}
