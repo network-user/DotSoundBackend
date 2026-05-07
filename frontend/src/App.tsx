@@ -210,6 +210,12 @@ export function App() {
     if (initCalled.current) return
     initCalled.current = true
     setWSTokenProvider(() => api.getToken())
+    let initSettled = false
+    const initWatchdogId = window.setTimeout(() => {
+      if (initSettled) return
+      setNeedsAuth(true)
+      setIsInitialized(true)
+    }, 9000)
 
     const init = async () => {
       let authenticated = false
@@ -263,133 +269,141 @@ export function App() {
       const params = new URLSearchParams(
         window.location.search,
       )
-      const magicToken = params.get('token')
-      if (magicToken) {
-        window.history.replaceState(
-          {},
-          '',
-          window.location.pathname,
-        )
-        try {
-          const res =
-            await api.verifyMagicLink(
-              magicToken,
-            )
-          if (
-            res.access_token &&
-            res.user_id &&
-            !res.requires_2fa
-          ) {
-            connectWS(res.access_token)
-            markAuthSuccess()
-            trackActivationEvent('auth_success', {
-              once: true,
-              meta: { via: 'magic_link' },
-            })
-            api.setOnUnauthorized(() => {
-              disconnectWS()
-              setNeedsAuth(true)
-            })
-            setIsInitialized(true)
-            return
-          }
-        } catch {
-          // fall through
-        }
-      }
-
-      if (hasTelegramContext) {
-        try {
-          const authRes =
-            await api.authTelegram(initData)
-          if (authRes?.access_token) {
-            connectWS(authRes.access_token)
-            authenticated = true
-            debug.authResult = 'ok'
-          }
-        } catch (err) {
-          const msg =
-            err instanceof Error
-              ? err.message
-              : String(err)
-          console.error(
-            '[App] Telegram auth failed:',
-            msg,
+      try {
+        const magicToken = params.get('token')
+        if (magicToken) {
+          window.history.replaceState(
+            {},
+            '',
+            window.location.pathname,
           )
-          debug.authError = msg
-
           try {
-            await new Promise((r) =>
-              setTimeout(r, 500),
-            )
-            const retryRes =
-              await api.authTelegram(
-                getInitData(),
+            const res =
+              await api.verifyMagicLink(
+                magicToken,
               )
-            if (retryRes?.access_token) {
-              connectWS(retryRes.access_token)
-              authenticated = true
-              debug.authResult = 'ok (retry)'
+            if (
+              res.access_token &&
+              res.user_id &&
+              !res.requires_2fa
+            ) {
+              connectWS(res.access_token)
+              markAuthSuccess()
+              trackActivationEvent('auth_success', {
+                once: true,
+                meta: { via: 'magic_link' },
+              })
+              api.setOnUnauthorized(() => {
+                disconnectWS()
+                setNeedsAuth(true)
+              })
+              return
             }
-          } catch (retryErr) {
-            const retryMsg =
-              retryErr instanceof Error
-                ? retryErr.message
-                : String(retryErr)
-            debug.authRetryError = retryMsg
-            setAuthError(
-              `Telegram auth: ${msg}`,
-            )
+          } catch {
+            // fall through
           }
         }
-      } else {
-        debug.authResult = 'skipped (no initData)'
-      }
 
-      if (!authenticated) {
-        const restored = api.restoreSession()
-        if (restored?.token) {
-          connectWS(restored.token)
-          authenticated = true
-          debug.storedToken = 'restored'
+        if (hasTelegramContext) {
+          try {
+            const authRes =
+              await api.authTelegram(initData)
+            if (authRes?.access_token) {
+              connectWS(authRes.access_token)
+              authenticated = true
+              debug.authResult = 'ok'
+            }
+          } catch (err) {
+            const msg =
+              err instanceof Error
+                ? err.message
+                : String(err)
+            console.error(
+              '[App] Telegram auth failed:',
+              msg,
+            )
+            debug.authError = msg
+
+            try {
+              await new Promise((r) =>
+                setTimeout(r, 500),
+              )
+              const retryRes =
+                await api.authTelegram(
+                  getInitData(),
+                )
+              if (retryRes?.access_token) {
+                connectWS(retryRes.access_token)
+                authenticated = true
+                debug.authResult = 'ok (retry)'
+              }
+            } catch (retryErr) {
+              const retryMsg =
+                retryErr instanceof Error
+                  ? retryErr.message
+                  : String(retryErr)
+              debug.authRetryError = retryMsg
+              setAuthError(
+                `Telegram auth: ${msg}`,
+              )
+            }
+          }
         } else {
-          debug.storedToken = 'none/expired'
+          debug.authResult = 'skipped (no initData)'
         }
-      }
 
-      if (!authenticated) {
-        setNeedsAuth(true)
-      } else {
-        await api.syncSessionUserFlags()
-        markAuthSuccess()
-        trackActivationEvent('auth_success', {
-          once: true,
-          meta: {
-            via: hasTelegramContext
-              ? 'telegram_initdata'
-              : 'restored_session',
-          },
+        if (!authenticated) {
+          const restored = api.restoreSession()
+          if (restored?.token) {
+            connectWS(restored.token)
+            authenticated = true
+            debug.storedToken = 'restored'
+          } else {
+            debug.storedToken = 'none/expired'
+          }
+        }
+
+        if (!authenticated) {
+          setNeedsAuth(true)
+        } else {
+          await api.syncSessionUserFlags()
+          markAuthSuccess()
+          trackActivationEvent('auth_success', {
+            once: true,
+            meta: {
+              via: hasTelegramContext
+                ? 'telegram_initdata'
+                : 'restored_session',
+            },
+          })
+          try {
+            window.dispatchEvent(
+              new Event('app-auth-ready'),
+            )
+          } catch {
+            /* ignore */
+          }
+        }
+
+        setAuthDebug(debug)
+        api.setOnUnauthorized(() => {
+          disconnectWS()
+          setNeedsAuth(true)
         })
-        try {
-          window.dispatchEvent(
-            new Event('app-auth-ready'),
-          )
-        } catch {
-          /* ignore */
-        }
+        api.setOnAccountBlocked((reason) => {
+          setBannedReason(reason || 'не указана')
+        })
+      } finally {
+        initSettled = true
+        window.clearTimeout(initWatchdogId)
+        setIsInitialized(true)
       }
-
-      setAuthDebug(debug)
-      api.setOnUnauthorized(() => {
-        disconnectWS()
-        setNeedsAuth(true)
-      })
-      api.setOnAccountBlocked((reason) => {
-        setBannedReason(reason || 'не указана')
-      })
-      setIsInitialized(true)
     }
     init()
+    return () => {
+      initSettled = true
+      window.clearTimeout(initWatchdogId)
+    }
   }, [])
 
   useEffect(() => {
