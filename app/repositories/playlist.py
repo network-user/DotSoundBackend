@@ -16,15 +16,9 @@ class PlaylistRepository:
     @staticmethod
     def _exclude_hidden_sources():  # noqa: ANN205
         hidden = ("youtube",)
-        source_platform = func.lower(
-            func.coalesce(Track.source_platform, "")
-        )
-        imported_from = func.lower(
-            func.coalesce(Track.imported_from, "")
-        )
-        return (~source_platform.in_(hidden)) & (
-            ~imported_from.in_(hidden)
-        )
+        source_platform = func.lower(func.coalesce(Track.source_platform, ""))
+        imported_from = func.lower(func.coalesce(Track.imported_from, ""))
+        return (~source_platform.in_(hidden)) & (~imported_from.in_(hidden))
 
     async def get_by_id(self, playlist_id: int) -> Playlist | None:
         return await self._session.get(Playlist, playlist_id)
@@ -118,6 +112,22 @@ class PlaylistRepository:
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def count_visible_tracks(self, playlist_id: int) -> int:
+        q = (
+            select(func.count(Track.id))
+            .select_from(PlaylistTrack)
+            .join(Track, PlaylistTrack.track_id == Track.id)
+            .where(
+                PlaylistTrack.playlist_id == playlist_id,
+                Track.is_active.is_(True),
+                self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
+            )
+        )
+        out = await self._session.execute(q)
+        row = out.scalar_one()
+        return int(row)
 
     async def delete(self, playlist: Playlist) -> None:
         await self._session.delete(playlist)

@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
+from app.repositories.lyrics import LyricsRepository
 from app.repositories.track import TrackRepository
 from app.schemas.track import (
     TrackPlaybackVariantBrief,
@@ -26,37 +27,54 @@ async def dedupe_and_build_track_list(
 async def build_track_response(
     session: AsyncSession,
     track: Track,
+    *,
+    include_has_lyrics: bool = True,
 ) -> TrackResponse:
     base = TrackResponse.model_validate(track)
     pvs = PlaybackVariantService(session)
     ids = await pvs.resolve_variant_track_ids(track)
+    enriched: TrackResponse
     if len(ids) <= 1:
-        return base
-    rows = await TrackRepository(session).get_by_ids_preserve_order(ids)
-    active = [r for r in rows if r.is_active and r.is_public]
-    if len(active) <= 1:
-        return base
-    primary = pvs.pick_primary_track(active)
-    briefs: list[TrackPlaybackVariantBrief] = []
-    for r in sorted(
-        active,
-        key=lambda x: (
-            x.catalog_type,
-            (x.source_platform or ""),
-            x.id,
-        ),
-    ):
-        briefs.append(
-            TrackPlaybackVariantBrief(
-                track_id=r.id,
-                source=r.source,
-                catalog_type=r.catalog_type,
-                source_platform=r.source_platform,
-                source_name=r.source_name,
-                is_primary_for_display=r.id == primary.id,
-            )
+        enriched = base
+    else:
+        rows = await TrackRepository(session).get_by_ids_preserve_order(
+            ids,
         )
-    return base.model_copy(update={"playback_variants": briefs})
+        active = [r for r in rows if r.is_active and r.is_public]
+        if len(active) <= 1:
+            enriched = base
+        else:
+            primary = pvs.pick_primary_track(active)
+            briefs: list[TrackPlaybackVariantBrief] = []
+            for r in sorted(
+                active,
+                key=lambda x: (
+                    x.catalog_type,
+                    (x.source_platform or ""),
+                    x.id,
+                ),
+            ):
+                briefs.append(
+                    TrackPlaybackVariantBrief(
+                        track_id=r.id,
+                        source=r.source,
+                        catalog_type=r.catalog_type,
+                        source_platform=r.source_platform,
+                        source_name=r.source_name,
+                        is_primary_for_display=(
+                            r.id == primary.id
+                        ),
+                    )
+                )
+            enriched = base.model_copy(
+                update={"playback_variants": briefs},
+            )
+    if not include_has_lyrics:
+        return enriched
+    has_l = await LyricsRepository(
+        session,
+    ).has_nonempty_plain_text(int(enriched.id))
+    return enriched.model_copy(update={"has_lyrics": has_l})
 
 
 async def build_track_responses(
@@ -66,9 +84,17 @@ async def build_track_responses(
     if not tracks:
         return []
     results = await asyncio.gather(
-        *[build_track_response(session, t) for t in tracks],
+        *[
+            build_track_response(session, t, include_has_lyrics=False)
+            for t in tracks
+        ],
     )
-    return list(results)
+    lyr = LyricsRepository(session)
+    present = await lyr.nonempty_plain_track_ids([int(r.id) for r in results])
+    return [
+        r.model_copy(update={"has_lyrics": (int(r.id) in present)})
+        for r in results
+    ]
 
 
 def merge_recent_listen_meta_into_responses(

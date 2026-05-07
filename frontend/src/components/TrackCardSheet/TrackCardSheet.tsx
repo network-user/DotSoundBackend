@@ -1451,24 +1451,30 @@ export function TrackCardSheet({
             </span>
           </MotionPress>
 
-          <MotionPress
-            type="button"
-            variant="ghost"
-            className={`tcs-action-btn${showLyrics ? ' active' : ''}`}
-            haptic="light"
-            disabled={
-              !card?.has_lyrics && !isOwner && !canEditUi
-            }
-            onClick={() => {
-              setShowLyrics((v) => !v)
-              setEditingLyrics(false)
-            }}
-          >
-            <Icon name="text" size={20} />
-            <span className="tcs-action-label">
-              {t('trackSheet.lyrics')}
-            </span>
-          </MotionPress>
+          {(Boolean(card?.has_lyrics) ||
+            isOwner ||
+            canEditUi) && (
+            <MotionPress
+              type="button"
+              variant="ghost"
+              className={`tcs-action-btn${showLyrics ? ' active' : ''}`}
+              haptic="light"
+              disabled={
+                !card?.has_lyrics &&
+                !isOwner &&
+                !canEditUi
+              }
+              onClick={() => {
+                setShowLyrics((v) => !v)
+                setEditingLyrics(false)
+              }}
+            >
+              <Icon name="text" size={20} />
+              <span className="tcs-action-label">
+                {t('trackSheet.lyrics')}
+              </span>
+            </MotionPress>
+          )}
 
           <MotionPress
             type="button"

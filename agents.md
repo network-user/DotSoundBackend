@@ -162,6 +162,9 @@ Backend (file_validator.py):
 - `services/playback_health_policy.py` -- пороги серверных
   ошибок воспроизведения и длительность авто-сокрытия; используется в
   `app/services/track_playback_health_service.py`
+- `services/playlist_cover_policy.py` -- одноразовая автогенерация
+  коллажа-обложки для пользовательских плейлистов (`should_attempt_auto_playlist_cover`);
+  используется в `app/services/playlist_service.py`
 - `services/upload_policy.py` -- upload security: MIME allowlists,
   dangerous extensions, size limits, decision functions
 - `services/admin_security_policy.py` -- TTL admin-сессии, окно

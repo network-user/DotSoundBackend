@@ -1,4 +1,10 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Icon } from '@/components/Icon/Icon'
@@ -55,6 +61,8 @@ export function PlaylistsView({
   const [renameOpen, setRenameOpen] = useState<Playlist | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renameBusy, setRenameBusy] = useState(false)
+  const [coverBusy, setCoverBusy] = useState(false)
+  const coverFileRef = useRef<HTMLInputElement>(null)
   const uid = getUserId()
   const isAdmin = getIsAdmin()
   const canEditSelected = Boolean(
@@ -95,7 +103,7 @@ export function PlaylistsView({
     setEditName(selected.name)
     setEditPublic(selected.is_public)
     if (canEditSelected) {
-      api.getMyLibrary(1, 100, false).then((res) => {
+      api.getMyLibrary(1, 100, true).then((res) => {
         setMyTracks(res.items)
       }).catch(() => setMyTracks([]))
     }
@@ -112,7 +120,7 @@ export function PlaylistsView({
     let cancelled = false
     const timer = window.setTimeout(() => {
       setSearchLoading(true)
-      api.getTracks({ q, size: 30, page: 1 })
+      api.getTracks({ q, size: 30, page: 1, playable: true })
         .then((res) => {
           if (cancelled) return
           setSearchResults(res.items)
@@ -379,6 +387,85 @@ export function PlaylistsView({
     }
   }
 
+  const handlePlaylistCoverPick = useCallback(
+    async (file: File) => {
+      if (!selected || !uid) return
+      if (selected.owner_id !== uid && !isAdmin) return
+      const mime = file.type.split(';')[0].toLowerCase()
+      const mimeOk =
+        mime === 'image/jpeg' ||
+        mime === 'image/png' ||
+        mime === 'image/webp'
+      if (!mimeOk) {
+        showIsland({
+          kind: 'error',
+          title: t('redesign.library.playlistCoverBadType'),
+          durationMs: 4000,
+        })
+        return
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        showIsland({
+          kind: 'error',
+          title: t('redesign.library.playlistCoverTooBig'),
+          durationMs: 4000,
+        })
+        return
+      }
+      setCoverBusy(true)
+      try {
+        await api.uploadPlaylistCover(selected.id, file)
+        await refreshSelected()
+        loadPlaylists()
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.library.playlistCoverUploaded'),
+          durationMs: 2400,
+        })
+      } catch {
+        showIsland({
+          kind: 'error',
+          title: t('redesign.library.playlistCoverFail'),
+          durationMs: 4000,
+        })
+      } finally {
+        setCoverBusy(false)
+      }
+    },
+    [selected, uid, isAdmin, t, loadPlaylists, refreshSelected],
+  )
+
+  const handlePlaylistCoverRemove = useCallback(async () => {
+    if (!selected || !uid) return
+    if (selected.owner_id !== uid && !isAdmin) return
+    setCoverBusy(true)
+    try {
+      await api.removePlaylistCover(selected.id)
+      await refreshSelected()
+      loadPlaylists()
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.library.playlistCoverRemoved'),
+        durationMs: 2400,
+      })
+    } catch {
+      showIsland({
+        kind: 'error',
+        title: t('redesign.library.playlistCoverRemoveFail'),
+        durationMs: 4000,
+      })
+    } finally {
+      setCoverBusy(false)
+    }
+  }, [
+    selected,
+    uid,
+    isAdmin,
+    t,
+    loadPlaylists,
+    refreshSelected,
+  ])
+
   const handleCopyLink = async () => {
     if (!selected) return
     const url = `${window.location.origin}${import.meta.env.BASE_URL}playlists`
@@ -444,6 +531,71 @@ export function PlaylistsView({
           </MotionPress>
         </div>
 
+        <div className="rd-pl-cover-hero-wrap">
+          {selected.cover_url ? (
+            <img
+              src={selected.cover_url}
+              alt=""
+              className="rd-pl-cover-hero-img"
+              loading="lazy"
+            />
+          ) : (
+            <div
+              className="rd-pl-cover rd-pl-cover-hero-img"
+              aria-hidden
+            >
+              <Icon name="list" size={40} />
+            </div>
+          )}
+          {canEditSelected ? (
+            <>
+              <input
+                ref={coverFileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                tabIndex={-1}
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ''
+                  if (f) void handlePlaylistCoverPick(f)
+                }}
+              />
+              <div className="rd-pl-cover-actions">
+                <MotionPress
+                  type="button"
+                  variant="ghost"
+                  haptic="light"
+                  className="btn-secondary"
+                  disabled={coverBusy}
+                  onClick={() => {
+                    coverFileRef.current?.click()
+                  }}
+                >
+                  <Icon name="image" size={18} />
+                  {coverBusy
+                    ? t('redesign.library.playlistCoverUploading')
+                    : t('redesign.library.playlistCoverUpload')}
+                </MotionPress>
+                <MotionPress
+                  type="button"
+                  variant="ghost"
+                  haptic="light"
+                  className="btn-secondary"
+                  disabled={
+                    coverBusy || !selected.cover_url
+                  }
+                  onClick={() => {
+                    void handlePlaylistCoverRemove()
+                  }}
+                >
+                  {t('redesign.library.playlistCoverRemove')}
+                </MotionPress>
+              </div>
+            </>
+          ) : null}
+        </div>
+
         {canEditSelected && (
           <div className="rd-pl-edit">
             <div className="form-group">
@@ -478,7 +630,7 @@ export function PlaylistsView({
                 ? t('redesign.library.playlistSaving')
                 : t('redesign.library.playlistSave')}
             </MotionPress>
-            <div className="rd-pl-add-row">
+            <div className="rd-pl-add-block">
               <input
                 className="form-input rd-pl-add-search"
                 placeholder={t(
@@ -487,33 +639,60 @@ export function PlaylistsView({
                 value={trackSearch}
                 onChange={(e) => setTrackSearch(e.target.value)}
               />
-              <select
-                className="form-input"
-                value={addTrackId ?? ''}
-                onChange={(e) =>
-                  setAddTrackId(Number(e.target.value) || null)
-                }
+              <p className="hint rd-pl-add-hint">
+                {t('redesign.library.playlistPickerHint')}
+              </p>
+              <div
+                className="rd-pl-add-list"
+                role="listbox"
+                aria-label={t('redesign.library.playlistAddOption')}
               >
-                <option value="">
-                  {t('redesign.library.playlistAddOption')}
-                </option>
-                {availableTracks.map((tr) => (
-                  <option key={tr.id} value={tr.id}>
-                    {tr.title} {tr.artist ? `- ${tr.artist}` : ''}
-                  </option>
-                ))}
-              </select>
+                {availableTracks.length === 0 ? (
+                  <p className="hint rd-pl-add-empty">
+                    {searchLoading
+                      ? t('redesign.library.playlistSearching')
+                      : t('redesign.library.playlistPickerEmpty')}
+                  </p>
+                ) : (
+                  availableTracks.map((tr) => {
+                    const selected = addTrackId === tr.id
+                    return (
+                      <button
+                        key={tr.id}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        className={
+                          'rd-pl-add-option' +
+                          (selected ? ' rd-pl-add-option--on' : '')
+                        }
+                        onClick={() => setAddTrackId(tr.id)}
+                      >
+                        <span className="rd-pl-add-option-title">
+                          {tr.title}
+                        </span>
+                        {tr.artist ? (
+                          <span className="rd-pl-add-option-artist">
+                            {tr.artist}
+                          </span>
+                        ) : null}
+                      </button>
+                    )
+                  })
+                )}
+              </div>
               <MotionPress
                 type="button"
                 variant="ghost"
                 haptic="selection"
-                className="btn-secondary"
+                className="btn-secondary rd-pl-add-submit"
                 onClick={() => void handleAddTrack()}
+                disabled={!addTrackId}
               >
                 {t('redesign.library.playlistAdd')}
               </MotionPress>
             </div>
-            {searchLoading && (
+            {searchLoading && availableTracks.length > 0 && (
               <p className="hint rd-pl-search-hint">
                 {t('redesign.library.playlistSearching')}
               </p>
@@ -802,7 +981,15 @@ export function PlaylistsView({
                   }}
                 >
                   <div className="rd-pl-cover">
-                    <Icon name="list" size={36} />
+                    {p.cover_url ? (
+                      <img
+                        src={p.cover_url}
+                        alt=""
+                        loading="lazy"
+                      />
+                    ) : (
+                      <Icon name="list" size={36} />
+                    )}
                   </div>
                   <div className="rd-pl-info">
                     <div className="rd-pl-name">{p.name}</div>

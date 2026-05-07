@@ -199,6 +199,11 @@ class Track(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    lyrics_catalog_miss_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
 
     audio_blob: Mapped[AudioBlob | None] = relationship(
         "AudioBlob",

@@ -1,12 +1,13 @@
 from datetime import UTC
 
 import structlog
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.lyrics import TrackLyrics
+from app.models.track import Track
 from app.models.lyrics_translation import (
     TrackLyricsTranslation,
 )
@@ -25,6 +26,29 @@ class LyricsRepository:
             .where(TrackLyrics.track_id == track_id)
         )
         return result.scalar_one_or_none()
+
+    async def has_nonempty_plain_text(self, track_id: int) -> bool:
+        result = await self._session.execute(
+            select(func.trim(TrackLyrics.plain_text)).where(
+                TrackLyrics.track_id == track_id,
+            ),
+        )
+        raw = result.scalar_one_or_none()
+        return bool(raw and raw.strip())
+
+    async def nonempty_plain_track_ids(
+        self, track_ids: list[int],
+    ) -> set[int]:
+        if not track_ids:
+            return set()
+        stripped = func.trim(func.coalesce(TrackLyrics.plain_text, ""))
+        result = await self._session.execute(
+            select(TrackLyrics.track_id).where(
+                TrackLyrics.track_id.in_(track_ids),
+                stripped != "",
+            ),
+        )
+        return set(int(r) for r in result.scalars().all())
 
     async def create_or_update(
         self,
@@ -86,6 +110,9 @@ class LyricsRepository:
         lyrics = result.scalar_one()
         logger.debug("db_lyrics_upserted", track_id=track_id)
         if plain_text.strip():
+            row = await self._session.get(Track, track_id)
+            if row is not None:
+                row.lyrics_catalog_miss_at = None
             try:
                 from app.services.lyrics_derived_genre_mood_service import (
                     apply_after_lyrics_saved,

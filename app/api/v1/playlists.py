@@ -1,5 +1,14 @@
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
@@ -25,6 +34,11 @@ from app.services.track_response_build import dedupe_and_build_track_list
 
 router = APIRouter(prefix="/playlists", tags=["playlists"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+_MAX_COVER_BYTES = 5 * 1024 * 1024
+_ALLOWED_PLAYLIST_COVER_CT = frozenset(
+    {"image/jpeg", "image/png", "image/webp"},
+)
 
 
 @router.get(
@@ -69,9 +83,7 @@ async def create_playlist(
         owner_id=current_user.id,
         is_public=data.is_public,
     )
-    logger.info(
-        "playlist_created_endpoint", playlist_id=playlist.id
-    )
+    logger.info("playlist_created_endpoint", playlist_id=playlist.id)
     return PlaylistResponse.model_validate(playlist)
 
 
@@ -116,10 +128,7 @@ async def get_playlist(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Playlist not found",
         )
-    is_owner = (
-        current_user
-        and current_user.id == playlist.owner_id
-    )
+    is_owner = current_user and current_user.id == playlist.owner_id
     is_admin = bool(current_user and current_user.is_admin)
     if not playlist.is_public and not is_owner and not is_admin:
         raise HTTPException(
@@ -180,9 +189,78 @@ async def delete_playlist(
         current_user.id,
         allow_admin=current_user.is_admin,
     )
-    logger.info(
-        "playlist_deleted_endpoint", playlist_id=playlist_id
+    logger.info("playlist_deleted_endpoint", playlist_id=playlist_id)
+
+
+@router.post(
+    "/{playlist_id}/cover",
+    response_model=PlaylistResponse,
+    summary="Upload or replace playlist cover (owner only)",
+)
+@limiter.limit("30/minute")
+async def upload_playlist_cover(
+    request: Request,
+    playlist_id: int,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PlaylistResponse:
+    structlog.contextvars.bind_contextvars(
+        playlist_id=playlist_id,
+        requester_id=current_user.id,
     )
+    mime = (file.content_type or "").split(";")[0].strip().lower()
+    if mime not in _ALLOWED_PLAYLIST_COVER_CT:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Cover must be JPEG, PNG, or WebP",
+        )
+    data = await file.read()
+    if len(data) > _MAX_COVER_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Cover exceeds 5 MB limit",
+        )
+    service = PlaylistService(session)
+    playlist = await service.upload_owner_cover(
+        playlist_id,
+        requester_id=current_user.id,
+        data=data,
+        content_type=mime,
+    )
+    logger.info(
+        "playlist_cover_uploaded",
+        playlist_id=playlist_id,
+    )
+    return PlaylistResponse.model_validate(playlist)
+
+
+@router.delete(
+    "/{playlist_id}/cover",
+    response_model=PlaylistResponse,
+    summary="Remove playlist cover and opt out of auto collage",
+)
+@limiter.limit("30/minute")
+async def delete_playlist_cover(
+    request: Request,
+    playlist_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PlaylistResponse:
+    structlog.contextvars.bind_contextvars(
+        playlist_id=playlist_id,
+        requester_id=current_user.id,
+    )
+    service = PlaylistService(session)
+    playlist = await service.delete_owner_cover(
+        playlist_id,
+        current_user.id,
+    )
+    logger.info(
+        "playlist_cover_removed",
+        playlist_id=playlist_id,
+    )
+    return PlaylistResponse.model_validate(playlist)
 
 
 @router.post(

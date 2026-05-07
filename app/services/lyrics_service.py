@@ -297,6 +297,16 @@ class LyricsService:
             )
             return None
 
+        lyrics_row = await self._repo.get_by_track_id(track_id)
+        if lyrics_row is not None and (
+            (lyrics_row.plain_text or "").strip()
+        ):
+            logger.debug(
+                "lyrics_background_skip_has_plain_text",
+                track_id=track_id,
+            )
+            return None
+
         mode = await get_routing_mode(self._session)
         if mode == "disabled":
             logger.info(
@@ -393,12 +403,21 @@ class LyricsService:
 
         Returns: progress_id for tracking the new generation task
         """
+        from sqlalchemy import update
+
+        from app.models.track import Track
         from app.services.lyrics_worker import (
             invalidate_cached_lyrics_for_track,
             set_cached_lyrics_result,
         )
 
         track = await self._get_owned_track(track_id, user_id)
+        await self._session.execute(
+            update(Track)
+            .where(Track.id == track_id)
+            .values(lyrics_catalog_miss_at=None)
+        )
+        await self._session.flush()
         existing = await self._repo.get_by_track_id(track_id)
 
         artist = track.artist or ""

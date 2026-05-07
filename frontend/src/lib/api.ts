@@ -335,12 +335,14 @@ export const api = {
     genre?: string
     size?: number
     page?: number
+    playable?: boolean
   }): Promise<TrackListResponse> {
     const sp = new URLSearchParams()
     if (params?.q) sp.set('q', params.q)
     if (params?.genre) sp.set('genre', params.genre)
     if (params?.size) sp.set('size', String(params.size))
     if (params?.page) sp.set('page', String(params.page))
+    if (params?.playable) sp.set('playable', 'true')
     const query = sp.toString() ? `?${sp}` : ''
     return request(`/api/v1/tracks${query}`)
   },
@@ -615,6 +617,21 @@ export const api = {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
+    })
+  },
+
+  uploadPlaylistCover(playlistId: number, file: File): Promise<Playlist> {
+    const fd = new FormData()
+    fd.append('file', file)
+    return request(`/api/v1/playlists/${playlistId}/cover`, {
+      method: 'POST',
+      body: fd,
+    })
+  },
+
+  removePlaylistCover(playlistId: number): Promise<Playlist> {
+    return request(`/api/v1/playlists/${playlistId}/cover`, {
+      method: 'DELETE',
     })
   },
 

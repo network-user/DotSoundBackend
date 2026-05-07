@@ -1,6 +1,7 @@
 from datetime import datetime
+from urllib.parse import quote
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.schemas.track import TrackResponse
 
@@ -26,8 +27,20 @@ class PlaylistResponse(BaseModel):
     is_featured: bool = False
     source_url: str | None = None
     cover_key: str | None = None
+    cover_auto_suppressed: bool = False
+    collage_generated_at: datetime | None = None
     description: str | None = None
     created_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cover_url(self) -> str | None:
+        if not self.cover_key:
+            return None
+        return (
+            f"/api/v1/tracks/cover_proxy?key="
+            f"{quote(self.cover_key, safe='')}"
+        )
 
 
 class PlaylistWithTracksResponse(BaseModel):
@@ -41,9 +54,21 @@ class PlaylistWithTracksResponse(BaseModel):
     is_featured: bool = False
     source_url: str | None = None
     cover_key: str | None = None
+    cover_auto_suppressed: bool = False
+    collage_generated_at: datetime | None = None
     description: str | None = None
     created_at: datetime
     tracks: list[TrackResponse] = []
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def cover_url(self) -> str | None:
+        if not self.cover_key:
+            return None
+        return (
+            f"/api/v1/tracks/cover_proxy?key="
+            f"{quote(self.cover_key, safe='')}"
+        )
 
 
 class PlaylistAddTrack(BaseModel):

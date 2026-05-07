@@ -93,15 +93,22 @@ def _session_ctx(session: AsyncSession) -> AsyncMock:
     return ctx
 
 
+def _enqueue_stub() -> tuple[MagicMock, AsyncMock]:
+    inst = MagicMock()
+    aq = AsyncMock(return_value="p1")
+    inst.enqueue_background_lyrics = aq
+    return inst, aq
+
+
+@patch(f"{_MOD}.LyricsService")
 @patch(f"{_MOD}.asyncio.sleep", new_callable=AsyncMock)
 @patch(f"{_MOD}._peek_last_error", return_value=None)
-@patch(f"{_MOD}.generate_lyrics_task.kiq", new_callable=AsyncMock)
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_skips_tracks_with_existing_lyrics(
     mock_session_local: MagicMock,
-    mock_kiq: AsyncMock,
     _mock_err: MagicMock,
     _mock_sleep: AsyncMock,
+    mock_svc_cls: MagicMock,
     session: AsyncSession,
 ) -> None:
     user = await _make_user(session, telegram_id=9101)
@@ -123,6 +130,8 @@ async def test_skips_tracks_with_existing_lyrics(
     )
     await session.commit()
     mock_session_local.return_value = _session_ctx(session)
+    inst, aq = _enqueue_stub()
+    mock_svc_cls.return_value = inst
 
     from app.services.import_lyrics_worker import (
         process_import_lyrics_task,
@@ -130,25 +139,23 @@ async def test_skips_tracks_with_existing_lyrics(
 
     await process_import_lyrics_task(job.id)
 
-    kiq_track_ids = sorted(
-        call.args[0] for call in mock_kiq.call_args_list
-    )
+    kiq_track_ids = sorted(call.args[0] for call in aq.call_args_list)
     assert kiq_track_ids == sorted([t1.id, t3.id])
-    for call in mock_kiq.call_args_list:
+    for call in aq.call_args_list:
         assert call.kwargs.get("with_sync") is True
 
 
+@patch(f"{_MOD}.LyricsService")
 @patch(f"{_MOD}.random.uniform", return_value=17.0)
 @patch(f"{_MOD}.asyncio.sleep", new_callable=AsyncMock)
 @patch(f"{_MOD}._peek_last_error", return_value=None)
-@patch(f"{_MOD}.generate_lyrics_task.kiq", new_callable=AsyncMock)
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_pacing_between_tracks_uses_uniform_delay(
     mock_session_local: MagicMock,
-    _mock_kiq: AsyncMock,
     _mock_err: MagicMock,
     mock_sleep: AsyncMock,
     mock_uniform: MagicMock,
+    mock_svc_cls: MagicMock,
     session: AsyncSession,
 ) -> None:
     user = await _make_user(session, telegram_id=9102)
@@ -161,6 +168,7 @@ async def test_pacing_between_tracks_uses_uniform_delay(
     )
     await session.commit()
     mock_session_local.return_value = _session_ctx(session)
+    mock_svc_cls.return_value = _enqueue_stub()[0]
 
     from app.services.import_lyrics_worker import (
         process_import_lyrics_task,
@@ -179,17 +187,17 @@ async def test_pacing_between_tracks_uses_uniform_delay(
     assert lo > 0
 
 
+@patch(f"{_MOD}.LyricsService")
 @patch(f"{_MOD}.random.uniform", return_value=17.0)
 @patch(f"{_MOD}.asyncio.sleep", new_callable=AsyncMock)
 @patch(f"{_MOD}._peek_last_error")
-@patch(f"{_MOD}.generate_lyrics_task.kiq", new_callable=AsyncMock)
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_cooldown_applied_after_block_signal(
     mock_session_local: MagicMock,
-    _mock_kiq: AsyncMock,
     mock_err: MagicMock,
     mock_sleep: AsyncMock,
     _mock_uniform: MagicMock,
+    mock_svc_cls: MagicMock,
     session: AsyncSession,
 ) -> None:
     # Two tracks, second iteration sees a captcha signal from the
@@ -205,6 +213,7 @@ async def test_cooldown_applied_after_block_signal(
     )
     await session.commit()
     mock_session_local.return_value = _session_ctx(session)
+    mock_svc_cls.return_value = _enqueue_stub()[0]
 
     # Error signal sequence matches per-track inspection order:
     # after track 1 — clean, after track 2 — block, after track 3 —
@@ -233,20 +242,20 @@ async def test_cooldown_applied_after_block_signal(
     )
 
 
+@patch(f"{_MOD}.LyricsService")
 @patch(f"{_MOD}.random.uniform", return_value=1.0)
 @patch(f"{_MOD}.asyncio.sleep", new_callable=AsyncMock)
 @patch(
     f"{_MOD}._peek_last_error",
     return_value="captcha: showcaptcha redirect",
 )
-@patch(f"{_MOD}.generate_lyrics_task.kiq", new_callable=AsyncMock)
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_early_exit_after_max_consecutive_blocks(
     mock_session_local: MagicMock,
-    mock_kiq: AsyncMock,
     _mock_err: MagicMock,
     _mock_sleep: AsyncMock,
     _mock_uniform: MagicMock,
+    mock_svc_cls: MagicMock,
     session: AsyncSession,
 ) -> None:
     # Every track trips the block signal. After MAX_CONSECUTIVE_BLOCKS
@@ -268,27 +277,31 @@ async def test_early_exit_after_max_consecutive_blocks(
     )
     await session.commit()
     mock_session_local.return_value = _session_ctx(session)
+    inst, aq = _enqueue_stub()
+    mock_svc_cls.return_value = inst
 
     await process_import_lyrics_task(job.id)
 
-    assert mock_kiq.await_count == MAX_CONSECUTIVE_BLOCKS
+    assert aq.await_count == MAX_CONSECUTIVE_BLOCKS
 
 
+@patch(f"{_MOD}.LyricsService")
 @patch(f"{_MOD}.asyncio.sleep", new_callable=AsyncMock)
 @patch(f"{_MOD}._peek_last_error", return_value=None)
-@patch(f"{_MOD}.generate_lyrics_task.kiq", new_callable=AsyncMock)
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_no_imported_tracks_is_noop(
     mock_session_local: MagicMock,
-    mock_kiq: AsyncMock,
     _mock_err: MagicMock,
     mock_sleep: AsyncMock,
+    mock_svc_cls: MagicMock,
     session: AsyncSession,
 ) -> None:
     user = await _make_user(session, telegram_id=9105)
     job = await _make_job_with_tracks(session, user.id, [])
     await session.commit()
     mock_session_local.return_value = _session_ctx(session)
+    inst, aq = _enqueue_stub()
+    mock_svc_cls.return_value = inst
 
     from app.services.import_lyrics_worker import (
         process_import_lyrics_task,
@@ -296,22 +309,24 @@ async def test_no_imported_tracks_is_noop(
 
     await process_import_lyrics_task(job.id)
 
-    assert mock_kiq.await_count == 0
+    assert aq.await_count == 0
     assert mock_sleep.await_count == 0
 
 
+@patch(f"{_MOD}.LyricsService")
 @patch(f"{_MOD}.asyncio.sleep", new_callable=AsyncMock)
 @patch(f"{_MOD}._peek_last_error", return_value=None)
-@patch(f"{_MOD}.generate_lyrics_task.kiq", new_callable=AsyncMock)
 @patch(f"{_MOD}.AsyncSessionLocal")
 async def test_missing_job_is_noop(
     mock_session_local: MagicMock,
-    mock_kiq: AsyncMock,
     _mock_err: MagicMock,
     mock_sleep: AsyncMock,
+    mock_svc_cls: MagicMock,
     session: AsyncSession,
 ) -> None:
     mock_session_local.return_value = _session_ctx(session)
+    inst, aq = _enqueue_stub()
+    mock_svc_cls.return_value = inst
 
     from app.services.import_lyrics_worker import (
         process_import_lyrics_task,
@@ -319,5 +334,5 @@ async def test_missing_job_is_noop(
 
     await process_import_lyrics_task(999_999)
 
-    assert mock_kiq.await_count == 0
+    assert aq.await_count == 0
     assert mock_sleep.await_count == 0

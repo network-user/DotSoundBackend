@@ -48,6 +48,12 @@
 
 ## Mini App / .sound UI (2026-05-04)
 
+- [x] **Обложки пользовательских плейлистов (2026-05-07)** — загрузка/смена
+  собственной обложки (POST/DELETE `/api/v1/playlists/{id}/cover`), флаги
+  `cover_auto_suppressed` + `collage_generated_at`, одноразовый коллаж из
+  обложек треков при ≥9 видимых треках (PrivateCore `playlist_cover_policy`),
+  Mini App (`PlaylistsView`) и `cover_proxy` для префикса `playlist-covers/`.
+
 - [x] **Admin + lyrics pipeline: жан�? и нас�?�?оение по �?екс�?�?** �??
   эв�?ис�?ика в PrivateCore (`text_genre_mood_infer`), ав�?оп�?именение
   после `LyricsRepository.create_or_update`, batch prompt/import в
@@ -84,6 +90,13 @@
   `MotionPress`, дубль visibility скрыт на узком экране; чат — back/bubble coarse;
   **итоги года** — пункт профиля и `/recap` только в декабре (`recapSeason.ts`),
   иначе stub.
+- [x] **Desktop: отдельные клики артист / трек (2026-05-07)** — при
+  `(min-width: 561px) and (pointer: fine)`: строка исполнителя ведёт на карточку
+  артиста через `resolveArtistByName`, клик по названию трека/обложке — как
+  раньше (воспроизведение в списках, карточка в плеере / Now Playing).
+  Компоненты: `TrackCard`, `PlayerBar`, `QueueSheet`/`QueueRow`, `NowPlayingView`,
+  главная (`HomeTrackTile`, hero-artist), `ChatBubble`; хуки
+  `useDesktopFinePointer`, `useNavigateToArtistByName`.
 - [x] **Редактирование аватарки профиля (2026-05-07)** — в режиме редактирования
   `ProfileView`/`ProfileHero`: выбор JPEG/PNG/WebP до 2 МБ, превью через blob,
   загрузка `POST /api/v1/users/me/avatar` при «Сохранить» (API уже было);
@@ -94,6 +107,10 @@
   `last_listen_at` и `last_listen_seconds` (учёт вариантов воспроизведения);
   `HistoryList` и `TrackCardSheet` показывают дату/время и «прослушано mm:ss`;
   i18n `redesign.library.*`, `trackSheet.lastListen*`.
+- [x] **Плейлисты: добавление только воспроизводимых треков** (2026-05-07) —
+  `playlist_track_eligibility` + проверка при `POST /playlists/.../tracks` и админ-добавлении;
+  поиск/`me/library` с `playable`, UI выбора в `PlaylistsView`, админ-пикер по
+  владельцу (`for_playlist_owner_id`, `playable_only`), i18n.
 - [x] **Upload UX redesign + genre search** �?? UploadView/Upload tabs пол�?�?или
   iOS-like polish, добавлено �?мное combobox с ES-backed fuzzy hints и
   create-new-genre flow, пл�?с haptic feedback и акк�?�?а�?н�?е мик�?о-анима�?ии.

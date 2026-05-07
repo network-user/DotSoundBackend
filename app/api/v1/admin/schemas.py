@@ -12,6 +12,7 @@ from app.schemas.user import UserResponse
 class AdminTrackResponse(TrackResponse):
     uploaded_by_id: int | None = None
     is_active: bool = True
+    lyrics_catalog_miss_at: datetime | None = None
     playback_last_failure_at: datetime | None = None
     playback_last_http_status: int | None = None
     playback_last_failure_source: str | None = None
@@ -244,6 +245,8 @@ class AdminPlaylistDetailResponse(BaseModel):
     is_featured: bool = False
     description: str | None = None
     cover_key: str | None = None
+    cover_auto_suppressed: bool = False
+    collage_generated_at: datetime | None = None
     source_url: str | None = None
     created_at: datetime
     tracks: list[AdminTrackResponse]

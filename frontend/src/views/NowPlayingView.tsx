@@ -18,6 +18,7 @@ import {
   usePlayerState,
   usePlayer,
 } from '@/store/PlayerContext'
+import { getInternalUserId, getIsAdmin } from '@/lib/telegram'
 import { useLikes } from '@/store/LikesContext'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
@@ -140,6 +141,16 @@ export function NowPlayingView() {
     await toggleLike(track.id)
   }
 
+  const internalUid = getInternalUserId()
+  const isUploader =
+    internalUid !== null &&
+    track.uploaded_by_id === internalUid
+  const canLyricsChrome =
+    Boolean(track.has_lyrics) ||
+    isUploader ||
+    getIsAdmin() ||
+    import.meta.env.DEV
+
   const handleShare = async () => {
     const url = `${window.location.origin}/mini_app/track/${track.id}`
     try {
@@ -161,10 +172,14 @@ export function NowPlayingView() {
       id: 'now',
       label: t('redesign.player.tabNow'),
     },
-    {
-      id: 'lyrics',
-      label: t('redesign.player.tabLyrics'),
-    },
+    ...(canLyricsChrome
+      ? ([
+          {
+            id: 'lyrics',
+            label: t('redesign.player.tabLyrics'),
+          },
+        ] as const)
+      : []),
     {
       id: 'queue',
       label: t('redesign.player.tabQueue'),
@@ -175,6 +190,12 @@ export function NowPlayingView() {
     haptic('light')
     setTab(next)
   }
+
+  useEffect(() => {
+    if (tab === 'lyrics' && !canLyricsChrome) {
+      setTab('now')
+    }
+  }, [tab, canLyricsChrome])
 
   return (
     <m.section
@@ -224,19 +245,23 @@ export function NowPlayingView() {
               'redesign.player.screenTitle',
             )}
           </span>
-          <MotionPress
-            variant="icon"
-            ariaLabel={t(
-              'redesign.player.menu',
-            )}
-            haptic="light"
-            onClick={() => {
-              haptic('light')
-              openLyrics()
-            }}
-          >
-            <Icon name="dots" size={18} />
-          </MotionPress>
+          {canLyricsChrome ? (
+            <MotionPress
+              variant="icon"
+              ariaLabel={t(
+                'redesign.player.menu',
+              )}
+              haptic="light"
+              onClick={() => {
+                haptic('light')
+                openLyrics()
+              }}
+            >
+              <Icon name="dots" size={18} />
+            </MotionPress>
+          ) : (
+            <span className="rp-now__topbar-spacer" aria-hidden />
+          )}
         </div>
 
         <div className="rp-now__handle" aria-hidden="true" />

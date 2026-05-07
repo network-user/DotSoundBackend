@@ -3,7 +3,6 @@ from urllib.parse import quote
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.lyrics import LyricsRepository
 from app.repositories.track import TrackRepository
 from app.schemas.card import TrackAlbumInfo, TrackCardResponse
 from app.services.track_playback_health_service import (
@@ -18,7 +17,6 @@ class CardService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._track_repo = TrackRepository(session)
-        self._lyrics_repo = LyricsRepository(session)
 
     async def get_card(
         self,
@@ -49,8 +47,6 @@ class CardService:
                     cover_key=album.cover_key,
                 )
 
-        lyrics = await self._lyrics_repo.get_by_track_id(track_id)
-
         cover_url = None
         if track.cover_key:
             cover_url = f"/api/v1/tracks/cover_proxy?key={quote(track.cover_key, safe='')}"
@@ -67,6 +63,6 @@ class CardService:
             cover_url=cover_url,
             created_at=track.created_at,
             album=album_info,
-            has_lyrics=lyrics is not None,
+            has_lyrics=enriched.has_lyrics,
             playback_variants=enriched.playback_variants,
         )
