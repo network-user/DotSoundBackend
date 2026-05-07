@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 
@@ -98,6 +98,8 @@ export function ArtistView() {
     useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [followBusy, setFollowBusy] = useState(false)
+  const [pinned, setPinned] = useState(false)
+  const heroRef = useRef<HTMLDivElement | null>(null)
 
   const goBack = useCallback(() => {
     if (window.history.length > 1) {
@@ -111,6 +113,21 @@ export function ArtistView() {
     setBackButton(true, goBack)
     return () => { setBackButton(false) }
   }, [goBack])
+
+  useEffect(() => {
+    const el = heroRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry) return
+        setPinned(entry.intersectionRatio < 0.3)
+      },
+      { threshold: [0, 0.3, 0.6, 1] },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [detail])
 
   useEffect(() => {
     if (!Number.isFinite(artistId)) return
@@ -271,7 +288,10 @@ export function ArtistView() {
 
   return (
     <section className="view active rf-artist">
-      <header className="rf-artist__chrome" data-pinned="true">
+      <header
+        className="rf-artist__chrome"
+        data-pinned={pinned ? 'true' : 'false'}
+      >
         <MotionPress
           variant="icon"
           haptic="light"
@@ -302,7 +322,10 @@ export function ArtistView() {
         coverUrl={heroUrl}
         className="rf-artist__hero"
       >
-        <div className="rf-artist__hero-inner">
+        <div
+          ref={heroRef}
+          className="rf-artist__hero-inner"
+        >
           <div className="rf-artist__hero-art">
             {heroUrl ? (
               <KenBurnsCover src={heroUrl} alt="" />
