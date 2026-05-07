@@ -170,13 +170,22 @@ class TrackRepository(BaseRepository[Track]):
         offset: int = 0,
         limit: int = 20,
         playable_only: bool = False,
+        genre_filter: str | None = None,
     ) -> tuple[list[Track], int]:
         pattern = f"%{query}%"
+        search_cond = (
+            Track.title.ilike(pattern)
+            | Track.artist.ilike(pattern)
+            | Track.genre.ilike(pattern)
+        )
         base = (
             Track.is_active.is_(True)
             & Track.is_public.is_(True)
-            & (Track.title.ilike(pattern) | Track.artist.ilike(pattern))
+            & search_cond
         )
+        if genre_filter:
+            genre_pattern = f"%{genre_filter}%"
+            base = base & Track.genre.ilike(genre_pattern)
         condition = (
             base & self._playable_filter()
             if playable_only

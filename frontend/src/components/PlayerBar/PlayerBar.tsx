@@ -57,6 +57,7 @@ export function PlayerBar() {
   } = usePlayerState()
   const {
     track,
+    volume,
     repeatMode,
     shuffleOn,
     hlsError,
@@ -70,6 +71,7 @@ export function PlayerBar() {
     openEq,
     openQueue,
     stop,
+    setVolume,
     toggleRepeat,
     toggleShuffle,
     clearHlsError,
@@ -78,8 +80,10 @@ export function PlayerBar() {
   const { isLiked, toggleLike } = useLikes()
   const [likeBurst, setLikeBurst] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
+  const [volumeOpen, setVolumeOpen] = useState(false)
   const [smoothPct, setSmoothPct] = useState(0)
   const overflowRef = useRef<HTMLDivElement>(null)
+  const volumeRef = useRef<HTMLDivElement>(null)
   const playRef = useRef<HTMLButtonElement>(null)
   useRipple(playRef)
   const targetPct = duration ? (currentTime / duration) * 100 : 0
@@ -95,20 +99,23 @@ export function PlayerBar() {
   }, [targetPct, isPlaying])
 
   useEffect(() => {
-    if (!overflowOpen) return
+    if (!overflowOpen && !volumeOpen) return
     const onDocClick = (
       e: globalThis.MouseEvent,
     ) => {
-      if (
-        overflowRef.current &&
-        !overflowRef.current.contains(e.target as Node)
-      ) {
-        setOverflowOpen(false)
-      }
+      const target = e.target as Node
+      const inOverflow =
+        overflowRef.current?.contains(target) ?? false
+      const inVolume =
+        volumeRef.current?.contains(target) ?? false
+      if (!inOverflow) setOverflowOpen(false)
+      if (!inVolume) setVolumeOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape')
+      if (e.key === 'Escape') {
         setOverflowOpen(false)
+        setVolumeOpen(false)
+      }
     }
     document.addEventListener(
       'pointerdown',
@@ -122,7 +129,7 @@ export function PlayerBar() {
       )
       window.removeEventListener('keydown', onKey)
     }
-  }, [overflowOpen])
+  }, [overflowOpen, volumeOpen])
 
   if (!track) return null
 
@@ -193,6 +200,13 @@ export function PlayerBar() {
   const trackBpm = (track as unknown as { bpm?: number }).bpm
   const tapBpm =
     typeof trackBpm === 'number' ? trackBpm : 120
+  const volumePct = Math.round(volume * 100)
+  const volumeIcon =
+    volume <= 0.01
+      ? 'volume-off'
+      : volume < 0.5
+        ? 'volume-low'
+        : 'volume-high'
 
   return (
     <m.div
@@ -381,6 +395,54 @@ export function PlayerBar() {
             />
           </MotionPress>
           <div
+            className="pb-volume-wrap"
+            ref={volumeRef}
+          >
+            <MotionPress
+              variant="icon"
+              className="ctrl-btn pb-volume-btn"
+              onClick={(e) => {
+                e.stopPropagation()
+                setVolumeOpen((v) => !v)
+                setOverflowOpen(false)
+              }}
+              ariaLabel="Громкость"
+              aria-expanded={volumeOpen}
+              aria-haspopup="dialog"
+            >
+              <Icon
+                name={volumeIcon}
+                size={18}
+              />
+            </MotionPress>
+            {volumeOpen && (
+              <div
+                className="pb-volume-pop"
+                role="dialog"
+                aria-label="Регулировка громкости"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="pb-volume-value">
+                  {volumePct}%
+                </div>
+                <input
+                  type="range"
+                  className="pb-volume-slider"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={volumePct}
+                  onChange={(e) =>
+                    setVolume(
+                      Number(e.currentTarget.value) / 100,
+                    )
+                  }
+                  aria-label="Громкость плеера"
+                />
+              </div>
+            )}
+          </div>
+          <div
             className="pb-overflow-wrap"
             ref={overflowRef}
           >
@@ -390,6 +452,7 @@ export function PlayerBar() {
               onClick={(e) => {
                 e.stopPropagation()
                 setOverflowOpen((v) => !v)
+                setVolumeOpen(false)
               }}
               ariaLabel="Дополнительно"
               aria-expanded={overflowOpen}
