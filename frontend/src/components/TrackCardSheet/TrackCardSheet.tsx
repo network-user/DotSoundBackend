@@ -142,6 +142,7 @@ export function TrackCardSheet({
   } = usePlayerActions()
   const { t } = useTranslation()
   const reduce = useReducedMotion()
+  const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const sound = useSound()
   const videoRef = useRef<HTMLVideoElement>(null)
 
@@ -265,6 +266,19 @@ export function TrackCardSheet({
       .catch(() => {})
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) {
+      return
+    }
+    const mq = window.matchMedia('(pointer: coarse)')
+    const apply = () => setIsCoarsePointer(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => {
+      mq.removeEventListener('change', apply)
     }
   }, [])
 
@@ -981,7 +995,7 @@ export function TrackCardSheet({
       <m.div
         className={`tcs-sheet re-tcs-sheet${hasActiveVideo ? ' tcs-video-mode' : ''}${exit.cls}`}
         ref={sheetRef}
-        drag={reduce ? false : 'y'}
+        drag={reduce || isCoarsePointer ? false : 'y'}
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={0.18}
         dragMomentum={false}

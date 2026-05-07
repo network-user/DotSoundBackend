@@ -253,7 +253,7 @@ function HomeTrackSnapSection({
           </div>
         )}
         pageDots
-        parallax
+        parallax={false}
         showArrows="never"
         className="rh-home-h-snap"
         ariaLabel={snapAria}
@@ -748,7 +748,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                 </div>
               )}
               pageDots
-              parallax
+              parallax={false}
               showArrows="never"
               className="rh-home-h-snap"
               ariaLabel={t('redesign.home.sectionGenreMixes')}
@@ -878,7 +878,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                 </div>
               )}
               pageDots
-              parallax
+              parallax={false}
               showArrows="never"
               className="rh-home-h-snap rh-home-artist-snap"
               ariaLabel={t('redesign.home.sectionSubscriptions')}

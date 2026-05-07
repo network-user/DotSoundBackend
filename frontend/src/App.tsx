@@ -439,6 +439,23 @@ export function App() {
   }, [])
 
   useEffect(() => {
+    const nav = navigator as Navigator & {
+      deviceMemory?: number
+    }
+    const cores = nav.hardwareConcurrency ?? 8
+    const memoryGb = nav.deviceMemory ?? 8
+    const isCoarsePointer =
+      window.matchMedia?.('(pointer: coarse)')
+        .matches ?? false
+    const shouldUseLiteProfile =
+      isCoarsePointer || cores <= 6 || memoryGb <= 4
+    document.body.classList.toggle(
+      'ds-perf-lite',
+      shouldUseLiteProfile,
+    )
+  }, [])
+
+  useEffect(() => {
     if (needsAuth) return
     const token = api.getToken()
     if (token) {

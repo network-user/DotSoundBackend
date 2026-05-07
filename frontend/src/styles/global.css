@@ -1280,6 +1280,11 @@ body.monochrome #app {
   box-shadow: 0 2px 20px rgba(255, 255, 255, 0.36), 0 0 0 1px rgba(255,255,255,0.24);
   animation: pbPlayGlow 3s var(--ease-soft) infinite;
 }
+body.ds-perf-lite .play-btn.play-btn--playing {
+  animation: none;
+  box-shadow: 0 2px 14px rgba(255, 255, 255, 0.24),
+    0 0 0 1px rgba(255, 255, 255, 0.2);
+}
 @keyframes pbPlayGlow {
   0%, 100% {
     box-shadow: 0 2px 16px rgba(255,255,255,0.24), 0 0 0 1px rgba(255,255,255,0.09);
@@ -1411,6 +1416,10 @@ body.monochrome #app {
   border-radius: 3px 3px 0 0;
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.5), 0 0 3px rgba(255, 255, 255, 0.6);
   animation: nav-indicator var(--dur-med) var(--ease-spring, cubic-bezier(0.34,1.56,0.64,1)) both;
+}
+body.ds-perf-lite .nav-btn.active::before,
+body.ds-perf-lite .nav-btn.active::after {
+  animation: none;
 }
 
 @keyframes nav-indicator {
@@ -2164,6 +2173,10 @@ textarea.form-input { resize: none; }
 .tcs-video-pulse {
   animation: videoPulse 1.5s ease-in-out infinite;
   color: var(--text-muted);
+}
+body.ds-perf-lite .tcs-video-pulse {
+  animation: none;
+  opacity: 0.6;
 }
 @keyframes videoPulse {
   0%, 100% { opacity: 0.2; }

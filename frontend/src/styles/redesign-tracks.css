@@ -79,7 +79,7 @@
 }
 
 .re-tcs-sheet {
-  touch-action: pan-y;
+  touch-action: auto;
   cursor: grab;
 }
 
