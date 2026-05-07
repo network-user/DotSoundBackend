@@ -1565,6 +1565,12 @@ export function PlayerProvider({
     if (!track) return
     let cancelled = false
 
+    try {
+      getPrefetchManager().markPlaybackStart(track.id)
+    } catch {
+      /* ignore telemetry failures */
+    }
+
     const teardownPreloadHls = () => {
       if (preloadHlsRef.current) {
         try {

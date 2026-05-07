@@ -55,11 +55,21 @@ export interface PrefetchEnqueueOptions {
   replaceContext?: boolean
 }
 
+export interface PrefetchStats {
+  warmed: number
+  evicted: number
+  hits: number
+  misses: number
+  overBudget: number
+  bytesUsed: number
+}
+
 export interface PrefetchManagerStatus {
   policy: PrefetchPolicySnapshot
   cachedHlsManifestTrackIds: number[]
   warmedTrackIds: number[]
   policySource: 'default' | 'remote'
+  stats: PrefetchStats
 }
 
 export const DEFAULT_PREFETCH_POLICY: PrefetchPolicySnapshot = {
