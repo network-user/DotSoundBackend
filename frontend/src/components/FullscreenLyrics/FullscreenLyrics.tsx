@@ -13,6 +13,10 @@ import {
   usePlayerState,
 } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
+import { BeatPulse } from '@/components/ui/BeatPulse'
+import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import type { LyricsResponse, SyncedLine } from '@/types/api'
 import {
@@ -455,42 +459,52 @@ export function FullscreenLyrics({
       <div className="fl-controls-row">
         <span className="fl-time">{fmt(currentTime)}</span>
         <div className="fl-btns">
-          <button
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
             className="ctrl-btn"
-            onClick={playPrev}
-            aria-label={t(
+            ariaLabel={t(
               'redesign.player.prevAria',
               'Previous track',
             )}
+            onClick={playPrev}
           >
             <Icon name="skip-back" size={18} />
-          </button>
-          <button
+          </MotionPress>
+          <MotionPress
+            type="button"
+            variant="primary"
+            haptic="medium"
             className={`play-btn${
               isPlaying ? ' play-btn--playing' : ''
             }`}
-            onClick={togglePlay}
-            aria-label={
+            ariaLabel={
               isPlaying
                 ? t('redesign.player.pauseAria', 'Pause')
                 : t('redesign.player.playAria', 'Play')
             }
+            onClick={togglePlay}
           >
-            <Icon
+            <MorphIcon
               name={isPlaying ? 'pause' : 'play'}
               size={16}
+              filled
             />
-          </button>
-          <button
+          </MotionPress>
+          <MotionPress
+            type="button"
+            variant="icon"
+            haptic="light"
             className="ctrl-btn"
-            onClick={playNext}
-            aria-label={t(
+            ariaLabel={t(
               'redesign.player.nextAria',
               'Next track',
             )}
+            onClick={playNext}
           >
             <Icon name="skip-forward" size={18} />
-          </button>
+          </MotionPress>
         </div>
         <span className="fl-time">{fmt(duration)}</span>
       </div>
@@ -522,13 +536,39 @@ export function FullscreenLyrics({
       )}
       <div className="fl-gradient" />
 
-      <button
-        className="fl-close icon-btn"
-        onClick={closeLyrics}
-        aria-label={t('redesign.player.closeLyrics', 'Close')}
-      >
-        <Icon name="x" size={18} />
-      </button>
+      <div className="fl-header rp-now-fl-header">
+        <BeatPulse
+          bpm={
+            (track as unknown as { bpm?: number }).bpm ??
+            120
+          }
+          active={isPlaying}
+          className="fl-header-cover rp-now-fl-cover"
+        >
+          <CoverImage coverKey={track.cover_key ?? null} />
+        </BeatPulse>
+        <div className="fl-header-meta rp-now-fl-meta">
+          <span className="fl-header-title">{track.title}</span>
+          {track.artist && (
+            <span className="fl-header-artist">
+              {track.artist}
+            </span>
+          )}
+        </div>
+        <MotionPress
+          type="button"
+          variant="icon"
+          haptic="light"
+          className="fl-close icon-btn"
+          ariaLabel={t(
+            'redesign.player.closeLyrics',
+            'Close',
+          )}
+          onClick={closeLyrics}
+        >
+          <Icon name="x" size={18} />
+        </MotionPress>
+      </div>
 
       {toolbar}
       {content}

@@ -866,6 +866,15 @@ bounded-transport exception
 - [x] Admin dashboard statistics: backend `/api/v1/admin/dashboard/stats` with period aggregations (today/7d/30d), plus frontend stats block with KPI cards and top tracks list.
 - [x] Admin tabs analytics expansion: track analytics (popular tracks + uploads timeline) and admin activity analytics (actions timeline + top admins) with period filters in `Tracks` and `Users` routes.
 
+## Session Updates (2026-05-07) — iOS Redesign 2026 stage closure
+
+- [x] **Stage E (Chat/TrackCardSheet) — visual rewrite**: ChatList rows wrapped in `LongPressMenu` (mute/pin/unpin/mark-unread/delete) with monochrome icons; ChatBubble переведён на `m.div` со spring-scale (own send) / fade-up (incoming), реакции через `MorphIcon` + `LongPressMenu`; ChatView rewrite — `glass--liquid` sticky header с `MotionPress`/`MorphIcon`, `AnimatePresence` для menu dropdown, локализация всех hardcoded строк (`redesign.tracks.*`); ChatsView large-title sticky header; TrackCardSheet — drag-down close (threshold 100 px), все action-buttons на `MotionPress` + `MorphIcon`. CSS: `frontend/src/styles/redesign-tracks.css`.
+- [x] **ChatView WS-dedup + DevPanel вынос**: activity-poll и message-poll теперь fallback (skip при `isWSConnected()`), интервалы 4s/8s; ~210 строк inline-styled DevTools вынесены в `frontend/src/components/Chat/ChatDevPanel.tsx` (DEV-only через `import.meta.env.DEV`), стили — в `redesign-tracks.css` (`.re-chat-dev-*`).
+- [x] **Stage B (Onboarding) — stories-style transitions**: `AnimatePresence mode="wait"` + direction-aware variants через `directionRef` (forward/backward по stepIndex), `useReducedMotion` → opacity-only. Все интерактивные элементы (artist cards, mood/genre chips, calibration play/like/dislike/skip, footer Skip/Next, OnboardingGenreScreen preview) переведены на `MotionPress`; `MorphIcon` для pause-overlay и heart (filled при like). Inline-стили заменены классами `.re-onb-*` в `frontend/src/styles/redesign-nav.css`.
+- [x] **Stage A (FullscreenLyrics) — Apple Music polish**: добавлен sticky header с маленькой обложкой через `BeatPulse` (bpm от трека, active=isPlaying) + meta-блок (title/artist) + close-кнопка на `MotionPress`. Playback controls (prev/play/next) на `MotionPress` + `MorphIcon` (`pause`/`play` filled). Стили в `frontend/src/styles/redesign-player.css` (`.rp-now-fl-*`).
+- [x] **i18n**: новые ключи в `frontend/src/locales/i18n_extra2_{ru,en}.json` под `redesign.tracks.*` (chat menu, chat header/status, chat empty/divider, TrackCardSheet close, message reactions).
+- [x] **Final acceptance**: `npx tsc --noEmit` — clean; `npm run build` — clean (vite + bundle-hygiene + admin-bundle), PWA precache 33 entries.
+
 ## �?ла�?�?о�?м�? �?? б�?д�?�?ее
 
 - **�?иб�?идн�?й плее�?**: для пла�?�?о�?м с о�?и�?иал�?н�?ми embed-видже�?ами �?еализова�?�?
@@ -1141,4 +1150,5 @@ ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyr
 
 ## Mini App iOS-redesign / поток 2 (прогресс)
 
-- [~] **Stage D (library): поиск, медиатека, лайки, плейлисты** — 2026-05-07: `redesign-library.css`, `SearchView` (чипы фильтра сущностей, motion), `LibraryView` (tabs + layoutId, daily mix `MotionPress`), `LikedView` (сортировка, чипы `MotionPress`, sticky-шапка), `PlaylistsView` (сетка, `LongPressMenu`, поток «поделиться» с экрана списка), ключи `redesign.library.*` в `i18n_extra2_*.json`. Дальше: polish профиль/настройки, Stage F (artist shell), Stage H (recap), отдельные коммиты после `tsc`/`build`.
+- [x] **Stage H (recap / achievements)** — 2026-05-07: `RecapStoryStage` (9 слайдов, auto-advance, long-press pause, tap-зоны), `RecapView` + `/recap?tab=achievements` → `AchievementsView`, share sheet + `RecapShareCard` (9:16, TODO на реальный export без новых npm), `redesign-recap.css`, `getRecapSnapshotMock()` + `redesign.recap.*` в `i18n_extra2_*`.
+- [~] **Stage D (library): поиск, медиатека, лайки, плейлисты** — 2026-05-07: `redesign-library.css`, `SearchView` (чипы фильтра сущностей, motion), `LibraryView` (tabs + layoutId, daily mix `MotionPress`), `LikedView` (сортировка, чипы `MotionPress`, sticky-шапка), `PlaylistsView` (сетка, `LongPressMenu`, поток «поделиться» с экрана списка), ключи `redesign.library.*` в `i18n_extra2_*.json`. Дальше: polish профиль/настройки, Stage F (artist shell), отдельные коммиты после `tsc`/`build`.
