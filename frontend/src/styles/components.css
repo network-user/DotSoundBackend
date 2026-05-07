@@ -1231,6 +1231,18 @@ body.ds-perf-lite .glass__noise {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.queue-row-artist--nav {
+  cursor: pointer;
+}
+.queue-row-artist--nav:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+.queue-row-artist--nav:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
 
 .queue-grab {
   cursor: grab;
@@ -1779,6 +1791,13 @@ body.ds-perf-lite .queue-eq-bars span {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.offline-list-hint {
+  font-size: var(--fs-11);
+  color: var(--text-muted, var(--text-secondary));
+  opacity: 0.9;
+  line-height: 1.25;
 }
 
 .offline-list-remove {

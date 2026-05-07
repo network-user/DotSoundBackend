@@ -51,6 +51,11 @@ class TrackResponse(BaseModel):
         default_factory=list,
     )
     resume_position_seconds: int | None = None
+    last_listen_at: datetime | None = None
+    last_listen_seconds: int | None = Field(
+        default=None,
+        ge=0,
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property

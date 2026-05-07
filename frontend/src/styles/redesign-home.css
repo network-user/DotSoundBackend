@@ -278,6 +278,60 @@
   text-overflow: ellipsis;
 }
 
+.rh-home-tile--split-desktop {
+  cursor: default;
+}
+.rh-home-tile__playback {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.rh-home-tile__playback:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+.rh-home-tile__artist-link {
+  margin-top: var(--space-1);
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.rh-home-tile__artist-link:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+.rh-home-tile__artist-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+
+.rh-home-hero__artist--nav {
+  cursor: pointer;
+}
+.rh-home-hero__artist--nav:hover {
+  text-decoration: underline;
+  color: var(--text-secondary);
+}
+
 .rh-home-genre-card {
   position: relative;
   width: 148px;

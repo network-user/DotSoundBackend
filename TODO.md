@@ -89,6 +89,11 @@
   загрузка `POST /api/v1/users/me/avatar` при «Сохранить» (API уже было);
   отмена сбрасывает черновик фото и имя до baseline; острова ошибок через
   `showIsland`; ключи в `i18n_extra2_ru/en.json`.
+- [x] **Медиатека: история прослушиваний — дата и длительность** (2026-05-07) —
+  `GET /users/me/listen-history` добавляет в `TrackResponse` поля
+  `last_listen_at` и `last_listen_seconds` (учёт вариантов воспроизведения);
+  `HistoryList` и `TrackCardSheet` показывают дату/время и «прослушано mm:ss`;
+  i18n `redesign.library.*`, `trackSheet.lastListen*`.
 - [x] **Upload UX redesign + genre search** �?? UploadView/Upload tabs пол�?�?или
   iOS-like polish, добавлено �?мное combobox с ES-backed fuzzy hints и
   create-new-genre flow, пл�?с haptic feedback и акк�?�?а�?н�?е мик�?о-анима�?ии.
@@ -109,6 +114,7 @@
 - [x] **Admin: плейлисты** - API `/api/v1/admin/playlists`, UI `/admin/playlists` и `/admin/playlists/:playlistId` (метаданные, состав, порядок; уплотнение `playlist_tracks.position` после удаления).
 - [x] **Admin: artist catalog editor UX (2026-05-05)** - `ArtistCatalogEditor` release metadata + cover upload, per-track title/artist/description/cover, paged «all tracks» list; API `POST /api/v1/admin/tracks/{id}/cover`, `POST .../catalog/releases/{id}/cover`.
 - [x] **Playback health / auto-hide (2026-05-07)** — миграция `0083`, PrivateCore `playback_health_policy.py`, события `track_playback_failure_events`, колонки `tracks.playback_*`, авто-`playback_suppressed_until`, фильтр публичных выборок, запись при исчерпании fallback и ошибках upstream-прокси, админ-списки + вкладки в `TracksRoute`, API `playback-health/*`, снятие авто-hide; admin PATCH поддерживает `sc_url` / `source_url` / `canonical_source_url`.
+- [x] **Admin playback health UI (2026-05-07)** — модалка «Источники» (редактирование/очистка URL), серверная **Проверить** (`POST .../verify`), **Сброс меток**, **Полное восст.**, **Снять auto-hide**; PATCH с `exclude_unset` и очистка URL в `admin_update_track`.
 
 ## Подписки на артистов и статистика (2026-04-30)
 

@@ -705,6 +705,27 @@ export const adminApi = {
       `/tracks/${trackId}/playback-health/clear-suppression`,
       { method: 'POST', body: {} },
     ),
+  verifyTrackPlayback: (trackId: number) =>
+    adminFetch<{
+      ok: boolean
+      detail: string
+      http_status: number | null
+      effective_track_id: number | null
+      stream_protocol: string | null
+    }>(`/tracks/${trackId}/playback-health/verify`, {
+      method: 'POST',
+      body: {},
+    }),
+  clearTrackPlaybackDiagnostics: (trackId: number) =>
+    adminFetch<Record<string, unknown>>(
+      `/tracks/${trackId}/playback-health/clear-diagnostics`,
+      { method: 'POST', body: {} },
+    ),
+  fullRestoreTrackPlayback: (trackId: number) =>
+    adminFetch<Record<string, unknown>>(
+      `/tracks/${trackId}/playback-health/full-restore`,
+      { method: 'POST', body: {} },
+    ),
   listAdminAlbums: (params: {
     page?: number
     size?: number

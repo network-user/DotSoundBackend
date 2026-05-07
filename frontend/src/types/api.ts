@@ -38,6 +38,8 @@ export interface Track {
   waveform_data: number[] | null
   playback_variants?: TrackPlaybackVariantBrief[]
   resume_position_seconds?: number | null
+  last_listen_at?: string | null
+  last_listen_seconds?: number | null
 }
 
 export interface TrackListResponse {

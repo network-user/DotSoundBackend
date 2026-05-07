@@ -933,6 +933,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.bubble-track-artist--nav {
+  cursor: pointer;
+}
+.bubble-track-artist--nav:hover {
+  color: #fff;
+  text-decoration: underline;
+}
 
 .bubble-track-play {
   border: 1px solid rgba(255, 255, 255, 0.2);

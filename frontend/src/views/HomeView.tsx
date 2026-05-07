@@ -22,6 +22,8 @@ import { usePlayerActions } from '@/store/PlayerContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { trackActivationEvent } from '@/lib/activation'
 import { usePullToRefresh } from '@/hooks/usePullToRefresh'
+import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
+import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import {
   HOME_QUICK_VISIBLE_COUNT,
   MIX_SHORTCUT_TILES,
@@ -63,33 +65,66 @@ interface HomeTrackTileProps {
 
 function HomeTrackTile({ track, onPlay }: HomeTrackTileProps) {
   const { t } = useTranslation()
+  const desktopFineNav = useDesktopFinePointer()
+  const goArtistByName = useNavigateToArtistByName()
   const src = coverUrl(track.cover_key)
   const [coverFailed, setCoverFailed] = useState(false)
   const fallbackTitle = t('redesign.home.untitled')
+  const titleAttr = [track.title, track.artist]
+    .filter(Boolean)
+    .join(' — ')
+  const coverBlock = (
+    <div className="rh-home-tile__cover">
+      {src && !coverFailed ? (
+        <img
+          src={src}
+          alt=""
+          width={112}
+          height={112}
+          loading="lazy"
+          decoding="async"
+          onError={() => setCoverFailed(true)}
+        />
+      ) : (
+        <div className="rh-home-tile__ph">
+          <Icon name="music" size={28} />
+        </div>
+      )}
+    </div>
+  )
+  if (desktopFineNav && track.artist) {
+    return (
+      <div className="rh-home-tile rh-home-tile--split-desktop">
+        <button
+          type="button"
+          className="rh-home-tile__playback"
+          onClick={() => onPlay(track)}
+          title={titleAttr}
+        >
+          {coverBlock}
+          <div className="rh-home-tile__title">
+            {track.title || fallbackTitle}
+          </div>
+        </button>
+        <button
+          type="button"
+          className="rh-home-tile__artist-link"
+          onClick={() => void goArtistByName(track.artist)}
+          title={track.artist}
+        >
+          {track.artist}
+        </button>
+      </div>
+    )
+  }
   return (
     <button
       type="button"
       className="rh-home-tile"
       onClick={() => onPlay(track)}
-      title={[track.title, track.artist].filter(Boolean).join(' — ')}
+      title={titleAttr}
     >
-      <div className="rh-home-tile__cover">
-        {src && !coverFailed ? (
-          <img
-            src={src}
-            alt=""
-            width={112}
-            height={112}
-            loading="lazy"
-            decoding="async"
-            onError={() => setCoverFailed(true)}
-          />
-        ) : (
-          <div className="rh-home-tile__ph">
-            <Icon name="music" size={28} />
-          </div>
-        )}
-      </div>
+      {coverBlock}
       <div className="rh-home-tile__title">
         {track.title || fallbackTitle}
       </div>
@@ -290,6 +325,8 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   const navigate = useNavigate()
   const { playTrack, startRadio } = usePlayerActions()
   const brandLabel = useBrandLabel()
+  const desktopFineNav = useDesktopFinePointer()
+  const goArtistByName = useNavigateToArtistByName()
 
   const [me, setMe] = useState<UserResponse | null>(null)
   const [sections, setSections] = useState<HomeSection[] | null>(null)
@@ -619,7 +656,52 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                   <h1 className="rh-home-hero__title">
                     {featuredTrack.title || t('redesign.home.untitled')}
                   </h1>
-                  <p className="rh-home-hero__artist">
+                  <p
+                    className={
+                      desktopFineNav &&
+                      featuredTrack.artist
+                        ? 'rh-home-hero__artist rh-home-hero__artist--nav'
+                        : 'rh-home-hero__artist'
+                    }
+                    role={
+                      desktopFineNav &&
+                      featuredTrack.artist
+                        ? 'link'
+                        : undefined
+                    }
+                    tabIndex={
+                      desktopFineNav &&
+                      featuredTrack.artist
+                        ? 0
+                        : undefined
+                    }
+                    onClick={
+                      desktopFineNav &&
+                      featuredTrack.artist
+                        ? () => {
+                            void goArtistByName(
+                              featuredTrack.artist,
+                            )
+                          }
+                        : undefined
+                    }
+                    onKeyDown={
+                      desktopFineNav &&
+                      featuredTrack.artist
+                        ? (e) => {
+                            if (
+                              e.key === 'Enter' ||
+                              e.key === ' '
+                            ) {
+                              e.preventDefault()
+                              void goArtistByName(
+                                featuredTrack.artist,
+                              )
+                            }
+                          }
+                        : undefined
+                    }
+                  >
                     {featuredTrack.artist || brandLabel}
                   </p>
                   <div className="rh-home-hero__actions">

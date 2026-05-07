@@ -161,6 +161,19 @@
   color: var(--text-secondary);
   margin: 0;
 }
+.rp-now__meta-title--nav {
+  cursor: pointer;
+}
+.rp-now__meta-title--nav:hover {
+  opacity: 0.92;
+}
+.rp-now__meta-artist--nav {
+  cursor: pointer;
+}
+.rp-now__meta-artist--nav:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
 
 .rp-now__seek {
   padding: var(--space-3) var(--space-6);

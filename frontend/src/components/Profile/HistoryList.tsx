@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
@@ -7,6 +8,25 @@ import {
   usePlayerMeta,
 } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
+
+function formatHistoryWhen(iso: string): string {
+  const d = new Date(iso)
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d)
+}
+
+function formatListened(sec: number): string {
+  if (!sec || sec < 1) return ''
+  const m = Math.floor(sec / 60)
+  const s = Math.floor(sec % 60)
+    .toString()
+    .padStart(2, '0')
+  return `${m}:${s}`
+}
 
 function mergeSessionAndApi(
   current: Track | null,
@@ -34,6 +54,7 @@ function mergeSessionAndApi(
 }
 
 export function HistoryList() {
+  const { t } = useTranslation()
   const { track, history: sessionHistory } =
     usePlayerMeta()
   const { playTrack } = usePlayerActions()
@@ -57,14 +78,39 @@ export function HistoryList() {
     load()
   }, [load])
 
+  const listenMetaById = useMemo(() => {
+    const m = new Map<
+      number,
+      { at: string; sec: number }
+    >()
+    if (!apiTracks) return m
+    for (const row of apiTracks) {
+      if (!row.last_listen_at) continue
+      m.set(row.id, {
+        at: row.last_listen_at,
+        sec: row.last_listen_seconds ?? 0,
+      })
+    }
+    return m
+  }, [apiTracks])
+
   const rows = useMemo(() => {
     if (apiTracks === null) return null
-    return mergeSessionAndApi(
+    const merged = mergeSessionAndApi(
       track,
       sessionHistory,
       apiTracks,
     )
-  }, [apiTracks, sessionHistory, track])
+    return merged.map((row) => {
+      const lm = listenMetaById.get(row.id)
+      if (!lm) return row
+      return {
+        ...row,
+        last_listen_at: lm.at,
+        last_listen_seconds: lm.sec,
+      }
+    })
+  }, [apiTracks, listenMetaById, sessionHistory, track])
 
   if (rows === null) {
     return (
@@ -115,9 +161,9 @@ export function HistoryList() {
         </div>
       </div>
       <div className="offline-list-rows">
-        {rows.map((t, i) => (
+        {rows.map((tr, i) => (
           <div
-            key={`h-${t.id}-${i}`}
+            key={`h-${tr.id}-${i}`}
             className="offline-list-row"
           >
             <MotionPress
@@ -125,12 +171,12 @@ export function HistoryList() {
               variant="ghost"
               haptic="light"
               className="offline-list-main"
-              onClick={() => playTrack(t)}
+              onClick={() => playTrack(tr)}
             >
               <div className="offline-list-cover">
-                {t.cover_key ? (
+                {tr.cover_key ? (
                   <img
-                    src={`/api/v1/tracks/cover_proxy?key=${encodeURIComponent(t.cover_key)}`}
+                    src={`/api/v1/tracks/cover_proxy?key=${encodeURIComponent(tr.cover_key)}`}
                     alt=""
                   />
                 ) : (
@@ -139,11 +185,36 @@ export function HistoryList() {
               </div>
               <div className="offline-list-meta">
                 <div className="offline-list-title">
-                  {t.title}
+                  {tr.title}
                 </div>
                 <div className="offline-list-sub">
-                  {t.artist || '—'}
+                  {tr.artist || '—'}
                 </div>
+                {tr.last_listen_at && (
+                  <div className="offline-list-hint">
+                    {formatListened(tr.last_listen_seconds ?? 0)
+                      ? t(
+                          'redesign.library.historyWhenAndDur',
+                          {
+                            when: formatHistoryWhen(
+                              tr.last_listen_at,
+                            ),
+                            duration: formatListened(
+                              tr.last_listen_seconds ??
+                                0,
+                            ),
+                          },
+                        )
+                      : t(
+                          'redesign.library.historyWhenOnly',
+                          {
+                            when: formatHistoryWhen(
+                              tr.last_listen_at,
+                            ),
+                          },
+                        )}
+                  </div>
+                )}
               </div>
             </MotionPress>
           </div>

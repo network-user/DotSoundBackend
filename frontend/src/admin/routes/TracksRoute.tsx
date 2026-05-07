@@ -26,6 +26,11 @@ interface TrackRow {
   is_active: boolean
   uploaded_by_id: number | null
   created_at: string
+  access_mode?: string
+  source_platform?: string | null
+  sc_url?: string | null
+  source_url?: string | null
+  canonical_source_url?: string | null
   playback_last_failure_at?: string | null
   playback_last_http_status?: number | null
   playback_last_failure_source?: string | null
@@ -84,6 +89,15 @@ export function TracksRoute() {
     imported: number
     errors: string[]
   } | null>(null)
+  const [sourceEditModal, setSourceEditModal] = useState<TrackRow | null>(
+    null,
+  )
+  const [sourceForm, setSourceForm] = useState({
+    sc: '',
+    src: '',
+    can: '',
+  })
+  const [sourceBusy, setSourceBusy] = useState(false)
 
   const contextTextareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -143,6 +157,15 @@ export function TracksRoute() {
     setSelectedIds(new Set())
   }, [page, listView])
 
+  useEffect(() => {
+    if (!sourceEditModal) return
+    setSourceForm({
+      sc: sourceEditModal.sc_url ?? '',
+      src: sourceEditModal.source_url ?? '',
+      can: sourceEditModal.canonical_source_url ?? '',
+    })
+  }, [sourceEditModal])
+
   const refresh = () =>
     qc.invalidateQueries({ queryKey: ['admin', 'tracks'] })
 
@@ -176,6 +199,75 @@ export function TracksRoute() {
       await showAlert((err as Error).message)
     } finally {
       setBusyId(null)
+    }
+  }
+
+  const handleVerifyPlayback = async (id: number) => {
+    setBusyId(id)
+    try {
+      const r = await adminApi.verifyTrackPlayback(id)
+      const lines = [
+        r.ok ? 'OK' : 'FAIL',
+        r.detail || '',
+        r.http_status != null ? `HTTP ${r.http_status}` : '',
+        r.effective_track_id != null
+          ? `effective_track_id=${r.effective_track_id}`
+          : '',
+        r.stream_protocol
+          ? `protocol=${r.stream_protocol}`
+          : '',
+      ].filter(Boolean)
+      await showAlert(lines.join('\n'))
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleClearPlaybackDiagnostics = async (id: number) => {
+    setBusyId(id)
+    try {
+      await adminApi.clearTrackPlaybackDiagnostics(id)
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleFullRestorePlayback = async (id: number) => {
+    const ok = await showConfirm(
+      'Полное восстановление: снять авто-hide и очистить метки ошибки на карточке трека. Продолжить?',
+    )
+    if (!ok) return
+    setBusyId(id)
+    try {
+      await adminApi.fullRestoreTrackPlayback(id)
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleSavePlaybackSources = async () => {
+    if (!sourceEditModal) return
+    setSourceBusy(true)
+    try {
+      await adminApi.updateTrackMetadata(sourceEditModal.id, {
+        sc_url: sourceForm.sc.trim() || null,
+        source_url: sourceForm.src.trim() || null,
+        canonical_source_url: sourceForm.can.trim() || null,
+      })
+      setSourceEditModal(null)
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setSourceBusy(false)
     }
   }
 
@@ -499,6 +591,10 @@ export function TracksRoute() {
         const { id, title, is_active } = i.row.original
         const busy = busyId === id
         const isPlaying = playingId === id
+        const pbRow =
+          listView !== 'all' ||
+          !!i.row.original.playback_last_failure_at ||
+          !!i.row.original.playback_suppressed_until
         return (
           <div
             style={{
@@ -508,7 +604,43 @@ export function TracksRoute() {
               alignItems: 'center',
             }}
           >
-            {listView === 'playback_suppressed' && (
+            <MotionPress
+              variant="ghost"
+              onClick={() => setSourceEditModal(i.row.original)}
+              disabled={busy}
+            >
+              Источники
+            </MotionPress>
+            {pbRow && (
+              <>
+                <MotionPress
+                  variant="ghost"
+                  onClick={() => handleVerifyPlayback(id)}
+                  disabled={busy}
+                >
+                  Проверить
+                </MotionPress>
+                <MotionPress
+                  variant="ghost"
+                  onClick={() =>
+                    handleClearPlaybackDiagnostics(id)
+                  }
+                  disabled={busy}
+                >
+                  Сброс меток
+                </MotionPress>
+                <MotionPress
+                  variant="ghost"
+                  onClick={() =>
+                    handleFullRestorePlayback(id)
+                  }
+                  disabled={busy}
+                >
+                  Полное восст.
+                </MotionPress>
+              </>
+            )}
+            {i.row.original.playback_suppressed_until && (
               <MotionPress
                 variant="ghost"
                 onClick={() =>
@@ -516,7 +648,7 @@ export function TracksRoute() {
                 }
                 disabled={busy}
               >
-                Clear auto-hide
+                Снять auto-hide
               </MotionPress>
             )}
             <MotionPress
@@ -1046,6 +1178,121 @@ export function TracksRoute() {
                 Закрыть
               </MotionPress>
             </div>
+          </div>
+        </div>
+      )}
+
+      {sourceEditModal && (
+        <div
+          className="admin-modal-overlay"
+          onClick={() => {
+            if (!sourceBusy) setSourceEditModal(null)
+          }}
+        >
+          <div
+            className="admin-modal"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 560 }}
+          >
+            <h3 style={{ marginTop: 0 }}>
+              Источники воспроизведения · #{sourceEditModal.id}
+            </h3>
+            <p
+              style={{
+                fontSize: 12,
+                color: 'var(--text-secondary)',
+                margin: '0 0 12px',
+              }}
+            >
+              {sourceEditModal.title}
+              {' · '}
+              {sourceEditModal.access_mode ?? '—'}
+              {sourceEditModal.source_platform
+                ? ` · ${sourceEditModal.source_platform}`
+                : ''}
+            </p>
+            <label
+              style={{ display: 'block', fontSize: 12, marginBottom: 4 }}
+            >
+              SoundCloud URL (sc_url)
+            </label>
+            <textarea
+              value={sourceForm.sc}
+              onChange={(e) =>
+                setSourceForm((p) => ({ ...p, sc: e.target.value }))
+              }
+              rows={3}
+              style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                marginBottom: 10,
+              }}
+              disabled={sourceBusy}
+            />
+            <label
+              style={{ display: 'block', fontSize: 12, marginBottom: 4 }}
+            >
+              YouTube / Bandcamp (source_url)
+            </label>
+            <textarea
+              value={sourceForm.src}
+              onChange={(e) =>
+                setSourceForm((p) => ({ ...p, src: e.target.value }))
+              }
+              rows={3}
+              style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                marginBottom: 10,
+              }}
+              disabled={sourceBusy}
+            />
+            <label
+              style={{ display: 'block', fontSize: 12, marginBottom: 4 }}
+            >
+              Канонический URL (canonical_source_url)
+            </label>
+            <textarea
+              value={sourceForm.can}
+              onChange={(e) =>
+                setSourceForm((p) => ({ ...p, can: e.target.value }))
+              }
+              rows={2}
+              style={{
+                width: '100%',
+                fontFamily: 'monospace',
+                fontSize: 12,
+                marginBottom: 10,
+              }}
+              disabled={sourceBusy}
+            />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <MotionPress
+                variant="primary"
+                onClick={() => handleSavePlaybackSources()}
+                disabled={sourceBusy}
+              >
+                Сохранить
+              </MotionPress>
+              <MotionPress
+                variant="ghost"
+                onClick={() => setSourceEditModal(null)}
+                disabled={sourceBusy}
+              >
+                Отмена
+              </MotionPress>
+            </div>
+            <p
+              style={{
+                fontSize: 11,
+                color: 'var(--text-secondary)',
+                margin: '10px 0 0',
+              }}
+            >
+              Пустое поле очищает соответствующий URL в базе (null).
+            </p>
           </div>
         </div>
       )}

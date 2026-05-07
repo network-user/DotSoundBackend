@@ -21,6 +21,7 @@ from app.dependencies import (
     require_admin_session,
 )
 from app.models.user import User
+from app.schemas.admin_playback import AdminPlaybackVerifyResponse
 from app.schemas.track import TrackUpdateRequest
 from app.services.admin_lyrics_import_service import (
     AdminLyricsImportService,
@@ -183,6 +184,90 @@ async def admin_clear_track_playback_suppression(
     return AdminTrackResponse.model_validate(track)
 
 
+@router.post(
+    "/tracks/{track_id}/playback-health/verify",
+    response_model=AdminPlaybackVerifyResponse,
+    summary=(
+        "[Admin] Try resolving remote stream (no health log write); "
+        "internal tracks only check file presence"
+    ),
+)
+@limiter.limit("30/minute")
+async def admin_verify_track_playback(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminPlaybackVerifyResponse:
+    service = AdminService(session)
+    result = await service.verify_track_playback(track_id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    logger.info(
+        "admin_playback_verify",
+        track_id=track_id,
+        ok=result.ok,
+    )
+    return result
+
+
+@router.post(
+    "/tracks/{track_id}/playback-health/clear-diagnostics",
+    response_model=AdminTrackResponse,
+    summary="[Admin] Clear playback failure summary fields on track row",
+)
+@limiter.limit("60/minute")
+async def admin_clear_track_playback_diagnostics(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminTrackResponse:
+    service = AdminService(session)
+    track = await service.clear_track_playback_diagnostics(track_id)
+    if track is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    logger.info(
+        "admin_playback_diagnostics_cleared",
+        track_id=track_id,
+    )
+    return AdminTrackResponse.model_validate(track)
+
+
+@router.post(
+    "/tracks/{track_id}/playback-health/full-restore",
+    response_model=AdminTrackResponse,
+    summary=(
+        "[Admin] Clear suppression window and playback diagnostic fields"
+    ),
+)
+@limiter.limit("60/minute")
+async def admin_full_restore_track_playback_health(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminTrackResponse:
+    service = AdminService(session)
+    track = await service.full_restore_track_playback_health(track_id)
+    if track is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    logger.info(
+        "admin_playback_full_restore",
+        track_id=track_id,
+    )
+    return AdminTrackResponse.model_validate(track)
+
+
 @router.delete(
     "/tracks/{track_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -246,7 +331,7 @@ async def admin_update_track(
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
 ) -> AdminTrackResponse:
-    fields = data.model_dump(exclude_none=True)
+    fields = data.model_dump(exclude_unset=True)
     if not fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -30,6 +30,8 @@ import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics
 import { QueuePanelContent } from '@/components/QueueSheet/QueueSheet'
 import { haptic } from '@/lib/telegram'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
+import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
+import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 
 const SWIPE_DOWN_THRESHOLD = 120
 
@@ -61,7 +63,10 @@ export function NowPlayingView() {
     playPrev,
     openLyrics,
     openQueue,
+    openCard,
   } = usePlayerActions()
+  const desktopFineNav = useDesktopFinePointer()
+  const goArtistByName = useNavigateToArtistByName()
   const { isLiked, toggleLike } = useLikes()
   const { queue } = usePlayer()
 
@@ -253,12 +258,81 @@ export function NowPlayingView() {
         </div>
 
         <div className="rp-now__meta">
-          <h1 className="rp-now__meta-title" dir="auto">
+          <h1
+            className={
+              desktopFineNav
+                ? 'rp-now__meta-title rp-now__meta-title--nav'
+                : 'rp-now__meta-title'
+            }
+            dir="auto"
+            role={
+              desktopFineNav ? 'button' : undefined
+            }
+            tabIndex={desktopFineNav ? 0 : undefined}
+            onClick={
+              desktopFineNav
+                ? () => {
+                    haptic('light')
+                    openCard()
+                  }
+                : undefined
+            }
+            onKeyDown={
+              desktopFineNav
+                ? (e) => {
+                    if (
+                      e.key === 'Enter' ||
+                      e.key === ' '
+                    ) {
+                      e.preventDefault()
+                      haptic('light')
+                      openCard()
+                    }
+                  }
+                : undefined
+            }
+          >
             {track.title}
           </h1>
           <p
-            className="rp-now__meta-artist"
+            className={
+              desktopFineNav && track.artist
+                ? 'rp-now__meta-artist rp-now__meta-artist--nav'
+                : 'rp-now__meta-artist'
+            }
             dir="auto"
+            role={
+              desktopFineNav && track.artist
+                ? 'link'
+                : undefined
+            }
+            tabIndex={
+              desktopFineNav && track.artist
+                ? 0
+                : undefined
+            }
+            onClick={
+              desktopFineNav && track.artist
+                ? () => {
+                    haptic('light')
+                    void goArtistByName(track.artist)
+                  }
+                : undefined
+            }
+            onKeyDown={
+              desktopFineNav && track.artist
+                ? (e) => {
+                    if (
+                      e.key === 'Enter' ||
+                      e.key === ' '
+                    ) {
+                      e.preventDefault()
+                      haptic('light')
+                      void goArtistByName(track.artist)
+                    }
+                  }
+                : undefined
+            }
           >
             {track.artist ?? '—'}
           </p>
