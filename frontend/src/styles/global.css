@@ -103,13 +103,6 @@ body.monochrome #app {
   transition: padding-top 0.2s var(--ease-standard, ease);
 }
 
-/* Room for fixed `ImportActivityBanner` under status bar (see .import-activity-banner). */
-html[data-import-ribbon='1'] #main {
-  padding-top: 56px;
-}
-html[data-import-ribbon='1'] #app:has(.offline-banner) #main {
-  padding-top: 92px;
-}
 #main::-webkit-scrollbar { display: none; }
 
 /* ── Views ── */
@@ -3160,6 +3153,19 @@ html.le-lyrics-sync-open body {
   border-top: 1px solid var(--border);
 }
 
+.le-fs-save .le-fs-save-btn {
+  flex: 1;
+}
+
+.lyrics-choice-back {
+  grid-column: 1 / -1;
+}
+
+.lyrics-choice-btn--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Author View (fullscreen overlay) ── */
 .author-view {
   position: fixed;
@@ -4943,94 +4949,7 @@ html.le-lyrics-sync-open body {
   padding-top: 8px;
 }
 
-/* Fixed under safe area, aligned with in-app “header” band; not over bottom nav. */
-.import-activity-banner {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  top: calc(var(--safe-top) + 8px);
-  bottom: auto;
-  z-index: calc(var(--z-toast, 1200) - 1);
-  width: min(92vw, 400px);
-  padding: 8px 4px 8px 12px;
-  border-radius: var(--r-md, 12px);
-  border: 1px solid var(--glass-edge);
-  background: var(--glass-tint-2);
-  -webkit-backdrop-filter: var(--glass-blur-medium);
-  backdrop-filter: var(--glass-blur-medium);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
-}
-
-#app:has(.offline-banner) .import-activity-banner {
-  top: calc(var(--safe-top) + 44px);
-}
-
-.import-activity-banner__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  min-width: 0;
-}
-
-.import-activity-banner__dismiss {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: var(--r-sm, 8px);
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-
-.import-activity-banner__dismiss:hover {
-  color: var(--text);
-  background: var(--glass-tint-3);
-}
-
-.import-activity-banner__text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1;
-}
-
-.import-activity-banner__line {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-muted);
-}
-
-.import-activity-banner__sub {
-  font-size: 12px;
-  color: var(--text-muted);
-  opacity: 0.9;
-}
-
-.import-activity-banner__bar {
-  margin-top: 6px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--glass-tint-2);
-  overflow: hidden;
-}
-
-.import-activity-banner__bar-fill {
-  height: 100%;
-  border-radius: 1px;
-  background: var(--text-muted);
-  opacity: 0.55;
-  transition: width 0.35s var(--ease-standard, ease);
-}
-
-/* ── Home Sections ──────────────────────────── */
+�─ Home Sections ──────────────────────────── */
 
 .home-section {
   margin-bottom: 24px;
@@ -6377,6 +6296,10 @@ html.le-lyrics-sync-open body {
 
 /* EQ reset confirm state */
 .eq-reset-confirm { color: #FF6B6B !important; }
+.eq-reset-confirm-label {
+  font-size: 12px;
+  font-weight: 600;
+}
 
 /* Audio file duration */
 .file-meta {
