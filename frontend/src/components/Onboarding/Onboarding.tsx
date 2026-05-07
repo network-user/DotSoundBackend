@@ -7,7 +7,8 @@ import { OnboardingImportStep } from '@/components/Onboarding/OnboardingImportSt
 import { OnboardingGenreScreen } from '@/components/Onboarding/OnboardingGenreScreen'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
-import { useToast } from '@/components/ui/Toast'
+import { useTranslation } from 'react-i18next'
+import { showIsland } from '@/lib/island'
 import {
   m,
   SPRING_GENTLE,
@@ -74,7 +75,7 @@ function formatEtaSeconds(sec: number): string {
 }
 
 export function Onboarding({ onComplete }: Props) {
-  const toast = useToast()
+  const { t } = useTranslation()
   const reduceMotion = useReducedMotion()
   const [includeImport, setIncludeImport] = useState(false)
   const [step, setStep] = useState<Step>('genres')
@@ -245,9 +246,11 @@ export function Onboarding({ onComplete }: Props) {
       trackActivationEvent('onboarding_step_complete', {
         meta: { step: 'genres', count: genres.length },
       })
-      toast.success(
-        `Готово, ${genres.length} жанров — обновляем подборки`,
-      )
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.onboardingMsg.genresDone', { count: genres.length }),
+        durationMs: 2400,
+      })
       loadArtists(genres)
       setStep('artists')
     } else if (step === 'artists') {
@@ -258,9 +261,11 @@ export function Onboarding({ onComplete }: Props) {
         },
       })
       if (selectedArtists.length) {
-        toast.success(
-          `Подписались на ${selectedArtists.length} артистов`,
-        )
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.artistsDone', { count: selectedArtists.length }),
+          durationMs: 2400,
+        })
       }
       setStep('moods')
     } else if (step === 'moods') {
@@ -277,11 +282,19 @@ export function Onboarding({ onComplete }: Props) {
             count: selectedMoods.length,
           },
         })
-        toast.success('Профиль сохранён, осталось 1 шаг')
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.profileSaved'),
+          durationMs: 2400,
+        })
         await loadCalibrationTracks()
         setStep('calibration')
       } catch {
-        toast.error('Не удалось сохранить, попробуйте ещё раз')
+        showIsland({
+          kind: 'error',
+          title: t('redesign.onboardingMsg.saveFail'),
+          durationMs: 3500,
+        })
       }
       setSaving(false)
     } else if (step === 'calibration') {
@@ -312,11 +325,19 @@ export function Onboarding({ onComplete }: Props) {
         trackActivationEvent('onboarding_complete', {
           meta: { calibrated: filteredItems.length },
         })
-        toast.success('Готово — подборки обновлены')
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.calibrationDone'),
+          durationMs: 2400,
+        })
         localStorage.removeItem(ONBOARDING_DRAFT_KEY)
         onComplete()
       } catch {
-        toast.error('Не удалось завершить, попробуйте ещё раз')
+        showIsland({
+          kind: 'error',
+          title: t('redesign.onboardingMsg.finishFail'),
+          durationMs: 3500,
+        })
       }
       setSaving(false)
     }
@@ -334,15 +355,23 @@ export function Onboarding({ onComplete }: Props) {
         },
       })
       if (res.applied_genres.length) {
-        toast.info(
-          'Подобрали стартовые жанры — настроить можно в профиле позже',
-        )
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.smartGenresApplied'),
+          durationMs: 3500,
+        })
       } else if (!res.enabled) {
-        toast.info('Smart skip выключен флагом, просто завершаем шаг')
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.smartDisabled'),
+          durationMs: 3500,
+        })
       } else {
-        toast.info(
-          'Запустим без настройки — поправим в профиле позже',
-        )
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.onboardingMsg.smartFallback'),
+          durationMs: 3500,
+        })
       }
       localStorage.removeItem(ONBOARDING_DRAFT_KEY)
       onComplete()
@@ -352,7 +381,11 @@ export function Onboarding({ onComplete }: Props) {
         localStorage.removeItem(ONBOARDING_DRAFT_KEY)
         onComplete()
       } catch {
-        toast.error('Не удалось пропустить, попробуйте ещё раз')
+        showIsland({
+          kind: 'error',
+          title: t('redesign.onboardingMsg.skipFail'),
+          durationMs: 3500,
+        })
       }
     }
     setSaving(false)
