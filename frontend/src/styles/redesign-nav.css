@@ -129,3 +129,50 @@
     animation: none;
   }
 }
+
+.re-onb-step-wrap {
+  display: block;
+  width: 100%;
+  min-height: 0;
+}
+
+.re-onb-cal-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.re-onb-cal-play.mp-press {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0;
+}
+
+.re-onb-cal-cover {
+  position: relative;
+}
+
+.re-onb-cal-cover-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm, 4px);
+  color: #fff;
+}
+
+.re-onb-cal-more.mp-press {
+  margin-top: 16px;
+  width: 100%;
+}
+
+.re-onb-hidden-audio {
+  display: none;
+}
