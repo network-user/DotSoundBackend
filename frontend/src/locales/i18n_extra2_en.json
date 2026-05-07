@@ -169,6 +169,8 @@
       "playlistTracksCount_one": "{{count}} track",
       "playlistTracksCount_other": "{{count}} tracks",
       "playlistTracksCount": "{{count}} tracks",
+      "playlistMoveUp": "Move up",
+      "playlistMoveDown": "Move down",
       "playlistMenuRename": "Rename",
       "playlistMenuDuplicate": "Duplicate",
       "playlistMenuDelete": "Delete",
