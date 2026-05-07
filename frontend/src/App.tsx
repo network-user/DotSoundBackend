@@ -121,6 +121,11 @@ const DailyMixView = lazy(() => import('@/views/DailyMixView').then(m => ({ defa
 const WeeklyMixView = lazy(() => import('@/views/WeeklyMixView').then(m => ({ default: m.WeeklyMixView })))
 const UserChoiceView = lazy(() => import('@/views/UserChoiceView').then(m => ({ default: m.UserChoiceView })))
 const WeeklyTopView = lazy(() => import('@/views/WeeklyTopView').then(m => ({ default: m.WeeklyTopView })))
+const ForgottenTreasuresView = lazy(() =>
+  import('@/views/ForgottenTreasuresView').then(m => ({
+    default: m.ForgottenTreasuresView,
+  })),
+)
 const RadioView = lazy(() => import('@/views/RadioView').then(m => ({ default: m.RadioView })))
 const GenreMixView = lazy(() => import('@/views/GenreMixView').then(m => ({ default: m.GenreMixView })))
 const ArtistStatsView = lazy(() => import('@/views/ArtistStatsView').then(m => ({ default: m.ArtistStatsView })))
@@ -661,6 +666,10 @@ export function App() {
           <Route
             path="/weekly-top"
             element={<WeeklyTopView />}
+          />
+          <Route
+            path="/forgotten-treasures"
+            element={<ForgottenTreasuresView />}
           />
           <Route path="/radio" element={<RadioView />} />
           <Route path="/genre-mix/:genre" element={<GenreMixView />} />

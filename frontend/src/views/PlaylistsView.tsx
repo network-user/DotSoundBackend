@@ -33,6 +33,11 @@ interface PlaylistsViewProps {
 
 type Screen = 'list' | 'detail'
 
+const ADD_PICK_LIBRARY_STEP = 12
+const ADD_PICK_CATALOG_SIZE = 12
+const ADD_PICK_MIN_CATALOG_CHARS = 2
+const ADD_PICK_DEBOUNCE_MS = 380
+
 export function PlaylistsView({
   embedded = false,
 }: PlaylistsViewProps) {
@@ -54,10 +59,17 @@ export function PlaylistsView({
   const [editPublic, setEditPublic] = useState(false)
   const [editBusy, setEditBusy] = useState(false)
   const [myTracks, setMyTracks] = useState<Track[]>([])
-  const [addTrackId, setAddTrackId] = useState<number | null>(null)
+  const [addingTrackId, setAddingTrackId] = useState<number | null>(null)
   const [trackSearch, setTrackSearch] = useState('')
-  const [searchResults, setSearchResults] = useState<Track[]>([])
-  const [searchLoading, setSearchLoading] = useState(false)
+  const [trackOrderFilter, setTrackOrderFilter] = useState('')
+  const [libraryVisibleCount, setLibraryVisibleCount] = useState(
+    ADD_PICK_LIBRARY_STEP,
+  )
+  const [catalogTracks, setCatalogTracks] = useState<Track[]>([])
+  const [catalogPage, setCatalogPage] = useState(0)
+  const [catalogTotal, setCatalogTotal] = useState(0)
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [catalogLoadingMore, setCatalogLoadingMore] = useState(false)
   const [renameOpen, setRenameOpen] = useState<Playlist | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renameBusy, setRenameBusy] = useState(false)
@@ -110,34 +122,107 @@ export function PlaylistsView({
   }, [selected?.id, canEditSelected])
 
   useEffect(() => {
+    setTrackOrderFilter('')
+  }, [selected?.id])
+
+  useEffect(() => {
     if (!selected || !canEditSelected) return
+    setLibraryVisibleCount(ADD_PICK_LIBRARY_STEP)
     const q = trackSearch.trim()
-    if (!q) {
-      setSearchResults([])
-      setSearchLoading(false)
+    let cancelled = false
+    if (q.length === 1) {
+      setCatalogTracks([])
+      setCatalogPage(0)
+      setCatalogTotal(0)
+      setCatalogLoading(false)
       return
     }
-    let cancelled = false
+    setCatalogTracks([])
+    setCatalogPage(0)
+    setCatalogTotal(0)
     const timer = window.setTimeout(() => {
-      setSearchLoading(true)
-      api.getTracks({ q, size: 30, page: 1, playable: true })
+      setCatalogLoading(true)
+      const load = q.length >= ADD_PICK_MIN_CATALOG_CHARS
+        ? api.getTracks({
+            q,
+            size: ADD_PICK_CATALOG_SIZE,
+            page: 1,
+            playable: true,
+          })
+        : api.getTracks({
+            size: ADD_PICK_CATALOG_SIZE,
+            page: 1,
+            playable: true,
+          })
+      load
         .then((res) => {
           if (cancelled) return
-          setSearchResults(res.items)
+          setCatalogTracks(res.items)
+          setCatalogPage(1)
+          setCatalogTotal(res.total)
         })
         .catch(() => {
           if (cancelled) return
-          setSearchResults([])
+          setCatalogTracks([])
+          setCatalogPage(0)
+          setCatalogTotal(0)
         })
         .finally(() => {
-          if (!cancelled) setSearchLoading(false)
+          if (!cancelled) setCatalogLoading(false)
         })
-    }, 250)
+    }, ADD_PICK_DEBOUNCE_MS)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
     }
   }, [selected?.id, canEditSelected, trackSearch])
+
+  const loadMoreCatalog = useCallback(async () => {
+    if (!selected || !canEditSelected || catalogLoadingMore) return
+    const q = trackSearch.trim()
+    if (q.length === 1) return
+    if (
+      catalogPage < 1 ||
+      catalogPage * ADD_PICK_CATALOG_SIZE >= catalogTotal
+    ) {
+      return
+    }
+    setCatalogLoadingMore(true)
+    const nextPage = catalogPage + 1
+    try {
+      const res =
+        q.length >= ADD_PICK_MIN_CATALOG_CHARS
+          ? await api.getTracks({
+              q,
+              size: ADD_PICK_CATALOG_SIZE,
+              page: nextPage,
+              playable: true,
+            })
+          : await api.getTracks({
+              size: ADD_PICK_CATALOG_SIZE,
+              page: nextPage,
+              playable: true,
+            })
+      setCatalogTracks((prev) => {
+        const seen = new Set(prev.map((t) => t.id))
+        const add = res.items.filter((t) => !seen.has(t.id))
+        return [...prev, ...add]
+      })
+      setCatalogPage(nextPage)
+      setCatalogTotal(res.total)
+    } catch {
+      /* keep list */
+    } finally {
+      setCatalogLoadingMore(false)
+    }
+  }, [
+    selected,
+    canEditSelected,
+    catalogLoadingMore,
+    catalogPage,
+    catalogTotal,
+    trackSearch,
+  ])
 
   const openPlaylist = useCallback(
     async (p: Playlist) => {
@@ -196,11 +281,39 @@ export function PlaylistsView({
     await refreshSelected()
   }
 
-  const handleAddTrack = async () => {
-    if (!selected || !canEditSelected || !addTrackId) return
-    await api.addTrackToPlaylist(selected.id, addTrackId)
-    await refreshSelected()
-    setAddTrackId(null)
+  const handleAddSingleTrack = async (trackId: number) => {
+    if (
+      !selected ||
+      !canEditSelected ||
+      addingTrackId !== null
+    ) {
+      return
+    }
+    setAddingTrackId(trackId)
+    try {
+      await api.addTrackToPlaylist(selected.id, trackId)
+      await refreshSelected()
+      sound.play('notificationInfo')
+      showIsland({
+        kind: 'toast',
+        title: t(
+          'redesign.library.playlistTrackAddedToast',
+          { playlist: selected.name },
+        ),
+        durationMs: 2400,
+      })
+    } catch {
+      sound.play('notificationError')
+      showIsland({
+        kind: 'error',
+        title: t(
+          'redesign.library.playlistTrackAddFail',
+        ),
+        durationMs: 4000,
+      })
+    } finally {
+      setAddingTrackId(null)
+    }
   }
 
   const moveTrack = async (index: number, dir: -1 | 1) => {
@@ -308,28 +421,85 @@ export function PlaylistsView({
     [loadPlaylists, t],
   )
 
-  const availableTracks = useMemo(() => {
+  const pickerQueryTrim = trackSearch.trim()
+  const pickerQueryNorm = pickerQueryTrim.toLowerCase()
+
+  const inPlaylistIds = useMemo(
+    () =>
+      new Set(selected?.tracks.map((t) => t.id) ?? []),
+    [selected],
+  )
+
+  const libraryCandidatesAll = useMemo(() => {
     if (!selected) return []
-    const inPlaylist = new Set(selected.tracks.map((t) => t.id))
-    const local = myTracks.filter((t) => !inPlaylist.has(t.id))
-    const q = trackSearch.trim().toLowerCase()
-    const base = q
-      ? local.filter((t) => {
-        const hay = `${t.title} ${t.artist ?? ''}`.toLowerCase()
-        return hay.includes(q)
+    let rows = myTracks.filter((t) => !inPlaylistIds.has(t.id))
+    if (pickerQueryNorm) {
+      rows = rows.filter((t) => {
+        const hay =
+          `${t.title} ${t.artist ?? ''}`.toLowerCase()
+        return hay.includes(pickerQueryNorm)
       })
-      : local
-    const merged = [...base]
-    for (const remote of searchResults) {
-      if (
-        !inPlaylist.has(remote.id) &&
-        !merged.some((t) => t.id === remote.id)
-      ) {
-        merged.push(remote)
-      }
     }
-    return merged
-  }, [selected, myTracks, trackSearch, searchResults])
+    return rows
+  }, [selected, myTracks, inPlaylistIds, pickerQueryNorm])
+
+  const libraryCandidatesIdSet = useMemo(
+    () =>
+      new Set(libraryCandidatesAll.map((t) => t.id)),
+    [libraryCandidatesAll],
+  )
+
+  const libraryVisible = useMemo(
+    () =>
+      libraryCandidatesAll.slice(0, libraryVisibleCount),
+    [libraryCandidatesAll, libraryVisibleCount],
+  )
+
+  const catalogVisible = useMemo(
+    () =>
+      catalogTracks.filter(
+        (t) =>
+          !inPlaylistIds.has(t.id) &&
+          !libraryCandidatesIdSet.has(t.id),
+      ),
+    [catalogTracks, inPlaylistIds, libraryCandidatesIdSet],
+  )
+
+  const addPickerRows = useMemo(
+    () => [...libraryVisible, ...catalogVisible],
+    [libraryVisible, catalogVisible],
+  )
+
+  const hasMoreLibrary =
+    libraryCandidatesAll.length > libraryVisibleCount
+  const hasMoreCatalog =
+    pickerQueryTrim.length !== 1 &&
+    catalogPage > 0 &&
+    catalogPage * ADD_PICK_CATALOG_SIZE < catalogTotal
+
+  const addPickerShowsShortQueryTip =
+    pickerQueryTrim.length === 1
+
+  const addPickerEmpty =
+    !catalogLoading &&
+    !catalogLoadingMore &&
+    addPickerRows.length === 0
+
+  const orderFilterQ = trackOrderFilter.trim().toLowerCase()
+  const filteredOrderIndices = useMemo(() => {
+    if (!selected?.tracks?.length) return []
+    if (!orderFilterQ) {
+      return selected.tracks.map((_, i) => i)
+    }
+    return selected.tracks
+      .map((tr, i) => ({ tr, i }))
+      .filter(({ tr }) => {
+        const hay =
+          `${tr.title} ${tr.artist ?? ''}`.toLowerCase()
+        return hay.includes(orderFilterQ)
+      })
+      .map(({ i }) => i)
+  }, [selected?.tracks, orderFilterQ])
 
   const formatShareChatTitle = (item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {
@@ -640,34 +810,39 @@ export function PlaylistsView({
                 onChange={(e) => setTrackSearch(e.target.value)}
               />
               <p className="hint rd-pl-add-hint">
-                {t('redesign.library.playlistPickerHint')}
+                {addPickerShowsShortQueryTip
+                  ? t(
+                      'redesign.library.playlistSearchMinCharsHint',
+                    )
+                  : t('redesign.library.playlistPickerHint')}
               </p>
               <div
                 className="rd-pl-add-list"
-                role="listbox"
+                role="list"
                 aria-label={t('redesign.library.playlistAddOption')}
               >
-                {availableTracks.length === 0 ? (
+                {catalogLoading && addPickerRows.length === 0 ? (
                   <p className="hint rd-pl-add-empty">
-                    {searchLoading
-                      ? t('redesign.library.playlistSearching')
-                      : t('redesign.library.playlistPickerEmpty')}
+                    {t('redesign.library.playlistSearching')}
                   </p>
-                ) : (
-                  availableTracks.map((tr) => {
-                    const selected = addTrackId === tr.id
-                    return (
-                      <button
-                        key={tr.id}
-                        type="button"
-                        role="option"
-                        aria-selected={selected}
-                        className={
-                          'rd-pl-add-option' +
-                          (selected ? ' rd-pl-add-option--on' : '')
-                        }
-                        onClick={() => setAddTrackId(tr.id)}
-                      >
+                ) : null}
+                {addPickerRows.map((tr) => {
+                  const busy = addingTrackId === tr.id
+                  return (
+                    <button
+                      key={tr.id}
+                      type="button"
+                      role="listitem"
+                      className={
+                        'rd-pl-add-option' +
+                        (busy ? ' rd-pl-add-option--busy' : '')
+                      }
+                      disabled={busy || addingTrackId !== null}
+                      onClick={() =>
+                        void handleAddSingleTrack(tr.id)
+                      }
+                    >
+                      <span className="rd-pl-add-option-meta">
                         <span className="rd-pl-add-option-title">
                           {tr.title}
                         </span>
@@ -676,67 +851,156 @@ export function PlaylistsView({
                             {tr.artist}
                           </span>
                         ) : null}
-                      </button>
-                    )
-                  })
-                )}
+                      </span>
+                      <span className="rd-pl-add-option-action">
+                        {busy ? (
+                          <span className="rd-pl-add-option-busy-label">
+                            {t(
+                              'redesign.library.playlistAddingTrack',
+                            )}
+                          </span>
+                        ) : (
+                          <Icon name="plus" size={18} />
+                        )}
+                      </span>
+                    </button>
+                  )
+                })}
+                {hasMoreLibrary ? (
+                  <div className="rd-pl-add-more-foot">
+                    <MotionPress
+                      type="button"
+                      variant="ghost"
+                      haptic="selection"
+                      className="btn-secondary rd-pl-add-more"
+                      disabled={addingTrackId !== null}
+                      onClick={() =>
+                        setLibraryVisibleCount((n) => {
+                          return n + ADD_PICK_LIBRARY_STEP
+                        })
+                      }
+                    >
+                      {t(
+                        'redesign.library.playlistLoadMoreLibrary',
+                      )}
+                    </MotionPress>
+                  </div>
+                ) : null}
+                {hasMoreCatalog ? (
+                  <div className="rd-pl-add-more-foot">
+                    <MotionPress
+                      type="button"
+                      variant="ghost"
+                      haptic="selection"
+                      className="btn-secondary rd-pl-add-more"
+                      disabled={
+                        catalogLoadingMore ||
+                        addingTrackId !== null
+                      }
+                      onClick={() => void loadMoreCatalog()}
+                    >
+                      {catalogLoadingMore
+                        ? t('redesign.library.playlistSearching')
+                        : t(
+                            'redesign.library.playlistLoadMoreCatalog',
+                          )}
+                    </MotionPress>
+                  </div>
+                ) : null}
+                {addPickerEmpty ? (
+                  <p className="hint rd-pl-add-empty">
+                    {addPickerShowsShortQueryTip
+                      ? t(
+                          'redesign.library.playlistAddPickerNoLibraryMatch',
+                        )
+                      : t(
+                          'redesign.library.playlistPickerEmpty',
+                        )}
+                  </p>
+                ) : null}
               </div>
-              <MotionPress
-                type="button"
-                variant="ghost"
-                haptic="selection"
-                className="btn-secondary rd-pl-add-submit"
-                onClick={() => void handleAddTrack()}
-                disabled={!addTrackId}
-              >
-                {t('redesign.library.playlistAdd')}
-              </MotionPress>
             </div>
-            {searchLoading && availableTracks.length > 0 && (
+            {(catalogLoading || catalogLoadingMore) &&
+            addPickerRows.length > 0 ? (
               <p className="hint rd-pl-search-hint">
                 {t('redesign.library.playlistSearching')}
               </p>
-            )}
+            ) : null}
           </div>
         )}
 
-        {canEditSelected && (
+        {canEditSelected && selected.tracks.length > 0 && (
+          <div className="rd-pl-order-tools">
+            <input
+              className="form-input rd-pl-order-search"
+              placeholder={t(
+                'redesign.library.playlistTracksFilterPlaceholder',
+              )}
+              aria-label={t(
+                'redesign.library.playlistTracksFilterPlaceholder',
+              )}
+              value={trackOrderFilter}
+              onChange={(e) =>
+                setTrackOrderFilter(e.target.value)
+              }
+            />
+          </div>
+        )}
+        {canEditSelected &&
+          orderFilterQ &&
+          filteredOrderIndices.length === 0 && (
+            <p className="hint rd-pl-order-empty">
+              {t('redesign.library.playlistTracksFilterEmpty')}
+            </p>
+          )}
+        {canEditSelected && filteredOrderIndices.length > 0 && (
           <div className="rd-pl-edit-rows">
-            {selected.tracks.map((tr, idx) => (
-              <div key={tr.id} className="rd-pl-edit-row">
-                <span className="rd-pl-edit-row-title">{tr.title}</span>
-                <MotionPress
-                  type="button"
-                  variant="icon"
-                  haptic="selection"
-                  className="icon-btn"
-                  ariaLabel={t('redesign.library.playlistMoveUp')}
-                  onClick={() => void moveTrack(idx, -1)}
-                >
-                  <Icon name="chevron-up" size={14} />
-                </MotionPress>
-                <MotionPress
-                  type="button"
-                  variant="icon"
-                  haptic="selection"
-                  className="icon-btn"
-                  ariaLabel={t('redesign.library.playlistMoveDown')}
-                  onClick={() => void moveTrack(idx, 1)}
-                >
-                  <Icon name="chevron-down" size={14} />
-                </MotionPress>
-                <MotionPress
-                  type="button"
-                  variant="icon"
-                  haptic="medium"
-                  className="icon-btn"
-                  ariaLabel={tr.title}
-                  onClick={() => void handleRemoveTrack(tr.id)}
-                >
-                  <Icon name="x" size={14} />
-                </MotionPress>
-              </div>
-            ))}
+            {filteredOrderIndices.map((idx) => {
+              const tr = selected.tracks[idx]
+              return (
+                <div key={tr.id} className="rd-pl-edit-row">
+                  <span className="rd-pl-edit-row-title">
+                    {tr.title}
+                  </span>
+                  <MotionPress
+                    type="button"
+                    variant="icon"
+                    haptic="selection"
+                    className="icon-btn"
+                    ariaLabel={t(
+                      'redesign.library.playlistMoveUp',
+                    )}
+                    onClick={() => void moveTrack(idx, -1)}
+                  >
+                    <Icon name="chevron-up" size={14} />
+                  </MotionPress>
+                  <MotionPress
+                    type="button"
+                    variant="icon"
+                    haptic="selection"
+                    className="icon-btn"
+                    ariaLabel={t(
+                      'redesign.library.playlistMoveDown',
+                    )}
+                    onClick={() => void moveTrack(idx, 1)}
+                  >
+                    <Icon name="chevron-down" size={14} />
+                  </MotionPress>
+                  <MotionPress
+                    type="button"
+                    variant="icon"
+                    haptic="medium"
+                    className="icon-btn"
+                    ariaLabel={tr.title}
+                    onClick={() =>
+                      void handleRemoveTrack(tr.id)
+                    }
+                  >
+                    <Icon name="x" size={14} />
+                  </MotionPress>
+                </div>
+              )
+            })}
           </div>
         )}
 

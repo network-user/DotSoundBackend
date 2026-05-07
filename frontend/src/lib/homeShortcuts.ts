@@ -24,6 +24,12 @@ export const MIX_SHORTCUT_TILES = [
     morph: 'heart' as const,
   },
   {
+    path: '/forgotten-treasures',
+    labelKey: 'quickForgotten' as const,
+    profileIcon: 'music',
+    morph: 'bookmark' as const,
+  },
+  {
     path: '/radio',
     labelKey: 'quickRadio' as const,
     profileIcon: 'radio',

@@ -334,3 +334,58 @@ class RecommendationRepository:
             int(tid): int(c)
             for tid, c in result.all()
         }
+
+    async def list_forgotten_treasure_rows(
+        self,
+        user_id: int,
+        *,
+        like_cutoff: datetime,
+        silence_cutoff: datetime,
+        fetch_cap: int = 3000,
+    ) -> list[tuple[int, datetime, datetime | None]]:
+        last_listen_sq = (
+            select(
+                ListenEvent.track_id,
+                func.max(ListenEvent.created_at).label(
+                    "last_at"
+                ),
+            )
+            .where(ListenEvent.user_id == user_id)
+            .group_by(ListenEvent.track_id)
+            .subquery()
+        )
+        stmt = (
+            select(
+                Like.track_id,
+                Like.created_at,
+                last_listen_sq.c.last_at,
+            )
+            .join(Track, Track.id == Like.track_id)
+            .outerjoin(
+                last_listen_sq,
+                Like.track_id == last_listen_sq.c.track_id,
+            )
+            .where(
+                Like.user_id == user_id,
+                Like.created_at <= like_cutoff,
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
+                or_(
+                    last_listen_sq.c.last_at.is_(None),
+                    last_listen_sq.c.last_at < silence_cutoff,
+                ),
+            )
+            .order_by(Like.created_at.asc())
+            .limit(fetch_cap)
+        )
+        rows = (
+            await self._session.execute(stmt)
+        ).all()
+        out: list[tuple[int, datetime, datetime | None]] = []
+        for tid, liked_at, last_at in rows:
+            out.append(
+                (int(tid), liked_at, last_at)
+            )
+        return out

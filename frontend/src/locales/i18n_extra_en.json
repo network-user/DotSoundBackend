@@ -47,6 +47,11 @@
     "homeHint": "Loudest tracks on the platform this week",
     "empty": "Not enough plays this week yet"
   },
+  "forgottenTreasures": {
+    "title": "Forgotten treasures",
+    "hint": "Liked a while ago, not played lately — resurfacing favorites",
+    "empty": "No tracks match the “old like + pause” gate yet"
+  },
   "library": {
     "tabLiked": "Favorites",
     "tabPlaylists": "Playlists",

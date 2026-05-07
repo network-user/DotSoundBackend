@@ -9,6 +9,7 @@ export type PrefetchContextName =
   | 'daily_mix'
   | 'weekly_mix'
   | 'weekly_top'
+  | 'forgotten_treasures'
   | 'user_choice'
   | 'radio'
   | 'queue'
@@ -93,6 +94,7 @@ export const DEFAULT_PREFETCH_POLICY: PrefetchPolicySnapshot = {
     daily_mix: 3,
     weekly_mix: 3,
     weekly_top: 3,
+    forgotten_treasures: 3,
     user_choice: 3,
     radio: 3,
     queue: 3,

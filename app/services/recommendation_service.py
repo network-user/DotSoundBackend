@@ -810,6 +810,60 @@ class RecommendationService:
             )
         return payload
 
+    async def get_forgotten_treasures_playlist(
+        self,
+        user_id: int,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        from dotsound_private_core.services.forgotten_treasures_policy import (
+            FORGOTTEN_DEFAULT_LIMIT,
+            FORGOTTEN_MAX_LIMIT,
+            FORGOTTEN_MIN_LIKE_AGE_DAYS,
+            FORGOTTEN_SILENCE_DAYS,
+            FORGOTTEN_TREASURES_SCORE_VERSION,
+            ForgottenTrackInput,
+            rank_forgotten_treasure_tracks,
+        )
+
+        sized = FORGOTTEN_DEFAULT_LIMIT if limit <= 0 else limit
+        size = max(1, min(int(sized), FORGOTTEN_MAX_LIMIT))
+        now = datetime.now(UTC)
+        like_cutoff = now - timedelta(
+            days=FORGOTTEN_MIN_LIKE_AGE_DAYS
+        )
+        silence_cutoff = now - timedelta(
+            days=FORGOTTEN_SILENCE_DAYS
+        )
+        rows = await self._rec_repo.list_forgotten_treasure_rows(
+            user_id,
+            like_cutoff=like_cutoff,
+            silence_cutoff=silence_cutoff,
+            fetch_cap=max(600, size * 25),
+        )
+        inputs = [
+            ForgottenTrackInput(
+                track_id=tid,
+                like_created_at=liked_at,
+                last_listen_at=last_at,
+            )
+            for tid, liked_at, last_at in rows
+        ]
+        ordered_ids = rank_forgotten_treasure_tracks(
+            inputs,
+            now=now,
+            limit=size,
+        )
+        return {
+            "track_ids": ordered_ids,
+            "score_version": FORGOTTEN_TREASURES_SCORE_VERSION,
+            "min_like_age_days": FORGOTTEN_MIN_LIKE_AGE_DAYS,
+            "silence_days": FORGOTTEN_SILENCE_DAYS,
+            "generated_at": now.isoformat(),
+            "expires_at": (
+                now + timedelta(seconds=900)
+            ).isoformat(),
+        }
+
     async def get_similar(
         self, track_id: int, limit: int = 10
     ) -> list[Track]:

@@ -48,21 +48,27 @@
 
 ## Mini App / .sound UI (2026-05-04)
 
+- [x] **Добавление треков в плейлист (2026-05-08)** — `PlaylistsView`: пустое поле — первая
+  страница каталога (12 playable) и «Ещё из каталога»; текстовый запрос **от 2 символов**
+  — поиск по каталогу с той же пагинацией; **1 символ** — только фильтр медиатеки;
+  медиатека показывается чанками по 12 + «Ещё из медиатеки». Одно нажатие добавляет трек,
+  острова успех/ошибка; `PlayerBar` → `AddToPlaylistSheet`; `api.getPlaylists(page,size)`.
+
 - [x] **Обложки пользовательских плейлистов (2026-05-07)** — загрузка/смена
   собственной обложки (POST/DELETE `/api/v1/playlists/{id}/cover`), флаги
   `cover_auto_suppressed` + `collage_generated_at`, одноразовый коллаж из
-  обложек треков при ≥9 видимых треках (PrivateCore `playlist_cover_policy`),
+  обложек треков при ≥4 видимых треках (PrivateCore `playlist_cover_policy`),
   Mini App (`PlaylistsView`) и `cover_proxy` для префикса `playlist-covers/`.
 
-- [x] **Admin + lyrics pipeline: жан�? и нас�?�?оение по �?екс�?�?** �??
-  эв�?ис�?ика в PrivateCore (`text_genre_mood_infer`), ав�?оп�?именение
+- [x] **Admin + lyrics pipeline: жанр и настроение по тексту** —
+  эвристика в PrivateCore (`text_genre_mood_infer`), автоприсвоение
   после `LyricsRepository.create_or_update`, batch prompt/import в
-  админ-�?�?ека�? и `LYRICS_DERIVED_GENRE_MOOD_ENABLED` в `.env.example`.
-- [x] **View Transitions + React** �?? `flushSync` в колбэке
-  `startViewTransition` в `App.tsx` (ина�?е снимок «нового» кад�?а до комми�?а
-  React �?? п�?с�?ой/�?�?�?н�?й эк�?ан п�?и смене вкладок/ма�?�?�?�?�?ов).
-- [x] **�?лобал�?н�?й UI redesign `.sound`** �?? обновлен�? splash/loading,
-  иконки PWA, дома�?ний эк�?ан, поиск, �?а�?�?, п�?о�?ил�?, admin shell и
+  админ-чеке и `LYRICS_DERIVED_GENRE_MOOD_ENABLED` в `.env.example`.
+- [x] **View Transitions + React** — `flushSync` в колбэке
+  `startViewTransition` в `App.tsx` (иначе снимок «нового» кадра до коммита
+  React — пустой/чёрный экран при смене вкладок/маршрутов).
+- [x] **Глобальный UI redesign `.sound`** — обновлены splash/loading,
+  иконки PWA, домашний экран, поиск, лайки, профиль, admin shell и
   Telegram bot copy/keyboards без изменения backend API, PrivateCore и
   ComputeWorker.
 - [x] **iOS 2026 global redesign — Stage G (Admin) + Stage I (Upload/Import) + Phase 3 polish**
@@ -111,18 +117,18 @@
   `playlist_track_eligibility` + проверка при `POST /playlists/.../tracks` и админ-добавлении;
   поиск/`me/library` с `playable`, UI выбора в `PlaylistsView`, админ-пикер по
   владельцу (`for_playlist_owner_id`, `playable_only`), i18n.
-- [x] **Upload UX redesign + genre search** �?? UploadView/Upload tabs пол�?�?или
-  iOS-like polish, добавлено �?мное combobox с ES-backed fuzzy hints и
-  create-new-genre flow, пл�?с haptic feedback и акк�?�?а�?н�?е мик�?о-анима�?ии.
-- [x] **Upload: profile-owned artist flow** �?? `one account -> one artist`
+- [x] **Upload UX redesign + genre search** — UploadView/Upload tabs получили
+  iOS-like polish, добавлено умное combobox с ES-backed fuzzy hints и
+  create-new-genre flow, плюс haptic feedback и аккуратные микро-анимации.
+- [x] **Upload: profile-owned artist flow** — `one account -> one artist`
   ownership (backend by user id), unique-name enforcement with migration
   auto-dedupe, auto-rename owned artist on `display_name` update, and
   UploadFileTab mode switch (`I am this artist` vs manual artist).
-- [ ] **Home recommendations: richer highlight endpoint** �?? добави�?�?
-  о�?дел�?н�?е данн�?е для к�?�?пной ка�?�?о�?ки главного эк�?ана: editorial label,
-  reason/highlight metadata, с�?абил�?н�?й hero image и компак�?н�?е carousel
-  controls. Реализова�?�? о�?дел�?н�?м backend/frontend п�?о�?одом после review
-  г�?ани�?�? Backend/PrivateCore; �?ек�?�?ий UI испол�?з�?е�? с�?�?ес�?в�?�?�?ие
+- [ ] **Home recommendations: richer highlight endpoint** — добавить
+  отдельные данные для крупной карточки главного экрана: editorial label,
+  reason/highlight metadata, стабильный hero image и компактные carousel
+  controls. Реализовать отдельным backend/frontend проходом после review
+  границ Backend/PrivateCore; текущий UI использует существующие
   `continue` / `personalized` / `user_choice` / fallback tracks.
 
 ## Админка / альбомы (2026-05-04)
@@ -145,7 +151,7 @@
 - [x] **Cron-расписание снапшота** - миграция `0069` seed'ит запись в `scheduled_jobs` с cron `0 2 1 * *` (TaskiqScheduler / scheduler_service).
 - [x] **Расширить `artist_monthly_stats`** - миграция `0070`, колонки `total_plays`, `total_likes`, `total_followers`; `ArtistStatsRepository` + `ArtistStatsService` + схема + frontend types. Chart в ArtistView показывает данные в tooltip.
 - [x] **Frontend: карточка артиста** - `follower_count`, `monthly_listeners` и кнопка «Подписаться» уже реализованы в ArtistView (2026-04-30).
-- `[x]` **Frontend: отдельная страница статистики** - `/artist/:id/stats` с полноценными recharts-графиками (total_plays, total_likes, total_followers по месяцам). Базовый bar-chart unique_listeners уже есть в ArtistView.
+- [x] **Frontend: отдельная страница статистики** - `/artist/:id/stats` с полноценными recharts-графиками (total_plays, total_likes, total_followers по месяцам). Базовый bar-chart unique_listeners уже есть в ArtistView.
 - [x] **Бот: плеер - источник «Подписки»** - источник `follows` добавлен в inline-плеер; `GET /users/me/followed-artists/tracks` (backend), `get_followed_artists_tracks` (bot client), кнопка «Мои подписки» в меню.
 
 ## Соответствие 152-ФЗ / ПДн (backlog, продукт + инженерия)
@@ -666,7 +672,7 @@
 
 ---
 
-*Последнее обновление: 2026-04-24 (multi-platform streaming: YouTube + Bandcamp).*
+*Последнее обновление: 2026-05-08 (TODO.md: кириллица и тире в повреждённых строках).*
 
 ## Session Updates (2026-05-06)
 
@@ -734,7 +740,7 @@
 - [x] **Disable track downloading in Mini App (2026-05-07)**: из `TrackCardSheet` удалена кнопка «Скачать» и связанная offline-cache логика (`downloadTrack/isCached/removeTrack`), а из `LibraryView` убрана вкладка «Скачанные» (`offline` tab + i18n keys `library.tabOffline`); `npm run build` зелёный.
 - [x] **Profile: вкладка дизлайков (2026-05-07)**: `GET /api/v1/dislikes/{user_id}` — только для авторизованного владельца (`403` если id не совпадает с `current_user`), пагинация и `source` как у лайков; репозиторий `list_disliked_tracks`, `DislikeService.list_disliked` + collapse вариантов; фронт: `DislikedView`, вкладка `profile.tabDislikes` в `ProfileView`, клиент `getDislikedTracks`, ключи `redesign.library.disliked*`; тесты `test_dislikes.py` / `test_dislike_service.py`.
 
-## �?ла�?�?о�?м�? �?? б�?д�?�?ее
+## Платформы — будущее
 
 - **Гибридный плеер**: для платформ с официальными embed-виджетами реализовать `access_mode="official_embed"` - храним embed URL, отрисовываем `<iframe>` вместо нативного плеера, отключаем EQ. Приоритет: YouTube (требует TOS раздел 5.D).
 - **VK Музыка**: OAuth уже реализован (`linked_accounts`, scope `audio`). Нужно добавить `VKStreamService` (получает HLS-URL через `audio.getById` с user OAuth token) и расширить `playback.py`. Отложено - российский сервис.
@@ -863,9 +869,9 @@
     - [ ] Карточки "Топ артистов/треков" месяца для шеринга.
     - [ ] Детальная статистика в профиле (часы прослушивания, любимые жанры).
     - [ ] Секция "Ваш топ" на главной.
-- [ ] **Динамические плейлисты**
+    - [ ] **Динамические плейлисты**
     - [x] "Weekly Top 50" -- 2026-05-06: PrivateCore weekly_top_policy (rank_weekly_top_tracks, blend log(listens_7d)+log(likes_7d), WEEKLY_TOP_SCORE_VERSION); Backend RecommendationRepository.get_qualified_listens_7d_counts, RecommendationService.get_weekly_top_playlist with Redis cache (TTL 30 min), GET /api/v1/recommendations/weekly-top; Frontend WeeklyTopView (/weekly-top), api.getWeeklyTopPlaylist, WeeklyTopPlaylistResponse type, flame icon, Home quick-grid card.
-    - [ ] "Забытые сокровища" (лайкнутое давно).
+    - [x] **«Забытые сокровища»** (лайкнутое давно, без прослушиваний в окне) — PrivateCore `forgotten_treasures_policy` (пороги лайка ≥21d, тишина ≥14d, `rank_forgotten_treasure_tracks`); Backend `RecommendationRepository.list_forgotten_treasure_rows`, `GET /api/v1/recommendations/forgotten-treasures` (JWT, per-user); Mini App `ForgottenTreasuresView` `/forgotten-treasures`, тайл в быстрых разделах после «Выбор»; prefetch context `forgotten_treasures`.
 - [ ] **PWA Offline Mode (v2) [High Priority]**
     - [ ] Кеширование HLS чанков в Service Worker.
     - [ ] Надежный UI для оффлайн-режима.
@@ -917,3 +923,13 @@
   на `MotionPress` (карточки источников, CTA в `empty/done/select/queued/importing`, оба confirm-модала), inline
   стили заменены классами `onboarding-import-*` в `global.css`; в `admin/routes/DashboardRoute` tick-кнопки
   metric slider также переведены на `MotionPress` (`icon` + `selection`). Проверки: `npx tsc --noEmit`, `npm run build`.
+
+## Session Updates (2026-05-08)
+
+- [x] Исправлены битые UTF-8 последовательности и восстановлены русские строки в `TODO.md`
+  (блок Mini App UI, backlog «Home recommendations», секция «Платформы — будущее»);
+  у пункта «Frontend: отдельная страница статистики» унифицирован формат статуса `[x]` (без лишних backticks).
+
+- [x] Динамический плейлист **«Забытые сокровища»**: PrivateCore `forgotten_treasures_policy`, Backend
+  `GET /api/v1/recommendations/forgotten-treasures`, Mini App `/forgotten-treasures` + prefetch context
+  `forgotten_treasures`; pytest (PrivateCore ranking + API), `npm run build` зелёный.

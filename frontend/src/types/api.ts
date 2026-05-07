@@ -79,6 +79,15 @@ export interface WeeklyTopPlaylistResponse {
   window_days: number
 }
 
+export interface ForgottenTreasuresPlaylistResponse {
+  tracks: Track[]
+  generated_at: string
+  expires_at: string
+  score_version: string
+  min_like_age_days: number
+  silence_days: number
+}
+
 export interface SearchSuggestItem {
   kind: 'track' | 'artist'
   id: number

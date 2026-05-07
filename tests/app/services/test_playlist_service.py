@@ -216,7 +216,7 @@ async def test_auto_collage_generates_once_at_threshold(
     jpeg = buf.getvalue()
 
     tids: list[int] = []
-    for i in range(10):
+    for i in range(6):
         tr = await repo.create(
             title=f"T{i}",
             file_key=f"k{i}",
@@ -236,15 +236,17 @@ async def test_auto_collage_generates_once_at_threshold(
             new_callable=AsyncMock,
         ) as upl,
     ):
-        for tid in tids[:9]:
+        for tid in tids[:3]:
             await svc.add_track(pl.id, tid, uid)
+        assert upl.await_count == 0
+        await svc.add_track(pl.id, tids[3], uid)
         assert upl.await_count == 1
         refreshed = await svc.get(pl.id)
         assert refreshed is not None
         ck = refreshed.cover_key or ""
         assert ck.startswith("playlist-covers/")
         assert refreshed.collage_generated_at is not None
-        await svc.add_track(pl.id, tids[9], uid)
+        await svc.add_track(pl.id, tids[4], uid)
         assert upl.await_count == 1
 
 
@@ -259,7 +261,7 @@ async def test_auto_collage_respects_opt_out(
 
     repo = TrackRepository(session)
     tids: list[int] = []
-    for i in range(9):
+    for i in range(5):
         tr = await repo.create(
             title=f"T{i}",
             file_key=f"k{i}",

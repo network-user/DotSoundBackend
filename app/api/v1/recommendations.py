@@ -21,8 +21,9 @@ from app.schemas.recommendation import (
     DailyPlaylistResponse,
     DiscoverGenreCard,
     DiscoverResponse,
-    GenreMixItemResponse,
+    ForgottenTreasuresPlaylistResponse,
     GenreMixesResponse,
+    GenreMixItemResponse,
     GenreMixOverrideRequest,
     HomePageResponse,
     HomeSectionResponse,
@@ -366,6 +367,34 @@ async def get_weekly_top_playlist(
         expires_at=payload["expires_at"],
         score_version=payload["score_version"],
         window_days=payload["window_days"],
+    )
+
+
+@router.get(
+    "/forgotten-treasures",
+    response_model=ForgottenTreasuresPlaylistResponse,
+)
+async def get_forgotten_treasures_playlist(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    svc = RecommendationService(db)
+    payload = await svc.get_forgotten_treasures_playlist(
+        user.id,
+        limit=limit,
+    )
+    repo = RecommendationRepository(db)
+    tracks = await repo.get_tracks_by_ids(
+        payload["track_ids"]
+    )
+    return ForgottenTreasuresPlaylistResponse(
+        tracks=await dedupe_and_build_track_list(db, tracks),
+        generated_at=payload["generated_at"],
+        expires_at=payload["expires_at"],
+        score_version=payload["score_version"],
+        min_like_age_days=payload["min_like_age_days"],
+        silence_days=payload["silence_days"],
     )
 
 

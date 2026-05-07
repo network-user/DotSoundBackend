@@ -15,7 +15,7 @@ import {
   usePlayerMeta,
   usePlayerState,
 } from '@/store/PlayerContext'
-import { haptic } from '@/lib/telegram'
+import { getUserId, haptic } from '@/lib/telegram'
 import { useRipple } from '@/components/ui/Ripple'
 import {
   m,
@@ -30,6 +30,7 @@ import { SharedCover } from '@/components/ui/SharedCover'
 import { useMatchMedia } from '@/hooks/useMatchMedia'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
+import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet/AddToPlaylistSheet'
 
 const PLATFORM_LABELS: Record<string, string> = {
   youtube: 'YouTube',
@@ -89,6 +90,7 @@ export function PlayerBar() {
   const goArtistByName = useNavigateToArtistByName()
   const [likeBurst, setLikeBurst] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
+  const [addToPlOpen, setAddToPlOpen] = useState(false)
   const [volumePinned, setVolumePinned] = useState(false)
   const [volumeHover, setVolumeHover] = useState(false)
   const [smoothCurrentTime, setSmoothCurrentTime] = useState(0)
@@ -262,8 +264,10 @@ export function PlayerBar() {
       : volume < 0.5
         ? 'volume-low'
         : 'volume-high'
+  const telegramUserId = getUserId()
 
   return (
+    <>
     <m.div
       id="player-bar"
       className="rp-player-bar"
@@ -634,6 +638,21 @@ export function PlayerBar() {
                   <Icon name="queue" size={16} />
                   {t('redesign.playerBar.queueMenu')}
                 </MotionPress>
+                {telegramUserId ? (
+                  <MotionPress
+                    role="menuitem"
+                    variant="ghost"
+                    haptic="selection"
+                    className="pb-menu-item"
+                    onClick={() => {
+                      setOverflowOpen(false)
+                      setAddToPlOpen(true)
+                    }}
+                  >
+                    <Icon name="list" size={16} />
+                    {t('redesign.playerBar.addToPlaylistMenu')}
+                  </MotionPress>
+                ) : null}
                 <MotionPress
                   role="menuitem"
                   variant="ghost"
@@ -717,5 +736,13 @@ export function PlayerBar() {
         </div>
       )}
     </m.div>
+    {telegramUserId ? (
+      <AddToPlaylistSheet
+        open={addToPlOpen}
+        onClose={() => setAddToPlOpen(false)}
+        trackId={track.id}
+      />
+    ) : null}
+    </>
   )
 }

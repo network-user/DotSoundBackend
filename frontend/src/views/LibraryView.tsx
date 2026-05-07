@@ -6,7 +6,6 @@ import { PlaylistsView } from '@/views/PlaylistsView'
 import { HistoryList } from '@/components/Profile/HistoryList'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { SPRING_LAYOUT, m } from '@/lib/motion'
 import { hapticSelection } from '@/lib/telegram'
 
 type Tab = 'liked' | 'playlists' | 'history'
@@ -120,19 +119,10 @@ export function LibraryView() {
               variant="ghost"
               haptic="selection"
               data-active={active ? 'true' : 'false'}
-              className={`rd-lib-tab library-tab${active ? ' active' : ''}`}
+              className="rd-lib-tab library-tab"
               onClick={() => handleTab(row.id)}
             >
-              {active && (
-                <m.span
-                  className="rd-lib-tab-pill"
-                  layoutId="library-tab-pill"
-                  transition={SPRING_LAYOUT}
-                />
-              )}
-              <span className="rd-lib-tab-label">
-                {t(row.labelKey)}
-              </span>
+              {t(row.labelKey)}
             </MotionPress>
           )
         })}

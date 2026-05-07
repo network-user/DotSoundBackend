@@ -21,7 +21,8 @@ class PrefetchPolicyResponse(BaseModel):
             "Per-context lookahead. Keys are opaque strings "
             "from the policy (home, album, artist, playlist, "
             "genre_mix, daily_mix, weekly_mix, weekly_top, "
-            "user_choice, radio, queue, playback, search_results, "
+            "forgotten_treasures, user_choice, radio, queue, "
+            "playback, search_results, "
             "similar_in_card, chat_shared, deep_link, "
             "continue_on_app_start, library)."
         ),
