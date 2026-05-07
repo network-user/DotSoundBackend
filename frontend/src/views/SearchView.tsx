@@ -1066,10 +1066,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                     <input
                       type="search"
                       enterKeyHint="search"
-                      placeholder={t(
-                        'search.genresSearchPlaceholder',
-                        { defaultValue: 'Поиск жанра' },
-                      )}
+                      placeholder={t('search.genresSearchPlaceholder')}
                       autoComplete="off"
                       value={genreSearchTerm}
                       onChange={(e) => {
@@ -1113,9 +1110,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         )
                       }
                     >
-                      {t('common.showMore', {
-                        defaultValue: 'Показать еще',
-                      })}
+                      {t('common.showMore')}
                     </button>
                   )}
                 </>

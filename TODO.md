@@ -107,7 +107,7 @@
 - [x] **Cron-расписание снапшота** - миграция `0069` seed'ит запись в `scheduled_jobs` с cron `0 2 1 * *` (TaskiqScheduler / scheduler_service).
 - [x] **Расширить `artist_monthly_stats`** - миграция `0070`, колонки `total_plays`, `total_likes`, `total_followers`; `ArtistStatsRepository` + `ArtistStatsService` + схема + frontend types. Chart в ArtistView показывает данные в tooltip.
 - [x] **Frontend: карточка артиста** - `follower_count`, `monthly_listeners` и кнопка «Подписаться» уже реализованы в ArtistView (2026-04-30).
-- `[ ]` **Frontend: отдельная страница статистики** - `/artist/:id/stats` с полноценными recharts-графиками (total_plays, total_likes, total_followers по месяцам). Базовый bar-chart unique_listeners уже есть в ArtistView.
+- `[x]` **Frontend: отдельная страница статистики** - `/artist/:id/stats` с полноценными recharts-графиками (total_plays, total_likes, total_followers по месяцам). Базовый bar-chart unique_listeners уже есть в ArtistView.
 - [x] **Бот: плеер - источник «Подписки»** - источник `follows` добавлен в inline-плеер; `GET /users/me/followed-artists/tracks` (backend), `get_followed_artists_tracks` (bot client), кнопка «Мои подписки» в меню.
 
 ## Соответствие 152-ФЗ / ПДн (backlog, продукт + инженерия)
@@ -683,6 +683,7 @@
 - [x] **Radio next-track compact block (2026-05-07)**: блок настроений в `RadioView` деактивирован через TODO-комментарии, вместо него на `./mini_app/radio` показывается компактная карточка «Следующий трек» с обложкой, названием и артистом из очереди `PlayerContext`; `npm run build` зелёный.
 - [x] **Radio paused pulse stability (2026-05-07)**: `BeatPulse` получил явный `data-beat-active`, а radio disc отключает `transform/transition` в paused-состоянии, чтобы обложка не дёргалась при паузе; `npm run build` зелёный.
 - [x] **Mix views i18n + API typing cleanup (2026-05-07)**: `DailyMixView`/`WeeklyMixView`/`UserChoiceView`/`WeeklyTopView` переведены с hardcoded share-строк на `useTranslation` (`redesign.library.*` + `redesign.home.mixShareAria`), а в `frontend/src/lib/api.ts` убраны inline response-shapes в пользу типизированных контрактов `UserListeningStatsResponse`, `AdjacentTracksResponse`, `TrackQueueResponse`, `HomePageResponse` из `frontend/src/types/api.ts`.
+- [x] **Stats TODO close + i18n/typing batch (2026-05-07)**: TODO-пункт про отдельную страницу статистики артиста (`/artist/:id/stats`) закрыт как выполненный; в `RadioView` и `SearchView` убран оставшийся hardcoded text в пользу i18n-ключей, а в `frontend/src/lib/api.ts` ещё один пакет inline response-типов вынесен в именованные интерфейсы `frontend/src/types/api.ts` (`StatusResponse`, `OkResponse`, `MessageResponse`, `AuthConfigResponse`, `LinkStatusResponse`, `EqSettingsResponse`, `PrefetchPolicyResponse`, `ConversationRefResponse`, `SearchUserItem` и др.).
 
 ## �?ла�?�?о�?м�? �?? б�?д�?�?ее
 

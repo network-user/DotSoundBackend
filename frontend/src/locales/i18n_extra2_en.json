@@ -87,6 +87,8 @@
       "radioSwipeAria": "Swipe the cover left or right to switch tracks",
       "radioNextUnavailable": "No next track found yet",
       "radioPrevUnavailable": "No previous track yet",
+      "radioNextTrack": "Up next",
+      "radioQueueEmpty": "Queue is empty for now",
       "radioMoodsTitle": "Mood",
       "radioMoodChill": "Chill",
       "radioMoodFocus": "Focus",

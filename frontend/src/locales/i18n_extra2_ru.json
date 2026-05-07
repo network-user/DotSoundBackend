@@ -87,6 +87,8 @@
       "radioSwipeAria": "Свайпните обложку влево или вправо для переключения трека",
       "radioNextUnavailable": "Следующий трек пока не найден",
       "radioPrevUnavailable": "Предыдущего трека пока нет",
+      "radioNextTrack": "Следующий трек",
+      "radioQueueEmpty": "Очередь пока пуста",
       "radioMoodsTitle": "Настроение",
       "radioMoodChill": "Chill",
       "radioMoodFocus": "Focus",

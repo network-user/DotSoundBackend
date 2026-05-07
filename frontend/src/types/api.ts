@@ -244,6 +244,40 @@ export interface UserListeningStatsResponse {
   top_genres: ListeningStatsTopItem[]
 }
 
+export interface StatusResponse {
+  status: string
+}
+
+export interface OkResponse {
+  ok: boolean
+}
+
+export interface MessageResponse {
+  message: string
+}
+
+export interface FollowingStatusResponse {
+  following: boolean
+}
+
+export interface AuthConfigResponse {
+  bot_username: string
+  debug?: boolean
+}
+
+export interface LinkStatusResponse {
+  telegram_linked: boolean
+  email_linked: boolean
+  email: string | null
+  telegram_username: string | null
+}
+
+export interface LinkTelegramCodeResponse {
+  code: string
+  bot_username: string
+  deep_link: string
+}
+
 export interface OnboardingStatus {
   onboarding_completed: boolean
   calibration_completed: boolean
@@ -392,6 +426,78 @@ export interface AdjacentTracksResponse {
 
 export interface TrackQueueResponse {
   next_tracks: Track[]
+}
+
+export interface EqSettingsResponse {
+  preset: string | null
+  bands: number[]
+}
+
+export interface PrefetchPolicyResponse {
+  enabled: boolean
+  algorithm_version: string
+  hot_pool_size: number
+  warm_segments_per_track: number
+  initial_bytes_per_track: number
+  max_storage_bytes: number
+  in_memory_ttl_seconds: number
+  persistent_ttl_seconds: number
+  eviction_policy: string
+  concurrent_prefetch_limit: number
+  skip_third_party_audio_cache: boolean
+  lookahead_by_context: Record<string, number>
+}
+
+export interface AcceptedResponse {
+  accepted: number
+}
+
+export interface ConversationRefResponse {
+  conversation: { id: number }
+}
+
+export interface SearchUserItem {
+  id: number
+  username: string | null
+  first_name: string
+  last_name: string | null
+  display_name: string | null
+  avatar_key: string | null
+}
+
+export interface ChatActivityResponse {
+  activities: {
+    activity: string
+    user_id: number
+    ts: number
+  }[]
+}
+
+export interface BlockListResponse {
+  blocked_user_ids: number[]
+}
+
+export interface UnreadCountResponse {
+  count: number
+}
+
+export interface SimilarTracksResponse {
+  seed_track_id: number
+  tracks: Track[]
+}
+
+export interface DailyMixResponse {
+  tracks: Track[]
+  generated_at: string
+}
+
+export interface ArtistItemsResponse {
+  items: ArtistInfo[]
+  total: number
+}
+
+export interface ResolveArtistResponse {
+  id: number
 }
 
 export interface LinkedPlaylistItem {

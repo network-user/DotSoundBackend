@@ -1,4 +1,5 @@
 import json
+import hashlib
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -70,6 +71,8 @@ _WEEKLY_SIZE = 50
 _GLOBAL_TOP_SIZE = 20
 _UNSEEN_POOL_LIMIT = 100
 _RADIO_CACHE_TTL = 30 * 60
+_RADIO_SKIP_GUARD_SECONDS = 1
+_RADIO_LAST_QUEUE_TTL = 20
 
 
 def _midnight_ttl() -> int:
@@ -1220,11 +1223,41 @@ class RecommendationService:
         )
 
         redis = get_redis_client()
-        cache_key = (
-            f"rec:radio:{user_id}:{seed_track_id}"
-            if user_id
-            else None
+        exclude_normalized = sorted(
+            {
+                int(tid)
+                for tid in (exclude_ids or [])
+                if int(tid) > 0 and int(tid) != seed_track_id
+            }
         )
+        exclude_hash = hashlib.blake2b(
+            ",".join(str(tid) for tid in exclude_normalized).encode(),
+            digest_size=8,
+        ).hexdigest()
+        cache_key = None
+        last_key = None
+        if user_id:
+            cache_key = (
+                f"rec:radio:{user_id}:{seed_track_id}:{exclude_hash}"
+            )
+            last_key = (
+                f"rec:radio:last:{user_id}:{seed_track_id}"
+            )
+            guard_key = (
+                f"rec:radio:guard:{user_id}:{seed_track_id}"
+            )
+            can_fetch = await redis.set(
+                guard_key,
+                "1",
+                ex=_RADIO_SKIP_GUARD_SECONDS,
+                nx=True,
+            )
+            if not can_fetch and last_key:
+                guarded = await redis.get(last_key)
+                if guarded:
+                    return await self._rec_repo.get_tracks_by_ids(
+                        json.loads(guarded)
+                    )
         if cache_key:
             cached = await redis.get(cache_key)
             if cached:
@@ -1272,7 +1305,7 @@ class RecommendationService:
                 user_locale=user_locale,
             )
 
-        exclude_set = set(exclude_ids or [])
+        exclude_set = set(exclude_normalized)
         all_tracks = [seed] + [
             t for t in candidates
             if t.id not in exclude_set
@@ -1333,6 +1366,12 @@ class RecommendationService:
                 _RADIO_CACHE_TTL,
                 json.dumps([t.id for t in result]),
             )
+            if last_key:
+                await redis.setex(
+                    last_key,
+                    _RADIO_LAST_QUEUE_TTL,
+                    json.dumps([t.id for t in result]),
+                )
         if user_id and result:
             await self._telemetry.record_impressions(
                 user_id=user_id,
