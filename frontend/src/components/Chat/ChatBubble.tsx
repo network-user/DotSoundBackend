@@ -12,6 +12,8 @@ import { api } from '@/lib/api'
 import { useBrandLabel } from '@/lib/brand'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
+import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
+import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import {
   m,
   SPRING_BOUNCY,
@@ -86,6 +88,8 @@ export function ChatBubble({
   const [sharedPlaylistLoading, setSharedPlaylistLoading] =
     useState(false)
   const { playTrack } = usePlayerActions()
+  const desktopFineNav = useDesktopFinePointer()
+  const goArtistByName = useNavigateToArtistByName()
 
   const photoAtt = message.attachments?.find(
     (a) => a.file_type === 'photo',
@@ -374,7 +378,54 @@ export function ChatBubble({
                   <span className="bubble-track-title">
                     {sharedTrack.title}
                   </span>
-                  <span className="bubble-track-artist">
+                  <span
+                    className={
+                      desktopFineNav &&
+                      sharedTrack.artist
+                        ? 'bubble-track-artist bubble-track-artist--nav'
+                        : 'bubble-track-artist'
+                    }
+                    role={
+                      desktopFineNav &&
+                      sharedTrack.artist
+                        ? 'link'
+                        : undefined
+                    }
+                    tabIndex={
+                      desktopFineNav &&
+                      sharedTrack.artist
+                        ? 0
+                        : undefined
+                    }
+                    onClick={
+                      desktopFineNav &&
+                      sharedTrack.artist
+                        ? (e) => {
+                            e.stopPropagation()
+                            void goArtistByName(
+                              sharedTrack.artist,
+                            )
+                          }
+                        : undefined
+                    }
+                    onKeyDown={
+                      desktopFineNav &&
+                      sharedTrack.artist
+                        ? (e) => {
+                            if (
+                              e.key === 'Enter' ||
+                              e.key === ' '
+                            ) {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              void goArtistByName(
+                                sharedTrack.artist,
+                              )
+                            }
+                          }
+                        : undefined
+                    }
+                  >
                     {sharedTrack.artist ||
                       t('trackCard.unknownArtist')}
                   </span>

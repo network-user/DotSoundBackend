@@ -1,4 +1,5 @@
 import mimetypes
+from datetime import datetime
 
 import structlog
 from fastapi import (
@@ -49,8 +50,11 @@ from app.services.signal_service import (
     SignalService,
 )
 from app.services.stats_service import StatsService
+from app.services.track_response_build import (
+    dedupe_and_build_track_list,
+    merge_recent_listen_meta_into_responses,
+)
 from app.services.track_service import TrackService
-from app.services.track_response_build import dedupe_and_build_track_list
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -336,13 +340,19 @@ async def get_my_listen_history(
     events = await signal_svc.get_recent_listens(
         current_user.id, limit=500
     )
+    meta_by_track_id: dict[int, tuple[datetime, int]] = {}
     track_ids: list[int] = []
-    seen: set[int] = set()
+    seen_ids: set[int] = set()
     for ev in events:
-        if ev.track_id in seen:
+        tid = ev.track_id
+        if tid in seen_ids:
             continue
-        seen.add(ev.track_id)
-        track_ids.append(ev.track_id)
+        seen_ids.add(tid)
+        meta_by_track_id[tid] = (
+            ev.created_at,
+            int(ev.duration_listened_seconds or 0),
+        )
+        track_ids.append(tid)
         if len(track_ids) >= limit:
             break
     if not track_ids:
@@ -358,8 +368,15 @@ async def get_my_listen_history(
     by_id = {t.id: t for t in result.scalars().all()}
     rows = [by_id[tid] for tid in track_ids if tid in by_id]
     items = await dedupe_and_build_track_list(session, rows)
+    items = merge_recent_listen_meta_into_responses(
+        items,
+        meta_by_track_id,
+    )
     return TrackListResponse(
-        items=items, total=len(items), page=1, size=len(items)
+        items=items,
+        total=len(items),
+        page=1,
+        size=len(items),
     )
 
 

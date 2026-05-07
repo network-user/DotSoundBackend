@@ -295,6 +295,10 @@ body.monochrome #app {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.track-card-artist--nav:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
 .track-card-meta {
   font-size: 11px;
   color: var(--text-muted);
@@ -1319,6 +1323,10 @@ body.monochrome #app {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.pb-artist--nav:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
 }
 
 #pb-volume-wrap {
@@ -2403,6 +2411,13 @@ body.ds-perf-lite .tcs-video-pulse {
   font-size: 15px;
   color: var(--text-secondary);
   margin-top: 4px;
+}
+
+.tcs-last-listen {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  line-height: 1.35;
 }
 
 /* Author row */

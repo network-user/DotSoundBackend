@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -68,3 +69,35 @@ async def build_track_responses(
         *[build_track_response(session, t) for t in tracks],
     )
     return list(results)
+
+
+def merge_recent_listen_meta_into_responses(
+    items: list[TrackResponse],
+    meta_by_track_id: dict[int, tuple[datetime, int]],
+) -> list[TrackResponse]:
+    if not meta_by_track_id:
+        return items
+    out: list[TrackResponse] = []
+    for item in items:
+        candidate_ids = {item.id}
+        for variant in item.playback_variants:
+            candidate_ids.add(variant.track_id)
+        best: tuple[datetime, int] | None = None
+        for tid in candidate_ids:
+            row = meta_by_track_id.get(tid)
+            if row is None:
+                continue
+            if best is None or row[0] > best[0]:
+                best = row
+        if best is None:
+            out.append(item)
+            continue
+        out.append(
+            item.model_copy(
+                update={
+                    "last_listen_at": best[0],
+                    "last_listen_seconds": max(0, int(best[1])),
+                }
+            )
+        )
+    return out

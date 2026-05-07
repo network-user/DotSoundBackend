@@ -12,6 +12,8 @@ import { SwipeRow } from '@/components/ui/SwipeRow'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
+import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 
 export type QueuePanelContentProps = {
   inline?: boolean
@@ -252,6 +254,8 @@ function QueueRow({
   grabbable?: boolean
 }) {
   const { t } = useTranslation()
+  const desktopFineNav = useDesktopFinePointer()
+  const goArtistByName = useNavigateToArtistByName()
   const cover = track.cover_key
     ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`
     : null
@@ -285,7 +289,41 @@ function QueueRow({
           <span className="queue-row-title">
             {track.title}
           </span>
-          <span className="queue-row-artist">
+          <span
+            className={
+              desktopFineNav && track.artist
+                ? 'queue-row-artist queue-row-artist--nav'
+                : 'queue-row-artist'
+            }
+            role={
+              desktopFineNav && track.artist ? 'link' : undefined
+            }
+            tabIndex={
+              desktopFineNav && track.artist ? 0 : undefined
+            }
+            onClick={
+              desktopFineNav && track.artist
+                ? (e) => {
+                    e.stopPropagation()
+                    void goArtistByName(track.artist)
+                  }
+                : undefined
+            }
+            onKeyDown={
+              desktopFineNav && track.artist
+                ? (e) => {
+                    if (
+                      e.key === 'Enter' ||
+                      e.key === ' '
+                    ) {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      void goArtistByName(track.artist)
+                    }
+                  }
+                : undefined
+            }
+          >
             {track.artist || '—'}
           </span>
         </span>

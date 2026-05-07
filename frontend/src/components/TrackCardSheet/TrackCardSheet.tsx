@@ -89,6 +89,16 @@ function fmt(sec: number) {
   return `${m}:${s}`
 }
 
+function fmtListenWhen(iso: string) {
+  const d = new Date(iso)
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(d)
+}
+
 function coverUrl(k: string, v: number) {
   return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(k)}&v=${v}`
 }
@@ -1251,6 +1261,25 @@ export function TrackCardSheet({
               'external_reference' &&
               t('trackSheet.catRef')}
           </p>
+          {track.last_listen_at && (
+            <p className="tcs-last-listen">
+              {typeof track.last_listen_seconds === 'number' &&
+              track.last_listen_seconds >= 1
+                ? t('trackSheet.lastListenWhenAndDur', {
+                    when: fmtListenWhen(
+                      track.last_listen_at,
+                    ),
+                    duration: fmt(
+                      track.last_listen_seconds,
+                    ),
+                  })
+                : t('trackSheet.lastListenWhenOnly', {
+                    when: fmtListenWhen(
+                      track.last_listen_at,
+                    ),
+                  })}
+            </p>
+          )}
           {(relatedAlbumInfo || track.album_id) && (
             <div className="tcs-share-related-row">
               <span className="tcs-share-related-title">

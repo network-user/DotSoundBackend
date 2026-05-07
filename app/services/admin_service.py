@@ -18,6 +18,7 @@ from app.models.complaint import Complaint
 from app.models.track import Track
 from app.models.user import User
 from app.repositories.admin import AdminRepository
+from app.schemas.admin_playback import AdminPlaybackVerifyResponse
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -84,6 +85,90 @@ class AdminService:
 
         svc = TrackPlaybackHealthService(self._session)
         return await svc.clear_auto_suppression(track_id)
+
+    async def verify_track_playback(
+        self,
+        track_id: int,
+    ) -> AdminPlaybackVerifyResponse | None:
+        from fastapi import HTTPException
+
+        from app.api.v1.tracks.playback import (
+            _resolve_third_party_stream_with_recovery,
+        )
+
+        track = await self._repo.get_track(track_id)
+        if track is None:
+            return None
+        if not track.is_active:
+            return AdminPlaybackVerifyResponse(
+                ok=False,
+                detail="Track is inactive",
+            )
+        if track.access_mode == "third_party_stream":
+            try:
+                eff, _url, protocol = (
+                    await _resolve_third_party_stream_with_recovery(
+                        track,
+                        self._session,
+                        use_cache=False,
+                    )
+                )
+                eid = int(getattr(eff, "id", track_id))
+                return AdminPlaybackVerifyResponse(
+                    ok=True,
+                    detail="Third-party stream resolves",
+                    effective_track_id=eid,
+                    stream_protocol=protocol,
+                )
+            except HTTPException as exc:
+                det = exc.detail
+                text = det if isinstance(det, str) else str(det)
+                return AdminPlaybackVerifyResponse(
+                    ok=False,
+                    detail=text,
+                    http_status=exc.status_code,
+                )
+
+        if track.file_key:
+            return AdminPlaybackVerifyResponse(
+                ok=True,
+                detail="Internal track: file_key present",
+                stream_protocol="direct",
+            )
+
+        return AdminPlaybackVerifyResponse(
+            ok=False,
+            detail="Internal track has no file_key",
+        )
+
+    async def clear_track_playback_diagnostics(
+        self,
+        track_id: int,
+    ) -> Track | None:
+        track = await self._repo.get_track(track_id)
+        if track is None:
+            return None
+        track.playback_last_failure_at = None
+        track.playback_last_http_status = None
+        track.playback_last_failure_source = None
+        track.playback_recovery_failed_at = None
+        await self._session.flush()
+        return track
+
+    async def full_restore_track_playback_health(
+        self,
+        track_id: int,
+    ) -> Track | None:
+        track = await self._repo.get_track(track_id)
+        if track is None:
+            return None
+        track.playback_suppressed_until = None
+        track.playback_last_failure_at = None
+        track.playback_last_http_status = None
+        track.playback_last_failure_source = None
+        track.playback_recovery_failed_at = None
+        await self._session.flush()
+        return track
 
     async def list_tracks_for_artist(
         self,

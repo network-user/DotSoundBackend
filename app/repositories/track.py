@@ -381,6 +381,13 @@ class TrackRepository(BaseRepository[Track]):
             "canonical_source_url",
         }
     )
+    _ADMIN_NULLABLE_URL_FIELDS = frozenset(
+        {
+            "sc_url",
+            "source_url",
+            "canonical_source_url",
+        }
+    )
 
     async def update_track(
         self,
@@ -414,11 +421,15 @@ class TrackRepository(BaseRepository[Track]):
         track_id: int,
         **fields: object,
     ) -> Track | None:
-        values = {
-            k: v
-            for k, v in fields.items()
-            if k in self._ADMIN_PATCHABLE and v is not None
-        }
+        values: dict[str, object] = {}
+        for k, raw in fields.items():
+            if k not in self._ADMIN_PATCHABLE:
+                continue
+            if raw is None:
+                if k in self._ADMIN_NULLABLE_URL_FIELDS:
+                    values[k] = None
+                continue
+            values[k] = raw
         if not values:
             return None
         result = await self._session.execute(

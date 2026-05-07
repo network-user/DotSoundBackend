@@ -22,6 +22,8 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { SharedCover } from '@/components/ui/SharedCover'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import type { Track } from '@/types/api'
+import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
+import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 
 interface Props {
   track: Track
@@ -55,6 +57,8 @@ export function TrackCard({
   const { track: currentTrack } = usePlayerMeta()
   const { isPlaying } = usePlayerState()
   const { playTrack, addToQueue } = usePlayerActions()
+  const desktopFine = useDesktopFinePointer()
+  const goArtistByName = useNavigateToArtistByName()
   const [confirmingDelete, setConfirmingDelete] =
     useState(false)
   const confirmTimerRef = useRef<ReturnType<
@@ -294,7 +298,22 @@ export function TrackCard({
                 </span>
               )}
             </div>
-            <p className="track-card-artist" dir="auto">
+            <p
+              className={
+                desktopFine && track.artist
+                  ? 'track-card-artist track-card-artist--nav'
+                  : 'track-card-artist'
+              }
+              dir="auto"
+              onClick={
+                desktopFine && track.artist
+                  ? (e) => {
+                      e.stopPropagation()
+                      void goArtistByName(track.artist)
+                    }
+                  : undefined
+              }
+            >
               {track.artist ?? t('trackCard.unknownArtist')}
             </p>
             <p className="track-card-meta">

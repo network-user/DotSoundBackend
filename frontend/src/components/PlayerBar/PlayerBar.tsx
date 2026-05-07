@@ -28,6 +28,8 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import { SharedCover } from '@/components/ui/SharedCover'
 import { useMatchMedia } from '@/hooks/useMatchMedia'
+import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
+import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 
 const PLATFORM_LABELS: Record<string, string> = {
   youtube: 'YouTube',
@@ -83,6 +85,8 @@ export function PlayerBar() {
   const compactBarControls = useMatchMedia(
     '(max-width: 560px)',
   )
+  const desktopFineNav = useDesktopFinePointer()
+  const goArtistByName = useNavigateToArtistByName()
   const [likeBurst, setLikeBurst] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [volumePinned, setVolumePinned] = useState(false)
@@ -312,14 +316,26 @@ export function PlayerBar() {
 
         <div
           id="pb-info"
-          className="pb-clickable"
-          onClick={handleOpenCard}
+          className={
+            desktopFineNav ? undefined : 'pb-clickable'
+          }
+          onClick={
+            desktopFineNav ? undefined : handleOpenCard
+          }
         >
           <div
             key={track.id}
             className="pb-info-meta"
           >
             <div
+              className={
+                desktopFineNav ? 'pb-clickable' : undefined
+              }
+              onClick={
+                desktopFineNav
+                  ? handleOpenCard
+                  : undefined
+              }
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -351,8 +367,25 @@ export function PlayerBar() {
               )}
             </div>
             <p
-              className="pb-artist hint"
+              className={
+                desktopFineNav && track.artist
+                  ? 'pb-artist hint pb-artist--nav'
+                  : 'pb-artist hint'
+              }
               dir="auto"
+              style={
+                desktopFineNav && track.artist
+                  ? { cursor: 'pointer' }
+                  : undefined
+              }
+              onClick={
+                desktopFineNav && track.artist
+                  ? (e) => {
+                      e.stopPropagation()
+                      void goArtistByName(track.artist)
+                    }
+                  : undefined
+              }
             >
               {track.artist ?? '—'}
             </p>
