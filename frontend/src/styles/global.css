@@ -4966,6 +4966,37 @@ html.le-lyrics-sync-open body {
   margin: 16px auto 0;
   padding-top: 8px;
 }
+.onboarding-import-footer-btns--stacked {
+  flex-direction: column;
+  margin-top: 20px;
+}
+.onboarding-import-btn-full {
+  width: 100%;
+  max-width: 100%;
+}
+.onboarding-import-action-spaced {
+  margin-top: 8px;
+}
+.onboarding-import-skip-flat {
+  border: 0;
+}
+.onboarding-import-cancel-push {
+  margin-left: auto;
+}
+.onboarding-import-select-cta-wrap {
+  padding: 8px 0 0;
+}
+.onboarding-import-select-cta {
+  width: 100%;
+}
+.onboarding-import-confirm-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.onboarding-import-confirm-btn {
+  flex: 1;
+}
 
 /* ?? Home Sections ???????????????????????????? */
 
