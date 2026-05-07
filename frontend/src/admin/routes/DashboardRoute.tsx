@@ -418,14 +418,16 @@ export function DashboardRoute() {
               />
               <div className="admin-metric-slider__ticks">
                 {metricOptions.map((opt, idx) => (
-                  <button
+                  <MotionPress
                     key={opt.value}
                     type="button"
+                    variant="icon"
+                    haptic="selection"
                     className={`admin-metric-slider__tick${
                       idx === metricIndex ? ' is-active' : ''
                     }`}
                     onClick={() => setStatsMetric(opt.value)}
-                    aria-label={opt.label}
+                    ariaLabel={opt.label}
                   />
                 ))}
               </div>

@@ -1177,3 +1177,8 @@ ugc owner ok), `test_lyrics_global_orchestrator::test_process_one_skips_when_lyr
   `Settings/OAuthImportAccounts`. Inline-стили `style={{padding,gap,flex,...}}` вынесены в новые классы
   `rf-import-*`, `settings-danger-zone__*`, `settings-badge--clickable` (`redesign-artist.css`, `global.css`).
   TS clean (`npx tsc --noEmit`), `npm run build` зелёный, hygiene + admin-bundle проверки прошли.
+
+- [x] **Micro-polish pass (batch 4)** — 2026-05-07: `OnboardingImportStep` полностью переведён с plain `<button>`
+  на `MotionPress` (карточки источников, CTA в `empty/done/select/queued/importing`, оба confirm-модала), inline
+  стили заменены классами `onboarding-import-*` в `global.css`; в `admin/routes/DashboardRoute` tick-кнопки
+  metric slider также переведены на `MotionPress` (`icon` + `selection`). Проверки: `npx tsc --noEmit`, `npm run build`.
