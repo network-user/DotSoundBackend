@@ -75,7 +75,7 @@ export function DailyMixView() {
 
   const formatShareChatTitle = useCallback((item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {
-      return 'Избранное'
+      return t('redesign.library.shareSaved')
     }
     if (item.conversation.title?.trim()) {
       return item.conversation.title.trim()
@@ -86,8 +86,10 @@ export function DailyMixView() {
       .join(' ')
     if (name && name.trim()) return name.trim()
     if (peer?.username) return `@${peer.username}`
-    return `Чат #${item.conversation.id}`
-  }, [])
+    return t('redesign.library.shareChatNumber', {
+      id: item.conversation.id,
+    })
+  }, [t])
 
   const openShareModal = useCallback(async () => {
     setShareOpen(true)
@@ -97,11 +99,11 @@ export function DailyMixView() {
       const chats = await api.listChats()
       setShareChats(chats)
     } catch {
-      setShareError('Не удалось загрузить чаты')
+      setShareError(t('redesign.library.shareLoadFail'))
     } finally {
       setShareLoading(false)
     }
-  }, [])
+  }, [t])
 
   const handleShareToChat = useCallback(async (conversationId: number) => {
     setShareSendingConvId(conversationId)
@@ -111,7 +113,7 @@ export function DailyMixView() {
       setShareOpen(false)
       showIsland({ kind: 'toast', title: t('redesign.library.shareLinkSent'), durationMs: 2200 })
     } catch {
-      setShareError('Не удалось отправить')
+      setShareError(t('redesign.library.shareLinkSendFail'))
     } finally {
       setShareSendingConvId(null)
     }
@@ -122,7 +124,7 @@ export function DailyMixView() {
       await navigator.clipboard.writeText(shareUrl)
       showIsland({ kind: 'toast', title: t('redesign.library.shareLinkCopied'), durationMs: 2000 })
     } catch {
-      setShareError('Не удалось скопировать ссылку')
+      setShareError(t('redesign.library.shareLinkCopyFail'))
     }
   }, [shareUrl, t])
 
@@ -166,7 +168,7 @@ export function DailyMixView() {
           onClick={() => {
             void openShareModal()
           }}
-          aria-label="Поделиться"
+          aria-label={t('redesign.home.mixShareAria')}
         >
           <Icon name="share" size={18} />
         </button>
@@ -251,7 +253,9 @@ export function DailyMixView() {
           <div className="share-modal scale-in">
             <div className="share-modal-header">
               <div className="share-modal-title-wrap">
-                <h3 className="share-modal-title">Поделиться плейлистом</h3>
+                <h3 className="share-modal-title">
+                  {t('redesign.library.shareTitleMix')}
+                </h3>
                 <p className="share-modal-subtitle">{t('dailyMix.title')}</p>
               </div>
               <button
@@ -260,7 +264,7 @@ export function DailyMixView() {
                 onClick={() => {
                   void handleCopyLink()
                 }}
-                aria-label="Скопировать ссылку"
+                aria-label={t('redesign.library.shareCopy')}
               >
                 <Icon name="copy" size={16} />
               </button>
@@ -268,7 +272,7 @@ export function DailyMixView() {
                 type="button"
                 className="icon-btn"
                 onClick={() => setShareOpen(false)}
-                aria-label="Закрыть"
+                aria-label={t('redesign.library.shareClose')}
               >
                 <Icon name="x" size={18} />
               </button>
@@ -310,7 +314,9 @@ export function DailyMixView() {
                         </span>
                       </span>
                       <span className="share-chat-action">
-                        {sending ? 'Отправка...' : 'Отправить'}
+                        {sending
+                          ? t('redesign.library.shareSending')
+                          : t('redesign.library.shareSend')}
                       </span>
                     </button>
                   )

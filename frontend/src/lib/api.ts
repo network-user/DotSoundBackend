@@ -60,7 +60,11 @@ import type {
   PlaylistInviteOut,
   AlbumRecord,
   AlbumWithTracksRecord,
+  AdjacentTracksResponse,
   ColistenRoomState,
+  HomePageResponse,
+  TrackQueueResponse,
+  UserListeningStatsResponse,
   ArtistListPayload,
 } from '@/types/api'
 
@@ -374,13 +378,7 @@ export const api = {
 
   getMyListeningStats(
     periodDays: number = 30,
-  ): Promise<{
-    period_days: number
-    minutes_listened: number
-    tracks_listened: number
-    top_artists: { name: string; minutes: number; plays: number }[]
-    top_genres: { name: string; minutes: number; plays: number }[]
-  }> {
+  ): Promise<UserListeningStatsResponse> {
     return request(
       `/api/v1/users/me/listening-stats?period_days=${periodDays}`,
     )
@@ -396,10 +394,7 @@ export const api = {
 
   getAdjacentTracks(
     trackId: number,
-  ): Promise<{
-    prev_id: number | null
-    next_id: number | null
-  }> {
+  ): Promise<AdjacentTracksResponse> {
     return request(
       `/api/v1/tracks/${trackId}/adjacent`,
     )
@@ -408,7 +403,7 @@ export const api = {
   getTrackQueue(
     trackId: number,
     count = 3,
-  ): Promise<{ next_tracks: Track[] }> {
+  ): Promise<TrackQueueResponse> {
     return request(
       `/api/v1/tracks/${trackId}/queue?count=${count}`,
     )
@@ -1869,10 +1864,7 @@ export const api = {
 
   // ── Recommendations ─────────────────────────────
 
-  getHomeRecommendations(): Promise<{
-    sections: { title: string; section_type: string; tracks: Track[] }[]
-    maturity: string
-  }> {
+  getHomeRecommendations(): Promise<HomePageResponse> {
     return request('/api/v1/recommendations/home')
   },
 

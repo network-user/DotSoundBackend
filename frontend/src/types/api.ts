@@ -230,6 +230,20 @@ export interface UserStatsResponse {
   top_tracks: Track[]
 }
 
+export interface ListeningStatsTopItem {
+  name: string
+  minutes: number
+  plays: number
+}
+
+export interface UserListeningStatsResponse {
+  period_days: number
+  minutes_listened: number
+  tracks_listened: number
+  top_artists: ListeningStatsTopItem[]
+  top_genres: ListeningStatsTopItem[]
+}
+
 export interface OnboardingStatus {
   onboarding_completed: boolean
   calibration_completed: boolean
@@ -369,6 +383,15 @@ export interface FollowListUser {
 export interface FollowListResponse {
   items: FollowListUser[]
   total: number
+}
+
+export interface AdjacentTracksResponse {
+  prev_id: number | null
+  next_id: number | null
+}
+
+export interface TrackQueueResponse {
+  next_tracks: Track[]
 }
 
 export interface LinkedPlaylistItem {
