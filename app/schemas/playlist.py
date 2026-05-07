@@ -22,6 +22,11 @@ class PlaylistResponse(BaseModel):
     name: str
     owner_id: int
     is_public: bool
+    playlist_type: str = "user"
+    is_featured: bool = False
+    source_url: str | None = None
+    cover_key: str | None = None
+    description: str | None = None
     created_at: datetime
 
 
@@ -32,6 +37,11 @@ class PlaylistWithTracksResponse(BaseModel):
     name: str
     owner_id: int
     is_public: bool
+    playlist_type: str = "user"
+    is_featured: bool = False
+    source_url: str | None = None
+    cover_key: str | None = None
+    description: str | None = None
     created_at: datetime
     tracks: list[TrackResponse] = []
 

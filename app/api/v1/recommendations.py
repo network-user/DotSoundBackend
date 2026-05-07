@@ -6,17 +6,21 @@ from dotsound_private_core.services.playcount_policy import (
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.dependencies import get_current_user, get_db
+from app.dependencies import get_current_user, get_db, get_optional_user
 from app.models.user import User
+from app.repositories.artist import ArtistRepository
 from app.repositories.recommendation import (
     RecommendationRepository,
 )
 from app.repositories.signal import (
     ListenEventRepository,
 )
+from app.schemas.artist import ArtistResponse
 from app.schemas.recommendation import (
     DailyMixResponse,
     DailyPlaylistResponse,
+    DiscoverGenreCard,
+    DiscoverResponse,
     GenreMixItemResponse,
     GenreMixesResponse,
     GenreMixOverrideRequest,
@@ -380,3 +384,80 @@ async def refresh_daily_playlist(
         )
     svc = RecommendationService(db)
     await svc.refresh_daily_playlist(user.id)
+
+
+@router.get(
+    "/discover",
+    response_model=DiscoverResponse,
+    summary="Personalized discover page for search empty state",
+)
+async def get_discover(
+    user: User | None = Depends(get_optional_user),
+    db: AsyncSession = Depends(get_db),
+    trending_limit: int = Query(default=10, ge=1, le=20),
+    artist_limit: int = Query(default=8, ge=1, le=20),
+) -> DiscoverResponse:
+    from sqlalchemy import desc, func, select  # noqa: PLC0415
+
+    from app.models.track import Track as TrackModel  # noqa: PLC0415
+
+    rec_repo = RecommendationRepository(db)
+    artist_repo = ArtistRepository(db)
+
+    trending_raw = await rec_repo.get_popular_tracks(limit=trending_limit)
+    trending_out = await dedupe_and_build_track_list(db, trending_raw)
+
+    artists_raw = await artist_repo.list_popular(limit=artist_limit)
+    artists_out = [
+        ArtistResponse.model_validate(a) for a in artists_raw
+    ]
+
+    genre_rows = await db.execute(
+        select(
+            TrackModel.genre,
+            func.count(TrackModel.id).label("cnt"),
+        )
+        .where(
+            TrackModel.genre.isnot(None),
+            TrackModel.genre != "",
+            TrackModel.is_active.is_(True),
+            TrackModel.is_public.is_(True),
+        )
+        .group_by(TrackModel.genre)
+        .order_by(desc("cnt"))
+        .limit(12)
+    )
+    genre_cards = [
+        DiscoverGenreCard(
+            genre=str(row[0]),
+            title=str(row[0]),
+            track_count=int(row[1]),
+        )
+        for row in genre_rows.all()
+    ]
+
+    recent_genres: list[str] = []
+    if user:
+        listen_repo = ListenEventRepository(db)
+        recent_events = await listen_repo.get_recent(user.id, limit=40)
+        if recent_events:
+            recent_track_ids = list(
+                dict.fromkeys(e.track_id for e in recent_events)
+            )[:30]
+            recent_tracks_raw = await rec_repo.get_tracks_by_ids(
+                recent_track_ids
+            )
+            seen: set[str] = set()
+            for t in recent_tracks_raw:
+                if t.genre and t.genre not in seen:
+                    seen.add(t.genre)
+                    recent_genres.append(t.genre)
+                    if len(recent_genres) >= 5:
+                        break
+
+    return DiscoverResponse(
+        trending_tracks=trending_out,
+        suggested_artists=artists_out,
+        genre_cards=genre_cards,
+        recent_genres=recent_genres,
+    )

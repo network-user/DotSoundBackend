@@ -159,6 +159,7 @@ const PATHS: Record<string, string> = {
     'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 7a4 4 0 100 8 4 4 0 000-8z M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75',
   'users-listeners':
     'M16 20v-1a4 4 0 00-4-4H6a4 4 0 00-4 4v1 M9 11a4 4 0 100-8 4 4 0 000 8z M22 20v-1a4 4 0 00-3-3.87 M15 3.13a4 4 0 010 7.75',
+<<<<<<< HEAD
   bookmark: 'M6 3h12v18l-6-4-6 4V3z',
   'bookmark-fill': 'M6 3h12v18l-6-4-6 4V3z',
   'play-fill': 'M7 4.5v15l13-7.5L7 4.5z',
@@ -205,6 +206,14 @@ const PATHS: Record<string, string> = {
     'M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8 M16 6l-4-4-4 4 M12 2v14',
   'airplay-like':
     'M5 17h-1a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-1 M8 22l4-5 4 5z',
+=======
+  fire:
+    'M12 2c0 0-4.5 4.5-4.5 9a4.5 4.5 0 009 0C16.5 6.5 12 2 12 2zm0 0c0 0 1.5 2 1.5 4a1.5 1.5 0 01-3 0C10.5 4 12 2 12 2z',
+  'music-note':
+    'M9 18V5l12-2v13 M9 18a3 3 0 11-6 0 3 3 0 016 0zm12-2a3 3 0 11-6 0 3 3 0 016 0z',
+  import:
+    'M12 3v9 M7 8l5 5 5-5 M5 21h14 M19 15v4H5v-4',
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 }
 
 const FILLED_ICONS = new Set([

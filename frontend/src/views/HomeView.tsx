@@ -8,12 +8,16 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
+<<<<<<< HEAD
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { HorizontalSnap } from '@/components/ui/HorizontalSnap'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
+=======
+import { usePullToRefresh } from '@/hooks/usePullToRefresh'
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
 import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { useBrandLabel } from '@/lib/brand'
@@ -96,7 +100,326 @@ function HomeTrackTile({ track, onPlay }: HomeTrackTileProps) {
   )
 }
 
+<<<<<<< HEAD
 interface HomeGenreMixCardProps {
+=======
+interface SectionProps {
+  title: string
+  onMore?: () => void
+  tracks: Track[]
+  onPlay: (t: Track) => void
+}
+
+interface FeaturedCardProps {
+  track: Track
+  label: string
+  reason?: string | null
+  heroImageKey?: string | null
+  brandLabel: string
+  onPlay: (t: Track) => void
+  onStartRadio?: (t: Track) => void
+  showRadioCta?: boolean
+}
+
+function FeaturedCard({
+  track,
+  label,
+  reason,
+  heroImageKey,
+  brandLabel,
+  onPlay,
+  onStartRadio,
+  showRadioCta,
+}: FeaturedCardProps) {
+  const src = coverUrl(heroImageKey || track.cover_key)
+  const handleMainKeyDown = (
+    e: KeyboardEvent<HTMLDivElement>,
+  ) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      onPlay(track)
+    }
+  }
+  return (
+    <div className="home-featured-card">
+      <div
+        role="button"
+        tabIndex={0}
+        className="home-featured__main"
+        onClick={() => onPlay(track)}
+        onKeyDown={handleMainKeyDown}
+      >
+        <div className="home-featured__copy">
+          <span className="home-featured__eyebrow">{label}</span>
+          <button
+            type="button"
+            className="home-featured__play"
+            onClick={(e) => {
+              e.stopPropagation()
+              onPlay(track)
+            }}
+            aria-label={`Слушать ${track.title || 'трек'}`}
+          >
+            <Icon name="play" size={18} />
+            <span>Play</span>
+          </button>
+          <strong className="home-featured__title">
+            {track.title || 'Без названия'}
+          </strong>
+          <span className="home-featured__artist">
+            {reason || track.artist || brandLabel}
+          </span>
+          {showRadioCta && onStartRadio && (
+            <button
+              type="button"
+              className="home-featured__radio"
+              onClick={(e) => {
+                e.stopPropagation()
+                onStartRadio(track)
+              }}
+              aria-label="Запустить бесконечную волну на основе трека"
+            >
+              <Icon name="radio" size={14} />
+              <span>Бесконечная волна</span>
+            </button>
+          )}
+        </div>
+        <div className="home-featured__cover">
+          {src ? (
+            <img
+              src={src}
+              alt=""
+              width={132}
+              height={132}
+              decoding="async"
+            />
+          ) : (
+            <Icon name="music" size={36} />
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CarouselDots({
+  count,
+  containerRef,
+}: {
+  count: number
+  containerRef: RefObject<HTMLElement>
+}) {
+  const dotCount = Math.min(4, Math.ceil(count / 2))
+  const [active, setActive] = useState(0)
+  const rafRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const update = () => {
+      const maxScroll = Math.max(
+        0,
+        el.scrollWidth - el.clientWidth,
+      )
+      if (maxScroll <= 0 || dotCount <= 1) {
+        setActive(0)
+        return
+      }
+      const ratio = el.scrollLeft / maxScroll
+      const idx = Math.round(ratio * (dotCount - 1))
+      setActive(Math.max(0, Math.min(dotCount - 1, idx)))
+    }
+
+    const onScroll = () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+      rafRef.current = requestAnimationFrame(update)
+    }
+
+    update()
+    el.addEventListener('scroll', onScroll, {
+      passive: true,
+    })
+    window.addEventListener('resize', update)
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+      el.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', update)
+    }
+  }, [containerRef, dotCount])
+
+  if (dotCount < 2) return null
+
+  const scrollToDot = (idx: number) => {
+    const el = containerRef.current
+    if (!el) return
+    const maxScroll = Math.max(
+      0,
+      el.scrollWidth - el.clientWidth,
+    )
+    if (maxScroll <= 0) return
+    const left =
+      dotCount === 1
+        ? 0
+        : (maxScroll * idx) / (dotCount - 1)
+    el.scrollTo({ left, behavior: 'smooth' })
+  }
+
+  return (
+    <div className="home-carousel-dots">
+      {Array.from({ length: dotCount }).map((_, i) => (
+        <button
+          key={i}
+          type="button"
+          className={`home-carousel-dot${i === active ? ' active' : ''}`}
+          onClick={() => scrollToDot(i)}
+          aria-label={`Slide ${i + 1}`}
+          aria-current={i === active ? 'true' : undefined}
+        />
+      ))}
+    </div>
+  )
+}
+
+function CarouselArrows({
+  containerRef,
+}: {
+  containerRef: RefObject<HTMLElement>
+}) {
+  const [canLeft, setCanLeft] = useState(false)
+  const [canRight, setCanRight] = useState(false)
+  const rafRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const update = () => {
+      const maxScroll = Math.max(
+        0,
+        el.scrollWidth - el.clientWidth,
+      )
+      if (maxScroll <= 1) {
+        setCanLeft(false)
+        setCanRight(false)
+        return
+      }
+      setCanLeft(el.scrollLeft > 2)
+      setCanRight(el.scrollLeft < maxScroll - 2)
+    }
+
+    const onScroll = () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+      rafRef.current = requestAnimationFrame(update)
+    }
+
+    update()
+    el.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', update)
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+      }
+      el.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', update)
+    }
+  }, [containerRef])
+
+  const scrollByPage = (direction: -1 | 1) => {
+    const el = containerRef.current
+    if (!el) return
+    const distance = Math.max(
+      180,
+      Math.round(el.clientWidth * 0.8),
+    )
+    el.scrollBy({
+      left: distance * direction,
+      behavior: 'smooth',
+    })
+  }
+
+  if (!canLeft && !canRight) return null
+
+  return (
+    <>
+      {canLeft && (
+        <button
+          type="button"
+          className="home-carousel-arrow home-carousel-arrow--left"
+          onClick={() => scrollByPage(-1)}
+          aria-label="Прокрутить влево"
+        >
+          <Icon
+            name="chevron"
+            size={20}
+            className="home-carousel-arrow__icon home-carousel-arrow__icon--left"
+          />
+        </button>
+      )}
+      {canRight && (
+        <button
+          type="button"
+          className="home-carousel-arrow home-carousel-arrow--right"
+          onClick={() => scrollByPage(1)}
+          aria-label="Прокрутить вправо"
+        >
+          <Icon
+            name="chevron"
+            size={20}
+            className="home-carousel-arrow__icon"
+          />
+        </button>
+      )}
+    </>
+  )
+}
+
+function TrackCarouselSection({
+  title,
+  onMore,
+  tracks,
+  onPlay,
+}: SectionProps) {
+  const carouselRef = useRef<HTMLDivElement>(null)
+  if (!tracks || !tracks.length) return null
+  return (
+    <div>
+      <div className="home-section-header">
+        <span className="home-section-header__title">{title}</span>
+        {onMore && (
+          <button
+            type="button"
+            className="home-section-header__link"
+            onClick={onMore}
+          >
+            Все
+          </button>
+        )}
+      </div>
+      <div className="home-carousel-shell">
+        <div ref={carouselRef} className="home-carousel">
+          {tracks.filter(Boolean).map((t) => (
+            <TrackTile key={t.id} track={t} onPlay={onPlay} />
+          ))}
+        </div>
+        <CarouselArrows containerRef={carouselRef} />
+      </div>
+      <CarouselDots
+        count={tracks.length}
+        containerRef={carouselRef}
+      />
+    </div>
+  )
+}
+
+interface GenreCardProps {
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
   mix: GenreMixItem
   onPlay: (tracks: Track[]) => void
   onOpen: () => void
@@ -104,6 +427,7 @@ interface HomeGenreMixCardProps {
   listenAria: string
 }
 
+<<<<<<< HEAD
 function HomeGenreMixCard({
   mix,
   onPlay,
@@ -112,6 +436,12 @@ function HomeGenreMixCard({
   listenAria,
 }: HomeGenreMixCardProps) {
   const covers = mix.tracks
+=======
+function GenreMixCard({ mix, onPlay, onOpen }: GenreCardProps) {
+  const tracks = mix.tracks || []
+  const covers = tracks
+    .filter(Boolean)
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
     .slice(0, 4)
     .map((t) => coverUrl(t.cover_key))
     .filter(Boolean) as string[]
@@ -157,17 +487,25 @@ function HomeGenreMixCard({
         className="rh-home-genre-card__play"
         onClick={(e) => {
           e.stopPropagation()
-          if (mix.tracks.length) onPlay(mix.tracks)
+          if (tracks.length) onPlay(tracks)
         }}
         aria-label={listenAria}
       >
         <Icon name="play" size={14} />
       </button>
+<<<<<<< HEAD
       <span className="rh-home-genre-card__genre">
         {mix.genre.charAt(0).toUpperCase() + mix.genre.slice(1)}
       </span>
       <span className="rh-home-genre-card__count">
         {countLabel}
+=======
+      <span className="home-genre-mix-card__genre">
+        {(mix.genre || '').charAt(0).toUpperCase() + (mix.genre || '').slice(1)}
+      </span>
+      <span className="home-genre-mix-card__count">
+        {tracks.length} треков
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
       </span>
     </div>
   )
@@ -508,7 +846,9 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   const sectionMap = new Map<string, HomeSection>()
   if (sections) {
     for (const s of sections) {
-      sectionMap.set(s.section_type, s)
+      if (s && s.section_type) {
+        sectionMap.set(s.section_type, s)
+      }
     }
   }
   const featuredSource =
@@ -517,7 +857,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     sectionMap.get('user_choice') ||
     sectionMap.get('popular')
   const featuredTrack =
-    featuredSource?.tracks[0] ||
+    featuredSource?.tracks?.[0] ||
     fallbackTracks?.[0] ||
     null
   const featuredEyebrow =
@@ -684,12 +1024,134 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
               ))}
             </div>
           </div>
+<<<<<<< HEAD
         ) : genreMixes.length > 0 ? (
           <>
             <div className="rh-home-section-head">
               <span className="rh-home-section-head__title">
                 {t('redesign.home.sectionGenreMixes')}
               </span>
+=======
+          <CarouselDots
+            count={genreMixes.length}
+            containerRef={genreRowRef}
+          />
+        </div>
+      ) : null}
+
+      {/* Continue listening */}
+      {sections === null ? (
+        <div>
+          <div className="home-section-header">
+            <span className="home-section-header__title">Продолжить</span>
+          </div>
+          <div className="home-carousel home-skeleton-row">
+            {[1, 2, 3, 4].map((i) => (
+              <SkeletonBlock key={i} className="home-skeleton-tile" />
+            ))}
+          </div>
+        </div>
+      ) : (
+        sectionMap.get('continue') && (
+          <TrackCarouselSection
+            title={sectionMap.get('continue')!.title}
+            tracks={sectionMap.get('continue')!.tracks}
+            onPlay={handlePlay}
+          />
+        )
+      )}
+
+      {/* Recently played */}
+      {recentlyPlayed === null ? (
+        <div>
+          <div className="home-section-header">
+            <span className="home-section-header__title">Недавно слушали</span>
+          </div>
+          <div className="home-carousel home-skeleton-row">
+            {[1, 2, 3, 4].map((i) => (
+              <SkeletonBlock key={i} className="home-skeleton-tile" />
+            ))}
+          </div>
+        </div>
+      ) : (() => {
+        const continueIds = new Set(
+          (sectionMap.get('continue')?.tracks ?? [])
+            .filter(Boolean)
+            .map((t) => t.id),
+        )
+        const recent = recentlyPlayed
+          .filter(Boolean)
+          .filter((t) => !continueIds.has(t.id))
+        if (recent.length === 0) return null
+        return (
+          <TrackCarouselSection
+            title="Недавно слушали"
+            tracks={recent}
+            onPlay={handlePlay}
+          />
+        )
+      })()}
+
+      {/* Followed artists strip */}
+      {followedArtists === null ? (
+        <div>
+          <div className="home-section-header">
+            <span className="home-section-header__title">Подписки</span>
+          </div>
+          <div className="home-artist-strip">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <SkeletonBlock key={i} className="home-skeleton-chip" />
+            ))}
+          </div>
+        </div>
+      ) : followedArtists.length > 0 ? (
+        <div>
+          <div className="home-section-header">
+            <span className="home-section-header__title">Подписки</span>
+          </div>
+          <div className="home-carousel-shell">
+            <div ref={artistRowRef} className="home-artist-strip">
+              {followedArtists.map((artist) => {
+                const src = coverUrl(artist.image_key)
+                return (
+                  <button
+                    key={artist.id}
+                    type="button"
+                    className="home-artist-chip"
+                    onClick={() => {
+                      if (onOpenArtist) {
+                        onOpenArtist(artist.id)
+                        return
+                      }
+                      navigate(
+                        `/search?q=${encodeURIComponent(artist.name)}`,
+                      )
+                    }}
+                    title={artist.name}
+                  >
+                    <div className="home-artist-chip__avatar">
+                      {src ? (
+                        <img
+                          src={src}
+                          alt=""
+                          width={64}
+                          height={64}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <div className="home-artist-chip__avatar-placeholder">
+                          <Icon name="user" size={24} />
+                        </div>
+                      )}
+                    </div>
+                    <span className="home-artist-chip__name">
+                      {artist.name}
+                    </span>
+                  </button>
+                )
+              })}
+>>>>>>> 9aaf5b04bd72da2afa179adfd69dfd1b59c8a5e0
             </div>
             <HorizontalSnap
               items={genreMixes}
