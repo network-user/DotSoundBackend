@@ -27,7 +27,7 @@ class GenreMixOverride(Base, TimestampMixin):
         JSONB().with_variant(sa.JSON(), "sqlite"),
         nullable=False,
         default=list,
-        server_default=sa.text("'[]'::jsonb"),
+        server_default=sa.text("'[]'"),
     )
     updated_by_id: Mapped[int | None] = mapped_column(
         sa.BigInteger,

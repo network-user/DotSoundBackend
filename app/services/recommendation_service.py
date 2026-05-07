@@ -7,6 +7,7 @@ from typing import Any
 import structlog
 from dotsound_private_core.services.recommendation_engine import (
     MAX_GENRE_MIXES,
+    RadioTuning,
     TrackFeatures,
     UserPrefs,
     build_daily_mix,
@@ -14,6 +15,7 @@ from dotsound_private_core.services.recommendation_engine import (
     build_radio_queue,
     build_weekly_mix,
     merge_hybrid_playlist,
+    normalize_radio_tuning,
     score_tracks_for_user,
     select_similar_tracks,
 )
@@ -42,6 +44,7 @@ from app.core.redis import get_redis_client
 from app.models.listen_event import ListenEvent as ListenEventModel
 from app.models.track import Track
 from app.models.user import User
+from app.repositories.app_settings import AppSettingsRepository
 from app.repositories.artist_catalog import (
     ArtistCatalogRepository,
 )
@@ -74,6 +77,7 @@ _UNSEEN_POOL_LIMIT = 100
 _RADIO_CACHE_TTL = 30 * 60
 _RADIO_SKIP_GUARD_SECONDS = 1
 _RADIO_LAST_QUEUE_TTL = 20
+_RADIO_TUNING_KEY = "recsys.radio_tuning"
 
 
 def _midnight_ttl() -> int:
@@ -1293,11 +1297,15 @@ class RecommendationService:
 
         user_locale: str | None = None
         user_prefs: UserPrefs | None = None
+        radio_tuning: RadioTuning | None = None
         if user_id:
             (
                 user_prefs,
                 user_locale,
             ) = await self._build_user_prefs(user_id)
+            radio_tuning = await self._load_radio_tuning(
+                user_id=user_id
+            )
 
         if user_id and user_prefs is not None:
             candidates = await self._scoring_candidate_tracks(
@@ -1376,6 +1384,7 @@ class RecommendationService:
             cand_features,
             queue_size,
             unseen_candidates=unseen_features,
+            tuning=radio_tuning,
         )
 
         track_map = {t.id: t for t in all_tracks}
@@ -1408,6 +1417,35 @@ class RecommendationService:
             queue_size=len(result),
         )
         return result
+
+    async def _load_radio_tuning(
+        self, *, user_id: int
+    ) -> RadioTuning:
+        repo = AppSettingsRepository(self._session)
+        raw = await repo.get_value(_RADIO_TUNING_KEY, default={})
+        if not isinstance(raw, dict):
+            return normalize_radio_tuning(None)
+
+        enabled = bool(raw.get("enabled", False))
+        if not enabled:
+            return normalize_radio_tuning(None)
+
+        split = raw.get("ab_split_percent_b", 50)
+        try:
+            split_int = int(split)
+        except (TypeError, ValueError):
+            split_int = 50
+        split_int = max(0, min(100, split_int))
+        bucket = user_id % 100
+        variant_key = (
+            "variant_b"
+            if bucket < split_int
+            else "variant_a"
+        )
+        variant = raw.get(variant_key)
+        if not isinstance(variant, dict):
+            variant = raw.get("variant_a")
+        return normalize_radio_tuning(variant)
 
     async def get_global_top(
         self, limit: int = _GLOBAL_TOP_SIZE

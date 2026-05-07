@@ -172,6 +172,39 @@ export function DashboardRoute() {
     refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
+  const radioReqHistory = useQuery({
+    queryKey: ['admin', 'dashboard', 'radio-req', minutes],
+    queryFn: () =>
+      adminApi.dashboardTimeseries(
+        'radio_requests_5m',
+        minutes,
+        30,
+      ),
+    refetchInterval: live ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  })
+  const radioGuardHistory = useQuery({
+    queryKey: ['admin', 'dashboard', 'radio-guard', minutes],
+    queryFn: () =>
+      adminApi.dashboardTimeseries(
+        'radio_guard_hits_5m',
+        minutes,
+        30,
+      ),
+    refetchInterval: live ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  })
+  const radioQueueSizeHistory = useQuery({
+    queryKey: ['admin', 'dashboard', 'radio-queue-size', minutes],
+    queryFn: () =>
+      adminApi.dashboardTimeseries(
+        'radio_queue_size_avg_5m',
+        minutes,
+        30,
+      ),
+    refetchInterval: live ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  })
   const stats = useQuery({
     queryKey: ['admin', 'dashboard', 'stats', statsPeriod],
     queryFn: () => adminApi.dashboardStats(statsPeriod),
@@ -202,6 +235,18 @@ export function DashboardRoute() {
   const latencyPoints = flattenRange(
     latencyHistory.data,
   )
+  const radioReqPoints = flattenRange(radioReqHistory.data)
+  const radioGuardPoints = flattenRange(
+    radioGuardHistory.data,
+  )
+  const radioQueueSizePoints = flattenRange(
+    radioQueueSizeHistory.data,
+  )
+  const latestRadioReq = radioReqPoints.at(-1)?.value ?? 0
+  const latestRadioGuard =
+    radioGuardPoints.at(-1)?.value ?? 0
+  const latestRadioQueueSize =
+    radioQueueSizePoints.at(-1)?.value ?? 0
   const baseOnlinePoints =
     onlinePoints.length > 0
       ? onlinePoints
@@ -747,6 +792,27 @@ export function DashboardRoute() {
                 ? 'warn'
                 : 'default'
             }
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label="Radio requests / 5m"
+            value={latestRadioReq.toFixed(1)}
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label="Radio guard hits / 5m"
+            value={latestRadioGuard.toFixed(1)}
+            accent={
+              latestRadioGuard > 1 ? 'warn' : 'default'
+            }
+          />
+        </m.div>
+        <m.div variants={VARIANTS_FADE_UP}>
+          <KpiCard
+            label="Radio avg queue size"
+            value={latestRadioQueueSize.toFixed(2)}
           />
         </m.div>
       </m.section>

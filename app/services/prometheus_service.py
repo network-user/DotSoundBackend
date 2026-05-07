@@ -29,6 +29,16 @@ ALLOWED_METRICS: dict[str, str] = {
         "))"
     ),
     "active_websockets": ("sum(active_websocket_connections)"),
+    "radio_requests_5m": (
+        "sum(rate(radio_requests_total[5m]))"
+    ),
+    "radio_guard_hits_5m": (
+        "sum(rate(radio_guard_hits_total[5m]))"
+    ),
+    "radio_queue_size_avg_5m": (
+        "avg(rate(radio_queue_size_sum[5m]) / "
+        "clamp_min(rate(radio_queue_size_count[5m]), 1e-9))"
+    ),
     "container_cpu_5m": (
         "sum by (name) (" "rate(container_cpu_usage_seconds_total[5m])" ")"
     ),
