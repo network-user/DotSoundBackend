@@ -320,7 +320,6 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
     setCatalogArtists([])
     setCatalogPlaylists([])
     setCatalogGenres([])
-    saveToHistory(debouncedQuery.trim())
     const reqId = ++requestSeqRef.current
     let cancelled = false
     const q = debouncedQuery
@@ -657,6 +656,12 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
             onChange={(e) => {
               setQuery(e.target.value)
               setGenreFilter(null)
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return
+              e.preventDefault()
+              const q = e.currentTarget.value.trim()
+              if (q) saveToHistory(q)
             }}
           />
           {query && (
@@ -1159,38 +1164,35 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         />
                         <div className="track-card-info">
                           <div className="track-card-title-row">
-                            <p className="track-card-title">
-                              {r.title}
-                            </p>
-                            <span className="track-badge track-badge-yt">
-                              YT
-                            </span>
-                          </div>
-                          <p className="track-card-artist">
-                            {r.artist ?? '—'}
-                          </p>
-                          {r.duration_seconds != null && (
-                            <p className="track-card-meta">
-                              <span className="sc-duration">
-                                {formatDuration(r.duration_seconds)}
+                            <p className="track-card-title" dir="auto">
+                              <span className="track-card-title-core">
+                                {r.title}
                               </span>
+                              {r.artist ? (
+                                <span className="track-card-title-artist">
+                                  {' · '}
+                                  {r.artist}
+                                </span>
+                              ) : null}
                             </p>
-                          )}
-                          <span className="track-source">
-                            {t('search.extSourceLabel')}{' '}
-                            <a
-                              href={r.watch_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="track-source-link"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              YouTube
-                            </a>
-                          </span>
-                          <span className="track-source">
-                            {t('search.afterAddStream')}
-                          </span>
+                          </div>
+                          <p
+                            className="track-card-meta track-card-summary"
+                            dir="auto"
+                          >
+                            {[
+                              r.duration_seconds != null &&
+                              r.duration_seconds > 0
+                                ? formatDuration(
+                                    r.duration_seconds,
+                                  )
+                                : null,
+                              'YouTube',
+                              t('search.afterAddStream'),
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
                         </div>
                         <div
                           className="track-card-actions"
@@ -1244,38 +1246,35 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         />
                         <div className="track-card-info">
                           <div className="track-card-title-row">
-                            <p className="track-card-title">
-                              {r.title}
-                            </p>
-                            <span className="track-badge track-badge-bc">
-                              BC
-                            </span>
-                          </div>
-                          <p className="track-card-artist">
-                            {r.artist ?? '—'}
-                          </p>
-                          {r.duration_seconds != null && (
-                            <p className="track-card-meta">
-                              <span className="sc-duration">
-                                {formatDuration(r.duration_seconds)}
+                            <p className="track-card-title" dir="auto">
+                              <span className="track-card-title-core">
+                                {r.title}
                               </span>
+                              {r.artist ? (
+                                <span className="track-card-title-artist">
+                                  {' · '}
+                                  {r.artist}
+                                </span>
+                              ) : null}
                             </p>
-                          )}
-                          <span className="track-source">
-                            {t('search.extSourceLabel')}{' '}
-                            <a
-                              href={r.track_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="track-source-link"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              Bandcamp
-                            </a>
-                          </span>
-                          <span className="track-source">
-                            {t('search.afterAddStream')}
-                          </span>
+                          </div>
+                          <p
+                            className="track-card-meta track-card-summary"
+                            dir="auto"
+                          >
+                            {[
+                              r.duration_seconds != null &&
+                              r.duration_seconds > 0
+                                ? formatDuration(
+                                    r.duration_seconds,
+                                  )
+                                : null,
+                              'Bandcamp',
+                              t('search.afterAddStream'),
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
                         </div>
                         <div
                           className="track-card-actions"
@@ -1330,38 +1329,35 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         />
                         <div className="track-card-info">
                           <div className="track-card-title-row">
-                            <p className="track-card-title">
-                              {r.title}
-                            </p>
-                            <span className="track-badge track-badge-sc">
-                              SC
-                            </span>
-                          </div>
-                          <p className="track-card-artist">
-                            {r.artist ?? '—'}
-                          </p>
-                          {r.duration_seconds != null && (
-                            <p className="track-card-meta">
-                              <span className="sc-duration">
-                                {formatDuration(r.duration_seconds)}
+                            <p className="track-card-title" dir="auto">
+                              <span className="track-card-title-core">
+                                {r.title}
                               </span>
+                              {r.artist ? (
+                                <span className="track-card-title-artist">
+                                  {' · '}
+                                  {r.artist}
+                                </span>
+                              ) : null}
                             </p>
-                          )}
-                          <span className="track-source">
-                            {t('search.extSourceLabel')}{' '}
-                            <a
-                              href={r.sc_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="track-source-link"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              SoundCloud
-                            </a>
-                          </span>
-                          <span className="track-source">
-                            {t('search.afterAddStream')}
-                          </span>
+                          </div>
+                          <p
+                            className="track-card-meta track-card-summary"
+                            dir="auto"
+                          >
+                            {[
+                              r.duration_seconds != null &&
+                              r.duration_seconds > 0
+                                ? formatDuration(
+                                    r.duration_seconds,
+                                  )
+                                : null,
+                              'SoundCloud',
+                              t('search.afterAddStream'),
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </p>
                         </div>
                         <div
                           className="track-card-actions"

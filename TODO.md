@@ -14,6 +14,25 @@
 
 ---
 
+## Mini App: compact track list cards (2026-05-08)
+
+- [x] **Unified list `TrackCard` summary** — cover, title + inline
+  artist, single `.track-card-summary` via `lib/trackCardFormat.ts`
+  (duration · source · contextual time: last listen / liked / disliked).
+  History and offline downloads use `TrackCard`; liked date merged into
+  card; search pending-import rows and sheet “similar” aligned; mobile
+  keeps summary visible. `docs/design-system.md`, i18n `trackCard.*`.
+  Frontend `npm run lint` / `npm run build` green.
+
+## Mini App: PlayerBar chrome (2026-05-08)
+
+- [x] **Player bar: larger meta, prev + like always visible, no volume
+  control** — `PlayerBar.tsx`: removed bar volume popover; single like
+  after next; prev/like no longer hidden on narrow screens; overflow
+  menu no duplicate prev/like on mobile. `global.css` / `components.css`:
+  larger cover and title/artist; removed unused `pb-volume-*` styles.
+  `docs/design-system.md` updated. Frontend `npm run lint` / `npm run build` green.
+
 ## Mini App: Telegram swipe-to-dismiss (2026-05-08)
 
 - [x] **Disable vertical Mini App dismiss on content swipe** — после
@@ -58,6 +77,14 @@
   (`width: max-content`) in `frontend/src/styles/redesign-home.css`
   (`.rh-home-genre-snap .h-snap__item`). Desktop layout remains unchanged;
   frontend `npm run lint` is green.
+
+## TrackCard access label in sheet (2026-05-08)
+
+- [x] **Third-party stream access copy only in TrackCardSheet** —
+  removed `trackCard.accessStream` from list `TrackCard.tsx`; sheet
+  `tcs-source-info` shows `.tcs-access-mode-line` + existing source /
+  disclaimer when applicable; `docs/design-system.md`. `npm run lint`
+  green.
 
 ## TrackCard mobile density (2026-05-08)
 

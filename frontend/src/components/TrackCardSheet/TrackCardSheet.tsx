@@ -48,6 +48,7 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { m, useReducedMotion } from '@/lib/motion'
 import { type PanInfo } from 'framer-motion'
 import { LyricsPanel } from './LyricsPanel'
+import { buildTrackCardSummaryLine } from '@/lib/trackCardFormat'
 
 const TCS_DRAG_CLOSE_THRESHOLD = 100
 
@@ -1881,23 +1882,36 @@ export function TrackCardSheet({
           </div>
         )}
 
-        {(track.source_url || track.sc_url) && (
+        {((track.source_url || track.sc_url) ||
+          track.access_mode === 'third_party_stream') && (
           <div className="tcs-source-info">
-            <span className="tcs-source-label">
-              {t('trackSheet.source')}{' '}
-              <a
-                href={track.source_url || track.sc_url || '#'}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {track.source_name || track.source}
-              </a>
-            </span>
-            <p className="tcs-disclaimer">
-              {track.access_mode === 'third_party_stream'
-                ? t('trackSheet.disclaimerStream')
-                : t('trackSheet.disclaimerMeta')}
-            </p>
+            {track.access_mode === 'third_party_stream' && (
+              <p className="tcs-access-mode-line">
+                {t('trackCard.accessStream')}
+              </p>
+            )}
+            {(track.source_url || track.sc_url) && (
+              <>
+                <span className="tcs-source-label">
+                  {t('trackSheet.source')}{' '}
+                  <a
+                    href={
+                      track.source_url || track.sc_url || '#'
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {track.source_name || track.source}
+                  </a>
+                </span>
+                <p className="tcs-disclaimer">
+                  {track.access_mode ===
+                  'third_party_stream'
+                    ? t('trackSheet.disclaimerStream')
+                    : t('trackSheet.disclaimerMeta')}
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -2063,8 +2077,21 @@ export function TrackCardSheet({
                 >
                   <CoverImage coverKey={st.cover_key} />
                   <div className="tcs-similar-info">
-                    <span className="tcs-similar-track-title">{st.title}</span>
-                    <span className="tcs-similar-track-artist">{st.artist ?? '—'}</span>
+                    <span className="tcs-similar-track-title" dir="auto">
+                      {st.title}
+                      {st.artist ? (
+                        <span className="tcs-similar-track-artist">
+                          {' · '}
+                          {st.artist}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span
+                      className="tcs-similar-track-meta"
+                      dir="auto"
+                    >
+                      {buildTrackCardSummaryLine(st, t)}
+                    </span>
                   </div>
                 </div>
               ))}

@@ -22,33 +22,20 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { SharedCover } from '@/components/ui/SharedCover'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import type { Track } from '@/types/api'
-import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
-import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
+import { buildTrackCardSummaryLine } from '@/lib/trackCardFormat'
 
 interface Props {
   track: Track
   variant?: 'compact' | 'expanded'
+  summarySuffix?: string | null
   onDeleted?: (trackId: number) => void
   onVisibilityChanged?: (track: Track) => void
-}
-
-function fmtDuration(sec: number | null): string {
-  if (!sec) return ''
-  const mins = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60).toString().padStart(2, '0')
-  return `${mins}:${s}`
-}
-
-function getCatalogLabel(track: Track): string | null {
-  if (track.catalog_type === 'external_reference') return 'EXT'
-  if (track.catalog_type === 'licensed') return 'LIC'
-  if (track.catalog_type === 'ugc') return 'UGC'
-  return null
 }
 
 export function TrackCard({
   track,
   variant = 'compact',
+  summarySuffix = null,
   onDeleted,
   onVisibilityChanged,
 }: Props) {
@@ -57,8 +44,6 @@ export function TrackCard({
   const { track: currentTrack } = usePlayerMeta()
   const { isPlaying } = usePlayerState()
   const { playTrack, addToQueue } = usePlayerActions()
-  const desktopFine = useDesktopFinePointer()
-  const goArtistByName = useNavigateToArtistByName()
   const [confirmingDelete, setConfirmingDelete] =
     useState(false)
   const confirmTimerRef = useRef<ReturnType<
@@ -73,7 +58,6 @@ export function TrackCard({
   const isOwner =
     internalId !== null &&
     track.uploaded_by_id === internalId
-  const catalogLabel = getCatalogLabel(track)
   const coverSrc = track.cover_key
     ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(track.cover_key)}`
     : null
@@ -257,7 +241,15 @@ export function TrackCard({
           <div className="track-card-info">
             <div className="track-card-title-row">
               <p className="track-card-title" dir="auto">
-                {track.title}
+                <span className="track-card-title-core">
+                  {track.title}
+                </span>
+                {track.artist ? (
+                  <span className="track-card-title-artist">
+                    {' · '}
+                    {track.artist}
+                  </span>
+                ) : null}
               </p>
               {!track.is_public && (
                 <span className="track-badge track-badge-private">
@@ -272,102 +264,14 @@ export function TrackCard({
                   MOD
                 </span>
               )}
-              {track.source === 'soundcloud' && (
-                <span className="track-badge track-badge-sc">
-                  SC
-                </span>
-              )}
-              {track.source === 'youtube' && (
-                <span className="track-badge track-badge-yt">
-                  YT
-                </span>
-              )}
-              {track.source === 'bandcamp' && (
-                <span className="track-badge track-badge-bc">
-                  BC
-                </span>
-              )}
-              {track.source === 'telegram' && (
-                <span className="track-badge track-badge-tg">
-                  TG
-                </span>
-              )}
-              {catalogLabel && (
-                <span className="track-badge">
-                  {catalogLabel}
-                </span>
-              )}
             </div>
-            <p
-              className={
-                desktopFine && track.artist
-                  ? 'track-card-artist track-card-artist--nav'
-                  : 'track-card-artist'
-              }
-              dir="auto"
-              onClick={
-                desktopFine && track.artist
-                  ? (e) => {
-                      e.stopPropagation()
-                      void goArtistByName(track.artist)
-                    }
-                  : undefined
-              }
-            >
-              {track.artist ?? t('trackCard.unknownArtist')}
-            </p>
-            <p className="track-card-meta">
-              <Icon name="play" size={11} className="meta-icon" />{' '}
-              {track.play_count}
-              {track.duration_seconds
-                ? ` · ${fmtDuration(track.duration_seconds)}`
-                : ''}
-            </p>
-            {(track.source_url || track.sc_url) && (
-              <span className="track-source">
-                {t('search.extSourceLabel')}{' '}
-                <a
-                  href={
-                    track.source_url ||
-                    track.sc_url ||
-                    '#'
-                  }
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="track-source-link"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {track.source_name || track.source}
-                </a>
-              </span>
-            )}
-            {track.access_mode === 'third_party_stream' && (
-              <span className="track-source">
-                {t('trackCard.accessStream')}
-              </span>
-            )}
-            {track.catalog_type === 'ugc' && (
-              <span className="track-source">
-                {t('trackCard.catUgc')}
-              </span>
-            )}
-            {track.catalog_type === 'licensed' && (
-              <span className="track-source">
-                {t('trackCard.catLicensed')}
-              </span>
-            )}
-            {track.catalog_type === 'external_reference' && (
-              <span className="track-source">
-                {t('trackCard.catRef')}
-              </span>
-            )}
-            {!track.source_url &&
-              !track.sc_url &&
-              track.source === 'telegram' && (
-                <span className="track-source">
-                  {t('trackCard.sourceTg')}
-                </span>
+            <p className="track-card-meta track-card-summary" dir="auto">
+              {buildTrackCardSummaryLine(
+                track,
+                t,
+                summarySuffix,
               )}
+            </p>
           </div>
           <div
             className="track-card-actions"

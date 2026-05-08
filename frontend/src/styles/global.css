@@ -290,6 +290,18 @@ body.monochrome #app {
   flex: 1;
   min-width: 0;
 }
+.track-card-title-core {
+  font-weight: 600;
+}
+.track-card-title-artist {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.track-card-summary {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .track-card-artist {
   font-size: 12px;
   color: var(--text-secondary);
@@ -465,13 +477,11 @@ body.monochrome #app {
     margin-top: 2px;
   }
 
-  .track-card-meta,
   .track-source {
     display: none;
   }
 
-  .track-card-title-row
-    .track-badge:not(.track-badge-private) {
+  .track-card-title-row .track-badge:not(.track-badge-private) {
     display: none;
   }
 
@@ -1307,14 +1317,14 @@ body.monochrome #app {
 }
 
 .pb-cover-img {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-sm);
   background: var(--surface);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 20px;
   overflow: hidden;
   flex-shrink: 0;
   border: 1px solid var(--border);
@@ -1366,14 +1376,14 @@ body.monochrome #app {
 
 #pb-info { flex: 1; min-width: 0; }
 .pb-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .pb-artist {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   margin-top: 1px;
   white-space: nowrap;
@@ -1383,43 +1393,6 @@ body.monochrome #app {
 .pb-artist--nav:hover {
   color: var(--text-primary);
   text-decoration: underline;
-}
-
-#pb-volume-wrap {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 12px;
-  flex-shrink: 0;
-}
-.volume-icon {
-  font-size: 14px;
-  color: var(--text-muted);
-  width: 18px;
-  text-align: center;
-}
-#pb-volume {
-  width: 60px;
-  height: 3px;
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-  background: var(--surface-2);
-  border-radius: 2px;
-  outline: none;
-}
-#pb-volume::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--text-secondary);
-  cursor: pointer;
-}
-#pb-volume:hover::-webkit-slider-thumb {
-  background: var(--text);
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.2);
 }
 
 #pb-controls { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
@@ -5205,6 +5178,17 @@ html.le-lyrics-sync-open body {
   text-decoration: underline;
 }
 
+.tcs-access-mode-line {
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+  margin: 0 0 var(--space-2);
+  line-height: 1.4;
+}
+
+.tcs-source-info .tcs-access-mode-line:last-child {
+  margin-bottom: 0;
+}
+
 .tcs-disclaimer {
   font-size: 11px;
   color: var(--text-muted);
@@ -5335,9 +5319,17 @@ html.le-lyrics-sync-open body {
   white-space: nowrap;
 }
 
-.tcs-similar-track-artist {
+.tcs-similar-track-title .tcs-similar-track-artist {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.tcs-similar-track-meta {
   font-size: 11px;
   color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ?????? TrackCardSheet: Info (?? ???????) ????????????????????????????????? */
@@ -9737,15 +9729,15 @@ html.ds-low-glass .tcs-sheet {
   }
   /* Compact player cover on tiny phones to keep title legible. */
   .pb-cover-img {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
   }
   #pb-row {
     gap: 8px;
     padding: 8px 12px;
   }
-  .pb-title { font-size: 13px; }
-  .pb-artist { font-size: 11px; }
+  .pb-title { font-size: 14px; }
+  .pb-artist { font-size: 12px; }
 }
 
 /* Landscape phones / split-screen / very short viewports.
@@ -9765,19 +9757,14 @@ html.ds-low-glass .tcs-sheet {
     height: calc(var(--player-h) - 2px);
   }
   .pb-cover-img {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
   }
-  .pb-title { font-size: 13px; }
-  .pb-artist { font-size: 11px; }
+  .pb-title { font-size: 14px; }
+  .pb-artist { font-size: 12px; }
   /* Hide #pb-time row in landscape — seek thumb still works */
   #pb-time {
     display: none;
-  }
-  /* The volume hover popover is desktop-style; suppress on short
-   * landscape phones where there is no room. */
-  @media (pointer: coarse) {
-    .pb-volume-wrap { display: none; }
   }
 }
 

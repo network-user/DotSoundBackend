@@ -139,7 +139,13 @@
     "public": "Make public",
     "private": "Make private",
     "deleteConfirm": "Tap again to delete the track",
-    "delete": "Delete track"
+    "delete": "Delete track",
+    "sourceTelegram": "Telegram",
+    "sourceUpload": "Upload",
+    "sourceLicensedShort": "Licensed",
+    "sourcePlatform": "DotSound",
+    "addedAt": "Liked {{when}}",
+    "dislikedAt": "Disliked {{when}}"
   },
   "upload": {
     "urlTrack": "Track link",

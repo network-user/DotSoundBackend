@@ -48,6 +48,10 @@ user has `prefers-reduced-motion: reduce`.
 - Safe area helpers: `--safe-top`, `--safe-right`, `--safe-bottom`,
   `--safe-left`. The fixed bottom UI (`#nav`, `#player-bar`,
   `#main`) already accounts for `env(safe-area-inset-bottom)`.
+- **Player bar:** mini cover (~48px), slightly larger title/artist
+  type (`global.css` `.pb-title` / `.pb-artist`), transport controls
+  **prev · play · next · like · overflow**. Playback volume is
+  adjusted from the track sheet / expanded player, not from the bar.
 
 ### Z-index scale
 
@@ -248,13 +252,23 @@ primary content blocks (`.tcs-info`, `.tcs-player-controls`,
 `.tcs-actions`, `.tcs-edit-panel`) to avoid text and controls sticking
 to card edges.
 
-List-style `TrackCard` rows (feeds, playlists, artist carousels): at
-`max-width: 560px`, padding and typography tighten, `.re-tc-cover-wrap`
-is `40×40` (`36×36` at `≤360px` in `redesign-tracks.css`), and
-play-count/duration (`.track-card-meta`), attribution (`.track-source`),
-and platform/catalog badges except `.track-badge-private` are hidden so
-the row stays scannable. `#main` adds extra bottom scroll padding so the
-last rows clear the fixed player + tab bar.
+List-style `TrackCard` rows (feeds, playlists, history, liked/disliked):
+cover, title with optional inline artist (`.track-card-title-core` /
+`.track-card-title-artist`), and a single muted summary line
+(`.track-card-meta.track-card-summary`) built by `buildTrackCardSummaryLine`
+in `lib/trackCardFormat.ts` — duration, human-readable source label, then
+contextual time when present (last listen, liked-at, disliked-at). At
+`max-width: 560px`, padding and `.re-tc-cover-wrap` shrink as before;
+legacy `.track-source` link blocks stay hidden on narrow viewports.
+Platform/catalog badges are not shown on the title row except
+`.track-badge-private` and owner-only moderation state. `#main` keeps
+extra bottom padding so the last rows clear the fixed player + tab bar.
+
+The third-party stream access label (`trackCard.accessStream`) is not
+shown on list rows; it appears in `TrackCardSheet` inside
+`.tcs-source-info` as `.tcs-access-mode-line` when
+`access_mode === third_party_stream` (with source link + disclaimer when
+URLs exist).
 
 ## Migration playbook
 

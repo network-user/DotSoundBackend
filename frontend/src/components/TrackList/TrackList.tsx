@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { TrackCard } from '@/components/TrackCard/TrackCard'
 import { SwipeRow } from '@/components/ui/SwipeRow'
@@ -16,7 +15,6 @@ interface Props {
     label: string
     onClick: () => void
   }
-  renderExtra?: (track: Track) => ReactNode
 }
 
 export function TrackList({
@@ -24,7 +22,6 @@ export function TrackList({
   flavor = 'default',
   emptyMessage = 'Ничего не найдено',
   emptyCta,
-  renderExtra,
 }: Props) {
   const { t } = useTranslation()
   const { isLiked, toggleLike } = useLikes()
@@ -102,7 +99,6 @@ export function TrackList({
             >
               <TrackCard track={tr} />
             </SwipeRow>
-            {renderExtra?.(tr)}
           </div>
         )
       })}

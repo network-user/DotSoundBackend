@@ -1,32 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { TrackCard } from '@/components/TrackCard/TrackCard'
 import { api } from '@/lib/api'
-import {
-  usePlayerActions,
-  usePlayerMeta,
-} from '@/store/PlayerContext'
+import { usePlayerMeta } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
-
-function formatHistoryWhen(iso: string): string {
-  const d = new Date(iso)
-  return new Intl.DateTimeFormat(undefined, {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(d)
-}
-
-function formatListened(sec: number): string {
-  if (!sec || sec < 1) return ''
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60)
-    .toString()
-    .padStart(2, '0')
-  return `${m}:${s}`
-}
 
 function mergeSessionAndApi(
   current: Track | null,
@@ -54,10 +32,8 @@ function mergeSessionAndApi(
 }
 
 export function HistoryList() {
-  const { t } = useTranslation()
   const { track, history: sessionHistory } =
     usePlayerMeta()
-  const { playTrack } = usePlayerActions()
   const [apiTracks, setApiTracks] = useState<
     Track[] | null
   >(null)
@@ -160,63 +136,13 @@ export function HistoryList() {
           <strong>{rows.length}</strong> в истории
         </div>
       </div>
-      <div className="offline-list-rows">
+      <div className="track-list re-tl-root re-history-as-tracklist">
         {rows.map((tr, i) => (
           <div
             key={`h-${tr.id}-${i}`}
-            className="offline-list-row"
+            className="track-list-item re-tl-item"
           >
-            <MotionPress
-              type="button"
-              variant="ghost"
-              haptic="light"
-              className="offline-list-main"
-              onClick={() => playTrack(tr)}
-            >
-              <div className="offline-list-cover">
-                {tr.cover_key ? (
-                  <img
-                    src={`/api/v1/tracks/cover_proxy?key=${encodeURIComponent(tr.cover_key)}`}
-                    alt=""
-                  />
-                ) : (
-                  <Icon name="music" size={18} />
-                )}
-              </div>
-              <div className="offline-list-meta">
-                <div className="offline-list-title">
-                  {tr.title}
-                </div>
-                <div className="offline-list-sub">
-                  {tr.artist || '—'}
-                </div>
-                {tr.last_listen_at && (
-                  <div className="offline-list-hint">
-                    {formatListened(tr.last_listen_seconds ?? 0)
-                      ? t(
-                          'redesign.library.historyWhenAndDur',
-                          {
-                            when: formatHistoryWhen(
-                              tr.last_listen_at,
-                            ),
-                            duration: formatListened(
-                              tr.last_listen_seconds ??
-                                0,
-                            ),
-                          },
-                        )
-                      : t(
-                          'redesign.library.historyWhenOnly',
-                          {
-                            when: formatHistoryWhen(
-                              tr.last_listen_at,
-                            ),
-                          },
-                        )}
-                  </div>
-                )}
-              </div>
-            </MotionPress>
+            <TrackCard track={tr} />
           </div>
         ))}
       </div>

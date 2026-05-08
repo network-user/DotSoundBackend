@@ -27,7 +27,6 @@ import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import { SharedCover } from '@/components/ui/SharedCover'
-import { useMatchMedia } from '@/hooks/useMatchMedia'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet/AddToPlaylistSheet'
@@ -61,7 +60,6 @@ export function PlayerBar() {
   } = usePlayerState()
   const {
     track,
-    volume,
     repeatMode,
     shuffleOn,
     hlsError,
@@ -76,71 +74,36 @@ export function PlayerBar() {
     openEq,
     openQueue,
     stop,
-    setVolume,
     toggleRepeat,
     toggleShuffle,
     clearHlsError,
     radioMode,
   } = usePlayerActions()
   const { isLiked, toggleLike } = useLikes()
-  const compactBarControls = useMatchMedia(
-    '(max-width: 560px)',
-  )
   const desktopFineNav = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
   const [likeBurst, setLikeBurst] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [addToPlOpen, setAddToPlOpen] = useState(false)
-  const [volumePinned, setVolumePinned] = useState(false)
-  const [volumeHover, setVolumeHover] = useState(false)
   const [smoothCurrentTime, setSmoothCurrentTime] = useState(0)
   const overflowRef = useRef<HTMLDivElement>(null)
-  const volumeRef = useRef<HTMLDivElement>(null)
-  const volumeCloseTimerRef = useRef<number | null>(null)
   const playRef = useRef<HTMLButtonElement>(null)
   useRipple(playRef)
   const targetPct = duration ? (smoothCurrentTime / duration) * 100 : 0
 
-  const volumeOpen = volumePinned || volumeHover
-
-  const clearVolumeCloseTimer = () => {
-    if (volumeCloseTimerRef.current !== null) {
-      window.clearTimeout(volumeCloseTimerRef.current)
-      volumeCloseTimerRef.current = null
-    }
-  }
-
-  const scheduleVolumeClose = () => {
-    clearVolumeCloseTimer()
-    volumeCloseTimerRef.current = window.setTimeout(() => {
-      setVolumeHover(false)
-      volumeCloseTimerRef.current = null
-    }, 180)
-  }
-
   useEffect(() => {
-    if (!overflowOpen && !volumeOpen) return
+    if (!overflowOpen) return
     const onDocClick = (
       e: globalThis.MouseEvent,
     ) => {
       const target = e.target as Node
       const inOverflow =
         overflowRef.current?.contains(target) ?? false
-      const inVolume =
-        volumeRef.current?.contains(target) ?? false
       if (!inOverflow) setOverflowOpen(false)
-      if (!inVolume) {
-        clearVolumeCloseTimer()
-        setVolumePinned(false)
-        setVolumeHover(false)
-      }
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        clearVolumeCloseTimer()
         setOverflowOpen(false)
-        setVolumePinned(false)
-        setVolumeHover(false)
       }
     }
     document.addEventListener(
@@ -154,9 +117,8 @@ export function PlayerBar() {
         onDocClick,
       )
       window.removeEventListener('keydown', onKey)
-      clearVolumeCloseTimer()
     }
-  }, [overflowOpen, volumeOpen])
+  }, [overflowOpen])
 
   useEffect(() => {
     setSmoothCurrentTime(currentTime)
@@ -257,13 +219,6 @@ export function PlayerBar() {
   const trackBpm = (track as unknown as { bpm?: number }).bpm
   const tapBpm =
     typeof trackBpm === 'number' ? trackBpm : 120
-  const volumePct = Math.round(volume * 100)
-  const volumeIcon =
-    volume <= 0.01
-      ? 'volume-off'
-      : volume < 0.5
-        ? 'volume-low'
-        : 'volume-high'
   const telegramUserId = getUserId()
 
   return (
@@ -317,7 +272,7 @@ export function PlayerBar() {
                 className="pb-cover-vt"
               />
             ) : (
-              <Icon name="music" size={18} />
+              <Icon name="music" size={20} />
             )}
           </div>
         </div>
@@ -466,86 +421,6 @@ export function PlayerBar() {
           >
             <Icon name="skip-forward" size={18} />
           </MotionPress>
-          <div
-            className="pb-volume-wrap"
-            ref={volumeRef}
-            onMouseEnter={() => {
-              clearVolumeCloseTimer()
-              setVolumeHover(true)
-            }}
-            onMouseLeave={() => {
-              if (!volumePinned) {
-                scheduleVolumeClose()
-              }
-            }}
-            onFocusCapture={() => {
-              clearVolumeCloseTimer()
-              setVolumeHover(true)
-            }}
-            onBlurCapture={(e) => {
-              if (
-                !e.currentTarget.contains(
-                  e.relatedTarget as Node | null,
-                )
-              ) {
-                if (!volumePinned) {
-                  scheduleVolumeClose()
-                }
-              }
-            }}
-          >
-            <MotionPress
-              variant="icon"
-              className="ctrl-btn pb-volume-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                clearVolumeCloseTimer()
-                setVolumePinned((v) => !v)
-                setOverflowOpen(false)
-              }}
-              ariaLabel="Громкость"
-              aria-expanded={volumeOpen}
-              aria-haspopup="dialog"
-            >
-              <Icon
-                name={volumeIcon}
-                size={18}
-              />
-            </MotionPress>
-            {volumeOpen && (
-              <div
-                className="pb-volume-pop"
-                role="dialog"
-                aria-label="Регулировка громкости"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="pb-volume-slider-wrap">
-                  <input
-                    type="range"
-                    className="pb-volume-slider"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={volumePct}
-                    style={
-                      {
-                        '--progress': `${volumePct}%`,
-                      } as CSSProperties
-                    }
-                    onChange={(e) =>
-                      setVolume(
-                        Number(e.currentTarget.value) / 100,
-                      )
-                    }
-                    aria-label="Громкость плеера"
-                  />
-                </div>
-                <div className="pb-volume-value">
-                  {volumePct}%
-                </div>
-              </div>
-            )}
-          </div>
           <MotionPress
             variant="icon"
             className={`icon-btn pb-like${liked ? ' liked' : ''}${
@@ -571,9 +446,6 @@ export function PlayerBar() {
               onClick={(e) => {
                 e.stopPropagation()
                 setOverflowOpen((v) => !v)
-                clearVolumeCloseTimer()
-                setVolumePinned(false)
-                setVolumeHover(false)
               }}
               ariaLabel="Дополнительно"
               aria-expanded={overflowOpen}
@@ -589,46 +461,6 @@ export function PlayerBar() {
                 className="pb-overflow-menu"
                 role="menu"
               >
-                {compactBarControls && (
-                  <>
-                    <MotionPress
-                      role="menuitem"
-                      variant="ghost"
-                      haptic="selection"
-                      className={`pb-menu-item${liked ? ' active' : ''}`}
-                      onClick={() => {
-                        setOverflowOpen(false)
-                        void runLikeToggle()
-                      }}
-                    >
-                      <MorphIcon
-                        name="heart"
-                        filled={liked}
-                        size={16}
-                      />
-                      {liked
-                        ? t(
-                            'redesign.playerBar.unlikeMenu',
-                          )
-                        : t(
-                            'redesign.playerBar.likeMenu',
-                          )}
-                    </MotionPress>
-                    <MotionPress
-                      role="menuitem"
-                      variant="ghost"
-                      haptic="selection"
-                      className="pb-menu-item"
-                      onClick={() => {
-                        setOverflowOpen(false)
-                        playPrev()
-                      }}
-                    >
-                      <Icon name="skip-back" size={16} />
-                      {t('redesign.player.prevAria')}
-                    </MotionPress>
-                  </>
-                )}
                 <MotionPress
                   role="menuitem"
                   variant="ghost"

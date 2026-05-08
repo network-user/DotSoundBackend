@@ -93,30 +93,9 @@ function getDateGroup(iso: string): DateGroup {
   return 'earlier'
 }
 
-function formatDislikedAt(
-  iso: string,
-  lang: string,
-): string {
-  const safeLang = lang || 'en'
-  try {
-    return new Intl.DateTimeFormat(safeLang, {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    }).format(new Date(iso))
-  } catch {
-    return new Intl.DateTimeFormat('en', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    }).format(new Date(iso))
-  }
-}
-
 export function DislikedView() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const navigate = useNavigate()
-  const lang = i18n.language
   const { isLiked, toggleLike } = useLikes()
   const { addToQueue } = usePlayerActions()
 
@@ -349,11 +328,6 @@ export function DislikedView() {
             <TrackCard track={track} />
           </SwipeRow>
           <div className="rd-disliked-extra">
-            {track.disliked_at && (
-              <span className="rd-liked-date">
-                {formatDislikedAt(track.disliked_at, lang)}
-              </span>
-            )}
             <button
               className="rd-disliked-remove-btn"
               onClick={() =>
@@ -376,7 +350,6 @@ export function DislikedView() {
       toggleLike,
       addToQueue,
       t,
-      lang,
       handleRemoveDislike,
       removingIds,
     ],

@@ -139,7 +139,13 @@
     "public": "Сделать публичным",
     "private": "Сделать приватным",
     "deleteConfirm": "Нажмите ещё раз для удаления",
-    "delete": "Удалить трек"
+    "delete": "Удалить трек",
+    "sourceTelegram": "Telegram",
+    "sourceUpload": "Загрузка",
+    "sourceLicensedShort": "Лицензия",
+    "sourcePlatform": "DotSound",
+    "addedAt": "В избранном с {{when}}",
+    "dislikedAt": "Не нравится с {{when}}"
   },
   "upload": {
     "urlTrack": "Ссылка на трек",

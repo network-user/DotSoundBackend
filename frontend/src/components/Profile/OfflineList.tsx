@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '@/components/Icon/Icon'
+import { TrackCard } from '@/components/TrackCard/TrackCard'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 import {
@@ -9,7 +10,6 @@ import {
   removeTrack,
   type OfflineRecord,
 } from '@/lib/offlineCache'
-import { usePlayerActions } from '@/store/PlayerContext'
 
 function fmtBytes(n: number): string {
   if (!n) return '0 МБ'
@@ -25,8 +25,6 @@ export function OfflineList() {
     used: number
     quota: number
   }>({ used: 0, quota: 0 })
-  const { playTrack } = usePlayerActions()
-
   const reload = async () => {
     setLoading(true)
     const list = await getCachedTracks()
@@ -111,39 +109,18 @@ export function OfflineList() {
           Очистить всё
         </MotionPress>
       </div>
-      <div className="offline-list-rows">
+      <div className="track-list re-tl-root">
         {items.map((it) => (
           <div
             key={it.trackId}
-            className="offline-list-row"
+            className="offline-list-row offline-list-row--card"
           >
-            <MotionPress
-              type="button"
-              variant="ghost"
-              haptic="light"
-              className="offline-list-main"
-              onClick={() => playTrack(it.track)}
-            >
-              <div className="offline-list-cover">
-                {it.track.cover_key ? (
-                  <img
-                    src={`/api/v1/tracks/cover_proxy?key=${encodeURIComponent(it.track.cover_key)}`}
-                    alt=""
-                  />
-                ) : (
-                  <Icon name="music" size={18} />
-                )}
-              </div>
-              <div className="offline-list-meta">
-                <div className="offline-list-title">
-                  {it.track.title}
-                </div>
-                <div className="offline-list-sub">
-                  {it.track.artist || '—'} ·{' '}
-                  {fmtBytes(it.bytes)}
-                </div>
-              </div>
-            </MotionPress>
+            <div className="offline-list-row-card">
+              <TrackCard
+                track={it.track}
+                summarySuffix={fmtBytes(it.bytes)}
+              />
+            </div>
             <MotionPress
               type="button"
               variant="icon"

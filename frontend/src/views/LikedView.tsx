@@ -12,7 +12,7 @@ import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
 import { getUserId } from '@/lib/telegram'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
-import type { LikedTrack, Track } from '@/types/api'
+import type { LikedTrack } from '@/types/api'
 
 interface LikedViewProps {
   embedded?: boolean
@@ -23,23 +23,6 @@ type SourceFilter = 'all' | 'platform' | 'soundcloud' | 'other'
 type LikedSort = 'newest' | 'oldest' | 'artist'
 
 const PAGE_SIZE = 20
-
-function formatLikedAt(iso: string, lang: string): string {
-  const safeLang = lang || 'en'
-  try {
-    return new Intl.DateTimeFormat(safeLang, {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    }).format(new Date(iso))
-  } catch {
-    return new Intl.DateTimeFormat('en', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    }).format(new Date(iso))
-  }
-}
 
 const SOURCE_FILTERS: { key: SourceFilter; labelKey: string }[] = [
   { key: 'all', labelKey: 'redesign.library.sourceAll' },
@@ -55,9 +38,8 @@ const SORT_OPTIONS: { key: LikedSort; labelKey: string }[] = [
 ]
 
 export function LikedView({ embedded = false }: LikedViewProps) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const navigate = useNavigate()
-  const lang = i18n.language
   const [tracks, setTracks] = useState<LikedTrack[] | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -199,18 +181,6 @@ export function LikedView({ embedded = false }: LikedViewProps) {
     </div>
   )
 
-  const renderExtra = useCallback(
-    (track: Track) => {
-      const lt = track as LikedTrack
-      return lt.liked_at ? (
-        <span className="rd-liked-date">
-          {formatLikedAt(lt.liked_at, lang)}
-        </span>
-      ) : null
-    },
-    [lang],
-  )
-
   const list = (
     <>
       <div className="rd-liked-top">
@@ -229,7 +199,6 @@ export function LikedView({ embedded = false }: LikedViewProps) {
               }
             : undefined
         }
-        renderExtra={renderExtra}
       />
       {hasMore && (
         <MotionPress
