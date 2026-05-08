@@ -8834,6 +8834,9 @@ html.ds-low-glass .tcs-sheet {
   border: none;
   background: transparent;
   padding: 0;
+  transition:
+    transform 150ms var(--ease-out),
+    color 150ms var(--ease-out);
 }
 .search-artist-pill__avatar {
   width: 56px;
@@ -8842,6 +8845,10 @@ html.ds-low-glass .tcs-sheet {
   object-fit: cover;
   overflow: hidden;
   flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 84%, transparent);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 .search-artist-pill__name {
   font-size: 11px;
@@ -8965,11 +8972,38 @@ html.ds-low-glass .tcs-sheet {
     background: var(--bg-card, rgba(255,255,255,0.05));
     transform: translateY(-1px);
   }
+
+  .search-artist-pill:hover {
+    transform: translateY(-2px);
+  }
+
+  .search-artist-pill:hover .search-artist-pill__name {
+    color: var(--text);
+  }
+
+  .playlist-featured-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--accent) 24%, var(--border));
+    box-shadow:
+      0 16px 30px rgba(0, 0, 0, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .playlist-featured-card:hover .playlist-featured-cover img,
+  .playlist-featured-card:hover .playlist-featured-cover .cover-img {
+    transform: scale(1.03);
+  }
 }
 
 .search-genre-card:focus-visible,
 .search-playlist-row:focus-visible,
 .search-history-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.search-artist-pill:focus-visible,
+.playlist-featured-card:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -8999,6 +9033,14 @@ html.ds-low-glass .tcs-sheet {
   cursor: pointer;
   transition: background 0.15s;
   text-align: left;
+  box-shadow:
+    0 12px 24px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    transform 150ms var(--ease-out),
+    background 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    box-shadow 150ms var(--ease-out);
 }
 .playlist-featured-card:active {
   background: var(--bg-glass);
@@ -9012,12 +9054,14 @@ html.ds-low-glass .tcs-sheet {
   justify-content: center;
   overflow: hidden;
   color: var(--text-muted);
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 82%, transparent);
 }
 .playlist-featured-cover img,
 .playlist-featured-cover .cover-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 220ms var(--ease-out);
 }
 .playlist-featured-info {
   padding: 10px 10px 12px;
@@ -9056,10 +9100,16 @@ html.ds-low-glass .tcs-sheet {
   width: 100%;
   padding: 10px 16px;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: background 0.12s;
+  transition:
+    background 0.12s,
+    transform 0.14s var(--ease-out),
+    border-color 0.14s var(--ease-out),
+    box-shadow 0.14s var(--ease-out);
   text-align: left;
+  border-radius: 12px;
+  margin: 0 8px 4px;
 }
 .playlist-auto-card:active {
   background: var(--bg-elevated);
@@ -9075,6 +9125,9 @@ html.ds-low-glass .tcs-sheet {
   justify-content: center;
   flex-shrink: 0;
   color: var(--text-secondary);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .playlist-auto-info {
   flex: 1;
@@ -9097,6 +9150,22 @@ html.ds-low-glass .tcs-sheet {
   color: var(--text-muted);
   transform: rotate(-90deg);
   flex-shrink: 0;
+}
+
+.playlist-auto-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .playlist-auto-card:hover {
+    background: var(--bg-card, rgba(255, 255, 255, 0.05));
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+    box-shadow:
+      0 12px 24px rgba(0, 0, 0, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
 }
 
 /* ?????? Inline create button ?????????????????????????????????????????????????????????????????????????????????????????????????????? */
