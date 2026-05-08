@@ -50,10 +50,10 @@ async def transcode_http_audio_to_fmp4_aac(
                 proc.communicate(),
                 timeout=_FFMPEG_TIMEOUT_SEC,
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             with contextlib.suppress(ProcessLookupError):
                 proc.kill()
-            with contextlib.suppress(asyncio.TimeoutError):
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(proc.wait(), timeout=2.0)
             logger.warning(
                 "track_preview_ffmpeg_timeout",
