@@ -500,6 +500,8 @@ async def admin_transcode_batch(
     )
     tracks = list(result.scalars().all())
     for track in tracks:
+        if track.file_key is None:
+            continue
         background_tasks.add_task(
             transcode_hls_only,
             track.id,

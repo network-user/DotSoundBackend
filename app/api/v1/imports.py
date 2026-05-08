@@ -377,9 +377,12 @@ async def _scan_account(
         )
     account = await linked_svc.refresh_if_expired(account)
 
-    resolved_source = (
-        body.playlist_id if body.source == "playlist" else "liked"
-    )
+    resolved_source: str
+    if body.source == "playlist":
+        assert body.playlist_id is not None
+        resolved_source = body.playlist_id
+    else:
+        resolved_source = "liked"
     import_svc = ImportService(session)
     job = await import_svc.scan_account_library(
         user_id=current_user.id,
