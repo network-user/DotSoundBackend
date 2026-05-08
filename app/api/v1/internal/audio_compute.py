@@ -129,7 +129,7 @@ async def _stream_sc_cdn_to_worker(
                     )
                 except StopAsyncIteration:
                     break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning(
                         "audio_compute_sc_proxy_chunk_idle",
                         job_id=job_id,
@@ -805,7 +805,7 @@ async def download_audio(
                     settings.lyrics_audio_resolve_timeout_seconds
                 ),
             )
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             logger.warning(
                 "audio_compute_sc_resolve_timeout",
                 job_id=job_id,
