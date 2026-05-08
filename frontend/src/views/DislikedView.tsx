@@ -19,6 +19,8 @@ import { useLikes } from '@/store/LikesContext'
 import { usePlayerActions } from '@/store/PlayerContext'
 import type { DislikedTrack } from '@/types/api'
 
+const SEARCH_DEBOUNCE_MS = 380
+
 type SourceFilter = 'all' | 'platform' | 'soundcloud' | 'other'
 
 type DislikedSort = 'newest' | 'oldest' | 'artist'
@@ -131,6 +133,7 @@ export function DislikedView() {
   const [sortOrder, setSortOrder] =
     useState<DislikedSort>('newest')
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [removingIds, setRemovingIds] = useState<
     Set<number>
   >(new Set())
@@ -139,10 +142,19 @@ export function DislikedView() {
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const searchRef = useRef<HTMLInputElement | null>(null)
 
+  useEffect(() => {
+    const id = setTimeout(
+      () => setDebouncedQuery(searchQuery.trim()),
+      SEARCH_DEBOUNCE_MS,
+    )
+    return () => clearTimeout(id)
+  }, [searchQuery])
+
   const fetchPage = useCallback(
     async (
       page: number,
       filter: SourceFilter,
+      query: string,
       reset: boolean,
     ) => {
       const uid = getUserId()
@@ -158,6 +170,7 @@ export function DislikedView() {
           page,
           PAGE_SIZE,
           filter !== 'all' ? filter : undefined,
+          query || undefined,
         )
         setTracks((prev) =>
           reset || !prev
@@ -178,17 +191,18 @@ export function DislikedView() {
 
   useEffect(() => {
     pageRef.current = 1
-    fetchPage(1, sourceFilter, true)
-  }, [sourceFilter, fetchPage])
+    fetchPage(1, sourceFilter, debouncedQuery, true)
+  }, [sourceFilter, debouncedQuery, fetchPage])
 
   const loadMore = useCallback(() => {
     if (loading || !hasMore) return
     fetchPage(
       pageRef.current + 1,
       sourceFilter,
+      debouncedQuery,
       false,
     )
-  }, [loading, hasMore, sourceFilter, fetchPage])
+  }, [loading, hasMore, sourceFilter, debouncedQuery, fetchPage])
 
   useEffect(() => {
     const el = sentinelRef.current
@@ -238,26 +252,15 @@ export function DislikedView() {
     return copy
   }, [tracks, sortOrder])
 
-  const filteredTracks = useMemo(() => {
-    if (!sortedTracks) return sortedTracks
-    const q = searchQuery.trim().toLowerCase()
-    if (!q) return sortedTracks
-    return sortedTracks.filter(
-      (tr) =>
-        tr.title.toLowerCase().includes(q) ||
-        (tr.artist ?? '').toLowerCase().includes(q),
-    )
-  }, [sortedTracks, searchQuery])
-
-  usePrefetchTracks(filteredTracks ?? null, 'library')
+  usePrefetchTracks(sortedTracks ?? null, 'library')
 
   const groupedTracks = useMemo(() => {
-    if (!filteredTracks || filteredTracks.length === 0) {
+    if (!sortedTracks || sortedTracks.length === 0) {
       return null
     }
     if (sortOrder === 'artist') return null
     const map = new Map<DateGroup, DislikedTrack[]>()
-    for (const tr of filteredTracks) {
+    for (const tr of sortedTracks) {
       const g = tr.disliked_at
         ? getDateGroup(tr.disliked_at)
         : 'earlier'
@@ -268,7 +271,7 @@ export function DislikedView() {
     return DATE_GROUP_ORDER.filter((g) =>
       map.has(g),
     ).map((g) => ({ key: g, tracks: map.get(g)! }))
-  }, [filteredTracks, sortOrder])
+  }, [sortedTracks, sortOrder])
 
   const handleRemoveDislike = useCallback(
     async (track: DislikedTrack) => {
@@ -379,16 +382,15 @@ export function DislikedView() {
     ],
   )
 
-  const isSearching =
-    searchQuery.trim().length > 0
+  const isSearching = debouncedQuery.length > 0
 
   const metaLine = (() => {
-    if (!Array.isArray(filteredTracks)) return null
+    if (!Array.isArray(sortedTracks)) return null
     if (isSearching) {
       return (
         <p className="rd-liked-meta">
           {t('redesign.library.dislikedSearchCount', {
-            count: filteredTracks.length,
+            count: apiTotal ?? 0,
           })}
         </p>
       )
@@ -471,7 +473,7 @@ export function DislikedView() {
         </div>
       )
     }
-    if (isSearching && filteredTracks?.length === 0) {
+    if (isSearching && sortedTracks?.length === 0) {
       return (
         <div className="rd-disliked-search-empty">
           <p>
@@ -508,31 +510,33 @@ export function DislikedView() {
 
   const content = (() => {
     if (emptyState) return emptyState
-    if (!filteredTracks || filteredTracks.length === 0) {
+    if (!sortedTracks || sortedTracks.length === 0) {
       return null
     }
 
     if (groupedTracks) {
       return (
         <div className="track-list re-tl-root">
-          {groupedTracks.map(({ key, tracks: grpTracks }) => (
-            <div
-              key={key}
-              className="rd-disliked-group"
-            >
-              <h3 className="rd-disliked-group-header">
-                {t(DATE_GROUP_KEYS[key])}
-              </h3>
-              {grpTracks.map(renderTrackRow)}
-            </div>
-          ))}
+          {groupedTracks.map(
+            ({ key, tracks: grpTracks }) => (
+              <div
+                key={key}
+                className="rd-disliked-group"
+              >
+                <h3 className="rd-disliked-group-header">
+                  {t(DATE_GROUP_KEYS[key])}
+                </h3>
+                {grpTracks.map(renderTrackRow)}
+              </div>
+            ),
+          )}
         </div>
       )
     }
 
     return (
       <div className="track-list re-tl-root">
-        {filteredTracks.map(renderTrackRow)}
+        {sortedTracks.map(renderTrackRow)}
       </div>
     )
   })()

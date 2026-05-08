@@ -541,6 +541,7 @@ export const api = {
     page = 1,
     size = 20,
     sourceFilter?: string,
+    query?: string,
   ): Promise<UserDislikesResponse> {
     const params = new URLSearchParams({
       page: String(page),
@@ -548,6 +549,9 @@ export const api = {
     })
     if (sourceFilter && sourceFilter !== 'all') {
       params.set('source', sourceFilter)
+    }
+    if (query && query.trim()) {
+      params.set('q', query.trim())
     }
     return request(`/api/v1/dislikes/${userId}?${params}`)
   },
