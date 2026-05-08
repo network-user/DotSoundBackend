@@ -272,11 +272,11 @@ async def send_admin_message(
     msg_svc = MessageService(session)
     try:
         chat = await chat_svc.create_dm(
-            owner_id=admin.id, peer_id=user_id
+            user_id=admin.id, target_id=user_id
         )
-        conv_id = (
-            chat.get("id") if isinstance(chat, dict) else chat.id
-        )
+        conv_id = chat["conversation"]["id"]
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.exception(
             "admin_message_create_dm_failed",
