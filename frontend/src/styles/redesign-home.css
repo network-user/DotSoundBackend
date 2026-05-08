@@ -43,6 +43,10 @@
   overflow: hidden;
   min-height: 200px;
   position: relative;
+  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .rh-home-hero .ambient-stage {
@@ -103,6 +107,7 @@
   max-width: 168px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
   z-index: 1;
+  transition: transform 220ms var(--ease-out);
 }
 
 .rh-home-hero__cover .kenburns-cover,
@@ -228,6 +233,8 @@
   text-align: left;
   color: inherit;
   font: inherit;
+  border-radius: var(--r-md);
+  transition: transform 180ms var(--ease-out);
 }
 
 .rh-home-tile:focus-visible {
@@ -242,12 +249,17 @@
   width: 112px;
   height: 112px;
   background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  transition:
+    transform 220ms var(--ease-out),
+    box-shadow 220ms var(--ease-out);
 }
 
 .rh-home-tile__cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 280ms var(--ease-out);
 }
 
 .rh-home-tile__ph {
@@ -425,6 +437,14 @@
   max-width: 380px;
 }
 
+@media (min-width: 768px) and (pointer: fine) {
+  .rh-home-h-snap .h-snap__item,
+  .rh-home-artist-snap .h-snap__item {
+    width: max-content;
+    max-width: none;
+  }
+}
+
 .rh-home-artist-page {
   display: flex;
   flex-direction: row;
@@ -459,12 +479,17 @@
   border-radius: var(--r-pill);
   overflow: hidden;
   background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  transition:
+    transform 200ms var(--ease-out),
+    box-shadow 200ms var(--ease-out);
 }
 
 .rh-home-artist-chip__avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 260ms var(--ease-out);
 }
 
 .rh-home-artist-chip__ph {

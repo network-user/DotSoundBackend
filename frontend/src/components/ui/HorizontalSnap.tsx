@@ -1,5 +1,6 @@
 import {
   type ReactNode,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -28,85 +29,84 @@ export function HorizontalSnap<T>({
 }: HorizontalSnapProps<T>) {
   const reduce = useReducedMotion()
   const trackRef = useRef<HTMLDivElement | null>(null)
-  const [activeIndex, setActiveIndex] = useState(0)
   const [canArrow, setCanArrow] = useState({
     left: false,
     right: false,
   })
+  const [pageMeta, setPageMeta] = useState({
+    totalPages: 1,
+    activePage: 0,
+  })
+  const [isCompact, setIsCompact] = useState(false)
+
+  const updateTrackMeta = useCallback(() => {
+    const el = trackRef.current
+    if (!el) return
+    const maxScrollLeft = Math.max(
+      0,
+      el.scrollWidth - el.clientWidth,
+    )
+    const hasOverflow = maxScrollLeft > 4
+    const totalPages = Math.max(
+      1,
+      Math.ceil(el.scrollWidth / Math.max(1, el.clientWidth)),
+    )
+    const activePage =
+      totalPages <= 1 || maxScrollLeft <= 0
+        ? 0
+        : Math.round(
+            (el.scrollLeft / maxScrollLeft) * (totalPages - 1),
+          )
+
+    setCanArrow({
+      left: el.scrollLeft > 4,
+      right:
+        el.scrollLeft + el.clientWidth <
+        el.scrollWidth - 4,
+    })
+    setIsCompact(!hasOverflow)
+    setPageMeta({
+      totalPages,
+      activePage: Math.max(
+        0,
+        Math.min(activePage, totalPages - 1),
+      ),
+    })
+
+    if (!parallax) return
+    const items = el.querySelectorAll<HTMLElement>(
+      '[data-snap-item]',
+    )
+    items.forEach((it) => {
+      const r = it.getBoundingClientRect()
+      const er = el.getBoundingClientRect()
+      const center =
+        r.left + r.width / 2 -
+        (er.left + er.width / 2)
+      const norm = Math.max(
+        -1,
+        Math.min(1, center / er.width),
+      )
+      it.style.setProperty(
+        '--snap-parallax',
+        norm.toFixed(3),
+      )
+    })
+  }, [parallax])
 
   useEffect(() => {
     const el = trackRef.current
     if (!el) return
-    const items = Array.from(
-      el.querySelectorAll<HTMLElement>('[data-snap-item]'),
-    )
-    if (items.length === 0) return
-
-    const io = new IntersectionObserver(
-      (entries) => {
-        let bestIdx = activeIndex
-        let bestRatio = 0
-        for (const entry of entries) {
-          const idx = Number(
-            (entry.target as HTMLElement).dataset.snapIndex ?? '0',
-          )
-          if (entry.intersectionRatio > bestRatio) {
-            bestRatio = entry.intersectionRatio
-            bestIdx = idx
-          }
-        }
-        if (bestRatio > 0) setActiveIndex(bestIdx)
-      },
-      {
-        root: el,
-        threshold: [0.4, 0.6, 0.8],
-      },
-    )
-    items.forEach((it) => io.observe(it))
-    return () => io.disconnect()
-  }, [items.length, activeIndex])
-
-  useEffect(() => {
-    const el = trackRef.current
-    if (!el) return
-    const update = () => {
-      setCanArrow({
-        left: el.scrollLeft > 4,
-        right:
-          el.scrollLeft + el.clientWidth <
-          el.scrollWidth - 4,
-      })
-      if (parallax) {
-        const items = el.querySelectorAll<HTMLElement>(
-          '[data-snap-item]',
-        )
-        items.forEach((it) => {
-          const r = it.getBoundingClientRect()
-          const er = el.getBoundingClientRect()
-          const center =
-            r.left + r.width / 2 -
-            (er.left + er.width / 2)
-          const norm = Math.max(
-            -1,
-            Math.min(1, center / er.width),
-          )
-          it.style.setProperty(
-            '--snap-parallax',
-            norm.toFixed(3),
-          )
-        })
-      }
-    }
-    update()
-    el.addEventListener('scroll', update, {
+    updateTrackMeta()
+    el.addEventListener('scroll', updateTrackMeta, {
       passive: true,
     })
-    window.addEventListener('resize', update)
+    window.addEventListener('resize', updateTrackMeta)
     return () => {
-      el.removeEventListener('scroll', update)
-      window.removeEventListener('resize', update)
+      el.removeEventListener('scroll', updateTrackMeta)
+      window.removeEventListener('resize', updateTrackMeta)
     }
-  }, [parallax])
+  }, [items.length, updateTrackMeta])
 
   const scrollByPage = (dir: 1 | -1) => {
     const el = trackRef.current
@@ -117,10 +117,20 @@ export function HorizontalSnap<T>({
     })
   }
 
+  const visibleDots = Math.min(4, pageMeta.totalPages)
+  const activeDot =
+    visibleDots <= 1 || pageMeta.totalPages <= 1
+      ? 0
+      : Math.round(
+          (pageMeta.activePage / (pageMeta.totalPages - 1)) *
+            (visibleDots - 1),
+        )
+
   return (
     <div
       className={[
         'h-snap',
+        isCompact ? 'h-snap--compact' : '',
         className,
       ]
         .filter(Boolean)
@@ -166,17 +176,17 @@ export function HorizontalSnap<T>({
           </button>
         </>
       )}
-      {pageDots && items.length > 1 && (
+      {pageDots && visibleDots > 1 && (
         <div
           className="h-snap__dots"
           aria-hidden="true"
         >
-          {items.map((_, idx) => (
+          {Array.from({ length: visibleDots }).map((_, idx) => (
             <span
               key={idx}
               className={[
                 'h-snap__dot',
-                idx === activeIndex
+                idx === activeDot
                   ? 'h-snap__dot--active'
                   : '',
               ]

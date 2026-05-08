@@ -432,6 +432,43 @@ async def _close_lyrics_job_catalog_miss(
     )
 
 
+async def _fallback_or_close_catalog_miss(
+    session: AsyncSession,
+    *,
+    job: LyricsJob,
+    progress_id: str,
+    with_sync: bool,
+    bypass_cache: bool,
+    log_line: str,
+) -> dict[str, str]:
+    if with_sync:
+        from app.services.lyrics_cascade import handle_tier_miss
+
+        will_fallback = await handle_tier_miss(
+            session,
+            job=job,
+            reason="catalog_no_match",
+            with_sync=with_sync,
+            bypass_cache=bypass_cache,
+        )
+        if will_fallback:
+            logger.info(
+                "lyrics_job_catalog_miss_fallback",
+                job_id=job.id,
+                track_id=job.track_id,
+                progress_id=progress_id,
+                detail=log_line,
+            )
+            return {"status": "fallback"}
+    await _close_lyrics_job_catalog_miss(
+        session,
+        job=job,
+        progress_id=progress_id,
+        log_line=log_line,
+    )
+    return {"status": "not_found"}
+
+
 async def _finalise(
     progress_id: str, terminal_state: str, log_line: str | None = None
 ) -> None:
@@ -1789,16 +1826,19 @@ async def catalog_only_lyrics_task(
 
             if gen_result is None:
                 if job is not None:
-                    await _close_lyrics_job_catalog_miss(
+                    result = await _fallback_or_close_catalog_miss(
                         session,
                         job=job,
                         progress_id=progress_id,
+                        with_sync=with_sync,
+                        bypass_cache=bypass_cache,
                         log_line=(
-                            "[catalog_only] no catalog lyrics — "
-                            "skipping transcription tiers"
+                            "[catalog_only] no catalog lyrics"
                         ),
                     )
                     await session.commit()
+                    if result["status"] == "fallback":
+                        return result
                 else:
                     await _mark_track_lyrics_catalog_miss(
                         session,
@@ -1861,16 +1901,20 @@ async def catalog_only_lyrics_task(
                         "from": "catalog",
                     }
                 if job is not None:
-                    await _close_lyrics_job_catalog_miss(
+                    result = await _fallback_or_close_catalog_miss(
                         session,
                         job=job,
                         progress_id=progress_id,
+                        with_sync=with_sync,
+                        bypass_cache=bypass_cache,
                         log_line=(
                             "[catalog_only] synced lines missing and "
                             "no plain text retained"
                         ),
                     )
                     await session.commit()
+                    if result["status"] == "fallback":
+                        return result
                 else:
                     await _mark_track_lyrics_catalog_miss(
                         session,

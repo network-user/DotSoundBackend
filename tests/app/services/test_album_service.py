@@ -170,3 +170,22 @@ async def test_remove_track_from_album(
     )
     assert with_tracks is not None
     assert len(with_tracks.tracks) == 0
+
+
+async def test_update_album_admin_override_requires_admin_actor(
+    session: AsyncSession,
+) -> None:
+    owner_id = await _make_user(session, 705)
+    actor_id = await _make_user(session, 706)
+    svc = AlbumService(session)
+    album = await svc.create(owner_id, "A")
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.update(
+            album.id,
+            actor_id,
+            title="Admin try",
+            allow_admin=True,
+        )
+
+    assert exc.value.status_code == 403

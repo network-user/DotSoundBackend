@@ -9,6 +9,7 @@ from app.config import settings
 from app.services.lyrics_worker import (
     _cache_keys_for_track,
     _cached_satisfies_request,
+    _fallback_or_close_catalog_miss,
     _search_cache_key,
     generate_lyrics_task,
     invalidate_cached_lyrics_for_track,
@@ -583,3 +584,66 @@ class TestInvalidateCachedLyricsForTrack:
         redis_client.delete.assert_awaited_once()
         deleted = redis_client.delete.await_args.args
         assert deleted == (_search_cache_key("", "Just A Title"),)
+
+
+class TestCatalogMissFallback:
+    @pytest.mark.anyio
+    async def test_with_sync_miss_goes_to_next_tier(self) -> None:
+        session = AsyncMock()
+        job = MagicMock()
+        job.id = "lj_1"
+        job.track_id = 10
+
+        with (
+            patch(
+                "app.services.lyrics_cascade.handle_tier_miss",
+                new_callable=AsyncMock,
+                return_value=True,
+            ) as mock_handle_miss,
+            patch(
+                "app.services.lyrics_worker._close_lyrics_job_catalog_miss",
+                new_callable=AsyncMock,
+            ) as mock_close_miss,
+        ):
+            result = await _fallback_or_close_catalog_miss(
+                session,
+                job=job,
+                progress_id="pid1",
+                with_sync=True,
+                bypass_cache=False,
+                log_line="catalog miss",
+            )
+
+        assert result == {"status": "fallback"}
+        mock_handle_miss.assert_awaited_once()
+        mock_close_miss.assert_not_awaited()
+
+    @pytest.mark.anyio
+    async def test_without_sync_miss_is_terminal(self) -> None:
+        session = AsyncMock()
+        job = MagicMock()
+        job.id = "lj_2"
+        job.track_id = 20
+
+        with (
+            patch(
+                "app.services.lyrics_cascade.handle_tier_miss",
+                new_callable=AsyncMock,
+            ) as mock_handle_miss,
+            patch(
+                "app.services.lyrics_worker._close_lyrics_job_catalog_miss",
+                new_callable=AsyncMock,
+            ) as mock_close_miss,
+        ):
+            result = await _fallback_or_close_catalog_miss(
+                session,
+                job=job,
+                progress_id="pid2",
+                with_sync=False,
+                bypass_cache=False,
+                log_line="catalog miss",
+            )
+
+        assert result == {"status": "not_found"}
+        mock_handle_miss.assert_not_awaited()
+        mock_close_miss.assert_awaited_once()

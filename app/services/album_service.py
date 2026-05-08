@@ -3,6 +3,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.album import Album
+from app.models.user import User
 from app.repositories.album import AlbumRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
@@ -17,10 +18,14 @@ class AlbumService:
         self._user_repo = UserRepository(session)
         self._session = session
 
-    async def _resolve_user_id(self, user_id: int) -> int:
+    async def _resolve_user(self, user_id: int) -> User | None:
         user = await self._user_repo.get_by_id(user_id)
-        if not user:
-            user = await self._user_repo.get_by_telegram_id(user_id)
+        if user is not None:
+            return user
+        return await self._user_repo.get_by_telegram_id(user_id)
+
+    async def _resolve_user_id(self, user_id: int) -> int:
+        user = await self._resolve_user(user_id)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
@@ -43,7 +48,12 @@ class AlbumService:
 
     async def _assert_admin_actor(self, user_id: int) -> None:
         actor = await self._resolve_user(user_id)
-        if not actor.is_admin or not actor.is_active or not actor.admin_init:
+        if (
+            actor is None
+            or not actor.is_admin
+            or not actor.is_active
+            or not actor.admin_init
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Admin access required",
