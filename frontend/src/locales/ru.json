@@ -74,7 +74,12 @@
     "liked": "Понравившееся",
     "editProfile": "Изменить профиль",
     "sectionCatalog": "Моя библиотека",
-    "sectionDiscover": "Подборки"
+    "sectionDiscover": "Подборки",
+    "myTracksTitle": "Мои треки",
+    "myTracksEmptyTitle": "Здесь будут ваши треки",
+    "myTracksEmptyHint": "Загрузите свой первый трек, чтобы он появился здесь",
+    "myTracksUpload": "Загрузить трек",
+    "avatarEditHint": "Сменить фото профиля"
   },
   "playlists": {
     "title": "Плейлисты",

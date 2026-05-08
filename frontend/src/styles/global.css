@@ -8617,8 +8617,154 @@ html.ds-low-glass .tcs-sheet {
   }
 }
 
-.my-tracks-section .section-header {
-  padding-top: 8px;
+/* Avatar — non-edit clickable with hover hint --------------- */
+
+.profile-avatar.profile-avatar--clickable {
+  position: relative;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  font-size: 38px;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  transition: border-color 160ms var(--ease-out);
+}
+
+.profile-avatar.profile-avatar--clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.profile-avatar-hover-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(
+    in srgb,
+    var(--bg) 60%,
+    transparent
+  );
+  color: var(--text);
+  opacity: 0;
+  transition: opacity 160ms var(--ease-out);
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .profile-avatar.profile-avatar--clickable:hover {
+    border-color: var(--border-hover);
+  }
+  .profile-avatar.profile-avatar--clickable:hover
+    .profile-avatar-hover-hint,
+  .profile-avatar.profile-avatar--clickable:focus-visible
+    .profile-avatar-hover-hint {
+    opacity: 1;
+  }
+}
+
+/* My tracks section ------------------------------------------ */
+
+.profile-tracks-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 16px 24px;
+}
+
+.profile-tracks-section__title {
+  margin: 4px 4px 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.profile-tracks-section__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.profile-tracks-section__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.profile-tracks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 28px 18px 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+
+.profile-tracks-empty__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.profile-tracks-empty__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.profile-tracks-empty__hint {
+  max-width: 320px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.profile-tracks-empty .profile-tracks-empty__cta {
+  margin-top: 12px;
+  min-height: 44px;
+  padding: 0 22px;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 8px;
+}
+
+/* Subview header — settings cog cluster ---------------------- */
+
+.profile-header-actions--sub {
+  justify-content: flex-end;
+  min-width: 44px;
 }
 
 .chats-header {

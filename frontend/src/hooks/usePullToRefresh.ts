@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { hapticSelection } from '@/lib/telegram'
 
 interface UsePullToRefreshOpts {
   /**
@@ -25,6 +26,7 @@ interface UsePullToRefreshOpts {
 
 interface State {
   pulling: boolean
+  armed: boolean
   distance: number
   refreshing: boolean
 }
@@ -33,6 +35,12 @@ interface State {
  * Native-feeling pull-to-refresh on the Mini App scroll container.
  * Works with touch only (mobile / Telegram Mini App). Desktop is
  * unaffected.
+ *
+ * The hook fires a single `hapticSelection()` the first time the
+ * user crosses the trigger threshold during a drag, and exposes
+ * an `armed` flag so the caller can render the indicator's two
+ * states (rotating arrow vs locked-in pill) without recomputing
+ * the threshold themselves.
  */
 export function usePullToRefresh(
   opts: UsePullToRefreshOpts,
@@ -45,11 +53,13 @@ export function usePullToRefresh(
   } = opts
   const [state, setState] = useState<State>({
     pulling: false,
+    armed: false,
     distance: 0,
     refreshing: false,
   })
   const startYRef = useRef<number | null>(null)
   const distRef = useRef(0)
+  const armedRef = useRef(false)
 
   useEffect(() => {
     if (!enabled) return
@@ -64,6 +74,7 @@ export function usePullToRefresh(
       }
       startYRef.current = e.touches[0].clientY
       distRef.current = 0
+      armedRef.current = false
     }
 
     const onTouchMove = (e: TouchEvent) => {
@@ -75,6 +86,7 @@ export function usePullToRefresh(
           setState((s) => ({
             ...s,
             pulling: false,
+            armed: false,
             distance: 0,
           }))
         }
@@ -84,11 +96,23 @@ export function usePullToRefresh(
       if (dy <= 0) return
       const damped = Math.min(140, dy * 0.55)
       distRef.current = damped
+      const nextArmed = damped >= triggerDistance
+      if (nextArmed && !armedRef.current) {
+        armedRef.current = true
+        try {
+          hapticSelection()
+        } catch {
+          /* ignore */
+        }
+      } else if (!nextArmed && armedRef.current) {
+        armedRef.current = false
+      }
       if (damped > 4) {
         e.preventDefault()
         setState((s) => ({
           ...s,
           pulling: true,
+          armed: nextArmed,
           distance: damped,
         }))
       }
@@ -99,10 +123,13 @@ export function usePullToRefresh(
       const final = distRef.current
       startYRef.current = null
       distRef.current = 0
+      const wasArmed = armedRef.current
+      armedRef.current = false
       if (final >= triggerDistance) {
         setState({
           pulling: false,
-          distance: 0,
+          armed: wasArmed,
+          distance: triggerDistance,
           refreshing: true,
         })
         Promise.resolve(onRefresh())
@@ -110,6 +137,7 @@ export function usePullToRefresh(
           .finally(() => {
             setState({
               pulling: false,
+              armed: false,
               distance: 0,
               refreshing: false,
             })
@@ -118,6 +146,7 @@ export function usePullToRefresh(
         setState((s) => ({
           ...s,
           pulling: false,
+          armed: false,
           distance: 0,
         }))
       }

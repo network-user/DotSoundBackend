@@ -1131,6 +1131,7 @@ body.ds-perf-lite .glass__noise {
   letter-spacing: 0.6px;
   color: var(--text-secondary);
   padding: var(--space-2) var(--space-1);
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 80%, transparent);
 }
 .queue-section-title-row {
   display: flex;
@@ -1306,11 +1307,26 @@ body.ds-perf-lite .glass__noise {
 .queue-empty {
   text-align: center;
   padding: var(--space-7) var(--space-4);
+  border: 1px dashed color-mix(in srgb, var(--glass-edge) 78%, transparent);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .queue-empty-text {
   color: var(--text-secondary);
   font-size: var(--fs-14);
   line-height: 1.6;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .queue-empty:hover {
+    border-color: color-mix(in srgb, var(--accent) 20%, var(--glass-edge));
+    box-shadow:
+      0 14px 26px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
 }
 
 .queue-eq-bars {

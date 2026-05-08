@@ -124,12 +124,26 @@
   --shadow-sheet:   0 -12px 48px rgba(0,0,0,0.55);
   --shadow-glow-sm: 0 0 14px rgba(255,255,255,0.18);
 
-  /* Tap target & layout helpers */
+  /* Tap target & layout helpers.
+   *  --tap         — WCAG 2.1 / Apple HIG minimum (44px).
+   *  --tap-comfort — comfortable target for primary actions.
+   *  --tap-large   — large-thumb-friendly hero controls. */
   --tap: 44px;
+  --tap-comfort: 48px;
+  --tap-large: 56px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
+
+  /* Responsive layout heights. The base values match the legacy
+   * --nav-h / --player-h tokens declared in global.css; the media
+   * queries below shrink them on narrow / landscape phones so the
+   * fixed strips stop eating valuable viewport real estate. */
+  --layout-nav-h: 60px;
+  --layout-player-h: 80px;
+  --layout-content-gutter: 16px;
+  --layout-section-gap: 24px;
 
   /* Z-index scale (#player-bar / #nav use 165–166 in global.css) */
   --z-nav: 80;
@@ -138,6 +152,37 @@
   --z-modal: 185;
   --z-toast: 500;
   --z-install: 150;
+}
+
+/* Narrow phones (iPhone SE / Android small): trim chrome a bit so
+ * #main has more vertical room. */
+@media (max-width: 360px) {
+  :root {
+    --layout-nav-h: 56px;
+    --layout-player-h: 72px;
+    --layout-content-gutter: 12px;
+    --layout-section-gap: 20px;
+  }
+}
+
+/* Landscape phones: split screens, foldables and any short viewport
+ * collapse the bottom strips aggressively so the player + nav don't
+ * cover the active row of content. */
+@media (orientation: landscape) and (max-height: 500px) {
+  :root {
+    --layout-nav-h: 48px;
+    --layout-player-h: 64px;
+    --layout-content-gutter: 12px;
+    --layout-section-gap: 16px;
+  }
+}
+
+/* Comfortable tablets / desktop browser: a touch more breathing room. */
+@media (min-width: 768px) {
+  :root {
+    --layout-content-gutter: 24px;
+    --layout-section-gap: 32px;
+  }
 }
 
 body.ds-perf-lite {

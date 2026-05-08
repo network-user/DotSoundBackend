@@ -680,6 +680,67 @@
       "smartFallback": "Continuing without setup — you can adjust this in the profile",
       "skipFail": "Could not skip, please try again"
     },
+    "onboardingV2": {
+      "skip": "Skip",
+      "next": "Next",
+      "back": "Back",
+      "saving": "Saving…",
+      "loading": "Loading…",
+      "welcome": {
+        "logo": "DotSound",
+        "title": "Music tuned to your taste",
+        "subtitle": "A few steps and your home is ready",
+        "cta": "Start"
+      },
+      "profile": {
+        "title": "What should we call you?",
+        "subtitle": "Your name and avatar will be visible to others",
+        "label": "Name",
+        "placeholder": "Enter your name",
+        "errInvalid": "Use 1 to 64 characters",
+        "errSave": "Couldn't save — try again?",
+        "cta": "Continue",
+        "skip": "Keep current",
+        "avatarSheetTitle": "Avatar",
+        "avatarPick": "Pick from gallery",
+        "avatarUploading": "Uploading…",
+        "avatarReset": "Reset to default",
+        "avatarCancel": "Cancel",
+        "avatarTooBig": "File is larger than 2 MB",
+        "avatarFail": "Couldn't upload"
+      },
+      "genres": {
+        "title": "What do you listen to?",
+        "subtitle": "Pick at least {{min}} genres so we can start mixing",
+        "counterMore": "Pick {{count}} more",
+        "counterDone": "{{count}} selected",
+        "cta": "Continue",
+        "skipHint": "Or let us pick automatically — tap \"{{skipLabel}}\"",
+        "empty": "No genres yet — try later"
+      },
+      "swipe": {
+        "title": "Swipe calibration",
+        "subtitle": "Like / dislike / skip — the card flies away",
+        "tapHint": "Tap a card to play a preview",
+        "like": "Like",
+        "dislike": "Dislike",
+        "skipCard": "Skip",
+        "badgeLike": "LIKE",
+        "badgeNope": "NOPE",
+        "empty": "All tracks rated",
+        "loading": "Loading tracks…",
+        "counter": "{{current}} / {{total}}",
+        "cta": "Done"
+      },
+      "complete": {
+        "title": "All set",
+        "subtitle": "Your home page is ready",
+        "importTitle": "Bring your music",
+        "importHint": "Telegram, Yandex Music, Spotify, SoundCloud",
+        "cta": "To music",
+        "ctaImport": "Import"
+      }
+    },
     "achievements": {},
     "legal": {
       "title": "Rights holders",

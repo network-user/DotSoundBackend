@@ -26,6 +26,7 @@ import './styles/redesign-tracks.css'
 import './styles/redesign-artist.css'
 import './styles/redesign-recap.css'
 import './styles/redesign-upload.css'
+import './styles/onboarding.css'
 
 installGlassPerformanceClass()
 installViewportListener()

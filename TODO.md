@@ -14,6 +14,113 @@
 
 ---
 
+## Onboarding v2 — fresh wizard (2026-05-08)
+
+- [x] **Onboarding v2** — переписан с нуля под единый flow
+  Welcome → Profile → Genres → Swipe → Complete без шага «artists/moods»
+  (вкус собирается через жанровые «пузыри» и Tinder-style свайп треков).
+  - Backend (`app/api/v1/onboarding.py`, `app/services/onboarding_service.py`,
+    `app/schemas/onboarding.py`):
+    - `GET /onboarding/bootstrap` — single-shot: status + profile defaults
+      + locale-curated `genre_bubbles[{genre, track_count, sample_cover_keys}]`
+      + `show_import_offer` (через `should_offer_import_in_onboarding`).
+    - `GET /onboarding/profile-defaults` — `derive_default_display_name`
+      + `_DICEBEAR_IDENTICON` fallback для аватара + `suggested_initials`.
+    - `POST /onboarding/profile` — сохранение `display_name` (валидация
+      через PrivateCore `is_display_name_valid`), `locale`,
+      `use_default_avatar`; `OnboardingProfileSubmitResponse` отдаёт
+      финальный URL аватара и флаг `profile_completed`.
+    - `GET /onboarding/taste-swipe?count=5` — отдаёт упорядоченные треки
+      через PrivateCore `order_taste_swipe_tracks` (rotates genre/locale).
+    - `POST /onboarding/taste-swipe` — батч из `like/dislike/skip` решений,
+      создаёт записи в `LikeRepository` / `DislikeRepository` и помечает
+      `calibration_completed=true`.
+    - `OnboardingService.get_genre_bubbles` — выборка top-3 cover_keys
+      на жанр через window-функцию `func.count().over()`.
+    - `process_activation_event` уже возвращает merged meta с
+      `ms_from_auth_server` (использовалось во фронте).
+  - PrivateCore: `services/onboarding_policy.py` —
+    `derive_default_display_name`, `is_display_name_valid`,
+    `pick_default_genres_for_locale`, `should_offer_import_in_onboarding`,
+    `trim_genre_bubbles`, `order_taste_swipe_tracks`,
+    `has_minimum_taste_signal`, константы `GENRE_BUBBLE_COUNT`,
+    `TASTE_SWIPE_TRACK_COUNT`, `TasteSwipeConfig`, `TasteTrackInput`.
+  - Frontend (`frontend/src/components/Onboarding/OnboardingV2.tsx`):
+    - 5 шагов в одном файле + sub-components `WelcomeStep` / `ProfileStep`
+      / `GenresStep` / `SwipeStep` / `CompleteStep`. Полный motion
+      (Framer Motion) c respect `prefers-reduced-motion`.
+    - `AvatarBuilder` (загрузка через `api.uploadAvatar` 2 МБ ограничение,
+      reset-to-default), `GenreBubble` (4-cell collage из cover_keys или
+      placeholder, `is-selected` стиль).
+    - Tinder-style `SwipeCard`: `useMotionValue` + `useTransform` для
+      `rotate` и `LIKE`/`NOPE` бейджей (порог 110 px), aux-кнопки
+      dislike / skip / like, hidden `<audio>` для preview по tap по карте.
+    - Smart skip: `POST /onboarding/smart-skip` (PrivateCore решает, что
+      применить); progress bar из 3 dots для основных шагов;
+      `welcome` и `complete` без skip.
+    - Hooks-events: `trackActivationEvent('onboarding_step_view')`,
+      `'onboarding_step_complete'`, `'onboarding_complete'` /
+      `'onboarding_skip'`.
+    - Полная локализация под `redesign.onboardingV2.*` ключами в
+      `frontend/src/locales/i18n_extra2_{ru,en}.json`.
+    - `App.tsx` теперь монтирует `OnboardingV2` вместо старого
+      `Onboarding`. Старый `Onboarding.tsx` + `OnboardingImportStep`
+      + `OnboardingGenreScreen` остаются в репо как legacy и удаляются
+      отдельным cleanup-коммитом (нет других потребителей).
+    - `frontend/vite.config.ts` получил `redirectRootToMiniApp` middleware:
+      запросы на `/` и `/mini_app` (без trailing slash) теперь 302
+      редиректятся на `/mini_app/` в dev/preview серверах.
+  - Тесты: 25 onboarding-тестов зелёные
+    (`tests/app/services/test_onboarding_service.py`,
+    `tests/app/api/v1/test_onboarding.py`); ruff/black по
+    `app/api/v1/onboarding.py`, `app/schemas/onboarding.py`,
+    `app/services/onboarding_service.py` clean. `tsc --noEmit`
+    + `npm run build` зелёные (PWA precache 41 entries).
+  - Follow-up: вычистить `Onboarding.tsx`/`OnboardingImportStep`/
+    `OnboardingGenreScreen` из репо отдельным коммитом, как только
+    станет ясно, что rollback не нужен.
+
+## Mini App: глобальный mobile-first рефакторинг (2026-05-08)
+
+- [x] **Mini App: глобальный mobile-first рефакторинг (адаптив + жесты + tap-targets)**
+  — пройден аудит всей публичной части и выкачен один большой проход полировки
+  под телефон без изменений API, PrivateCore и ComputeWorker.
+  - Адаптивные токены `tokens.css`: `--tap-comfort/--tap-large`, ответвлённые
+    `--layout-nav-h/--layout-player-h/--layout-content-gutter/--layout-section-gap`
+    с media queries `(max-width: 360px)`, `(orientation: landscape) and
+    (max-height: 500px)`, `(min-width: 768px)`. Legacy `--nav-h/--player-h`
+    в `global.css` теперь биндятся к новым токенам.
+  - `global.css` mobile-first слой: `.line-clamp-1/2/3`, `.touch-target`,
+    `.no-scrollbar`, `.safe-bottom-pad`, `.sr-only`; tap-target нормализация
+    `.ctrl-btn/.icon-btn/.nav-btn/.play-btn` под `pointer: coarse` (≥44px) +
+    форм-контролы (`min-height: var(--tap)`, `font-size: 16px` чтобы убрать
+    iOS-зум при focus); landscape-секция для `#player-bar/#pb-row` (компакт,
+    `#pb-time/.pb-volume-wrap` скрыты), narrow-phone tweaks для view-header,
+    `.track-card/.pb-cover/.pb-title/.pb-artist`; tablet (≥768px) шире gutter,
+    desktop (≥1280px) центровка `.view` с `--content-max-width: 1200px`;
+    `#main` overscroll-behavior contain; глобальный `:where()` focus-visible.
+  - `redesign-shared.css`: glass-pill `.ptr-indicator` со state-машиной
+    `idle | pulling | armed | refreshing`, `.sheet-inner--snap-medium/--snap-tall`,
+    `.sheet-handle-zone { min-height: 28px }` для удобного захвата.
+  - `redesign-nav.css`: narrow-phone padding, landscape (labels off,
+    иконки в ряд), tablet centering.
+  - `redesign-player.css`: narrow-phone now-playing, landscape split
+    (`.rp-now__split` + `.rp-now__split-right`), wide desktop cap cover
+    `min(48vw, 420px)`, компактные `--player-h` 72/56px на narrow/landscape,
+    visual swipe-up `.rp-player-bar__hint`.
+  - Sheet primitive (`components/ui/Sheet.tsx`): pointer-capture, rubberband
+    easing, `snap='auto'|'medium'|'tall'`, чище cleanup transform/transition.
+  - PullToRefresh: `hooks/usePullToRefresh` теперь возвращает `armed` и
+    единожды стреляет `hapticSelection()` при пересечении threshold; общий
+    `components/ui/PullToRefreshIndicator.tsx` (мигрирован `HomeView`,
+    добавлен sr-only live region); ключи `redesign.home.ptrRelease` для
+    RU/EN.
+  - `PlayerBar` JSX: `<span class="rp-player-bar__hint">` swipe-up affordance
+    над seek; seek thumb стабильно видим под `pointer: coarse`.
+  - `NowPlayingView` JSX: добавлены wrapper-блоки `.rp-now__split` и
+    `.rp-now__split-right` (в портрете `display: contents`, в landscape
+    активируют 2-column grid).
+
 ## Smart-buffering / pre-fetch (2026-05-06)
 
 - [x] **Smart predictive audio buffering (Mini App)** — единый
@@ -72,6 +179,24 @@
   `search_index_service` dropped unsupported `ignore` kwargs on
   Elasticsearch delete calls (errors remain safely logged in the same
   exception path). Plus typed null-filter in `metadata` genres endpoint.
+
+- [x] **Mini App: redesign /profile UX — follow-ups (2026-05-08)** —
+  поверх первого редизайна: (1) `ProfileTrackList` переписан с
+  i18n-заголовком («Мои треки» + бейдж-счётчик в стиле
+  `.profile-actions-group__title`) и empty state с CTA «Загрузить
+  трек» (вызывает `navigate('/upload')`); (2) аватар в обычном
+  режиме стал кликабельным `MotionPress` — на desktop при hover
+  и focus-visible появляется тонкий pencil-overlay
+  (`.profile-avatar-hover-hint`), клик открывает edit mode; на
+  мобиле скрыт через `@media (hover: hover)`, остаётся явная
+  кнопка «Изменить профиль»; (3) settings cog продублирован в
+  back-header подвью (`profile-header-actions--sub`), чтобы из
+  Импорта/Жалоб/Дизлайков можно было сразу попасть в настройки
+  без возврата на главный профиль. Затронутые файлы:
+  `views/ProfileView.tsx`, `components/Profile/ProfileHero.tsx`,
+  `components/Profile/ProfileTrackList.tsx`, `styles/global.css`,
+  `locales/ru.json`, `locales/en.json`. tsc/lint/tests/vite build —
+  зелёные.
 
 - [x] **Mini App: redesign /profile UX (2026-05-08)** —
   убрали табы Профиль/Импорт/Жалобы из шапки, шапка теперь
@@ -135,6 +260,10 @@
   Radio: hero и `next track` карточка получили более выразительный
   glass-depth и cleaner hover/focus. Share Sheet: recap-card и collage
   блок стали контрастнее и визуально “плотнее”.
+
+- [x] **Mini App: Radio — tap on disc toggles play/pause (2026-05-08)** —
+  в `/radio` клик/тап по большому диску переключает воспроизведение
+  (короткий тап, без конфликта со swipe next/prev).
 
 - [x] **Mini App: visual polish NotFound + External views (2026-05-08)** —
   NotFound: экран 404 переведён в более аккуратный card-layout с
@@ -1076,3 +1205,17 @@
   `make test` (или `poetry run pytest -v`), `make lint` (ruff + black --check + mypy по `app/`),
   `python scripts/check_docs_sync.py`. Частичный прогон `pytest` до прерывания уже показывал несколько падений —
   после полного прогона зафиксировать список упавших модулей и закрыть регрессии.
+
+- [x] **Onboarding v2 — заверение flow и переключение App.tsx (2026-05-08)**:
+  собран главный компонент `OnboardingV2` (`Welcome → Profile → Genres →
+  Swipe → Complete`), подключён в `App.tsx` вместо старого
+  `Onboarding`, переведены `AvatarBuilder` / диалог аватара на i18n
+  ключи `redesign.onboardingV2.profile.*`. Backend часть (`/onboarding/
+  bootstrap`, `/profile-defaults`, `/profile`, `/taste-swipe` GET+POST)
+  отформатирована Black + чистый Ruff. Тестовая батарея
+  (`tests/app/services/test_onboarding_service.py`,
+  `tests/app/api/v1/test_onboarding.py`) — 25 passed. Frontend
+  `tsc --noEmit` + `npm run build` зелёные. Параллельно восстановлен
+  синтаксис в `DotSoundPrivateCore/src/dotsound_private_core/services/
+  lyrics_provider.py` (две слипшиеся в одну строку конструкции из ASR
+  loop), без них тесты не загружались.

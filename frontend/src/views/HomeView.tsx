@@ -22,6 +22,7 @@ import { usePlayerActions } from '@/store/PlayerContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { trackActivationEvent } from '@/lib/activation'
 import { usePullToRefresh } from '@/hooks/usePullToRefresh'
+import { PullToRefreshIndicator } from '@/components/ui/PullToRefreshIndicator'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import {
@@ -602,27 +603,14 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       id="view-home"
       className="view active rh-home-root"
     >
-      {(pull.pulling || pull.refreshing) && (
-        <div
-          className="rh-home-ptr"
-          aria-live="polite"
-          style={{
-            height: pull.refreshing
-              ? 36
-              : Math.min(72, Math.round(pull.distance)),
-            opacity: pull.refreshing
-              ? 1
-              : Math.min(1, pull.distance / 70),
-            transition: pull.refreshing
-              ? 'height .15s ease'
-              : 'none',
-          }}
-        >
-          {pull.refreshing
-            ? t('redesign.home.ptrRefresh')
-            : t('redesign.home.ptrPull')}
-        </div>
-      )}
+      <PullToRefreshIndicator state={pull} />
+      <span className="sr-only" aria-live="polite">
+        {pull.refreshing
+          ? t('redesign.home.ptrRefresh')
+          : pull.pulling
+            ? t('redesign.home.ptrPull')
+            : ''}
+      </span>
 
       <m.div
         initial="hidden"

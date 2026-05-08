@@ -74,7 +74,12 @@
     "liked": "Liked",
     "editProfile": "Edit profile",
     "sectionCatalog": "My library",
-    "sectionDiscover": "Mixes"
+    "sectionDiscover": "Mixes",
+    "myTracksTitle": "My tracks",
+    "myTracksEmptyTitle": "Your tracks will appear here",
+    "myTracksEmptyHint": "Upload your first track to see it here",
+    "myTracksUpload": "Upload track",
+    "avatarEditHint": "Change profile photo"
   },
   "playlists": {
     "title": "Playlists",
