@@ -13,10 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_db
-from app.schemas.track import (
-    TrackListResponse,
-    TrackResponse,
-)
+from app.schemas.track import TrackListResponse
 from app.services.track_service import TrackService
 from app.services.track_response_build import dedupe_and_build_track_list
 

@@ -10,7 +10,6 @@ from app.schemas.like import (
     LikeToggleResponse,
     UserLikesResponse,
 )
-from app.schemas.track import TrackResponse
 from app.services.like_service import LikeService
 from app.services.track_response_build import build_track_response
 
