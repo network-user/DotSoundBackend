@@ -13,6 +13,7 @@ from app.config import settings
 from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db, get_optional_user
+from app.models.track import Track
 from app.models.user import User
 from app.repositories.track import TrackRepository
 from app.schemas.card import TrackCardResponse
@@ -264,12 +265,12 @@ async def _proxy_cors_bypass_third_party_audio(
 
 
 async def _resolve_third_party_stream_with_recovery(
-    track: object,
+    track: Track,
     session: AsyncSession,
     *,
     use_cache: bool = True,
-) -> tuple[object, str, str]:
-    eff_track: object = track
+) -> tuple[Track, str, str]:
+    eff_track: Track = track
     try:
         stream_url, protocol = await _resolve_third_party_stream(
             eff_track,
@@ -527,7 +528,7 @@ async def audio_stream(
     ),
     session: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
-) -> StreamingResponse | RedirectResponse:
+) -> Response | StreamingResponse | RedirectResponse:
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
     track = await service.get_track_for_playback(track_id)
@@ -668,7 +669,7 @@ async def audio_stream(
         ) from exc
 
     http_status = 206 if content_range else 200
-    headers: dict[str, str] = {
+    headers = {
         "Accept-Ranges": "bytes",
         "Content-Length": str(content_length),
     }
