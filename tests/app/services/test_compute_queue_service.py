@@ -5,9 +5,33 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from app.models.compute_job import ComputeJob
+from app.models.compute_worker import ComputeWorker
 from app.services import compute_queue_service as q
 
 pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture(autouse=True)
+async def _register_test_workers(db_session):
+    """Register every worker_id used in this module so claim_next
+    can pass the ComputeWorker authorization gate.
+    """
+    for wid in ("w_x", "w_a", "w_b_only"):
+        existing = await db_session.get(ComputeWorker, wid)
+        if existing is not None:
+            continue
+        db_session.add(
+            ComputeWorker(
+                id=wid,
+                name=wid,
+                profile="cpu_light",
+                token_hash="test",
+                active=True,
+                max_concurrent_jobs=8,
+            )
+        )
+    await db_session.commit()
+    yield
 
 
 async def test_enqueue_is_idempotent(db_session):
