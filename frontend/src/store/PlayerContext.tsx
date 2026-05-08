@@ -843,7 +843,13 @@ export function PlayerProvider({
     if (!track) return
     const i = setInterval(() => {
       const a = audioRef.current
-      if (a) _saveState(track, a.currentTime)
+      if (
+        a &&
+        lastTrackIdRef.current === track.id &&
+        Number.isFinite(a.currentTime)
+      ) {
+        _saveState(track, a.currentTime)
+      }
     }, _SAVE_INTERVAL)
     return () => clearInterval(i)
   }, [track])
@@ -1294,6 +1300,16 @@ export function PlayerProvider({
     playCountSentRef.current = false
     listenSignalSentRef.current = false
     listenStartTimeRef.current = 0
+    if (!audio.paused) {
+      audio.pause()
+    }
+    audio.src = ''
+    audio.load()
+    try {
+      audio.currentTime = 0
+    } catch {
+    }
+    setIsPlaying(false)
     setCurrentTime(0)
     setDuration(0)
     _saveState(newTrack, 0)

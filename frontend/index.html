@@ -126,6 +126,19 @@
       var loader = document.getElementById('ds-loader');
       var loaderMark = loader && loader.querySelector('.loader-mark');
       var loaderText = loader && loader.querySelector('.loader-text');
+      var warmBootCacheKey = 'ds:last-ready-at';
+      var warmBootWindowMs = 30 * 60 * 1000;
+      var nowTs = Date.now();
+      var warmBoot = false;
+      try {
+        var rawBootTs = sessionStorage.getItem(warmBootCacheKey);
+        var parsedBootTs = rawBootTs ? Number(rawBootTs) : NaN;
+        warmBoot =
+          Number.isFinite(parsedBootTs) &&
+          nowTs - parsedBootTs <= warmBootWindowMs;
+      } catch (_warmErr) {
+        warmBoot = false;
+      }
       if (loaderMark) {
         loaderMark.setAttribute('aria-label', brandLabel);
       }
@@ -152,8 +165,34 @@
           }, 350);
         }, waitMs);
       }
+      function hideImmediately() {
+        if (done || !loader) return;
+        done = true;
+        if (loader.parentNode) {
+          loader.parentNode.removeChild(loader);
+        }
+      }
+      function rememberWarmBoot() {
+        try {
+          sessionStorage.setItem(
+            warmBootCacheKey,
+            String(Date.now())
+          );
+        } catch (_storeErr) {
+          /* ignore */
+        }
+      }
+      if (warmBoot) {
+        hideImmediately();
+      }
       window.addEventListener('app-ready', hide);
+      window.addEventListener('app-ready', rememberWarmBoot);
       setTimeout(hide, fallbackMs);
+      window.addEventListener('pageshow', function (event) {
+        if (event && event.persisted) {
+          hideImmediately();
+        }
+      });
     })();
   </script>
 </body>

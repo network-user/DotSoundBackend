@@ -14,6 +14,16 @@
 
 ---
 
+## Playback resume fix (2026-05-08)
+
+- [x] **Fix intermittent cross-track resume-position bleed in Mini App player** —
+  in `frontend/src/store/PlayerContext.tsx` track switch now hard-resets previous
+  audio element (`pause` + `src=''` + `load` + `currentTime=0`) before loading
+  the next track, and periodic position persistence writes only when
+  `lastTrackIdRef` matches the active `track.id`. This removes the race where
+  old playback time could be saved under a newly selected track and improves
+  state consistency during rapid switches. Frontend `npm run lint` is green.
+
 ## Onboarding v2 — fresh wizard (2026-05-08)
 
 - [x] **Onboarding v2** — переписан с нуля под единый flow
@@ -154,6 +164,15 @@
     metadata + URL warm-up через существующий `audio_cache_prefetch`.
 
 ## Mini App / .sound UI (2026-05-04)
+
+- [x] **Mini App: warm-start без повторного бренд-сплэша (2026-05-08)** —
+  устранено частое повторное появление глобального `.sound` loading-screen
+  при самопроизвольных refresh в мобильном WebView. В `frontend/index.html`
+  добавлен warm-boot cache в `sessionStorage` (`ds:last-ready-at`), логика
+  мгновенного скрытия loader на «тёплом» старте и `pageshow`-обработка для
+  bfcache. В `frontend/src/App.tsx` отключён React splash-screen на тёплом
+  старте (init идёт в фоне без повторного бренд-экрана). Проверка:
+  `npm run build` зелёный.
 
 - [x] **Backend tech debt: targeted mypy + tests pass (2026-05-08)** -
   `AlbumService` fixed admin-actor resolution path (`_resolve_user` +

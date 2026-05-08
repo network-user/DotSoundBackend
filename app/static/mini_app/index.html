@@ -73,7 +73,7 @@
       pointer-events: none;
     }
   </style>
-  <script type="module" crossorigin src="/mini_app/assets/index-Blj8kFad.js"></script>
+  <script type="module" crossorigin src="/mini_app/assets/index-BRZE8WQh.js"></script>
   <link rel="modulepreload" crossorigin href="/mini_app/assets/vendor-V1sCP0F7.js">
   <link rel="modulepreload" crossorigin href="/mini_app/assets/hls-BbSaIQh1.js">
   <link rel="stylesheet" crossorigin href="/mini_app/assets/secure/admin-bundle.css">
@@ -85,8 +85,7 @@
       <span class="loader-dot">.</span><span class="loader-text">&#1079;&#1074;&#1091;&#1082;</span>
     </span>
   </div>
-  <div id="root"></div>
-
+  <div id="root"></div>
   <script>
     // Hide loader once the app marks itself as ready.
     // Keep a short minimum visibility to avoid flicker,
@@ -131,6 +130,19 @@
       var loader = document.getElementById('ds-loader');
       var loaderMark = loader && loader.querySelector('.loader-mark');
       var loaderText = loader && loader.querySelector('.loader-text');
+      var warmBootCacheKey = 'ds:last-ready-at';
+      var warmBootWindowMs = 30 * 60 * 1000;
+      var nowTs = Date.now();
+      var warmBoot = false;
+      try {
+        var rawBootTs = sessionStorage.getItem(warmBootCacheKey);
+        var parsedBootTs = rawBootTs ? Number(rawBootTs) : NaN;
+        warmBoot =
+          Number.isFinite(parsedBootTs) &&
+          nowTs - parsedBootTs <= warmBootWindowMs;
+      } catch (_warmErr) {
+        warmBoot = false;
+      }
       if (loaderMark) {
         loaderMark.setAttribute('aria-label', brandLabel);
       }
@@ -157,8 +169,34 @@
           }, 350);
         }, waitMs);
       }
+      function hideImmediately() {
+        if (done || !loader) return;
+        done = true;
+        if (loader.parentNode) {
+          loader.parentNode.removeChild(loader);
+        }
+      }
+      function rememberWarmBoot() {
+        try {
+          sessionStorage.setItem(
+            warmBootCacheKey,
+            String(Date.now())
+          );
+        } catch (_storeErr) {
+          /* ignore */
+        }
+      }
+      if (warmBoot) {
+        hideImmediately();
+      }
       window.addEventListener('app-ready', hide);
+      window.addEventListener('app-ready', rememberWarmBoot);
       setTimeout(hide, fallbackMs);
+      window.addEventListener('pageshow', function (event) {
+        if (event && event.persisted) {
+          hideImmediately();
+        }
+      });
     })();
   </script>
 </body>
