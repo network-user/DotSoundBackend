@@ -229,18 +229,18 @@ class OnboardingService:
             if liked is None:
                 continue
             if liked:
-                existing = await like_repo.get(
+                like_existing = await like_repo.get(
                     user_id, track_id
                 )
-                if not existing:
+                if not like_existing:
                     await like_repo.add(
                         user_id, track_id
                     )
             else:
-                existing = await dislike_repo.get(
+                dislike_existing = await dislike_repo.get(
                     user_id, track_id
                 )
-                if not existing:
+                if not dislike_existing:
                     await dislike_repo.add(
                         user_id, track_id
                     )
