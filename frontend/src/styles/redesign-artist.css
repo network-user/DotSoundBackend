@@ -65,6 +65,9 @@
   position: relative;
   min-height: 360px;
   border-bottom: 1px solid var(--glass-border);
+  box-shadow:
+    inset 0 -28px 48px rgba(0, 0, 0, 0.2),
+    0 18px 38px rgba(0, 0, 0, 0.2);
 }
 
 .rf-artist__hero .ambient-stage {
@@ -91,6 +94,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  transition:
+    transform 220ms var(--ease-out),
+    box-shadow 220ms var(--ease-out);
 }
 
 .rf-artist__hero-art .kenburns-cover {
@@ -236,12 +243,17 @@
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition:
+    transform 180ms var(--ease-out),
+    box-shadow 180ms var(--ease-out);
 }
 
 .rf-artist__similar-art img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 240ms var(--ease-out);
 }
 
 .rf-artist__similar-name {
@@ -269,6 +281,42 @@
   padding: 8px 14px;
   border-radius: 999px;
   color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition:
+    transform 160ms var(--ease-out),
+    background 160ms var(--ease-out),
+    border-color 160ms var(--ease-out);
+}
+
+.rf-artist__source-btn:focus-visible,
+.rf-artist__similar-card:focus-visible,
+.rf-artist__footer-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rf-artist__hero:hover .rf-artist__hero-art {
+    transform: translateY(-2px) scale(1.015);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.58);
+  }
+
+  .rf-artist__similar-card:hover .rf-artist__similar-art {
+    transform: translateY(-2px);
+    box-shadow:
+      0 14px 24px rgba(0, 0, 0, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .rf-artist__similar-card:hover .rf-artist__similar-art img {
+    transform: scale(1.04);
+  }
+
+  .rf-artist__footer-btn:hover {
+    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.2);
+  }
 }
 
 .rf-artist__error {
@@ -312,6 +360,10 @@
 .rf-album__hero {
   margin: calc(var(--space-3) * -1) 0 var(--space-4);
   min-height: 320px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 85%, transparent);
+  box-shadow:
+    inset 0 -24px 42px rgba(0, 0, 0, 0.2),
+    0 14px 30px rgba(0, 0, 0, 0.18);
 }
 
 .rf-album__hero .ambient-stage {
@@ -334,6 +386,10 @@
   overflow: hidden;
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
   background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition:
+    transform 210ms var(--ease-out),
+    box-shadow 210ms var(--ease-out);
 }
 
 .rf-album__hero-art .kenburns-cover,
@@ -408,6 +464,10 @@
 .rf-playlist__hero {
   margin: calc(var(--space-3) * -1) 0 var(--space-4);
   min-height: 320px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 85%, transparent);
+  box-shadow:
+    inset 0 -24px 42px rgba(0, 0, 0, 0.2),
+    0 14px 30px rgba(0, 0, 0, 0.18);
 }
 
 .rf-playlist__hero .ambient-stage {
@@ -434,6 +494,10 @@
   overflow: hidden;
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
   background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition:
+    transform 210ms var(--ease-out),
+    box-shadow 210ms var(--ease-out);
 }
 
 .rf-playlist__collage-cell {
@@ -450,6 +514,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 240ms var(--ease-out);
 }
 
 .rf-playlist__collage--single {
@@ -530,6 +595,10 @@
     rgba(255, 255, 255, 0.12) 0%,
     rgba(0, 0, 0, 0.0) 60%
   );
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 84%, transparent);
+  box-shadow:
+    inset 0 -20px 36px rgba(0, 0, 0, 0.18),
+    0 12px 28px rgba(0, 0, 0, 0.17);
 }
 
 .rf-genre__hero-inner {
@@ -568,10 +637,42 @@
   font-size: var(--fs-13);
   font-weight: 500;
   cursor: pointer;
+  transition:
+    transform 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    background 140ms var(--ease-out);
 }
 
 .rf-genre__tab[data-active='true'] {
   color: var(--text);
+}
+
+.rf-album__actions .mp-press:focus-visible,
+.rf-playlist__actions .mp-press:focus-visible,
+.rf-genre__tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rf-album__hero:hover .rf-album__hero-art {
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.58);
+  }
+
+  .rf-playlist__hero:hover .rf-playlist__collage {
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.58);
+  }
+
+  .rf-playlist__hero:hover .rf-playlist__collage-cell img {
+    transform: scale(1.03);
+  }
+
+  .rf-genre__tab:hover:not([data-active='true']) {
+    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.05);
+  }
 }
 
 .rf-genre__tab-indicator {

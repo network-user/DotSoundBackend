@@ -27,4 +27,4 @@ async def get_popular_genres(
         .order_by(func.count(Track.id).desc())
         .limit(limit)
     )
-    return list(result.scalars().all())
+    return [genre for genre in result.scalars().all() if genre is not None]

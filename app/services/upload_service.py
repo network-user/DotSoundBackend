@@ -71,7 +71,7 @@ class UploadService:
         cover: UploadFile | None = None,
         uploader_id: int | None = None,
         is_public: bool = True,
-        background_tasks: BackgroundTasks = None,
+        background_tasks: BackgroundTasks | None = None,
     ) -> Track:
         mime = _resolve_mime(file)
         logger.info(
