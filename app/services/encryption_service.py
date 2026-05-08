@@ -58,7 +58,7 @@ async def _get_or_create_conversation_key(
         _KEY_CACHE[conversation_id] = key
         return key
 
-    conv_key = AESGCM.generate_key(bit_length=256)
+    conv_key = AESGCM.generate_key(256)
     master = _master_aesgcm()
     nonce = os.urandom(12)
     encrypted = nonce + master.encrypt(

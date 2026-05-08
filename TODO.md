@@ -57,12 +57,58 @@
   image typing; `AlbumRepository._next_album_position` hardened for
   nullable scalar edge-case. Added service regression test for admin
   override authorization (`tests/app/services/test_album_service.py`).
+- [x] **Backend tech debt: likes/dislikes typing cleanup (2026-05-08)** -
+  tightened SQLAlchemy typing in `LikeRepository`/`DislikeRepository`:
+  expression helpers now return `ColumnElement[bool]`, source-filter
+  builder signatures are typed, and delete result handling uses safe
+  `rowcount` extraction without `Result.rowcount` static-typing breakage.
+  Also typed `TrackRepository` shared predicates to reduce downstream
+  `no-untyped-call` debt.
+- [x] **Backend tech debt: service typing fixes (2026-05-08)** -
+  fixed strict-typing regressions in isolated services:
+  `UploadService.upload_track` now has explicit optional
+  `BackgroundTasks`; `encryption_service` uses positional
+  `AESGCM.generate_key(256)` to match current cryptography stubs;
+  `search_index_service` dropped unsupported `ignore` kwargs on
+  Elasticsearch delete calls (errors remain safely logged in the same
+  exception path). Plus typed null-filter in `metadata` genres endpoint.
 
 - [x] **Mini App: визуальный polish Home + Search (2026-05-08)** —
   Home: hero/tiles/artist chips получили мягкий glass-border, depth и
   desktop hover micro-interactions (lift + cover zoom). Search: genre
   discover/playlist/history получили более выразительные состояния
   hover/focus, badge для количества треков и более читаемый active-tab.
+
+- [x] **Mini App: visual polish Library + Profile header (2026-05-08)** —
+  Library: `Daily mix` карточка и табы получили более выразительный
+  depth/hover/focus. Profile: верхняя панель вкладок и подшапка
+  `dislikes` стали контрастнее и визуально чище (glass-border, мягкие
+  тени, hover/focus states).
+
+- [x] **Mini App: visual polish Artist + Now Playing (2026-05-08)** —
+  Artist: hero/related artists/footer buttons получили depth и более
+  аккуратные hover/focus состояния. Now Playing: topbar и tabs стали
+  визуально чище, обложка получила мягкий hero-lift эффект на desktop.
+
+- [x] **Mini App: visual polish Upload + Recap (2026-05-08)** —
+  Upload: dropzone/cover/url-preview получили depth и понятные
+  hover/focus состояния. Recap: top chrome, hero элементы и CTA-кнопки
+  стали контрастнее и визуально “собраннее”.
+
+- [x] **Mini App: visual polish Legal + Achievements (2026-05-08)** —
+  Legal: секции переведены в более читабельный card-layout со sticky
+  header. Achievements: плитки и detail-sheet получили depth, cleaner
+  states и более выразительные hover/focus.
+
+- [x] **Mini App: visual polish Chats + Playlists grid (2026-05-08)** —
+  Chats: header и saved/search actions получили более чистый glass-depth
+  и hover/focus states. Playlists: карточки сетки и cover-обложки стали
+  выразительнее за счёт lift/zoom/contrast polish.
+
+- [x] **Mini App: visual polish Album/Playlist hero + Genre tabs (2026-05-08)** —
+  Album/Playlist: hero-обложки получили более выраженный depth и
+  desktop lift/zoom эффект. Genre: hero и табы стали контрастнее, с
+  cleaner hover/focus состояниями.
 
 - [x] **Профиль: дизлайки в блоке действий + адаптив (2026-05-08)** — убран четвёртый таб
   сверху; «Дизлайки» в `ProfileActions` после «Понравившееся»; подшапка «К профилю» +

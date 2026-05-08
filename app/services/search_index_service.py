@@ -26,9 +26,7 @@ async def index_track_document(session: AsyncSession, t: Track) -> None:
     tid = str(t.id)
     if not _indexable_track(t):
         try:
-            await es.delete(
-                index=idx, id=tid, ignore=[400, 404]
-            )
+            await es.delete(index=idx, id=tid)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "es_delete_track_failed", track_id=t.id, error=str(exc)
@@ -77,7 +75,6 @@ async def delete_track_document(track_id: int) -> None:
         await get_es().delete(
             index=settings.elasticsearch_index_tracks,
             id=str(track_id),
-            ignore=[400, 404],
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
@@ -92,7 +89,6 @@ async def delete_artist_document(artist_id: int) -> None:
         await get_es().delete(
             index=settings.elasticsearch_index_artists,
             id=str(artist_id),
-            ignore=[400, 404],
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning(
