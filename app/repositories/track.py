@@ -1,6 +1,7 @@
 import structlog
 from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.artist import TrackArtist
 from app.models.track import Track
@@ -39,7 +40,7 @@ class TrackRepository(BaseRepository[Track]):
         return result.scalar_one()
 
     @staticmethod
-    def _playable_filter():  # type: ignore[no-untyped-def]  # noqa: ANN205
+    def _playable_filter() -> ColumnElement[bool]:
         return Track.file_key.isnot(None) | (
             Track.access_mode.in_(
                 (
@@ -50,7 +51,7 @@ class TrackRepository(BaseRepository[Track]):
         )
 
     @staticmethod
-    def _exclude_hidden_sources():  # noqa: ANN205
+    def _exclude_hidden_sources() -> ColumnElement[bool]:
         hidden = ("youtube",)
         source_platform = func.lower(
             func.coalesce(Track.source_platform, "")
@@ -63,7 +64,7 @@ class TrackRepository(BaseRepository[Track]):
         )
 
     @staticmethod
-    def _playback_listing_allowed():  # noqa: ANN205
+    def _playback_listing_allowed() -> ColumnElement[bool]:
         return or_(
             Track.playback_suppressed_until.is_(None),
             Track.playback_suppressed_until <= func.now(),

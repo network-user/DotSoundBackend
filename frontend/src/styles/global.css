@@ -6464,10 +6464,14 @@ html.le-lyrics-sync-open body {
   align-items: center;
   gap: 10px;
   padding: 10px 16px;
+  border-radius: 12px;
+  margin: 0 8px;
   cursor: pointer;
   color: var(--text-secondary, rgba(255,255,255,0.6));
   font-size: 14px;
-  transition: background 0.15s;
+  transition:
+    background 0.15s,
+    color 0.15s;
 }
 .search-history-item:active { background: var(--bg-card, rgba(255,255,255,0.05)); }
 .search-history-item span { flex: 1; }
@@ -8626,6 +8630,7 @@ html.ds-low-glass .tcs-sheet {
   background: var(--text-primary);
   color: var(--bg);
   border-color: var(--text-primary);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
 }
 
 /* ?????? Discover (empty state) ????????????????????????????????????????????????????????????????????????????????????????????? */
@@ -8666,7 +8671,12 @@ html.ds-low-glass .tcs-sheet {
   padding: 12px;
   overflow: hidden;
   cursor: pointer;
-  transition: transform 0.16s ease, filter 0.16s ease, background 0.16s ease;
+  transition:
+    transform 0.16s ease,
+    filter 0.16s ease,
+    background 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
 }
 .search-genre-card:active {
   transform: translateY(1px) scale(0.99);
@@ -8719,8 +8729,12 @@ html.ds-low-glass .tcs-sheet {
   position: relative;
   z-index: 1;
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.86);
-  margin-top: 2px;
+  color: rgba(255, 255, 255, 0.9);
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 /* Genre chips (recent) */
@@ -8845,6 +8859,12 @@ html.ds-low-glass .tcs-sheet {
   align-items: center;
   gap: 12px;
   padding: 10px 16px;
+  border-radius: 12px;
+  margin: 0 8px 4px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    transform 0.15s;
 }
 .search-playlist-cover {
   width: 44px;
@@ -8875,6 +8895,33 @@ html.ds-low-glass .tcs-sheet {
   font-size: 12px;
   color: var(--text-muted);
   margin-top: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .search-history-item:hover {
+    background: var(--bg-card, rgba(255,255,255,0.05));
+    color: var(--text-primary);
+  }
+
+  .search-genre-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+    box-shadow:
+      0 12px 22px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .search-playlist-row:hover {
+    background: var(--bg-card, rgba(255,255,255,0.05));
+    transform: translateY(-1px);
+  }
+}
+
+.search-genre-card:focus-visible,
+.search-playlist-row:focus-visible,
+.search-history-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ?????? Playlists view: featured horizontal scroll ???????????????????????????????????? */

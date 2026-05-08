@@ -58,6 +58,12 @@
   nullable scalar edge-case. Added service regression test for admin
   override authorization (`tests/app/services/test_album_service.py`).
 
+- [x] **Mini App: визуальный polish Home + Search (2026-05-08)** —
+  Home: hero/tiles/artist chips получили мягкий glass-border, depth и
+  desktop hover micro-interactions (lift + cover zoom). Search: genre
+  discover/playlist/history получили более выразительные состояния
+  hover/focus, badge для количества треков и более читаемый active-tab.
+
 - [x] **Профиль: дизлайки в блоке действий + адаптив (2026-05-08)** — убран четвёртый таб
   сверху; «Дизлайки» в `ProfileActions` после «Понравившееся»; подшапка «К профилю» +
   заголовок; вкладка «Профиль» активна и для подэкрана дизлайков; сетка действий 3–4
