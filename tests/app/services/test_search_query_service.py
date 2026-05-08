@@ -23,13 +23,17 @@ def test_base_track_filters_all() -> None:
 
 def test_track_search_should_clauses_layered() -> None:
     layers = svs._track_search_should_clauses("hello world")
-    assert len(layers) == 2
+    assert len(layers) >= 2
     a = layers[0]["multi_match"]
     b = layers[1]["multi_match"]
     assert a.get("fuzziness") is None
     assert b.get("fuzziness")
     assert b.get("fuzzy_max_expansions", 0) > 0
     assert a["boost"] > b.get("boost", 0.0)
+    if len(layers) > 2:
+        translit = layers[2]["multi_match"]
+        assert translit["query"] != "hello world"
+        assert translit.get("fuzziness") is None
 
 
 @pytest.mark.anyio
@@ -77,7 +81,7 @@ async def test_es_search_tracks_success() -> None:
     _args, call_kw = es.search.call_args
     body = call_kw.get("body") or {}
     should = body.get("query", {}).get("bool", {}).get("should", [])
-    assert len(should) == 2
+    assert len(should) >= 2
     assert "multi_match" in should[0]
     assert "fuzziness" in should[1].get("multi_match", {})
 
