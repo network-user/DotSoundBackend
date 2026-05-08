@@ -80,12 +80,29 @@ class DislikeRepository(BaseRepository[Dislike]):
         )
         return r.scalar_one_or_none() is not None
 
+    @staticmethod
+    def _build_query_filter(
+        q: str | None,
+        base_clause: ColumnElement[bool],
+    ) -> ColumnElement[bool]:
+        if not q:
+            return base_clause
+        pattern = f"%{q.lower()}%"
+        return and_(
+            base_clause,
+            func.lower(Track.title).like(pattern)
+            | func.lower(func.coalesce(Track.artist, "")).like(
+                pattern
+            ),
+        )
+
     async def list_disliked_tracks(
         self,
         user_id: int,
         offset: int = 0,
         limit: int = 20,
         source_filter: str | None = None,
+        query: str | None = None,
     ) -> tuple[list[tuple[Track, datetime]], int]:
         base_where = self._build_source_filter(
             source_filter,
@@ -95,6 +112,9 @@ class DislikeRepository(BaseRepository[Dislike]):
                 self._exclude_hidden_sources(),
                 TrackRepository._playback_listing_allowed(),
             ),
+        )
+        base_where = self._build_query_filter(
+            query, base_where
         )
 
         count_result = await self._session.execute(

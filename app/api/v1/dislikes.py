@@ -26,6 +26,9 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _VALID_SOURCE_FILTERS = frozenset({"platform", "soundcloud", "other"})
 
 
+_MAX_QUERY_LEN = 100
+
+
 @router.get(
     "/{user_id}",
     response_model=UserDislikesResponse,
@@ -38,6 +41,7 @@ async def get_user_dislikes(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=200),
     source: str | None = Query(None),
+    q: str | None = Query(None, max_length=_MAX_QUERY_LEN),
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UserDislikesResponse:
@@ -48,12 +52,14 @@ async def get_user_dislikes(
         )
     structlog.contextvars.bind_contextvars(user_id=user_id)
     source_filter = source if source in _VALID_SOURCE_FILTERS else None
+    query = q.strip() if q and q.strip() else None
     service = DislikeService(session)
     rows, total = await service.list_disliked(
         user_id=user_id,
         page=page,
         size=size,
         source_filter=source_filter,
+        query=query,
     )
     items = []
     for track, disliked_at in rows:
