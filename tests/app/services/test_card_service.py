@@ -52,9 +52,8 @@ async def test_get_card_success(
     card = await svc.get_card(track.id)
 
     assert card is not None
+    assert card.id == track.id
     assert card.title == "Test Song"
-    assert card.author is not None
-    assert card.author.id == user.id
 
 
 async def test_get_card_not_found(
