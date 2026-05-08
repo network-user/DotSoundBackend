@@ -73,6 +73,27 @@
   Elasticsearch delete calls (errors remain safely logged in the same
   exception path). Plus typed null-filter in `metadata` genres endpoint.
 
+- [x] **Mini App: redesign /profile UX (2026-05-08)** —
+  убрали табы Профиль/Импорт/Жалобы из шапки, шапка теперь
+  компактная (`profile-page-header`): заголовок + правый кластер
+  иконок (notifications/admin/debug/settings). Подвью import/
+  complaints/dislikes используют единый back-header. ProfileHero:
+  центрированный layout, аватар 96/112px, заметная кнопка
+  «Изменить профиль» во всю ширину под именем; Save/Cancel — пара
+  широких pill-кнопок. ProfileActions переведён в iOS/Telegram-style
+  список со сгруппированными секциями («Моя библиотека»: Загрузить,
+  Импортировать, Мои плейлисты, Понравившееся, Дизлайки, Жалобы;
+  «Подборки»: Mix-шорткаты + Recap). Добавлен `.profile-content`
+  max-width 720px на десктопе; hover/focus состояния для всех
+  кликабельных элементов; min-height 44px у CTA и 56px у строк
+  списка для удобного тапа на телефоне. Удалены устаревшие
+  CSS-блоки для `.profile-tabs*`, оставлен только используемый
+  `.profile-settings-btn`. Затронутые файлы: `views/ProfileView.tsx`,
+  `components/Profile/ProfileHero.tsx`,
+  `components/Profile/ProfileActions.tsx`, `styles/global.css`,
+  `styles/redesign-library.css`, `locales/ru.json`,
+  `locales/en.json`. tsc/lint/tests/vite build — зелёные.
+
 - [x] **Mini App: визуальный polish Home + Search (2026-05-08)** —
   Home: hero/tiles/artist chips получили мягкий glass-border, depth и
   desktop hover micro-interactions (lift + cover zoom). Search: genre
@@ -139,6 +160,16 @@
   Playlists auto rows: строки и иконки получили более читаемый depth и
   hover/focus feedback. Share chat list: карточки выбора чата стали
   контрастнее и аккуратнее в интерактивных состояниях.
+
+- [x] **Mini App: visual polish Inline create button + Share modal header (2026-05-08)** —
+  Inline create button: улучшены depth, hover/focus и контраст border.
+  Share modal: header/surface и header-actions получили cleaner glass
+  вид и более аккуратные интерактивные состояния.
+
+- [x] **Mini App: visual polish Photo preview composer + Queue empty state (2026-05-08)** —
+  Photo preview composer: footer/input получили cleaner contrast и
+  более читаемый focus-state. Queue: section titles и empty state
+  получили более структурный card-like вид.
 
 - [x] **Профиль: дизлайки в блоке действий + адаптив (2026-05-08)** — убран четвёртый таб
   сверху; «Дизлайки» в `ProfileActions` после «Понравившееся»; подшапка «К профилю» +

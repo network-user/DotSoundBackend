@@ -71,7 +71,10 @@
     "openSettings": "Настройки",
     "uploadTrack": "Загрузить трек",
     "myPlaylists": "Мои плейлисты",
-    "liked": "Понравившееся"
+    "liked": "Понравившееся",
+    "editProfile": "Изменить профиль",
+    "sectionCatalog": "Моя библиотека",
+    "sectionDiscover": "Подборки"
   },
   "playlists": {
     "title": "Плейлисты",
