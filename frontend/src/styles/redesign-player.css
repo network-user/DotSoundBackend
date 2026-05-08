@@ -13,6 +13,37 @@
   cursor: grab;
 }
 
+/* Subtle swipe-up affordance: a short horizontal handle bar
+ * floated above the seek strip. Hints to the user that the
+ * surface can be dragged towards the now-playing screen. */
+.rp-player-bar__hint {
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 28px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 3;
+  transition:
+    width var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out);
+}
+
+.rp-player-bar:hover .rp-player-bar__hint {
+  background: rgba(255, 255, 255, 0.36);
+  width: 36px;
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .rp-player-bar__hint {
+    display: none;
+  }
+}
+
 .rp-player-cover .shared-cover {
   border-radius: var(--r-md);
 }
@@ -463,4 +494,145 @@
   top: auto;
   right: auto;
   z-index: 4;
+}
+
+/* ============================================================
+ * Adaptive Now Playing — narrow / landscape / wide
+ * ============================================================ */
+
+/* Default (portrait, all sizes): the JSX wrapper is transparent
+ * to layout so existing portrait spacing still works. */
+.rp-now__split,
+.rp-now__split-right {
+  display: contents;
+}
+
+/* Narrow phones: keep cover prominent but trim hero padding so
+ * meta + seek + controls fit above the safe-area without scroll. */
+@media (max-width: 360px) {
+  .rp-now__hero {
+    padding: var(--space-3) var(--space-4);
+  }
+  .rp-now__cover {
+    width: min(74vw, 300px);
+  }
+  .rp-now__meta-title {
+    font-size: var(--fs-18);
+  }
+  .rp-now__meta-artist {
+    font-size: var(--fs-13);
+  }
+  .rp-now__seek {
+    padding: var(--space-2) var(--space-4);
+  }
+  .rp-now__controls {
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4) var(--space-3);
+  }
+  .rp-now__ctl-play {
+    width: 56px;
+    height: 56px;
+  }
+  .rp-now__tabs {
+    margin: 0 var(--space-4);
+  }
+  .rp-now__panel {
+    padding: var(--space-3) var(--space-4) var(--space-5);
+  }
+}
+
+/* Landscape phones: split the screen — cover on the left,
+ * meta + controls on the right — so nothing is hidden behind
+ * a folded keyboard or the OS status bar. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .rp-now__shell {
+    flex-direction: column;
+  }
+  .rp-now__topbar {
+    flex: 0 0 auto;
+  }
+  .rp-now__handle {
+    display: none;
+  }
+  .rp-now__split {
+    flex: 1;
+    display: grid;
+    grid-template-columns:
+      minmax(0, 36%) minmax(0, 1fr);
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    min-height: 0;
+  }
+  .rp-now__hero {
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+  .rp-now__cover {
+    width: 100%;
+    max-width: min(48vh, 280px);
+    aspect-ratio: 1 / 1;
+  }
+  .rp-now__split-right {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    gap: var(--space-2);
+  }
+  .rp-now__meta {
+    padding: 0;
+    text-align: left;
+  }
+  .rp-now__meta-title {
+    font-size: var(--fs-18);
+  }
+  .rp-now__meta-artist {
+    font-size: var(--fs-13);
+  }
+  .rp-now__seek {
+    padding: 0;
+  }
+  .rp-now__controls {
+    padding: var(--space-1) 0 var(--space-2);
+    justify-content: flex-start;
+    gap: var(--space-3);
+  }
+  .rp-now__ctl-play {
+    width: 52px;
+    height: 52px;
+  }
+  .rp-now__secondary {
+    padding: 0;
+  }
+  .rp-now__tabs {
+    margin: 0;
+  }
+  .rp-now__panel {
+    padding: var(--space-2) 0 var(--space-3);
+  }
+}
+
+/* Tablet / desktop browser: keep proportions but cap the hero
+ * cover so it doesn't fill 80% of a 27" monitor. */
+@media (min-width: 900px) {
+  .rp-now__cover {
+    width: min(48vw, 420px);
+  }
+}
+
+/* ============================================================
+ * Adaptive PlayerBar
+ * ============================================================ */
+
+@media (max-width: 360px) {
+  .rp-player-bar {
+    --player-h: 72px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .rp-player-bar {
+    --player-h: 56px;
+  }
 }

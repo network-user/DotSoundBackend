@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -32,7 +33,11 @@ import { ProfileDebugMenu } from '@/components/Admin/ProfileDebugMenu'
 import { MyComplaintsList } from '@/components/Profile/MyComplaintsList'
 import { DislikedView } from '@/views/DislikedView'
 
-type ProfileTab = 'profile' | 'import' | 'complaints' | 'dislikes'
+type ProfileTab =
+  | 'profile'
+  | 'import'
+  | 'complaints'
+  | 'dislikes'
 
 interface Props {
   onOpenSettings?: () => void
@@ -310,143 +315,161 @@ export function ProfileView({
     sound.play('tapSoft')
   }
 
+  const subviewTitle = useMemo(() => {
+    switch (tab) {
+      case 'import':
+        return t('profile.tabImport')
+      case 'complaints':
+        return t('profile.tabComplaints')
+      case 'dislikes':
+        return t('profile.tabDislikes')
+      default:
+        return ''
+    }
+  }, [tab, t])
+
+  const isMainTab = tab === 'profile'
+
   return (
     <section
       id="view-profile"
       className="view active"
     >
-      <div className="profile-tabs-row">
-        <div className="profile-tabs">
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="selection"
-            className={`profile-tab${
-              tab === 'profile' || tab === 'dislikes'
-                ? ' active'
-                : ''
-            }`}
-            onClick={() => {
-              feedbackTap()
-              setTab('profile')
-            }}
-          >
-            {t('profile.tabProfile')}
-          </MotionPress>
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="selection"
-            className={`profile-tab${tab === 'import' ? ' active' : ''}`}
-            onClick={() => {
-              feedbackTap()
-              setTab('import')
-            }}
-          >
-            {t('profile.tabImport')}
-          </MotionPress>
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="selection"
-            className={`profile-tab${tab === 'complaints' ? ' active' : ''}`}
-            onClick={() => {
-              feedbackTap()
-              setTab('complaints')
-            }}
-          >
-            {t('profile.tabComplaints')}
-          </MotionPress>
-        </div>
-        <div className="profile-header-actions">
-          <NotificationBell />
-          <ProfileAdminButton />
-          <ProfileDebugMenu serverDebug={serverDebug} />
-          {onOpenSettings && (
+      <header
+        className={`profile-page-header${
+          isMainTab ? '' : ' profile-page-header--sub'
+        }`}
+      >
+        {isMainTab ? (
+          <>
+            <h1 className="profile-page-title">
+              {t('profile.title')}
+            </h1>
+            <div className="profile-header-actions">
+              <NotificationBell />
+              <ProfileAdminButton />
+              <ProfileDebugMenu
+                serverDebug={serverDebug}
+              />
+              {onOpenSettings && (
+                <MotionPress
+                  type="button"
+                  variant="icon"
+                  haptic="light"
+                  className="icon-btn profile-settings-btn"
+                  ariaLabel={t(
+                    'profile.openSettings',
+                  )}
+                  onClick={() => {
+                    feedbackTap()
+                    onOpenSettings()
+                  }}
+                >
+                  <Icon name="settings" size={20} />
+                </MotionPress>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
             <MotionPress
               type="button"
-              variant="icon"
-              haptic="light"
-              className="icon-btn profile-settings-btn"
-              ariaLabel={t(
-                'profile.openSettings',
-              )}
+              variant="ghost"
+              haptic="selection"
+              className="profile-subview-back"
+              ariaLabel={t('profile.backToProfile')}
               onClick={() => {
                 feedbackTap()
-                onOpenSettings()
+                setTab('profile')
               }}
             >
-              <Icon name="settings" size={20} />
+              <Icon name="chevron-left" size={18} />
+              <span>
+                {t('profile.backToProfile')}
+              </span>
             </MotionPress>
-          )}
-        </div>
+            <h1 className="profile-page-title profile-page-title--sub">
+              {subviewTitle}
+            </h1>
+            <div className="profile-header-actions profile-header-actions--sub">
+              {onOpenSettings ? (
+                <MotionPress
+                  type="button"
+                  variant="icon"
+                  haptic="light"
+                  className="icon-btn profile-settings-btn"
+                  ariaLabel={t(
+                    'profile.openSettings',
+                  )}
+                  onClick={() => {
+                    feedbackTap()
+                    onOpenSettings()
+                  }}
+                >
+                  <Icon name="settings" size={20} />
+                </MotionPress>
+              ) : (
+                <span
+                  aria-hidden
+                  className="profile-page-spacer"
+                />
+              )}
+            </div>
+          </>
+        )}
+      </header>
+
+      <div className="profile-content">
+        {isMainTab && (
+          <>
+            <ProfileHero
+              avatarImageUrl={heroAvatarImage}
+              shownName={shownName}
+              username={username}
+              editMode={editMode}
+              displayName={displayName}
+              saving={saving}
+              onEditStart={handleEditStart}
+              onSave={handleSave}
+              onCancel={handleCancelEdit}
+              onDisplayNameChange={setDisplayName}
+              onAvatarFileSelected={
+                handleAvatarFileChosen
+              }
+              onAvatarRejected={
+                handleAvatarRejected
+              }
+            />
+            <ProfileStats stats={stats} />
+            <ListenerStats />
+            <ProfileActions
+              onOpenImport={() => setTab('import')}
+              onOpenComplaints={() =>
+                setTab('complaints')
+              }
+              onOpenDislikes={() =>
+                setTab('dislikes')
+              }
+            />
+            <ProfileTrackList
+              tracks={myTracks}
+              onPlay={playTrack}
+              onToggleVisibility={
+                handleToggleVisibility
+              }
+              onDelete={handleDelete}
+            />
+          </>
+        )}
+
+        {tab === 'import' && (
+          <ImportView active={tab === 'import'} />
+        )}
+
+        {tab === 'complaints' && <MyComplaintsList />}
+
+        {tab === 'dislikes' && <DislikedView />}
       </div>
-
-      {tab === 'dislikes' && (
-        <div className="profile-subview-head">
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="selection"
-            className="profile-subview-back"
-            onClick={() => {
-              feedbackTap()
-              setTab('profile')
-            }}
-          >
-            <Icon name="chevron-left" size={18} />
-            <span>{t('profile.backToProfile')}</span>
-          </MotionPress>
-          <span className="profile-subview-title">
-            {t('profile.tabDislikes')}
-          </span>
-        </div>
-      )}
-
-      {tab === 'profile' && (
-        <>
-          <ProfileHero
-            avatarImageUrl={heroAvatarImage}
-            shownName={shownName}
-            username={username}
-            editMode={editMode}
-            displayName={displayName}
-            saving={saving}
-            onEditStart={handleEditStart}
-            onSave={handleSave}
-            onCancel={handleCancelEdit}
-            onDisplayNameChange={setDisplayName}
-            onAvatarFileSelected={
-              handleAvatarFileChosen
-            }
-            onAvatarRejected={
-              handleAvatarRejected
-            }
-          />
-          <ProfileStats stats={stats} />
-          <ListenerStats />
-          <ProfileActions
-            onOpenImport={() => setTab('import')}
-            onOpenDislikes={() => setTab('dislikes')}
-          />
-          <ProfileTrackList
-            tracks={myTracks}
-            onPlay={playTrack}
-            onToggleVisibility={
-              handleToggleVisibility
-            }
-            onDelete={handleDelete}
-          />
-        </>
-      )}
-
-      {tab === 'import' && (
-        <ImportView active={tab === 'import'} />
-      )}
-
-      {tab === 'complaints' && <MyComplaintsList />}
-
-      {tab === 'dislikes' && <DislikedView />}
     </section>
   )
 }

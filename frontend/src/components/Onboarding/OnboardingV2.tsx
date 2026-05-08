@@ -1,0 +1,1281 @@
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { AnimatePresence } from 'framer-motion'
+import { useTranslation } from 'react-i18next'
+import {
+  type PanInfo,
+  useMotionValue,
+  useTransform,
+} from 'framer-motion'
+import { api } from '@/lib/api'
+import { Icon } from '@/components/Icon/Icon'
+import { CoverImage } from '@/components/CoverImage/CoverImage'
+import { MotionPress } from '@/components/ui/MotionPress'
+import {
+  m,
+  SPRING_GENTLE,
+  SPRING_SNAPPY,
+  TWEEN_FAST,
+  useReducedMotion,
+} from '@/lib/motion'
+import { showIsland } from '@/lib/island'
+import { trackActivationEvent } from '@/lib/activation'
+import { hapticSelection } from '@/lib/telegram'
+import { AvatarBuilder } from '@/components/Onboarding/AvatarBuilder'
+import { GenreBubble } from '@/components/Onboarding/GenreBubble'
+import type {
+  OnboardingBootstrap,
+  OnboardingTasteDecision,
+  Track,
+} from '@/types/api'
+
+interface Props {
+  onComplete: () => void
+}
+
+type Step =
+  | 'welcome'
+  | 'profile'
+  | 'genres'
+  | 'swipe'
+  | 'complete'
+
+const MIN_GENRES = 3
+const SWIPE_BATCH = 5
+const SWIPE_THRESHOLD = 110
+
+const STEP_ORDER: Step[] = [
+  'welcome',
+  'profile',
+  'genres',
+  'swipe',
+  'complete',
+]
+
+const PROGRESS_STEPS: Step[] = [
+  'profile',
+  'genres',
+  'swipe',
+]
+
+export function OnboardingV2({ onComplete }: Props) {
+  const { t } = useTranslation()
+  const reduce = Boolean(useReducedMotion())
+
+  const [step, setStep] = useState<Step>('welcome')
+  const [bootstrap, setBootstrap] =
+    useState<OnboardingBootstrap | null>(null)
+  const [bootstrapErr, setBootstrapErr] = useState<
+    string | null
+  >(null)
+  const [saving, setSaving] = useState(false)
+
+  const [displayName, setDisplayName] = useState('')
+  const [useDefaultAvatar, setUseDefaultAvatar] =
+    useState(false)
+  const [profileErr, setProfileErr] = useState<
+    string | null
+  >(null)
+
+  const [selectedGenres, setSelectedGenres] = useState<
+    string[]
+  >([])
+
+  const [tasteTracks, setTasteTracks] = useState<
+    Track[]
+  >([])
+  const [tasteIndex, setTasteIndex] = useState(0)
+  const [tasteDecisions, setTasteDecisions] = useState<
+    {
+      track_id: number
+      decision: OnboardingTasteDecision
+    }[]
+  >([])
+  const [tasteLoading, setTasteLoading] = useState(false)
+
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [previewTrackId, setPreviewTrackId] = useState<
+    number | null
+  >(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api
+      .getOnboardingBootstrap()
+      .then((b) => {
+        if (cancelled) return
+        setBootstrap(b)
+        setDisplayName(
+          b.profile_defaults.current_display_name ??
+            b.profile_defaults.suggested_display_name ??
+            '',
+        )
+      })
+      .catch(() => {
+        if (cancelled) return
+        setBootstrapErr('bootstrap_failed')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    trackActivationEvent('onboarding_step_view', {
+      meta: { step },
+    })
+  }, [step])
+
+  useEffect(() => {
+    if (step !== 'swipe' || tasteTracks.length > 0) {
+      return
+    }
+    let cancelled = false
+    setTasteLoading(true)
+    api
+      .getTasteSwipeTracks(SWIPE_BATCH)
+      .then((tracks) => {
+        if (cancelled) return
+        setTasteTracks(tracks)
+        setTasteIndex(0)
+      })
+      .catch(() => {
+        if (cancelled) return
+        showIsland({
+          kind: 'error',
+          title: t(
+            'redesign.onboardingMsg.saveFail',
+          ),
+          durationMs: 3000,
+        })
+      })
+      .finally(() => {
+        if (!cancelled) setTasteLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [step, tasteTracks.length, t])
+
+  useEffect(() => {
+    return () => {
+      const a = audioRef.current
+      if (a) {
+        a.pause()
+        a.src = ''
+      }
+    }
+  }, [])
+
+  const goNext = useCallback((from: Step) => {
+    const i = STEP_ORDER.indexOf(from)
+    if (i < 0 || i >= STEP_ORDER.length - 1) return
+    setStep(STEP_ORDER[i + 1])
+  }, [])
+
+  const handleWelcomeStart = () => {
+    hapticSelection()
+    goNext('welcome')
+  }
+
+  const handleProfileSubmit = async () => {
+    if (saving) return
+    const name = displayName.trim()
+    if (name.length < 1 || name.length > 64) {
+      setProfileErr(
+        t('redesign.onboardingV2.profile.errInvalid'),
+      )
+      return
+    }
+    setProfileErr(null)
+    setSaving(true)
+    try {
+      const res = await api.submitOnboardingProfile({
+        display_name: name,
+        locale:
+          bootstrap?.profile_defaults.locale ?? null,
+        use_default_avatar: useDefaultAvatar,
+      })
+      trackActivationEvent('onboarding_step_complete', {
+        meta: {
+          step: 'profile',
+          has_name: Boolean(res.display_name),
+        },
+      })
+      goNext('profile')
+    } catch {
+      setProfileErr(
+        t('redesign.onboardingV2.profile.errSave'),
+      )
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleProfileSkip = () => {
+    hapticSelection()
+    goNext('profile')
+  }
+
+  const toggleGenre = (g: string) => {
+    setSelectedGenres((prev) =>
+      prev.includes(g)
+        ? prev.filter((x) => x !== g)
+        : [...prev, g],
+    )
+  }
+
+  const handleGenresSubmit = async () => {
+    if (
+      saving ||
+      selectedGenres.length < MIN_GENRES
+    ) {
+      return
+    }
+    setSaving(true)
+    try {
+      await api.saveOnboardingPreferences({
+        genres: selectedGenres,
+        artist_ids: [],
+        moods: [],
+      })
+      trackActivationEvent('onboarding_step_complete', {
+        meta: {
+          step: 'genres',
+          count: selectedGenres.length,
+        },
+      })
+      showIsland({
+        kind: 'toast',
+        title: t(
+          'redesign.onboardingMsg.genresDone',
+          { count: selectedGenres.length },
+        ),
+        durationMs: 2400,
+      })
+      goNext('genres')
+    } catch {
+      showIsland({
+        kind: 'error',
+        title: t('redesign.onboardingMsg.saveFail'),
+        durationMs: 3000,
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const recordDecision = useCallback(
+    (decision: OnboardingTasteDecision) => {
+      const tr = tasteTracks[tasteIndex]
+      if (!tr) return
+      hapticSelection()
+      setTasteDecisions((prev) => [
+        ...prev,
+        { track_id: tr.id, decision },
+      ])
+      setTasteIndex((i) => i + 1)
+      const a = audioRef.current
+      if (a && previewTrackId === tr.id) {
+        a.pause()
+        setPreviewTrackId(null)
+      }
+    },
+    [tasteTracks, tasteIndex, previewTrackId],
+  )
+
+  const playPreview = useCallback(() => {
+    const tr = tasteTracks[tasteIndex]
+    if (!tr) return
+    const a = audioRef.current
+    if (!a) return
+    if (previewTrackId === tr.id) {
+      if (a.paused) {
+        a.play().catch(() => {})
+      } else {
+        a.pause()
+      }
+      return
+    }
+    setPreviewTrackId(tr.id)
+    a.src = `/api/v1/track-preview/${tr.id}/segment.m4a`
+    a.crossOrigin = 'anonymous'
+    a.play().catch(() => setPreviewTrackId(null))
+  }, [tasteTracks, tasteIndex, previewTrackId])
+
+  const finalizeSwipe = useCallback(
+    async (decisions: typeof tasteDecisions) => {
+      if (saving) return
+      setSaving(true)
+      try {
+        if (decisions.length > 0) {
+          await api.saveTasteSwipeBatch(decisions)
+        }
+        await api.completeOnboarding()
+        trackActivationEvent('onboarding_complete', {
+          meta: { calibrated: decisions.length },
+        })
+        showIsland({
+          kind: 'toast',
+          title: t(
+            'redesign.onboardingMsg.calibrationDone',
+          ),
+          durationMs: 2400,
+        })
+        goNext('swipe')
+      } catch {
+        showIsland({
+          kind: 'error',
+          title: t(
+            'redesign.onboardingMsg.finishFail',
+          ),
+          durationMs: 3000,
+        })
+      } finally {
+        setSaving(false)
+      }
+    },
+    [saving, goNext, t],
+  )
+
+  useEffect(() => {
+    if (step !== 'swipe') return
+    if (tasteTracks.length === 0) return
+    if (tasteIndex < tasteTracks.length) return
+    void finalizeSwipe(tasteDecisions)
+  }, [
+    step,
+    tasteIndex,
+    tasteTracks.length,
+    tasteDecisions,
+    finalizeSwipe,
+  ])
+
+  const handleSmartSkip = useCallback(async () => {
+    if (saving) return
+    hapticSelection()
+    setSaving(true)
+    try {
+      const res = await api.smartSkipOnboarding()
+      trackActivationEvent('onboarding_skip', {
+        meta: {
+          step,
+          applied_genres: res.applied_genres.length,
+        },
+      })
+      if (res.applied_genres.length) {
+        showIsland({
+          kind: 'toast',
+          title: t(
+            'redesign.onboardingMsg.smartGenresApplied',
+          ),
+          durationMs: 3000,
+        })
+      } else if (!res.enabled) {
+        showIsland({
+          kind: 'toast',
+          title: t(
+            'redesign.onboardingMsg.smartDisabled',
+          ),
+          durationMs: 3000,
+        })
+      } else {
+        showIsland({
+          kind: 'toast',
+          title: t(
+            'redesign.onboardingMsg.smartFallback',
+          ),
+          durationMs: 3000,
+        })
+      }
+      onComplete()
+    } catch {
+      try {
+        await api.completeOnboarding()
+        onComplete()
+      } catch {
+        showIsland({
+          kind: 'error',
+          title: t(
+            'redesign.onboardingMsg.skipFail',
+          ),
+          durationMs: 3000,
+        })
+      }
+    } finally {
+      setSaving(false)
+    }
+  }, [saving, step, onComplete, t])
+
+  const handleCompleteFinish = useCallback(
+    (openImport: boolean) => {
+      hapticSelection()
+      onComplete()
+      if (openImport) {
+        try {
+          window.location.assign('/profile?import=1')
+        } catch {
+          /* ignore */
+        }
+      }
+    },
+    [onComplete],
+  )
+
+  const progressIndex = useMemo(() => {
+    return PROGRESS_STEPS.indexOf(step)
+  }, [step])
+
+  return (
+    <div className="onb-v2-shell">
+      <ProgressBar
+        steps={PROGRESS_STEPS.length}
+        currentIndex={progressIndex}
+      />
+
+      {step !== 'welcome' && step !== 'complete' && (
+        <button
+          type="button"
+          className="onb-v2-skip-btn"
+          onClick={handleSmartSkip}
+          disabled={saving}
+        >
+          {t('redesign.onboardingV2.skip')}
+        </button>
+      )}
+
+      <div className="onb-v2-content">
+        <AnimatePresence mode="wait">
+          {step === 'welcome' && (
+            <m.div
+              key="welcome"
+              initial={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, y: 8 }
+              }
+              animate={
+                reduce
+                  ? { opacity: 1 }
+                  : { opacity: 1, y: 0 }
+              }
+              exit={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, y: -8 }
+              }
+              transition={
+                reduce ? TWEEN_FAST : SPRING_GENTLE
+              }
+              className="onb-v2-step"
+            >
+              <WelcomeStep
+                onStart={handleWelcomeStart}
+              />
+            </m.div>
+          )}
+
+          {step === 'profile' && bootstrap && (
+            <m.div
+              key="profile"
+              initial={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, x: 8 }
+              }
+              animate={
+                reduce
+                  ? { opacity: 1 }
+                  : { opacity: 1, x: 0 }
+              }
+              exit={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, x: -8 }
+              }
+              transition={
+                reduce ? TWEEN_FAST : SPRING_GENTLE
+              }
+              className="onb-v2-step"
+            >
+              <ProfileStep
+                bootstrap={bootstrap}
+                displayName={displayName}
+                onChangeName={setDisplayName}
+                onUseDefaultAvatar={() =>
+                  setUseDefaultAvatar(true)
+                }
+                onResetUseDefault={() =>
+                  setUseDefaultAvatar(false)
+                }
+                onSubmit={handleProfileSubmit}
+                onSkip={handleProfileSkip}
+                err={profileErr}
+                saving={saving}
+              />
+            </m.div>
+          )}
+
+          {step === 'genres' && bootstrap && (
+            <m.div
+              key="genres"
+              initial={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, x: 8 }
+              }
+              animate={
+                reduce
+                  ? { opacity: 1 }
+                  : { opacity: 1, x: 0 }
+              }
+              exit={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, x: -8 }
+              }
+              transition={
+                reduce ? TWEEN_FAST : SPRING_GENTLE
+              }
+              className="onb-v2-step"
+            >
+              <GenresStep
+                bubbles={bootstrap.genre_bubbles}
+                selected={selectedGenres}
+                onToggle={toggleGenre}
+                onSubmit={handleGenresSubmit}
+                saving={saving}
+              />
+            </m.div>
+          )}
+
+          {step === 'swipe' && (
+            <m.div
+              key="swipe"
+              initial={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, x: 8 }
+              }
+              animate={
+                reduce
+                  ? { opacity: 1 }
+                  : { opacity: 1, x: 0 }
+              }
+              exit={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, x: -8 }
+              }
+              transition={
+                reduce ? TWEEN_FAST : SPRING_GENTLE
+              }
+              className="onb-v2-step"
+            >
+              <SwipeStep
+                tracks={tasteTracks}
+                index={tasteIndex}
+                loading={tasteLoading}
+                playingId={previewTrackId}
+                onLike={() => recordDecision('like')}
+                onDislike={() =>
+                  recordDecision('dislike')
+                }
+                onSkipCard={() =>
+                  recordDecision('skip')
+                }
+                onTap={playPreview}
+                reduce={reduce}
+              />
+            </m.div>
+          )}
+
+          {step === 'complete' && bootstrap && (
+            <m.div
+              key="complete"
+              initial={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, scale: 0.96 }
+              }
+              animate={
+                reduce
+                  ? { opacity: 1 }
+                  : { opacity: 1, scale: 1 }
+              }
+              exit={
+                reduce
+                  ? { opacity: 0 }
+                  : { opacity: 0, scale: 0.98 }
+              }
+              transition={
+                reduce ? TWEEN_FAST : SPRING_GENTLE
+              }
+              className="onb-v2-step"
+            >
+              <CompleteStep
+                showImport={
+                  bootstrap.show_import_offer
+                }
+                onFinish={handleCompleteFinish}
+              />
+            </m.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {bootstrapErr && (
+        <p
+          className="onb-v2-name-error"
+          role="alert"
+          style={{ padding: '0 24px 16px' }}
+        >
+          {t('redesign.onboardingMsg.saveFail')}
+        </p>
+      )}
+
+      <audio
+        ref={audioRef}
+        onEnded={() => setPreviewTrackId(null)}
+        preload="none"
+        style={{ display: 'none' }}
+      />
+    </div>
+  )
+}
+
+interface ProgressBarProps {
+  steps: number
+  currentIndex: number
+}
+
+function ProgressBar({
+  steps,
+  currentIndex,
+}: ProgressBarProps) {
+  return (
+    <div
+      className="onb-v2-progress"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={steps}
+      aria-valuenow={Math.max(0, currentIndex + 1)}
+    >
+      {Array.from({ length: steps }, (_, i) => {
+        const isDone = i < currentIndex
+        const isCurrent = i === currentIndex
+        const klass = [
+          'onb-v2-progress__bar',
+          isDone ? 'is-done' : '',
+          isCurrent ? 'is-current' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
+        return <div key={i} className={klass} />
+      })}
+    </div>
+  )
+}
+
+interface WelcomeStepProps {
+  onStart: () => void
+}
+
+function WelcomeStep({ onStart }: WelcomeStepProps) {
+  const { t } = useTranslation()
+  return (
+    <div className="onb-v2-welcome">
+      <div
+        className="onb-v2-welcome__logo"
+        aria-hidden="true"
+      >
+        {t('redesign.onboardingV2.welcome.logo')}
+      </div>
+      <h1 className="onb-v2-welcome__title">
+        {t('redesign.onboardingV2.welcome.title')}
+      </h1>
+      <p className="onb-v2-welcome__subtitle">
+        {t(
+          'redesign.onboardingV2.welcome.subtitle',
+        )}
+      </p>
+      <div
+        className="onb-v2-footer"
+        style={{ width: '100%', maxWidth: 360 }}
+      >
+        <MotionPress
+          variant="primary"
+          haptic="medium"
+          className="onb-v2-cta"
+          onClick={onStart}
+        >
+          {t('redesign.onboardingV2.welcome.cta')}
+        </MotionPress>
+      </div>
+    </div>
+  )
+}
+
+interface ProfileStepProps {
+  bootstrap: OnboardingBootstrap
+  displayName: string
+  onChangeName: (s: string) => void
+  onUseDefaultAvatar: () => void
+  onResetUseDefault: () => void
+  onSubmit: () => void
+  onSkip: () => void
+  err: string | null
+  saving: boolean
+}
+
+function ProfileStep({
+  bootstrap,
+  displayName,
+  onChangeName,
+  onUseDefaultAvatar,
+  onResetUseDefault,
+  onSubmit,
+  onSkip,
+  err,
+  saving,
+}: ProfileStepProps) {
+  const { t } = useTranslation()
+  const defaults = bootstrap.profile_defaults
+  return (
+    <>
+      <div className="onb-v2-step__hero">
+        <h1 className="onb-v2-step__title">
+          {t('redesign.onboardingV2.profile.title')}
+        </h1>
+        <p className="onb-v2-step__subtitle">
+          {t(
+            'redesign.onboardingV2.profile.subtitle',
+          )}
+        </p>
+      </div>
+      <div className="onb-v2-step__body">
+        <div className="onb-v2-profile">
+          <AvatarBuilder
+            initials={defaults.suggested_initials}
+            defaultUrl={
+              defaults.suggested_avatar_url
+            }
+            hasCustomAvatar={defaults.has_custom_avatar}
+            onUploaded={() => onResetUseDefault()}
+            onResetToDefault={() =>
+              onUseDefaultAvatar()
+            }
+          />
+          <div className="onb-v2-name-field">
+            <label
+              htmlFor="onb-v2-name-input"
+              className="onb-v2-name-field__label"
+            >
+              {t(
+                'redesign.onboardingV2.profile.label',
+              )}
+            </label>
+            <input
+              id="onb-v2-name-input"
+              type="text"
+              className="onb-v2-name-input"
+              maxLength={64}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={t(
+                'redesign.onboardingV2.profile.placeholder',
+              )}
+              value={displayName}
+              onChange={(e) =>
+                onChangeName(e.target.value)
+              }
+            />
+            <p
+              className="onb-v2-name-error"
+              aria-live="polite"
+            >
+              {err ?? '\u00A0'}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="onb-v2-footer">
+        <MotionPress
+          variant="primary"
+          haptic="medium"
+          className="onb-v2-cta"
+          onClick={onSubmit}
+          disabled={saving}
+        >
+          {saving
+            ? t('redesign.onboardingV2.saving')
+            : t('redesign.onboardingV2.profile.cta')}
+        </MotionPress>
+        <MotionPress
+          variant="ghost"
+          haptic="light"
+          className="onb-v2-cta onb-v2-cta--ghost"
+          onClick={onSkip}
+          disabled={saving}
+        >
+          {t('redesign.onboardingV2.profile.skip')}
+        </MotionPress>
+      </div>
+    </>
+  )
+}
+
+interface GenresStepProps {
+  bubbles: OnboardingBootstrap['genre_bubbles']
+  selected: string[]
+  onToggle: (g: string) => void
+  onSubmit: () => void
+  saving: boolean
+}
+
+function GenresStep({
+  bubbles,
+  selected,
+  onToggle,
+  onSubmit,
+  saving,
+}: GenresStepProps) {
+  const { t } = useTranslation()
+  const remaining = Math.max(
+    0,
+    MIN_GENRES - selected.length,
+  )
+  const counterText =
+    remaining > 0
+      ? t('redesign.onboardingV2.genres.counterMore', {
+          count: remaining,
+        })
+      : t('redesign.onboardingV2.genres.counterDone', {
+          count: selected.length,
+        })
+  return (
+    <>
+      <div className="onb-v2-step__hero">
+        <h1 className="onb-v2-step__title">
+          {t('redesign.onboardingV2.genres.title')}
+        </h1>
+        <p className="onb-v2-step__subtitle">
+          {t(
+            'redesign.onboardingV2.genres.subtitle',
+            { min: MIN_GENRES },
+          )}
+        </p>
+      </div>
+      <div className="onb-v2-step__body">
+        {bubbles.length > 0 ? (
+          <div className="onb-v2-bubbles">
+            {bubbles.map((b) => (
+              <GenreBubble
+                key={b.genre}
+                bubble={b}
+                selected={selected.includes(b.genre)}
+                onToggle={onToggle}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="onb-v2-step__subtitle">
+            {t(
+              'redesign.onboardingV2.genres.empty',
+            )}
+          </p>
+        )}
+        <p className="onb-v2-counter">
+          {counterText}
+        </p>
+      </div>
+      <div className="onb-v2-footer">
+        <MotionPress
+          variant="primary"
+          haptic="medium"
+          className="onb-v2-cta"
+          onClick={onSubmit}
+          disabled={
+            saving || selected.length < MIN_GENRES
+          }
+        >
+          {saving
+            ? t('redesign.onboardingV2.saving')
+            : t('redesign.onboardingV2.genres.cta')}
+        </MotionPress>
+      </div>
+    </>
+  )
+}
+
+interface SwipeStepProps {
+  tracks: Track[]
+  index: number
+  loading: boolean
+  playingId: number | null
+  onLike: () => void
+  onDislike: () => void
+  onSkipCard: () => void
+  onTap: () => void
+  reduce: boolean
+}
+
+function SwipeStep({
+  tracks,
+  index,
+  loading,
+  playingId,
+  onLike,
+  onDislike,
+  onSkipCard,
+  onTap,
+  reduce,
+}: SwipeStepProps) {
+  const { t } = useTranslation()
+  const top = tracks[index]
+  const next = tracks[index + 1]
+
+  return (
+    <>
+      <div className="onb-v2-step__hero">
+        <h1 className="onb-v2-step__title">
+          {t('redesign.onboardingV2.swipe.title')}
+        </h1>
+        <p className="onb-v2-step__subtitle">
+          {t(
+            'redesign.onboardingV2.swipe.subtitle',
+          )}
+        </p>
+      </div>
+      <div className="onb-v2-swipe">
+        <div className="onb-v2-swipe-stack">
+          {loading && tracks.length === 0 && (
+            <div className="onb-v2-swipe-empty">
+              {t(
+                'redesign.onboardingV2.swipe.loading',
+              )}
+            </div>
+          )}
+          {!loading &&
+            tracks.length === 0 && (
+              <div className="onb-v2-swipe-empty">
+                {t(
+                  'redesign.onboardingV2.swipe.empty',
+                )}
+              </div>
+            )}
+          {next && !reduce && (
+            <SwipeBackdropCard
+              key={`bg-${next.id}`}
+              track={next}
+            />
+          )}
+          {top && (
+            <SwipeCard
+              key={top.id}
+              track={top}
+              isPlaying={playingId === top.id}
+              onLike={onLike}
+              onDislike={onDislike}
+              onTap={onTap}
+              reduce={reduce}
+            />
+          )}
+        </div>
+        <p
+          className="onb-v2-counter"
+          style={{ marginTop: 12 }}
+        >
+          {tracks.length > 0
+            ? t(
+                'redesign.onboardingV2.swipe.counter',
+                {
+                  current: Math.min(
+                    index + 1,
+                    tracks.length,
+                  ),
+                  total: tracks.length,
+                },
+              )
+            : '\u00A0'}
+        </p>
+        {top && (
+          <div className="onb-v2-swipe-actions">
+            <MotionPress
+              variant="ghost"
+              haptic="medium"
+              className="onb-v2-swipe-btn onb-v2-swipe-btn--dislike"
+              onClick={onDislike}
+              ariaLabel={t(
+                'redesign.onboardingV2.swipe.dislike',
+              )}
+            >
+              <Icon name="x" size={26} />
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              haptic="light"
+              className="onb-v2-swipe-btn onb-v2-swipe-btn--skip"
+              onClick={onSkipCard}
+              ariaLabel={t(
+                'redesign.onboardingV2.swipe.skipCard',
+              )}
+            >
+              <Icon name="chevron-right" size={26} />
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              haptic="medium"
+              className="onb-v2-swipe-btn onb-v2-swipe-btn--like"
+              onClick={onLike}
+              ariaLabel={t(
+                'redesign.onboardingV2.swipe.like',
+              )}
+            >
+              <Icon name="heart" size={26} />
+            </MotionPress>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+interface SwipeBackdropCardProps {
+  track: Track
+}
+
+function SwipeBackdropCard({
+  track,
+}: SwipeBackdropCardProps) {
+  return (
+    <div
+      className="onb-v2-swipe-card"
+      style={{
+        transform:
+          'translateY(8px) scale(0.96)',
+        opacity: 0.55,
+        pointerEvents: 'none',
+      }}
+      aria-hidden="true"
+    >
+      <CoverArt track={track} />
+      <CardInfo track={track} />
+    </div>
+  )
+}
+
+interface SwipeCardProps {
+  track: Track
+  isPlaying: boolean
+  onLike: () => void
+  onDislike: () => void
+  onTap: () => void
+  reduce: boolean
+}
+
+function SwipeCard({
+  track,
+  isPlaying,
+  onLike,
+  onDislike,
+  onTap,
+  reduce,
+}: SwipeCardProps) {
+  const { t } = useTranslation()
+  const x = useMotionValue(0)
+  const rotate = useTransform(
+    x,
+    [-200, 0, 200],
+    [-12, 0, 12],
+  )
+  const likeOpacity = useTransform(
+    x,
+    [40, SWIPE_THRESHOLD],
+    [0, 1],
+  )
+  const nopeOpacity = useTransform(
+    x,
+    [-SWIPE_THRESHOLD, -40],
+    [1, 0],
+  )
+
+  const handleDragEnd = (
+    _: unknown,
+    info: PanInfo,
+  ) => {
+    const v = info.offset.x
+    if (v > SWIPE_THRESHOLD) {
+      onLike()
+    } else if (v < -SWIPE_THRESHOLD) {
+      onDislike()
+    }
+  }
+
+  if (reduce) {
+    return (
+      <div
+        className="onb-v2-swipe-card"
+        onClick={onTap}
+        role="button"
+        tabIndex={0}
+      >
+        <CoverArt track={track} isPlaying={isPlaying} />
+        <CardInfo track={track} />
+      </div>
+    )
+  }
+
+  return (
+    <m.div
+      className="onb-v2-swipe-card"
+      drag="x"
+      dragConstraints={{
+        left: -240,
+        right: 240,
+      }}
+      dragElastic={0.6}
+      style={{ x, rotate }}
+      onDragEnd={handleDragEnd}
+      onTap={onTap}
+      whileTap={{ cursor: 'grabbing' }}
+      transition={SPRING_SNAPPY}
+      exit={{
+        opacity: 0,
+        scale: 0.95,
+        transition: TWEEN_FAST,
+      }}
+    >
+      <CoverArt track={track} isPlaying={isPlaying} />
+      <CardInfo track={track} />
+      <m.span
+        className="onb-v2-swipe-card__badge onb-v2-swipe-card__badge--like"
+        style={{ opacity: likeOpacity }}
+        aria-hidden="true"
+      >
+        {t('redesign.onboardingV2.swipe.badgeLike')}
+      </m.span>
+      <m.span
+        className="onb-v2-swipe-card__badge onb-v2-swipe-card__badge--dislike"
+        style={{ opacity: nopeOpacity }}
+        aria-hidden="true"
+      >
+        {t('redesign.onboardingV2.swipe.badgeNope')}
+      </m.span>
+    </m.div>
+  )
+}
+
+interface CardArtProps {
+  track: Track
+  isPlaying?: boolean
+}
+
+function CoverArt({
+  track,
+  isPlaying = false,
+}: CardArtProps) {
+  return (
+    <div className="onb-v2-swipe-card__cover">
+      <CoverImage
+        coverKey={track.cover_key}
+        size={360}
+      />
+      <span className="onb-v2-swipe-card__cover-fade" />
+      {isPlaying && (
+        <span className="onb-v2-swipe-card__play-pulse">
+          <Icon name="pause" size={28} />
+        </span>
+      )}
+    </div>
+  )
+}
+
+function CardInfo({
+  track,
+}: {
+  track: Track
+}) {
+  return (
+    <div className="onb-v2-swipe-card__info">
+      <h3 className="onb-v2-swipe-card__title">
+        {track.title}
+      </h3>
+      <p className="onb-v2-swipe-card__artist">
+        {track.artist || '\u00A0'}
+      </p>
+    </div>
+  )
+}
+
+interface CompleteStepProps {
+  showImport: boolean
+  onFinish: (openImport: boolean) => void
+}
+
+function CompleteStep({
+  showImport,
+  onFinish,
+}: CompleteStepProps) {
+  const { t } = useTranslation()
+  return (
+    <div className="onb-v2-complete">
+      <div
+        className="onb-v2-complete__check"
+        aria-hidden="true"
+      >
+        <Icon name="check" size={40} />
+      </div>
+      <h1 className="onb-v2-complete__title">
+        {t('redesign.onboardingV2.complete.title')}
+      </h1>
+      <p className="onb-v2-complete__subtitle">
+        {t(
+          'redesign.onboardingV2.complete.subtitle',
+        )}
+      </p>
+      {showImport && (
+        <button
+          type="button"
+          className="onb-v2-complete__import-card"
+          onClick={() => onFinish(true)}
+        >
+          <span className="onb-v2-complete__import-icon">
+            <Icon name="download" size={20} />
+          </span>
+          <span className="onb-v2-complete__import-text">
+            <span className="onb-v2-complete__import-title">
+              {t(
+                'redesign.onboardingV2.complete.importTitle',
+              )}
+            </span>
+            <span className="onb-v2-complete__import-hint">
+              {t(
+                'redesign.onboardingV2.complete.importHint',
+              )}
+            </span>
+          </span>
+          <Icon name="chevron-right" size={18} />
+        </button>
+      )}
+      <div
+        className="onb-v2-footer"
+        style={{ width: '100%', maxWidth: 360 }}
+      >
+        <MotionPress
+          variant="primary"
+          haptic="medium"
+          className="onb-v2-cta"
+          onClick={() => onFinish(false)}
+        >
+          {t('redesign.onboardingV2.complete.cta')}
+        </MotionPress>
+      </div>
+    </div>
+  )
+}

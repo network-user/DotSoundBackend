@@ -266,22 +266,24 @@ export function NowPlayingView() {
 
         <div className="rp-now__handle" aria-hidden="true" />
 
-        <div className="rp-now__hero">
-          <div className="rp-now__cover">
-            {coverSrc ? (
-              <SharedCover
-                trackId={track.id}
-                src={coverSrc}
-                alt={track.title}
-              />
-            ) : (
-              <div className="rp-now__cover-fallback">
-                <Icon name="music" size={48} />
-              </div>
-            )}
+        <div className="rp-now__split">
+          <div className="rp-now__hero">
+            <div className="rp-now__cover">
+              {coverSrc ? (
+                <SharedCover
+                  trackId={track.id}
+                  src={coverSrc}
+                  alt={track.title}
+                />
+              ) : (
+                <div className="rp-now__cover-fallback">
+                  <Icon name="music" size={48} />
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
+          <div className="rp-now__split-right">
         <div className="rp-now__meta">
           <h1
             className={
@@ -489,6 +491,8 @@ export function NowPlayingView() {
           >
             <Icon name="queue" size={20} />
           </MotionPress>
+        </div>
+          </div>
         </div>
 
         <div

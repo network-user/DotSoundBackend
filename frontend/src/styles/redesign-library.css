@@ -725,78 +725,9 @@
   outline-offset: 2px;
 }
 
-.profile-tabs-row {
-  border-bottom-color: color-mix(
-    in srgb,
-    var(--border) 78%,
-    transparent
-  );
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
-}
-
-.profile-tabs {
-  border: 1px solid color-mix(
-    in srgb,
-    var(--border-subtle) 85%,
-    transparent
-  );
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 10px 22px rgba(0, 0, 0, 0.18);
-}
-
-.profile-tab {
-  transition:
-    transform 140ms var(--ease-out),
-    background 140ms var(--ease-out),
-    color 140ms var(--ease-out);
-}
-
-.profile-tab:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.profile-tab.active {
-  box-shadow:
-    0 8px 16px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-
-.profile-subview-head {
-  border-bottom-color: color-mix(
-    in srgb,
-    var(--border) 80%,
-    transparent
-  );
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--bg) 92%, transparent) 0%,
-    var(--bg) 100%
-  );
-}
-
-.profile-subview-back {
-  border: 1px solid color-mix(
-    in srgb,
-    var(--border-subtle) 75%,
-    transparent
-  );
-  background: color-mix(
-    in srgb,
-    var(--surface-elevated) 86%,
-    transparent
-  );
-  transition:
-    transform 140ms var(--ease-out),
-    background 140ms var(--ease-out),
-    border-color 140ms var(--ease-out);
-}
-
-.profile-subview-back:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+/* Profile shell, hero and action list moved to global.css
+ * (profile redesign 2026-05-08). Library-only redesign hovers
+ * for daily/tab tiles remain below. */
 
 @media (hover: hover) and (pointer: fine) {
   .rd-lib-daily:hover {
@@ -813,24 +744,6 @@
 
   .rd-lib-tab:hover {
     transform: translateY(-1px);
-  }
-
-  .profile-tab:hover:not(.active) {
-    transform: translateY(-1px);
-    background: color-mix(
-      in srgb,
-      var(--surface-elevated) 85%,
-      transparent
-    );
-  }
-
-  .profile-subview-back:hover {
-    transform: translateY(-1px);
-    border-color: color-mix(
-      in srgb,
-      var(--accent) 22%,
-      var(--border-subtle)
-    );
   }
 }
 
@@ -851,4 +764,170 @@
 .rd-lib-daily__hint {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+/* ── Disliked page enhancements ── */
+
+.rd-disliked-search-wrap {
+  padding: 0 0 var(--space-2);
+}
+
+.rd-disliked-search {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  cursor: text;
+  transition: border-color var(--dur-fast) var(--ease-snappy);
+}
+
+.rd-disliked-search:focus-within {
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.rd-disliked-search-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.rd-disliked-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--fs-14);
+  color: var(--text);
+  outline: none;
+}
+
+.rd-disliked-search input::placeholder {
+  color: var(--text-secondary);
+}
+
+.rd-disliked-search-clear {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-snappy),
+    color var(--dur-fast) var(--ease-snappy);
+}
+
+.rd-disliked-search-clear:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--text);
+}
+
+.rd-disliked-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-2);
+  line-height: 1.4;
+}
+
+.rd-disliked-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.rd-disliked-group {
+  margin-bottom: var(--space-2);
+}
+
+.rd-disliked-group-header {
+  margin: 0 var(--space-4) var(--space-1);
+  font-size: var(--fs-11);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+  padding-top: var(--space-3);
+}
+
+.rd-disliked-group:first-child .rd-disliked-group-header {
+  padding-top: var(--space-1);
+}
+
+.rd-disliked-extra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px var(--space-4) var(--space-2);
+  gap: var(--space-2);
+}
+
+.rd-disliked-remove-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px var(--space-2);
+  border-radius: var(--r-pill);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background var(--dur-fast) var(--ease-snappy),
+    border-color var(--dur-fast) var(--ease-snappy),
+    color var(--dur-fast) var(--ease-snappy);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rd-disliked-remove-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.22);
+    color: var(--text);
+  }
+}
+
+.rd-disliked-remove-btn:active {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rd-disliked-remove-btn:disabled {
+  opacity: 0.45;
+  cursor: wait;
+}
+
+.rd-disliked-sentinel {
+  height: 1px;
+  margin-top: var(--space-2);
+}
+
+.rd-disliked-load-indicator {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3) var(--space-4) var(--space-5);
+}
+
+.rd-disliked-search-empty {
+  padding: var(--space-7) var(--space-4);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.loader--sm {
+  width: 20px;
+  height: 20px;
+  margin: 0 auto;
 }

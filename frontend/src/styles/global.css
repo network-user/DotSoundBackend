@@ -35,9 +35,12 @@
   --glass-blur:   blur(16px);
   --glass-border: rgba(255, 255, 255, 0.06);
 
-  /* Spacing & radius */
-  --nav-h:    60px;
-  --player-h: 80px;
+  /* Spacing & radius. --nav-h / --player-h are kept for legacy
+   * call-sites; the canonical responsive values live in
+   * tokens.css (--layout-nav-h / --layout-player-h) and the var()
+   * fallback chain below makes both work in any media query. */
+  --nav-h:    var(--layout-nav-h, 60px);
+  --player-h: var(--layout-player-h, 80px);
   --radius:   10px;
   --radius-sm: 6px;
   --radius-lg: 16px;
@@ -1240,6 +1243,21 @@ body.monochrome #app {
 #pb-seek:focus-visible::-moz-range-thumb {
   opacity: 1;
   transform: scale(1);
+}
+
+/* On touch devices the user has no hover, so the seek thumb
+ * stays invisible until they actually start dragging. Keep it
+ * permanently visible (smaller, but discoverable) so the bar
+ * looks scrubbable at a glance. */
+@media (pointer: coarse) {
+  #pb-seek::-webkit-slider-thumb {
+    opacity: 0.85;
+    transform: scale(0.9);
+  }
+  #pb-seek::-moz-range-thumb {
+    opacity: 0.85;
+    transform: scale(0.9);
+  }
 }
 
 #pb-row {
@@ -3639,47 +3657,12 @@ html.le-lyrics-sync-open body {
   opacity: 0.45;
 }
 
-.profile-tabs-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 16px;
-}
 .profile-settings-btn {
   flex-shrink: 0;
   color: var(--text-muted);
 }
 .profile-settings-btn:hover {
   color: var(--text);
-}
-.profile-tabs {
-  flex: 1;
-  display: flex;
-  gap: 0;
-  margin: 0;
-  background: var(--surface);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  overflow: hidden;
-}
-.profile-tab {
-  flex: 1;
-  padding: 12px;
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 14px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-}
-.profile-tab.active {
-  color: var(--text);
-  background: var(--bg-card-hover);
-}
-.profile-tab:hover:not(.active) {
-  color: var(--text-secondary);
 }
 
 .import-sources { padding-bottom: 16px; }
@@ -8153,82 +8136,315 @@ html.ds-low-glass .tcs-sheet {
   }
 }
 
-.profile-tabs-row {
+/* ============================================================
+ * Profile view (redesign 2026-05-08)
+ * Mobile-first list layout, centered hero, max-width container
+ * for desktop, large hit targets, accessible focus rings.
+ * ============================================================ */
+
+#view-profile {
+  padding-bottom: calc(
+    var(--player-h) + var(--nav-h) + var(--safe-bottom)
+  );
+}
+
+.profile-page-header {
   position: sticky;
   top: 0;
   z-index: 20;
-  padding: calc(10px + var(--safe-top)) 16px 10px;
-  background: rgba(10, 10, 10, 0.92);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: calc(8px + var(--safe-top)) 16px 8px;
+  background: rgba(10, 10, 10, 0.88);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
 }
 
-.profile-tabs {
-  border-radius: 10px;
-  background: var(--bg-elevated);
+.profile-page-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.profile-tab {
-  min-height: 40px;
-  padding: 0 10px;
-  border-radius: 8px;
+.profile-page-title--sub {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 700;
 }
 
-.profile-tab.active {
-  background: var(--accent);
-  color: var(--bg);
+.profile-page-spacer {
+  display: inline-block;
+  flex: 0 0 auto;
+  min-width: 44px;
 }
 
 .profile-header-actions {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex: 0 0 auto;
 }
 
-.profile-subview-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px 14px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+.profile-page-header--sub .profile-subview-back {
+  flex: 0 0 auto;
 }
 
 .profile-subview-back {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px 6px 6px;
+  min-height: 40px;
+  padding: 0 10px 0 6px;
   margin: 0;
-  border-radius: 8px;
+  border-radius: 10px;
   color: var(--text-secondary);
   font-size: 14px;
   font-weight: 600;
   font-family: inherit;
+  background: transparent;
 }
 
-.profile-subview-title {
-  font-size: 15px;
-  font-weight: 700;
+.profile-subview-back:hover {
+  background: var(--bg-card-hover);
   color: var(--text);
+}
+
+.profile-subview-back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.profile-content {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0;
+}
+
+/* Hero ------------------------------------------------------- */
+
+.profile-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin: 20px 16px 0;
+  padding: 20px 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+
+.profile-hero__avatar-wrap {
+  position: relative;
+  margin: 0 0 14px;
+}
+
+.profile-avatar {
+  width: 96px;
+  height: 96px;
+  margin: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 38px;
+  font-weight: 700;
+  overflow: hidden;
+  color: var(--text);
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar.profile-avatar--editable {
+  position: relative;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  font-size: 38px;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  transition: border-color 160ms var(--ease-out);
+}
+
+.profile-avatar.profile-avatar--editable:hover {
+  border-color: var(--border-hover);
+}
+
+.profile-avatar.profile-avatar--editable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.profile-avatar.profile-avatar--editable[disabled] {
+  cursor: wait;
+  opacity: 0.85;
+}
+
+.profile-avatar-edit-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(
+    in srgb,
+    var(--bg) 55%,
+    transparent
+  );
+  color: var(--text);
+  pointer-events: none;
+}
+
+.profile-name {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.2;
+  color: var(--text);
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.profile-username {
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-name-input {
+  width: 100%;
+  max-width: 320px;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.profile-edit-controls {
+  width: 100%;
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.profile-hero .profile-edit-btn {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.profile-hero .profile-edit-save {
+  flex: 1 1 160px;
+  min-height: 44px;
+  padding: 0 22px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.profile-hero .profile-edit-cancel {
+  flex: 0 1 120px;
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Stats ------------------------------------------------------ */
+
+.profile-stats {
+  display: flex;
+  gap: 1px;
+  margin: 16px 16px 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--border);
+}
+
+.stat-item {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 14px 10px;
+  text-align: center;
+  background: var(--bg-elevated);
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: var(--text);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-label {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Listener stats card ---------------------------------------- */
+
 .listener-stats {
-  margin: 12px 16px 0;
+  margin: 16px 16px 0;
   padding: 14px 14px 16px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   box-sizing: border-box;
 }
 
 .listener-stats .profile-stats {
   margin: 10px 0 0;
+  border: none;
+  background: transparent;
+}
+
+.listener-stats .stat-item {
+  background: var(--bg-card);
+  border-radius: 10px;
+  margin: 0 2px;
 }
 
 .listener-stats__header {
@@ -8256,163 +8472,299 @@ html.ds-low-glass .tcs-sheet {
   flex: 0 1 auto;
 }
 
-.profile-hero {
-  align-items: flex-start;
-  text-align: left;
-  margin: 16px 16px 0;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--bg-elevated);
-  display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
-  column-gap: 14px;
-}
+/* Action list ------------------------------------------------ */
 
-.profile-avatar {
-  width: 76px;
-  height: 76px;
-  margin: 0;
-  grid-row: span 4;
-}
-
-.profile-avatar.profile-avatar--editable {
-  align-self: start;
-  padding: 0;
-  appearance: none;
-  -webkit-appearance: none;
-  font: inherit;
-  margin: 0;
-  outline: none;
-  cursor: pointer;
-  position: relative;
-}
-
-.profile-avatar.profile-avatar--editable[disabled] {
-  cursor: wait;
-  opacity: 0.85;
-}
-
-.profile-avatar-edit-hint {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 26px;
+.profile-actions {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background: color-mix(
-    in srgb,
-    var(--bg) 50%,
-    transparent
-  );
-  color: var(--text);
-  pointer-events: none;
+  flex-direction: column;
+  gap: 18px;
+  padding: 20px 16px 8px;
 }
 
-
-.profile-name,
-.profile-username {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.profile-edit-controls {
-  margin-top: 10px;
+.profile-actions-group {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 8px;
 }
 
-.profile-edit-btn,
-.profile-edit-cancel {
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 12px;
+.profile-actions-group__title {
+  margin: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.profile-actions-list {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.profile-actions-list .profile-action-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 0;
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: left;
+  justify-content: flex-start;
   cursor: pointer;
+  transition: background 140ms var(--ease-out);
 }
 
-.profile-stats {
-  margin-top: 12px;
-  border-radius: 12px;
+.profile-actions-list
+  .profile-action-btn
+  + .profile-action-btn {
+  border-top: 1px solid var(--border);
 }
 
-.stat-item {
-  padding: 12px 8px;
-}
-
-.stat-value {
-  font-size: 20px;
-}
-
-.profile-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  padding: 16px;
-}
-
-.profile-action-btn {
-  position: relative;
-  min-height: 92px;
-  padding: 12px;
-  border-radius: 10px;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+.profile-actions-list .profile-action-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .profile-action-icon,
 .profile-action-icon-svg {
-  width: 32px;
-  height: 32px;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface);
+  border-radius: 10px;
+  background: var(--bg-card);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  color: var(--text);
+  transition:
+    background 140ms var(--ease-out),
+    border-color 140ms var(--ease-out);
 }
 
 .profile-action-label {
-  width: 100%;
-  font-size: 13px;
-  line-height: 1.25;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-action-chevron {
-  position: absolute;
-  right: 12px;
-  top: 14px;
+  position: static;
+  flex-shrink: 0;
   color: var(--text-muted);
 }
 
-@media (min-width: 640px) {
-  .profile-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+@media (hover: hover) and (pointer: fine) {
+  .profile-actions-list .profile-action-btn:hover {
+    background: var(--bg-card-hover);
+  }
+  .profile-actions-list
+    .profile-action-btn:hover
+    .profile-action-icon-svg {
+    background: var(--bg-card-hover);
+    border-color: var(--border-hover);
+  }
+  .profile-actions-list
+    .profile-action-btn:hover
+    .profile-action-chevron {
+    color: var(--text);
   }
 }
 
-@media (min-width: 960px) {
+@media (min-width: 720px) {
+  .profile-page-header {
+    padding-left: max(16px, calc((100% - 720px) / 2 + 16px));
+    padding-right: max(16px, calc((100% - 720px) / 2 + 16px));
+  }
+  .profile-hero {
+    padding: 26px 24px 22px;
+  }
+  .profile-avatar {
+    width: 112px;
+    height: 112px;
+    font-size: 44px;
+  }
+  .profile-name {
+    font-size: 24px;
+  }
+  .profile-edit-btn {
+    width: auto;
+    min-width: 220px;
+  }
   .profile-actions {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 24px 16px 8px;
+  }
+  .profile-action-btn {
+    min-height: 60px;
+    padding: 10px 18px;
   }
 }
 
-.my-tracks-section .section-header {
-  padding-top: 8px;
+/* Avatar — non-edit clickable with hover hint --------------- */
+
+.profile-avatar.profile-avatar--clickable {
+  position: relative;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  font-size: 38px;
+  font-weight: 700;
+  outline: none;
+  cursor: pointer;
+  background: var(--surface-2);
+  border: 2px solid var(--border);
+  transition: border-color 160ms var(--ease-out);
+}
+
+.profile-avatar.profile-avatar--clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.profile-avatar-hover-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(
+    in srgb,
+    var(--bg) 60%,
+    transparent
+  );
+  color: var(--text);
+  opacity: 0;
+  transition: opacity 160ms var(--ease-out);
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .profile-avatar.profile-avatar--clickable:hover {
+    border-color: var(--border-hover);
+  }
+  .profile-avatar.profile-avatar--clickable:hover
+    .profile-avatar-hover-hint,
+  .profile-avatar.profile-avatar--clickable:focus-visible
+    .profile-avatar-hover-hint {
+    opacity: 1;
+  }
+}
+
+/* My tracks section ------------------------------------------ */
+
+.profile-tracks-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 16px 24px;
+}
+
+.profile-tracks-section__title {
+  margin: 4px 4px 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.profile-tracks-section__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.profile-tracks-section__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.profile-tracks-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 28px 18px 24px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+
+.profile-tracks-empty__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.profile-tracks-empty__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.profile-tracks-empty__hint {
+  max-width: 320px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.profile-tracks-empty .profile-tracks-empty__cta {
+  margin-top: 12px;
+  min-height: 44px;
+  padding: 0 22px;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 8px;
+}
+
+/* Subview header — settings cog cluster ---------------------- */
+
+.profile-header-actions--sub {
+  justify-content: flex-end;
+  min-width: 44px;
 }
 
 .chats-header {
@@ -9181,8 +9533,235 @@ html.ds-low-glass .tcs-sheet {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transition:
+    background 0.15s,
+    color 0.15s,
+    transform 0.15s var(--ease-out),
+    border-color 0.15s var(--ease-out),
+    box-shadow 0.15s var(--ease-out);
 }
 .playlist-create-inline:active {
   background: var(--bg-elevated);
+}
+
+.playlist-create-inline:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .playlist-create-inline:hover {
+    transform: translateY(-1px);
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+    box-shadow:
+      0 12px 22px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* ============================================================
+ * Mobile-first adaptive layer (DS-2026-mobile)
+ * ------------------------------------------------------------
+ * Adds responsive breakpoints + tap-target normalization on
+ * top of the legacy desktop-first rules above. Order matters:
+ * keep this block last so it wins specificity ties.
+ * ============================================================ */
+
+/* Universal text-overflow utilities (used by titles, artist
+ * names, breadcrumbs etc. on narrow viewports). */
+.line-clamp-1,
+.line-clamp-2,
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+.line-clamp-1 { -webkit-line-clamp: 1; line-clamp: 1; }
+.line-clamp-2 { -webkit-line-clamp: 2; line-clamp: 2; }
+.line-clamp-3 { -webkit-line-clamp: 3; line-clamp: 3; }
+
+.touch-target {
+  min-width: var(--tap, 44px);
+  min-height: var(--tap, 44px);
+}
+
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Accessible visually-hidden helper (keeps content for screen
+ * readers while removing it from the visual flow). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Bottom-of-screen safe-area helper for sticky CTA panels. */
+.safe-bottom-pad {
+  padding-bottom: max(var(--space-4, 16px), var(--safe-bottom));
+}
+
+/* Touch-friendly minimum size for the most common interactive
+ * legacy primitives. Desktops (`pointer: fine`) keep their
+ * compact 36px sizing via the override below to avoid regressing
+ * dense desktop layouts. */
+@media (pointer: coarse) {
+  .ctrl-btn,
+  .icon-btn,
+  .nav-btn {
+    min-width: var(--tap, 44px);
+    min-height: var(--tap, 44px);
+  }
+
+  .play-btn {
+    width: var(--tap, 44px);
+    height: var(--tap, 44px);
+  }
+
+  /* Make sure links rendered as inline pills are easy to hit. */
+  .pb-source-link,
+  .player-radio-badge {
+    min-height: 28px;
+  }
+
+  /* Form controls: native browser defaults can drop below 32px
+   * on Android, which is way under the WCAG threshold. */
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="number"],
+  input[type="password"],
+  textarea,
+  select {
+    min-height: var(--tap, 44px);
+    font-size: max(16px, 1em);
+  }
+}
+
+/* Stop accidental browser-level overscroll-glow / pull-to-refresh
+ * fighting our in-app PTR. Only affects the main scroll surface.
+ * The native swipe-back gesture is preserved since #app sits at
+ * page level. */
+#main {
+  overscroll-behavior-y: contain;
+  overscroll-behavior-x: none;
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #main {
+    scroll-behavior: auto;
+  }
+}
+
+/* Keyboard navigation parity: any clickable area exposes a clear
+ * focus outline. Mouse interactions still don't show the ring.
+ * Uses :where() so existing component focus styles win without
+ * needing extra specificity boosts. */
+:where(a, button, [role="button"], input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent, #fff);
+  outline-offset: 2px;
+}
+
+/* Narrow phones: tighter side gutters and slightly smaller
+ * heroes so headers don't push the first card off-screen. */
+@media (max-width: 360px) {
+  .view-header {
+    padding: 18px 16px 12px;
+  }
+  .view-header h2 {
+    font-size: clamp(20px, 6vw, 24px);
+    letter-spacing: var(--ls-tight, -0.014em);
+  }
+  .track-card {
+    padding: 10px 12px;
+  }
+  .track-card-cover {
+    width: 44px;
+    height: 44px;
+  }
+  /* Compact player cover on tiny phones to keep title legible. */
+  .pb-cover-img {
+    width: 40px;
+    height: 40px;
+  }
+  #pb-row {
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  .pb-title { font-size: 13px; }
+  .pb-artist { font-size: 11px; }
+}
+
+/* Landscape phones / split-screen / very short viewports.
+ * Bottom strips become more compact, big covers shrink, and
+ * player meta drops to a single line. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .view-header {
+    padding: 12px 16px 8px;
+  }
+  .view-header h2 {
+    font-size: clamp(18px, 4.5vh, 22px);
+  }
+
+  #pb-row {
+    padding: 6px 12px;
+    gap: 8px;
+    height: calc(var(--player-h) - 2px);
+  }
+  .pb-cover-img {
+    width: 40px;
+    height: 40px;
+  }
+  .pb-title { font-size: 13px; }
+  .pb-artist { font-size: 11px; }
+  /* Hide #pb-time row in landscape — seek thumb still works */
+  #pb-time {
+    display: none;
+  }
+  /* The volume hover popover is desktop-style; suppress on short
+   * landscape phones where there is no room. */
+  @media (pointer: coarse) {
+    .pb-volume-wrap { display: none; }
+  }
+}
+
+/* Tablet / desktop browser: more generous side gutters so the
+ * Mini App doesn't look stretched-thin on >=768px screens. */
+@media (min-width: 768px) {
+  .view-header {
+    padding: 28px 32px 18px;
+  }
+  .track-card {
+    padding: 12px 24px;
+  }
+}
+
+/* Wide desktop browser: cap content width and centre it so
+ * single-column lists stop spanning the entire monitor. */
+@media (min-width: 1280px) {
+  #main {
+    --content-max-width: 1200px;
+  }
+  #main > .view {
+    max-width: var(--content-max-width);
+    margin-inline: auto;
+  }
 }

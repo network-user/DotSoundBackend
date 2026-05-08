@@ -354,6 +354,53 @@ export interface OnboardingStatus {
   import_prompt_acknowledged: boolean
   can_import_from_telegram: boolean
   has_telegram_profile_music: boolean | null
+  profile_completed: boolean
+}
+
+export interface OnboardingProfileDefaults {
+  suggested_display_name: string
+  current_display_name: string | null
+  suggested_avatar_url: string | null
+  has_custom_avatar: boolean
+  auth_provider: string
+  suggested_initials: string
+  locale: string | null
+}
+
+export interface OnboardingProfileSubmitRequest {
+  display_name?: string | null
+  use_default_avatar?: boolean
+  locale?: string | null
+}
+
+export interface OnboardingProfileSubmitResponse {
+  display_name: string
+  avatar_url: string | null
+  profile_completed: boolean
+}
+
+export interface OnboardingGenreBubble {
+  genre: string
+  track_count: number
+  sample_cover_keys: string[]
+}
+
+export interface OnboardingBootstrap {
+  status: OnboardingStatus
+  profile_defaults: OnboardingProfileDefaults
+  genre_bubbles: OnboardingGenreBubble[]
+  show_import_offer: boolean
+}
+
+export type OnboardingTasteDecision = 'like' | 'dislike' | 'skip'
+
+export interface OnboardingTasteSwipeBatchRequest {
+  decisions: { track_id: number; decision: OnboardingTasteDecision }[]
+}
+
+export interface OnboardingTasteSwipeBatchResponse {
+  saved: number
+  swipe_total: number
 }
 
 export interface SCSearchResult {

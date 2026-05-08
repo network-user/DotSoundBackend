@@ -112,6 +112,7 @@ class DislikeService:
         page: int = 1,
         size: int = 20,
         source_filter: str | None = None,
+        query: str | None = None,
     ) -> tuple[list[tuple[Track, datetime]], int]:
         user = await self._user_repo.get_by_id(user_id)
         if not user:
@@ -126,6 +127,7 @@ class DislikeService:
             offset=offset,
             limit=size,
             source_filter=source_filter,
+            query=query,
         )
         collapsed = await self.collapse_disliked_rows(rows)
         logger.info(

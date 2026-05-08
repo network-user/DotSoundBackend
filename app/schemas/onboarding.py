@@ -3,9 +3,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class OnboardingPreferencesRequest(BaseModel):
     genres: list[str] = Field(default_factory=list)
-    artist_ids: list[int] = Field(
-        default_factory=list
-    )
+    artist_ids: list[int] = Field(default_factory=list)
     moods: list[str] = Field(default_factory=list)
 
 
@@ -15,9 +13,7 @@ class CalibrationItem(BaseModel):
 
 
 class CalibrationRequest(BaseModel):
-    items: list[CalibrationItem] = Field(
-        min_length=1, max_length=10
-    )
+    items: list[CalibrationItem] = Field(min_length=1, max_length=10)
 
 
 class OnboardingStatusResponse(BaseModel):
@@ -28,6 +24,7 @@ class OnboardingStatusResponse(BaseModel):
     import_prompt_acknowledged: bool = False
     can_import_from_telegram: bool = False
     has_telegram_profile_music: bool | None = None
+    profile_completed: bool = False
 
 
 class ArtistBriefResponse(BaseModel):
@@ -39,23 +36,90 @@ class ArtistBriefResponse(BaseModel):
 
 
 class SmartSkipResponse(BaseModel):
-    applied_genres: list[str] = Field(
-        default_factory=list
-    )
-    applied_artist_ids: list[int] = Field(
-        default_factory=list
-    )
-    applied_moods: list[str] = Field(
-        default_factory=list
-    )
+    applied_genres: list[str] = Field(default_factory=list)
+    applied_artist_ids: list[int] = Field(default_factory=list)
+    applied_moods: list[str] = Field(default_factory=list)
     enabled: bool = True
 
 
-ActivationEventMeta = dict[
-    str, str | int | float | bool | None
-]
+ActivationEventMeta = dict[str, str | int | float | bool | None]
 
 
 class ActivationEventRequest(BaseModel):
     event: str = Field(min_length=1, max_length=64)
     meta: ActivationEventMeta | None = None
+
+
+class ProfileDefaultsResponse(BaseModel):
+    suggested_display_name: str
+    current_display_name: str | None = None
+    suggested_avatar_url: str | None = None
+    has_custom_avatar: bool = False
+    auth_provider: str = "telegram"
+    suggested_initials: str = ""
+    locale: str | None = None
+
+
+class OnboardingProfileSubmitRequest(BaseModel):
+    display_name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+    )
+    use_default_avatar: bool = False
+    locale: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=10,
+    )
+
+
+class OnboardingProfileSubmitResponse(BaseModel):
+    display_name: str
+    avatar_url: str | None = None
+    profile_completed: bool
+
+
+class TasteSwipeDecision(BaseModel):
+    track_id: int
+    decision: str = Field(
+        pattern=r"^(like|dislike|skip)$",
+    )
+
+
+class TasteSwipeBatchRequest(BaseModel):
+    decisions: list[TasteSwipeDecision] = Field(
+        default_factory=list,
+        max_length=20,
+    )
+
+
+class TasteSwipeBatchResponse(BaseModel):
+    saved: int
+    swipe_total: int
+
+
+class GenreBubbleResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    genre: str
+    track_count: int = 0
+    sample_cover_keys: list[str] = Field(
+        default_factory=list,
+    )
+
+
+class OnboardingBootstrapResponse(BaseModel):
+    """Single round-trip payload for the onboarding wizard.
+
+    Bundles status + profile defaults + the locale-curated
+    bubble list so the client can render the first frame
+    without two extra requests.
+    """
+
+    status: OnboardingStatusResponse
+    profile_defaults: ProfileDefaultsResponse
+    genre_bubbles: list[GenreBubbleResponse] = Field(
+        default_factory=list,
+    )
+    show_import_offer: bool = False

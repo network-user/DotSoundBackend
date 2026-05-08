@@ -70,10 +70,6 @@ export function ProfileHero({
   const sound = useSound()
   const avatarInputRef = useRef<HTMLInputElement>(null)
   const tap = () => sound.play('tapSoft')
-  const handleSave = () => {
-    tap()
-    onSave()
-  }
 
   const onAvatarInputChange = (
     ev: ChangeEvent<HTMLInputElement>,
@@ -89,60 +85,81 @@ export function ProfileHero({
     onAvatarFileSelected(file)
   }
 
-  const avatarVisual = (
-    <>
-      {avatarImageUrl ? (
-        <img src={avatarImageUrl} alt="" />
-      ) : (
-        shownName.charAt(0).toUpperCase()
-      )}
-      {editMode && (
-        <>
-          <input
-            ref={avatarInputRef}
-            type="file"
-            hidden
-            accept="image/jpeg,image/png,image/webp"
-            onChange={onAvatarInputChange}
-          />
-          {!saving && (
-            <span className="profile-avatar-edit-hint">
-              <Icon name="image" size={22} />
-            </span>
-          )}
-        </>
-      )}
-    </>
+  const triggerAvatarPick = () => {
+    if (saving) return
+    tap()
+    avatarInputRef.current?.click()
+  }
+
+  const avatarInner = avatarImageUrl ? (
+    <img src={avatarImageUrl} alt="" />
+  ) : (
+    <span aria-hidden>
+      {shownName.charAt(0).toUpperCase()}
+    </span>
   )
 
   return (
     <div className="profile-hero">
-      {editMode ? (
-        <MotionPress
-          type="button"
-          variant="ghost"
-          disabled={saving}
-          ariaLabel={t(
-            'redesign.library.profileAvatarChangeAria',
-          )}
-          className="profile-avatar profile-avatar--editable"
-          onClick={() => {
-            if (saving) return
-            tap()
-            avatarInputRef.current?.click()
-          }}
-        >
-          {avatarVisual}
-        </MotionPress>
-      ) : (
-        <div className="profile-avatar">{avatarVisual}</div>
-      )}
+      <div className="profile-hero__avatar-wrap">
+        {editMode ? (
+          <MotionPress
+            type="button"
+            variant="ghost"
+            disabled={saving}
+            ariaLabel={t(
+              'redesign.library.profileAvatarChangeAria',
+            )}
+            className="profile-avatar profile-avatar--editable"
+            onClick={triggerAvatarPick}
+          >
+            {avatarInner}
+            {!saving && (
+              <span className="profile-avatar-edit-hint">
+                <Icon name="image" size={20} />
+              </span>
+            )}
+          </MotionPress>
+        ) : (
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="selection"
+            ariaLabel={t(
+              'profile.avatarEditHint',
+              'Сменить фото профиля',
+            )}
+            className="profile-avatar profile-avatar--clickable"
+            onClick={() => {
+              tap()
+              onEditStart()
+            }}
+          >
+            {avatarInner}
+            <span
+              aria-hidden
+              className="profile-avatar-hover-hint"
+            >
+              <Icon name="edit" size={18} />
+            </span>
+          </MotionPress>
+        )}
+        <input
+          ref={avatarInputRef}
+          type="file"
+          hidden
+          accept="image/jpeg,image/png,image/webp"
+          onChange={onAvatarInputChange}
+        />
+      </div>
 
       {editMode ? (
         <input
           className="form-input profile-name-input"
           value={displayName}
-          onChange={(e) => onDisplayNameChange(e.target.value)}
+          onChange={(e) =>
+            onDisplayNameChange(e.target.value)
+          }
           maxLength={64}
           placeholder={t(
             'redesign.library.profileNamePlaceholder',
@@ -150,11 +167,15 @@ export function ProfileHero({
           )}
         />
       ) : (
-        <div className="profile-name">{shownName}</div>
+        <div className="profile-name">
+          {shownName}
+        </div>
       )}
 
       {username && !editMode && (
-        <div className="profile-username">@{username}</div>
+        <div className="profile-username">
+          @{username}
+        </div>
       )}
 
       <div className="profile-edit-controls">
@@ -171,7 +192,10 @@ export function ProfileHero({
           >
             <Icon name="edit" size={16} />
             <span>
-              {t('redesign.library.profileNameEdit', 'Изменить')}
+              {t(
+                'profile.editProfile',
+                'Изменить профиль',
+              )}
             </span>
           </MotionPress>
         ) : (
@@ -180,13 +204,22 @@ export function ProfileHero({
               type="button"
               variant="primary"
               haptic="medium"
-              className="btn-primary"
-              onClick={handleSave}
+              className="btn-primary profile-edit-save"
+              onClick={() => {
+                tap()
+                onSave()
+              }}
               disabled={saving}
             >
               {saving
-                ? t('redesign.library.profileNameSaving', 'Сохранение…')
-                : t('redesign.library.profileNameSave', 'Сохранить')}
+                ? t(
+                    'redesign.library.profileNameSaving',
+                    'Сохранение…',
+                  )
+                : t(
+                    'redesign.library.profileNameSave',
+                    'Сохранить',
+                  )}
             </MotionPress>
             <MotionPress
               type="button"
@@ -197,8 +230,12 @@ export function ProfileHero({
                 tap()
                 onCancel()
               }}
+              disabled={saving}
             >
-              {t('redesign.library.profileNameCancel', 'Отмена')}
+              {t(
+                'redesign.library.profileNameCancel',
+                'Отмена',
+              )}
             </MotionPress>
           </>
         )}
