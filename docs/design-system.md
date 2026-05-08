@@ -193,6 +193,10 @@ Mini App must not pay for.
 
 `frontend/src/lib/telegram.ts` exposes:
 
+- On load (after `ready` / `expand`), calls Telegram
+  `disableVerticalSwipes()` so a downward swipe on page content does
+  not minimize or close the Mini App (Bot API 7.7+). Users can still
+  dismiss via the Telegram header strip.
 - `installTelegramThemeBridge()` — once per session.
 - `installViewportListener()` — keeps `--vh` in sync with the
   Telegram viewport.
@@ -211,6 +215,21 @@ SoundCloud artist-station rows add
 `.artist-catalog-release-station-badge` (monochrome caption
 below meta; styles in `frontend/src/styles/global.css`).
 
+Popular tracks on the redesigned artist page use
+`.rf-artist-top-tracks*` in `frontend/src/styles/redesign-artist.css`:
+horizontal snap slides of three `TrackCard` rows (swipe everywhere;
+`h-snap__arrow` controls only on `≥768px` + fine pointer), optional
+page dots, and a bottom-sheet modal (`.rf-artist-tracks-modal`) for
+the full list with the standard `TrackList` + `SwipeRow` pattern.
+
+Catalog releases on the same page use `.rf-artist-releases*` with the
+same carousel mechanics (three `.artist-catalog-release-card` rows per
+slide) and `.rf-artist-releases-modal` for the full list. The section
+heading is `artist.catalog_releases_title` (“Релизы” / “Releases”) with
+a count; `release_kind === dotsound_sc_artist_station` rows are sorted
+first and their card title uses `redesign.artist.catalogReleasesSimilar`
+(“Похожее: {name}”), then other releases follow in API order.
+
 Artist header shows monthly listeners in a compact inline row
 `.artist-monthly-listeners-inline` under the name/meta line with a
 stroke icon (`users-listeners`). Keep it monochrome, compact and
@@ -228,6 +247,14 @@ Spacing in the track card should keep side gutters at `24px` for
 primary content blocks (`.tcs-info`, `.tcs-player-controls`,
 `.tcs-actions`, `.tcs-edit-panel`) to avoid text and controls sticking
 to card edges.
+
+List-style `TrackCard` rows (feeds, playlists, artist carousels): at
+`max-width: 560px`, padding and typography tighten, `.re-tc-cover-wrap`
+is `40×40` (`36×36` at `≤360px` in `redesign-tracks.css`), and
+play-count/duration (`.track-card-meta`), attribution (`.track-source`),
+and platform/catalog badges except `.track-badge-private` are hidden so
+the row stays scannable. `#main` adds extra bottom scroll padding so the
+last rows clear the fixed player + tab bar.
 
 ## Migration playbook
 

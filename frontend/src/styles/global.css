@@ -433,19 +433,57 @@ body.monochrome #app {
 .track-card-delete:hover { color: #FF6B6B; }
 
 @media (max-width: 560px) {
+  #main {
+    padding-bottom: calc(
+      var(--nav-h) + var(--player-h) + 28px +
+        env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  .track-list {
+    padding: 0 0 var(--space-3);
+  }
+
   .track-card {
-    padding: 10px 14px;
+    padding: 8px 12px;
     margin-left: 0;
     margin-right: 0;
+    margin-bottom: 2px;
     max-width: 100%;
   }
 
   .track-card-main-row {
-    gap: 10px;
+    gap: 8px;
+  }
+
+  .track-card-title {
+    font-size: var(--fs-13);
+  }
+
+  .track-card-artist {
+    font-size: var(--fs-12);
+    margin-top: 2px;
+  }
+
+  .track-card-meta,
+  .track-source {
+    display: none;
+  }
+
+  .track-card-title-row
+    .track-badge:not(.track-badge-private) {
+    display: none;
   }
 
   .track-card-actions {
-    gap: 4px;
+    gap: 2px;
+  }
+
+  .track-card-like svg,
+  .track-card-visibility svg,
+  .track-card-delete svg {
+    width: 16px;
+    height: 16px;
   }
 }
 

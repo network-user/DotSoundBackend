@@ -408,6 +408,10 @@ button.empty-cta:focus-visible {
 /* Hide secondary controls on narrow / touch layouts.
  * Overflow menu restores prev; like moved there on compact. */
 @media (max-width: 560px) {
+  .pb-ctl-v2 {
+    gap: var(--space-2);
+  }
+
   .pb-ctl-v2 .pb-like,
   .pb-ctl-v2 .pb-prev {
     display: none;
@@ -558,6 +562,9 @@ button.empty-cta:focus-visible {
   bottom: calc(100% + var(--space-2));
   right: 0;
   min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
   background: var(--glass-bg, rgba(16, 16, 16, 0.85));
   backdrop-filter: var(--glass-blur, blur(20px))
     saturate(180%);
@@ -577,6 +584,20 @@ button.empty-cta:focus-visible {
   animation: menu-pop var(--dur-fast)
     var(--ease-standard);
   transform-origin: bottom right;
+}
+
+@media (max-width: 560px) {
+  .pb-overflow-menu {
+    padding: var(--space-2);
+    gap: var(--space-2);
+    min-width: min(240px, calc(100vw - var(--space-8)));
+  }
+
+  .pb-menu-item {
+    padding: var(--space-4) var(--space-4);
+    min-height: var(--tap-comfort);
+    border-radius: var(--r-md);
+  }
 }
 
 @keyframes menu-pop {

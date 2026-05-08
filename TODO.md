@@ -14,6 +14,15 @@
 
 ---
 
+## Mini App: Telegram swipe-to-dismiss (2026-05-08)
+
+- [x] **Disable vertical Mini App dismiss on content swipe** — после
+  `WebApp.ready()` / `expand()` вызывается `disableVerticalSwipes()`
+  (`frontend/src/lib/telegram.ts`, Bot API 7.7+), чтобы свайп сверху
+  вниз по контенту не сворачивал Mini App (на главной поведение уже
+  маскировалось pull-to-refresh). Документация: `docs/design-system.md`.
+  Frontend `npm run lint` / `npm run build` green.
+
 ## Lyrics: catalog + sync → compute worker (2026-05-08)
 
 - [x] **Auto lyrics with sync:** если каталог отдаёт только plain text без
@@ -49,6 +58,45 @@
   (`width: max-content`) in `frontend/src/styles/redesign-home.css`
   (`.rh-home-genre-snap .h-snap__item`). Desktop layout remains unchanged;
   frontend `npm run lint` is green.
+
+## TrackCard mobile density (2026-05-08)
+
+- [x] **Compact list `TrackCard` on narrow viewports** — `max-width:
+  560px`: smaller padding/covers, hide meta/source/non-private badges,
+  extra `#main` bottom padding + `.track-list` spacing; `redesign-tracks.css`
+  cover sizes; `docs/design-system.md`. `npm run lint` green.
+
+## Artist page: catalog releases carousel (2026-05-08)
+
+- [x] **Releases section heading vs station card** — section uses
+  `artist.catalog_releases_title`; `dotsound_sc_artist_station` rows
+  sort first with title `catalogReleasesSimilar`; modal title matches
+  section. `docs/design-system.md` updated.
+
+- [x] **ArtistView catalog releases: below top tracks, 3-up carousel +
+  sheet** — `ArtistCatalogReleasesPanel.tsx`, `.rf-artist-releases*`,
+  RU/EN keys, `docs/design-system.md`. `npm run lint` / `npm run build`
+  green.
+
+## Artist page: popular tracks carousel + modal (2026-05-08)
+
+- [x] **ArtistView popular tracks: 3-up snap carousel + «Ещё» sheet** —
+  `frontend/src/components/ArtistView/ArtistTopTracksPanel.tsx` (swipe;
+  `h-snap__arrow` on `≥768px` + fine pointer), full list in bottom sheet
+  via `api.getAllArtistTracks` + `TrackList`; `api.getArtistTracks` gains
+  optional `size`; `docs/design-system.md` + RU/EN i18n. `npm run lint`
+  / `npm run build` green.
+
+## PlayerBar mobile touch ergonomics (2026-05-08)
+
+- [x] **Refine bottom player bar for phone use** — in
+  `frontend/src/styles/global.css` hidden seek thumb for coarse pointers
+  (mobile touch) to remove redundant dot on progress strip; in
+  `frontend/src/styles/components.css` increased `.pb-ctl-v2` gap on narrow
+  widths and **overflow menu** spacing: `.pb-overflow-menu` is a flex column
+  with `gap` + roomier `.pb-menu-item` padding / `min-height: --tap-comfort`
+  under `max-width: 560px` (queue, playlist, EQ, shuffle, etc.). Frontend
+  `npm run lint` is green.
 
 ## Onboarding v2 — fresh wizard (2026-05-08)
 

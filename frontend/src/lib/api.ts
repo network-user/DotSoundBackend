@@ -1977,9 +1977,47 @@ export const api = {
     return request(`/api/v1/artists/${artistId}`)
   },
 
-  getArtistTracks(artistId: number, page?: number): Promise<TrackListResponse> {
+  getArtistTracks(
+    artistId: number,
+    page?: number,
+    size?: number,
+  ): Promise<TrackListResponse> {
     const p = page || 1
-    return request(`/api/v1/artists/${artistId}/tracks?page=${p}`)
+    const sp = new URLSearchParams({ page: String(p) })
+    if (size != null) {
+      sp.set('size', String(size))
+    }
+    return request(
+      `/api/v1/artists/${artistId}/tracks?${sp}`,
+    )
+  },
+
+  async getAllArtistTracks(artistId: number): Promise<Track[]> {
+    const pageSize = 100
+    const first = await api.getArtistTracks(
+      artistId,
+      1,
+      pageSize,
+    )
+    const out = [...first.items]
+    const target = Math.min(first.total, 500)
+    let page = 2
+    while (out.length < target) {
+      const res = await api.getArtistTracks(
+        artistId,
+        page,
+        pageSize,
+      )
+      out.push(...res.items)
+      if (res.items.length === 0) {
+        break
+      }
+      page += 1
+      if (page > 20) {
+        break
+      }
+    }
+    return out
   },
 
   listArtistCatalogReleases(

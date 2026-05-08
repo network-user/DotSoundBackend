@@ -3,9 +3,9 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { ArtistCatalogReleasePanel } from '@/components/ArtistView/ArtistCatalogReleasePanel'
-import { CoverImage } from '@/components/CoverImage/CoverImage'
+import { ArtistCatalogReleasesPanel } from '@/components/ArtistView/ArtistCatalogReleasesPanel'
+import { ArtistTopTracksPanel } from '@/components/ArtistView/ArtistTopTracksPanel'
 import { Icon } from '@/components/Icon/Icon'
-import { TrackList } from '@/components/TrackList/TrackList'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { HorizontalSnap } from '@/components/ui/HorizontalSnap'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
@@ -99,6 +99,9 @@ export function ArtistView() {
 
   const [detail, setDetail] = useState<ArtistDetail | null>(null)
   const [tracks, setTracks] = useState<Track[] | null>(null)
+  const [tracksTotal, setTracksTotal] = useState<
+    number | null
+  >(null)
   const [similar, setSimilar] = useState<ArtistInfo[]>([])
   const [following, setFollowing] = useState<boolean>(false)
   const [followerCount, setFollowerCount] =
@@ -157,6 +160,7 @@ export function ArtistView() {
 
     setDetail(null)
     setTracks(null)
+    setTracksTotal(null)
     setSimilar([])
     setError(null)
 
@@ -177,10 +181,12 @@ export function ArtistView() {
       .then((res) => {
         if (cancelled) return
         setTracks(res.items ?? [])
+        setTracksTotal(res.total ?? 0)
       })
       .catch(() => {
         if (cancelled) return
         setTracks([])
+        setTracksTotal(0)
       })
 
     api
@@ -493,88 +499,6 @@ export function ArtistView() {
         variants={VARIANTS_FADE_UP}
         className="rf-artist__sections"
       >
-        {catalogReleases !== null && (
-          <section className="rf-artist__section">
-            <div className="artist-catalog-releases">
-              <div className="section-header">
-                <span className="section-title">
-                  {t('artist.catalog_releases_title')}{' '}
-                  ({catalogReleases.length})
-                </span>
-              </div>
-              {catalogReleasesError && (
-                <div className="artist-empty-info">
-                  {t('artist.catalog_releases_load_error')}
-                </div>
-              )}
-              {!catalogReleasesError &&
-                catalogReleases.length === 0 && (
-                  <div className="artist-empty-info">
-                    {isAdmin
-                      ? t('artist.catalog_releases_empty_admin')
-                      : t('artist.catalog_releases_empty')}
-                  </div>
-                )}
-              {!catalogReleasesError &&
-                catalogReleases.length > 0 && (
-                  <div className="artist-catalog-releases-grid">
-                    {catalogReleases.map((r) => {
-                      const y = r.released_at?.match(
-                        /^(\d{4})/,
-                      )?.[1]
-                      const metaBits: string[] = []
-                      if (y) metaBits.push(y)
-                      metaBits.push(
-                        t('artist.catalog_release_card_tracks', {
-                          count: r.track_count,
-                        }),
-                      )
-                      const isScStation =
-                        r.release_kind ===
-                        'dotsound_sc_artist_station'
-                      return (
-                        <MotionPress
-                          key={r.id}
-                          type="button"
-                          variant="subtle"
-                          haptic="light"
-                          className={
-                            isScStation
-                              ? 'artist-catalog-release-card artist-catalog-release-card-station'
-                              : 'artist-catalog-release-card'
-                          }
-                          onClick={() =>
-                            setSelectedReleaseId(r.id)
-                          }
-                        >
-                          <CoverImage
-                            coverKey={r.cover_key}
-                            size={56}
-                          />
-                          <div className="artist-catalog-release-card-text">
-                            <div className="artist-catalog-release-card-title">
-                              {r.title}
-                            </div>
-                            <div className="artist-catalog-release-card-meta">
-                              {metaBits.join(' · ')}
-                            </div>
-                            {isScStation && (
-                              <span className="artist-catalog-release-station-badge">
-                                {t(
-                                  'artist.catalog_release_station_badge',
-                                )}
-                              </span>
-                            )}
-                          </div>
-                        </MotionPress>
-                      )
-                    })}
-                  </div>
-                )}
-            </div>
-          </section>
-        )}
-
         {discography.length > 0 && (
           <section className="rf-artist__section">
             <div className="artist-discography">
@@ -620,14 +544,24 @@ export function ArtistView() {
         )}
 
         <section className="rf-artist__section">
-          <h2 className="rf-artist__section-title">
-            {t('redesign.artist.topTracks')}
-          </h2>
-          <TrackList
-            tracks={tracks}
-            emptyMessage={t('redesign.artist.noTracks')}
+          <ArtistTopTracksPanel
+            artistId={artistId}
+            previewTracks={tracks}
+            total={tracksTotal}
           />
         </section>
+
+        {catalogReleases !== null && (
+          <section className="rf-artist__section">
+            <ArtistCatalogReleasesPanel
+              artistDisplayName={detail?.name ?? ''}
+              items={catalogReleases}
+              loadError={catalogReleasesError}
+              isAdmin={isAdmin}
+              onSelectRelease={setSelectedReleaseId}
+            />
+          </section>
+        )}
 
         {detail?.bio && detail.bio.trim() && (
           <section className="rf-artist__section">

@@ -14,6 +14,10 @@ declare global {
 WebApp.ready()
 WebApp.expand()
 
+try {
+  WebApp.disableVerticalSwipes()
+} catch {}
+
 export const tg = WebApp
 
 type HapticImpact = 'light' | 'medium' | 'heavy'

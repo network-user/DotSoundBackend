@@ -45,6 +45,32 @@
   color: var(--text-muted);
 }
 
+@media (max-width: 560px) {
+  .re-tc-cover-wrap {
+    width: 40px;
+    height: 40px;
+  }
+
+  .re-tc-cover-fallback .icon,
+  .re-tc-cover-fallback svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+@media (max-width: 360px) {
+  .re-tc-cover-wrap {
+    width: 36px;
+    height: 36px;
+  }
+
+  .re-tc-cover-fallback .icon,
+  .re-tc-cover-fallback svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
 .re-tl-root {
   min-width: 0;
 }
