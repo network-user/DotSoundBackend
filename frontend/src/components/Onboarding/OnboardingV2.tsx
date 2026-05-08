@@ -303,14 +303,17 @@ export function OnboardingV2({ onComplete }: Props) {
   const togglePreview = useCallback(() => {
     const a = audioRef.current
     if (!a) return
+    const tr = tasteTracks[tasteIndex]
     if (a.paused) {
       void a.play().catch(() =>
         setPreviewTrackId(null),
       )
+      if (tr) setPreviewTrackId(tr.id)
     } else {
       a.pause()
+      setPreviewTrackId(null)
     }
-  }, [])
+  }, [tasteTracks, tasteIndex])
 
   const finalizeSwipe = useCallback(
     async (decisions: typeof tasteDecisions) => {
@@ -369,9 +372,16 @@ export function OnboardingV2({ onComplete }: Props) {
         )
         if (fresh.length > 0) {
           setTasteTracks((prev) => [...prev, ...fresh])
+        } else {
+          // Server returned only duplicates — reset guard
+          // so the next swipe triggers a retry instead of
+          // freezing with an empty card stack.
+          lastFetchCountRef.current = 0
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        lastFetchCountRef.current = 0
+      })
       .finally(() => {
         if (!cancelled) setTasteLoading(false)
       })
@@ -389,6 +399,7 @@ export function OnboardingV2({ onComplete }: Props) {
     const a = audioRef.current
     if (!a) return
     a.pause()
+    a.muted = false
     a.src = `/api/v1/track-preview/${tr.id}/segment.mp4`
     setPreviewTrackId(tr.id)
     void a.play().catch(() => {
@@ -972,7 +983,6 @@ function GenresStep({
       }
       a.src = `/api/v1/track-preview/${track.id}/segment.mp4`
       a.muted = false
-      a.currentTime = 0
       a.onended = () => {
         if (timerRef.current !== null) {
           window.clearTimeout(timerRef.current)
