@@ -1076,6 +1076,7 @@ body.ds-perf-lite .glass__noise {
   animation: sheet-enter var(--dur-med)
     var(--ease-standard);
   box-shadow: 0 -16px 48px rgba(0, 0, 0, 0.55);
+  border-top-color: color-mix(in srgb, var(--glass-edge) 86%, transparent);
   padding-bottom: var(--safe-bottom);
 }
 .queue-sheet.is-closing {
@@ -1103,6 +1104,7 @@ body.ds-perf-lite .glass__noise {
   align-items: center;
   justify-content: space-between;
   padding: 4px 16px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-edge) 84%, transparent);
 }
 
 .queue-title {
@@ -1166,6 +1168,12 @@ body.ds-perf-lite .glass__noise {
   padding: var(--space-2) var(--space-1);
   border-radius: var(--r-md);
   width: 100%;
+  border: 1px solid transparent;
+  transition:
+    transform 140ms var(--ease-out),
+    border-color 140ms var(--ease-out),
+    background 140ms var(--ease-out),
+    box-shadow 140ms var(--ease-out);
 }
 .queue-row:hover {
   background: rgba(255, 255, 255, 0.04);
@@ -1203,11 +1211,14 @@ body.ds-perf-lite .glass__noise {
   align-items: center;
   justify-content: center;
   background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 82%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .queue-cover img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 220ms var(--ease-out);
 }
 
 .queue-meta {
@@ -1269,6 +1280,27 @@ body.ds-perf-lite .glass__noise {
 .queue-remove:hover {
   color: var(--text);
   background: rgba(255, 255, 255, 0.06);
+}
+
+.queue-action-btn:focus-visible,
+.queue-remove:focus-visible,
+.queue-row-main:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .queue-row:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--accent) 20%, var(--glass-edge));
+    box-shadow:
+      0 10px 20px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+
+  .queue-row:hover .queue-cover img {
+    transform: scale(1.03);
+  }
 }
 
 .queue-empty {

@@ -110,6 +110,36 @@
   desktop lift/zoom эффект. Genre: hero и табы стали контрастнее, с
   cleaner hover/focus состояниями.
 
+- [x] **Mini App: visual polish Radio + Share Sheet (2026-05-08)** —
+  Radio: hero и `next track` карточка получили более выразительный
+  glass-depth и cleaner hover/focus. Share Sheet: recap-card и collage
+  блок стали контрастнее и визуально “плотнее”.
+
+- [x] **Mini App: visual polish NotFound + External views (2026-05-08)** —
+  NotFound: экран 404 переведён в более аккуратный card-layout с
+  cleaner CTA состояниями. External Track/Album: hero и source actions
+  получили depth и более выразительные hover/focus состояния.
+
+- [x] **Mini App: visual polish ArtistStats + Queue sheet (2026-05-08)** —
+  ArtistStats: KPI/graph cards получили более выраженный depth и cleaner
+  hover/focus states. Queue sheet: header/rows/covers стали контрастнее
+  и визуально аккуратнее за счёт subtle lift/zoom polish.
+
+- [x] **Mini App: visual polish Import picker + Chat bubble actions (2026-05-08)** —
+  Import source picker: rows/icons/badges получили более читаемый depth
+  и hover/focus polish. Chat bubbles: action/reaction controls стали
+  контрастнее и аккуратнее в интерактивных состояниях.
+
+- [x] **Mini App: visual polish Search artist strip + Featured playlists (2026-05-08)** —
+  Search artist strip: аватары и подписи получили cleaner depth и hover
+  feedback. Featured playlists: карточки и cover-обложки получили
+  более выраженный lift/zoom/contrast polish.
+
+- [x] **Mini App: visual polish Playlists auto rows + Share chat list (2026-05-08)** —
+  Playlists auto rows: строки и иконки получили более читаемый depth и
+  hover/focus feedback. Share chat list: карточки выбора чата стали
+  контрастнее и аккуратнее в интерактивных состояниях.
+
 - [x] **Профиль: дизлайки в блоке действий + адаптив (2026-05-08)** — убран четвёртый таб
   сверху; «Дизлайки» в `ProfileActions` после «Понравившееся»; подшапка «К профилю» +
   заголовок; вкладка «Профиль» активна и для подэкрана дизлайков; сетка действий 3–4

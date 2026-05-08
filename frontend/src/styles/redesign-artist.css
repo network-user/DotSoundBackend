@@ -706,6 +706,10 @@
 .rf-external__hero {
   margin: calc(var(--space-3) * -1) 0 var(--space-4);
   min-height: 320px;
+  border-bottom: 1px solid color-mix(in srgb, var(--glass-border) 85%, transparent);
+  box-shadow:
+    inset 0 -24px 42px rgba(0, 0, 0, 0.2),
+    0 14px 30px rgba(0, 0, 0, 0.18);
 }
 
 .rf-external__hero .ambient-stage {
@@ -728,12 +732,17 @@
   overflow: hidden;
   box-shadow: 0 16px 44px rgba(0, 0, 0, 0.55);
   background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition:
+    transform 210ms var(--ease-out),
+    box-shadow 210ms var(--ease-out);
 }
 
 .rf-external__hero-art img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 240ms var(--ease-out);
 }
 
 .rf-external__badge {
@@ -772,6 +781,11 @@
   background: var(--glass-medium);
   font-size: var(--fs-12);
   color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--glass-edge) 88%, transparent);
+  transition:
+    transform 150ms var(--ease-out),
+    border-color 150ms var(--ease-out),
+    background 150ms var(--ease-out);
 }
 
 .rf-external__actions {
@@ -780,6 +794,29 @@
   gap: var(--space-2);
   justify-content: center;
   margin-top: var(--space-2);
+}
+
+.rf-external__source-btn:focus-visible,
+.rf-external__actions .mp-press:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rf-external__hero:hover .rf-external__hero-art {
+    transform: translateY(-2px) scale(1.01);
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.58);
+  }
+
+  .rf-external__hero:hover .rf-external__hero-art img {
+    transform: scale(1.03);
+  }
+
+  .rf-external__source-btn:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--accent) 24%, var(--glass-edge));
+    background: color-mix(in srgb, var(--glass-medium) 85%, rgba(255, 255, 255, 0.05));
+  }
 }
 
 /* Artist snippet preview button (compact) */

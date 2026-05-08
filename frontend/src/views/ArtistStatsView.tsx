@@ -605,6 +605,9 @@ function ArtistStatsStyles() {
         top: 0;
         z-index: 10;
         border-bottom: 1px solid var(--border);
+        box-shadow:
+          0 10px 22px rgba(0, 0, 0, 0.16),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
       }
       .artist-stats-view .view-title {
         font-size: 1.05rem;
@@ -660,6 +663,13 @@ function ArtistStatsStyles() {
         flex-direction: column;
         gap: 6px;
         min-height: 92px;
+        box-shadow:
+          0 10px 22px rgba(0, 0, 0, 0.16),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        transition:
+          transform 150ms ease,
+          border-color 150ms ease,
+          box-shadow 150ms ease;
       }
       .stats-kpi-card--skeleton {
         min-height: 92px;
@@ -712,6 +722,13 @@ function ArtistStatsStyles() {
         padding: 14px;
         border: 1px solid var(--border);
         color: var(--accent);
+        box-shadow:
+          0 12px 24px rgba(0, 0, 0, 0.17),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
+        transition:
+          transform 150ms ease,
+          border-color 150ms ease,
+          box-shadow 150ms ease;
       }
       .stats-chart-card--muted {
         color: var(--text-secondary);
@@ -738,6 +755,28 @@ function ArtistStatsStyles() {
         width: 100%;
         aspect-ratio: 16 / 7;
         min-height: 200px;
+      }
+      .artist-stats-view .back-btn:focus-visible,
+      .stats-kpi-card:focus-within,
+      .stats-chart-card:focus-within {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .stats-kpi-card:hover {
+          transform: translateY(-1px);
+          border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+          box-shadow:
+            0 14px 28px rgba(0, 0, 0, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+        .stats-chart-card:hover {
+          transform: translateY(-1px);
+          border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
+          box-shadow:
+            0 16px 30px rgba(0, 0, 0, 0.22),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
       }
       @media (prefers-reduced-motion: reduce) {
         .stats-kpi-card--skeleton,
