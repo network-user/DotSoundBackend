@@ -8,7 +8,6 @@ from app.schemas.artist_catalog import (
     ArtistCatalogReleaseSummaryResponse,
     ArtistCatalogReleaseTrackRowResponse,
 )
-from app.schemas.track import TrackResponse
 from app.services.track_response_build import build_track_response
 
 
