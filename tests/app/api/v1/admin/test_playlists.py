@@ -1,7 +1,9 @@
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.track import Track
 from tests.conftest import (
     admin_bearer_for_user,
     auth_headers,
@@ -10,6 +12,27 @@ from tests.conftest import (
 )
 
 pytestmark = pytest.mark.anyio
+
+
+async def _mark_track_playable(
+    db_session: AsyncSession, track_id: int
+) -> None:
+    """Force the freshly-uploaded test track into a playable state.
+
+    `create_test_track` leaves `file_key=None` because the S3 upload
+    is mocked, but `ensure_track_addable_to_user_playlist` rejects
+    such rows. Setting `file_key` here mirrors the post-transcoding
+    state without invoking the real worker.
+    """
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == track_id)
+        .values(
+            file_key=f"tracks/{track_id}.mp3",
+            processing_status="active",
+        )
+    )
+    await db_session.commit()
 
 
 async def test_admin_playlist_reorder(
@@ -42,6 +65,8 @@ async def test_admin_playlist_reorder(
         "PL B",
         uploader_id=admin["id"],
     )
+    await _mark_track_playable(db_session, t1["id"])
+    await _mark_track_playable(db_session, t2["id"])
 
     r1 = await client.post(
         f"/api/v1/admin/playlists/{playlist_id}/tracks/{t1['id']}",
