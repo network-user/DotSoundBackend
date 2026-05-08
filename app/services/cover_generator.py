@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 _SIZE = 512
 _BG = (10, 10, 10)
+DrawContext = ImageDraw.ImageDraw
 
 
 def generate_cover(seed: str) -> bytes:
@@ -34,7 +35,7 @@ def _gray(rng: random.Random, lo: int = 40, hi: int = 255) -> tuple[int, int, in
 
 def _draw_geometric(
     img: Image.Image,
-    draw: ImageDraw.Draw,
+    draw: DrawContext,
     rng: random.Random,
 ) -> None:
     for _ in range(rng.randint(3, 8)):
@@ -84,7 +85,7 @@ def _draw_geometric(
 
 def _draw_waves(
     img: Image.Image,
-    draw: ImageDraw.Draw,
+    draw: DrawContext,
     rng: random.Random,
 ) -> None:
     num_waves = rng.randint(5, 12)
@@ -125,7 +126,7 @@ def _draw_waves(
 
 def _draw_gradient_mesh(
     img: Image.Image,
-    draw: ImageDraw.Draw,
+    draw: DrawContext,
     rng: random.Random,
 ) -> None:
     overlay = Image.new("RGB", (_SIZE, _SIZE), _BG)
@@ -162,7 +163,7 @@ def _draw_gradient_mesh(
 
 def _draw_dots_grid(
     img: Image.Image,
-    draw: ImageDraw.Draw,
+    draw: DrawContext,
     rng: random.Random,
 ) -> None:
     step = rng.randint(16, 32)

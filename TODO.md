@@ -48,10 +48,25 @@
 
 ## Mini App / .sound UI (2026-05-04)
 
+- [x] **Backend tech debt: targeted mypy + tests pass (2026-05-08)** -
+  `AlbumService` fixed admin-actor resolution path (`_resolve_user` +
+  strict `None` guard in `_assert_admin_actor`) to avoid runtime
+  attribute access on missing user and make `allow_admin` path explicit;
+  `cover_generator` draw context typing corrected (`ImageDraw.ImageDraw`);
+  `media_service` switched to `Image.Resampling.LANCZOS` + explicit PIL
+  image typing; `AlbumRepository._next_album_position` hardened for
+  nullable scalar edge-case. Added service regression test for admin
+  override authorization (`tests/app/services/test_album_service.py`).
+
 - [x] **Профиль: дизлайки в блоке действий + адаптив (2026-05-08)** — убран четвёртый таб
   сверху; «Дизлайки» в `ProfileActions` после «Понравившееся»; подшапка «К профилю» +
   заголовок; вкладка «Профиль» активна и для подэкрана дизлайков; сетка действий 3–4
   колонки от 640/960px; блок «Ваше прослушивание» в карточке (`ListenerStats` + CSS).
+- [x] **Lyrics auto cascade: fallback после catalog miss при with_sync (2026-05-08)** —
+  `catalog_only_lyrics_task` больше не завершает job как terminal `not_found` для
+  sync-запросов: при `catalog_no_match` и отсутствии text/synced payload вызывает
+  `handle_tier_miss` и переводит задачу в следующий tier (remote/speechkit). Для
+  text-only режима поведение прежнее (terminal miss + `lyrics_catalog_miss_at`).
 - [x] **Добавление треков в плейлист (2026-05-08)** — `PlaylistsView`: пустое поле — первая
   страница каталога (12 playable) и «Ещё из каталога»; текстовый запрос **от 2 символов**
   — поиск по каталогу с той же пагинацией; **1 символ** — только фильтр медиатеки;
@@ -929,6 +944,12 @@
   metric slider также переведены на `MotionPress` (`icon` + `selection`). Проверки: `npx tsc --noEmit`, `npm run build`.
 
 ## Session Updates (2026-05-08)
+
+- [x] **HorizontalSnap compact centering on desktop (2026-05-08)**: в `HorizontalSnap` добавлен флаг `h-snap--compact` для кейсов без реального overflow, а в shared-стилях на desktop fine-pointer (`min-width:768px`) короткие карусели автоматически центрируются (`justify-content:center`) для более аккуратного вида при малом числе карточек.
+
+- [x] **HorizontalSnap smart dots (2026-05-08)**: в `HorizontalSnap` точки пагинации теперь считаются от реального числа страниц прокрутки (`scrollWidth/clientWidth`) и ограничены максимумом в 4; при 1 странице точки скрыты, при 2–4 показывается точное число, при >4 — агрегированный индикатор из 4 точек с корректным активным состоянием при скролле.
+
+- [x] **Home desktop carousel spacing fix (2026-05-08)**: для `HomeView` убран лишний full-width wrapper у карточек «Миксы по жанрам», а в `redesign-home.css` desktop fine-pointer snap-элементы (`.rh-home-h-snap`, `.rh-home-artist-snap`) переведены на `width: max-content` вместо viewport-width, чтобы исчезли большие пустоты в секциях «Миксы по жанрам», «Продолжить слушать», «Недавно слушали» и ниже; `npm run build` зелёный.
 
 - [x] Исправлены битые UTF-8 последовательности и восстановлены русские строки в `TODO.md`
   (блок Mini App UI, backlog «Home recommendations», секция «Платформы — будущее»);

@@ -803,25 +803,17 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
             <HorizontalSnap
               items={genreMixes}
               renderItem={(mix) => (
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    width: '100%',
-                  }}
-                >
-                  <HomeGenreMixCard
-                    mix={mix}
-                    onPlay={handlePlayAll}
-                    onOpen={() =>
-                      navigate(
-                        `/genre-mix/${encodeURIComponent(mix.genre)}`,
-                      )
-                    }
-                    countLabel={genreTrackCount(mix.tracks.length)}
-                    listenAria={t('redesign.home.mixPlayAll')}
-                  />
-                </div>
+                <HomeGenreMixCard
+                  mix={mix}
+                  onPlay={handlePlayAll}
+                  onOpen={() =>
+                    navigate(
+                      `/genre-mix/${encodeURIComponent(mix.genre)}`,
+                    )
+                  }
+                  countLabel={genreTrackCount(mix.tracks.length)}
+                  listenAria={t('redesign.home.mixPlayAll')}
+                />
               )}
               pageDots
               parallax={false}

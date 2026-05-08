@@ -24,7 +24,7 @@ def strip_metadata_and_compress(
     quality: int | None = None,
 ) -> tuple[bytes, int, int]:
     quality = quality or settings.image_quality
-    img = Image.open(io.BytesIO(data))
+    img: Image.Image = Image.open(io.BytesIO(data))
 
     if img.mode in ("RGBA", "LA", "P"):
         img = img.convert("RGBA")
@@ -36,7 +36,7 @@ def strip_metadata_and_compress(
         ratio = max_size / max(w, h)
         w = int(w * ratio)
         h = int(h * ratio)
-        img = img.resize((w, h), Image.LANCZOS)
+        img = img.resize((w, h), Image.Resampling.LANCZOS)
 
     buf = io.BytesIO()
     img.save(
@@ -60,12 +60,12 @@ def create_thumbnail(
     size: int | None = None,
 ) -> bytes:
     size = size or settings.image_thumbnail_size
-    img = Image.open(io.BytesIO(data))
+    img: Image.Image = Image.open(io.BytesIO(data))
     if img.mode in ("RGBA", "LA", "P"):
         img = img.convert("RGBA")
     else:
         img = img.convert("RGB")
-    img.thumbnail((size, size), Image.LANCZOS)
+    img.thumbnail((size, size), Image.Resampling.LANCZOS)
     buf = io.BytesIO()
     img.save(buf, format="WEBP", quality=60)
     return buf.getvalue()

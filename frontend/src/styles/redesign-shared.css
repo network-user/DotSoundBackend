@@ -313,6 +313,12 @@
   flex: 0 0 auto;
 }
 
+@media (min-width: 768px) and (pointer: fine) {
+  .h-snap--compact .h-snap__track {
+    justify-content: center;
+  }
+}
+
 .h-snap__arrow {
   position: absolute;
   top: 50%;

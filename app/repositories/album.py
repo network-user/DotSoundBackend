@@ -98,7 +98,10 @@ class AlbumRepository:
                 Track.album_id == album_id,
             )
         )
-        return int(result.scalar_one()) + 1
+        current_max = result.scalar_one()
+        if current_max is None:
+            return 0
+        return int(current_max) + 1
 
     async def add_track(self, album_id: int, track: Track) -> None:
         track.album_id = album_id
