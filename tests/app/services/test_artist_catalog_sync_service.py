@@ -56,6 +56,9 @@ async def test_sync_single_wrong_playlist_owner(
     mock_sc.ensure_soundcloud_ids_for_artist = AsyncMock(
         return_value=True,
     )
+    mock_sc.sync_artist_soundcloud_uploader_profile = AsyncMock(
+        return_value=None,
+    )
     mock_sc.fetch_playlist_by_id = AsyncMock(
         return_value={
             "id": 5,
@@ -103,6 +106,9 @@ async def test_sync_full_skips_manual_lock(
     mock_sc_cls.return_value = mock_inst
     mock_inst.ensure_soundcloud_ids_for_artist = AsyncMock(
         return_value=True,
+    )
+    mock_inst.sync_artist_soundcloud_uploader_profile = AsyncMock(
+        return_value=None,
     )
     mock_inst.list_user_albums = AsyncMock(
         return_value=(
@@ -178,6 +184,9 @@ async def test_sync_full_imports_release_and_links(
     mock_sc_cls.return_value = mock_inst
     mock_inst.ensure_soundcloud_ids_for_artist = AsyncMock(
         return_value=True,
+    )
+    mock_inst.sync_artist_soundcloud_uploader_profile = AsyncMock(
+        return_value=None,
     )
     mock_inst.list_user_albums = AsyncMock(
         return_value=(
@@ -293,6 +302,9 @@ async def test_sync_full_caps_releases(
     mock_inst.ensure_soundcloud_ids_for_artist = AsyncMock(
         return_value=True,
     )
+    mock_inst.sync_artist_soundcloud_uploader_profile = AsyncMock(
+        return_value=None,
+    )
     albums_payload = [
         {"id": 10 + i, "title": f"R{i}", "tracks": []} for i in range(4)
     ]
@@ -380,6 +392,9 @@ async def test_sync_single_caps_tracks(
     mock_inst.ensure_soundcloud_ids_for_artist = AsyncMock(
         return_value=True,
     )
+    mock_inst.sync_artist_soundcloud_uploader_profile = AsyncMock(
+        return_value=None,
+    )
     mock_inst.fetch_playlist_by_id = AsyncMock(
         return_value={
             "id": 77,
@@ -461,6 +476,9 @@ async def test_sync_artist_similar_station_writes_release(
     mock_sc_cls.return_value = mock_inst
     mock_inst.ensure_soundcloud_ids_for_artist = AsyncMock(
         return_value=True,
+    )
+    mock_inst.sync_artist_soundcloud_uploader_profile = AsyncMock(
+        return_value=None,
     )
     mock_inst.fetch_expanded_artist_station_playlist = AsyncMock(
         return_value={
