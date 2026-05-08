@@ -279,6 +279,10 @@ export function PlayerBar() {
       onDragEnd={handleDragEnd}
       transition={SPRING_GENTLE}
     >
+      <span
+        className="rp-player-bar__hint"
+        aria-hidden="true"
+      />
       <div
         id="pb-seek-wrap"
         className="pb-seek-zone rp-player-seek"

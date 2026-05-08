@@ -391,7 +391,30 @@ export function ProfileView({
             <h1 className="profile-page-title profile-page-title--sub">
               {subviewTitle}
             </h1>
-            <span aria-hidden className="profile-page-spacer" />
+            <div className="profile-header-actions profile-header-actions--sub">
+              {onOpenSettings ? (
+                <MotionPress
+                  type="button"
+                  variant="icon"
+                  haptic="light"
+                  className="icon-btn profile-settings-btn"
+                  ariaLabel={t(
+                    'profile.openSettings',
+                  )}
+                  onClick={() => {
+                    feedbackTap()
+                    onOpenSettings()
+                  }}
+                >
+                  <Icon name="settings" size={20} />
+                </MotionPress>
+              ) : (
+                <span
+                  aria-hidden
+                  className="profile-page-spacer"
+                />
+              )}
+            </div>
           </>
         )}
       </header>

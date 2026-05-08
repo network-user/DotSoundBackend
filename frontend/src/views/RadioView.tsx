@@ -49,6 +49,7 @@ function coverUrl(key: string | null): string | null {
 const DISC_SWIPE_THRESHOLD_PX = 42
 const DISC_SWIPE_MAX_OFFSET_PX = 92
 const DISC_SLIDE_DISTANCE_PX = 160
+const DISC_TAP_MAX_OFFSET_PX = 6
 const RADIO_WAVE_STYLE: 'style1' | 'style2' | 'style3' =
   'style2'
 
@@ -60,6 +61,7 @@ export function RadioView() {
   const {
     playNext,
     playTrack,
+    togglePlay,
     startRadio,
     stopRadio,
     radioMode,
@@ -253,6 +255,15 @@ export function RadioView() {
     setDiscDragX(0)
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId)
+    }
+    if (
+      Math.abs(pointer.offsetX) <= DISC_TAP_MAX_OFFSET_PX &&
+      radioMode &&
+      currentTrack &&
+      !switchingRef.current
+    ) {
+      togglePlay()
+      return
     }
     if (pointer.offsetX <= -DISC_SWIPE_THRESHOLD_PX) {
       void handleDiscSwipe('next')

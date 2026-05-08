@@ -453,3 +453,120 @@
     min-height: 36px;
   }
 }
+
+/* ---------- Pull-to-refresh indicator ----------
+ *
+ * A floating monochrome glass pill anchored at the top of the
+ * primary scroll container while the user drags. Driven by the
+ * shared usePullToRefresh() hook — pure state, no Framer dep.
+ *
+ *   data attrs from the hook:
+ *     data-ptr-state="idle | pulling | armed | refreshing"
+ *   inline style:
+ *     style={{ ['--ptr-pull']: `${distance}px` }}
+ */
+.ptr-indicator {
+  position: fixed;
+  top: calc(var(--safe-top) + 6px);
+  left: 50%;
+  transform: translate(-50%, -120%);
+  z-index: var(--z-toast, 500);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  background: var(--glass-tint-3);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: var(--glass-blur-soft) var(--glass-saturate);
+  -webkit-backdrop-filter: var(--glass-blur-soft) var(--glass-saturate);
+  color: var(--text);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: var(--ls-snug);
+  box-shadow: var(--shadow-card);
+  pointer-events: none;
+  opacity: clamp(0, calc(var(--ptr-pull, 0px) / 64), 1);
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    opacity var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.ptr-indicator[data-ptr-state="pulling"],
+.ptr-indicator[data-ptr-state="armed"],
+.ptr-indicator[data-ptr-state="refreshing"] {
+  transform: translate(
+    -50%,
+    calc(-100% + var(--ptr-pull, 0px) * 0.6)
+  );
+}
+
+.ptr-indicator[data-ptr-state="armed"] {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: var(--glass-edge-bright);
+}
+
+.ptr-indicator[data-ptr-state="refreshing"] {
+  transform: translate(-50%, calc(var(--safe-top) * 0 + 6px));
+  opacity: 1;
+}
+
+.ptr-indicator__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  transform: rotate(calc(var(--ptr-pull, 0px) * 4deg));
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+
+.ptr-indicator[data-ptr-state="refreshing"] .ptr-indicator__icon {
+  animation: ptr-spin 900ms linear infinite;
+}
+
+@keyframes ptr-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ptr-indicator,
+  .ptr-indicator__icon {
+    transition: none;
+  }
+  .ptr-indicator[data-ptr-state="refreshing"] .ptr-indicator__icon {
+    animation: none;
+  }
+}
+
+/* ---------- Sheet snap helpers ----------
+ *
+ * Sheets render above the player + nav, so the visible content
+ * area must subtract them. Combined with safe-area, this gives
+ * a consistent feel across iPhone and Android. */
+.sheet-inner--snap-medium {
+  max-height: min(72vh, calc(100dvh - var(--player-h) - var(--nav-h)));
+}
+
+.sheet-inner--snap-tall {
+  max-height: min(92vh, calc(100dvh - var(--safe-top) - 8px));
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .sheet-inner,
+  .sheet-inner--snap-medium {
+    max-height: 92vh;
+  }
+}
+
+/* Big sheet handle hit-zone. The component already has a
+ * grabbable strip; this just makes the visual handle feel
+ * less fragile and easier to grab with the thumb on small
+ * phones. */
+.sheet-handle-zone {
+  min-height: 28px;
+}

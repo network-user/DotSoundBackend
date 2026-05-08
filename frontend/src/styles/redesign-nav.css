@@ -130,6 +130,63 @@
   }
 }
 
+/* Tighter spacing on narrow phones so the 5 nav items keep
+ * their min tap-area without overflowing on iPhone SE / 320px. */
+@media (max-width: 360px) {
+  .rb-nav {
+    padding: calc(4px + var(--safe-bottom, 0px)) 4px
+      calc(6px + var(--safe-bottom, 0px));
+    gap: 0;
+  }
+  .rb-nav__btn {
+    padding: 4px 2px 2px;
+  }
+  .rb-nav__icon-wrap {
+    width: 30px;
+    height: 26px;
+  }
+  .rb-nav__label {
+    font-size: 9.5px;
+  }
+}
+
+/* Landscape phones / very short viewports — drop the labels so
+ * the nav row is half its usual height (precious vertical space
+ * goes back to the content). Active state still shines through
+ * the bubble + filled icon. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .rb-nav {
+    padding: calc(2px + var(--safe-bottom, 0px))
+      var(--safe-right, 0px) calc(4px + var(--safe-bottom, 0px))
+      var(--safe-left, 0px);
+  }
+  .rb-nav__btn {
+    flex-direction: row;
+    gap: 0;
+    padding: 4px 2px;
+  }
+  .rb-nav__label {
+    display: none;
+  }
+  .rb-nav__icon-wrap {
+    width: 36px;
+    height: 30px;
+  }
+}
+
+/* Tablet / desktop browser: reasonable gutter so nav items don't
+ * stretch to absurd widths on a 16-inch display. */
+@media (min-width: 768px) {
+  .rb-nav {
+    padding-inline: max(16px, var(--safe-left)) max(16px, var(--safe-right));
+    justify-content: center;
+    gap: 16px;
+  }
+  .rb-nav__btn {
+    flex: 0 1 88px;
+  }
+}
+
 .re-onb-step-wrap {
   display: block;
   width: 100%;

@@ -1,10 +1,41 @@
-﻿import { defineConfig } from 'vite'
+﻿import { defineConfig, type Connect, type PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 import path from 'path'
 
+const MINI_APP_BASE = '/mini_app/'
+
+const redirectRootToMiniApp = (): PluginOption => {
+  const handler: Connect.NextHandleFunction = (req, res, next) => {
+    const rawUrl = req.url || '/'
+    const [pathname, search = ''] = rawUrl.split('?')
+
+    if (pathname === '/' || pathname === '/mini_app') {
+      const target = MINI_APP_BASE + (search ? '?' + search : '')
+      res.statusCode = 302
+      res.setHeader('Location', target)
+      res.end()
+      return
+    }
+
+    next()
+  }
+
+  return {
+    name: 'dotsound:redirect-root-to-mini-app',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use(handler)
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(handler)
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
+    redirectRootToMiniApp(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',

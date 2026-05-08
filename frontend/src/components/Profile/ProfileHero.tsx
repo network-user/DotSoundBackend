@@ -121,9 +121,28 @@ export function ProfileHero({
             )}
           </MotionPress>
         ) : (
-          <div className="profile-avatar">
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="selection"
+            ariaLabel={t(
+              'profile.avatarEditHint',
+              'Сменить фото профиля',
+            )}
+            className="profile-avatar profile-avatar--clickable"
+            onClick={() => {
+              tap()
+              onEditStart()
+            }}
+          >
             {avatarInner}
-          </div>
+            <span
+              aria-hidden
+              className="profile-avatar-hover-hint"
+            >
+              <Icon name="edit" size={18} />
+            </span>
+          </MotionPress>
         )}
         <input
           ref={avatarInputRef}

@@ -86,6 +86,12 @@ import type {
   StatusResponse,
   OnboardingGenrePreviewResponse,
   OnboardingArtistItem,
+  OnboardingBootstrap,
+  OnboardingProfileDefaults,
+  OnboardingProfileSubmitRequest,
+  OnboardingProfileSubmitResponse,
+  OnboardingTasteDecision,
+  OnboardingTasteSwipeBatchResponse,
   RadioResponse,
   MyComplaintsResponse,
   UserPresenceResponse,
@@ -1833,6 +1839,40 @@ export const api = {
   smartSkipOnboarding(): Promise<SmartSkipResponse> {
     return request('/api/v1/onboarding/smart-skip', {
       method: 'POST',
+    })
+  },
+
+  getOnboardingBootstrap(): Promise<OnboardingBootstrap> {
+    return request('/api/v1/onboarding/bootstrap')
+  },
+
+  getOnboardingProfileDefaults(): Promise<OnboardingProfileDefaults> {
+    return request('/api/v1/onboarding/profile-defaults')
+  },
+
+  submitOnboardingProfile(
+    data: OnboardingProfileSubmitRequest,
+  ): Promise<OnboardingProfileSubmitResponse> {
+    return request('/api/v1/onboarding/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    })
+  },
+
+  getTasteSwipeTracks(count = 5): Promise<Track[]> {
+    return request(
+      `/api/v1/onboarding/taste-swipe?count=${count}`,
+    )
+  },
+
+  saveTasteSwipeBatch(
+    decisions: { track_id: number; decision: OnboardingTasteDecision }[],
+  ): Promise<OnboardingTasteSwipeBatchResponse> {
+    return request('/api/v1/onboarding/taste-swipe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ decisions }),
     })
   },
 

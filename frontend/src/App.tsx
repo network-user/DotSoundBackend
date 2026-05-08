@@ -82,7 +82,7 @@ import {
 import { useOptionalPrefetch } from '@/store/PrefetchContext'
 import { tg, getInitData } from '@/lib/telegram'
 import { AuthScreen } from '@/components/Auth/AuthScreen'
-import { Onboarding } from '@/components/Onboarding/Onboarding'
+import { OnboardingV2 } from '@/components/Onboarding/OnboardingV2'
 import { AuthorView } from '@/components/AuthorView/AuthorView'
 import { BottomNav } from '@/components/BottomNav/BottomNav'
 import { ComplaintModal } from '@/components/ComplaintModal/ComplaintModal'
@@ -577,7 +577,7 @@ export function App() {
 
   if (needsOnboarding) {
     return (
-      <Onboarding
+      <OnboardingV2
         onComplete={() => {
           setNeedsOnboarding(false)
           reloadLikes()
