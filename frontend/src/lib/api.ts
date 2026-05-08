@@ -3,6 +3,7 @@ import {
   setInternalUserId,
   setIsAdmin,
 } from '@/lib/telegram'
+import { getAdminApiPath } from '@/lib/adminPath'
 import type {
   AppNotification,
   ArtistCatalogReleaseDetail,
@@ -892,7 +893,7 @@ export const api = {
 
   getAdminManifest(locale?: string): Promise<AdminManifestResponse> {
     const qs = locale ? `?locale=${encodeURIComponent(locale)}` : ''
-    return request(`/api/v1/admin/manifest${qs}`)
+    return request(`${getAdminApiPath('/manifest')}${qs}`)
   },
 
   // ── Follow ────────────────────────────────────────────────────────────────
@@ -1026,16 +1027,13 @@ export const api = {
       note?: string
     },
   ): Promise<OkResponse> {
-    return request(
-      `/api/v1/admin/complaints/${id}`,
-      {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
+    return request(getAdminApiPath(`/complaints/${id}`), {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
       },
-    )
+      body: JSON.stringify(body),
+    })
   },
 
   getAuthConfig(): Promise<AuthConfigResponse> {

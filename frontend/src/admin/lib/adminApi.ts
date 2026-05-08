@@ -1,7 +1,6 @@
 import { useAdminAuth } from '../store/adminAuthStore'
 import { ensureCsrf, readCsrfCookie } from './csrf'
-
-const BASE = '/api/v1/admin'
+import { getAdminApiBasePath } from '@/lib/adminPath'
 
 function normalizeHttpDetail(raw: unknown): string {
   if (typeof raw === 'string') {
@@ -74,8 +73,9 @@ function buildUrl(
   path: string,
   query?: RequestOptions['query'],
 ): string {
+  const base = getAdminApiBasePath()
   const url = new URL(
-    `${BASE}${path}`,
+    `${base}${path}`,
     window.location.origin,
   )
   if (query) {

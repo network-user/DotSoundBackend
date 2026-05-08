@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { getAdminPanelRoute } from '@/lib/adminPath'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
@@ -83,7 +84,9 @@ export function AlbumsListRoute() {
         <MotionPress
           variant="ghost"
           onClick={() =>
-            navigate(`/admin/albums/${row.original.id}`)
+            navigate(
+              getAdminPanelRoute(`/albums/${row.original.id}`),
+            )
           }
         >
           {t('admin.albums.open')}

@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-query'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { getAdminPanelRoute } from '@/lib/adminPath'
 import { adminApi } from '../lib/adminApi'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 
@@ -205,7 +206,9 @@ export function AlbumDetailRoute() {
         <p className="admin-card__sub">
           {t('admin.albums.invalidId')}
         </p>
-        <Link to="/admin/albums">{t('admin.albums.backToList')}</Link>
+        <Link to={getAdminPanelRoute('/albums')}>
+          {t('admin.albums.backToList')}
+        </Link>
       </section>
     )
   }
@@ -224,7 +227,9 @@ export function AlbumDetailRoute() {
         <p className="admin-card__sub">
           {t('admin.albums.loadError')}
         </p>
-        <Link to="/admin/albums">{t('admin.albums.backToList')}</Link>
+        <Link to={getAdminPanelRoute('/albums')}>
+          {t('admin.albums.backToList')}
+        </Link>
       </section>
     )
   }
@@ -243,7 +248,7 @@ export function AlbumDetailRoute() {
       >
         <div>
           <Link
-            to="/admin/albums"
+            to={getAdminPanelRoute('/albums')}
             className="admin-card__sub"
             style={{ textDecoration: 'none' }}
           >

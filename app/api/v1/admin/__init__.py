@@ -2,6 +2,8 @@
 
 from fastapi import APIRouter
 
+from app.config import settings
+
 from . import (
     albums as admin_albums,
 )
@@ -29,7 +31,10 @@ from . import (
     playlists as admin_playlists,
 )
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(
+    prefix=settings.admin_panel_route_prefix,
+    tags=["admin"],
+)
 router.include_router(artist_catalog.router)
 router.include_router(artist_discography.router)
 router.include_router(admin_albums.router)

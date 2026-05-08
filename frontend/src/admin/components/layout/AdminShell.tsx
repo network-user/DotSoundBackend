@@ -13,6 +13,7 @@ import {
   Outlet,
 } from 'react-router-dom'
 import { Icon } from '@/components/Icon/Icon'
+import { getAdminPanelRoute } from '@/lib/adminPath'
 import {
   m,
   SPRING_LAYOUT,
@@ -121,7 +122,7 @@ export function AdminShell() {
               variant="ghost"
               className="admin-shell__profile-wide"
               onClick={() => {
-                navigate('/admin/profile')
+                navigate(getAdminPanelRoute('/profile'))
               }}
             >
               {t('redesign.admin.profileTitle')}

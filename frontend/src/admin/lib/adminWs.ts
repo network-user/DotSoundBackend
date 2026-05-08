@@ -1,4 +1,5 @@
 import { useAdminAuth } from '../store/adminAuthStore'
+import { getAdminApiPath } from '@/lib/adminPath'
 
 export type AdminWsHandler = (event: {
   channel: string
@@ -37,7 +38,7 @@ export class AdminWs {
       window.location.protocol === 'https:'
         ? 'wss'
         : 'ws'
-    const url = `${proto}://${window.location.host}/api/v1/admin/ws?token=${encodeURIComponent(
+    const url = `${proto}://${window.location.host}${getAdminApiPath('/ws')}?token=${encodeURIComponent(
       token,
     )}`
     this.socket = new WebSocket(url)

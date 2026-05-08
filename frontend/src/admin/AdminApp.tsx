@@ -175,8 +175,8 @@ export function AdminApp() {
       <AuthGate>
         <StepUpProvider>
           <AdminPromptProvider>
-            {/* Mounted under outer <Route path="/admin/*">,
-             * so paths below are relative to /admin. */}
+            {/* Mounted under outer admin route, so child
+             * paths remain relative to that prefix. */}
             <Routes>
               <Route element={<AdminShell />}>
                 <Route

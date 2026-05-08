@@ -111,6 +111,11 @@ import {
   disconnectWS,
   setWSTokenProvider,
 } from '@/lib/ws'
+import {
+  getConfiguredAdminPanelPath,
+  normalizeAdminPathSegment,
+  setAdminRuntimeConfig,
+} from '@/lib/adminPath'
 import { useLikes } from '@/store/LikesContext'
 
 const SearchView = lazy(() => import('@/views/SearchView').then(m => ({ default: m.SearchView })))
@@ -236,6 +241,9 @@ export function App() {
   const [bannedReason, setBannedReason] = useState<
     string | null
   >(null)
+  const [adminPanelPath, setAdminPanelPath] = useState<
+    string | null
+  >(getConfiguredAdminPanelPath())
   const initCalled = useRef(false)
   const readyEventSent = useRef(false)
 
@@ -399,6 +407,32 @@ export function App() {
         if (!authenticated) {
           setNeedsAuth(true)
         } else {
+          try {
+            const authConfig = await api.getAuthConfig()
+            const configuredPath =
+              authConfig.admin_panel_path
+            if (configuredPath) {
+              const normalized =
+                normalizeAdminPathSegment(configuredPath)
+              setAdminRuntimeConfig({
+                panelPath: normalized,
+                apiPath: authConfig.admin_api_path ?? null,
+              })
+              setAdminPanelPath(normalized)
+            } else {
+              setAdminRuntimeConfig({
+                panelPath: null,
+                apiPath: null,
+              })
+              setAdminPanelPath(null)
+            }
+          } catch {
+            setAdminRuntimeConfig({
+              panelPath: null,
+              apiPath: null,
+            })
+            setAdminPanelPath(null)
+          }
           await api.syncSessionUserFlags()
           markAuthSuccess()
           trackActivationEvent('auth_success', {
@@ -711,7 +745,22 @@ export function App() {
           <Route path="/external/album/:id" element={<ExternalAlbumView />} />
           <Route path="/now-playing" element={<NowPlayingView />} />
           <Route path="/recap" element={<RecapView />} />
-          <Route path="/admin/*" element={<AdminApp />} />
+          {adminPanelPath === 'admin' && (
+            <Route path="/admin/*" element={<AdminApp />} />
+          )}
+          {adminPanelPath &&
+            adminPanelPath !== 'admin' && (
+              <Route
+                path={`/${adminPanelPath}/*`}
+                element={<AdminApp />}
+              />
+            )}
+          {adminPanelPath !== 'admin' && (
+            <Route
+              path="/admin/*"
+              element={<Navigate to="/" replace />}
+            />
+          )}
           <Route path="*" element={<NotFoundView />} />
         </AnimatedRoutes>
         </Suspense>

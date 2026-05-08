@@ -90,7 +90,7 @@ def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
         httponly=True,
         secure=not settings.debug,
         samesite="strict",
-        path="/api/v1/admin/auth",
+        path=settings.admin_api_auth_prefix,
     )
 
 
@@ -99,7 +99,7 @@ def _clear_refresh_cookie(
 ) -> None:
     response.delete_cookie(
         key="admin_refresh",
-        path="/api/v1/admin/auth",
+        path=settings.admin_api_auth_prefix,
     )
 
 
@@ -119,7 +119,7 @@ async def get_csrf(
         httponly=False,
         secure=not settings.debug,
         samesite="strict",
-        path="/api/v1/admin",
+        path=settings.admin_api_prefix,
     )
     return AdminCsrfResponse(csrf=token)
 

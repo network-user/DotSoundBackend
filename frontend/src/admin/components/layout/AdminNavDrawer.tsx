@@ -6,6 +6,7 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useBrandLabel } from '@/lib/brand'
+import { getAdminPanelRoute } from '@/lib/adminPath'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { AdminMenu } from './AdminMenu'
 
@@ -79,7 +80,7 @@ export function AdminNavDrawer({
             variant="ghost"
             onClick={() => {
               onClose()
-              navigate('/admin/profile')
+              navigate(getAdminPanelRoute('/profile'))
             }}
           >
             {t('redesign.admin.profileTitle')}

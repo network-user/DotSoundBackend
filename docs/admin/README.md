@@ -4,7 +4,7 @@ Operator runbook for the DotSound admin panel.
 
 ## Where it lives
 
-- Backend: routes under `/api/v1/admin/*`, code in
+- Backend: routes under `/api/v1/{ADMIN_PANEL_PATH}/*`, code in
   [`app/api/v1/admin/`](../../app/api/v1/admin/).
 - Frontend: separate code-split chunk under
   [`frontend/src/admin/`](../../frontend/src/admin/), shipped as
@@ -25,7 +25,7 @@ cd frontend && npm run dev   # frontend dev server (port 5173)
 make observability-up        # prometheus, grafana, loki, tempo, cadvisor
 ```
 
-Open `http://localhost:5173/admin` (after signing in to a regular
+Open `http://localhost:5173/{ADMIN_PANEL_PATH}` (after signing in to a regular
 account that has `is_admin=true`). The first time it'll redirect to
 the onboarding flow.
 
@@ -72,19 +72,19 @@ the same source when Loki is not configured.
 
 | Section | Route | Capability |
 |---|---|---|
-| Dashboard | `/admin` | – |
-| Users | `/admin/users` | `users.manage` |
-| Tracks | `/admin/tracks` | `tracks.manage` |
-| Complaints | `/admin/complaints` | `complaints.moderate` |
-| Artists | `/admin/artists` | `artists.enrich` |
-| Compute | `/admin/audio-compute` | `audio_compute.manage` |
-| Tasks | `/admin/tasks` | `tasks.manage` |
-| Logs | `/admin/logs` | `logs.view` |
-| Metrics | `/admin/metrics` | `metrics.view` |
-| Containers | `/admin/containers` | `containers.view` |
-| Audit | `/admin/audit` | `audit.view` |
-| Security | `/admin/security` | `security.view` |
-| Settings | `/admin/settings` | `settings.manage` |
+| Dashboard | `/{ADMIN_PANEL_PATH}` | – |
+| Users | `/{ADMIN_PANEL_PATH}/users` | `users.manage` |
+| Tracks | `/{ADMIN_PANEL_PATH}/tracks` | `tracks.manage` |
+| Complaints | `/{ADMIN_PANEL_PATH}/complaints` | `complaints.moderate` |
+| Artists | `/{ADMIN_PANEL_PATH}/artists` | `artists.enrich` |
+| Compute | `/{ADMIN_PANEL_PATH}/audio-compute` | `audio_compute.manage` |
+| Tasks | `/{ADMIN_PANEL_PATH}/tasks` | `tasks.manage` |
+| Logs | `/{ADMIN_PANEL_PATH}/logs` | `logs.view` |
+| Metrics | `/{ADMIN_PANEL_PATH}/metrics` | `metrics.view` |
+| Containers | `/{ADMIN_PANEL_PATH}/containers` | `containers.view` |
+| Audit | `/{ADMIN_PANEL_PATH}/audit` | `audit.view` |
+| Security | `/{ADMIN_PANEL_PATH}/security` | `security.view` |
+| Settings | `/{ADMIN_PANEL_PATH}/settings` | `settings.manage` |
 
 Capabilities are stored per-user in the `admin_capabilities` table.
 Even with `is_admin=true`, every menu item is invisible until a
@@ -99,7 +99,7 @@ step-up). For the very first admin, see
 [onboarding.md](onboarding.md) for the SQL bootstrap.
 
 The full list of known capabilities is exposed via
-`GET /api/v1/admin/system/known-capabilities`.
+`GET /api/v1/{ADMIN_PANEL_PATH}/system/known-capabilities`.
 
 ## Step-up authentication
 
@@ -134,7 +134,7 @@ and the list of events.
 curl http://localhost:8000/api/v1/health/deep | jq
 
 # Show containers from CLI (matches what the panel renders)
-curl -s http://localhost:8000/api/v1/admin/system/containers \
+curl -s http://localhost:8000/api/v1/{ADMIN_PANEL_PATH}/system/containers \
   -H "Authorization: Bearer $ADMIN_JWT" | jq
 
 # Force re-build admin chunk only

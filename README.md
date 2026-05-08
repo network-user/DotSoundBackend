@@ -157,6 +157,7 @@ npm run build
 | `MINIO_USE_SSL` | Использовать HTTPS для MinIO | `false` |
 | `LOG_LEVEL` | Уровень логов (`DEBUG`/`INFO`/`WARNING`) | `INFO` |
 | `COMPLAINT_THRESHOLD` | Количество жалоб до авто-скрытия трека | `3` |
+| `ADMIN_PANEL_PATH` | Скрытый slug админ-панели и admin API (`/<slug>` и `/api/v1/<slug>`) | `admin` |
 
 ---
 

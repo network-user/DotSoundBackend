@@ -18,8 +18,8 @@ from app.config import settings
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-ADMIN_PATH_PREFIX = "/api/v1/admin"
-ADMIN_AUTH_PATH_PREFIX = "/api/v1/admin/auth"
+ADMIN_PATH_PREFIX = settings.admin_api_prefix
+ADMIN_AUTH_PATH_PREFIX = settings.admin_api_auth_prefix
 CSRF_COOKIE_NAME = "admin_csrf"
 CSRF_HEADER_NAME = "X-Admin-CSRF"
 ADMIN_STEP_UP_HEADER = "X-Admin-Step-Up"
@@ -65,7 +65,7 @@ def _set_csrf_cookie(response: Response, value: str) -> None:
         httponly=False,
         secure=not settings.debug,
         samesite="strict",
-        path="/api/v1/admin",
+        path=ADMIN_PATH_PREFIX,
     )
 
 

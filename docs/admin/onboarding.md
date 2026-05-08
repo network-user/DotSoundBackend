@@ -20,6 +20,10 @@ python -c "import secrets;print('ADMIN_CSRF_SECRET=' + secrets.token_urlsafe(32)
 python -c "import base64,os;print('TOTP_ENCRYPTION_KEY=' + base64.b64encode(os.urandom(32)).decode())"
 ```
 
+Set `ADMIN_PANEL_PATH` in `.env` to a non-obvious slug (for
+example `ADMIN_PANEL_PATH=qx7m2k9`). If omitted, backend falls
+back to `admin`.
+
 (Re-using the email-2FA `TOTP_ENCRYPTION_KEY` is OK; the admin
 secret is encrypted with the same key but stored in a different
 column.)
@@ -73,7 +77,7 @@ Open `/mini_app/` and authenticate with your existing user
 credentials. Make sure you can play tracks etc. — the regular
 session must work first.
 
-## 5. Open `/admin`
+## 5. Open `/{ADMIN_PANEL_PATH}`
 
 The frontend will detect `is_admin=true` and redirect through the
 onboarding flow:
@@ -89,7 +93,8 @@ onboarding flow:
      fingerprint,
    - generates **10 single-use backup codes** that are shown
      **only once** — save them somewhere safe.
-3. You're redirected to `/admin` with a 15-minute admin JWT.
+3. You're redirected to `/{ADMIN_PANEL_PATH}` with a 15-minute
+   admin JWT.
 
 ## 6. Smoke-test critical flows
 
@@ -124,8 +129,8 @@ described in [security.md](security.md).
 - **Lost authenticator and no backup codes.** Re-enter PostgreSQL
   and clear `admin_init`, `admin_totp_enabled`,
   `admin_totp_secret_encrypted`, `admin_backup_codes_hash` for
-  your user; the next visit to `/admin` will start onboarding from
-  scratch.
+  your user; the next visit to `/{ADMIN_PANEL_PATH}` will start
+  onboarding from scratch.
 - **Account locked out.** Another admin with
   `security.release_lockout` can release you via Security → Locked
   admins → Release. Otherwise wait for the lockout to expire.

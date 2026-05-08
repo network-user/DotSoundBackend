@@ -289,6 +289,8 @@ export interface FollowingStatusResponse {
 export interface AuthConfigResponse {
   bot_username: string
   debug?: boolean
+  admin_panel_path?: string | null
+  admin_api_path?: string | null
 }
 
 export interface LinkStatusResponse {

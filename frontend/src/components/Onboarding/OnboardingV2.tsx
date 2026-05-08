@@ -240,6 +240,14 @@ export function OnboardingV2({ onComplete }: Props) {
     ) {
       return
     }
+    // Prime swipe audio in user-gesture context
+    // so autoplay works when swipe step loads.
+    const swipeAudio = audioRef.current
+    if (swipeAudio) {
+      swipeAudio.muted = true
+      swipeAudio.src = GENRE_SILENT_WAV
+      void swipeAudio.play().catch(() => {})
+    }
     setSaving(true)
     try {
       await api.saveOnboardingPreferences({
@@ -382,7 +390,6 @@ export function OnboardingV2({ onComplete }: Props) {
     if (!a) return
     a.pause()
     a.src = `/api/v1/track-preview/${tr.id}/segment.mp4`
-    a.crossOrigin = 'anonymous'
     setPreviewTrackId(tr.id)
     void a.play().catch(() => {
       if (autoPlayedTrackRef.current === tr.id) {
@@ -963,9 +970,8 @@ function GenresStep({
       if (timerRef.current !== null) {
         window.clearTimeout(timerRef.current)
       }
-      a.muted = false
       a.src = `/api/v1/track-preview/${track.id}/segment.mp4`
-      a.crossOrigin = 'anonymous'
+      a.muted = false
       a.currentTime = 0
       a.onended = () => {
         if (timerRef.current !== null) {

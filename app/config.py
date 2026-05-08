@@ -252,6 +252,7 @@ class AppSettings(BaseSettings):
     admin_csrf_secret: str = ""
     admin_telegram_alert_chat_id: str = ""
     admin_bundle_ttl_seconds: int = 3600
+    admin_panel_path: str = "admin"
 
     prometheus_url: str = ""
     loki_url: str = ""
@@ -336,6 +337,28 @@ class AppSettings(BaseSettings):
                 ]
             return []
         return [piece.strip() for piece in raw.split(",") if piece.strip()]
+
+    @property
+    def admin_panel_path_slug(self) -> str:
+        raw = (self.admin_panel_path or "").strip().strip("/")
+        if not raw:
+            return "admin"
+        cleaned = "".join(
+            ch for ch in raw if ch.isalnum() or ch in {"-", "_"}
+        )
+        return cleaned or "admin"
+
+    @property
+    def admin_panel_route_prefix(self) -> str:
+        return f"/{self.admin_panel_path_slug}"
+
+    @property
+    def admin_api_prefix(self) -> str:
+        return f"/api/v1/{self.admin_panel_path_slug}"
+
+    @property
+    def admin_api_auth_prefix(self) -> str:
+        return f"{self.admin_api_prefix}/auth"
 
     @model_validator(mode="after")
     def _validate_dev_only_flags(self) -> "AppSettings":

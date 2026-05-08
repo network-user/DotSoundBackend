@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { getAdminPanelRoute } from '@/lib/adminPath'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
@@ -108,7 +109,11 @@ export function PlaylistsListRoute() {
       setTab('list')
       void qc.invalidateQueries({ queryKey: ['admin', 'playlists'] })
       if (res && typeof res === 'object' && 'id' in res) {
-        navigate(`/admin/playlists/${(res as { id: number }).id}`)
+        navigate(
+          getAdminPanelRoute(
+            `/playlists/${(res as { id: number }).id}`,
+          ),
+        )
       }
     },
     onError: (err: Error) => {
@@ -206,7 +211,11 @@ export function PlaylistsListRoute() {
         <MotionPress
           variant="ghost"
           onClick={() =>
-            navigate(`/admin/playlists/${row.original.id}`)
+            navigate(
+              getAdminPanelRoute(
+                `/playlists/${row.original.id}`,
+              ),
+            )
           }
         >
           {t('admin.playlists.open')}

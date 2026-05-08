@@ -6,6 +6,7 @@ import {
 import { useTranslation } from 'react-i18next'
 import QRCode from 'qrcode'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { getAdminPanelRoute } from '@/lib/adminPath'
 import { adminApi } from '../../lib/adminApi'
 import { computeFingerprint } from '../../lib/fingerprint'
 import { useAdminAuth } from '../../store/adminAuthStore'
@@ -114,7 +115,7 @@ export function AdminInit() {
         <MotionPress
           variant="primary"
           onClick={() => {
-            window.location.href = '/admin'
+            window.location.href = getAdminPanelRoute()
           }}
         >
           {t('admin.init.continue')}

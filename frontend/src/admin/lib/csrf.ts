@@ -1,3 +1,5 @@
+import { getAdminApiPath } from '@/lib/adminPath'
+
 export function readCsrfCookie(): string {
   const match = document.cookie.match(
     /(?:^|; )admin_csrf=([^;]+)/,
@@ -10,7 +12,7 @@ export async function ensureCsrf(
 ): Promise<string> {
   const existing = readCsrfCookie()
   if (existing) return existing
-  await fetcher('/api/v1/admin/auth/csrf', {
+  await fetcher(getAdminApiPath('/auth/csrf'), {
     credentials: 'include',
   })
   return readCsrfCookie()

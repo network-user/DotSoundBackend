@@ -10,6 +10,7 @@ from starlette.middleware.base import (
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.config import settings
 from app.core.auth import AuthError, decode_admin_token
 from app.core.db import AsyncSessionLocal
 from app.middlewares.admin_security import (
@@ -21,7 +22,7 @@ from app.repositories.admin_action_log import (
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-_ADMIN_API_PREFIX = "/api/v1/admin"
+_ADMIN_API_PREFIX = settings.admin_api_prefix
 _MUTATING = frozenset(
     {
         "POST",
@@ -46,7 +47,7 @@ def _client_ip(request: Request) -> str | None:
 
 
 class AdminAuditLogMiddleware(BaseHTTPMiddleware):
-    """Log mutating /api/v1/admin requests to ``admin_action_log``."""
+    """Log mutating admin requests to ``admin_action_log``."""
 
     async def dispatch(
         self,

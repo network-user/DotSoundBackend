@@ -41,7 +41,8 @@ from app.core.auth import (
     verify_telegram_init_data,
 )
 from app.core.rate_limit import limiter
-from app.dependencies import get_db
+from app.dependencies import get_db, get_optional_user
+from app.models.user import User
 from app.schemas.auth import (
     TelegramAuthRequest,
     TokenResponse,
@@ -71,15 +72,26 @@ async def _get_redis() -> Any:
 class AuthConfigResponse(BaseModel):
     bot_username: str
     debug: bool = False
+    admin_panel_path: str | None = None
+    admin_api_path: str | None = None
 
 
 @router.get(
     "/config", response_model=AuthConfigResponse
 )
-async def get_auth_config() -> AuthConfigResponse:
+async def get_auth_config(
+    user: User | None = Depends(get_optional_user),
+) -> AuthConfigResponse:
+    admin_panel_path: str | None = None
+    admin_api_path: str | None = None
+    if user and user.is_admin:
+        admin_panel_path = settings.admin_panel_path_slug
+        admin_api_path = settings.admin_api_prefix
     return AuthConfigResponse(
         bot_username=settings.telegram_bot_username,
         debug=settings.debug,
+        admin_panel_path=admin_panel_path,
+        admin_api_path=admin_api_path,
     )
 
 

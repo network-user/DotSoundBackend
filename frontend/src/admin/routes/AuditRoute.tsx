@@ -6,6 +6,7 @@ import {
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { getAdminApiPath } from '@/lib/adminPath'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { JsonViewer } from '../components/widgets/JsonViewer'
@@ -132,7 +133,7 @@ export function AuditRoute() {
         {canExport && (
           <a
             className="admin-link"
-            href="/api/v1/admin/audit/export.csv"
+            href={getAdminApiPath('/audit/export.csv')}
             target="_blank"
             rel="noreferrer"
           >
