@@ -118,6 +118,8 @@ class CommentService:
         actor: User | None,
         parent_author_id: int,
     ) -> None:
+        if new_comment.user_id is None:
+            return
         if parent_author_id == new_comment.user_id:
             return
         if await self._block_repo.is_blocked(
@@ -260,7 +262,11 @@ class CommentService:
         await ws_manager.broadcast_to_online(
             {"event": "comment.new", **result}
         )
-        if parent_id is not None and parent_row is not None:
+        if (
+            parent_id is not None
+            and parent_row is not None
+            and parent_row.user_id is not None
+        ):
             await self._notify_comment_reply(
                 track=storage,
                 new_comment=c,
