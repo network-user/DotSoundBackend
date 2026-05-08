@@ -9,6 +9,7 @@ from app.config import settings
 from app.services.lyrics_worker import (
     _cache_keys_for_track,
     _cached_satisfies_request,
+    _escalate_catalog_plain_for_sync,
     _fallback_or_close_catalog_miss,
     _search_cache_key,
     generate_lyrics_task,
@@ -647,3 +648,59 @@ class TestCatalogMissFallback:
         assert result == {"status": "not_found"}
         mock_handle_miss.assert_not_awaited()
         mock_close_miss.assert_awaited_once()
+
+
+class TestCatalogPlainEscalateSync:
+    @pytest.mark.anyio
+    async def test_escalate_calls_handle_tier_miss(self) -> None:
+        session = AsyncMock()
+        job = MagicMock()
+        job.id = "lj_esc"
+        job.track_id = 30
+
+        with patch(
+            "app.services.lyrics_cascade.handle_tier_miss",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as mock_handle_miss:
+            result = await _escalate_catalog_plain_for_sync(
+                session,
+                job=job,
+                progress_id="pid_e",
+                with_sync=True,
+                bypass_cache=False,
+                log_line="plain no sync",
+            )
+
+        assert result == {"status": "fallback"}
+        mock_handle_miss.assert_awaited_once_with(
+            session,
+            job=job,
+            reason="catalog_plain_without_sync",
+            with_sync=True,
+            bypass_cache=False,
+        )
+
+    @pytest.mark.anyio
+    async def test_escalate_exhausted_returns_exhausted(self) -> None:
+        session = AsyncMock()
+        job = MagicMock()
+        job.id = "lj_ex"
+        job.track_id = 31
+
+        with patch(
+            "app.services.lyrics_cascade.handle_tier_miss",
+            new_callable=AsyncMock,
+            return_value=False,
+        ) as mock_handle_miss:
+            result = await _escalate_catalog_plain_for_sync(
+                session,
+                job=job,
+                progress_id="pid_x",
+                with_sync=True,
+                bypass_cache=True,
+                log_line="plain no sync",
+            )
+
+        assert result == {"status": "exhausted"}
+        mock_handle_miss.assert_awaited_once()

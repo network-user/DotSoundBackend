@@ -503,6 +503,7 @@ class SoundCloudService:
             ):
                 attempted = False
                 saw_manifest_404 = False
+                saw_transient_network_error = False
                 for protocol in protocols_order:
                     selected = next(
                         (
@@ -517,7 +518,18 @@ class SoundCloudService:
                     if not selected:
                         continue
                     attempted = True
-                    r = await client.get(selected["url"], params=params)
+                    try:
+                        r = await client.get(
+                            selected["url"], params=params
+                        )
+                    except httpx.HTTPError as exc:
+                        saw_transient_network_error = True
+                        logger.warning(
+                            "soundcloud_transcoding_network_error",
+                            protocol=protocol,
+                            error=type(exc).__name__,
+                        )
+                        continue
                     if r.status_code in (401, 403):
                         raise HTTPException(
                             status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
@@ -566,6 +578,13 @@ class SoundCloudService:
                     logger.warning(
                         "soundcloud_stream_unavailable_all_formats",
                         sc_host="api-v2.soundcloud.com",
+                    )
+                if saw_transient_network_error:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail=(
+                            "SoundCloud upstream temporarily unavailable"
+                        ),
                     )
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,

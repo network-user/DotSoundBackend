@@ -456,6 +456,16 @@ export function PlayerProvider({
   const streamLoadFailedTrackIdRef = useRef<
     number | null
   >(null)
+  const unavailableTrackIdsRef = useRef<Set<number>>(new Set())
+  const lastPlaybackErrorRef = useRef<{
+    trackId: number | null
+    message: string | null
+    atMs: number
+  }>({
+    trackId: null,
+    message: null,
+    atMs: 0,
+  })
   const playSessionRef = useRef(0)
   const preloadHlsRef = useRef<Hls | null>(null)
   const preloadHlsTrackIdRef = useRef<number | null>(
@@ -876,6 +886,81 @@ export function PlayerProvider({
   const setVolume = (v: number) =>
     setVolumeState(Math.max(0, Math.min(1, v)))
 
+  const isSoundCloudUnavailableError = useCallback(
+    (errorMessage: string) => {
+      const msg = errorMessage.toLowerCase()
+      return (
+        msg.includes('no streamable format') ||
+        msg.includes('sc track missing url') ||
+        msg.includes('private track') ||
+        msg.includes('track is private') ||
+        msg.includes('deleted') ||
+        msg.includes('removed') ||
+        msg.includes('no longer available') ||
+        msg.includes('soundcloud stream unavailable')
+      )
+    },
+    [],
+  )
+
+  const isSoundCloudUnavailableTrack = useCallback(
+    (candidate: Track) => {
+      if (candidate.access_mode !== 'third_party_stream') {
+        return false
+      }
+      return (
+        candidate.source_platform === 'soundcloud' ||
+        candidate.source === 'soundcloud' ||
+        Boolean(candidate.sc_url)
+      )
+    },
+    [],
+  )
+
+  const markTrackUnavailableInSession = useCallback(
+    (trackId: number) => {
+      unavailableTrackIdsRef.current.add(trackId)
+      manualQueueRef.current = manualQueueRef.current.filter(
+        (item) => item.id !== trackId,
+      )
+      setQueue([...manualQueueRef.current])
+      const cache = prefetchCacheRef.current
+      if (!cache) return
+      prefetchCacheRef.current = {
+        forTrackId: cache.forTrackId,
+        tracks: cache.tracks.filter(
+          (item) => item.id !== trackId,
+        ),
+      }
+    },
+    [],
+  )
+
+  const showPlaybackErrorOnce = useCallback(
+    (trackId: number | null, title: string) => {
+      const now = Date.now()
+      const last = lastPlaybackErrorRef.current
+      const isDuplicate =
+        last.trackId === trackId &&
+        last.message === title &&
+        now - last.atMs < 2500
+      if (isDuplicate) {
+        return
+      }
+      lastPlaybackErrorRef.current = {
+        trackId,
+        message: title,
+        atMs: now,
+      }
+      showIsland({
+        kind: 'error',
+        title,
+        durationMs: 3600,
+      })
+    },
+    [],
+  )
+
   const startDirectPlayback = useCallback(
     async (
       audio: HTMLAudioElement,
@@ -1100,7 +1185,7 @@ export function PlayerProvider({
         }
       })
     }
-    const onError = () => {
+      const onError = () => {
       const a = audioRef.current
       if (!a || !track) return
       const code = a.error?.code
@@ -1114,16 +1199,22 @@ export function PlayerProvider({
           track,
           a,
           t,
-        ).catch((err) =>
-          showIsland({
-            kind: 'error',
-            title: getApiErrorMessage(
-              err,
-              i18n.t('redesign.playerErrors.playback'),
-            ),
-            durationMs: 4000,
-          }),
-        )
+        ).catch(async (err) => {
+          const message = getApiErrorMessage(
+            err,
+            i18n.t('redesign.playerErrors.playback'),
+          )
+          if (
+            isSoundCloudUnavailableTrack(track) &&
+            isSoundCloudUnavailableError(message)
+          ) {
+            markTrackUnavailableInSession(track.id)
+            showPlaybackErrorOnce(track.id, message)
+            await playNext()
+            return
+          }
+          showPlaybackErrorOnce(track.id, message)
+        })
         return
       }
       if (
@@ -1165,11 +1256,10 @@ export function PlayerProvider({
           return
         }
       }
-      showIsland({
-        kind: 'error',
-        title: i18n.t('redesign.playerErrors.playback'),
-        durationMs: 4000,
-      })
+      showPlaybackErrorOnce(
+        track.id,
+        i18n.t('redesign.playerErrors.playback'),
+      )
     }
     const onStalled = () => {
       try {
@@ -1243,7 +1333,14 @@ export function PlayerProvider({
       audio.removeEventListener('error', onError)
       audio.removeEventListener('stalled', onStalled)
     }
-  }, [track, rebindThirdPartyStream])
+  }, [
+    track,
+    rebindThirdPartyStream,
+    isSoundCloudUnavailableError,
+    isSoundCloudUnavailableTrack,
+    markTrackUnavailableInSession,
+    showPlaybackErrorOnce,
+  ])
 
   useEffect(() => {
     if (isCardOpen) return
@@ -1479,14 +1576,23 @@ export function PlayerProvider({
       console.error('playTrack error', e)
       streamLoadFailedTrackIdRef.current =
         newTrack.id
-      showIsland({
-        kind: 'error',
-        title: getApiErrorMessage(
-          e,
-          i18n.t('redesign.playerErrors.playback'),
-        ),
-        durationMs: 4000,
-      })
+      const message = getApiErrorMessage(
+        e,
+        i18n.t('redesign.playerErrors.playback'),
+      )
+      if (
+        isSoundCloudUnavailableTrack(newTrack) &&
+        isSoundCloudUnavailableError(message)
+      ) {
+        markTrackUnavailableInSession(newTrack.id)
+      }
+      showPlaybackErrorOnce(newTrack.id, message)
+      if (
+        isSoundCloudUnavailableTrack(newTrack) &&
+        isSoundCloudUnavailableError(message)
+      ) {
+        await playNext()
+      }
     }
   }
 
@@ -1527,7 +1633,18 @@ export function PlayerProvider({
     if (!track) return false
     try {
       if (manualQueueRef.current.length > 0) {
-        const next = manualQueueRef.current.shift()!
+        const nextIdx = manualQueueRef.current.findIndex(
+          (item) => !unavailableTrackIdsRef.current.has(item.id),
+        )
+        if (nextIdx < 0) {
+          manualQueueRef.current = []
+          setQueue([])
+          return false
+        }
+        const [next] = manualQueueRef.current.splice(nextIdx, 1)
+        if (!next) {
+          return false
+        }
         setQueue([...manualQueueRef.current])
         await playTrack(next)
         return true
@@ -1541,7 +1658,9 @@ export function PlayerProvider({
         try {
           const result = await api.getRadio(seedId, 15, excludeIds)
           const newTracks = result.tracks.filter(
-            (t) => !radioPlayedIdsRef.current.has(t.id),
+            (t) =>
+              !radioPlayedIdsRef.current.has(t.id) &&
+              !unavailableTrackIdsRef.current.has(t.id),
           )
           if (newTracks.length > 0) {
             const next = newTracks[0]
@@ -1568,29 +1687,44 @@ export function PlayerProvider({
         cache.forTrackId === track.id &&
         cache.tracks.length > 0
       ) {
+        const availableCacheTracks = cache.tracks.filter(
+          (item) => !unavailableTrackIdsRef.current.has(item.id),
+        )
+        if (availableCacheTracks.length === 0) {
+          prefetchCacheRef.current = null
+        } else {
         let next: Track
-        if (shuffleOnRef.current && cache.tracks.length > 1) {
-          const idx = Math.floor(Math.random() * cache.tracks.length)
-          next = cache.tracks[idx]
+        if (shuffleOnRef.current && availableCacheTracks.length > 1) {
+          const idx = Math.floor(Math.random() * availableCacheTracks.length)
+          next = availableCacheTracks[idx]
           prefetchCacheRef.current = {
             forTrackId: next.id,
-            tracks: cache.tracks.filter((_, i) => i !== idx),
+            tracks: availableCacheTracks.filter(
+              (_, i) => i !== idx,
+            ),
           }
         } else {
-          next = cache.tracks[0]
+          next = availableCacheTracks[0]
           prefetchCacheRef.current = {
             forTrackId: next.id,
-            tracks: cache.tracks.slice(1),
+            tracks: availableCacheTracks.slice(1),
           }
         }
         await playTrack(next)
         return true
+        }
       }
       const adj = await api.getAdjacentTracks(
         track.id,
       )
-      if (adj.next_id) {
+      if (
+        adj.next_id &&
+        !unavailableTrackIdsRef.current.has(adj.next_id)
+      ) {
         const t = await api.getTrack(adj.next_id)
+        if (unavailableTrackIdsRef.current.has(t.id)) {
+          return false
+        }
         await playTrack(t)
         return true
       }

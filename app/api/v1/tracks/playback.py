@@ -389,6 +389,13 @@ async def stream_track(
                 )
             )
         except HTTPException as exc:
+            logger.warning(
+                "stream_track_third_party_failed",
+                track_id=track_id,
+                status_code=exc.status_code,
+                detail=_http_exc_detail(exc),
+                source_platform=getattr(track, "source_platform", None),
+            )
             ph = TrackPlaybackHealthService(session)
             await ph.record_server_recovery_exhausted(
                 track_id=track_id,
@@ -592,6 +599,13 @@ async def audio_stream(
                 )
             )
         except HTTPException as exc:
+            logger.warning(
+                "audio_stream_third_party_failed",
+                track_id=track_id,
+                status_code=exc.status_code,
+                detail=_http_exc_detail(exc),
+                source_platform=getattr(track, "source_platform", None),
+            )
             ph = TrackPlaybackHealthService(session)
             await ph.record_server_recovery_exhausted(
                 track_id=track_id,

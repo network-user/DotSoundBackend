@@ -14,6 +14,23 @@
 
 ---
 
+## Lyrics: catalog + sync → compute worker (2026-05-08)
+
+- [x] **Auto lyrics with sync:** если каталог отдаёт только plain text без
+  таймкодов, текст сохраняется в БД и каскад снова вызывает
+  `handle_tier_miss` → очередь `remote_whisper` для выравнивания по ASR
+  (`app/services/lyrics_worker.py`).
+
+## SoundCloud playback auto-skip (2026-05-08)
+
+- [x] **Auto-skip unavailable SoundCloud streams in Mini App player** —
+  `frontend/src/store/PlayerContext.tsx` now detects SoundCloud
+  unavailability errors (deleted/private/unresolvable stream),
+  shows an error toast, marks the track as unavailable for the current
+  session, removes it from in-memory queue candidates, and immediately
+  skips to the next track instead of stalling playback. `npm run lint`
+  and `npm run build` are green (build refreshed `app/static/mini_app`).
+
 ## Playback resume fix (2026-05-08)
 
 - [x] **Fix intermittent cross-track resume-position bleed in Mini App player** —
@@ -23,6 +40,15 @@
   `lastTrackIdRef` matches the active `track.id`. This removes the race where
   old playback time could be saved under a newly selected track and improves
   state consistency during rapid switches. Frontend `npm run lint` is green.
+
+## Home mobile genre-mixes spacing fix (2026-05-08)
+
+- [x] **Fix oversized empty horizontal space in Home "Genre mixes" on phones** —
+  added dedicated snap variant class for this carousel in
+  `frontend/src/views/HomeView.tsx` and narrowed item width to content
+  (`width: max-content`) in `frontend/src/styles/redesign-home.css`
+  (`.rh-home-genre-snap .h-snap__item`). Desktop layout remains unchanged;
+  frontend `npm run lint` is green.
 
 ## Onboarding v2 — fresh wizard (2026-05-08)
 

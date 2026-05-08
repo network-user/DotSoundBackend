@@ -469,6 +469,43 @@ async def _fallback_or_close_catalog_miss(
     return {"status": "not_found"}
 
 
+async def _escalate_catalog_plain_for_sync(
+    session: AsyncSession,
+    *,
+    job: LyricsJob,
+    progress_id: str,
+    with_sync: bool,
+    bypass_cache: bool,
+    log_line: str,
+) -> dict[str, str]:
+    from app.services.lyrics_cascade import handle_tier_miss
+
+    will_fallback = await handle_tier_miss(
+        session,
+        job=job,
+        reason="catalog_plain_without_sync",
+        with_sync=with_sync,
+        bypass_cache=bypass_cache,
+    )
+    if will_fallback:
+        logger.info(
+            "lyrics_catalog_plain_escalate_worker",
+            job_id=job.id,
+            track_id=job.track_id,
+            progress_id=progress_id,
+            detail=log_line,
+        )
+        return {"status": "fallback"}
+    logger.info(
+        "lyrics_catalog_plain_escalate_exhausted",
+        job_id=job.id,
+        track_id=job.track_id,
+        progress_id=progress_id,
+        detail=log_line,
+    )
+    return {"status": "exhausted"}
+
+
 async def _finalise(
     progress_id: str, terminal_state: str, log_line: str | None = None
 ) -> None:
@@ -1683,9 +1720,10 @@ async def catalog_only_lyrics_task(
     Catalog misses (no text from providers) terminate the LyricsJob
     without advancing to transcription tiers.
 
-    Plain text without ``synced_lines`` when ``with_sync=True`` is
-    persisted as plain text only; transcription tiers are not used
-    to recover timecodes.
+    Plain text without ``synced_lines`` when ``with_sync=True`` and a
+    ``LyricsJob`` row exists: text is stored for alignment, then the
+    cascade advances to transcription tiers so a compute worker can
+    attach timecodes.
     """
     from dotsound_private_core.services.lyrics_provider import (
         generate_lyrics,
@@ -1857,20 +1895,37 @@ async def catalog_only_lyrics_task(
                 trimmed = (payload.get("text") or "").strip()
                 if trimmed:
                     if job is not None:
-                        await _save_catalog_result_and_close(
+                        repo_l = LyricsRepository(session)
+                        await repo_l.create_or_update(
+                            track_id=track_id,
+                            plain_text=payload["text"],
+                            source="auto",
+                            synced_lines=[],
+                            sync_quality=None,
+                            sync_profile=None,
+                            source_name=payload.get("source_name"),
+                        )
+                        await session.flush()
+                        result = await _escalate_catalog_plain_for_sync(
                             session,
                             job=job,
-                            payload=payload,
                             progress_id=progress_id,
                             with_sync=with_sync,
+                            bypass_cache=bypass_cache,
+                            log_line=(
+                                "[catalog_only] plain text without "
+                                "timecodes; escalating to compute worker"
+                            ),
                         )
                         await session.commit()
+                        if result["status"] == "fallback":
+                            return result
                         await _finalise(
                             progress_id,
                             "found",
                             log_line=(
-                                "[catalog_only] saved plain text only "
-                                f"({len(trimmed)} chars; no timecodes)"
+                                "[catalog_only] saved plain text; "
+                                "no remote tier for timing sync"
                             ),
                         )
                         return {

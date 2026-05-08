@@ -806,7 +806,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
               pageDots
               parallax={false}
               showArrows="never"
-              className="rh-home-h-snap"
+              className="rh-home-h-snap rh-home-genre-snap"
               ariaLabel={t('redesign.home.sectionGenreMixes')}
             />
           </>

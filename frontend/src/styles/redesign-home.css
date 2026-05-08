@@ -208,6 +208,11 @@
   max-width: 520px;
 }
 
+.rh-home-genre-snap .h-snap__item {
+  width: max-content;
+  max-width: none;
+}
+
 .rh-home-snap-page {
   display: flex;
   flex-direction: row;
