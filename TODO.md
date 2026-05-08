@@ -14,6 +14,91 @@
 
 ---
 
+## Onboarding UX-рефакторинг (2026-05-09)
+
+- [x] **Онбординг: 11-точечный UX-рефакторинг**
+  — рефактор экранов Welcome/Genres/Swipe/Complete без изменений API и
+  PrivateCore.
+  - Логотип `.звук` / `.sound` в зависимости от языка интерфейса
+    (`i18n_extra2_*.json` welcome.logo).
+  - Прогресс-бар: убраны анимации `onbProgressFill` / `onbProgressPulse`,
+    заполнение теперь статичное (нет «дёрганий»).
+  - Поле имени: `enterKeyHint="done"` + `onKeyDown Enter → blur + submit`
+    — клавиатура закрывается при нажатии «Ввод» на мобиле.
+  - Жанры: аудио-превью при выборе жанра (15 с из очереди, случайный
+    порядок, только один жанр одновременно). Отмена выделения → стоп.
+    Аудио-реф локален внутри `GenresStep` (не конкурирует со свайпом).
+  - Жанры: поиск-фильтр (`onb-v2-genre-search`) — ищет по подстроке
+    названия жанра, те же превью при выборе в результатах.
+  - Бэкдроп-карточка свайпа: убран `CardInfo`, добавлены
+    `filter:blur(3px)` + `opacity: 0.35` через `.onb-v2-swipe-card--backdrop`
+    — не видно текст следующего трека за текущей карточкой.
+  - `touch-action: none` на `.onb-v2-swipe-card` — разрешён ручной
+    горизонтальный свайп пальцем (framer-motion drag="x").
+  - Обложка свайпа: иконка play/pause всегда видна (opacity 0.5 в покое,
+    0.9 + анимация при `.is-playing`). Тап = toggle пауза/продолжение.
+  - Авто-воспроизведение при смене карточки (`autoPlayedTrackRef` + effect
+    на `[step, tasteIndex, tasteTracks]`).
+  - Свайп: первые 5 треков обязательны; после них появляется кнопка
+    «Завершить» + подсказка «продолжайте — чем больше оценок…».
+    При исчерпании текущего пакета треков — тихая подгрузка следующего
+    (radio-mode, `lastFetchCountRef` предотвращает двойные запросы).
+  - «Перенести музыку»: исправлен редирект
+    `/profile?import=1` → `/mini_app/profile?import=1`.
+  - `tsc --noEmit` зелёный.
+
+## Admin + global error UI (2026-05-09)
+
+- [x] **Admin device-approval 429 / «что-то пошло не так»** — в логах
+  `POST /api/v1/admin/auth/devices/request-approval` отдавал **429** (лимит
+  `3/minute`); UI показывал сырое сообщение об ошибке. Лимит ослаблен до
+  `20/minute`; в `DeviceApproval` дедуп автозапроса при двойном mount (Strict
+  Mode), понятный текст при 429, кнопка повторной отправки кода;
+  `AdminLogin` переводит 429 через i18n. Страницы ошибок приложения —
+  `AppErrorFallback` + `.app-issue-panel`, тексты в `i18n_extra`. Заодно
+  `warmTrackStreamCache` не дергает API с пустым/битым списком id (убирает
+  лишние 422 в логах). `docs/design-system.md`, frontend `npm run lint` /
+  `npm run build` green.
+
+- [x] **Admin device-approval 400 без email** — тот же шаг после успешного
+  `login` отдавал **400**: у аккаунта только Telegram, поля `email` нет,
+  сервис раньше требовал почту для отправки кода. Теперь код уходит в
+  Telegram через бота (`POST …/internal/send-auth-code`, те же
+  `BOT_INTERNAL_URL` / секрет, что для прочих internal-вызовов). Во
+  `frontend` нормализация `detail` ошибок API в строку (без «объект в React»).
+  Подписи в `admin.device.*` обновлены под оба канала.
+
+## Mini App: player progress wrong track (2026-05-08)
+
+- [x] **Playback position applied to another track** — прогресс и
+  метаданные трека писались в **два** ключа `localStorage`
+  (`player-track` + `player-time`); при нескольких вкладках или
+  чередовании записей возможна рассинхронизация (трек A + время B).
+  Теперь один ключ `player-snapshot` (JSON `{ v, track, time }`),
+  миграция со старых ключей, при сохранении убирается
+  `resume_position_seconds` чтобы не тащить устаревший seek из кэша.
+  `PlayerContext.tsx`; `npm run lint` / `npm run build` green.
+
+## Mini App: TrackCard cover image (2026-05-08)
+
+- [x] **Track list cover stuck as flat placeholder** — `re-tc-cover-wrap`
+  used a fixed 56×56 box but `BeatPulse` was `inline-flex` without
+  stretching, so `img` percentage sizing collapsed and only
+  `--surface` showed. Wrap is now flex; pulse + `SharedCover` fill
+  the tile. `SharedCover` adds a gradient frame and fades the image in
+  on `onLoad`. `docs/design-system.md`. Frontend `npm run lint` /
+  `npm run build` green.
+
+## Mini App: LongPressMenu desktop hit-testing (2026-05-08)
+
+- [x] **Track context menu (long-press / right-click) unclickable on
+  desktop** — `LongPressMenu` overlay was `position: fixed` inside
+  `SwipeRow`’s transformed drag layer, which breaks pointer hit-testing
+  in Chromium-class browsers. Overlay is now portaled to
+  `document.body`; backdrop uses `pointerdown` + `preventDefault` to
+  dismiss and reduce click-through. `docs/design-system.md`. Frontend
+  `npm run lint` / `npm run build` green.
+
 ## Mini App: compact track list cards (2026-05-08)
 
 - [x] **Unified list `TrackCard` summary** — cover, title + inline
@@ -26,12 +111,12 @@
 
 ## Mini App: PlayerBar chrome (2026-05-08)
 
-- [x] **Player bar: larger meta, prev + like always visible, no volume
-  control** — `PlayerBar.tsx`: removed bar volume popover; single like
-  after next; prev/like no longer hidden on narrow screens; overflow
-  menu no duplicate prev/like on mobile. `global.css` / `components.css`:
-  larger cover and title/artist; removed unused `pb-volume-*` styles.
-  `docs/design-system.md` updated. Frontend `npm run lint` / `npm run build` green.
+- [x] **Player bar: larger meta, prev + like always visible; desktop
+  bar volume** — `PlayerBar.tsx`: volume popover only when
+  `min-width: 561px`; mobile keeps prev/play/next/like/overflow; wide
+  layouts insert volume before like. Coarse landscape: hide bar volume
+  (`global.css`). `components.css` restores `pb-volume-*`. Docs
+  updated. Frontend `npm run lint` / `npm run build` green.
 
 ## Mini App: Telegram swipe-to-dismiss (2026-05-08)
 
@@ -92,6 +177,18 @@
   560px`: smaller padding/covers, hide meta/source/non-private badges,
   extra `#main` bottom padding + `.track-list` spacing; `redesign-tracks.css`
   cover sizes; `docs/design-system.md`. `npm run lint` green.
+
+## Artist carousels: mouse drag scroll (2026-05-08)
+
+- [x] **Desktop drag on artist top-tracks + releases carousels** —
+  `useHorizontalPointerDragScroll` (mouse only; `cursor: grab`), wired
+  in both panels; `docs/design-system.md`. `npm run lint` green.
+
+- [x] **Carousel snap + arrows: rAF scroll animation** — native
+  `scrollTo/scrollBy(smooth)` unreliable in WebView; `horizontalScrollAnimate.ts`
+  eases `scrollLeft` over `HORIZONTAL_PAGE_SCROLL_MS`; hook + arrow buttons.
+  `npm run lint` green.
+
 
 ## Artist page: catalog releases carousel (2026-05-08)
 

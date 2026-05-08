@@ -3,13 +3,61 @@ import { ensureCsrf, readCsrfCookie } from './csrf'
 
 const BASE = '/api/v1/admin'
 
+function normalizeHttpDetail(raw: unknown): string {
+  if (typeof raw === 'string') {
+    return raw
+  }
+  if (raw === null || raw === undefined) {
+    return ''
+  }
+  if (
+    typeof raw === 'number' ||
+    typeof raw === 'boolean'
+  ) {
+    return String(raw)
+  }
+  if (Array.isArray(raw)) {
+    const parts = raw.map((item) => {
+      if (
+        item &&
+        typeof item === 'object' &&
+        'msg' in item
+      ) {
+        return String(
+          (item as { msg?: unknown }).msg ?? '',
+        )
+      }
+      if (typeof item === 'string') {
+        return item
+      }
+      try {
+        return JSON.stringify(item)
+      } catch {
+        return ''
+      }
+    })
+    return parts.filter(Boolean).join('; ')
+  }
+  if (typeof raw === 'object') {
+    try {
+      return JSON.stringify(raw)
+    } catch {
+      return ''
+    }
+  }
+  return String(raw)
+}
+
 export class AdminApiError extends Error {
   status: number
   detail: string
-  constructor(status: number, detail: string) {
-    super(detail || `HTTP ${status}`)
+  constructor(status: number, detail: unknown) {
+    const message =
+      normalizeHttpDetail(detail) ||
+      `HTTP ${status}`
+    super(message)
     this.status = status
-    this.detail = detail
+    this.detail = message
   }
 }
 
@@ -216,21 +264,33 @@ export async function adminFetch<T = unknown>(
     opts,
   )
   if (response.status >= 400) {
-    let detail = `HTTP ${response.status}`
+    let detail: unknown = `HTTP ${response.status}`
     try {
-      const body = await response.json()
+      const body = (await response.json()) as Record<
+        string,
+        unknown
+      >
+      const fromDetail = normalizeHttpDetail(
+        body.detail,
+      )
+      const fromMessage = normalizeHttpDetail(
+        body.message,
+      )
       detail =
-        body?.detail ||
-        body?.message ||
-        JSON.stringify(body)
+        fromDetail ||
+        fromMessage ||
+        `HTTP ${response.status}`
     } catch {
       try {
         detail = await response.text()
       } catch {
-        // keep default
+        detail = `HTTP ${response.status}`
       }
     }
-    throw new AdminApiError(response.status, detail)
+    throw new AdminApiError(
+      response.status,
+      detail,
+    )
   }
   if (response.status === 204) {
     return undefined as T
@@ -299,12 +359,18 @@ export const adminApi = {
       body: payload,
       isUserToken: true,
     }),
-  requestDeviceApproval: (deviceId: number) =>
+  requestDeviceApproval: (
+    deviceId: number,
+    opts?: { force?: boolean },
+  ) =>
     adminFetch<{ detail: string }>(
       '/auth/devices/request-approval',
       {
         method: 'POST',
-        body: { device_id: deviceId },
+        body: {
+          device_id: deviceId,
+          force_resend: opts?.force === true,
+        },
         isUserToken: true,
       },
     ),

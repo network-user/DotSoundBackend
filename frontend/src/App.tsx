@@ -1,4 +1,5 @@
 import {
+  Fragment,
   lazy,
   Suspense,
   useEffect,
@@ -9,33 +10,41 @@ import {
   type ErrorInfo,
 } from 'react'
 import { flushSync } from 'react-dom'
-import { useTranslation } from 'react-i18next'
-import i18n from '@/lib/i18n'
 import { useBrandLabel } from '@/lib/brand'
+import { AppErrorFallback } from '@/components/AppErrorFallback'
 
 class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
-  { hasError: boolean }
+  { hasError: boolean; resetKey: number }
 > {
-  state = { hasError: false }
-  static getDerivedStateFromError() { return { hasError: true } }
-  componentDidCatch(error: Error, info: ErrorInfo) { console.error('[ErrorBoundary]', error, info) }
+  state = { hasError: false, resetKey: 0 }
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error('[ErrorBoundary]', error, info)
+  }
   render() {
     if (this.state.hasError) {
-      return this.props.fallback ?? (
-        <div className="error-boundary-fallback">
-          <p>{i18n.t('app.errorTitle')}</p>
-          <button
-            onClick={() =>
-              this.setState({ hasError: false })
+      return (
+        this.props.fallback ?? (
+          <AppErrorFallback
+            variant="crash"
+            onPrimary={() =>
+              this.setState((s) => ({
+                hasError: false,
+                resetKey: s.resetKey + 1,
+              }))
             }
-          >
-            {i18n.t('app.tryAgain')}
-          </button>
-        </div>
+          />
+        )
       )
     }
-    return this.props.children
+    return (
+      <Fragment key={this.state.resetKey}>
+        {this.props.children}
+      </Fragment>
+    )
   }
 }
 
@@ -44,7 +53,6 @@ function RouteFallback({
 }: {
   timeoutMs?: number
 }) {
-  const { t } = useTranslation()
   const [stuck, setStuck] = useState(false)
   useEffect(() => {
     const id = window.setTimeout(
@@ -55,14 +63,10 @@ function RouteFallback({
   }, [timeoutMs])
   if (stuck) {
     return (
-      <div className="error-boundary-fallback">
-        <p>{t('app.sectionLoadError')}</p>
-        <button
-          onClick={() => window.location.reload()}
-        >
-          {t('app.reload')}
-        </button>
-      </div>
+      <AppErrorFallback
+        variant="section"
+        onPrimary={() => window.location.reload()}
+      />
     )
   }
   return <div className="loader" />

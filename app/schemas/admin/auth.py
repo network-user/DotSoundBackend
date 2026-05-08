@@ -49,6 +49,7 @@ class AdminLoginResponse(BaseModel):
 
 class AdminDeviceApprovalRequest(BaseModel):
     device_id: int
+    force_resend: bool = False
 
 
 class AdminDeviceConfirmRequest(BaseModel):

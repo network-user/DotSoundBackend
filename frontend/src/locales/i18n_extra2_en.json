@@ -694,7 +694,7 @@
       "saving": "Saving…",
       "loading": "Loading…",
       "welcome": {
-        "logo": "DotSound",
+        "logo": ".sound",
         "title": "Music tuned to your taste",
         "subtitle": "A few steps and your home is ready",
         "cta": "Start"
@@ -723,7 +723,9 @@
         "counterDone": "{{count}} selected",
         "cta": "Continue",
         "skipHint": "Or let us pick automatically — tap \"{{skipLabel}}\"",
-        "empty": "No genres yet — try later"
+        "empty": "No genres yet — try later",
+        "searchPlaceholder": "Search genre",
+        "searchEmpty": "Nothing found"
       },
       "swipe": {
         "title": "Swipe calibration",
@@ -737,7 +739,9 @@
         "empty": "All tracks rated",
         "loading": "Loading tracks…",
         "counter": "{{current}} / {{total}}",
-        "cta": "Done"
+        "cta": "Done",
+        "finish": "Finish",
+        "continueHint": "Or keep swiping — more ratings mean better picks"
       },
       "complete": {
         "title": "All set",

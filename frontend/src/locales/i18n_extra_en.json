@@ -1,8 +1,10 @@
 {
   "app": {
     "errorTitle": "Something went wrong",
+    "errorHint": "This screen hit an unexpected error. You can try again or reload the page.",
     "tryAgain": "Try again",
     "sectionLoadError": "Could not load this section",
+    "sectionLoadHint": "Loading took too long or the network dropped. Reload to retry.",
     "reload": "Reload"
   },
   "common": {

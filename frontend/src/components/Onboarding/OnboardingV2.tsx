@@ -31,6 +31,7 @@ import { GenreBubble } from '@/components/Onboarding/GenreBubble'
 import type {
   OnboardingBootstrap,
   OnboardingTasteDecision,
+  OnboardingGenrePreviewResponse,
   Track,
 } from '@/types/api'
 
@@ -102,6 +103,8 @@ export function OnboardingV2({ onComplete }: Props) {
   const [previewTrackId, setPreviewTrackId] = useState<
     number | null
   >(null)
+  const lastFetchCountRef = useRef(0)
+  const autoPlayedTrackRef = useRef<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -281,32 +284,25 @@ export function OnboardingV2({ onComplete }: Props) {
       ])
       setTasteIndex((i) => i + 1)
       const a = audioRef.current
-      if (a && previewTrackId === tr.id) {
+      if (a) {
         a.pause()
         setPreviewTrackId(null)
       }
     },
-    [tasteTracks, tasteIndex, previewTrackId],
+    [tasteTracks, tasteIndex],
   )
 
-  const playPreview = useCallback(() => {
-    const tr = tasteTracks[tasteIndex]
-    if (!tr) return
+  const togglePreview = useCallback(() => {
     const a = audioRef.current
     if (!a) return
-    if (previewTrackId === tr.id) {
-      if (a.paused) {
-        a.play().catch(() => {})
-      } else {
-        a.pause()
-      }
-      return
+    if (a.paused) {
+      void a.play().catch(() =>
+        setPreviewTrackId(null),
+      )
+    } else {
+      a.pause()
     }
-    setPreviewTrackId(tr.id)
-    a.src = `/api/v1/track-preview/${tr.id}/segment.m4a`
-    a.crossOrigin = 'anonymous'
-    a.play().catch(() => setPreviewTrackId(null))
-  }, [tasteTracks, tasteIndex, previewTrackId])
+  }, [])
 
   const finalizeSwipe = useCallback(
     async (decisions: typeof tasteDecisions) => {
@@ -347,14 +343,61 @@ export function OnboardingV2({ onComplete }: Props) {
     if (step !== 'swipe') return
     if (tasteTracks.length === 0) return
     if (tasteIndex < tasteTracks.length) return
+    if (lastFetchCountRef.current === tasteTracks.length)
+      return
+    lastFetchCountRef.current = tasteTracks.length
+
+    let cancelled = false
+    setTasteLoading(true)
+    api
+      .getTasteSwipeTracks(SWIPE_BATCH)
+      .then((tracks) => {
+        if (cancelled) return
+        const seenIds = new Set(
+          tasteTracks.map((t) => t.id),
+        )
+        const fresh = tracks.filter(
+          (t) => !seenIds.has(t.id),
+        )
+        if (fresh.length > 0) {
+          setTasteTracks((prev) => [...prev, ...fresh])
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setTasteLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [step, tasteIndex, tasteTracks])
+
+  useEffect(() => {
+    if (step !== 'swipe') return
+    const tr = tasteTracks[tasteIndex]
+    if (!tr) return
+    if (autoPlayedTrackRef.current === tr.id) return
+    autoPlayedTrackRef.current = tr.id
+    const a = audioRef.current
+    if (!a) return
+    a.pause()
+    a.src = `/api/v1/track-preview/${tr.id}/segment.mp4`
+    a.crossOrigin = 'anonymous'
+    setPreviewTrackId(tr.id)
+    void a.play().catch(() => {
+      if (autoPlayedTrackRef.current === tr.id) {
+        setPreviewTrackId(null)
+      }
+    })
+  }, [step, tasteIndex, tasteTracks])
+
+  const canFinish =
+    tasteDecisions.length >= SWIPE_BATCH
+
+  const handleManualFinish = useCallback(() => {
+    hapticSelection()
     void finalizeSwipe(tasteDecisions)
-  }, [
-    step,
-    tasteIndex,
-    tasteTracks.length,
-    tasteDecisions,
-    finalizeSwipe,
-  ])
+  }, [tasteDecisions, finalizeSwipe])
 
   const handleSmartSkip = useCallback(async () => {
     if (saving) return
@@ -418,7 +461,9 @@ export function OnboardingV2({ onComplete }: Props) {
       onComplete()
       if (openImport) {
         try {
-          window.location.assign('/profile?import=1')
+          window.location.assign(
+            '/mini_app/profile?import=1',
+          )
         } catch {
           /* ignore */
         }
@@ -589,8 +634,10 @@ export function OnboardingV2({ onComplete }: Props) {
                 onSkipCard={() =>
                   recordDecision('skip')
                 }
-                onTap={playPreview}
+                onTogglePreview={togglePreview}
                 reduce={reduce}
+                canFinish={canFinish}
+                onFinish={handleManualFinish}
               />
             </m.div>
           )}
@@ -787,6 +834,7 @@ function ProfileStep({
               maxLength={64}
               autoComplete="off"
               spellCheck={false}
+              enterKeyHint="done"
               placeholder={t(
                 'redesign.onboardingV2.profile.placeholder',
               )}
@@ -794,6 +842,12 @@ function ProfileStep({
               onChange={(e) =>
                 onChangeName(e.target.value)
               }
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.currentTarget.blur()
+                  onSubmit()
+                }
+              }}
             />
             <p
               className="onb-v2-name-error"
@@ -838,6 +892,9 @@ interface GenresStepProps {
   saving: boolean
 }
 
+const GENRE_SILENT_WAV =
+  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+
 function GenresStep({
   bubbles,
   selected,
@@ -846,18 +903,242 @@ function GenresStep({
   saving,
 }: GenresStepProps) {
   const { t } = useTranslation()
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const genreAudioRef =
+    useRef<HTMLAudioElement | null>(null)
+  const playingGenreRef = useRef<string | null>(null)
+  const timerRef = useRef<number | null>(null)
+  const queuesRef = useRef(
+    new Map<string, Track[]>(),
+  )
+  const idxRef = useRef(new Map<string, number>())
+  const playNextRef = useRef<
+    ((genre: string) => void) | null
+  >(null)
+  const bubblesRef = useRef(bubbles)
+
+  const stopGenreAudio = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    const a = genreAudioRef.current
+    if (a) {
+      a.pause()
+      a.onended = null
+      a.src = ''
+    }
+    playingGenreRef.current = null
+  }, [])
+
+  const playNext = useCallback(
+    (genre: string) => {
+      if (playingGenreRef.current !== genre) return
+      const a = genreAudioRef.current
+      if (!a) return
+      const queue = queuesRef.current.get(genre)
+      if (!queue || queue.length === 0) return
+
+      let idx = idxRef.current.get(genre) ?? 0
+      if (idx >= queue.length) {
+        for (
+          let i = queue.length - 1;
+          i > 0;
+          i--
+        ) {
+          const j = Math.floor(
+            Math.random() * (i + 1),
+          )
+          ;[queue[i], queue[j]] = [
+            queue[j],
+            queue[i],
+          ]
+        }
+        idx = 0
+      }
+      idxRef.current.set(genre, idx + 1)
+      const track = queue[idx]
+
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current)
+      }
+      a.muted = false
+      a.src = `/api/v1/track-preview/${track.id}/segment.mp4`
+      a.crossOrigin = 'anonymous'
+      a.currentTime = 0
+      a.onended = () => {
+        if (timerRef.current !== null) {
+          window.clearTimeout(timerRef.current)
+          timerRef.current = null
+        }
+        playNextRef.current?.(genre)
+      }
+      timerRef.current = window.setTimeout(() => {
+        timerRef.current = null
+        if (genreAudioRef.current) {
+          genreAudioRef.current.pause()
+          genreAudioRef.current.onended = null
+        }
+        playNextRef.current?.(genre)
+      }, 15000)
+      void a.play().catch(() => {
+        if (playingGenreRef.current === genre) {
+          stopGenreAudio()
+        }
+      })
+    },
+    [stopGenreAudio],
+  )
+
+  playNextRef.current = playNext
+
+  const startGenrePreview = useCallback(
+    async (genre: string) => {
+      stopGenreAudio()
+      playingGenreRef.current = genre
+      const a = genreAudioRef.current
+      if (!a) return
+
+      let queue = queuesRef.current.get(genre)
+
+      if (!queue) {
+        // Prime audio element synchronously in the
+        // user-gesture tick BEFORE the network await.
+        // This marks the element as user-activated so
+        // the real a.play() works after the fetch.
+        a.muted = true
+        a.src = GENRE_SILENT_WAV
+        void a.play().catch(() => {})
+
+        try {
+          const resp: OnboardingGenrePreviewResponse =
+            await api.fetchGenrePreviewQueue(
+              genre,
+              10,
+            )
+          if (playingGenreRef.current !== genre) {
+            return
+          }
+          const arr = [...resp.items]
+          for (
+            let i = arr.length - 1;
+            i > 0;
+            i--
+          ) {
+            const j = Math.floor(
+              Math.random() * (i + 1),
+            )
+            ;[arr[i], arr[j]] = [arr[j], arr[i]]
+          }
+          queue = arr
+          queuesRef.current.set(genre, queue)
+          idxRef.current.set(genre, 0)
+        } catch {
+          if (playingGenreRef.current === genre) {
+            playingGenreRef.current = null
+          }
+          a.muted = false
+          return
+        }
+      }
+
+      if (!queue || queue.length === 0) {
+        if (playingGenreRef.current === genre) {
+          playingGenreRef.current = null
+        }
+        return
+      }
+      if (playingGenreRef.current !== genre) return
+      playNext(genre)
+    },
+    [stopGenreAudio, playNext],
+  )
+
+  // Pre-fetch queues for visible genres on mount
+  // so the first tap on each genre is synchronous.
+  useEffect(() => {
+    let active = true
+    const prefetch = async () => {
+      for (const b of bubblesRef.current.slice(
+        0,
+        14,
+      )) {
+        if (!active) return
+        if (queuesRef.current.has(b.genre)) continue
+        try {
+          const resp =
+            await api.fetchGenrePreviewQueue(
+              b.genre,
+              5,
+            )
+          if (!active) return
+          const arr = [...resp.items]
+          for (
+            let i = arr.length - 1;
+            i > 0;
+            i--
+          ) {
+            const j = Math.floor(
+              Math.random() * (i + 1),
+            )
+            ;[arr[i], arr[j]] = [arr[j], arr[i]]
+          }
+          queuesRef.current.set(b.genre, arr)
+          idxRef.current.set(b.genre, 0)
+        } catch {}
+      }
+    }
+    void prefetch()
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const handleToggle = useCallback(
+    (genre: string) => {
+      const wasSelected = selected.includes(genre)
+      onToggle(genre)
+      if (!wasSelected) {
+        void startGenrePreview(genre)
+      } else if (
+        playingGenreRef.current === genre
+      ) {
+        stopGenreAudio()
+      }
+    },
+    [selected, onToggle, startGenrePreview, stopGenreAudio],
+  )
+
+  useEffect(() => {
+    return () => {
+      stopGenreAudio()
+    }
+  }, [stopGenreAudio])
+
+  const filteredBubbles = useMemo(() => {
+    if (!searchQuery.trim()) return bubbles
+    const q = searchQuery.toLowerCase()
+    return bubbles.filter((b) =>
+      b.genre.toLowerCase().includes(q),
+    )
+  }, [bubbles, searchQuery])
+
   const remaining = Math.max(
     0,
     MIN_GENRES - selected.length,
   )
   const counterText =
     remaining > 0
-      ? t('redesign.onboardingV2.genres.counterMore', {
-          count: remaining,
-        })
-      : t('redesign.onboardingV2.genres.counterDone', {
-          count: selected.length,
-        })
+      ? t(
+          'redesign.onboardingV2.genres.counterMore',
+          { count: remaining },
+        )
+      : t(
+          'redesign.onboardingV2.genres.counterDone',
+          { count: selected.length },
+        )
+
   return (
     <>
       <div className="onb-v2-step__hero">
@@ -872,22 +1153,53 @@ function GenresStep({
         </p>
       </div>
       <div className="onb-v2-step__body">
-        {bubbles.length > 0 ? (
+        <div className="onb-v2-genre-search">
+          <Icon name="search" size={15} />
+          <input
+            className="onb-v2-genre-search__input"
+            type="search"
+            enterKeyHint="search"
+            placeholder={t(
+              'redesign.onboardingV2.genres.searchPlaceholder',
+            )}
+            value={searchQuery}
+            onChange={(e) =>
+              setSearchQuery(e.target.value)
+            }
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              className="onb-v2-genre-search__clear"
+              onClick={() => setSearchQuery('')}
+              aria-label="Clear"
+            >
+              <Icon name="x" size={14} />
+            </button>
+          )}
+        </div>
+        {filteredBubbles.length > 0 ? (
           <div className="onb-v2-bubbles">
-            {bubbles.map((b) => (
+            {filteredBubbles.map((b) => (
               <GenreBubble
                 key={b.genre}
                 bubble={b}
-                selected={selected.includes(b.genre)}
-                onToggle={onToggle}
+                selected={selected.includes(
+                  b.genre,
+                )}
+                onToggle={handleToggle}
               />
             ))}
           </div>
         ) : (
           <p className="onb-v2-step__subtitle">
-            {t(
-              'redesign.onboardingV2.genres.empty',
-            )}
+            {searchQuery
+              ? t(
+                  'redesign.onboardingV2.genres.searchEmpty',
+                )
+              : t(
+                  'redesign.onboardingV2.genres.empty',
+                )}
           </p>
         )}
         <p className="onb-v2-counter">
@@ -909,6 +1221,11 @@ function GenresStep({
             : t('redesign.onboardingV2.genres.cta')}
         </MotionPress>
       </div>
+      <audio
+        ref={genreAudioRef}
+        preload="none"
+        style={{ display: 'none' }}
+      />
     </>
   )
 }
@@ -921,8 +1238,10 @@ interface SwipeStepProps {
   onLike: () => void
   onDislike: () => void
   onSkipCard: () => void
-  onTap: () => void
+  onTogglePreview: () => void
   reduce: boolean
+  canFinish: boolean
+  onFinish: () => void
 }
 
 function SwipeStep({
@@ -933,8 +1252,10 @@ function SwipeStep({
   onLike,
   onDislike,
   onSkipCard,
-  onTap,
+  onTogglePreview,
   reduce,
+  canFinish,
+  onFinish,
 }: SwipeStepProps) {
   const { t } = useTranslation()
   const top = tracks[index]
@@ -961,14 +1282,13 @@ function SwipeStep({
               )}
             </div>
           )}
-          {!loading &&
-            tracks.length === 0 && (
-              <div className="onb-v2-swipe-empty">
-                {t(
-                  'redesign.onboardingV2.swipe.empty',
-                )}
-              </div>
-            )}
+          {!loading && tracks.length === 0 && (
+            <div className="onb-v2-swipe-empty">
+              {t(
+                'redesign.onboardingV2.swipe.empty',
+              )}
+            </div>
+          )}
           {next && !reduce && (
             <SwipeBackdropCard
               key={`bg-${next.id}`}
@@ -982,9 +1302,16 @@ function SwipeStep({
               isPlaying={playingId === top.id}
               onLike={onLike}
               onDislike={onDislike}
-              onTap={onTap}
+              onTogglePreview={onTogglePreview}
               reduce={reduce}
             />
+          )}
+          {!top && loading && (
+            <div className="onb-v2-swipe-empty">
+              {t(
+                'redesign.onboardingV2.swipe.loading',
+              )}
+            </div>
           )}
         </div>
         <p
@@ -1041,6 +1368,27 @@ function SwipeStep({
             </MotionPress>
           </div>
         )}
+        {canFinish && (
+          <div className="onb-v2-swipe-finish">
+            <MotionPress
+              variant="primary"
+              haptic="medium"
+              className="onb-v2-cta"
+              onClick={onFinish}
+            >
+              {t(
+                'redesign.onboardingV2.swipe.finish',
+              )}
+            </MotionPress>
+            {top && (
+              <p className="onb-v2-swipe-finish__hint">
+                {t(
+                  'redesign.onboardingV2.swipe.continueHint',
+                )}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </>
   )
@@ -1055,17 +1403,10 @@ function SwipeBackdropCard({
 }: SwipeBackdropCardProps) {
   return (
     <div
-      className="onb-v2-swipe-card"
-      style={{
-        transform:
-          'translateY(8px) scale(0.96)',
-        opacity: 0.55,
-        pointerEvents: 'none',
-      }}
+      className="onb-v2-swipe-card onb-v2-swipe-card--backdrop"
       aria-hidden="true"
     >
       <CoverArt track={track} />
-      <CardInfo track={track} />
     </div>
   )
 }
@@ -1075,7 +1416,7 @@ interface SwipeCardProps {
   isPlaying: boolean
   onLike: () => void
   onDislike: () => void
-  onTap: () => void
+  onTogglePreview: () => void
   reduce: boolean
 }
 
@@ -1084,7 +1425,7 @@ function SwipeCard({
   isPlaying,
   onLike,
   onDislike,
-  onTap,
+  onTogglePreview,
   reduce,
 }: SwipeCardProps) {
   const { t } = useTranslation()
@@ -1121,11 +1462,14 @@ function SwipeCard({
     return (
       <div
         className="onb-v2-swipe-card"
-        onClick={onTap}
+        onClick={onTogglePreview}
         role="button"
         tabIndex={0}
       >
-        <CoverArt track={track} isPlaying={isPlaying} />
+        <CoverArt
+          track={track}
+          isPlaying={isPlaying}
+        />
         <CardInfo track={track} />
       </div>
     )
@@ -1142,7 +1486,7 @@ function SwipeCard({
       dragElastic={0.6}
       style={{ x, rotate }}
       onDragEnd={handleDragEnd}
-      onTap={onTap}
+      onTap={onTogglePreview}
       whileTap={{ cursor: 'grabbing' }}
       transition={SPRING_SNAPPY}
       exit={{
@@ -1151,7 +1495,10 @@ function SwipeCard({
         transition: TWEEN_FAST,
       }}
     >
-      <CoverArt track={track} isPlaying={isPlaying} />
+      <CoverArt
+        track={track}
+        isPlaying={isPlaying}
+      />
       <CardInfo track={track} />
       <m.span
         className="onb-v2-swipe-card__badge onb-v2-swipe-card__badge--like"
@@ -1187,11 +1534,20 @@ function CoverArt({
         size={360}
       />
       <span className="onb-v2-swipe-card__cover-fade" />
-      {isPlaying && (
-        <span className="onb-v2-swipe-card__play-pulse">
-          <Icon name="pause" size={28} />
-        </span>
-      )}
+      <span
+        className={[
+          'onb-v2-swipe-card__play-pulse',
+          isPlaying ? 'is-playing' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        aria-hidden="true"
+      >
+        <Icon
+          name={isPlaying ? 'pause' : 'play'}
+          size={28}
+        />
+      </span>
     </div>
   )
 }

@@ -1,7 +1,16 @@
-import { useEffect, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
+import i18n from '@/lib/i18n'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { adminApi } from '../../lib/adminApi'
+import {
+  AdminApiError,
+  adminApi,
+} from '../../lib/adminApi'
 import { useAdminAuth } from '../../store/adminAuthStore'
 import { TotpInput } from './TotpInput'
 
@@ -15,29 +24,58 @@ export function DeviceApproval() {
   const [emailCode, setEmailCode] = useState('')
   const [totpCode, setTotpCode] = useState('')
   const [label, setLabel] = useState('')
-  const [requested, setRequested] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [approvalBusy, setApprovalBusy] =
+    useState(false)
   const [error, setError] = useState<string | null>(
     null,
   )
+  const autoSentForDeviceRef = useRef<number | null>(
+    null,
+  )
+
+  const sendApprovalRequest = useCallback(
+    async (force: boolean) => {
+      if (!pendingDeviceId) return
+      setApprovalBusy(true)
+      setError(null)
+      try {
+        await adminApi.requestDeviceApproval(
+          pendingDeviceId,
+          force ? { force: true } : undefined,
+        )
+      } catch (err) {
+        autoSentForDeviceRef.current = null
+        let message: string
+        if (
+          err instanceof AdminApiError &&
+          err.status === 429
+        ) {
+          message = i18n.t('admin.auth.rateLimited')
+        } else if (err instanceof Error) {
+          message = err.message
+        } else {
+          message = String(err)
+        }
+        setError(message)
+      } finally {
+        setApprovalBusy(false)
+      }
+    },
+    [pendingDeviceId],
+  )
 
   useEffect(() => {
-    if (!pendingDeviceId || requested) return
-    let alive = true
-    adminApi
-      .requestDeviceApproval(pendingDeviceId)
-      .then(() => {
-        if (!alive) return
-        setRequested(true)
-      })
-      .catch((err) => {
-        if (!alive) return
-        setError(err.message || 'failed')
-      })
-    return () => {
-      alive = false
+    if (!pendingDeviceId) return
+    if (
+      autoSentForDeviceRef.current ===
+      pendingDeviceId
+    ) {
+      return
     }
-  }, [pendingDeviceId, requested])
+    autoSentForDeviceRef.current = pendingDeviceId
+    void sendApprovalRequest(false)
+  }, [pendingDeviceId, sendApprovalRequest])
 
   async function handleConfirm() {
     if (
@@ -63,14 +101,26 @@ export function DeviceApproval() {
         )
       }
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : String(err)
+      let message: string
+      if (
+        err instanceof AdminApiError &&
+        err.status === 429
+      ) {
+        message = i18n.t('admin.auth.rateLimited')
+      } else if (err instanceof Error) {
+        message = err.message
+      } else {
+        message = String(err)
+      }
       setError(message)
     } finally {
       setBusy(false)
     }
+  }
+
+  function handleResend() {
+    autoSentForDeviceRef.current = null
+    void sendApprovalRequest(true)
   }
 
   if (!pendingDeviceId) {
@@ -131,6 +181,16 @@ export function DeviceApproval() {
       {error && (
         <div className="admin-auth-error">
           {error}
+          <div className="admin-auth-error-actions">
+            <MotionPress
+              type="button"
+              variant="ghost"
+              disabled={approvalBusy}
+              onClick={handleResend}
+            >
+              {t('admin.device.resendApproval')}
+            </MotionPress>
+          </div>
         </div>
       )}
       <MotionPress

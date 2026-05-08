@@ -297,34 +297,108 @@ const _SAVE_INTERVAL = 5000
 /** Min interval between React time updates (progress, lyrics UI). */
 const PLAYER_UI_TIME_MS = 40
 
+const _PLAYER_SNAPSHOT_KEY = 'player-snapshot'
+const _PLAYER_LEGACY_TRACK_KEY = 'player-track'
+const _PLAYER_LEGACY_TIME_KEY = 'player-time'
+
+type _PlayerSnapshotV1 = {
+  v: 1
+  track: Track
+  time: number
+}
+
+function _cloneTrackForStorage(t: Track): Track {
+  const { resume_position_seconds: _r, ...rest } = t
+  return rest as Track
+}
+
 function _saveState(t: Track | null, s: number) {
   if (!t) return
-  localStorage.setItem(
-    'player-track',
-    JSON.stringify(t),
-  )
-  localStorage.setItem('player-time', String(s))
+  const time = Number.isFinite(s) ? s : 0
+  try {
+    const payload: _PlayerSnapshotV1 = {
+      v: 1,
+      track: _cloneTrackForStorage(t),
+      time,
+    }
+    localStorage.setItem(
+      _PLAYER_SNAPSHOT_KEY,
+      JSON.stringify(payload),
+    )
+    localStorage.removeItem(_PLAYER_LEGACY_TRACK_KEY)
+    localStorage.removeItem(_PLAYER_LEGACY_TIME_KEY)
+  } catch {
+    /* quota / private mode */
+  }
 }
 
 function _loadState() {
   try {
-    const r = localStorage.getItem('player-track')
-    if (!r) return { track: null, time: 0 }
-    return {
-      track: JSON.parse(r) as Track,
-      time: parseFloat(
-        localStorage.getItem('player-time') ||
-          '0',
-      ),
+    const snapRaw = localStorage.getItem(
+      _PLAYER_SNAPSHOT_KEY,
+    )
+    if (snapRaw) {
+      const snap = JSON.parse(
+        snapRaw,
+      ) as Partial<_PlayerSnapshotV1>
+      if (
+        snap?.v === 1 &&
+        snap.track &&
+        typeof snap.track.id === 'number' &&
+        typeof snap.time === 'number' &&
+        Number.isFinite(snap.time)
+      ) {
+        return {
+          track: snap.track as Track,
+          time: snap.time,
+        }
+      }
     }
+
+    const r = localStorage.getItem(
+      _PLAYER_LEGACY_TRACK_KEY,
+    )
+    if (!r) return { track: null, time: 0 }
+    const track = JSON.parse(r) as Track
+    const time = parseFloat(
+      localStorage.getItem(_PLAYER_LEGACY_TIME_KEY) ||
+        '0',
+    )
+    const safeTime = Number.isFinite(time) ? time : 0
+    if (
+      typeof track?.id === 'number' &&
+      Number.isFinite(safeTime)
+    ) {
+      try {
+        const migrated: _PlayerSnapshotV1 = {
+          v: 1,
+          track: _cloneTrackForStorage(track),
+          time: safeTime,
+        }
+        localStorage.setItem(
+          _PLAYER_SNAPSHOT_KEY,
+          JSON.stringify(migrated),
+        )
+        localStorage.removeItem(
+          _PLAYER_LEGACY_TRACK_KEY,
+        )
+        localStorage.removeItem(
+          _PLAYER_LEGACY_TIME_KEY,
+        )
+      } catch {
+        /* keep legacy keys if migrate fails */
+      }
+    }
+    return { track, time: safeTime }
   } catch {
     return { track: null, time: 0 }
   }
 }
 
 function _clearState() {
-  localStorage.removeItem('player-track')
-  localStorage.removeItem('player-time')
+  localStorage.removeItem(_PLAYER_SNAPSHOT_KEY)
+  localStorage.removeItem(_PLAYER_LEGACY_TRACK_KEY)
+  localStorage.removeItem(_PLAYER_LEGACY_TIME_KEY)
 }
 
 function _updateMediaSession(

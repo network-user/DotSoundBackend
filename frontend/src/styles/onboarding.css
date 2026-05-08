@@ -57,7 +57,6 @@
   inset: 0;
   background: var(--accent, #fff);
   border-radius: inherit;
-  animation: onbProgressFill 320ms var(--ease-snappy, ease-out) both;
 }
 
 .onb-v2-progress__bar.is-current::after {
@@ -66,17 +65,7 @@
   inset: 0 50% 0 0;
   background: var(--accent, #fff);
   border-radius: inherit;
-  animation: onbProgressPulse 1.6s ease-in-out infinite alternate;
-}
-
-@keyframes onbProgressFill {
-  from { transform: scaleX(0); transform-origin: left; }
-  to { transform: scaleX(1); transform-origin: left; }
-}
-
-@keyframes onbProgressPulse {
-  from { opacity: 0.6; transform: scaleX(0.4); transform-origin: left; }
-  to { opacity: 1; transform: scaleX(1); transform-origin: left; }
+  opacity: 0.7;
 }
 
 .onb-v2-skip-btn {
@@ -579,13 +568,13 @@
   position: absolute;
   inset: 0;
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.04);
+  background: #000;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   user-select: none;
   -webkit-user-drag: none;
-  touch-action: pan-y;
+  touch-action: none;
   cursor: grab;
   box-shadow:
     0 18px 40px rgba(0, 0, 0, 0.5),
@@ -594,6 +583,14 @@
 
 .onb-v2-swipe-card:active {
   cursor: grabbing;
+}
+
+.onb-v2-swipe-card--backdrop {
+  transform: translateY(8px) scale(0.96);
+  opacity: 0.35;
+  filter: blur(3px);
+  pointer-events: none;
+  cursor: default;
 }
 
 .onb-v2-swipe-card__cover {
@@ -691,19 +688,24 @@
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   transform: translate(-50%, -50%);
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  opacity: 0.85;
+  opacity: 0.5;
+  transition: opacity 200ms ease;
+}
+
+.onb-v2-swipe-card__play-pulse.is-playing {
+  opacity: 0.9;
   animation: onbPlayPulse 1.6s ease-in-out infinite;
 }
 
 @keyframes onbPlayPulse {
-  0%, 100% { transform: translate(-50%, -50%) scale(0.97); opacity: 0.7; }
+  0%, 100% { transform: translate(-50%, -50%) scale(0.97); opacity: 0.8; }
   50% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
 }
 
@@ -858,6 +860,78 @@
   margin: 0;
 }
 
+/* ─── Genre search ─────────────────────────────────── */
+
+.onb-v2-genre-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 0 14px;
+  margin-bottom: 14px;
+  color: rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+}
+
+.onb-v2-genre-search__input {
+  flex: 1;
+  height: 42px;
+  background: transparent;
+  border: 0;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.onb-v2-genre-search__input::placeholder {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.onb-v2-genre-search__input::-webkit-search-cancel-button,
+.onb-v2-genre-search__input::-webkit-search-decoration {
+  display: none;
+}
+
+.onb-v2-genre-search__clear {
+  background: none;
+  border: 0;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.onb-v2-genre-search__clear:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* ─── Swipe finish ──────────────────────────────────── */
+
+.onb-v2-swipe-finish {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.onb-v2-swipe-finish__hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  text-align: center;
+  margin: 0;
+}
+
 /* ─── Reduced motion ───────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -865,10 +939,8 @@
   .onb-v2-welcome__title,
   .onb-v2-welcome__subtitle,
   .onb-v2-complete__check,
-  .onb-v2-progress__bar.is-done::after,
-  .onb-v2-progress__bar.is-current::after,
   .onb-v2-bubble__check,
-  .onb-v2-swipe-card__play-pulse {
+  .onb-v2-swipe-card__play-pulse.is-playing {
     animation: none !important;
   }
 }

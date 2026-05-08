@@ -1,4 +1,6 @@
 import {
+  useEffect,
+  useState,
   type ImgHTMLAttributes,
 } from 'react'
 import {
@@ -38,10 +40,15 @@ export function SharedCover({
   ...rest
 }: SharedCoverProps) {
   const reduce = useReducedMotion()
+  const [loaded, setLoaded] = useState(false)
   const layoutId =
     trackId !== null && trackId !== undefined
       ? `cover-${trackId}`
       : undefined
+
+  useEffect(() => {
+    setLoaded(false)
+  }, [src])
 
   if (!src) {
     return (
@@ -59,16 +66,27 @@ export function SharedCover({
   }
 
   return (
-    <m.img
-      layoutId={reduce ? undefined : layoutId}
-      src={src}
-      alt={alt}
-      loading="lazy"
-      className={['shared-cover', className]
+    <div
+      className={[
+        'shared-cover',
+        'shared-cover-frame',
+        loaded ? 'shared-cover-frame--loaded' : '',
+        className,
+      ]
         .filter(Boolean)
         .join(' ')}
-      transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
-      {...rest}
-    />
+    >
+      <m.img
+        layoutId={reduce ? undefined : layoutId}
+        src={src}
+        alt={alt}
+        loading="lazy"
+        className="shared-cover-frame__img"
+        transition={reduce ? { duration: 0 } : SPRING_LAYOUT}
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+        {...rest}
+      />
+    </div>
   )
 }

@@ -12,7 +12,7 @@ interface Props {
 export function CoverImage({
   coverKey,
   externalUrl,
-  size = 50,
+  size = 56,
   className,
   style,
 }: Props) {

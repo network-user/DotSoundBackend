@@ -23,6 +23,8 @@ import { SharedCover } from '@/components/ui/SharedCover'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import type { Track } from '@/types/api'
 import { buildTrackCardSummaryLine } from '@/lib/trackCardFormat'
+import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
+import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 
 interface Props {
   track: Track
@@ -44,6 +46,8 @@ export function TrackCard({
   const { track: currentTrack } = usePlayerMeta()
   const { isPlaying } = usePlayerState()
   const { playTrack, addToQueue } = usePlayerActions()
+  const desktopFine = useDesktopFinePointer()
+  const goArtistByName = useNavigateToArtistByName()
   const [confirmingDelete, setConfirmingDelete] =
     useState(false)
   const confirmTimerRef = useRef<ReturnType<
@@ -234,22 +238,14 @@ export function TrackCard({
               </BeatPulse>
             ) : (
               <div className="re-tc-cover-fallback">
-                <Icon name="music" size={20} />
+                <Icon name="music" size={22} />
               </div>
             )}
           </div>
           <div className="track-card-info">
             <div className="track-card-title-row">
               <p className="track-card-title" dir="auto">
-                <span className="track-card-title-core">
-                  {track.title}
-                </span>
-                {track.artist ? (
-                  <span className="track-card-title-artist">
-                    {' · '}
-                    {track.artist}
-                  </span>
-                ) : null}
+                {track.title}
               </p>
               {!track.is_public && (
                 <span className="track-badge track-badge-private">
@@ -265,6 +261,31 @@ export function TrackCard({
                 </span>
               )}
             </div>
+            {track.artist ? (
+              <p
+                className={
+                  desktopFine
+                    ? 'track-card-artist track-card-artist--nav'
+                    : 'track-card-artist'
+                }
+                dir="auto"
+                style={
+                  desktopFine
+                    ? { cursor: 'pointer' }
+                    : undefined
+                }
+                onClick={
+                  desktopFine
+                    ? (e) => {
+                        e.stopPropagation()
+                        void goArtistByName(track.artist)
+                      }
+                    : undefined
+                }
+              >
+                {track.artist}
+              </p>
+            ) : null}
             <p className="track-card-meta track-card-summary" dir="auto">
               {buildTrackCardSummaryLine(
                 track,
@@ -293,7 +314,7 @@ export function TrackCard({
               <MorphIcon
                 name="heart"
                 filled={liked}
-                size={18}
+                size={20}
               />
             </MotionPress>
             {isOwner && (
@@ -318,7 +339,7 @@ export function TrackCard({
                     name={
                       track.is_public ? 'eye' : 'lock'
                     }
-                    size={18}
+                    size={20}
                   />
                 </MotionPress>
                 <MotionPress
@@ -341,7 +362,7 @@ export function TrackCard({
                     name={
                       confirmingDelete ? 'check' : 'trash'
                     }
-                    size={18}
+                    size={20}
                   />
                 </MotionPress>
               </>

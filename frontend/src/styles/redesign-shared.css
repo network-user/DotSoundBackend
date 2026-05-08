@@ -379,8 +379,32 @@
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
   border-radius: inherit;
+}
+
+.shared-cover-frame {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.02)
+  );
+}
+
+.shared-cover-frame__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0;
+  transition: opacity var(--dur-med) var(--ease-standard);
+}
+
+.shared-cover-frame--loaded .shared-cover-frame__img {
+  opacity: 1;
 }
 
 .shared-cover--empty {

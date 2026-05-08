@@ -50,8 +50,11 @@ user has `prefers-reduced-motion: reduce`.
   `#main`) already accounts for `env(safe-area-inset-bottom)`.
 - **Player bar:** mini cover (~48px), slightly larger title/artist
   type (`global.css` `.pb-title` / `.pb-artist`), transport controls
-  **prev · play · next · like · overflow**. Playback volume is
-  adjusted from the track sheet / expanded player, not from the bar.
+  **prev · play · next · like · overflow** on narrow layouts; from
+  **561px** width up, a **volume** control (popover) appears before the
+  like button. Coarse-pointer landscape phones still hide the bar
+  volume (`global.css`). Otherwise volume is also available from the
+  track sheet / expanded player.
 
 ### Z-index scale
 
@@ -93,6 +96,20 @@ and sheets combine `--glass-blur-*` with `--glass-saturate`. When
 `prefers-reduced-motion` or `prefers-reduced-data` applies,
 `installGlassPerformanceClass()` adds `ds-low-glass` on
 `<html>` and heavy backdrop filters fall back to opaque surfaces.
+
+## Global error states
+
+Fatal React errors (error boundary) and long-running lazy-route loads
+(Suspense timeout) use `AppErrorFallback`
+(`frontend/src/components/AppErrorFallback.tsx`): UI is rendered via
+**`createPortal` → `document.body`** inside `.app-issue-overlay`
+(`position: fixed`, `--z-modal`) so taps are not swallowed by the fixed
+player bar / bottom nav above `#main`. Centered `.app-issue-panel` in
+`frontend/src/styles/global.css`, `alert-triangle` icon, title + short
+hint, primary action via `MotionPress`. The route `ErrorBoundary` bumps a
+`Fragment` **key** on retry to remount the subtree. Copy lives in
+`frontend/src/locales/i18n_extra_*.json` under `app.errorTitle`,
+`app.errorHint`, `app.sectionLoadError`, `app.sectionLoadHint`.
 
 ## UI primitives
 
@@ -221,14 +238,21 @@ below meta; styles in `frontend/src/styles/global.css`).
 
 Popular tracks on the redesigned artist page use
 `.rf-artist-top-tracks*` in `frontend/src/styles/redesign-artist.css`:
-horizontal snap slides of three `TrackCard` rows (swipe everywhere;
+horizontal snap slides of three `TrackCard` rows (swipe on touch;
+`useHorizontalPointerDragScroll` adds mouse drag (`pointerdown` capture on
+the scroller + `window` `pointermove` / `pointerup`, and horizontal /
+Shift+`wheel`) on fine pointers; snap-to-page uses
+`lib/horizontalScrollAnimate.ts` (`requestAnimationFrame` + ease-out,
+WebView-safe) instead of `scrollTo({ behavior: 'smooth' })`. Arrow buttons
+use the same helper. Respects `prefers-reduced-motion`;
 `h-snap__arrow` controls only on `≥768px` + fine pointer), optional
 page dots, and a bottom-sheet modal (`.rf-artist-tracks-modal`) for
 the full list with the standard `TrackList` + `SwipeRow` pattern.
 
 Catalog releases on the same page use `.rf-artist-releases*` with the
 same carousel mechanics (three `.artist-catalog-release-card` rows per
-slide) and `.rf-artist-releases-modal` for the full list. The section
+slide; fine-pointer mouse drag via the same hook) and
+`.rf-artist-releases-modal` for the full list. The section
 heading is `artist.catalog_releases_title` (“Релизы” / “Releases”) with
 a count; `release_kind === dotsound_sc_artist_station` rows are sorted
 first and their card title uses `redesign.artist.catalogReleasesSimilar`
@@ -253,16 +277,28 @@ primary content blocks (`.tcs-info`, `.tcs-player-controls`,
 to card edges.
 
 List-style `TrackCard` rows (feeds, playlists, history, liked/disliked):
-cover, title with optional inline artist (`.track-card-title-core` /
-`.track-card-title-artist`), and a single muted summary line
+cover, title on the first line, optional artist on the next (`.track-card-artist`;
+`.track-card-artist--nav` on desktop fine pointer opens the artist page via
+`useNavigateToArtistByName`, same breakpoint as `PlayerBar`), and a single muted
+summary line
 (`.track-card-meta.track-card-summary`) built by `buildTrackCardSummaryLine`
 in `lib/trackCardFormat.ts` — duration, human-readable source label, then
-contextual time when present (last listen, liked-at, disliked-at). At
-`max-width: 560px`, padding and `.re-tc-cover-wrap` shrink as before;
-legacy `.track-source` link blocks stay hidden on narrow viewports.
+contextual time when present (last listen, liked-at, disliked-at).
+Default list scale (all viewports): `.re-tc-cover-wrap` is `56×56`
+(`58×58` at `≤560px`, `54×54` at `≤360px`), `.track-card` padding
+`14×22` (`12×14` on narrow phones, `14×26` from `768px`), title
+`fs-15`, summary `fs-12`, row gap `18px`. `CoverImage` defaults to
+`56×56` so inline covers match list cards. Legacy `.track-source` link
+blocks stay hidden on narrow viewports.
 Platform/catalog badges are not shown on the title row except
 `.track-badge-private` and owner-only moderation state. `#main` keeps
 extra bottom padding so the last rows clear the fixed player + tab bar.
+
+Search results for not-yet-imported YouTube / Bandcamp / SoundCloud rows
+use `SearchPendingTrackRow` in `SearchView.tsx`: same `re-tc-main` row,
+`re-tc-cover-wrap` thumbnail, title then artist line, summary line
+(duration · platform · `search.addAndPlay`), and `MotionPress` +
+`MorphIcon` heart like list `TrackCard`.
 
 The third-party stream access label (`trackCard.accessStream`) is not
 shown on list rows; it appears in `TrackCardSheet` inside
@@ -303,7 +339,9 @@ Highlights:
   `chats`, `profile`, `radio`, `users-following`, `flame`.
 - `SwipeRow` — left/right swipe-actions row with rubber-band and
   threshold-armed haptic.
-- `LongPressMenu` — iOS-style context menu over any trigger.
+- `LongPressMenu` — iOS-style context menu over any trigger; overlay is
+  portaled to `document.body` so it stays above nested transforms
+  (e.g. `SwipeRow` drag) and keeps correct hit-testing on desktop.
 - `DynamicIslandHost` + `lib/island.ts` — single top-of-screen
   pill for toasts, progress, now-playing, errors. Use
   `showIsland()` / `dismissIsland()` from `lib/island`.
@@ -314,9 +352,9 @@ Highlights:
 - `BeatPulse` — phase-locked subtle pulse driven by BPM.
 - `HorizontalSnap` — accessible snap-carousel with optional dots,
   arrows on `≥md`, and per-card parallax.
-- `SharedCover` — `m.img` with `layoutId={cover-${trackId}}` for
-  shared-element transitions between PlayerBar, NowPlaying and
-  TrackCard surfaces.
+- `SharedCover` — wrapper + `m.img` (`layoutId={cover-${trackId}}`)
+  for shared-element transitions between PlayerBar, NowPlaying and
+  TrackCard; gradient frame until `onLoad`, then image fades in.
 - `AdminRangeSwitch` — segmented control for admin surfaces.
   Uses `LayoutGroup` + `layoutId` pill indicator (Framer Motion),
   `MotionPress` per option, `role="tablist"`, `prefers-reduced-motion`

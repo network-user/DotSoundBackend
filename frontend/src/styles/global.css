@@ -181,14 +181,14 @@ body.monochrome #app {
   flex-direction: column;
   align-items: stretch;
   gap: 0;
-  padding: 12px 20px;
+  padding: 14px 22px;
   cursor: pointer;
   transition:
     background var(--dur-fast) var(--ease-snappy, cubic-bezier(0.2,0,0,1)),
     border-color var(--dur-fast) var(--ease-snappy),
     transform var(--dur-xfast) var(--ease-snappy);
   border-radius: var(--radius);
-  margin: 0 4px 4px;
+  margin: 0 4px 6px;
   border: 1px solid transparent;
   min-width: 0;
   max-width: calc(100% - 8px);
@@ -199,7 +199,7 @@ body.monochrome #app {
 .track-card-main-row {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 18px;
   width: 100%;
 }
 .track-card:hover {
@@ -221,8 +221,8 @@ body.monochrome #app {
 }
 
 .track-card-cover {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border-radius: var(--radius-sm);
   background: var(--surface);
   object-fit: cover;
@@ -230,7 +230,7 @@ body.monochrome #app {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 22px;
   overflow: hidden;
   border: 1px solid var(--border);
   position: relative;
@@ -281,7 +281,7 @@ body.monochrome #app {
   width: 100%;
 }
 .track-card-title {
-  font-size: 14px;
+  font-size: var(--fs-15);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -290,22 +290,18 @@ body.monochrome #app {
   flex: 1;
   min-width: 0;
 }
-.track-card-title-core {
-  font-weight: 600;
-}
-.track-card-title-artist {
-  font-weight: 500;
-  color: var(--text-secondary);
-}
 .track-card-summary {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .track-card-artist {
-  font-size: 12px;
+  font-size: var(--fs-13);
+  font-weight: 500;
   color: var(--text-secondary);
-  margin-top: 4px;
+  margin: 3px 0 0;
+  padding: 0;
+  line-height: var(--lh-tight, 1.2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -315,9 +311,9 @@ body.monochrome #app {
   text-decoration: underline;
 }
 .track-card-meta {
-  font-size: 11px;
+  font-size: var(--fs-12);
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: 5px;
 }
 
 .track-card-footer {
@@ -457,24 +453,29 @@ body.monochrome #app {
   }
 
   .track-card {
-    padding: 8px 12px;
+    padding: 12px 14px;
     margin-left: 0;
     margin-right: 0;
-    margin-bottom: 2px;
+    margin-bottom: 6px;
     max-width: 100%;
   }
 
   .track-card-main-row {
-    gap: 8px;
+    gap: 12px;
   }
 
   .track-card-title {
-    font-size: var(--fs-13);
+    font-size: var(--fs-15);
   }
 
   .track-card-artist {
+    font-size: var(--fs-13);
+    margin-top: 4px;
+  }
+
+  .track-card-meta {
     font-size: var(--fs-12);
-    margin-top: 2px;
+    margin-top: 6px;
   }
 
   .track-source {
@@ -492,8 +493,8 @@ body.monochrome #app {
   .track-card-like svg,
   .track-card-visibility svg,
   .track-card-delete svg {
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
   }
 }
 
@@ -601,22 +602,6 @@ body.monochrome #app {
   font-size: 14px;
   line-height: 1.45;
   color: var(--text-muted);
-}
-
-.sc-result .track-badge-sc {
-  margin-left: 6px;
-}
-.sc-play-hint--yt {
-  color: #E62117;
-}
-.sc-play-hint--bc {
-  color: #629aa0;
-}
-.sc-play-hint {
-  font-size: 14px;
-  color: #FF5500;
-  width: 24px;
-  text-align: center;
 }
 
 /* ?????? Playing indicator ??? animated equalizer bars ?????? */
@@ -5285,8 +5270,8 @@ html.le-lyrics-sync-open body {
 .tcs-similar-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px;
+  gap: 12px;
+  padding: 8px;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s;
@@ -5296,10 +5281,10 @@ html.le-lyrics-sync-open body {
   background: var(--bg-secondary);
 }
 
-.tcs-similar-item .cover-image {
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
+.tcs-similar-item .track-card-cover {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
 }
 
@@ -5308,24 +5293,34 @@ html.le-lyrics-sync-open body {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .tcs-similar-track-title {
-  font-size: 13px;
+  font-size: var(--fs-14);
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tcs-similar-track-title .tcs-similar-track-artist {
+.tcs-similar-track-artist {
+  font-size: var(--fs-13);
   font-weight: 500;
   color: var(--text-secondary);
+  line-height: var(--lh-tight, 1.2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tcs-similar-track-artist--nav:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
 }
 
 .tcs-similar-track-meta {
-  font-size: 11px;
+  font-size: var(--fs-12);
   color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6502,9 +6497,9 @@ html.le-lyrics-sync-open body {
 
 /* Track card skeleton */
 .track-card-skeleton {
-  height: 68px;
+  height: 88px;
   border-radius: var(--radius, 12px);
-  margin: 0 8px 2px;
+  margin: 0 8px 6px;
   background: var(--bg-card, rgba(255,255,255,0.05));
 }
 
@@ -6539,7 +6534,7 @@ html.le-lyrics-sync-open body {
 .search-history-item:active { background: var(--bg-card, rgba(255,255,255,0.05)); }
 .search-history-item span { flex: 1; }
 
-/* Error boundary */
+/* Error boundary & route stall */
 .error-boundary-fallback {
   display: flex;
   flex-direction: column;
@@ -6550,6 +6545,65 @@ html.le-lyrics-sync-open body {
   padding: 48px 24px;
   text-align: center;
   color: var(--text-secondary, rgba(255,255,255,0.6));
+}
+
+.app-issue-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal, 185);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: var(--space-6);
+  padding-bottom: calc(
+    var(--space-8) + env(safe-area-inset-bottom, 0px)
+  );
+  background: var(--bg);
+  pointer-events: auto;
+}
+
+.app-issue-panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 400px;
+  margin: 0 auto;
+  gap: var(--space-4);
+  padding: 0;
+  text-align: center;
+  color: var(--text);
+}
+
+.app-issue-panel__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: var(--r-lg);
+  background: var(--surface, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  color: var(--text-secondary);
+}
+
+.app-issue-panel__title {
+  margin: 0;
+  font-size: var(--fs-22);
+  font-weight: 650;
+  line-height: var(--lh-tight);
+  letter-spacing: -0.02em;
+}
+
+.app-issue-panel__hint {
+  margin: 0;
+  font-size: var(--fs-14);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+  max-width: 32ch;
 }
 
 /* Playlist create spinner */
@@ -9721,11 +9775,11 @@ html.ds-low-glass .tcs-sheet {
     letter-spacing: var(--ls-tight, -0.014em);
   }
   .track-card {
-    padding: 10px 12px;
+    padding: 12px 14px;
   }
   .track-card-cover {
-    width: 44px;
-    height: 44px;
+    width: 54px;
+    height: 54px;
   }
   /* Compact player cover on tiny phones to keep title legible. */
   .pb-cover-img {
@@ -9766,6 +9820,11 @@ html.ds-low-glass .tcs-sheet {
   #pb-time {
     display: none;
   }
+  @media (pointer: coarse) {
+    .pb-volume-wrap {
+      display: none;
+    }
+  }
 }
 
 /* Tablet / desktop browser: more generous side gutters so the
@@ -9775,7 +9834,7 @@ html.ds-low-glass .tcs-sheet {
     padding: 28px 32px 18px;
   }
   .track-card {
-    padding: 12px 24px;
+    padding: 14px 26px;
   }
 }
 

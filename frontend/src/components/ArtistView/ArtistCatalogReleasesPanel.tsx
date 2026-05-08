@@ -12,6 +12,11 @@ import { CoverImage } from '@/components/CoverImage/CoverImage'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { useExitTransition } from '@/hooks/useExitTransition'
+import { useHorizontalPointerDragScroll } from '@/hooks/useHorizontalPointerDragScroll'
+import {
+  HORIZONTAL_PAGE_SCROLL_MS,
+  scrollHorizontalByOnePage,
+} from '@/lib/horizontalScrollAnimate'
 import { useReducedMotion } from '@/lib/motion'
 import type { ArtistCatalogReleaseSummary } from '@/types/api'
 
@@ -130,12 +135,18 @@ export function ArtistCatalogReleasesPanel({
     }
   }, [slides.length, updateTrackMeta])
 
+  useHorizontalPointerDragScroll(
+    trackRef,
+    slides.length > 1,
+    slides.length,
+  )
+
   const scrollBySlide = (dir: 1 | -1) => {
     const el = trackRef.current
     if (!el) return
-    el.scrollBy({
-      left: dir * el.clientWidth,
-      behavior: reduce ? 'auto' : 'smooth',
+    scrollHorizontalByOnePage(el, dir, {
+      durationMs: HORIZONTAL_PAGE_SCROLL_MS,
+      instant: Boolean(reduce),
     })
   }
 

@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MotionPress } from '@/components/ui/MotionPress'
-import { adminApi } from '../../lib/adminApi'
+import {
+  AdminApiError,
+  adminApi,
+} from '../../lib/adminApi'
 import { computeFingerprint } from '../../lib/fingerprint'
 import { useAdminAuth } from '../../store/adminAuthStore'
 import { TotpInput } from './TotpInput'
@@ -46,10 +49,17 @@ export function AdminLogin() {
         )
       }
     } catch (err) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : String(err)
+      let message: string
+      if (
+        err instanceof AdminApiError &&
+        err.status === 429
+      ) {
+        message = t('admin.auth.rateLimited')
+      } else if (err instanceof Error) {
+        message = err.message
+      } else {
+        message = String(err)
+      }
       setError(message)
     } finally {
       setBusy(false)

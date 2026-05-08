@@ -3,6 +3,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
+  type MouseEvent,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
@@ -13,7 +15,11 @@ import { api } from '@/lib/api'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { useLikes } from '@/store/LikesContext'
 import { useDebounce } from '@/hooks/useDebounce'
+import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
+import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
+import { MorphIcon } from '@/components/ui/MorphIcon'
 import type {
   ArtistInfo,
   BCSearchResult,
@@ -94,6 +100,131 @@ function mergeTracksBySuggestOrder(
 
 function formatDuration(secs: number): string {
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+}
+
+interface SearchPendingTrackRowProps {
+  thumbnailUrl: string | null
+  title: string
+  artist: string | null
+  durationSeconds: number | null | undefined
+  sourceLabel: string
+  busy: boolean
+  addPlayLabel: string
+  onOpen: () => void
+  onLike: (e: MouseEvent) => void
+  likeTitle: string
+}
+
+function SearchPendingTrackRow({
+  thumbnailUrl,
+  title,
+  artist,
+  durationSeconds,
+  sourceLabel,
+  busy,
+  addPlayLabel,
+  onOpen,
+  onLike,
+  likeTitle,
+}: SearchPendingTrackRowProps) {
+  const desktopFine = useDesktopFinePointer()
+  const goArtistByName = useNavigateToArtistByName()
+  const parts: string[] = []
+  if (
+    durationSeconds != null &&
+    durationSeconds > 0
+  ) {
+    parts.push(formatDuration(durationSeconds))
+  }
+  parts.push(sourceLabel)
+  parts.push(addPlayLabel)
+
+  return (
+    <div
+      className="track-card re-tc-card search-pending-track"
+      onClick={onOpen}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onOpen()
+        }
+      }}
+    >
+      <div className="track-card-main-row re-tc-main">
+        <div className="re-tc-cover-wrap">
+          {thumbnailUrl ? (
+            <img
+              src={thumbnailUrl}
+              alt=""
+              className="re-tc-cover"
+              loading="lazy"
+              decoding="async"
+            />
+          ) : (
+            <div className="re-tc-cover-fallback">
+              <Icon name="music" size={22} />
+            </div>
+          )}
+        </div>
+        <div className="track-card-info">
+          <div className="track-card-title-row">
+            <p className="track-card-title" dir="auto">
+              {title}
+            </p>
+          </div>
+          {artist ? (
+            <p
+              className={
+                desktopFine
+                  ? 'track-card-artist track-card-artist--nav'
+                  : 'track-card-artist'
+              }
+              dir="auto"
+              style={
+                desktopFine
+                  ? { cursor: 'pointer' }
+                  : undefined
+              }
+              onClick={
+                desktopFine
+                  ? (e) => {
+                      e.stopPropagation()
+                      void goArtistByName(artist)
+                    }
+                  : undefined
+              }
+            >
+              {artist}
+            </p>
+          ) : null}
+          <p
+            className="track-card-meta track-card-summary"
+            dir="auto"
+          >
+            {parts.join(' · ')}
+          </p>
+        </div>
+        <div
+          className="track-card-actions"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MotionPress
+            variant="icon"
+            className="track-card-like"
+            title={likeTitle}
+            ariaLabel={likeTitle}
+            haptic="light"
+            disabled={busy}
+            onClick={onLike}
+          >
+            <MorphIcon name="heart" filled={false} size={20} />
+          </MotionPress>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function SearchView({ onOpenArtist }: SearchViewProps) {
@@ -1153,67 +1284,19 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                       )
                     }
                     return (
-                      <div
+                      <SearchPendingTrackRow
                         key={r.video_id}
-                        className="track-card sc-result"
-                        onClick={() => void handlePlayYT(r)}
-                      >
-                        <CoverImage
-                          coverKey={null}
-                          externalUrl={r.thumbnail_url}
-                        />
-                        <div className="track-card-info">
-                          <div className="track-card-title-row">
-                            <p className="track-card-title" dir="auto">
-                              <span className="track-card-title-core">
-                                {r.title}
-                              </span>
-                              {r.artist ? (
-                                <span className="track-card-title-artist">
-                                  {' · '}
-                                  {r.artist}
-                                </span>
-                              ) : null}
-                            </p>
-                          </div>
-                          <p
-                            className="track-card-meta track-card-summary"
-                            dir="auto"
-                          >
-                            {[
-                              r.duration_seconds != null &&
-                              r.duration_seconds > 0
-                                ? formatDuration(
-                                    r.duration_seconds,
-                                  )
-                                : null,
-                              'YouTube',
-                              t('search.afterAddStream'),
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </p>
-                        </div>
-                        <div
-                          className="track-card-actions"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            className="track-card-like"
-                            title={t('search.addAndLike')}
-                            onClick={(e) => void handleLikeYT(e, r)}
-                            disabled={importingYt === r.video_id}
-                            type="button"
-                          >
-                            <Icon name="heart-outline" size={18} />
-                          </button>
-                          <span className="sc-play-hint sc-play-hint--yt">
-                            {importingYt === r.video_id
-                              ? '...'
-                              : t('search.addAndPlay')}
-                          </span>
-                        </div>
-                      </div>
+                        thumbnailUrl={r.thumbnail_url}
+                        title={r.title}
+                        artist={r.artist ?? null}
+                        durationSeconds={r.duration_seconds}
+                        sourceLabel="YouTube"
+                        busy={importingYt === r.video_id}
+                        addPlayLabel={t('search.addAndPlay')}
+                        onOpen={() => void handlePlayYT(r)}
+                        onLike={(e) => void handleLikeYT(e, r)}
+                        likeTitle={t('search.addAndLike')}
+                      />
                     )
                   })}
                 </div>
@@ -1235,71 +1318,19 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                       )
                     }
                     return (
-                      <div
+                      <SearchPendingTrackRow
                         key={r.result_id}
-                        className="track-card sc-result"
-                        onClick={() => void handlePlayBC(r)}
-                      >
-                        <CoverImage
-                          coverKey={null}
-                          externalUrl={r.artwork_url}
-                        />
-                        <div className="track-card-info">
-                          <div className="track-card-title-row">
-                            <p className="track-card-title" dir="auto">
-                              <span className="track-card-title-core">
-                                {r.title}
-                              </span>
-                              {r.artist ? (
-                                <span className="track-card-title-artist">
-                                  {' · '}
-                                  {r.artist}
-                                </span>
-                              ) : null}
-                            </p>
-                          </div>
-                          <p
-                            className="track-card-meta track-card-summary"
-                            dir="auto"
-                          >
-                            {[
-                              r.duration_seconds != null &&
-                              r.duration_seconds > 0
-                                ? formatDuration(
-                                    r.duration_seconds,
-                                  )
-                                : null,
-                              'Bandcamp',
-                              t('search.afterAddStream'),
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </p>
-                        </div>
-                        <div
-                          className="track-card-actions"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            className="track-card-like"
-                            title={t('search.addAndLike')}
-                            onClick={(e) =>
-                              void handleLikeBC(e, r)
-                            }
-                            disabled={
-                              importingBc === r.track_url
-                            }
-                            type="button"
-                          >
-                            <Icon name="heart-outline" size={18} />
-                          </button>
-                          <span className="sc-play-hint sc-play-hint--bc">
-                            {importingBc === r.track_url
-                              ? '...'
-                              : t('search.addAndPlay')}
-                          </span>
-                        </div>
-                      </div>
+                        thumbnailUrl={r.artwork_url}
+                        title={r.title}
+                        artist={r.artist ?? null}
+                        durationSeconds={r.duration_seconds}
+                        sourceLabel="Bandcamp"
+                        busy={importingBc === r.track_url}
+                        addPlayLabel={t('search.addAndPlay')}
+                        onOpen={() => void handlePlayBC(r)}
+                        onLike={(e) => void handleLikeBC(e, r)}
+                        likeTitle={t('search.addAndLike')}
+                      />
                     )
                   })}
                 </div>
@@ -1318,71 +1349,19 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                       )
                     }
                     return (
-                      <div
+                      <SearchPendingTrackRow
                         key={r.sc_id}
-                        className="track-card sc-result"
-                        onClick={() => void handlePlaySC(r)}
-                      >
-                        <CoverImage
-                          coverKey={null}
-                          externalUrl={r.artwork_url}
-                        />
-                        <div className="track-card-info">
-                          <div className="track-card-title-row">
-                            <p className="track-card-title" dir="auto">
-                              <span className="track-card-title-core">
-                                {r.title}
-                              </span>
-                              {r.artist ? (
-                                <span className="track-card-title-artist">
-                                  {' · '}
-                                  {r.artist}
-                                </span>
-                              ) : null}
-                            </p>
-                          </div>
-                          <p
-                            className="track-card-meta track-card-summary"
-                            dir="auto"
-                          >
-                            {[
-                              r.duration_seconds != null &&
-                              r.duration_seconds > 0
-                                ? formatDuration(
-                                    r.duration_seconds,
-                                  )
-                                : null,
-                              'SoundCloud',
-                              t('search.afterAddStream'),
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </p>
-                        </div>
-                        <div
-                          className="track-card-actions"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <button
-                            className="track-card-like"
-                            title={t('search.addAndLike')}
-                            onClick={(e) =>
-                              void handleLikeSC(e, r)
-                            }
-                            disabled={
-                              importing === r.sc_url
-                            }
-                            type="button"
-                          >
-                            <Icon name="heart-outline" size={18} />
-                          </button>
-                          <span className="sc-play-hint">
-                            {importing === r.sc_url
-                              ? '...'
-                              : t('search.addAndPlay')}
-                          </span>
-                        </div>
-                      </div>
+                        thumbnailUrl={r.artwork_url}
+                        title={r.title}
+                        artist={r.artist ?? null}
+                        durationSeconds={r.duration_seconds}
+                        sourceLabel="SoundCloud"
+                        busy={importing === r.sc_url}
+                        addPlayLabel={t('search.addAndPlay')}
+                        onOpen={() => void handlePlaySC(r)}
+                        onLike={(e) => void handleLikeSC(e, r)}
+                        likeTitle={t('search.addAndLike')}
+                      />
                     )
                   })}
                 </div>

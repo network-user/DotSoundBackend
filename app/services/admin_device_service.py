@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import secrets
 
+import httpx
 import structlog
 from dotsound_private_core.services.admin_security_policy import (
+    ADMIN_DEVICE_APPROVAL_NOTIFY_COOLDOWN_SECONDS,
     ADMIN_DEVICE_PENDING_TTL_SECONDS,
+)
+from dotsound_private_core.services.internal_bridge import (
+    build_internal_headers,
+    send_auth_code_url,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.redis import get_redis_client
 from app.core.totp import (
     decrypt_secret,
@@ -31,6 +38,7 @@ from app.services.email_sender import (
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 DEVICE_PENDING_PREFIX = "admin:device_pending:"
+DEVICE_NOTIFY_PREFIX = "admin:device_approval_notify:"
 
 
 def _new_email_code() -> str:
@@ -41,14 +49,77 @@ def _pending_key(user_id: int, device_id: int) -> str:
     return f"{DEVICE_PENDING_PREFIX}{user_id}:{device_id}"
 
 
+def _notify_key(user_id: int, device_id: int) -> str:
+    return f"{DEVICE_NOTIFY_PREFIX}{user_id}:{device_id}"
+
+
+async def _send_device_code_via_telegram(
+    telegram_id: int,
+    code: str,
+) -> None:
+    if (
+        not settings.bot_internal_url
+        or not settings.bot_internal_secret.strip()
+    ):
+        logger.warning(
+            "admin_device_code_telegram_unconfigured",
+            telegram_id=telegram_id,
+        )
+        raise AdminAuthError(
+            "telegram delivery unavailable for device approval"
+        )
+    url = send_auth_code_url(settings.bot_internal_url)
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                url,
+                headers=build_internal_headers(settings.bot_internal_secret),
+                json={
+                    "telegram_id": telegram_id,
+                    "code": code,
+                },
+            )
+    except Exception as exc:
+        logger.exception(
+            "admin_device_code_telegram_http_failed",
+            telegram_id=telegram_id,
+        )
+        raise AdminAuthError(
+            "could not send verification code via Telegram"
+        ) from exc
+    if resp.status_code >= 400:
+        logger.warning(
+            "admin_device_code_telegram_rejected",
+            status_code=resp.status_code,
+            body_preview=resp.text[:500],
+        )
+        raise AdminAuthError("could not send verification code via Telegram")
+
+
+async def _deliver_device_approval_code(
+    *,
+    user: User,
+    code: str,
+) -> None:
+    if user.email:
+        await send_totp_fallback_code(user.email, code)
+        return
+    if user.telegram_id:
+        await _send_device_code_via_telegram(
+            int(user.telegram_id),
+            code,
+        )
+        return
+    raise AdminAuthError("no delivery channel: add email or link Telegram")
+
+
 async def request_device_approval(
     *,
     user: User,
     device_id: int,
     session: AsyncSession,
+    force_resend: bool = False,
 ) -> None:
-    if not user.email:
-        raise AdminAuthError("user has no email for confirmation")
     devices = AdminDeviceRepository(session)
     device = await devices.get_by_id(device_id)
     if (
@@ -58,18 +129,35 @@ async def request_device_approval(
     ):
         raise AdminAuthError("device not found")
 
-    code = _new_email_code()
     redis = get_redis_client()
+    notify_key = _notify_key(user.id, device.id)
+    if not force_resend:
+        existing_notify = await redis.get(notify_key)
+        if existing_notify:
+            logger.info(
+                "admin_device_approval_notify_skipped_cooldown",
+                user_id=user.id,
+                device_id=device.id,
+            )
+            return
+
+    code = _new_email_code()
     await redis.setex(
         _pending_key(user.id, device.id),
         ADMIN_DEVICE_PENDING_TTL_SECONDS,
         code,
     )
-    await send_totp_fallback_code(user.email, code)
+    await redis.setex(
+        notify_key,
+        ADMIN_DEVICE_APPROVAL_NOTIFY_COOLDOWN_SECONDS,
+        "1",
+    )
+    await _deliver_device_approval_code(user=user, code=code)
     logger.info(
         "admin_device_approval_requested",
         user_id=user.id,
         device_id=device.id,
+        force_resend=force_resend,
     )
 
 

@@ -273,7 +273,7 @@ async def login(
     "/devices/request-approval",
     response_model=AdminMessageResponse,
 )
-@limiter.limit("3/minute")
+@limiter.limit("20/minute")
 async def devices_request_approval(
     request: Request,
     payload: AdminDeviceApprovalRequest = Body(...),
@@ -289,6 +289,7 @@ async def devices_request_approval(
         await request_device_approval(
             user=user,
             device_id=payload.device_id,
+            force_resend=payload.force_resend,
             session=session,
         )
     except AdminAuthError as exc:

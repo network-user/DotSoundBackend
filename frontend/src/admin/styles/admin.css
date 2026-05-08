@@ -1067,6 +1067,10 @@
   border-radius: var(--r-md);
 }
 
+.admin-auth-error-actions {
+  margin-top: var(--space-2);
+}
+
 .admin-totp-input {
   display: flex;
   gap: var(--space-2);

@@ -49,6 +49,7 @@ import { m, useReducedMotion } from '@/lib/motion'
 import { type PanInfo } from 'framer-motion'
 import { LyricsPanel } from './LyricsPanel'
 import { buildTrackCardSummaryLine } from '@/lib/trackCardFormat'
+import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 
 const TCS_DRAG_CLOSE_THRESHOLD = 100
 
@@ -147,6 +148,7 @@ export function TrackCardSheet({
   } = usePlayerActions()
   const { t } = useTranslation()
   const reduce = useReducedMotion()
+  const desktopFineNav = useDesktopFinePointer()
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const sound = useSound()
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -2079,13 +2081,32 @@ export function TrackCardSheet({
                   <div className="tcs-similar-info">
                     <span className="tcs-similar-track-title" dir="auto">
                       {st.title}
-                      {st.artist ? (
-                        <span className="tcs-similar-track-artist">
-                          {' · '}
-                          {st.artist}
-                        </span>
-                      ) : null}
                     </span>
+                    {st.artist ? (
+                      <span
+                        className={
+                          desktopFineNav && onOpenArtist
+                            ? 'tcs-similar-track-artist tcs-similar-track-artist--nav'
+                            : 'tcs-similar-track-artist'
+                        }
+                        dir="auto"
+                        style={
+                          desktopFineNav && onOpenArtist
+                            ? { cursor: 'pointer' }
+                            : undefined
+                        }
+                        onClick={
+                          desktopFineNav && onOpenArtist
+                            ? (e) => {
+                                e.stopPropagation()
+                                goToArtist(st.artist!)
+                              }
+                            : undefined
+                        }
+                      >
+                        {st.artist}
+                      </span>
+                    ) : null}
                     <span
                       className="tcs-similar-track-meta"
                       dir="auto"

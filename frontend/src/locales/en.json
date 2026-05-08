@@ -164,7 +164,8 @@
       "signingIn": "Signing in…",
       "signIn": "Sign in",
       "confirm": "Confirm",
-      "confirming": "Confirming…"
+      "confirming": "Confirming…",
+      "rateLimited": "Too many requests. Wait a minute and try again."
     },
     "init": {
       "title": "Set up admin authenticator",
@@ -179,14 +180,15 @@
     },
     "device": {
       "title": "Approve new device",
-      "hint": "We sent a confirmation code to your email and an alert to the bound Telegram account. Enter both codes to trust this device.",
-      "emailCode": "Email code",
+      "hint": "We send a confirmation code by email when your account has one; otherwise you receive it in Telegram from the bot. Enter that code plus your authenticator code to trust this device.",
+      "emailCode": "Confirmation code",
       "totpLabel": "Authenticator code",
       "deviceLabel": "Device label",
       "deviceLabelPlaceholder": "e.g. desktop-firefox",
       "approve": "Approve device",
       "approving": "Approving…",
-      "noPending": "No pending device."
+      "noPending": "No pending device.",
+      "resendApproval": "Resend code"
     },
     "dashboard": {
       "title": "Dashboard",

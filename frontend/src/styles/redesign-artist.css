@@ -248,6 +248,19 @@
   display: none;
 }
 
+@media (pointer: fine) {
+  .rf-artist-top-tracks__viewport,
+  .rf-artist-releases__viewport {
+    cursor: grab;
+  }
+
+  .rf-artist-top-tracks__viewport.rf-drag-scroll--active,
+  .rf-artist-releases__viewport.rf-drag-scroll--active {
+    cursor: grabbing;
+    user-select: none;
+  }
+}
+
 .rf-artist-top-tracks__slide {
   flex: 0 0 100%;
   min-width: 0;

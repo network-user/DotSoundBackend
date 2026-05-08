@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { AnimatePresence } from 'framer-motion'
 import {
   m,
@@ -122,18 +123,8 @@ export function LongPressMenu({
     item.onPick()
   }
 
-  return (
-    <>
-      <div
-        className="long-press-trigger"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onContextMenu={onContextMenu}
-      >
-        {children}
-      </div>
+  const overlay =
+    typeof document !== 'undefined' ? (
       <AnimatePresence>
         {open && (
           <m.div
@@ -143,6 +134,12 @@ export function LongPressMenu({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={TWEEN_FAST}
+            onPointerDown={(e) => {
+              if (e.target === e.currentTarget) {
+                e.preventDefault()
+                setOpen(false)
+              }
+            }}
             onClick={() => setOpen(false)}
             role="presentation"
           >
@@ -167,6 +164,9 @@ export function LongPressMenu({
                 reduce ? TWEEN_FAST : SPRING_GENTLE
               }
               role="menu"
+              onPointerDown={(e) =>
+                e.stopPropagation()
+              }
               onClick={(e) => e.stopPropagation()}
             >
               {items.map((it) => (
@@ -199,6 +199,23 @@ export function LongPressMenu({
           </m.div>
         )}
       </AnimatePresence>
+    ) : null
+
+  return (
+    <>
+      <div
+        className="long-press-trigger"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onContextMenu={onContextMenu}
+      >
+        {children}
+      </div>
+      {overlay
+        ? createPortal(overlay, document.body)
+        : null}
     </>
   )
 }
