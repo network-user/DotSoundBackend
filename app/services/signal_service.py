@@ -61,7 +61,6 @@ class SignalService:
             completed=completed,
             skipped=skipped,
             duration_listened=duration_listened,
-            total_duration=total_duration,
         )
         logger.debug(
             "listen_event_recorded",

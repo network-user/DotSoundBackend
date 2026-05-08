@@ -38,11 +38,9 @@ class PublicPlayCountService:
         completed: bool,
         skipped: bool,
         duration_listened: int,
-        total_duration: int | None,
     ) -> None:
         if not qualifies_for_public_playcount(
             duration_listened,
-            total_duration,
             completed,
             skipped,
         ):
