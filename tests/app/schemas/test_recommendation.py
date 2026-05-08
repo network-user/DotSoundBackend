@@ -19,10 +19,11 @@ def test_home_section() -> None:
 
 def test_home_page() -> None:
     resp = HomePageResponse(
-        sections=[], maturity="cold"
+        sections=[], highlights=[], maturity="cold"
     )
     assert resp.maturity == "cold"
     assert resp.sections == []
+    assert resp.highlights == []
 
 
 def test_similar_tracks() -> None:
