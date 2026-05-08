@@ -443,6 +443,35 @@
     width: max-content;
     max-width: none;
   }
+
+  .rh-home-hero:hover .rh-home-hero__cover {
+    transform: translateY(-2px) scale(1.015);
+  }
+
+  .rh-home-tile:hover {
+    transform: translateY(-2px);
+  }
+
+  .rh-home-tile:hover .rh-home-tile__cover {
+    box-shadow:
+      0 14px 26px rgba(0, 0, 0, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .rh-home-tile:hover .rh-home-tile__cover img {
+    transform: scale(1.04);
+  }
+
+  .rh-home-artist-chip:hover .rh-home-artist-chip__avatar {
+    transform: translateY(-1px);
+    box-shadow:
+      0 12px 22px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .rh-home-artist-chip:hover .rh-home-artist-chip__avatar img {
+    transform: scale(1.03);
+  }
 }
 
 .rh-home-artist-page {

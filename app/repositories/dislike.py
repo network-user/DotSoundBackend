@@ -3,6 +3,7 @@ from datetime import datetime
 import structlog
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.dislike import Dislike
 from app.models.track import Track
@@ -17,7 +18,7 @@ class DislikeRepository(BaseRepository[Dislike]):
         super().__init__(session, Dislike)
 
     @staticmethod
-    def _exclude_hidden_sources():  # noqa: ANN205
+    def _exclude_hidden_sources() -> ColumnElement[bool]:
         hidden = ("youtube",)
         source_platform = func.lower(func.coalesce(Track.source_platform, ""))
         imported_from = func.lower(func.coalesce(Track.imported_from, ""))
@@ -25,8 +26,9 @@ class DislikeRepository(BaseRepository[Dislike]):
 
     @staticmethod
     def _build_source_filter(
-        source_filter: str | None, base_clause: object
-    ) -> object:
+        source_filter: str | None,
+        base_clause: ColumnElement[bool],
+    ) -> ColumnElement[bool]:
         if source_filter == "platform":
             return and_(base_clause, Track.catalog_type == "ugc")
         if source_filter == "soundcloud":
@@ -59,7 +61,7 @@ class DislikeRepository(BaseRepository[Dislike]):
             )
         )
         await self._session.flush()
-        return result.rowcount > 0
+        return bool((getattr(result, "rowcount", 0) or 0) > 0)
 
     async def exists_any_for_user_track_ids(
         self,
