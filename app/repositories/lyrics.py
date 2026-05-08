@@ -130,6 +130,9 @@ class LyricsRepository:
                     track_id=track_id,
                     exc_info=True,
                 )
+        await self._session.refresh(
+            lyrics, attribute_names=["translations"]
+        )
         return lyrics
 
     async def update_sync(
@@ -140,7 +143,9 @@ class LyricsRepository:
             return None
         existing.synced_lines = synced_lines
         await self._session.flush()
-        await self._session.refresh(existing)
+        await self._session.refresh(
+            existing, attribute_names=["translations"]
+        )
         logger.debug("db_lyrics_sync_updated", track_id=track_id)
         return existing
 
