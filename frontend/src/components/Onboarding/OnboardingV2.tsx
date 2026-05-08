@@ -181,6 +181,25 @@ export function OnboardingV2({ onComplete }: Props) {
     setStep(STEP_ORDER[i + 1])
   }, [])
 
+  const goBack = useCallback(() => {
+    const i = STEP_ORDER.indexOf(step)
+    if (i <= 0) return
+    if (step === 'swipe') {
+      const a = audioRef.current
+      if (a) {
+        a.pause()
+        a.src = ''
+      }
+      setPreviewTrackId(null)
+      setTasteTracks([])
+      setTasteIndex(0)
+      setTasteDecisions([])
+      lastFetchCountRef.current = 0
+      autoPlayedTrackRef.current = null
+    }
+    setStep(STEP_ORDER[i - 1])
+  }, [step])
+
   const handleWelcomeStart = () => {
     hapticSelection()
     goNext('welcome')
@@ -502,14 +521,25 @@ export function OnboardingV2({ onComplete }: Props) {
       />
 
       {step !== 'welcome' && step !== 'complete' && (
-        <button
-          type="button"
-          className="onb-v2-skip-btn"
-          onClick={handleSmartSkip}
-          disabled={saving}
-        >
-          {t('redesign.onboardingV2.skip')}
-        </button>
+        <>
+          <button
+            type="button"
+            className="onb-v2-back-btn"
+            onClick={goBack}
+            disabled={saving}
+            aria-label={t('redesign.onboardingV2.back')}
+          >
+            <Icon name="chevron-left" size={18} />
+          </button>
+          <button
+            type="button"
+            className="onb-v2-skip-btn"
+            onClick={handleSmartSkip}
+            disabled={saving}
+          >
+            {t('redesign.onboardingV2.skip')}
+          </button>
+        </>
       )}
 
       <div className="onb-v2-content">

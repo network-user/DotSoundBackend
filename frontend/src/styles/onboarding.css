@@ -68,6 +68,35 @@
   opacity: 0.7;
 }
 
+.onb-v2-back-btn {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  z-index: 2;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.onb-v2-back-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.onb-v2-back-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .onb-v2-skip-btn {
   position: absolute;
   top: 12px;
