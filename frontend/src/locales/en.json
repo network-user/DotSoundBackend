@@ -71,7 +71,10 @@
     "openSettings": "Settings",
     "uploadTrack": "Upload track",
     "myPlaylists": "My playlists",
-    "liked": "Liked"
+    "liked": "Liked",
+    "editProfile": "Edit profile",
+    "sectionCatalog": "My library",
+    "sectionDiscover": "Mixes"
   },
   "playlists": {
     "title": "Playlists",
