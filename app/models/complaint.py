@@ -1,7 +1,13 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import BigInteger, Boolean, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.track import Track
+    from app.models.user import User
 
 
 class Complaint(Base, TimestampMixin):
@@ -39,7 +45,7 @@ class Complaint(Base, TimestampMixin):
         Boolean, server_default="false", nullable=False
     )
 
-    track: Mapped["Track"] = relationship(  # type: ignore[name-defined]
+    track: Mapped["Track"] = relationship(
         back_populates="complaints"
     )
-    reporter: Mapped["User"] = relationship()  # type: ignore[name-defined]
+    reporter: Mapped["User"] = relationship()
