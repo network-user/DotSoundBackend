@@ -27,7 +27,7 @@ interface PlayMeta {
 }
 
 export interface UseOnboardingAudio {
-  audioRef: React.RefObject<HTMLAudioElement | null>
+  audioRef: React.RefObject<HTMLAudioElement>
   state: OnboardingAudioState
   lastError: OnboardingAudioErrCode | null
   currentTrackId: number | null
@@ -55,7 +55,7 @@ function classifyError(
 }
 
 export function useOnboardingAudio(): UseOnboardingAudio {
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioRef = useRef<HTMLAudioElement>(null)
   const tokenRef = useRef(0)
   const trackIdRef = useRef<number | null>(null)
   const [state, setState] =
