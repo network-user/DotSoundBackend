@@ -89,26 +89,34 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         )
 
         if es_available():
-            try:
-                await init_elasticsearch_starter()
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("elasticsearch_init_failed", error=str(exc))
-            if settings.elasticsearch_backfill_on_empty or (
+            _do_backfill = settings.elasticsearch_backfill_on_empty or (
                 settings.elasticsearch_dev_bootstrap
-            ):
-                try:
-                    n = await count_tracks_indexed()
-                    if n < 1:
-                        from app.services import search_index_worker
+            )
 
-                        await (
-                            search_index_worker.reindex_backfill_all_task.kiq()
-                        )
+            async def _es_init_background() -> None:
+                try:
+                    await init_elasticsearch_starter()
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
-                        "elasticsearch_backfill_kiq_failed",
-                        error=str(exc),
+                        "elasticsearch_init_failed", error=str(exc)
                     )
+                    return
+                if _do_backfill:
+                    try:
+                        n = await count_tracks_indexed()
+                        if n < 1:
+                            from app.services import search_index_worker
+
+                            await (
+                                search_index_worker.reindex_backfill_all_task.kiq()
+                            )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "elasticsearch_backfill_kiq_failed",
+                            error=str(exc),
+                        )
+
+            asyncio.create_task(_es_init_background())
             play_stop = asyncio.Event()
             drain_task = asyncio.create_task(
                 _elasticsearch_drain_lifecycle(play_stop)

@@ -107,6 +107,7 @@ export function AdminProvider({
   useEffect(() => {
     if (!getIsAdmin()) return
     if (!api.getToken()) return
+    if (authTick === 0) return
     if (loading) return
     if (manifest && manifest.locale === i18n.language) {
       return

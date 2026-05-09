@@ -50,6 +50,9 @@ const MIN_GENRES = 3
 const SWIPE_BATCH = 5
 const SWIPE_THRESHOLD = 110
 
+const GENRE_SILENT_WAV =
+  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
+
 const STEP_ORDER: Step[] = [
   'welcome',
   'profile',
@@ -202,6 +205,14 @@ export function OnboardingV2({ onComplete }: Props) {
 
   const handleWelcomeStart = () => {
     hapticSelection()
+    // Prime swipe audio on very first user gesture so autoplay
+    // works on iOS/Telegram WebApp when the swipe step loads.
+    const a = audioRef.current
+    if (a) {
+      a.muted = true
+      a.src = GENRE_SILENT_WAV
+      void a.play().catch(() => {})
+    }
     goNext('welcome')
   }
 
@@ -436,62 +447,6 @@ export function OnboardingV2({ onComplete }: Props) {
     void finalizeSwipe(tasteDecisions)
   }, [tasteDecisions, finalizeSwipe])
 
-  const handleSmartSkip = useCallback(async () => {
-    if (saving) return
-    hapticSelection()
-    setSaving(true)
-    try {
-      const res = await api.smartSkipOnboarding()
-      trackActivationEvent('onboarding_skip', {
-        meta: {
-          step,
-          applied_genres: res.applied_genres.length,
-        },
-      })
-      if (res.applied_genres.length) {
-        showIsland({
-          kind: 'toast',
-          title: t(
-            'redesign.onboardingMsg.smartGenresApplied',
-          ),
-          durationMs: 3000,
-        })
-      } else if (!res.enabled) {
-        showIsland({
-          kind: 'toast',
-          title: t(
-            'redesign.onboardingMsg.smartDisabled',
-          ),
-          durationMs: 3000,
-        })
-      } else {
-        showIsland({
-          kind: 'toast',
-          title: t(
-            'redesign.onboardingMsg.smartFallback',
-          ),
-          durationMs: 3000,
-        })
-      }
-      onComplete()
-    } catch {
-      try {
-        await api.completeOnboarding()
-        onComplete()
-      } catch {
-        showIsland({
-          kind: 'error',
-          title: t(
-            'redesign.onboardingMsg.skipFail',
-          ),
-          durationMs: 3000,
-        })
-      }
-    } finally {
-      setSaving(false)
-    }
-  }, [saving, step, onComplete, t])
-
   const handleCompleteFinish = useCallback(
     (openImport: boolean) => {
       hapticSelection()
@@ -520,27 +475,6 @@ export function OnboardingV2({ onComplete }: Props) {
         currentIndex={progressIndex}
       />
 
-      {step !== 'welcome' && step !== 'complete' && (
-        <>
-          <button
-            type="button"
-            className="onb-v2-back-btn"
-            onClick={goBack}
-            disabled={saving}
-            aria-label={t('redesign.onboardingV2.back')}
-          >
-            <Icon name="chevron-left" size={18} />
-          </button>
-          <button
-            type="button"
-            className="onb-v2-skip-btn"
-            onClick={handleSmartSkip}
-            disabled={saving}
-          >
-            {t('redesign.onboardingV2.skip')}
-          </button>
-        </>
-      )}
 
       <div className="onb-v2-content">
         <AnimatePresence mode="wait">
@@ -606,10 +540,7 @@ export function OnboardingV2({ onComplete }: Props) {
                 onResetUseDefault={() =>
                   setUseDefaultAvatar(false)
                 }
-                onSubmit={handleProfileSubmit}
-                onSkip={handleProfileSkip}
                 err={profileErr}
-                saving={saving}
               />
             </m.div>
           )}
@@ -641,8 +572,6 @@ export function OnboardingV2({ onComplete }: Props) {
                 bubbles={bootstrap.genre_bubbles}
                 selected={selectedGenres}
                 onToggle={toggleGenre}
-                onSubmit={handleGenresSubmit}
-                saving={saving}
               />
             </m.div>
           )}
@@ -684,8 +613,6 @@ export function OnboardingV2({ onComplete }: Props) {
                 }
                 onTogglePreview={togglePreview}
                 reduce={reduce}
-                canFinish={canFinish}
-                onFinish={handleManualFinish}
               />
             </m.div>
           )}
@@ -723,6 +650,75 @@ export function OnboardingV2({ onComplete }: Props) {
           )}
         </AnimatePresence>
       </div>
+
+      {step !== 'welcome' && step !== 'complete' && (
+        <div className="onb-v2-float-footer">
+          <MotionPress
+            variant="ghost"
+            haptic="light"
+            className="onb-v2-float-back"
+            onClick={goBack}
+            disabled={saving}
+            ariaLabel={t('redesign.onboardingV2.back')}
+          >
+            <Icon name="chevron-left" size={18} />
+            {t('redesign.onboardingV2.back')}
+          </MotionPress>
+          <div className="onb-v2-float-ctas">
+            {step === 'profile' && (
+              <>
+                <MotionPress
+                  variant="ghost"
+                  haptic="light"
+                  className="onb-v2-float-ghost"
+                  onClick={handleProfileSkip}
+                  disabled={saving}
+                >
+                  {t('redesign.onboardingV2.profile.skip')}
+                </MotionPress>
+                <MotionPress
+                  variant="primary"
+                  haptic="medium"
+                  className="onb-v2-float-cta"
+                  onClick={handleProfileSubmit}
+                  disabled={saving}
+                >
+                  {saving
+                    ? t('redesign.onboardingV2.saving')
+                    : t('redesign.onboardingV2.profile.cta')}
+                </MotionPress>
+              </>
+            )}
+            {step === 'genres' && (
+              <MotionPress
+                variant="primary"
+                haptic="medium"
+                className="onb-v2-float-cta"
+                onClick={handleGenresSubmit}
+                disabled={
+                  saving ||
+                  selectedGenres.length < MIN_GENRES
+                }
+              >
+                {saving
+                  ? t('redesign.onboardingV2.saving')
+                  : t('redesign.onboardingV2.genres.cta')}
+              </MotionPress>
+            )}
+            {step === 'swipe' && canFinish && (
+              <MotionPress
+                variant="primary"
+                haptic="medium"
+                className="onb-v2-float-cta"
+                onClick={handleManualFinish}
+                disabled={saving}
+              >
+                {t('redesign.onboardingV2.swipe.finish')}
+              </MotionPress>
+            )}
+          </div>
+        </div>
+      )}
 
       {bootstrapErr && (
         <p
@@ -822,10 +818,7 @@ interface ProfileStepProps {
   onChangeName: (s: string) => void
   onUseDefaultAvatar: () => void
   onResetUseDefault: () => void
-  onSubmit: () => void
-  onSkip: () => void
   err: string | null
-  saving: boolean
 }
 
 function ProfileStep({
@@ -834,10 +827,7 @@ function ProfileStep({
   onChangeName,
   onUseDefaultAvatar,
   onResetUseDefault,
-  onSubmit,
-  onSkip,
   err,
-  saving,
 }: ProfileStepProps) {
   const { t } = useTranslation()
   const defaults = bootstrap.profile_defaults
@@ -893,7 +883,6 @@ function ProfileStep({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.currentTarget.blur()
-                  onSubmit()
                 }
               }}
             />
@@ -906,28 +895,6 @@ function ProfileStep({
           </div>
         </div>
       </div>
-      <div className="onb-v2-footer">
-        <MotionPress
-          variant="primary"
-          haptic="medium"
-          className="onb-v2-cta"
-          onClick={onSubmit}
-          disabled={saving}
-        >
-          {saving
-            ? t('redesign.onboardingV2.saving')
-            : t('redesign.onboardingV2.profile.cta')}
-        </MotionPress>
-        <MotionPress
-          variant="ghost"
-          haptic="light"
-          className="onb-v2-cta onb-v2-cta--ghost"
-          onClick={onSkip}
-          disabled={saving}
-        >
-          {t('redesign.onboardingV2.profile.skip')}
-        </MotionPress>
-      </div>
     </>
   )
 }
@@ -936,19 +903,12 @@ interface GenresStepProps {
   bubbles: OnboardingBootstrap['genre_bubbles']
   selected: string[]
   onToggle: (g: string) => void
-  onSubmit: () => void
-  saving: boolean
 }
-
-const GENRE_SILENT_WAV =
-  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
 
 function GenresStep({
   bubbles,
   selected,
   onToggle,
-  onSubmit,
-  saving,
 }: GenresStepProps) {
   const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
@@ -1011,6 +971,7 @@ function GenresStep({
       if (timerRef.current !== null) {
         window.clearTimeout(timerRef.current)
       }
+      a.pause()
       a.src = `/api/v1/track-preview/${track.id}/segment.mp4`
       a.muted = false
       a.onended = () => {
@@ -1046,16 +1007,16 @@ function GenresStep({
       const a = genreAudioRef.current
       if (!a) return
 
+      // Always prime in user-gesture tick regardless of
+      // queue cache. Without this, cached queues skip
+      // priming and a.play() is blocked by autoplay policy.
+      a.muted = true
+      a.src = GENRE_SILENT_WAV
+      void a.play().catch(() => {})
+
       let queue = queuesRef.current.get(genre)
 
       if (!queue) {
-        // Prime audio element synchronously in the
-        // user-gesture tick BEFORE the network await.
-        // This marks the element as user-activated so
-        // the real a.play() works after the fetch.
-        a.muted = true
-        a.src = GENRE_SILENT_WAV
-        void a.play().catch(() => {})
 
         try {
           const resp: OnboardingGenrePreviewResponse =
@@ -1252,21 +1213,6 @@ function GenresStep({
           {counterText}
         </p>
       </div>
-      <div className="onb-v2-footer">
-        <MotionPress
-          variant="primary"
-          haptic="medium"
-          className="onb-v2-cta"
-          onClick={onSubmit}
-          disabled={
-            saving || selected.length < MIN_GENRES
-          }
-        >
-          {saving
-            ? t('redesign.onboardingV2.saving')
-            : t('redesign.onboardingV2.genres.cta')}
-        </MotionPress>
-      </div>
       <audio
         ref={genreAudioRef}
         preload="none"
@@ -1286,8 +1232,6 @@ interface SwipeStepProps {
   onSkipCard: () => void
   onTogglePreview: () => void
   reduce: boolean
-  canFinish: boolean
-  onFinish: () => void
 }
 
 function SwipeStep({
@@ -1300,8 +1244,6 @@ function SwipeStep({
   onSkipCard,
   onTogglePreview,
   reduce,
-  canFinish,
-  onFinish,
 }: SwipeStepProps) {
   const { t } = useTranslation()
   const top = tracks[index]
@@ -1412,27 +1354,6 @@ function SwipeStep({
             >
               <Icon name="heart" size={26} />
             </MotionPress>
-          </div>
-        )}
-        {canFinish && (
-          <div className="onb-v2-swipe-finish">
-            <MotionPress
-              variant="primary"
-              haptic="medium"
-              className="onb-v2-cta"
-              onClick={onFinish}
-            >
-              {t(
-                'redesign.onboardingV2.swipe.finish',
-              )}
-            </MotionPress>
-            {top && (
-              <p className="onb-v2-swipe-finish__hint">
-                {t(
-                  'redesign.onboardingV2.swipe.continueHint',
-                )}
-              </p>
-            )}
           </div>
         )}
       </div>

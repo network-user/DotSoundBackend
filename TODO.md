@@ -20,9 +20,12 @@
   — backend теперь принимает slug из `.env` (fallback `admin`) и
   применяет его к префиксам `/{slug}` и `/api/v1/{slug}`; frontend
   использует runtime-конфиг из `/api/v1/auth/config` только для admin
-  и убирает хардкод `/admin`. Для `"/admin/*"` добавлен редирект на
+  и   убирает хардкод `/admin`. Для `"/admin/*"` добавлен редирект на
   главную, если фактический slug отличается. Обновлены `.env.example`,
   `README.md`, `docs/admin/onboarding.md`, `docs/admin/README.md`.
+  Исправлена гонка: `AdminProvider` не запрашивает manifest до события
+  `app-auth-ready`, чтобы не дергать `/api/v1/admin/...` до применения
+  runtime-пути из `GET /auth/config`.
 
 ## Onboarding UX-рефакторинг (2026-05-09)
 
