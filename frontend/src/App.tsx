@@ -247,6 +247,34 @@ export function App() {
   const initCalled = useRef(false)
   const readyEventSent = useRef(false)
 
+  const fetchAndApplyAdminPath = async () => {
+    try {
+      const authConfig = await api.getAuthConfig()
+      const configuredPath = authConfig.admin_panel_path
+      if (configuredPath) {
+        const normalized =
+          normalizeAdminPathSegment(configuredPath)
+        setAdminRuntimeConfig({
+          panelPath: normalized,
+          apiPath: authConfig.admin_api_path ?? null,
+        })
+        setAdminPanelPath(normalized)
+      } else {
+        setAdminRuntimeConfig({
+          panelPath: null,
+          apiPath: null,
+        })
+        setAdminPanelPath(null)
+      }
+    } catch {
+      setAdminRuntimeConfig({
+        panelPath: null,
+        apiPath: null,
+      })
+      setAdminPanelPath(null)
+    }
+  }
+
   useEffect(() => {
     if (initCalled.current) return
     initCalled.current = true
@@ -407,32 +435,7 @@ export function App() {
         if (!authenticated) {
           setNeedsAuth(true)
         } else {
-          try {
-            const authConfig = await api.getAuthConfig()
-            const configuredPath =
-              authConfig.admin_panel_path
-            if (configuredPath) {
-              const normalized =
-                normalizeAdminPathSegment(configuredPath)
-              setAdminRuntimeConfig({
-                panelPath: normalized,
-                apiPath: authConfig.admin_api_path ?? null,
-              })
-              setAdminPanelPath(normalized)
-            } else {
-              setAdminRuntimeConfig({
-                panelPath: null,
-                apiPath: null,
-              })
-              setAdminPanelPath(null)
-            }
-          } catch {
-            setAdminRuntimeConfig({
-              panelPath: null,
-              apiPath: null,
-            })
-            setAdminPanelPath(null)
-          }
+          await fetchAndApplyAdminPath()
           await api.syncSessionUserFlags()
           markAuthSuccess()
           trackActivationEvent('auth_success', {
@@ -631,6 +634,15 @@ export function App() {
             meta: { via: 'auth_screen' },
           })
           reloadLikes()
+          void fetchAndApplyAdminPath().finally(() => {
+            try {
+              window.dispatchEvent(
+                new Event('app-auth-ready'),
+              )
+            } catch {
+              /* ignore */
+            }
+          })
         }}
         error={authError}
         debugInfo={authDebug}
