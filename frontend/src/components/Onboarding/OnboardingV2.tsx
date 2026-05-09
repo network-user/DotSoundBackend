@@ -1337,6 +1337,7 @@ function SwipeBackdropCard({
 interface SwipeCardProps {
   track: Track
   isPlaying: boolean
+  audioBlocked: boolean
   onLike: () => void
   onDislike: () => void
   onTogglePreview: () => void
@@ -1346,6 +1347,7 @@ interface SwipeCardProps {
 function SwipeCard({
   track,
   isPlaying,
+  audioBlocked,
   onLike,
   onDislike,
   onTogglePreview,
@@ -1394,6 +1396,7 @@ function SwipeCard({
           isPlaying={isPlaying}
         />
         <CardInfo track={track} />
+        {audioBlocked && <MuteHint />}
       </div>
     )
   }
@@ -1437,7 +1440,21 @@ function SwipeCard({
       >
         {t('redesign.onboardingV2.swipe.badgeNope')}
       </m.span>
+      {audioBlocked && <MuteHint />}
     </m.div>
+  )
+}
+
+function MuteHint() {
+  const { t } = useTranslation()
+  return (
+    <span
+      className="onb-v2-swipe-card__mute-hint"
+      role="status"
+    >
+      <Icon name="volume-off" size={16} />
+      {t('redesign.onboardingV2.swipe.tapToUnmute')}
+    </span>
   )
 }
 

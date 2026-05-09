@@ -521,12 +521,13 @@ async def use_backup_code(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="not found",
         )
-    if not consume_backup_code(user, payload.code):
+    if not await consume_backup_code(
+        user=user, code=payload.code, session=session
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid backup code",
         )
-    await session.flush()
     return AdminMessageResponse(detail="backup code consumed")
 
 

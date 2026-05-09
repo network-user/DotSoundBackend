@@ -731,6 +731,7 @@
         "title": "Swipe calibration",
         "subtitle": "Like / dislike / skip — the card flies away",
         "tapHint": "Tap a card to play a preview",
+        "tapToUnmute": "Tap to enable sound",
         "like": "Like",
         "dislike": "Dislike",
         "skipCard": "Skip",
