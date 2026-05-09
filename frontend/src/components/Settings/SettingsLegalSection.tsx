@@ -5,6 +5,8 @@ import {
   LEGAL_CONTACT_EMAIL,
 } from '@/views/legalContent'
 
+const LEGAL_BASE = `${import.meta.env.BASE_URL}legal/`
+
 /**
  * Юридическая секция в настройках профиля.
  *
@@ -18,6 +20,10 @@ import {
  *
  * Кнопку «Удалить аккаунт» сюда не дублируем — она в
  * `AccountDangerZone` ниже по странице.
+ *
+ * Ссылки используют `import.meta.env.BASE_URL`, чтобы корректно
+ * работать при Vite-сборке с `base: '/mini_app/'` — иначе при
+ * `target="_blank"` браузер открыл бы корень домена без префикса.
  */
 export function SettingsLegalSection() {
   return (
@@ -31,35 +37,35 @@ export function SettingsLegalSection() {
       </p>
       <div className="settings-legal-section__links">
         <a
-          href="/legal/terms"
+          href={`${LEGAL_BASE}terms`}
           target="_blank"
           rel="noopener noreferrer"
         >
           Условия
         </a>
         <a
-          href="/legal/privacy"
+          href={`${LEGAL_BASE}privacy`}
           target="_blank"
           rel="noopener noreferrer"
         >
           Политика конфиденциальности
         </a>
         <a
-          href="/legal/copyright"
+          href={`${LEGAL_BASE}copyright`}
           target="_blank"
           rel="noopener noreferrer"
         >
           Авторские права
         </a>
         <a
-          href="/legal/upload-rules"
+          href={`${LEGAL_BASE}upload-rules`}
           target="_blank"
           rel="noopener noreferrer"
         >
           Правила загрузки
         </a>
         <a
-          href="/legal/rightsholders"
+          href={`${LEGAL_BASE}rightsholders`}
           target="_blank"
           rel="noopener noreferrer"
         >

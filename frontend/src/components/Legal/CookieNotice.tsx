@@ -66,7 +66,7 @@ export function CookieNotice() {
           Рекламные и аналитические трекеры третьих лиц не
           используются. Подробнее —{' '}
           <a
-            href="/legal/privacy"
+            href={`${import.meta.env.BASE_URL}legal/privacy`}
             target="_blank"
             rel="noopener noreferrer"
           >

@@ -5,7 +5,6 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthError, decode_access_token
 from app.core.db import AsyncSessionLocal
@@ -15,10 +14,9 @@ from app.models.user import User
 from app.repositories.user import UserRepository
 
 # [REGULATORY-DISABLED v1] чат-обмен отключён (ст. 10.1 149-ФЗ).
-# from sqlalchemy.ext.asyncio import AsyncSession
-# from app.core.ws_manager import ACTIVITY_TYPES
-# from app.dependencies import get_db
-# from app.repositories.chat import ChatRepository
+# Полностью убраны импорты `AsyncSession`, `ACTIVITY_TYPES`,
+# `get_db`, `ChatRepository` — они нужны только закомментированным
+# ниже chat-handler'ам и chat-presence-роуту.
 
 router = APIRouter(tags=["websocket"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(

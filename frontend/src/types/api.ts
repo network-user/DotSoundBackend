@@ -357,6 +357,8 @@ export interface OnboardingStatus {
   can_import_from_telegram: boolean
   has_telegram_profile_music: boolean | null
   profile_completed: boolean
+  legal_accepted_version: string | null
+  is_adult_confirmed: boolean
 }
 
 export interface OnboardingProfileDefaults {

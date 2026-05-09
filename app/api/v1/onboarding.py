@@ -1,5 +1,5 @@
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_user, get_db
@@ -237,7 +237,7 @@ async def save_taste_swipe(
 
 @router.post("/complete")
 async def complete_onboarding(
-    body: OnboardingCompleteRequest | None = None,
+    body: OnboardingCompleteRequest | None = Body(default=None),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:

@@ -273,6 +273,10 @@ export function UsersRoute() {
             >
               {t('admin.users.actionLogout')}
             </MotionPress>
+            {/* [REGULATORY-DISABLED v1] DM-сообщения админа
+            пользователю отключены вместе с чат-стеком (149-ФЗ
+            ст. 10.1). Восстановить вместе с
+            `app/api/v1/messages.py`.
             <MotionPress
               variant="ghost"
               disabled={busy}
@@ -283,6 +287,7 @@ export function UsersRoute() {
             >
               {t('admin.users.actionMessage')}
             </MotionPress>
+            */}
           </div>
         )
       },

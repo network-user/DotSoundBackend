@@ -1574,7 +1574,7 @@ function CompleteStep({
           », вы подтверждаете, что вам исполнилось 18 лет,
           и принимаете{' '}
           <a
-            href="/legal/terms"
+            href={`${import.meta.env.BASE_URL}legal/terms`}
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -1582,7 +1582,7 @@ function CompleteStep({
           </a>
           {' и '}
           <a
-            href="/legal/privacy"
+            href={`${import.meta.env.BASE_URL}legal/privacy`}
             target="_blank"
             rel="noopener noreferrer"
           >

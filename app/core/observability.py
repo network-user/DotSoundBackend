@@ -359,14 +359,32 @@ _USER_PII_KEYS: frozenset[str] = frozenset(
 )
 
 
+_PII_FILTER_KEYS_CACHE: frozenset[str] | None = None
+
+
+def _get_blocked_pii_keys() -> frozenset[str]:
+    """Build the union of admin- and user-PII keys exactly once.
+
+    PrivateCore is imported lazily to keep the module importable in
+    contexts where the dependency is not installed (e.g., minimal
+    test environments).
+    """
+    global _PII_FILTER_KEYS_CACHE
+    if _PII_FILTER_KEYS_CACHE is None:
+        from dotsound_private_core.services.admin_security_policy import (
+            ADMIN_PII_KEYS,
+        )
+
+        _PII_FILTER_KEYS_CACHE = frozenset(
+            {key.lower() for key in ADMIN_PII_KEYS} | _USER_PII_KEYS
+        )
+    return _PII_FILTER_KEYS_CACHE
+
+
 def _sentry_pii_filter(
     event: dict[str, object], _hint: dict[str, object]
 ) -> dict[str, object] | None:
-    from dotsound_private_core.services.admin_security_policy import (
-        ADMIN_PII_KEYS,
-    )
-
-    blocked = {key.lower() for key in ADMIN_PII_KEYS} | _USER_PII_KEYS
+    blocked = _get_blocked_pii_keys()
 
     def _scrub(value: object) -> object:
         if isinstance(value, dict):
