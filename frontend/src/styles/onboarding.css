@@ -792,6 +792,28 @@
   50% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
 }
 
+.onb-v2-swipe-card__mute-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 4;
+}
+
 .onb-v2-swipe-actions {
   display: flex;
   gap: 16px;

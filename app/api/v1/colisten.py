@@ -122,16 +122,23 @@ async def colisten_ws(
     room_id: uuid.UUID,
     token: str | None = Query(None),
 ) -> None:
-    if not token:
+    raw_token = token or ""
+    proto = websocket.headers.get("sec-websocket-protocol")
+    if not raw_token and proto:
+        raw_token = proto.split(",")[0].strip()
+    if not raw_token:
         await websocket.close(code=4401)
         return
     try:
-        payload = decode_access_token(token)
+        payload = decode_access_token(raw_token)
     except AuthError:
         await websocket.close(code=4401)
         return
     int(str(payload["sub"]))
-    await websocket.accept()
+    if proto:
+        await websocket.accept(subprotocol=proto.split(",")[0].strip())
+    else:
+        await websocket.accept()
     rcli = get_redis_client()
     ch = _CHANNEL_FMT.format(str(room_id))
     pubsub = rcli.pubsub()

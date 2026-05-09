@@ -79,9 +79,15 @@ class ConnectionManager:
         logger.info("ws_manager_stopped")
 
     async def connect(
-        self, user_id: int, ws: WebSocket
+        self,
+        user_id: int,
+        ws: WebSocket,
+        subprotocol: str | None = None,
     ) -> None:
-        await ws.accept()
+        if subprotocol:
+            await ws.accept(subprotocol=subprotocol)
+        else:
+            await ws.accept()
         is_first = user_id not in self._connections
         self._connections.setdefault(
             user_id, []

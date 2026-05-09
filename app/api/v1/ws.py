@@ -26,12 +26,16 @@ async def websocket_endpoint(
     websocket: WebSocket,
     token: str | None = None,
 ) -> None:
-    if not token:
+    raw_token = token or ""
+    proto = websocket.headers.get("sec-websocket-protocol")
+    if not raw_token and proto:
+        raw_token = proto.split(",")[0].strip()
+    if not raw_token:
         await websocket.close(code=4001)
         return
 
     try:
-        payload = decode_access_token(token)
+        payload = decode_access_token(raw_token)
     except AuthError:
         await websocket.close(code=4001)
         return
@@ -45,7 +49,8 @@ async def websocket_endpoint(
             await websocket.close(code=4001)
             return
 
-    await ws_manager.connect(user_id, websocket)
+    subprotocol = proto.split(",")[0].strip() if proto else None
+    await ws_manager.connect(user_id, websocket, subprotocol=subprotocol)
 
     try:
         while True:
