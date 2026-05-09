@@ -8,6 +8,7 @@ export type ActivationEvent =
   | 'onboarding_step_complete'
   | 'onboarding_skip'
   | 'onboarding_complete'
+  | 'audio_silent'
   | 'home_first_play'
   | 'home_first_session_start'
   | 'home_play_all'

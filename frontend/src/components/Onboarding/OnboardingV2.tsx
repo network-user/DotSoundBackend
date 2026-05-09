@@ -26,6 +26,7 @@ import {
 import { showIsland } from '@/lib/island'
 import { trackActivationEvent } from '@/lib/activation'
 import { hapticSelection } from '@/lib/telegram'
+import { useOnboardingAudio } from '@/hooks/useOnboardingAudio'
 import { AvatarBuilder } from '@/components/Onboarding/AvatarBuilder'
 import { GenreBubble } from '@/components/Onboarding/GenreBubble'
 import type {
@@ -102,10 +103,7 @@ export function OnboardingV2({ onComplete }: Props) {
   >([])
   const [tasteLoading, setTasteLoading] = useState(false)
 
-  const audioRef = useRef<HTMLAudioElement>(null)
-  const [previewTrackId, setPreviewTrackId] = useState<
-    number | null
-  >(null)
+  const audio = useOnboardingAudio()
   const lastFetchCountRef = useRef(0)
   const autoPlayedTrackRef = useRef<number | null>(null)
 
@@ -168,16 +166,6 @@ export function OnboardingV2({ onComplete }: Props) {
     }
   }, [step, tasteTracks.length, t])
 
-  useEffect(() => {
-    return () => {
-      const a = audioRef.current
-      if (a) {
-        a.pause()
-        a.src = ''
-      }
-    }
-  }, [])
-
   const goNext = useCallback((from: Step) => {
     const i = STEP_ORDER.indexOf(from)
     if (i < 0 || i >= STEP_ORDER.length - 1) return
@@ -188,12 +176,7 @@ export function OnboardingV2({ onComplete }: Props) {
     const i = STEP_ORDER.indexOf(step)
     if (i <= 0) return
     if (step === 'swipe') {
-      const a = audioRef.current
-      if (a) {
-        a.pause()
-        a.src = ''
-      }
-      setPreviewTrackId(null)
+      audio.stop()
       setTasteTracks([])
       setTasteIndex(0)
       setTasteDecisions([])
@@ -201,18 +184,11 @@ export function OnboardingV2({ onComplete }: Props) {
       autoPlayedTrackRef.current = null
     }
     setStep(STEP_ORDER[i - 1])
-  }, [step])
+  }, [step, audio])
 
   const handleWelcomeStart = () => {
     hapticSelection()
-    // Prime swipe audio on very first user gesture so autoplay
-    // works on iOS/Telegram WebApp when the swipe step loads.
-    const a = audioRef.current
-    if (a) {
-      a.muted = true
-      a.src = GENRE_SILENT_WAV
-      void a.play().catch(() => {})
-    }
+    audio.prime()
     goNext('welcome')
   }
 
@@ -270,14 +246,7 @@ export function OnboardingV2({ onComplete }: Props) {
     ) {
       return
     }
-    // Prime swipe audio in user-gesture context
-    // so autoplay works when swipe step loads.
-    const swipeAudio = audioRef.current
-    if (swipeAudio) {
-      swipeAudio.muted = true
-      swipeAudio.src = GENRE_SILENT_WAV
-      void swipeAudio.play().catch(() => {})
-    }
+    audio.prime()
     setSaving(true)
     try {
       await api.saveOnboardingPreferences({
@@ -321,29 +290,13 @@ export function OnboardingV2({ onComplete }: Props) {
         { track_id: tr.id, decision },
       ])
       setTasteIndex((i) => i + 1)
-      const a = audioRef.current
-      if (a) {
-        a.pause()
-        setPreviewTrackId(null)
-      }
     },
     [tasteTracks, tasteIndex],
   )
 
   const togglePreview = useCallback(() => {
-    const a = audioRef.current
-    if (!a) return
-    const tr = tasteTracks[tasteIndex]
-    if (a.paused) {
-      void a.play().catch(() =>
-        setPreviewTrackId(null),
-      )
-      if (tr) setPreviewTrackId(tr.id)
-    } else {
-      a.pause()
-      setPreviewTrackId(null)
-    }
-  }, [tasteTracks, tasteIndex])
+    audio.toggle({ step: 'swipe' })
+  }, [audio])
 
   const finalizeSwipe = useCallback(
     async (decisions: typeof tasteDecisions) => {
@@ -426,18 +379,12 @@ export function OnboardingV2({ onComplete }: Props) {
     if (!tr) return
     if (autoPlayedTrackRef.current === tr.id) return
     autoPlayedTrackRef.current = tr.id
-    const a = audioRef.current
-    if (!a) return
-    a.pause()
-    a.muted = false
-    a.src = `/api/v1/track-preview/${tr.id}/segment.mp4`
-    setPreviewTrackId(tr.id)
-    void a.play().catch(() => {
-      if (autoPlayedTrackRef.current === tr.id) {
-        setPreviewTrackId(null)
-      }
-    })
-  }, [step, tasteIndex, tasteTracks])
+    audio.playTrack(
+      tr.id,
+      `/api/v1/track-preview/${tr.id}/segment.mp4`,
+      { step: 'swipe' },
+    )
+  }, [step, tasteIndex, tasteTracks, audio])
 
   const canFinish =
     tasteDecisions.length >= SWIPE_BATCH
@@ -603,7 +550,14 @@ export function OnboardingV2({ onComplete }: Props) {
                 tracks={tasteTracks}
                 index={tasteIndex}
                 loading={tasteLoading}
-                playingId={previewTrackId}
+                playingId={
+                  audio.state === 'playing'
+                    ? audio.currentTrackId
+                    : null
+                }
+                audioBlocked={
+                  audio.state === 'blocked'
+                }
                 onLike={() => recordDecision('like')}
                 onDislike={() =>
                   recordDecision('dislike')
@@ -731,8 +685,7 @@ export function OnboardingV2({ onComplete }: Props) {
       )}
 
       <audio
-        ref={audioRef}
-        onEnded={() => setPreviewTrackId(null)}
+        ref={audio.audioRef}
         preload="none"
         style={{ display: 'none' }}
       />
@@ -1227,6 +1180,7 @@ interface SwipeStepProps {
   index: number
   loading: boolean
   playingId: number | null
+  audioBlocked: boolean
   onLike: () => void
   onDislike: () => void
   onSkipCard: () => void
@@ -1239,6 +1193,7 @@ function SwipeStep({
   index,
   loading,
   playingId,
+  audioBlocked,
   onLike,
   onDislike,
   onSkipCard,
@@ -1288,6 +1243,7 @@ function SwipeStep({
               key={top.id}
               track={top}
               isPlaying={playingId === top.id}
+              audioBlocked={audioBlocked}
               onLike={onLike}
               onDislike={onDislike}
               onTogglePreview={onTogglePreview}
