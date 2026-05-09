@@ -6,6 +6,8 @@ from starlette.middleware.base import (
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.config import settings
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(
@@ -19,6 +21,26 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = (
             "nosniff"
         )
+        response.headers.setdefault(
+            "Referrer-Policy",
+            "strict-origin-when-cross-origin",
+        )
+        response.headers.setdefault(
+            "X-Frame-Options", "DENY"
+        )
+        response.headers.setdefault(
+            "X-Permitted-Cross-Domain-Policies", "none"
+        )
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=(), "
+            "interest-cohort=()",
+        )
+        if not settings.debug:
+            response.headers.setdefault(
+                "Strict-Transport-Security",
+                "max-age=63072000; includeSubDomains; preload",
+            )
         ct = response.headers.get("content-type", "")
         if ct.startswith(
             ("audio/", "video/", "image/")
