@@ -458,24 +458,10 @@ export function OnboardingV2({ onComplete }: Props) {
           {step === 'profile' && bootstrap && (
             <m.div
               key="profile"
-              initial={
-                reduce
-                  ? { opacity: 0 }
-                  : { opacity: 0, x: 8 }
-              }
-              animate={
-                reduce
-                  ? { opacity: 1 }
-                  : { opacity: 1, x: 0 }
-              }
-              exit={
-                reduce
-                  ? { opacity: 0 }
-                  : { opacity: 0, x: -8 }
-              }
-              transition={
-                reduce ? TWEEN_FAST : SPRING_GENTLE
-              }
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={TWEEN_FAST}
               className="onb-v2-step"
             >
               <ProfileStep
@@ -496,24 +482,10 @@ export function OnboardingV2({ onComplete }: Props) {
           {step === 'genres' && bootstrap && (
             <m.div
               key="genres"
-              initial={
-                reduce
-                  ? { opacity: 0 }
-                  : { opacity: 0, x: 8 }
-              }
-              animate={
-                reduce
-                  ? { opacity: 1 }
-                  : { opacity: 1, x: 0 }
-              }
-              exit={
-                reduce
-                  ? { opacity: 0 }
-                  : { opacity: 0, x: -8 }
-              }
-              transition={
-                reduce ? TWEEN_FAST : SPRING_GENTLE
-              }
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={TWEEN_FAST}
               className="onb-v2-step"
             >
               <GenresStep
@@ -527,24 +499,10 @@ export function OnboardingV2({ onComplete }: Props) {
           {step === 'swipe' && (
             <m.div
               key="swipe"
-              initial={
-                reduce
-                  ? { opacity: 0 }
-                  : { opacity: 0, x: 8 }
-              }
-              animate={
-                reduce
-                  ? { opacity: 1 }
-                  : { opacity: 1, x: 0 }
-              }
-              exit={
-                reduce
-                  ? { opacity: 0 }
-                  : { opacity: 0, x: -8 }
-              }
-              transition={
-                reduce ? TWEEN_FAST : SPRING_GENTLE
-              }
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={TWEEN_FAST}
               className="onb-v2-step"
             >
               <SwipeStep

@@ -175,7 +175,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 16px 24px 8px;
+  padding: max(16px, env(safe-area-inset-top)) 24px 8px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   position: relative;
@@ -378,10 +378,10 @@
 
 .onb-v2-avatar__edit-btn {
   position: absolute;
-  bottom: 4px;
-  right: 4px;
-  width: 36px;
-  height: 36px;
+  bottom: 0;
+  right: 0;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: var(--accent, #fff);
   color: var(--bg, #000);
@@ -427,9 +427,12 @@
   transition: border-color 160ms ease, background-color 160ms ease;
 }
 
-.onb-v2-name-input:focus {
+.onb-v2-name-input:focus,
+.onb-v2-name-input:focus-visible {
   border-color: rgba(255, 255, 255, 0.4);
   background: rgba(255, 255, 255, 0.06);
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 2px;
 }
 
 .onb-v2-name-input::placeholder {
@@ -439,7 +442,7 @@
 .onb-v2-name-error {
   text-align: center;
   font-size: 12px;
-  color: #ff7070;
+  color: #ff8a8a;
   margin: 0;
   min-height: 16px;
 }
@@ -998,7 +1001,7 @@
 
 .onb-v2-genre-search__input {
   flex: 1;
-  height: 42px;
+  height: 48px;
   background: transparent;
   border: 0;
   color: #fff;
@@ -1006,6 +1009,10 @@
   outline: none;
   -webkit-appearance: none;
   appearance: none;
+}
+
+.onb-v2-genre-search__input:focus-visible {
+  outline: none;
 }
 
 .onb-v2-genre-search__input::placeholder {
@@ -1025,13 +1032,19 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2px;
-  border-radius: 4px;
+  min-width: 40px;
+  min-height: 40px;
+  border-radius: 8px;
   flex-shrink: 0;
 }
 
 .onb-v2-genre-search__clear:hover {
   color: rgba(255, 255, 255, 0.7);
+}
+
+.onb-v2-genre-search__clear:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 1px;
 }
 
 /* ─── Swipe finish ──────────────────────────────────── */
