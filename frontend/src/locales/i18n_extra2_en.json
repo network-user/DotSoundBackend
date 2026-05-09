@@ -707,7 +707,7 @@
         "errInvalid": "Use 1 to 64 characters",
         "errSave": "Couldn't save — try again?",
         "cta": "Continue",
-        "skip": "Keep current",
+        "skip": "Use default avatar",
         "avatarSheetTitle": "Avatar",
         "avatarPick": "Pick from gallery",
         "avatarUploading": "Uploading…",

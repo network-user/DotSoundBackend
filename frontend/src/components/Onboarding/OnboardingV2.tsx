@@ -412,6 +412,7 @@ export function OnboardingV2({ onComplete }: Props) {
   )
 
   const progressIndex = useMemo(() => {
+    if (step === 'complete') return PROGRESS_STEPS.length
     return PROGRESS_STEPS.indexOf(step)
   }, [step])
 
@@ -644,20 +645,36 @@ export function OnboardingV2({ onComplete }: Props) {
               </>
             )}
             {step === 'genres' && (
-              <MotionPress
-                variant="primary"
-                haptic="medium"
-                className="onb-v2-float-cta"
-                onClick={handleGenresSubmit}
-                disabled={
-                  saving ||
-                  selectedGenres.length < MIN_GENRES
-                }
-              >
-                {saving
-                  ? t('redesign.onboardingV2.saving')
-                  : t('redesign.onboardingV2.genres.cta')}
-              </MotionPress>
+              <>
+                <MotionPress
+                  variant="primary"
+                  haptic="medium"
+                  className="onb-v2-float-cta"
+                  onClick={handleGenresSubmit}
+                  disabled={
+                    saving ||
+                    selectedGenres.length < MIN_GENRES
+                  }
+                >
+                  {saving
+                    ? t('redesign.onboardingV2.saving')
+                    : t(
+                        'redesign.onboardingV2.genres.cta',
+                      )}
+                </MotionPress>
+                {selectedGenres.length < MIN_GENRES && (
+                  <p className="onb-v2-genres-hint">
+                    {t(
+                      'redesign.onboardingV2.genres.counterMore',
+                      {
+                        count:
+                          MIN_GENRES -
+                          selectedGenres.length,
+                      },
+                    )}
+                  </p>
+                )}
+              </>
             )}
             {step === 'swipe' && canFinish && (
               <MotionPress
@@ -1219,10 +1236,8 @@ function SwipeStep({
       <div className="onb-v2-swipe">
         <div className="onb-v2-swipe-stack">
           {loading && tracks.length === 0 && (
-            <div className="onb-v2-swipe-empty">
-              {t(
-                'redesign.onboardingV2.swipe.loading',
-              )}
+            <div className="onb-v2-swipe-loading">
+              <div className="upload-spinner" />
             </div>
           )}
           {!loading && tracks.length === 0 && (
@@ -1251,10 +1266,8 @@ function SwipeStep({
             />
           )}
           {!top && loading && (
-            <div className="onb-v2-swipe-empty">
-              {t(
-                'redesign.onboardingV2.swipe.loading',
-              )}
+            <div className="onb-v2-swipe-loading">
+              <div className="upload-spinner" />
             </div>
           )}
         </div>

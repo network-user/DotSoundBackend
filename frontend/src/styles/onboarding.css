@@ -871,6 +871,22 @@
   text-align: center;
 }
 
+.onb-v2-swipe-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+}
+
+.onb-v2-genres-hint {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: center;
+  pointer-events: none;
+}
+
 /* ─── Complete step ────────────────────────────────── */
 
 .onb-v2-complete {
