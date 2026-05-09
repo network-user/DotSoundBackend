@@ -86,7 +86,7 @@ _CORRELATION_ID_KEYS = frozenset(
     }
 )
 
-_REDACT_ENABLED = False
+_REDACT_ENABLED = True
 _REDACT_IDENTIFIERS = True
 
 THIRD_PARTY_LOGGER_NAMES: tuple[str, ...] = (

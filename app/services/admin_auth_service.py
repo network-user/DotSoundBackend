@@ -415,7 +415,15 @@ async def verify_step_up(
 async def consume_step_up(*, user_id: int, action: str) -> bool:
     redis = get_redis_client()
     key = f"{STEP_UP_REDIS_PREFIX}{user_id}:{action}"
-    raw = await redis.get(key)
+    getdel = getattr(redis, "getdel", None)
+    if getdel is not None:
+        raw = await getdel(key)
+    else:
+        async with redis.pipeline(transaction=True) as pipe:
+            pipe.get(key)
+            pipe.delete(key)
+            results = await pipe.execute()
+        raw = results[0] if results else None
     return bool(raw)
 
 
@@ -450,7 +458,10 @@ async def regenerate_backup_codes(
     return codes
 
 
-def consume_backup_code(user: User, code: str) -> bool:
+async def consume_backup_code(
+    *, user: User, code: str, session: AsyncSession
+) -> bool:
+    await session.refresh(user, with_for_update=True)
     if not user.admin_backup_codes_hash:
         return False
     raw = json.loads(user.admin_backup_codes_hash)
@@ -461,6 +472,7 @@ def consume_backup_code(user: User, code: str) -> bool:
         return False
     raw.remove(target)
     user.admin_backup_codes_hash = json.dumps(raw)
+    await session.flush()
     return True
 
 
