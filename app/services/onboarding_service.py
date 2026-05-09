@@ -88,6 +88,8 @@ class OnboardingService:
             can_import_from_telegram=(pf.can_import_from_telegram),
             has_telegram_profile_music=(pf.has_telegram_profile_music),
             profile_completed=profile_completed,
+            legal_accepted_version=pref.legal_accepted_version,
+            is_adult_confirmed=pref.is_adult_confirmed,
         )
 
     async def acknowledge_import_prompt(self, user_id: int) -> UserPreference:
@@ -313,11 +315,30 @@ class OnboardingService:
             default=True,
         )
 
-    async def complete(self, user_id: int) -> UserPreference:
+    async def complete(
+        self,
+        user_id: int,
+        legal_accepted_version: str | None = None,
+    ) -> UserPreference:
+        """Mark onboarding as done and, if the client provided the
+        version of the legal pack it displayed, record the implicit
+        acceptance + adult confirmation. The disclosure shown under
+        the final "Готово" button states 18+ and "Условия + Privacy",
+        so a single tap registers all three at once.
+        """
+        kwargs: dict[str, Any] = {
+            "onboarding_completed": True,
+            "onboarding_import_acknowledged": True,
+        }
+        if legal_accepted_version:
+            now = datetime.now(UTC)
+            kwargs["legal_accepted_version"] = legal_accepted_version
+            kwargs["legal_accepted_at"] = now
+            kwargs["is_adult_confirmed"] = True
+            kwargs["adult_confirmed_at"] = now
         return await self._pref_repo.upsert(
             user_id=user_id,
-            onboarding_completed=True,
-            onboarding_import_acknowledged=True,
+            **kwargs,
         )
 
     async def apply_smart_default_profile(

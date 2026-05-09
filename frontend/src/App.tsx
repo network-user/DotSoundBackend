@@ -95,6 +95,7 @@ import { OauthConnectionsReturn } from '@/components/Settings/OauthConnectionsRe
 import { Equalizer } from '@/components/Equalizer/Equalizer'
 import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics'
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
+import { CookieNotice } from '@/components/Legal/CookieNotice'
 import { OfflineBanner } from '@/components/ui/OfflineBanner'
 import { DynamicIslandHost } from '@/components/ui/DynamicIsland'
 import { InstallPrompt } from '@/components/PwaInstall/InstallPrompt'
@@ -121,8 +122,9 @@ import { useLikes } from '@/store/LikesContext'
 const SearchView = lazy(() => import('@/views/SearchView').then(m => ({ default: m.SearchView })))
 const UploadView = lazy(() => import('@/views/UploadView').then(m => ({ default: m.UploadView })))
 const LibraryView = lazy(() => import('@/views/LibraryView').then(m => ({ default: m.LibraryView })))
-const ChatsView = lazy(() => import('@/views/ChatsView').then(m => ({ default: m.ChatsView })))
-const ChatView = lazy(() => import('@/views/ChatView').then(m => ({ default: m.ChatView })))
+// [REGULATORY-DISABLED v1] чаты отключены — см. docs/REGULATORY_DISABLED.md
+// const ChatsView = lazy(() => import('@/views/ChatsView').then(m => ({ default: m.ChatsView })))
+// const ChatView = lazy(() => import('@/views/ChatView').then(m => ({ default: m.ChatView })))
 const ProfileView = lazy(() => import('@/views/ProfileView').then(m => ({ default: m.ProfileView })))
 const LegalView = lazy(() => import('@/views/LegalView').then(m => ({ default: m.LegalView })))
 const LegalDocView = lazy(() => import('@/views/LegalDocView').then(m => ({ default: m.LegalDocView })))
@@ -570,8 +572,10 @@ export function App() {
     setAuthorId(null)
   }, [location.pathname])
 
-  const handleOpenAuthor = (id: number) =>
-    setAuthorId(id)
+  // [REGULATORY-DISABLED v1] handler использовался только в
+  // отключённом ChatsView. Восстановить вместе с чат-маршрутом.
+  // const handleOpenAuthor = (id: number) =>
+  //   setAuthorId(id)
   const handleCloseAuthor = () =>
     setAuthorId(null)
   const handleLogout = () => {
@@ -706,6 +710,7 @@ export function App() {
               />
             }
           />
+          {/* [REGULATORY-DISABLED v1] чат-маршруты отключены.
           <Route
             path="/chats"
             element={
@@ -715,6 +720,15 @@ export function App() {
             }
           />
           <Route path="/chats/:id" element={<ChatView />} />
+          */}
+          <Route
+            path="/chats"
+            element={<Navigate to="/" replace />}
+          />
+          <Route
+            path="/chats/:id"
+            element={<Navigate to="/" replace />}
+          />
           <Route
             path="/profile"
             element={
@@ -784,6 +798,7 @@ export function App() {
       <QueueSheet />
       <InstallPrompt />
       <SystemEventListener />
+      <CookieNotice />
       <SettingsSheet
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

@@ -40,7 +40,8 @@ import type {
   TrackInfoResponse,
   TrackPlaybackVariantBrief,
 } from '@/types/api'
-import { CommentSection } from '@/components/Comments/CommentSection'
+// [REGULATORY-DISABLED v1] комментарии отключены — см. docs/REGULATORY_DISABLED.md
+// import { CommentSection } from '@/components/Comments/CommentSection'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
@@ -202,9 +203,12 @@ export function TrackCardSheet({
     useState(false)
   const [genCooldown, setGenCooldown] = useState(0)
   const [shareOpen, setShareOpen] = useState(false)
-  const [shareChats, setShareChats] = useState<ChatListItem[]>([])
-  const [shareLoading, setShareLoading] = useState(false)
-  const [shareSendingConvId, setShareSendingConvId] = useState<number | null>(null)
+  // [REGULATORY-DISABLED v1] чат-список и отправка в DM убраны
+  // из share-модала. Setters сохранены для совместимости с
+  // openShareModal; getters не читаются — их использование
+  // вернётся вместе с чат-стеком.
+  const [, setShareChats] = useState<ChatListItem[]>([])
+  const [, setShareLoading] = useState(false)
   const [shareError, setShareError] = useState<string | null>(null)
   const [shareCopyBusy, setShareCopyBusy] = useState(false)
   const [sharePayload, setSharePayload] = useState<{
@@ -487,28 +491,11 @@ export function TrackCardSheet({
     if (e.target === e.currentTarget) closeCard()
   }
 
-  const formatShareChatTitle = useCallback((item: ChatListItem): string => {
-    if (item.conversation.type === 'saved') {
-      return t('redesign.chats.savedTitle')
-    }
-    if (item.conversation.title?.trim()) {
-      return item.conversation.title.trim()
-    }
-    const peer = item.peer
-    const name = peer?.display_name
-      || [peer?.first_name, peer?.last_name]
-        .filter(Boolean)
-        .join(' ')
-    if (name && name.trim()) {
-      return name.trim()
-    }
-    if (peer?.username) {
-      return `@${peer.username}`
-    }
-    return t('redesign.chats.chatNumber', {
-      id: item.conversation.id,
-    })
-  }, [t])
+  // [REGULATORY-DISABLED v1] formatter для чат-списка в share-модале
+  // больше не нужен — модал показывает только copy-link.
+  // const formatShareChatTitle = useCallback((item: ChatListItem): string => {
+  //   ... см. git history
+  // }, [t])
 
   const openShareModal = useCallback(async (payload: {
     id: number
@@ -517,58 +504,19 @@ export function TrackCardSheet({
   }) => {
     setSharePayload(payload)
     setShareOpen(true)
-    setShareLoading(true)
     setShareError(null)
-    try {
-      const chats = await api.listChats()
-      setShareChats(chats)
-    } catch {
-      setShareError('Не удалось загрузить чаты')
-    } finally {
-      setShareLoading(false)
-    }
+    // [REGULATORY-DISABLED v1] список чатов и отправка в DM
+    // отключены вместе со всем чат-стеком (ст. 10.1 149-ФЗ).
+    // Модал остаётся для копирования ссылки (handleCopyShare).
+    setShareChats([])
+    setShareLoading(false)
   }, [])
 
-  const handleShareToChat = useCallback(async (conversationId: number) => {
-    if (!sharePayload) return
-    setShareSendingConvId(conversationId)
-    setShareError(null)
-    const msgTypeMap: Record<ShareEntityType, string> = {
-      track: 'track_share',
-      album: 'album_share',
-      playlist: 'playlist_share',
-    }
-    const opts: {
-      type: string
-      shared_track_id?: number
-      shared_album_id?: number
-      shared_playlist_id?: number
-    } = {
-      type: msgTypeMap[sharePayload.type],
-    }
-    if (sharePayload.type === 'track') {
-      opts.shared_track_id = sharePayload.id
-    } else if (sharePayload.type === 'album') {
-      opts.shared_album_id = sharePayload.id
-    } else {
-      opts.shared_playlist_id = sharePayload.id
-    }
-    try {
-      await api.sendMessage(conversationId, '', opts)
-      setShareOpen(false)
-      sound.play('notificationSuccess')
-      showIsland({
-        kind: 'toast',
-        title: t('trackSheet.shareSent'),
-        durationMs: 2200,
-      })
-    } catch {
-      setShareError('Не удалось отправить')
-      sound.play('notificationError')
-    } finally {
-      setShareSendingConvId(null)
-    }
-  }, [sharePayload, sound])
+  // [REGULATORY-DISABLED v1] отправка в чат отключена вместе с
+  // чат-стеком. Восстановить вместе с api/v1/messages.py.
+  // const handleShareToChat = useCallback(async (conversationId: number) => {
+  //   ... см. git history
+  // }, [sharePayload, sound])
 
   const handleCopyShare = useCallback(async () => {
     if (!sharePayload) return
@@ -2120,6 +2068,7 @@ export function TrackCardSheet({
           </div>
         )}
 
+        {/* [REGULATORY-DISABLED v1] секция комментариев скрыта.
         {track.is_public && (
           <div className="tcs-comments-section">
             <CommentSection
@@ -2128,6 +2077,7 @@ export function TrackCardSheet({
             />
           </div>
         )}
+        */}
 
         <div className="tcs-volume-section">
           <Icon
@@ -2362,54 +2312,12 @@ export function TrackCardSheet({
                 </button>
               </div>
 
-              {shareLoading ? (
-                <div className="share-modal-loading">
-                  <div className="loader" />
-                </div>
-              ) : shareChats.length === 0 ? (
-                <div className="share-modal-empty">
-                  Нет доступных чатов
-                </div>
-              ) : (
-                <div className="share-chat-list">
-                  {shareChats.map((item) => {
-                    const convId = item.conversation.id
-                    const sending = shareSendingConvId === convId
-                    return (
-                      <button
-                        key={convId}
-                        type="button"
-                        className="share-chat-row"
-                        onClick={() => {
-                          void handleShareToChat(convId)
-                        }}
-                        disabled={shareSendingConvId !== null}
-                      >
-                        <span className="share-chat-icon">
-                          <Icon
-                            name={
-                              item.conversation.type === 'group'
-                                ? 'users-following'
-                                : item.conversation.type === 'saved'
-                                  ? 'heart'
-                                  : 'user'
-                            }
-                            size={16}
-                          />
-                        </span>
-                        <span className="share-chat-meta">
-                          <span className="share-chat-title">
-                            {formatShareChatTitle(item)}
-                          </span>
-                        </span>
-                        <span className="share-chat-action">
-                          {sending ? 'Отправка...' : 'Отправить'}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
+              {/* [REGULATORY-DISABLED v1] список чатов и отправка
+              в DM отключены — используйте кнопку копирования ссылки. */}
+              <div className="share-modal-empty">
+                Нажмите кнопку копирования, чтобы получить ссылку
+                на этот трек.
+              </div>
 
               {shareError && (
                 <div className="share-modal-error">

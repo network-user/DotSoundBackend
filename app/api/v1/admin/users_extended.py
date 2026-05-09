@@ -246,74 +246,18 @@ async def force_logout(
     }
 
 
-@router.post("/{user_id}/message")
-async def send_admin_message(
-    user_id: int,
-    text: str = Body(..., embed=True, min_length=1, max_length=4000),
-    admin: User = Depends(require_step_up("users.message")),
-    session: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Open a DM between the admin and the target user (if not
-    already present) and post ``text`` to it. Delivery is best-
-    effort — if the chat stack is unavailable the call still fails
-    explicitly with 503.
-    """
-    from app.services.chat_service import ChatService
-    from app.services.message_service import MessageService
-
-    target = await session.get(User, user_id)
-    if not target:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="user not found",
-        )
-
-    chat_svc = ChatService(session)
-    msg_svc = MessageService(session)
-    try:
-        chat = await chat_svc.create_dm(
-            user_id=admin.id, target_id=user_id
-        )
-        conv_id = chat["conversation"]["id"]
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception(
-            "admin_message_create_dm_failed",
-            target_user_id=user_id,
-        )
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    try:
-        msg = await msg_svc.send_message(
-            conversation_id=int(conv_id),
-            sender_id=admin.id,
-            content=text,
-            msg_type="text",
-            sender_role="admin",
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception(
-            "admin_message_send_failed",
-            target_user_id=user_id,
-        )
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    await session.commit()
-    logger.info(
-        "admin_message_sent",
-        target_user_id=user_id,
-        admin_id=admin.id,
-        chars=len(text),
-    )
-    return {
-        "conversation_id": conv_id,
-        "message_id": (
-            msg.get("id") if isinstance(msg, dict) else getattr(msg, "id", None)
-        ),
-    }
+# [REGULATORY-DISABLED v1] admin → user DM отключена вместе с
+# чат-стеком (ст. 10.1 149-ФЗ). Восстановить вместе с
+# `app/api/v1/chats.py` / `app/api/v1/messages.py`. См.
+# `docs/REGULATORY_DISABLED.md`.
+# @router.post("/{user_id}/message")
+# async def send_admin_message(
+#     user_id: int,
+#     text: str = Body(..., embed=True, min_length=1, max_length=4000),
+#     admin: User = Depends(require_step_up("users.message")),
+#     session: AsyncSession = Depends(get_db),
+# ) -> dict[str, Any]:
+#     ...  # см. git history
 
 
 @router.post("/{user_id}/grant-admin")

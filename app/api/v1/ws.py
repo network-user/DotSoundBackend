@@ -9,11 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import AuthError, decode_access_token
 from app.core.db import AsyncSessionLocal
-from app.core.ws_manager import ACTIVITY_TYPES, ws_manager
-from app.dependencies import get_current_user, get_db
+from app.core.ws_manager import ws_manager
+from app.dependencies import get_current_user
 from app.models.user import User
-from app.repositories.chat import ChatRepository
 from app.repositories.user import UserRepository
+
+# [REGULATORY-DISABLED v1] чат-обмен отключён (ст. 10.1 149-ФЗ).
+# from sqlalchemy.ext.asyncio import AsyncSession
+# from app.core.ws_manager import ACTIVITY_TYPES
+# from app.dependencies import get_db
+# from app.repositories.chat import ChatRepository
 
 router = APIRouter(tags=["websocket"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
@@ -61,48 +66,15 @@ async def websocket_endpoint(
                 continue
 
             event = data.get("event")
-            conv_id = data.get("conversation_id")
             logger.debug(
                 "ws_incoming",
                 user_id=user_id,
                 ws_event=event,
-                conv_id=conv_id,
             )
-
-            if not conv_id:
-                continue
-
-            if event == "activity":
-                activity = data.get(
-                    "activity", "typing"
-                )
-                if activity not in ACTIVITY_TYPES:
-                    continue
-                async with AsyncSessionLocal() as s:
-                    repo = ChatRepository(s)
-                    member_ids = (
-                        await repo.get_member_ids(
-                            conv_id
-                        )
-                    )
-                members = [
-                    uid
-                    for uid in member_ids
-                    if uid != user_id
-                ]
-                logger.info(
-                    "ws_activity_broadcast",
-                    user_id=user_id,
-                    conv_id=conv_id,
-                    activity=activity,
-                    targets=members,
-                )
-                await ws_manager.broadcast_activity(
-                    user_id,
-                    conv_id,
-                    members,
-                    activity,
-                )
+            # [REGULATORY-DISABLED v1] chat activity (typing) и
+            # conversation-broadcast отключены вместе с чатами.
+            # Принятые сообщения просто игнорируются.
+            continue
     except WebSocketDisconnect:
         pass
     except Exception:
@@ -130,32 +102,26 @@ async def get_user_presence(
     }
 
 
-@router.get("/chats/{conv_id}/presence")
-async def get_chat_presence(
-    conv_id: int,
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    repo = ChatRepository(session)
-    member_ids = await repo.get_member_ids(
-        conv_id
-    )
-    presence = await ws_manager.get_presence_bulk(
-        [
-            uid
-            for uid in member_ids
-            if uid != user.id
-        ]
-    )
-    return {
-        "conversation_id": conv_id,
-        "members": {
-            str(uid): {
-                "status": p.get(
-                    "status", "offline"
-                ),
-                "last_seen": p.get("ts", 0),
-            }
-            for uid, p in presence.items()
-        },
-    }
+# [REGULATORY-DISABLED v1] chat presence-роут отключён вместе с
+# чатами. Восстановить вместе с `app/api/v1/chats.py`.
+# @router.get("/chats/{conv_id}/presence")
+# async def get_chat_presence(
+#     conv_id: int,
+#     user: User = Depends(get_current_user),
+#     session: AsyncSession = Depends(get_db),
+# ) -> dict[str, Any]:
+#     repo = ChatRepository(session)
+#     member_ids = await repo.get_member_ids(conv_id)
+#     presence = await ws_manager.get_presence_bulk(
+#         [uid for uid in member_ids if uid != user.id]
+#     )
+#     return {
+#         "conversation_id": conv_id,
+#         "members": {
+#             str(uid): {
+#                 "status": p.get("status", "offline"),
+#                 "last_seen": p.get("ts", 0),
+#             }
+#             for uid, p in presence.items()
+#         },
+#     }

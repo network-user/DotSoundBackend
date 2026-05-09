@@ -1,6 +1,18 @@
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class OnboardingCompleteRequest(BaseModel):
+    """Implicit acceptance recorded when user taps the final
+    "Готово/Начать" button. Mini App must send the legal pack
+    version it displayed below the button so the server stores
+    exactly what the user saw.
+    """
+
+    legal_accepted_version: str = Field(
+        min_length=1, max_length=32
+    )
+
+
 class OnboardingPreferencesRequest(BaseModel):
     genres: list[str] = Field(default_factory=list)
     artist_ids: list[int] = Field(default_factory=list)
@@ -25,6 +37,8 @@ class OnboardingStatusResponse(BaseModel):
     can_import_from_telegram: bool = False
     has_telegram_profile_music: bool | None = None
     profile_completed: bool = False
+    legal_accepted_version: str | None = None
+    is_adult_confirmed: bool = False
 
 
 class ArtistBriefResponse(BaseModel):

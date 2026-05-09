@@ -18,6 +18,13 @@ export function LegalView() {
     { id: 'terms', label: t('redesign.legal.docTerms') },
     { id: 'privacy', label: t('redesign.legal.docPrivacy') },
     { id: 'upload-rules', label: t('redesign.legal.docUploadRules') },
+    {
+      id: 'rightsholders',
+      label: t(
+        'redesign.legal.docRightsholders',
+        'Правообладателям',
+      ),
+    },
   ]
 
   return (

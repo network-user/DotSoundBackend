@@ -25,7 +25,8 @@ const NAV_ITEMS: NavItem[] = [
     morphName: 'library',
     labelKey: 'nav.library',
   },
-  { path: '/chats', morphName: 'chats', labelKey: 'nav.chats' },
+  // [REGULATORY-DISABLED v1] чаты отключены, см. docs/REGULATORY_DISABLED.md
+  // { path: '/chats', morphName: 'chats', labelKey: 'nav.chats' },
   {
     path: '/profile',
     morphName: 'profile',

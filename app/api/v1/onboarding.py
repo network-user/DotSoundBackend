@@ -10,6 +10,7 @@ from app.schemas.onboarding import (
     ArtistBriefResponse,
     CalibrationRequest,
     OnboardingBootstrapResponse,
+    OnboardingCompleteRequest,
     OnboardingPreferencesRequest,
     OnboardingProfileSubmitRequest,
     OnboardingProfileSubmitResponse,
@@ -236,11 +237,22 @@ async def save_taste_swipe(
 
 @router.post("/complete")
 async def complete_onboarding(
+    body: OnboardingCompleteRequest | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
+    """Finalize onboarding. The disclosure under the final "Готово"
+    button asks the user to confirm 18+ and accept Terms + Privacy
+    of the displayed version; clients send that version here so the
+    server records implicit acceptance in the same call.
+    """
     svc = OnboardingService(db)
-    await svc.complete(user.id)
+    await svc.complete(
+        user.id,
+        legal_accepted_version=(
+            body.legal_accepted_version if body else None
+        ),
+    )
     return {"status": "ok"}
 
 

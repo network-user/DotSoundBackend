@@ -322,6 +322,43 @@ def setup_tracing() -> None:
     logger.info("observability_tracing_ready")
 
 
+# User-уровневые ПДн ключи (публичные имена; не секрет — могут жить
+# в Backend). Дополняют admin-keys из PrivateCore. Любой ключ в
+# теле события Sentry, чьё имя совпадает (case-insensitive) с этим
+# списком, заменяется на "[REDACTED]" перед отправкой.
+_USER_PII_KEYS: frozenset[str] = frozenset(
+    {
+        "email",
+        "telegram_id",
+        "tg_id",
+        "ip",
+        "client_ip",
+        "remote_addr",
+        "x-forwarded-for",
+        "user_agent",
+        "user-agent",
+        "init_data",
+        "tg_init_data",
+        "access_token",
+        "refresh_token",
+        "jwt",
+        "jwt_secret",
+        "session_token",
+        "magic_link",
+        "magic_link_url",
+        "backup_code",
+        "totp_secret",
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "avatar_seed",
+        "first_name",
+        "last_name",
+        "username",
+    }
+)
+
+
 def _sentry_pii_filter(
     event: dict[str, object], _hint: dict[str, object]
 ) -> dict[str, object] | None:
@@ -329,10 +366,12 @@ def _sentry_pii_filter(
         ADMIN_PII_KEYS,
     )
 
+    blocked = {key.lower() for key in ADMIN_PII_KEYS} | _USER_PII_KEYS
+
     def _scrub(value: object) -> object:
         if isinstance(value, dict):
             return {
-                k: ("[REDACTED]" if k.lower() in ADMIN_PII_KEYS else _scrub(v))
+                k: ("[REDACTED]" if k.lower() in blocked else _scrub(v))
                 for k, v in value.items()
             }
         if isinstance(value, list):

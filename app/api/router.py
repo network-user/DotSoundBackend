@@ -9,9 +9,6 @@ from app.api.v1 import (
     auth_email,
     bandcamp,
     blocks,
-    chats,
-    colisten,
-    comments,
     complaints,
     dislikes,
     follows,
@@ -20,7 +17,6 @@ from app.api.v1 import (
     likes,
     linked_accounts,
     lyrics,
-    messages,
     metadata,
     notifications,
     onboarding,
@@ -35,6 +31,12 @@ from app.api.v1 import (
     ws,
     youtube,
 )
+
+# [REGULATORY-DISABLED v1] peer-to-peer обмен сообщениями отключён
+# во избежание попадания под ст. 10.1 149-ФЗ (ОРИ). См.
+# `docs/REGULATORY_DISABLED.md`. Восстановить после оформления
+# юрлица и регистрации в реестре ОРИ Роскомнадзора.
+# from app.api.v1 import chats, colisten, comments, messages
 from app.api.v1 import (
     prefetch as prefetch_router,
 )
@@ -63,10 +65,11 @@ api_router.include_router(follows.router)
 api_router.include_router(albums.router)
 api_router.include_router(imports.router)
 api_router.include_router(linked_accounts.router)
-api_router.include_router(chats.router)
-api_router.include_router(colisten.router)
-api_router.include_router(messages.router)
-api_router.include_router(comments.router)
+# [REGULATORY-DISABLED v1] см. блок импорта выше.
+# api_router.include_router(chats.router)
+# api_router.include_router(colisten.router)
+# api_router.include_router(messages.router)
+# api_router.include_router(comments.router)
 api_router.include_router(blocks.router)
 api_router.include_router(notifications.router)
 api_router.include_router(onboarding.router)

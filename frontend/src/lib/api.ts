@@ -1839,8 +1839,19 @@ export const api = {
     })
   },
 
-  completeOnboarding(): Promise<void> {
-    return request('/api/v1/onboarding/complete', { method: 'POST' })
+  completeOnboarding(legalAcceptedVersion?: string): Promise<void> {
+    const body = legalAcceptedVersion
+      ? JSON.stringify({
+          legal_accepted_version: legalAcceptedVersion,
+        })
+      : undefined
+    return request('/api/v1/onboarding/complete', {
+      method: 'POST',
+      headers: body
+        ? { 'Content-Type': 'application/json' }
+        : undefined,
+      body,
+    })
   },
 
   smartSkipOnboarding(): Promise<SmartSkipResponse> {

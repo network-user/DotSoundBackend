@@ -29,6 +29,7 @@ import { hapticSelection } from '@/lib/telegram'
 import { useOnboardingAudio } from '@/hooks/useOnboardingAudio'
 import { AvatarBuilder } from '@/components/Onboarding/AvatarBuilder'
 import { GenreBubble } from '@/components/Onboarding/GenreBubble'
+import { LEGAL_VERSION } from '@/views/legalContent'
 import type {
   OnboardingBootstrap,
   OnboardingTasteDecision,
@@ -1490,6 +1491,26 @@ function CompleteStep({
   onFinish,
 }: CompleteStepProps) {
   const { t } = useTranslation()
+  const [accepting, setAccepting] = useState(false)
+
+  const handleFinish = useCallback(
+    async (openImport: boolean) => {
+      if (accepting) return
+      setAccepting(true)
+      try {
+        await api.completeOnboarding(LEGAL_VERSION)
+      } catch {
+        // Acceptance — best effort. Если запись провалилась,
+        // онбординг всё равно завершён (onboarding_completed
+        // уже выставлен ранее в finalizeSwipe). При следующем
+        // входе toast о новой версии договора предложит
+        // принять её повторно.
+      }
+      onFinish(openImport)
+    },
+    [accepting, onFinish],
+  )
+
   return (
     <div className="onb-v2-complete">
       <div
@@ -1510,7 +1531,10 @@ function CompleteStep({
         <button
           type="button"
           className="onb-v2-complete__import-card"
-          onClick={() => onFinish(true)}
+          onClick={() => {
+            void handleFinish(true)
+          }}
+          disabled={accepting}
         >
           <span className="onb-v2-complete__import-icon">
             <Icon name="download" size={20} />
@@ -1538,10 +1562,34 @@ function CompleteStep({
           variant="primary"
           haptic="medium"
           className="onb-v2-cta"
-          onClick={() => onFinish(false)}
+          onClick={() => {
+            void handleFinish(false)
+          }}
         >
           {t('redesign.onboardingV2.complete.cta')}
         </MotionPress>
+        <p className="onb-v2-complete__legal-disclosure">
+          Нажимая «
+          {t('redesign.onboardingV2.complete.cta')}
+          », вы подтверждаете, что вам исполнилось 18 лет,
+          и принимаете{' '}
+          <a
+            href="/legal/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Условия использования
+          </a>
+          {' и '}
+          <a
+            href="/legal/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Политику конфиденциальности
+          </a>
+          .
+        </p>
       </div>
     </div>
   )

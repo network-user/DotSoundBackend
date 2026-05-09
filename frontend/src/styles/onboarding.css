@@ -984,6 +984,26 @@
   margin: 0;
 }
 
+.onb-v2-complete__legal-disclosure {
+  margin: 12px 0 0;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.onb-v2-complete__legal-disclosure a {
+  color: rgba(255, 255, 255, 0.7);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.onb-v2-complete__legal-disclosure a:hover,
+.onb-v2-complete__legal-disclosure a:focus-visible {
+  color: rgba(255, 255, 255, 0.9);
+}
+
 /* ─── Genre search ─────────────────────────────────── */
 
 .onb-v2-genre-search {

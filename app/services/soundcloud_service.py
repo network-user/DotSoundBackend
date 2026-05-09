@@ -1392,6 +1392,12 @@ class SoundCloudService:
 
         sc_id = sc_data.get("id")
         new_values = {
+            # SC_PLAYBACK_MODE=reference — аварийный режим (см.
+            # `app/config.py`): новые SC-треки помечаются как
+            # external_link, наш плеер их не стримит, карточка
+            # ведёт на исходную страницу SoundCloud. Существующие
+            # записи в БД остаются без изменений — их обновляет
+            # отдельная админ-задача (TODO).
             "title": sc_data.get("title", "Unknown"),
             "artist": artist,
             "duration_seconds": duration_sec,
@@ -1401,7 +1407,14 @@ class SoundCloudService:
             "imported_from": "soundcloud",
             "source": "soundcloud",
             "catalog_type": "external_reference",
-            "access_mode": "third_party_stream",
+            "access_mode": (
+                "external_link"
+                if (
+                    getattr(settings, "sc_playback_mode", "stream")
+                    == "reference"
+                )
+                else "third_party_stream"
+            ),
             "source_platform": "soundcloud",
             "sc_url": sc_url or None,
             "sc_uri": sc_data.get("uri"),

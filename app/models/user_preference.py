@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -40,5 +40,17 @@ class UserPreference(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
     first_play_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    legal_accepted_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    legal_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_adult_confirmed: Mapped[bool] = mapped_column(
+        Boolean, server_default="false", nullable=False
+    )
+    adult_confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

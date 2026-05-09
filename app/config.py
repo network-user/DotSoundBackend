@@ -110,6 +110,16 @@ class AppSettings(BaseSettings):
     # generate_lyrics_task for the same track_id at the same time.
     soundcloud_global_concurrency: int = 4
     soundcloud_slot_acquire_timeout_seconds: float = 30.0
+
+    # Аварийный переключатель воспроизведения для SoundCloud-треков:
+    #   "stream"    — текущая модель (наш плеер поверх stream URL);
+    #   "reference" — карточка трека показывает только ссылку на
+    #                 исходную страницу SoundCloud, наш плеер их не
+    #                 проигрывает.
+    # Переключение нужно держать наготове: при первой претензии от
+    # правообладателя или SoundCloud перевести в "reference" и
+    # отдельно разбираться. См. план Фазы 7.
+    sc_playback_mode: str = "stream"
     artist_station_stale_threshold_days: int = 7
     artist_catalog_full_sync_stale_threshold_days: int = 30
     artist_catalog_enqueue_lock_ttl_seconds: int = 300

@@ -18,6 +18,7 @@ import { canInstallPwa } from '@/components/PwaInstall/InstallPrompt'
 import { showIsland } from '@/lib/island'
 import { useSound } from '@/store/SoundContext'
 import { AccountDangerZone } from './AccountDangerZone'
+import { SettingsLegalSection } from './SettingsLegalSection'
 import { LinkedAccounts } from './LinkedAccounts'
 import { OAuthImportAccounts } from './OAuthImportAccounts'
 import { TwoFASettings } from './TwoFASettings'
@@ -490,6 +491,7 @@ export function SettingsSheet({
             </span>
           </MotionPress>
 
+          <SettingsLegalSection />
           <AccountDangerZone />
         </div>
 
