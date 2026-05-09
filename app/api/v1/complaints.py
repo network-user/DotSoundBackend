@@ -5,7 +5,6 @@ from app.config import AppSettings
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db, get_settings
 from app.models.user import User
-from app.repositories.complaint import ComplaintRepository
 from app.schemas.complaint import (
     ComplaintCreate,
     ComplaintResponse,
@@ -48,21 +47,3 @@ async def submit_complaint(
         complaint=ComplaintResponse.model_validate(complaint),
         track_hidden=track_hidden,
     )
-
-
-@router.get(
-    "/{track_id}", response_model=list[ComplaintResponse]
-)
-@limiter.limit("60/minute")
-async def list_complaints(
-    request: Request,
-    track_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> list[ComplaintResponse]:
-    repo = ComplaintRepository(db)
-    complaints = await repo.list_by_track(track_id)
-    return [
-        ComplaintResponse.model_validate(c)
-        for c in complaints
-    ]

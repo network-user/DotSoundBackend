@@ -61,6 +61,11 @@ async def post_activity(
     member_ids = await repo.get_member_ids(
         conv_id
     )
+    if user.id not in member_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member",
+        )
     targets = [
         uid
         for uid in member_ids
@@ -79,7 +84,15 @@ async def post_activity(
 async def get_activity(
     conv_id: int,
     user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    repo = ChatRepository(session)
+    member_ids = await repo.get_member_ids(conv_id)
+    if user.id not in member_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member",
+        )
     data = await ws_manager.get_chat_activity(
         conv_id, user.id
     )
@@ -195,6 +208,12 @@ async def upload_photo(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    chat_repo = ChatRepository(session)
+    if not await chat_repo.get_member(conv_id, user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member",
+        )
     if (
         file.content_type
         and file.content_type not in _ALLOWED_IMAGE_TYPES
@@ -251,6 +270,12 @@ async def upload_voice_msg(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
+    chat_repo = ChatRepository(session)
+    if not await chat_repo.get_member(conv_id, user.id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member",
+        )
     data = await file.read()
     if len(data) > _MAX_VOICE_BYTES:
         raise HTTPException(

@@ -118,6 +118,11 @@ async def toggle_dislike_public(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> DislikeToggleResponse:
+    if user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
     structlog.contextvars.bind_contextvars(user_id=user_id, track_id=track_id)
     service = DislikeService(session)
     disliked, variant_ids = await service.toggle(user_id, track_id)

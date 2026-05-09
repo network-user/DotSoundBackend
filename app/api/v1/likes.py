@@ -1,5 +1,12 @@
 import structlog
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
@@ -57,6 +64,11 @@ async def toggle_like_public(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> LikeToggleResponse:
+    if user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
     structlog.contextvars.bind_contextvars(
         user_id=user_id, track_id=track_id
     )
