@@ -1,3 +1,6 @@
+import asyncio
+import io
+
 import structlog
 from fastapi import (
     APIRouter,
@@ -8,19 +11,21 @@ from fastapi import (
     status,
 )
 from fastapi.responses import Response
+from PIL import Image, UnidentifiedImageError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_db
 from app.schemas.track import TrackListResponse
-from app.services.track_service import TrackService
 from app.services.track_response_build import dedupe_and_build_track_list
+from app.services.track_service import TrackService
+
+_COVER_RENDER_WIDTHS = frozenset({120, 240, 480})
+_COVER_RENDER_QUALITY = 80
 
 router = APIRouter()
-logger: structlog.stdlib.BoundLogger = (
-    structlog.get_logger(__name__)
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 @router.get(
@@ -40,9 +45,7 @@ async def list_tracks(
     service = TrackService(session)
     if q or genre:
         effective_query = q or genre or ""
-        structlog.contextvars.bind_contextvars(
-            search_query=effective_query
-        )
+        structlog.contextvars.bind_contextvars(search_query=effective_query)
         tracks, total = await service.search(
             effective_query,
             page=page,
@@ -65,11 +68,33 @@ async def list_tracks(
     )
 
 
+def _resize_to_webp(data: bytes, width: int) -> bytes:
+    img: Image.Image = Image.open(io.BytesIO(data))
+    if img.mode in ("RGBA", "LA", "P"):
+        img = img.convert("RGBA")
+    else:
+        img = img.convert("RGB")
+    src_w, src_h = img.size
+    if src_w > width:
+        ratio = width / src_w
+        new_h = max(1, int(src_h * ratio))
+        img = img.resize((width, new_h), Image.Resampling.LANCZOS)
+    buf = io.BytesIO()
+    img.save(
+        buf,
+        format="WEBP",
+        quality=_COVER_RENDER_QUALITY,
+        method=4,
+    )
+    return buf.getvalue()
+
+
 @router.get("/cover_proxy")
 @limiter.limit("600/minute")
 async def cover_proxy(
     request: Request,
     key: str = Query(...),
+    w: int | None = Query(None),
 ) -> Response:
     _ALLOWED_PREFIXES = (
         "covers/",
@@ -89,24 +114,46 @@ async def cover_proxy(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid key",
         )
+    if w is not None and w not in _COVER_RENDER_WIDTHS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported width",
+        )
     try:
         data = await s3.download_object(key)
-    except Exception:
+    except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Cover not found",
+        ) from exc
+
+    if w is None or key.endswith(".ogg"):
+        content_type = "image/png"
+        if key.endswith(".jpg") or key.endswith(".jpeg"):
+            content_type = "image/jpeg"
+        elif key.endswith(".webp"):
+            content_type = "image/webp"
+        elif key.endswith(".ogg"):
+            content_type = "audio/ogg"
+        return Response(
+            content=data,
+            media_type=content_type,
+            headers={"Cache-Control": "public, max-age=3600"},
         )
-    content_type = "image/png"
-    if key.endswith(".jpg") or key.endswith(".jpeg"):
-        content_type = "image/jpeg"
-    elif key.endswith(".webp"):
-        content_type = "image/webp"
-    elif key.endswith(".ogg"):
-        content_type = "audio/ogg"
+
+    try:
+        resized = await asyncio.to_thread(_resize_to_webp, data, w)
+    except UnidentifiedImageError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Unsupported image",
+        ) from exc
     return Response(
-        content=data,
-        media_type=content_type,
-        headers={"Cache-Control": "public, max-age=3600"},
+        content=resized,
+        media_type="image/webp",
+        headers={
+            "Cache-Control": "public, max-age=86400, immutable",
+        },
     )
 
 

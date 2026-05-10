@@ -9,6 +9,26 @@ interface Props {
   style?: CSSProperties
 }
 
+const COVER_RENDER_WIDTHS = [120, 240, 480] as const
+
+function buildProxyUrl(
+  key: string,
+  width?: number,
+): string {
+  const base = `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(key)}`
+  return width ? `${base}&w=${width}` : base
+}
+
+function buildSrcSet(key: string): string {
+  return COVER_RENDER_WIDTHS.map(
+    (w) => `${buildProxyUrl(key, w)} ${w}w`,
+  ).join(', ')
+}
+
+function pickSizesAttr(displaySize: number): string {
+  return `${displaySize}px`
+}
+
 export function CoverImage({
   coverKey,
   externalUrl,
@@ -25,9 +45,10 @@ export function CoverImage({
     ? { ...sizeStyle, ...style }
     : sizeStyle
 
-  const src = coverKey
-    ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(coverKey)}`
-    : externalUrl ?? null
+  const proxySrc = coverKey ? buildProxyUrl(coverKey) : null
+  const srcSet = coverKey ? buildSrcSet(coverKey) : undefined
+  const sizesAttr = coverKey ? pickSizesAttr(size) : undefined
+  const src = proxySrc ?? externalUrl ?? null
 
   return (
     <div
@@ -37,6 +58,8 @@ export function CoverImage({
       {src && !failed ? (
         <img
           src={src}
+          srcSet={srcSet}
+          sizes={sizesAttr}
           alt=""
           width={size}
           height={size}
