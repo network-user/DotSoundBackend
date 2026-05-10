@@ -1,5 +1,6 @@
 import contextlib
 import re
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -28,6 +29,26 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _SC_API_BASE = "https://api-v2.soundcloud.com"
 
+# Per-(proxy_url, timeout) httpx client cache. SoundCloud calls
+# previously created a fresh ``httpx.AsyncClient`` (and a fresh
+# TLS handshake) per request — at scale this is the largest fixed
+# cost on each call. We keep one client per outbound proxy variant
+# and let httpx pool the underlying TCP connections.
+#
+# Tor pool integration: ``get_outbound_proxy`` round-robins across
+# circuit SOCKS ports, so each circuit gets its own client — a
+# fresh circuit rotation just creates one extra entry, not a full
+# new TLS handshake on every call.
+_sc_http_client_cache: dict[tuple[str | None, float], httpx.AsyncClient] = {}
+
+
+async def close_sc_http_clients() -> None:
+    """Close cached SC clients. Called on Taskiq/FastAPI shutdown."""
+    for client in list(_sc_http_client_cache.values()):
+        with contextlib.suppress(Exception):
+            await client.aclose()
+    _sc_http_client_cache.clear()
+
 
 class SoundCloudRateLimitError(Exception):
     """Raised on SC 429/503 — caller should back off before retrying."""
@@ -54,6 +75,7 @@ async def _maybe_enqueue_audio_cache(track_id: int) -> None:
             track_id=track_id,
             error=str(exc),
         )
+
 
 _SC_STATION_SYNTHETIC_ID_OFFSET = 10**15
 
@@ -120,14 +142,27 @@ class SoundCloudService:
         self._client_id = client_id
         self._session = session
 
-    def _sc_client(
-        self, timeout: float = 10, **kwargs: object
-    ) -> httpx.AsyncClient:
-        """Return an AsyncClient routed through Tor if the pool is active."""
+    @contextlib.asynccontextmanager
+    async def _sc_client(
+        self, timeout: float = 10
+    ) -> AsyncIterator[httpx.AsyncClient]:
+        """Yield a pooled AsyncClient routed through Tor if active.
+
+        The yielded client is shared across calls — do NOT close it
+        from the call site (the ``async with`` here is a no-op
+        cleanup wrapper, just to keep the existing call shape).
+        Process-wide shutdown is handled by
+        :func:`close_sc_http_clients`.
+        """
         from app.services.tor_pool import get_outbound_proxy
 
         proxy = get_outbound_proxy("soundcloud")
-        return httpx.AsyncClient(timeout=timeout, proxy=proxy, **kwargs)  # type: ignore[arg-type]
+        key = (proxy, float(timeout))
+        client = _sc_http_client_cache.get(key)
+        if client is None or client.is_closed:
+            client = httpx.AsyncClient(timeout=timeout, proxy=proxy)  # type: ignore[arg-type]
+            _sc_http_client_cache[key] = client
+        yield client
 
     async def search(self, query: str, limit: int = 20) -> list[dict]:
         if not self._client_id:
@@ -200,28 +235,18 @@ class SoundCloudService:
 
         def _score(cand: dict[str, Any]) -> float:
             ct = _norm(cand.get("title", ""))
-            cu = _norm(
-                cand.get("user", {}).get("username", "")
-            )
-            cf = _norm(
-                cand.get("user", {}).get("full_name", "")
-            )
+            cu = _norm(cand.get("user", {}).get("username", ""))
+            cf = _norm(cand.get("user", {}).get("full_name", ""))
             cd_ms: int = cand.get("duration") or 0
             tt = _norm(title)
             ta = _norm(artist or "")
 
-            t_score = difflib.SequenceMatcher(
-                None, tt, ct
-            ).ratio()
+            t_score = difflib.SequenceMatcher(None, tt, ct).ratio()
             a_score = 0.0
             if ta:
                 a_score = max(
-                    difflib.SequenceMatcher(
-                        None, ta, cu
-                    ).ratio(),
-                    difflib.SequenceMatcher(
-                        None, ta, cf
-                    ).ratio(),
+                    difflib.SequenceMatcher(None, ta, cu).ratio(),
+                    difflib.SequenceMatcher(None, ta, cf).ratio(),
                 )
             d_score = 0.0
             if duration_seconds and cd_ms:
@@ -230,11 +255,7 @@ class SoundCloudService:
                 d_score = max(0.0, 1.0 - delta / tol)
 
             if ta:
-                return (
-                    t_score * 0.5
-                    + a_score * 0.3
-                    + d_score * 0.2
-                )
+                return t_score * 0.5 + a_score * 0.3 + d_score * 0.2
             return t_score * 0.7 + d_score * 0.3
 
         queries: list[str] = []
@@ -244,9 +265,7 @@ class SoundCloudService:
         queries.append(title)
         if " - " in title and not artist:
             parts = title.split(" - ", 1)
-            queries.append(
-                f"{parts[0].strip()} {parts[1].strip()}"
-            )
+            queries.append(f"{parts[0].strip()} {parts[1].strip()}")
 
         seen_ids: set[int] = set()
         candidates: list[dict[str, Any]] = []
@@ -312,9 +331,7 @@ class SoundCloudService:
                     params=params,
                 )
         except SoundCloudSemaphoreTimeout as exc:
-            logger.warning(
-                "sc_charts_semaphore_timeout", error=str(exc)
-            )
+            logger.warning("sc_charts_semaphore_timeout", error=str(exc))
             return []
         except Exception as exc:
             logger.warning("sc_charts_failed", error=str(exc))
@@ -326,9 +343,7 @@ class SoundCloudService:
         if r.status_code in (429, 503):
             retry_after: float | None = None
             with contextlib.suppress(TypeError, ValueError):
-                retry_after = float(
-                    r.headers.get("Retry-After", "")
-                )
+                retry_after = float(r.headers.get("Retry-After", ""))
             logger.warning(
                 "sc_charts_rate_limited",
                 status=r.status_code,
@@ -347,9 +362,7 @@ class SoundCloudService:
     async def get_trending(self, limit: int = 20) -> list[dict]:
         """Global trending tracks via charts or popular search fallback."""
         try:
-            result = await self.get_charts(
-                genre="all-music", limit=limit
-            )
+            result = await self.get_charts(genre="all-music", limit=limit)
         except SoundCloudRateLimitError:
             logger.warning("sc_trending_charts_rate_limited")
             return await self._get_popular_fallback(limit)
@@ -509,8 +522,7 @@ class SoundCloudService:
                         (
                             t
                             for t in transcodings
-                            if t.get("format", {}).get("protocol")
-                            == protocol
+                            if t.get("format", {}).get("protocol") == protocol
                             and not t.get("snipped")
                         ),
                         None,
@@ -519,9 +531,7 @@ class SoundCloudService:
                         continue
                     attempted = True
                     try:
-                        r = await client.get(
-                            selected["url"], params=params
-                        )
+                        r = await client.get(selected["url"], params=params)
                     except httpx.HTTPError as exc:
                         saw_transient_network_error = True
                         logger.warning(
@@ -582,9 +592,7 @@ class SoundCloudService:
                 if saw_transient_network_error:
                     raise HTTPException(
                         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail=(
-                            "SoundCloud upstream temporarily unavailable"
-                        ),
+                        detail=("SoundCloud upstream temporarily unavailable"),
                     )
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
@@ -1481,9 +1489,7 @@ class SoundCloudService:
                 .values(**new_values)
                 .on_conflict_do_nothing(
                     index_elements=["imported_from", "external_id"],
-                    index_where=sql_text(
-                        "external_id IS NOT NULL"
-                    ),
+                    index_where=sql_text("external_id IS NOT NULL"),
                 )
                 .returning(Track)
             )
@@ -1493,8 +1499,7 @@ class SoundCloudService:
             if track is None:
                 existing_result = await self._session.execute(
                     select(Track).where(
-                        Track.imported_from
-                        == new_values["imported_from"],
+                        Track.imported_from == new_values["imported_from"],
                         Track.external_id == external_id,
                     )
                 )

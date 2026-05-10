@@ -153,6 +153,15 @@ async def email_auth_verify(
         request, session, int(str(result["user_id"]))
     )
 
+    from app.services.abuse_guard import evaluate_auth_event
+
+    await evaluate_auth_event(
+        request,
+        session=session,
+        kind="login",
+        user_id=int(str(result["user_id"])),
+    )
+
     return EmailVerifyResponse(
         access_token=str(result["access_token"]),
         user_id=int(str(result["user_id"])),

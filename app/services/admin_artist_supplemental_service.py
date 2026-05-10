@@ -15,14 +15,21 @@ from app.repositories.artist_supplemental_info import (
     ArtistSupplementalInfoRepository,
 )
 
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+
+_BIO_SNIPPET_LEN = 300
+
 _BATCH_PROMPT_HEADER = """\
-Ты — музыкальный редактор платформы DotSound.
+Ты — музыкальный редактор платформы DotSound (российская музыкальная платформа).
 Для каждого артиста из списка напиши краткую справку для карточки артиста.
 
-Требования к каждому описанию (3–5 предложений):
-— Краткий контекст и позиционирование артиста
-— Нейтральный информационный стиль, без превосходных степеней
-— Текст должен быть полезен пользователю карточки артиста
+Правила:
+— 3–5 предложений на артиста
+— Язык текста: если у артиста метка [RU] — пиши на русском; если [EN] — пиши на русском, \
+но адаптируй контекст для русскоязычной аудитории
+— Используй country и bio_hint как источник фактов; не придумывай даты и факты если их нет
+— Нейтральный информационный стиль, без превосходных степеней и рекламных оборотов
+— Текст должен быть полезен пользователю карточки артиста на платформе DotSound
 
 Верни ответ СТРОГО в формате JSON (без пояснений, только JSON):
 {{
@@ -44,10 +51,7 @@ class AdminArtistSupplementalService:
 
     async def batch_prompt(self, artist_ids: list[int]) -> tuple[str, int]:
         artists = await self._load_artists(artist_ids)
-        lines = [
-            f"— ID: {artist.id} | Имя: {artist.name}"
-            for artist in artists
-        ]
+        lines = [_format_artist_line(a) for a in artists]
         prompt = _BATCH_PROMPT_HEADER.format(
             artist_list="\n".join(lines) if lines else "(нет артистов)",
         )
@@ -90,6 +94,28 @@ class AdminArtistSupplementalService:
         )
         by_id = {a.id: a for a in result.scalars().all()}
         return [by_id[i] for i in artist_ids if i in by_id]
+
+
+def _detect_language(name: str | None) -> str:
+    return "ru" if _CYRILLIC_RE.search(name or "") else "en"
+
+
+def _format_artist_line(artist: Artist) -> str:
+    lang = _detect_language(artist.name)
+    lang_label = "[RU]" if lang == "ru" else "[EN]"
+    country = artist.country or "—"
+    bio_hint = "—"
+    if artist.bio and artist.bio.strip():
+        snippet = artist.bio.strip()
+        if len(snippet) > _BIO_SNIPPET_LEN:
+            snippet = snippet[:_BIO_SNIPPET_LEN] + "…"
+        bio_hint = snippet
+    return (
+        f"— ID: {artist.id} {lang_label} | "
+        f"Имя: {artist.name} | "
+        f"country: {country} | "
+        f"bio_hint: {bio_hint}"
+    )
 
 
 def _parse_ai_response(

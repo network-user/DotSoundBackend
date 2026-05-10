@@ -112,3 +112,91 @@ async def test_get_author_stats_by_telegram_id(
 
     assert stats.total_tracks == 1
     assert stats.total_plays == 5
+
+
+async def _emit_listen(
+    session: AsyncSession,
+    user_id: int,
+    track_id: int,
+    *,
+    completed: bool = True,
+) -> None:
+    from datetime import UTC, datetime
+
+    from app.models.listen_event import ListenEvent
+
+    session.add(
+        ListenEvent(
+            user_id=user_id,
+            track_id=track_id,
+            started_at=datetime.now(UTC),
+            duration_listened_seconds=120,
+            total_duration_seconds=180,
+            completed=completed,
+            skipped=False,
+            source_context=None,
+        )
+    )
+    await session.flush()
+
+
+async def test_get_user_top_tracks_drops_low_listen_count(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, 1700)
+    quiet = await _make_track(session, user.id)
+    loud = await _make_track(session, user.id)
+    # one completed event for the quiet track, four for the loud one
+    await _emit_listen(session, user.id, quiet.id)
+    for _ in range(4):
+        await _emit_listen(session, user.id, loud.id)
+
+    svc = StatsService(session)
+    tracks, window = await svc.get_user_top_tracks(
+        user.id, window="30d"
+    )
+    ids = [t.id for t in tracks]
+
+    assert window == "30d"
+    assert loud.id in ids
+    assert quiet.id not in ids
+
+
+async def test_get_user_top_tracks_normalizes_window(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, 1701)
+    track = await _make_track(session, user.id)
+    for _ in range(5):
+        await _emit_listen(session, user.id, track.id)
+
+    svc = StatsService(session)
+    _, window = await svc.get_user_top_tracks(
+        user.id, window="garbage"
+    )
+    assert window in {"7d", "30d", "90d", "all"}
+
+
+async def test_get_user_top_genres_returns_genre_with_count(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, 1702)
+    track = Track(
+        title="G",
+        file_key="k",
+        uploaded_by_id=user.id,
+        play_count=0,
+        genre="rock",
+    )
+    session.add(track)
+    await session.flush()
+    for _ in range(5):
+        await _emit_listen(session, user.id, track.id)
+
+    svc = StatsService(session)
+    items, _ = await svc.get_user_top_genres(
+        user.id, window="all"
+    )
+    assert items, "expected at least one genre"
+    assert items[0][0] == "rock"
+    assert items[0][1] >= 1

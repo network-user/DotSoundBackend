@@ -57,7 +57,7 @@ export function TracksRoute() {
   const [search, setSearch] = useState('')
   const [withoutLyricsOnly, setWithoutLyricsOnly] = useState(false)
   const [listView, setListView] = useState<
-    'all' | 'playback_failures' | 'playback_suppressed'
+    'all' | 'playback_failures' | 'playback_suppressed' | 'deleted'
   >('all')
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -122,6 +122,9 @@ export function TracksRoute() {
       if (listView === 'playback_suppressed') {
         return adminApi.listTracksPlaybackSuppressed(base)
       }
+      if (listView === 'deleted') {
+        return adminApi.listDeletedTracks(base)
+      }
       return adminApi.listTracks({
         ...base,
         without_lyrics: withoutLyricsOnly || undefined,
@@ -185,6 +188,43 @@ export function TracksRoute() {
           message: (err as Error).message,
         }),
       )
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleRestoreDeleted = async (id: number) => {
+    setBusyId(id)
+    try {
+      await adminApi.restoreTrack(id)
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleHardDeleteForever = async (
+    id: number,
+    title: string,
+  ) => {
+    const ok = await showConfirm(
+      t(
+        'admin.tracks.confirmHardDelete',
+        'Удалить трек "{{title}}" (#{{id}}) безвозвратно? ' +
+          'Файлы из S3 и индекс будут удалены немедленно.',
+        { id, title },
+      ),
+      { danger: true },
+    )
+    if (!ok) return
+    setBusyId(id)
+    try {
+      await adminApi.hardDeleteTrackForever(id)
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
     } finally {
       setBusyId(null)
     }
@@ -698,13 +738,40 @@ export function TracksRoute() {
             >
               Контекст
             </MotionPress>
-            <MotionPress
-              variant="ghost"
-              onClick={() => handleDelete(id, title)}
-              disabled={busy}
-            >
-              {t('admin.tracks.actionDelete')}
-            </MotionPress>
+            {listView === 'deleted' ? (
+              <>
+                <MotionPress
+                  variant="ghost"
+                  onClick={() => handleRestoreDeleted(id)}
+                  disabled={busy}
+                >
+                  {t(
+                    'admin.tracks.actionRestore',
+                    'Восстановить',
+                  )}
+                </MotionPress>
+                <MotionPress
+                  variant="danger"
+                  onClick={() =>
+                    handleHardDeleteForever(id, title)
+                  }
+                  disabled={busy}
+                >
+                  {t(
+                    'admin.tracks.actionHardDelete',
+                    'Удалить навсегда',
+                  )}
+                </MotionPress>
+              </>
+            ) : (
+              <MotionPress
+                variant="ghost"
+                onClick={() => handleDelete(id, title)}
+                disabled={busy}
+              >
+                {t('admin.tracks.actionDelete')}
+              </MotionPress>
+            )}
           </div>
         )
       },
@@ -815,7 +882,8 @@ export function TracksRoute() {
               v as
                 | 'all'
                 | 'playback_failures'
-                | 'playback_suppressed',
+                | 'playback_suppressed'
+                | 'deleted',
             )
             setPage(1)
             setSelectedIds(new Set())
@@ -830,6 +898,7 @@ export function TracksRoute() {
               value: 'playback_suppressed',
               label: 'Auto-hidden',
             },
+            { value: 'deleted', label: 'Deleted' },
           ]}
         />
         <label

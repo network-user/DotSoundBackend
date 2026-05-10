@@ -1588,6 +1588,33 @@
   `GET /users/me/top`; новая плитка `quickMyTop` в
   `MIX_SHORTCUT_TILES`, i18n RU/EN.
 
+- [x] **Polish-pass (2026-05-10)**:
+  - Admin `TracksRoute`: вкладка `Deleted` в
+    `AdminRangeSwitch` (`adminApi.listDeletedTracks`); в
+    строках этой вкладки — кнопки `Восстановить`
+    (`adminApi.restoreTrack`) и `Удалить навсегда`
+    (`adminApi.hardDeleteTrackForever` со step-up confirm).
+  - `PlayerContext.playNext`: при отсутствии next через
+    API и `navigator.onLine === false` падает в
+    `_fallbackToCachedTrack`, который тянет из
+    `getCachedTracks` следующий доступный кэшированный трек.
+  - `ListenerStats` показывает CTA «Открыть Ваш топ →»,
+    ведущий на `/my-top`.
+  - `app/api/v1/auth_email.py /verify` подключён к
+    `evaluate_auth_event(kind="login")` (LOCKOUT → 423,
+    REQUIRE_CAPTCHA → 429), как `auth.py /telegram`.
+  - `app/models/__init__.py` импортирует `AbuseEvent`
+    (включает таблицу в `Base.metadata.create_all` для
+    in-memory pytest БД).
+  - Тесты: `tests/app/repositories/test_abuse_event.py`
+    (recent_signal_counts: empty / short-vs-long window /
+    failed_login_burst по score, `prune_older_than`),
+    `tests/app/services/test_abuse_signal_service.py`
+    (PASS-event persists; LOCKOUT при «грязных» сигналах),
+    3 новых сценария в `test_stats_service.py`
+    (top tracks отбрасывает листенеров ниже порога,
+    нормализация window, top genres).
+
 - [x] **Onboarding v2 — заверение flow и переключение App.tsx (2026-05-08)**:
   собран главный компонент `OnboardingV2` (`Welcome → Profile → Genres →
   Swipe → Complete`), подключён в `App.tsx` вместо старого
@@ -1601,3 +1628,37 @@
   синтаксис в `DotSoundPrivateCore/src/dotsound_private_core/services/
   lyrics_provider.py` (две слипшиеся в одну строку конструкции из ASR
   loop), без них тесты не загружались.
+
+## Оптимизация импорта (2026-05-10)
+
+- [x] **Параллельный prefetch SC-поиска + полный рефакторинг import-воркеров**:
+  - `app/services/external_import_worker.py`: до главного цикла вызывается
+    `_prefetch_sc_searches` — все SC-запросы для треков без локального
+    совпадения запускаются параллельно (семафор `import_sc_prefetch_concurrency=3`),
+    каждый слот спит джиттер перед вызовом API и пишет результат в Redis.
+    Главный цикл попадает в кеш — сохраняет время ожидания поиска.
+    Оба запроса (`artist+title` и только `title`) прогреваются заранее.
+  - `app/utils/text_normalize.py`: `normalize_for_match` — зеркало SQL
+    `lower(trim(...))` для консистентного preflight-матчинга.
+  - `app/repositories/track.py`: `find_existing_by_normalized_title_artist`
+    — пакетный запрос по (title, artist) без внешних вызовов.
+  - `app/services/import_service.py`: Redis-флаги отмены вместо refresh DB
+    в каждом item-цикле; `set_cancel_flag`, `is_cancel_flag_set`, `clear_cancel_flag`.
+  - `app/services/import_queue_dispatcher.py`: `sweep_stuck_jobs` сбрасывает
+    зависшие `importing` джобы в `queued`.
+  - `app/services/external_providers.py`: `asyncio.wait_for` с `scan_timeout_seconds`
+    для scan_playlist_url + код ошибки `scan_timeout`.
+  - `app/services/soundcloud_service.py`: `_sc_http_client_cache` — persistent
+    `httpx.AsyncClient` per (proxy, timeout); `close_sc_http_clients` при shutdown.
+  - `app/services/import_worker.py` (Telegram): single httpx.AsyncClient на job,
+    retry с backoff `_download_audio_with_retry`, `_BOT_RETRYABLE_STATUSES`.
+  - `alembic/versions/0090_import_job_items.py`: таблица `import_job_items`
+    (PK job_id+idx, status, track_id FK, title, artist, sc_url, reason, local_match,
+    updated_at) с `ON CONFLICT DO NOTHING` для идемпотентного resume.
+  - `app/models/import_job_item.py` + `app/repositories/import_job_item.py`:
+    полный CRUD; `seed_pending`, `list_pending_indices`, `mark_done/failed/skipped/deduped`,
+    `counters`, `list_for_response`.
+  - `app/config.py`: новые knobs `import_job_stuck_after_seconds`,
+    `import_cancel_flag_ttl_seconds`, `import_lease_check_every_n_items`,
+    `import_sc_prefetch_concurrency`, `import_telegram_download_*`,
+    `scan_timeout_seconds`.

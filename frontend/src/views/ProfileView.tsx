@@ -31,6 +31,7 @@ import { NotificationBell } from '@/components/Notifications/NotificationBell'
 import { ProfileAdminButton } from '@/components/Admin/ProfileAdminButton'
 import { ProfileDebugMenu } from '@/components/Admin/ProfileDebugMenu'
 import { MyComplaintsList } from '@/components/Profile/MyComplaintsList'
+import { ProfileStatsTab } from '@/components/Profile/ProfileStatsTab'
 import { DislikedView } from '@/views/DislikedView'
 
 type ProfileTab =
@@ -38,6 +39,7 @@ type ProfileTab =
   | 'import'
   | 'complaints'
   | 'dislikes'
+  | 'stats'
 
 interface Props {
   onOpenSettings?: () => void
@@ -323,6 +325,8 @@ export function ProfileView({
         return t('profile.tabComplaints')
       case 'dislikes':
         return t('profile.tabDislikes')
+      case 'stats':
+        return t('profile.tabStats', 'Статистика')
       default:
         return ''
     }
@@ -450,6 +454,7 @@ export function ProfileView({
               onOpenDislikes={() =>
                 setTab('dislikes')
               }
+              onOpenStats={() => setTab('stats')}
             />
             <ProfileTrackList
               tracks={myTracks}
@@ -469,6 +474,8 @@ export function ProfileView({
         {tab === 'complaints' && <MyComplaintsList />}
 
         {tab === 'dislikes' && <DislikedView />}
+
+        {tab === 'stats' && <ProfileStatsTab />}
       </div>
     </section>
   )

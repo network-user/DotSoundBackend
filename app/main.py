@@ -97,9 +97,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
                 try:
                     await init_elasticsearch_starter()
                 except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "elasticsearch_init_failed", error=str(exc)
-                    )
+                    logger.warning("elasticsearch_init_failed", error=str(exc))
                     return
                 if _do_backfill:
                     try:
@@ -192,6 +190,12 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             await close_es()
         except Exception:  # noqa: BLE001
             logger.exception("elasticsearch_close_failed")
+    try:
+        from app.services.soundcloud_service import close_sc_http_clients
+
+        await close_sc_http_clients()
+    except Exception:  # noqa: BLE001
+        logger.exception("sc_http_client_close_failed")
     await ws_manager.shutdown()
     await close_redis()
     await dispose_engine()

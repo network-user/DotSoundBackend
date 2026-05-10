@@ -62,3 +62,9 @@ async def _taskiq_worker_shutdown(_st: TaskiqState) -> None:
         await close_es()
     except Exception:  # noqa: BLE001
         logger.exception("elasticsearch_worker_close_failed")
+    try:
+        from app.services.soundcloud_service import close_sc_http_clients
+
+        await close_sc_http_clients()
+    except Exception:  # noqa: BLE001
+        logger.exception("sc_http_client_close_failed")

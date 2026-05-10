@@ -189,6 +189,13 @@ class AppSettings(BaseSettings):
     import_job_stuck_after_seconds: int = 600
     import_job_heartbeat_min_interval_seconds: float = 30.0
 
+    # In-loop overhead control. Per-item ``session.refresh(job)``
+    # was costing 1000 round-trips for a 1000-track import just to
+    # detect cancel/lease. Cancel is now a Redis flag (no DB), and
+    # the lease re-read from Postgres happens at most every N items.
+    import_cancel_flag_ttl_seconds: int = 24 * 3600
+    import_lease_check_every_n_items: int = 10
+
     # Per-track pacing for external import jobs. Prevents rapid-fire
     # API calls that trigger platform-side IP bans.
     # SLOW_MODE kicks in when a job contains more than THRESHOLD tracks.
@@ -201,6 +208,21 @@ class AppSettings(BaseSettings):
     import_per_track_retry_base_delay_seconds: float = 5.0
     import_adaptive_failure_window: int = 5
     import_adaptive_delay_multiplier_max: float = 4.0
+    # SC searches for non-local-match items are prefetched in parallel
+    # before the main loop runs. This concurrency value controls how
+    # many search requests can be in-flight simultaneously. Keep it ≤
+    # the global ``soundcloud_slot`` semaphore capacity (default 4).
+    import_sc_prefetch_concurrency: int = 3
+
+    # Telegram import path: a transient bot/network failure used to
+    # kill the import for that track. With a small retry budget the
+    # 502/timeout window is closed without paying for the rare
+    # double-download. ``concurrency`` is intentionally tiny — the
+    # Telegram bot is one process and parallel downloads against it
+    # multiply the rate-limit pressure.
+    import_telegram_download_max_retries: int = 2
+    import_telegram_download_retry_base_delay_seconds: float = 2.0
+    import_telegram_download_concurrency: int = 1
 
     # Audio caching: download third-party audio to S3 for local serving.
     # Off by default — enable once storage budget is confirmed.

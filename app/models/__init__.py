@@ -1,3 +1,4 @@
+from app.models.abuse_event import AbuseEvent
 from app.models.account_merge import AccountMerge
 from app.models.admin_action_log import AdminActionLog
 from app.models.admin_capability import AdminCapability
@@ -36,18 +37,19 @@ from app.models.dislike import Dislike
 from app.models.encryption_key import EncryptionKey
 from app.models.eq_settings import UserEqSettings
 from app.models.follow import UserFollow
-from app.models.genre_sample import GenreSample
 from app.models.genre_mix_override import GenreMixOverride
+from app.models.genre_sample import GenreSample
 from app.models.image_blob import ImageBlob
 from app.models.import_job import ImportJob
+from app.models.import_job_item import ImportJobItem
 from app.models.like import Like
 from app.models.listen_event import ListenEvent
 from app.models.login_history import LoginHistory
 from app.models.lyrics import TrackLyrics
+from app.models.lyrics_job import LyricsJob
 from app.models.lyrics_translation import (
     TrackLyricsTranslation,
 )
-from app.models.lyrics_job import LyricsJob
 from app.models.message import (
     Message,
     MessageAttachment,
@@ -82,6 +84,7 @@ from app.models.video_blob import VideoBlob
 from app.models.worker_audit import WorkerAuditLog
 
 __all__ = [
+    "AbuseEvent",
     "AccountMerge",
     "ArtistSupplementalInfo",
     "TrackInfo",
@@ -114,6 +117,7 @@ __all__ = [
     "GenreSample",
     "GenreMixOverride",
     "ImportJob",
+    "ImportJobItem",
     "Like",
     "ListenEvent",
     "LoginHistory",

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import hashlib
 
 import httpx
@@ -27,12 +28,43 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _BOT_TIMEOUT = 30.0
 _SCAN_CACHE_PREFIX = "import:scan"
+_CANCEL_FLAG_PREFIX = "import:cancel"
+
+
+def _cancel_flag_key(job_id: int) -> str:
+    return f"{_CANCEL_FLAG_PREFIX}:{job_id}"
+
+
+async def set_cancel_flag(job_id: int) -> None:
+    """Mark a job as cancelled in Redis.
+
+    Worker loops poll this on every iteration so the cancel takes
+    effect without the per-item ``session.refresh(job)`` round-trip
+    that previously dominated the loop overhead at scale.
+    """
+    with contextlib.suppress(Exception):
+        await get_redis_client().set(
+            _cancel_flag_key(job_id),
+            "1",
+            ex=settings.import_cancel_flag_ttl_seconds,
+        )
+
+
+async def is_cancel_flag_set(job_id: int) -> bool:
+    try:
+        v = await get_redis_client().get(_cancel_flag_key(job_id))
+        return v is not None
+    except Exception:
+        return False
+
+
+async def clear_cancel_flag(job_id: int) -> None:
+    with contextlib.suppress(Exception):
+        await get_redis_client().delete(_cancel_flag_key(job_id))
 
 
 def _scan_cache_key(user_id: int, source: str, url: str) -> str:
-    digest = hashlib.sha256(
-        f"{source}:{url}".encode()
-    ).hexdigest()
+    digest = hashlib.sha256(f"{source}:{url}".encode()).hexdigest()
     return f"{_SCAN_CACHE_PREFIX}:{user_id}:{digest}"
 
 
@@ -68,9 +100,7 @@ def _is_postgresql(session: AsyncSession) -> bool:
     return getattr(bind.dialect, "name", "") == "postgresql"
 
 
-async def _advisory_lock_user(
-    session: AsyncSession, user_id: int
-) -> None:
+async def _advisory_lock_user(session: AsyncSession, user_id: int) -> None:
     """Acquire a transaction-level advisory lock keyed on user_id.
 
     Serializes concurrent start_import calls for the same user to
@@ -182,13 +212,9 @@ class ImportService:
 
         user = await self._resolve_user(user_id)
 
-        cached_job_id = await _get_scan_cache_job_id(
-            user.id, source, url
-        )
+        cached_job_id = await _get_scan_cache_job_id(user.id, source, url)
         if cached_job_id is not None:
-            cached_job = await self._session.get(
-                ImportJob, cached_job_id
-            )
+            cached_job = await self._session.get(ImportJob, cached_job_id)
             if cached_job and cached_job.status == "ready":
                 logger.info(
                     "external_scan_cache_hit",
@@ -342,9 +368,7 @@ class ImportService:
             for t in result.tracks
         ]
         source_label = (
-            "Liked tracks"
-            if source == "liked"
-            else f"Playlist: {source}"
+            "Liked tracks" if source == "liked" else f"Playlist: {source}"
         )
         job.status = "ready"
         job.total_tracks = len(tracks)
@@ -483,6 +507,7 @@ class ImportService:
             "queued",
         ):
             job.status = "cancelled"
+            await set_cancel_flag(job.id)
         return job
 
     async def _get_job(self, job_id: int, internal_user_id: int) -> ImportJob:

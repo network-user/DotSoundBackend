@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
@@ -26,6 +27,7 @@ function formatMinutes(min: number): string {
 
 export function ListenerStats() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [period, setPeriod] = useState<7 | 30 | 365>(30)
   const [data, setData] = useState<ListenerStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -179,6 +181,22 @@ export function ListenerStats() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {!loading && (minutes > 0 || tracks > 0) && (
+        <div className="listener-stats__footer">
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            onClick={() => navigate('/my-top')}
+          >
+            {t(
+              'profile.listenStats.openMyTop',
+              'Открыть «Ваш топ» →',
+            )}
+          </MotionPress>
         </div>
       )}
     </div>

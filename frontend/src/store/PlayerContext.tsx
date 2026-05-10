@@ -1831,7 +1831,32 @@ export function PlayerProvider({
         await playTrack(t)
         return true
       }
-      return false
+      return await _fallbackToCachedTrack(track.id)
+    } catch {
+      return await _fallbackToCachedTrack(track.id)
+    }
+  }
+
+  const _fallbackToCachedTrack = async (
+    excludeId: number,
+  ): Promise<boolean> => {
+    const isOffline =
+      typeof navigator !== 'undefined' &&
+      navigator.onLine === false
+    if (!isOffline) return false
+    try {
+      const { getCachedTracks } = await import(
+        '@/lib/offlineCache'
+      )
+      const cached = await getCachedTracks()
+      const next = cached.find(
+        (rec) =>
+          rec.trackId !== excludeId &&
+          !unavailableTrackIdsRef.current.has(rec.trackId),
+      )
+      if (!next) return false
+      await playTrack(next.track)
+      return true
     } catch {
       return false
     }

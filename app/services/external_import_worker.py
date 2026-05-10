@@ -16,9 +16,14 @@ from app.core.redis import get_redis_client
 from app.core.tkq import broker
 from app.models.import_job import ImportJob
 from app.models.track import Track
+from app.repositories.import_job_item import ImportJobItemRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user_track_library import (
     UserTrackLibraryRepository,
+)
+from app.services.import_service import (
+    clear_cancel_flag,
+    is_cancel_flag_set,
 )
 from app.services.soundcloud_service import (
     SoundCloudRateLimitError,
@@ -162,6 +167,65 @@ def _lookup_local_match(
     return matches.get((title, artist))
 
 
+async def _prefetch_sc_searches(
+    sc_service: SoundCloudService,
+    items: list[dict],  # type: ignore[type-arg]
+    *,
+    job_id: int,
+    slow: bool,
+) -> None:
+    """Warm the Redis SC-search cache for all pending items concurrently.
+
+    Each slot acquires a semaphore, sleeps a random jitter, then fires
+    one ``search`` call. Cache hits are skipped entirely. Errors are
+    suppressed — a miss here just means the main loop does the live
+    call. This separates the *search* latency from the serial main loop
+    so both phases (search prefetch + ``import_or_get_track``) overlap
+    in wall-clock time.
+    """
+    concurrency = max(1, int(settings.import_sc_prefetch_concurrency))
+    sem = asyncio.Semaphore(concurrency)
+
+    async def _fetch_one(query: str) -> None:
+        cached = await _get_cached_sc_search(query)
+        if cached is not None:
+            return
+        async with sem:
+            await asyncio.sleep(_jitter_delay(slow))
+            try:
+                hits = await _search_with_retry(
+                    sc_service,
+                    query,
+                    max_retries=settings.import_per_track_max_retries,
+                    base_delay=settings.import_per_track_retry_base_delay_seconds,
+                    delay_multiplier=1.0,
+                    job_id=job_id,
+                )
+                await _set_cached_sc_search(query, hits)
+            except Exception:
+                logger.debug(
+                    "external_import_prefetch_miss",
+                    job_id=job_id,
+                    query=query,
+                )
+
+    seen: set[str] = set()
+    tasks: list[asyncio.Task[None]] = []
+    for item in items:
+        title = (item.get("title") or "").strip()
+        artist = (item.get("artist") or "").strip()
+        q = _build_query(title, artist)
+        if q and q not in seen:
+            seen.add(q)
+            tasks.append(asyncio.create_task(_fetch_one(q)))
+        # Pre-warm title-only query used by the fallback retry path.
+        if title and artist and title not in seen:
+            seen.add(title)
+            tasks.append(asyncio.create_task(_fetch_one(title)))
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+
 def _build_query(title: str, artist: str) -> str:
     parts = [p.strip() for p in (artist, title) if p and p.strip()]
     return " ".join(parts)
@@ -233,13 +297,18 @@ async def process_external_import_job(job_id: int) -> None:
             await send_import_job_finished_notification(session, job)
             return
 
-        # Resume: completed + failed counters double as a cursor.
-        # Every per-item branch already increments exactly one of
-        # them, so a worker restart picks up where the previous run
-        # was forced to stop without rescanning processed items.
-        cursor = int(job.completed_tracks or 0) + int(job.failed_tracks or 0)
-        cursor = max(0, min(cursor, len(selected_full)))
-        selected = selected_full[cursor:]
+        # Per-track state lives in ``import_job_items``. Seed the
+        # rows once (idempotent on resume) and use the set of still
+        # ``pending`` indices as the cursor — strictly more reliable
+        # than the completed+failed counter, which assumed contiguous
+        # progress and could double-process items in edge cases.
+        items_repo = ImportJobItemRepository(session)
+        await items_repo.seed_pending(job.id, selected_full)
+        await session.commit()
+
+        original_idx_list = await items_repo.list_pending_indices(job.id)
+        selected = [selected_full[i] for i in original_idx_list]
+        cursor_count = len(selected_full) - len(selected)
 
         # Worker lease: any zombie worker that wakes up after
         # ``sweep_stuck_jobs`` reset this row will see a different
@@ -253,14 +322,12 @@ async def process_external_import_job(job_id: int) -> None:
         sc_service = SoundCloudService(settings.sc_client_id, session)
         library_repo = UserTrackLibraryRepository(session)
         track_repo = TrackRepository(session)
-        imported: list[dict] = list(existing_data.get("imported", []))
-        not_matched: list[dict] = list(existing_data.get("not_matched", []))
 
-        if cursor > 0:
+        if cursor_count > 0:
             logger.info(
                 "external_import_resume",
                 job_id=job_id,
-                cursor=cursor,
+                cursor=cursor_count,
                 remaining=len(selected),
             )
 
@@ -274,20 +341,57 @@ async def process_external_import_job(job_id: int) -> None:
             )
 
         slow = _is_slow_mode(selected)
+
+        # Items that have no local match need a SoundCloud search.
+        # Prefetch those searches in parallel so the main loop
+        # hits the Redis cache instead of waiting on each network
+        # round-trip serially.
+        sc_items = [
+            item
+            for item in selected
+            if _lookup_local_match(local_matches, item) is None
+        ]
+        if sc_items:
+            logger.info(
+                "external_import_prefetch_start",
+                job_id=job_id,
+                sc_items=len(sc_items),
+                concurrency=settings.import_sc_prefetch_concurrency,
+            )
+            await _prefetch_sc_searches(
+                sc_service,
+                sc_items,
+                job_id=job_id,
+                slow=slow,
+            )
+            logger.info(
+                "external_import_prefetch_done",
+                job_id=job_id,
+            )
         consecutive_failures = 0
         delay_multiplier = 1.0
         sc_call_index = 0
+        items_seen = 0
+        lease_check_every = max(
+            1, int(settings.import_lease_check_every_n_items)
+        )
 
-        for item in selected:
-            await session.refresh(job)
-            if job.status == "cancelled":
+        for pos, item in enumerate(selected):
+            original_idx = original_idx_list[pos]
+            if await is_cancel_flag_set(job_id):
+                await session.refresh(job)
+                job.status = "cancelled"
+                await session.commit()
                 break
-            if _lease_lost(job, worker_lease):
-                logger.warning(
-                    "external_import_lease_lost",
-                    job_id=job_id,
-                )
-                return
+            if items_seen % lease_check_every == 0:
+                await session.refresh(job)
+                if _lease_lost(job, worker_lease):
+                    logger.warning(
+                        "external_import_lease_lost",
+                        job_id=job_id,
+                    )
+                    return
+            items_seen += 1
 
             local_match = _lookup_local_match(local_matches, item)
             if local_match is not None:
@@ -298,15 +402,14 @@ async def process_external_import_job(job_id: int) -> None:
                         source=job.source,
                     )
                     job.completed_tracks += 1
-                    imported.append(
-                        {
-                            "title": local_match.title,
-                            "artist": local_match.artist,
-                            "track_id": local_match.id,
-                            "sc_url": local_match.sc_url,
-                            "status": "done",
-                            "local_match": True,
-                        }
+                    await items_repo.mark_done(
+                        job.id,
+                        original_idx,
+                        track_id=local_match.id,
+                        title=local_match.title,
+                        artist=local_match.artist,
+                        sc_url=local_match.sc_url,
+                        local_match=True,
                     )
                     await session.commit()
                     logger.info(
@@ -319,12 +422,12 @@ async def process_external_import_job(job_id: int) -> None:
                     await session.rollback()
                     await session.refresh(job)
                     job.failed_tracks += 1
-                    not_matched.append(
-                        {
-                            "title": local_match.title,
-                            "artist": local_match.artist,
-                            "reason": f"local_match_link_failed: {exc}",
-                        }
+                    await items_repo.mark_failed(
+                        job.id,
+                        original_idx,
+                        title=local_match.title,
+                        artist=local_match.artist,
+                        reason=f"local_match_link_failed: {exc}",
                     )
                     await session.commit()
                     logger.warning(
@@ -349,12 +452,12 @@ async def process_external_import_job(job_id: int) -> None:
 
             if not query:
                 job.failed_tracks += 1
-                not_matched.append(
-                    {
-                        "title": title or "Unknown",
-                        "artist": artist or None,
-                        "reason": "no_query",
-                    }
+                await items_repo.mark_failed(
+                    job.id,
+                    original_idx,
+                    title=title or "Unknown",
+                    artist=artist or None,
+                    reason="no_query",
                 )
                 await session.commit()
                 continue
@@ -380,12 +483,12 @@ async def process_external_import_job(job_id: int) -> None:
                 )
                 await session.refresh(job)
                 job.failed_tracks += 1
-                not_matched.append(
-                    {
-                        "title": title,
-                        "artist": artist or None,
-                        "reason": "rate_limited",
-                    }
+                await items_repo.mark_failed(
+                    job.id,
+                    original_idx,
+                    title=title,
+                    artist=artist or None,
+                    reason="rate_limited",
                 )
                 await session.commit()
                 consecutive_failures += 1
@@ -411,12 +514,12 @@ async def process_external_import_job(job_id: int) -> None:
                 )
                 await session.refresh(job)
                 job.failed_tracks += 1
-                not_matched.append(
-                    {
-                        "title": title,
-                        "artist": artist or None,
-                        "reason": "search_error",
-                    }
+                await items_repo.mark_failed(
+                    job.id,
+                    original_idx,
+                    title=title,
+                    artist=artist or None,
+                    reason="search_error",
                 )
                 await session.commit()
                 continue
@@ -464,12 +567,12 @@ async def process_external_import_job(job_id: int) -> None:
 
             if best_match is None:
                 job.failed_tracks += 1
-                not_matched.append(
-                    {
-                        "title": title,
-                        "artist": artist or None,
-                        "reason": "no_soundcloud_match",
-                    }
+                await items_repo.mark_failed(
+                    job.id,
+                    original_idx,
+                    title=title,
+                    artist=artist or None,
+                    reason="no_soundcloud_match",
                 )
                 await session.commit()
                 consecutive_failures += 1
@@ -530,14 +633,14 @@ async def process_external_import_job(job_id: int) -> None:
 
                 await session.refresh(job)
                 job.completed_tracks += 1
-                imported.append(
-                    {
-                        "title": track.title,
-                        "artist": track.artist,
-                        "track_id": track.id,
-                        "sc_url": track.sc_url,
-                        "status": "done",
-                    }
+                await items_repo.mark_done(
+                    job.id,
+                    original_idx,
+                    track_id=track.id,
+                    title=track.title,
+                    artist=track.artist,
+                    sc_url=track.sc_url,
+                    local_match=False,
                 )
                 await session.commit()
                 from app.services.search_index_notify import (
@@ -579,12 +682,12 @@ async def process_external_import_job(job_id: int) -> None:
                 )
                 await session.refresh(job)
                 job.failed_tracks += 1
-                not_matched.append(
-                    {
-                        "title": title,
-                        "artist": artist or None,
-                        "reason": f"import_error: {exc}",
-                    }
+                await items_repo.mark_failed(
+                    job.id,
+                    original_idx,
+                    title=title,
+                    artist=artist or None,
+                    reason=f"import_error: {exc}",
                 )
                 await session.commit()
                 consecutive_failures += 1
@@ -605,6 +708,7 @@ async def process_external_import_job(job_id: int) -> None:
         if job.status != "cancelled":
             job.status = "done"
 
+        imported, not_matched = await items_repo.list_for_response(job.id)
         job.tracks_data = {
             **(job.tracks_data or {}),
             "imported": imported,
@@ -612,6 +716,7 @@ async def process_external_import_job(job_id: int) -> None:
         }
         await session.commit()
         await session.refresh(job)
+        await clear_cancel_flag(job_id)
 
         from app.services.import_job_notifications import (
             send_import_job_finished_notification,

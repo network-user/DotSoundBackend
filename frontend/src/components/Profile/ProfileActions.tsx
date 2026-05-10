@@ -10,6 +10,7 @@ interface ProfileActionsProps {
   onOpenImport: () => void
   onOpenComplaints: () => void
   onOpenDislikes: () => void
+  onOpenStats: () => void
 }
 
 interface ActionRow {
@@ -29,6 +30,7 @@ export function ProfileActions({
   onOpenImport,
   onOpenComplaints,
   onOpenDislikes,
+  onOpenStats,
 }: ProfileActionsProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -36,6 +38,15 @@ export function ProfileActions({
   const tap = () => sound.play('tapSoft')
 
   const catalogRows: ActionRow[] = [
+    {
+      id: 'profile-action-stats',
+      icon: 'chart-bar',
+      label: t('profile.tabStats', 'Статистика'),
+      onClick: () => {
+        tap()
+        onOpenStats()
+      },
+    },
     {
       id: 'profile-action-upload',
       icon: 'upload',

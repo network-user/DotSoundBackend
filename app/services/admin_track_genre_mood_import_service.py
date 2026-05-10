@@ -212,10 +212,10 @@ class AdminTrackGenreMoodImportService:
 def _format_line(track: Track, lyrics_excerpt: str | None) -> str:
     artist = track.artist or "Unknown"
     genre = track.genre or "—"
-    lx = lyrics_excerpt or "(текста нет в каталоге)"
+    lx = lyrics_excerpt or "(текст не найден)"
     return (
-        f"— ID: {track.id} | Artist: {artist} | Title: {track.title} "
-        f"| genre_now: {genre}\n  lyrics_excerpt: {lx}"
+        f"— ID: {track.id} | Исполнитель: {artist} | Название: {track.title} "
+        f"| Текущий жанр: {genre}\n  Текст (фрагмент): {lx}"
     )
 
 

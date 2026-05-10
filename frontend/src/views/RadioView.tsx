@@ -11,7 +11,7 @@ import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { Waveform } from '@/components/Waveform/Waveform'
 import { AmbientStage } from '@/components/ui/AmbientStage'
-import { BeatPulse } from '@/components/ui/BeatPulse'
+import { AudioRipple } from '@/components/ui/AudioRipple'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
@@ -65,6 +65,7 @@ export function RadioView() {
     startRadio,
     stopRadio,
     radioMode,
+    getAnalyser,
   } = usePlayerActions()
 
   const [historyTracks, setHistoryTracks] = useState<Track[]>([])
@@ -425,9 +426,10 @@ export function RadioView() {
             aria-label={t('redesign.home.radioSwipeAria')}
             role="group"
           >
-            <BeatPulse
+            <AudioRipple
               bpm={bpm}
               active={discIsLive}
+              getAnalyser={getAnalyser}
               className="rh-radio-disc-pulse"
             >
               <div className="rh-radio-disc-viewport">
@@ -488,7 +490,7 @@ export function RadioView() {
                   </m.div>
                 </AnimatePresence>
               </div>
-            </BeatPulse>
+            </AudioRipple>
           </m.div>
           <div className="rh-radio-hero__meta">
             <h2>
