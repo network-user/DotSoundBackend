@@ -1,3 +1,4 @@
+import { api } from '@/lib/api'
 import type { Track } from '@/types/api'
 
 const CACHE_NAME = 'offline-tracks-v1'
@@ -94,12 +95,53 @@ export async function getCachedAudioUrl(
   }
 }
 
+export class OfflineNotAllowedError extends Error {
+  reason: string
+  constructor(reason: string) {
+    super(`Offline not allowed: ${reason}`)
+    this.reason = reason
+  }
+}
+
+async function checkOfflineEligibility(
+  trackId: number,
+): Promise<{ maxTrackBytes: number; maxTotalBytes: number }> {
+  const res = (await api.getOfflineEligibility(trackId)) as {
+    allowed: boolean
+    reason: string
+    max_track_bytes: number
+    max_total_bytes_per_user: number
+  }
+  if (!res.allowed) {
+    throw new OfflineNotAllowedError(res.reason)
+  }
+  return {
+    maxTrackBytes: res.max_track_bytes,
+    maxTotalBytes: res.max_total_bytes_per_user,
+  }
+}
+
+async function evictUntilUnder(maxBytes: number): Promise<void> {
+  const records = await getCachedTracks()
+  let total = records.reduce((s, r) => s + r.bytes, 0)
+  if (total <= maxBytes) return
+  const oldestFirst = [...records].sort(
+    (a, b) => a.cachedAt - b.cachedAt,
+  )
+  for (const rec of oldestFirst) {
+    if (total <= maxBytes) break
+    await removeTrack(rec.trackId)
+    total -= rec.bytes
+  }
+}
+
 export async function downloadTrack(
   track: Track,
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<void> {
   if (!isSupported())
     throw new Error('Offline cache не поддерживается')
+  const limits = await checkOfflineEligibility(track.id)
   const url = audioUrlForTrack(track)
   const res = await fetch(url, {
     credentials: 'include',
@@ -108,6 +150,9 @@ export async function downloadTrack(
     throw new Error(
       `Не удалось загрузить (${res.status})`,
     )
+  }
+  if (res.headers.get('X-Offline-Allowed') === '0') {
+    throw new OfflineNotAllowedError('server_blocked')
   }
   const total = Number(
     res.headers.get('content-length') || 0,
@@ -129,6 +174,12 @@ export async function downloadTrack(
   const blob = new Blob(parts, {
     type: res.headers.get('content-type') || 'audio/mpeg',
   })
+  if (blob.size > limits.maxTrackBytes) {
+    throw new OfflineNotAllowedError('track_too_large')
+  }
+  await evictUntilUnder(
+    Math.max(0, limits.maxTotalBytes - blob.size),
+  )
   const cache = await caches.open(CACHE_NAME)
   await cache.put(
     url,

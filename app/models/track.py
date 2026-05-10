@@ -204,6 +204,20 @@ class Track(Base, TimestampMixin):
         nullable=True,
         index=True,
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,
+    )
+    deleted_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        type_=BigInteger,
+        nullable=True,
+    )
+    deleted_reason: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+    )
 
     audio_blob: Mapped[AudioBlob | None] = relationship(
         "AudioBlob",

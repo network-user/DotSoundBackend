@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { usePlayerActions } from '@/store/PlayerContext'
@@ -35,6 +36,7 @@ export function SettingsSheet({
   onLogout,
 }: Props) {
   const { t, i18n } = useTranslation()
+  const navigate = useNavigate()
   const { openEq } = usePlayerActions()
   const sound = useSound()
   const prefetchCtx = useOptionalPrefetch()
@@ -489,6 +491,20 @@ export function SettingsSheet({
             <span className="settings-version">
               v0.1.0
             </span>
+          </MotionPress>
+
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="settings-item"
+            onClick={() => {
+              onClose()
+              navigate('/trash')
+            }}
+          >
+            <Icon name="trash" size={20} />
+            <span>{t('settings.trashLink', 'Корзина треков')}</span>
           </MotionPress>
 
           <SettingsLegalSection />

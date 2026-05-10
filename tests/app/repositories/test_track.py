@@ -212,6 +212,111 @@ async def test_delete_by_owner(
     )
     assert result is not None
     assert result.is_active is False
+    assert result.deleted_at is not None
+    assert result.deleted_by_id == user.id
+    assert result.deleted_reason == "owner"
+
+
+async def test_delete_by_owner_idempotent(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=42)
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="Idem",
+        artist="A",
+        uploaded_by_id=user.id,
+    )
+    first = await repo.delete_by_owner(track.id, user.id)
+    assert first is not None
+    second = await repo.delete_by_owner(track.id, user.id)
+    assert second is None
+
+
+async def test_restore_by_owner_undoes_soft_delete(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=43)
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="Resto",
+        artist="A",
+        uploaded_by_id=user.id,
+    )
+    await repo.delete_by_owner(track.id, user.id)
+    restored = await repo.restore_by_owner(track.id, user.id)
+    assert restored is not None
+    assert restored.is_active is True
+    assert restored.deleted_at is None
+    assert restored.deleted_by_id is None
+    assert restored.deleted_reason is None
+
+
+async def test_restore_by_owner_refuses_admin_deleted(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=44)
+    admin = await _make_user(session, telegram_id=45)
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="DMCA",
+        artist="A",
+        uploaded_by_id=user.id,
+    )
+    await repo.admin_soft_delete(
+        track.id, by_user_id=admin.id, reason="dmca"
+    )
+    out = await repo.restore_by_owner(track.id, user.id)
+    assert out is None
+
+
+async def test_list_user_trash_only_owners_owner_reason(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=46)
+    admin = await _make_user(session, telegram_id=47)
+    repo = TrackRepository(session)
+    own = await repo.create(
+        title="Own",
+        artist="A",
+        uploaded_by_id=user.id,
+    )
+    admin_hidden = await repo.create(
+        title="AdminHidden",
+        artist="A",
+        uploaded_by_id=user.id,
+    )
+    await repo.delete_by_owner(own.id, user.id)
+    await repo.admin_soft_delete(
+        admin_hidden.id, by_user_id=admin.id, reason="admin"
+    )
+    rows, total = await repo.list_user_trash(user.id)
+    ids = {t.id for t in rows}
+    assert total == 1
+    assert own.id in ids
+    assert admin_hidden.id not in ids
+
+
+async def test_list_hard_delete_candidates_only_deleted(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=48)
+    repo = TrackRepository(session)
+    alive = await repo.create(
+        title="Alive",
+        artist="A",
+        uploaded_by_id=user.id,
+    )
+    dead = await repo.create(
+        title="Dead",
+        artist="A",
+        uploaded_by_id=user.id,
+    )
+    await repo.delete_by_owner(dead.id, user.id)
+    rows = await repo.list_hard_delete_candidates(limit=10)
+    ids = [t.id for t in rows]
+    assert dead.id in ids
+    assert alive.id not in ids
 
 
 async def test_find_by_title_and_duration_exact(

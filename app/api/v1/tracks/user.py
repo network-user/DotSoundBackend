@@ -26,15 +26,14 @@ from app.schemas.track import (
     TrackUpdateRequest,
     TrackUploadResponse,
 )
-from app.services.audio_blob_service import AudioBlobService
 from app.services.cover_worker import (
     generate_and_upload_cover,
 )
-from app.services.track_service import TrackService
 from app.services.track_response_build import (
     build_track_response,
     dedupe_and_build_track_list,
 )
+from app.services.track_service import TrackService
 from app.services.upload_service import UploadService
 
 router = APIRouter()
@@ -196,6 +195,7 @@ async def update_track(
 @router.delete(
     "/{track_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    summary="Soft-delete an owned track (restorable in /me/trash)",
 )
 @limiter.limit("30/minute")
 async def delete_track(
@@ -204,9 +204,7 @@ async def delete_track(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    structlog.contextvars.bind_contextvars(
-        track_id=track_id
-    )
+    structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
     track = await service.delete_by_owner(
         track_id=track_id, user_id=current_user.id
@@ -216,39 +214,63 @@ async def delete_track(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found or access denied",
         )
-    ab = AudioBlobService(session)
-    await ab.try_release_for_track(track)
-    await session.refresh(track)
-    try:
-        await s3.delete_objects_by_prefix(
-            f"hls/{track_id}/"
-        )
-    except Exception:
-        logger.warning("hls_prefix_delete_failed", track_id=track_id)
-    for key in (track.cover_key, track.video_key):
-        if not key:
-            continue
-        try:
-            await s3.delete_object(key)
-        except Exception:
-            logger.warning(
-                "s3_delete_failed",
-                track_id=track_id,
-                file_key=key,
-            )
-    if not track.blob_id and track.file_key:
-        try:
-            await s3.delete_object(track.file_key)
-        except Exception:
-            logger.warning(
-                "s3_delete_failed",
-                track_id=track_id,
-                file_key=track.file_key,
-            )
     logger.info(
-        "track_deleted",
+        "track_soft_deleted",
         track_id=track_id,
         user_id=current_user.id,
+    )
+
+
+@router.post(
+    "/{track_id}/restore",
+    response_model=TrackResponse,
+    summary="Restore a soft-deleted track within grace period",
+)
+@limiter.limit("30/minute")
+async def restore_track(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TrackResponse:
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    service = TrackService(session)
+    track = await service.restore_by_owner(
+        track_id=track_id, user_id=current_user.id
+    )
+    if not track:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not in trash or not owned",
+        )
+    logger.info(
+        "track_restored",
+        track_id=track_id,
+        user_id=current_user.id,
+    )
+    return await build_track_response(session, track)
+
+
+@router.get(
+    "/me/trash",
+    response_model=TrackListResponse,
+    summary="List soft-deleted tracks for the current user",
+)
+@limiter.limit("60/minute")
+async def list_my_trash(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(50, ge=1, le=200),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TrackListResponse:
+    service = TrackService(session)
+    tracks, total = await service.list_my_trash(
+        user_id=current_user.id, page=page, size=size
+    )
+    items = await dedupe_and_build_track_list(session, tracks)
+    return TrackListResponse(
+        items=items, total=total, page=page, size=size
     )
 
 

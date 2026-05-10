@@ -50,6 +50,12 @@ class DeleteAccountRequest(BaseModel):
     )
 
 
+class DeletionStatusResponse(BaseModel):
+    pending: bool
+    deleted_at: datetime | None = None
+    grace_until: datetime | None = None
+
+
 class AvatarResponse(BaseModel):
     avatar_url: str
 

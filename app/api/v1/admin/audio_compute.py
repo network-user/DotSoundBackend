@@ -346,6 +346,7 @@ async def patch_lyrics_job_routing(
 async def list_generic_compute_jobs(
     session: AsyncSession = Depends(get_db),
     status: str | None = Query(None, max_length=16),
+    job_type: str | None = Query(None, max_length=48),
     limit: int = Query(100, ge=1, le=200),
     _admin: User = Depends(
         require_capability("audio_compute.manage")
@@ -354,6 +355,7 @@ async def list_generic_compute_jobs(
     svc = AudioComputeAdminService(session)
     return await svc.list_generic_compute_jobs(
         status=status,
+        job_type=job_type,
         limit=limit,
     )
 

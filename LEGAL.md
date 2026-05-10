@@ -60,6 +60,68 @@
 - `docs/legal/SOUNDCLOUD_TERMS_REVIEW.md` — source-specific internal
   review для текущей SoundCloud integration.
 
+## Удаление аккаунта и контента
+
+**Аккаунт.** Запрос на удаление подаётся через
+`Settings → Удалить аккаунт…`. Сервис ставит метку `deleted_at`
+и в течение grace-периода (см. PrivateCore
+`account_deletion_policy.GRACE_PERIOD_DAYS`) ежедневный фоновый
+таск `daily-user-hard-delete` (cron `30 3 * * *`) удаляет
+учётную запись окончательно. До истечения grace доступна кнопка
+«Отменить удаление» (`POST /api/v1/users/me/restore`); статус
+читается через `GET /api/v1/users/me/deletion-status`.
+
+При hard-delete обнуляются прямые ссылки на пользователя в
+комментариях/сообщениях (отображаются как «Удалённый
+пользователь»), очищаются строки `admin_actions_log` с этим
+`user_id`, удаляется аватар из MinIO. **Загруженные треки
+сохраняются** в каталоге; колонка `tracks.uploaded_by_id`
+переходит в `NULL` (трек становится «бесхозным»).
+
+**Контент (треки).** Для треков работает та же модель
+soft-delete + grace + hard-delete:
+
+- владелец удаляет трек → `deleted_reason = "owner"`;
+- админ-модерация → `"admin"` или `"dmca"` (с собственным grace
+  per-reason из `track_lifecycle_policy`);
+- ежедневный таск `daily-track-hard-delete` (cron `0 4 * * *`)
+  удаляет внешние ассеты (S3: HLS-префикс, file_key, cover_key,
+  video_key, video_thumbnail_key), снимает ссылку с
+  `audio_blobs`, удаляет ES-документ и саму строку.
+
+В течение grace восстановление доступно владельцу через
+`Settings → Корзина треков` (`POST /api/v1/tracks/{id}/restore`)
+или администратору через `POST /api/v1/admin/tracks/{id}/restore`.
+
+## Локальный оффлайн-кэш (PWA)
+
+Mini App как PWA сохраняет небольшое количество треков на
+устройстве пользователя для воспроизведения без сети
+(`IndexedDB` + `Cache API`, имя кэша `offline-tracks-v1`).
+Кэш живёт **только на устройстве**, оператор копий не получает.
+
+**Что разрешено кэшировать:** только треки c
+`access_mode = "internal_stream"` и `catalog_type ∈ {ugc,
+licensed}`. Решение принимает PrivateCore-policy и backend
+проставляет заголовок `X-Offline-Allowed` на каждый ответ
+`/audio` и HLS-ресурсы. Service Worker отказывается записывать
+ответ в кэш при `X-Offline-Allowed: 0`.
+
+**Что не кэшируется:** `third_party_stream`, `official_embed`,
+`external_reference` — для них нет права на воспроизведение
+без сети. SoundCloud-/Bandcamp-/YouTube-стримы редиректят на
+внешние CDN и в кэш не попадают.
+
+**Лимиты:** размер одного трека и общий лимит на пользователя
+заданы в PrivateCore-policy; клиент применяет LRU-вытеснение
+по `cachedAt`. Очистка вручную — через `Settings →
+Управление офлайн` (если доступно), либо через стандартное
+«Очистить данные сайта» в браузере.
+
+**Удаление трека из каталога:** кэшированный трек на устройстве
+останется до следующего онлайн-сеанса; при возврате в сеть
+клиент проверяет `X-Offline-Allowed` и удаляет запись.
+
 ## Backlog: 152-ФЗ и функционал
 
 Пошаговый план приведения функционала к 152-ФЗ/242-ФЗ/436-ФЗ

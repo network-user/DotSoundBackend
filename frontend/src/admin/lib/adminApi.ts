@@ -965,9 +965,37 @@ export const adminApi = {
         body: { track_ids: trackIds },
       },
     ),
-  deleteTrack: (trackId: number) =>
+  deleteTrack: (trackId: number, reason: string = 'admin') =>
     adminFetch<void>(`/tracks/${trackId}`, {
       method: 'DELETE',
+      query: { reason },
+    }),
+  restoreTrack: (trackId: number) =>
+    adminFetch<Record<string, unknown>>(
+      `/tracks/${trackId}/restore`,
+      { method: 'POST' },
+    ),
+  hardDeleteTrackForever: (trackId: number) =>
+    adminFetch<void>(`/tracks/${trackId}/forever`, {
+      method: 'DELETE',
+    }),
+  listDeletedTracks: (params: {
+    page?: number
+    size?: number
+    search?: string
+  }) =>
+    adminFetch<{
+      items: Array<Record<string, unknown>>
+      total: number
+      page: number
+      size: number
+    }>(`/tracks/deleted`, {
+      method: 'GET',
+      query: {
+        page: params.page ?? 1,
+        size: params.size ?? 25,
+        ...(params.search ? { search: params.search } : {}),
+      },
     }),
   setTrackVisibility: (
     trackId: number,
@@ -1102,6 +1130,7 @@ export const adminApi = {
     ),
   listGenericComputeJobs: (params?: {
     status?: string
+    job_type?: string
     limit?: number
   }) =>
     adminFetch<
@@ -1110,13 +1139,17 @@ export const adminApi = {
         job_type: string
         target_kind: string | null
         target_id: string | null
+        feature_version: string | null
         status: string
         priority: number
+        attempts: number
+        max_attempts: number | null
         pinned_worker_id: string | null
         claimed_by: string | null
-        attempts: number
         last_error: string | null
         created_at: string | null
+        finished_at: string | null
+        next_attempt_at: string | null
       }>
     >('/audio-compute/generic-compute-jobs', {
       query: params,

@@ -22,6 +22,28 @@ _TS_MIME = "video/MP2T"
 _VALID_VARIANTS = frozenset({"hi", "lo"})
 
 
+def _offline_header(track: object) -> dict[str, str]:
+    """Compute ``X-Offline-Allowed`` for the Service Worker.
+
+    The SW reads this header to decide whether to keep the
+    response in the local audio cache. Header value is ``"1"``
+    when the track is allowed to be cached, ``"0"`` otherwise.
+    """
+    from app.services.offline_policy_adapter import (
+        is_offline_allowed,
+    )
+
+    catalog_type = getattr(track, "catalog_type", "") or ""
+    access_mode = getattr(track, "access_mode", "") or ""
+    file_size_bytes = getattr(track, "file_size_bytes", None)
+    allowed, _reason = is_offline_allowed(
+        catalog_type=catalog_type,
+        access_mode=access_mode,
+        file_size_bytes=file_size_bytes,
+    )
+    return {"X-Offline-Allowed": "1" if allowed else "0"}
+
+
 @router.get(
     "/{track_id}/hls/master.m3u8",
     summary="HLS master playlist (adaptive bitrate)",
@@ -55,7 +77,10 @@ async def hls_master(
     return Response(
         content=data,
         media_type=_HLS_MIME,
-        headers={"Cache-Control": "no-cache"},
+        headers={
+            "Cache-Control": "no-cache",
+            **_offline_header(track),
+        },
     )
 
 
@@ -106,7 +131,10 @@ async def hls_variant_playlist(
     return Response(
         content=data,
         media_type=_HLS_MIME,
-        headers={"Cache-Control": "no-cache"},
+        headers={
+            "Cache-Control": "no-cache",
+            **_offline_header(track),
+        },
     )
 
 
@@ -163,5 +191,8 @@ async def hls_segment(
     return Response(
         content=data,
         media_type=_TS_MIME,
-        headers={"Cache-Control": "max-age=86400"},
+        headers={
+            "Cache-Control": "max-age=86400",
+            **_offline_header(track),
+        },
     )

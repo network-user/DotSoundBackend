@@ -558,9 +558,16 @@
         "hint": "Pull queue served at /internal/compute (audio features, similarity indexes, …). Higher priority is claimed first. Pin limits which worker may claim; releasing a lease puts a stuck claimed row back to pending.",
         "empty": "No rows in this list",
         "type": "Job type",
+        "target": "Target",
+        "attempts": "Attempts",
+        "error": "Error",
         "priority": "Priority",
         "pin": "Pin worker",
-        "releaseLease": "Release lease"
+        "releaseLease": "Release lease",
+        "allStatuses": "All statuses",
+        "allTypes": "All types",
+        "refresh": "Refresh",
+        "loading": "Loading…"
       },
       "auditSection": {
         "title": "Worker audit (last 200)",

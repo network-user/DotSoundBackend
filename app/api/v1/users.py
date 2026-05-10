@@ -35,6 +35,7 @@ from app.schemas.track import TrackListResponse
 from app.schemas.user import (
     AvatarResponse,
     DeleteAccountRequest,
+    DeletionStatusResponse,
     UserCreate,
     UserResponse,
     UserStatsResponse,
@@ -174,6 +175,37 @@ async def delete_me(
             detail="Invalid confirmation text",
         )
     return {"status": "deletion_scheduled"}
+
+
+@router.get(
+    "/me/deletion-status",
+    response_model=DeletionStatusResponse,
+    summary="Read pending-deletion countdown for the current user",
+)
+@limiter.limit("60/minute")
+async def deletion_status(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DeletionStatusResponse:
+    from datetime import UTC
+
+    from dotsound_private_core.services.account_deletion_policy import (
+        hard_delete_cutoff,
+    )
+
+    service = UserService(session)
+    user = await service.get_by_id(current_user.id)
+    if not user or user.deleted_at is None:
+        return DeletionStatusResponse(pending=False)
+    now = datetime.now(UTC)
+    cutoff = hard_delete_cutoff(now)
+    grace_until = user.deleted_at + (now - cutoff)
+    return DeletionStatusResponse(
+        pending=True,
+        deleted_at=user.deleted_at,
+        grace_until=grace_until,
+    )
 
 
 @router.post(

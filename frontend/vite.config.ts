@@ -158,6 +158,20 @@ export default defineConfig({
               cacheableResponse: {
                 statuses: [200, 206],
               },
+              plugins: [
+                {
+                  cacheWillUpdate: async ({ response }) => {
+                    if (
+                      response.headers.get(
+                        'X-Offline-Allowed',
+                      ) === '0'
+                    ) {
+                      return null
+                    }
+                    return response
+                  },
+                },
+              ],
             },
           },
           {
@@ -174,6 +188,20 @@ export default defineConfig({
               cacheableResponse: {
                 statuses: [200, 206],
               },
+              plugins: [
+                {
+                  cacheWillUpdate: async ({ response }) => {
+                    if (
+                      response.headers.get(
+                        'X-Offline-Allowed',
+                      ) === '0'
+                    ) {
+                      return null
+                    }
+                    return response
+                  },
+                },
+              ],
             },
           },
           {

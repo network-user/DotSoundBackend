@@ -473,6 +473,7 @@ class AudioComputeAdminService:
         self,
         *,
         status: str | None = None,
+        job_type: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         from sqlalchemy import select
@@ -483,6 +484,10 @@ class AudioComputeAdminService:
         stmt = select(ComputeJob)
         if status:
             stmt = stmt.where(ComputeJob.status == status)
+        if job_type:
+            stmt = stmt.where(
+                ComputeJob.job_type == job_type
+            )
         stmt = (
             stmt.order_by(
                 ComputeJob.priority.desc(),
@@ -497,15 +502,27 @@ class AudioComputeAdminService:
                 "job_type": r.job_type,
                 "target_kind": r.target_kind,
                 "target_id": r.target_id,
+                "feature_version": r.feature_version,
                 "status": r.status,
                 "priority": r.priority,
+                "attempts": r.attempts,
+                "max_attempts": r.max_attempts,
                 "pinned_worker_id": r.pinned_worker_id,
                 "claimed_by": r.claimed_by,
-                "attempts": r.attempts,
                 "last_error": r.last_error,
                 "created_at": (
                     r.created_at.isoformat()
                     if r.created_at
+                    else None
+                ),
+                "finished_at": (
+                    r.finished_at.isoformat()
+                    if r.finished_at
+                    else None
+                ),
+                "next_attempt_at": (
+                    r.next_attempt_at.isoformat()
+                    if r.next_attempt_at
                     else None
                 ),
             }

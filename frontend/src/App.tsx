@@ -125,6 +125,7 @@ import { useLikes } from '@/store/LikesContext'
 
 const SearchView = lazy(() => import('@/views/SearchView').then(m => ({ default: m.SearchView })))
 const UploadView = lazy(() => import('@/views/UploadView').then(m => ({ default: m.UploadView })))
+const TrashView = lazy(() => import('@/views/TrashView').then(m => ({ default: m.TrashView })))
 const LibraryView = lazy(() => import('@/views/LibraryView').then(m => ({ default: m.LibraryView })))
 // [REGULATORY-DISABLED v1] чаты отключены — см. docs/REGULATORY_DISABLED.md
 // const ChatsView = lazy(() => import('@/views/ChatsView').then(m => ({ default: m.ChatsView })))
@@ -699,6 +700,7 @@ export function App() {
             }
           />
           <Route path="/upload" element={<UploadView />} />
+          <Route path="/trash" element={<TrashView />} />
           <Route path="/library" element={<LibraryView />} />
           <Route
             path="/liked"

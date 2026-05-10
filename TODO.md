@@ -866,7 +866,11 @@
   - Извлечение фич/пороги confidence и decision rules в PrivateCore, Taskiq orchestration и запись результата - в Backend
 - Waveform generation (pre-render формы волны для UI)
 
-## Чат и комментарии
+## Чат и комментарии [FROZEN — legal hold (149-ФЗ ОРИ)]
+
+> Раздел заморожен: чаты/p2p-обмен сообщениями отключены до
+> оформления юрлица и подачи в реестр ОРИ. Не реализуем новые
+> пункты, см. `docs/REGULATORY_DISABLED.md`.
 
 - Чат: DM, группы, WebSocket real-time
 - Реакции, вложения, голосовые сообщения, цитирование
@@ -1334,7 +1338,11 @@
 - `[x]` **PlayerContext.tsx**: `radioMode`, `radioSeedTrackId`, `startRadio()`, `stopRadio()`; `playNext()` - авто-fetch при пустой очереди в radio-режиме; `played_ids Set` (max 50)
 - `[x]` **RadioView.tsx**: переработан - кнопка «Запустить бесконечное радио», индикатор режима, история прослушивания
 - `[x]` **PlayerBar.tsx**: `.player-radio-badge` при активном `radioMode`; клик - `/radio`
-## Chats / Track Share (2026-05-04)
+## Chats / Track Share (2026-05-04) [FROZEN — legal hold (149-ФЗ ОРИ)]
+
+> Раздел заморожен: чаты/p2p-обмен сообщениями отключены до
+> оформления юрлица и подачи в реестр ОРИ. Не трогаем код в
+> рамках обычных задач, см. `docs/REGULATORY_DISABLED.md`.
 
 - [x] Share track to chat ? modal picker in TrackCardSheet, send via api.sendMessage(..., { type: 'track_share', shared_track_id }), and shared-track bubble with Play in ChatBubble.
 - [x] Chat share: albums and playlists (shared_album_id, shared_playlist_id) + updated Home track/artist card styling for .sound consistency (2026-05-04).
@@ -1352,10 +1360,12 @@
     - [ ] Автоматическое тегирование на основе анализа аудио (ComputeWorker).
     - [ ] Анализ метаданных и текста песен через LLM (определение настроения/жанра).
     - [ ] Хранение в Backend и отображение в UI.
-- [ ] **Listening Party (v2)**
+- [-] **Listening Party (v2)** [FROZEN — legal hold (149-ФЗ ОРИ)]
     - [ ] Интеграция с чатами (создание комнат внутри групп).
     - [ ] "Демократичная очередь" (голосование за треки).
     - [ ] Улучшение UI и синхронизации.
+    > Заморожено: зависит от чатов, которые отключены до оформления
+    > юрлица и подачи в реестр ОРИ.
 - [ ] **Музыкальные профили и статистика**
     - [ ] Карточки "Топ артистов/треков" месяца для шеринга.
     - [ ] Детальная статистика в профиле (часы прослушивания, любимые жанры).
@@ -1363,9 +1373,24 @@
 - [ ] **Динамические плейлисты**
     - [x] "Weekly Top 50" -- 2026-05-06: PrivateCore weekly_top_policy (rank_weekly_top_tracks, blend log(listens_7d)+log(likes_7d), WEEKLY_TOP_SCORE_VERSION); Backend RecommendationRepository.get_qualified_listens_7d_counts, RecommendationService.get_weekly_top_playlist with Redis cache (TTL 30 min), GET /api/v1/recommendations/weekly-top; Frontend WeeklyTopView (/weekly-top), api.getWeeklyTopPlaylist, WeeklyTopPlaylistResponse type, flame icon, Home quick-grid card.
     - [x] **«Забытые сокровища»** (лайкнутое давно, без прослушиваний в окне) — PrivateCore `forgotten_treasures_policy` (пороги лайка ≥21d, тишина ≥14d, `rank_forgotten_treasure_tracks`); Backend `RecommendationRepository.list_forgotten_treasure_rows`, `GET /api/v1/recommendations/forgotten-treasures` (JWT, per-user); Mini App `ForgottenTreasuresView` `/forgotten-treasures`, тайл в быстрых разделах после «Выбор»; prefetch context `forgotten_treasures`.
-- [ ] **PWA Offline Mode (v2) [High Priority]**
-    - [ ] Кеширование HLS чанков в Service Worker.
-    - [ ] Надежный UI для оффлайн-режима.
+- [~] **PWA Offline Mode (v2) [High Priority]**
+    - [x] PrivateCore `offline_policy` (allow-list по `access_mode`/
+      `catalog_type`, лимиты на трек / на пользователя).
+    - [x] Backend: `GET /api/v1/tracks/{id}/offline-eligibility`
+      и заголовок `X-Offline-Allowed` на HLS-плейлистах,
+      сегментах и progressive `/audio` (cached-from-S3 ветка).
+    - [x] Service Worker (`vite-plugin-pwa`): `cacheWillUpdate`-
+      плагин на `progressive-audio-cache` и `hls-segments-cache`
+      отказывается записывать ответы с `X-Offline-Allowed: 0`.
+    - [x] `offlineCache.downloadTrack` сначала вызывает
+      `getOfflineEligibility`, проверяет server-флаг в ответе,
+      применяет LRU-вытеснение по `cachedAt`.
+    - [ ] UI «Сохранить для оффлайн» в `TrackCardSheet` (с
+      проверкой `access_mode`) и кнопка «Слушать оффлайн-кэш»
+      в `OfflineBanner`.
+    - [ ] Авто-переключение плеера в cached-only при
+      `navigator.online === false` (фильтр очереди через
+      `isCached`).
 - [ ] **Anti-Abuse Fingerprinting**
     - [ ] Перенос логики в PrivateCore.
     - [ ] Анализ поведения для борьбы с накрутками.
@@ -1435,6 +1460,58 @@
   `make test` (или `poetry run pytest -v`), `make lint` (ruff + black --check + mypy по `app/`),
   `python scripts/check_docs_sync.py`. Частичный прогон `pytest` до прерывания уже показывал несколько падений —
   после полного прогона зафиксировать список упавших модулей и закрыть регрессии.
+
+## Session Updates (2026-05-10)
+
+- [x] **Track soft-delete + корзина (общий механизм, не только при
+  удалении профиля)**: миграция `0087` (`tracks.deleted_at`,
+  `deleted_by_id` SET NULL → users, `deleted_reason`, индекс
+  `ix_admin_actions_log_user_id`, seed cron `daily-track-hard-delete`
+  `0 4 * * *`); `Track` модель + `TrackRepository`
+  (`delete_by_owner` теперь soft, `restore_by_owner`,
+  `admin_soft_delete`, `admin_restore`, `list_user_trash`,
+  `list_admin_deleted`, `list_hard_delete_candidates`,
+  `hard_delete_track`); `TrackService` (restore, list_my_trash);
+  `track_lifecycle_adapter` для PrivateCore-policy
+  (контракт: `TRACK_HARD_DELETE_BATCH_LIMIT`,
+  `should_hard_delete_track`, `grace_period_seconds`,
+  `valid_track_delete_reasons`); новый
+  `TrackHardDeleteService` + `track_hard_delete_worker.py`
+  (S3 cleanup HLS-prefix/cover/video/file_key, ES delete,
+  audio_blob ref release — всё перенесено из eager-cleanup
+  в cron). User API: `DELETE /api/v1/tracks/{id}` теперь soft;
+  добавлены `POST /api/v1/tracks/{id}/restore` и
+  `GET /api/v1/tracks/me/trash`. Admin API: `AdminService.delete_track`
+  тоже soft (по умолчанию `reason=admin`); добавлены
+  `GET /api/v1/admin/tracks/deleted`,
+  `POST /api/v1/admin/tracks/{id}/restore`,
+  `DELETE /api/v1/admin/tracks/{id}/forever` (точечный hard).
+  Frontend: новый `TrashView` (`/trash`) + ссылка из
+  `SettingsSheet` («Корзина треков»); `api.getMyTrash`,
+  `api.restoreTrack`, `api.getDeletionStatus`;
+  `adminApi.deleteTrack(reason)`, `restoreTrack`,
+  `hardDeleteTrackForever`, `listDeletedTracks`; обновлены
+  i18n `trackCard.deleteConfirm` (упоминание корзины).
+
+- [x] **Доводка удаления аккаунта (152-ФЗ ст.14/21)**:
+  `AccountDeletionService.hard_delete_expired_users` чистит
+  `admin_actions_log` по `user_id` (PII в `ip` и `meta`); треки
+  пользователя НЕ трогаем (только `tracks.uploaded_by_id → NULL`
+  как было в 0078). Эндпоинт `GET /api/v1/users/me/deletion-status`
+  для countdown в UI; `AccountDangerZone` обновлён: при `pending`
+  показывает обратный отсчёт grace-периода и кнопку «Отменить
+  удаление». Тесты: `test_track.py` (soft_delete/restore/trash/
+  candidates), `test_account_deletion_service.py` (admin-log
+  purge + tracks остаются).
+
+- [x] **Legal docs sync**: `LEGAL.md` секция «Удаление аккаунта и
+  контента»; `docs/legal/PRIVACY_POLICY.md` §7.1 (аккаунт, треки
+  не возвращаются автору) и §7.2 (корзина треков, grace per-reason).
+
+- **Заморожены legal hold (149-ФЗ ОРИ)**: «Чат и комментарии»,
+  «Listening Party (v2)», «Chats / Track Share» — в TODO
+  помечены `[FROZEN — legal hold]`; код жив, не реализуем
+  новые пункты до оформления юрлица и подачи в реестр ОРИ.
 
 - [x] **Onboarding v2 — заверение flow и переключение App.tsx (2026-05-08)**:
   собран главный компонент `OnboardingV2` (`Welcome → Profile → Genres →

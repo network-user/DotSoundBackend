@@ -24,16 +24,18 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.core import s3
-from app.models.user import User
-from app.repositories.user import UserRepository
 from dotsound_private_core.services.account_deletion_policy import (
     HARD_DELETE_BATCH_LIMIT,
     hard_delete_cutoff,
     should_hard_delete,
 )
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core import s3
+from app.models.admin_action_log import AdminActionLog
+from app.models.user import User
+from app.repositories.user import UserRepository
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -73,6 +75,14 @@ class AccountDeletionService:
             avatar_key = user.avatar_key
             user_id = user.id
             try:
+                await self._purge_admin_action_log(user_id)
+            except Exception:
+                logger.warning(
+                    "account_hard_delete_admin_log_purge_failed",
+                    user_id=user_id,
+                    exc_info=True,
+                )
+            try:
                 await self._repo.hard_delete(user_id)
             except Exception:
                 logger.exception(
@@ -99,6 +109,23 @@ class AccountDeletionService:
         }
         logger.info("account_hard_delete_summary", **summary)
         return summary
+
+    async def _purge_admin_action_log(self, user_id: int) -> None:
+        """Remove admin audit rows tied to the deleted user.
+
+        ``admin_actions_log.user_id`` is intentionally a plain
+        BigInteger without an FK -- the audit log can outlive
+        ``users`` rows for moderation history. On 152-FZ
+        right-to-erasure we wipe the rows that reference this
+        specific user. ``ip`` and ``meta`` columns may carry PII,
+        so the row is removed entirely.
+        """
+        await self._session.execute(
+            delete(AdminActionLog).where(
+                AdminActionLog.user_id == user_id
+            )
+        )
+        await self._session.flush()
 
     async def _best_effort_delete_avatar(
         self, user_id: int, avatar_key: str

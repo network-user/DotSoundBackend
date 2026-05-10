@@ -293,26 +293,134 @@ async def admin_full_restore_track_playback_health(
     return AdminTrackResponse.model_validate(track)
 
 
+@router.get(
+    "/tracks/deleted",
+    response_model=AdminTrackListResponse,
+    summary="[Admin] List soft-deleted tracks (any reason)",
+)
+@limiter.limit("60/minute")
+async def admin_list_deleted_tracks(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(25, ge=1, le=100),
+    search: str | None = Query(None, max_length=128),
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminTrackListResponse:
+    service = AdminService(session)
+    tracks, total = await service.list_deleted_tracks(
+        page=page, size=size, search=search
+    )
+    return AdminTrackListResponse(
+        items=[AdminTrackResponse.model_validate(t) for t in tracks],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
 @router.delete(
     "/tracks/{track_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="[Admin] Hard-delete any track",
+    summary=(
+        "[Admin] Soft-delete a track (restorable in /admin/tracks/"
+        "deleted, hard-purged after grace by daily cron)"
+    ),
 )
 @limiter.limit("30/minute")
 async def admin_delete_track(
     request: Request,
     track_id: int,
+    reason: str = Query(
+        "admin",
+        max_length=32,
+        description="Soft-delete reason; allowed values from PrivateCore",
+    ),
     session: AsyncSession = Depends(get_db),
-    _admin: User = Depends(require_admin_session),
+    admin: User = Depends(require_admin_session),
 ) -> None:
+    from app.services.track_lifecycle_adapter import (
+        valid_track_delete_reasons,
+    )
+
+    if reason not in valid_track_delete_reasons():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported deletion reason",
+        )
     service = AdminService(session)
-    deleted = await service.delete_track(track_id)
-    if not deleted:
+    ok = await service.delete_track(
+        track_id, actor_id=admin.id, reason=reason
+    )
+    if not ok:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not found",
         )
-    logger.info("admin_track_deleted", track_id=track_id)
+    logger.info(
+        "admin_track_soft_deleted",
+        track_id=track_id,
+        reason=reason,
+        actor_id=admin.id,
+    )
+
+
+@router.post(
+    "/tracks/{track_id}/restore",
+    response_model=AdminTrackResponse,
+    summary="[Admin] Restore a soft-deleted track",
+)
+@limiter.limit("30/minute")
+async def admin_restore_track(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> AdminTrackResponse:
+    service = AdminService(session)
+    track = await service.restore_track(track_id)
+    if track is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not in trash",
+        )
+    logger.info(
+        "admin_track_restored",
+        track_id=track_id,
+        actor_id=admin.id,
+    )
+    return AdminTrackResponse.model_validate(track)
+
+
+@router.delete(
+    "/tracks/{track_id}/forever",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary=(
+        "[Admin] Hard-delete a track immediately (irreversible). "
+        "Requires step-up confirmation in the UI."
+    ),
+)
+@limiter.limit("10/minute")
+async def admin_hard_delete_track(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> None:
+    service = AdminService(session)
+    ok = await service.hard_delete_track_now(
+        track_id, actor_id=admin.id
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    logger.info(
+        "admin_track_hard_deleted",
+        track_id=track_id,
+        actor_id=admin.id,
+    )
 
 
 @router.patch(

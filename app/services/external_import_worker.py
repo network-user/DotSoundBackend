@@ -15,6 +15,7 @@ from app.core.redis import get_redis_client
 from app.core.tkq import broker
 from app.models.import_job import ImportJob
 from app.models.track import Track
+from app.repositories.track import TrackRepository
 from app.repositories.user_track_library import (
     UserTrackLibraryRepository,
 )
@@ -22,6 +23,7 @@ from app.services.soundcloud_service import (
     SoundCloudRateLimitError,
     SoundCloudService,
 )
+from app.utils.text_normalize import normalize_for_match
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -113,6 +115,47 @@ async def _search_with_retry(
     return []
 
 
+async def _preflight_local_matches(
+    track_repo: TrackRepository,
+    selected: list,  # type: ignore[type-arg]
+) -> dict[tuple[str, str], Track]:
+    """Return ``(norm_title, norm_artist) -> Track`` for items already in DB.
+
+    Only items that have BOTH title and artist are considered — a
+    title-only match is too noisy to skip the external matcher
+    safely. Items without a hit just pass through to the existing
+    SoundCloud pipeline.
+    """
+    pairs: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in selected:
+        title = normalize_for_match(item.get("title"))
+        artist = normalize_for_match(item.get("artist"))
+        if not title or not artist:
+            continue
+        key = (title, artist)
+        if key in seen:
+            continue
+        seen.add(key)
+        pairs.append(key)
+    if not pairs:
+        return {}
+    return await track_repo.find_existing_by_normalized_title_artist(pairs)
+
+
+def _lookup_local_match(
+    matches: dict[tuple[str, str], Track],
+    item: dict,  # type: ignore[type-arg]
+) -> Track | None:
+    if not matches:
+        return None
+    title = normalize_for_match(item.get("title"))
+    artist = normalize_for_match(item.get("artist"))
+    if not title or not artist:
+        return None
+    return matches.get((title, artist))
+
+
 def _build_query(title: str, artist: str) -> str:
     parts = [p.strip() for p in (artist, title) if p and p.strip()]
     return " ".join(parts)
@@ -187,21 +230,71 @@ async def process_external_import_job(job_id: int) -> None:
 
         sc_service = SoundCloudService(settings.sc_client_id, session)
         library_repo = UserTrackLibraryRepository(session)
+        track_repo = TrackRepository(session)
         imported: list[dict] = []
         not_matched: list[dict] = []
+
+        local_matches = await _preflight_local_matches(track_repo, selected)
+        if local_matches:
+            logger.info(
+                "external_import_preflight_hits",
+                job_id=job_id,
+                hits=len(local_matches),
+                total=len(selected),
+            )
 
         slow = _is_slow_mode(selected)
         consecutive_failures = 0
         delay_multiplier = 1.0
+        sc_call_index = 0
 
         for idx, item in enumerate(selected):
             await session.refresh(job)
             if job.status == "cancelled":
                 break
 
-            # Jitter delay between iterations to avoid rapid-fire API calls.
-            if idx > 0:
+            local_match = _lookup_local_match(local_matches, item)
+            if local_match is not None:
+                try:
+                    await library_repo.add(
+                        user_id=job.user_id,
+                        track_id=local_match.id,
+                        source=job.source,
+                    )
+                    job.completed_tracks += 1
+                    imported.append(
+                        {
+                            "title": local_match.title,
+                            "artist": local_match.artist,
+                            "track_id": local_match.id,
+                            "sc_url": local_match.sc_url,
+                            "status": "done",
+                            "local_match": True,
+                        }
+                    )
+                    await session.commit()
+                    logger.info(
+                        "external_import_local_match",
+                        job_id=job_id,
+                        track_id=local_match.id,
+                        source=job.source,
+                    )
+                except Exception as exc:
+                    await session.rollback()
+                    logger.warning(
+                        "external_import_local_match_link_failed",
+                        job_id=job_id,
+                        track_id=local_match.id,
+                        error=str(exc),
+                    )
+                continue
+
+            # Jitter delay between SC calls to avoid rapid-fire API calls.
+            # Counted on real SC calls only — local-match items don't
+            # touch the network, so they shouldn't burn the budget.
+            if sc_call_index > 0:
                 await asyncio.sleep(_jitter_delay(slow) * delay_multiplier)
+            sc_call_index += 1
 
             title = (item.get("title") or "").strip()
             artist = (item.get("artist") or "").strip()

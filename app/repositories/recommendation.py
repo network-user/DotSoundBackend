@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.artist import TrackArtist
 from app.models.like import Like
 from app.models.listen_event import ListenEvent
+from app.models.playlist import Playlist, PlaylistTrack
 from app.models.track import Track
 from app.repositories.track import TrackRepository
 
@@ -334,6 +335,96 @@ class RecommendationRepository:
             int(tid): int(c)
             for tid, c in result.all()
         }
+
+    async def get_recent_listen_events(
+        self,
+        user_id: int,
+        days: int = 30,
+        limit: int = 500,
+    ) -> list[ListenEvent]:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        result = await self._session.execute(
+            select(ListenEvent)
+            .where(
+                ListenEvent.user_id == user_id,
+                ListenEvent.created_at >= cutoff,
+            )
+            .order_by(ListenEvent.created_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def get_repeat_listen_counts(
+        self,
+        user_id: int,
+        days: int = 30,
+        min_count: int = 2,
+    ) -> dict[int, int]:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        qualified = ListenEvent.skipped.is_(False) & (
+            ListenEvent.completed.is_(True)
+            | (ListenEvent.duration_listened_seconds >= 30)
+        )
+        result = await self._session.execute(
+            select(
+                ListenEvent.track_id,
+                func.count().label("c"),
+            )
+            .where(
+                ListenEvent.user_id == user_id,
+                ListenEvent.created_at >= cutoff,
+                qualified,
+            )
+            .group_by(ListenEvent.track_id)
+            .having(func.count() >= min_count)
+        )
+        return {int(tid): int(c) for tid, c in result.all()}
+
+    async def get_unique_savers_per_track(
+        self,
+        track_ids: list[int],
+    ) -> dict[int, int]:
+        if not track_ids:
+            return {}
+        result = await self._session.execute(
+            select(
+                PlaylistTrack.track_id,
+                func.count(func.distinct(Playlist.owner_id)),
+            )
+            .join(
+                Playlist,
+                Playlist.id == PlaylistTrack.playlist_id,
+            )
+            .where(PlaylistTrack.track_id.in_(track_ids))
+            .group_by(PlaylistTrack.track_id)
+        )
+        return {int(tid): int(c) for tid, c in result.all()}
+
+    async def get_unique_listeners_per_track(
+        self,
+        track_ids: list[int],
+        days: int = 30,
+    ) -> dict[int, int]:
+        if not track_ids:
+            return {}
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        qualified = ListenEvent.skipped.is_(False) & (
+            ListenEvent.completed.is_(True)
+            | (ListenEvent.duration_listened_seconds >= 30)
+        )
+        result = await self._session.execute(
+            select(
+                ListenEvent.track_id,
+                func.count(func.distinct(ListenEvent.user_id)),
+            )
+            .where(
+                ListenEvent.track_id.in_(track_ids),
+                ListenEvent.created_at >= cutoff,
+                qualified,
+            )
+            .group_by(ListenEvent.track_id)
+        )
+        return {int(tid): int(c) for tid, c in result.all()}
 
     async def list_forgotten_treasure_rows(
         self,

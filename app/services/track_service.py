@@ -316,6 +316,40 @@ class TrackService:
             await schedule_delete_track(track_id)
         return out
 
+    async def restore_by_owner(
+        self, track_id: int, user_id: int
+    ) -> Track | None:
+        out = await self._repo.restore_by_owner(
+            track_id=track_id, user_id=user_id
+        )
+        if out is not None:
+            from app.services.search_index_notify import (
+                schedule_reindex_track,
+            )
+
+            await schedule_reindex_track(track_id)
+        return out
+
+    async def list_my_trash(
+        self,
+        user_id: int,
+        page: int = 1,
+        size: int = 50,
+    ) -> tuple[list[Track], int]:
+        offset = (page - 1) * size
+        return await self._repo.list_user_trash(
+            user_id=user_id,
+            offset=offset,
+            limit=size,
+        )
+
+    async def get_owned_track_including_trash(
+        self, track_id: int, user_id: int
+    ) -> Track | None:
+        return await self._repo.get_for_owner_including_trash(
+            track_id=track_id, user_id=user_id
+        )
+
     async def list_public_by_user(
         self,
         user_id: int,

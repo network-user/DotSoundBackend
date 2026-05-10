@@ -139,6 +139,84 @@ async def test_hard_delete_avatar_failure_does_not_block_deletion(
     assert await repo.get_by_id(uid) is None
 
 
+async def test_hard_delete_purges_admin_action_log(
+    session: AsyncSession,
+) -> None:
+    from sqlalchemy import select
+
+    from app.models.admin_action_log import AdminActionLog
+
+    expired = datetime.now(UTC) - timedelta(
+        days=GRACE_PERIOD_DAYS + 3
+    )
+    uid = await _make_user_with_deleted_at(
+        session, telegram_id=920, deleted_at=expired
+    )
+    other_uid = await _make_user_with_deleted_at(
+        session, telegram_id=921, deleted_at=None
+    )
+    log_a = AdminActionLog(
+        user_id=uid,
+        action="login",
+        ip="10.0.0.1",
+        created_at=datetime.now(UTC),
+    )
+    log_b = AdminActionLog(
+        user_id=other_uid,
+        action="login",
+        ip="10.0.0.2",
+        created_at=datetime.now(UTC),
+    )
+    session.add_all([log_a, log_b])
+    await session.flush()
+
+    with patch(
+        "app.services.account_deletion_service.s3.delete_object",
+        new=AsyncMock(),
+    ):
+        svc = AccountDeletionService(session)
+        await svc.hard_delete_expired_users()
+
+    rows = (
+        await session.execute(select(AdminActionLog))
+    ).scalars().all()
+    user_ids_left = {r.user_id for r in rows}
+    assert uid not in user_ids_left
+    assert other_uid in user_ids_left
+
+
+async def test_hard_delete_does_not_touch_user_tracks(
+    session: AsyncSession,
+) -> None:
+    from app.models.track import Track
+    from app.repositories.track import TrackRepository
+
+    expired = datetime.now(UTC) - timedelta(
+        days=GRACE_PERIOD_DAYS + 1
+    )
+    uid = await _make_user_with_deleted_at(
+        session, telegram_id=922, deleted_at=expired
+    )
+    repo = TrackRepository(session)
+    track = await repo.create(
+        title="Survives",
+        artist="A",
+        uploaded_by_id=uid,
+    )
+    track_id = track.id
+
+    with patch(
+        "app.services.account_deletion_service.s3.delete_object",
+        new=AsyncMock(),
+    ):
+        svc = AccountDeletionService(session)
+        await svc.hard_delete_expired_users()
+
+    survivor = await session.get(Track, track_id)
+    assert survivor is not None
+    assert survivor.uploaded_by_id is None
+
+
 async def test_hard_delete_batch_limit(
     session: AsyncSession,
 ) -> None:

@@ -123,11 +123,17 @@ async def test_admin_service_set_visibility(
     assert out.is_active is False
 
 
-async def test_admin_service_delete_track_calls_s3(
+async def test_admin_service_delete_track_soft_delete(
     db_session: AsyncSession,
 ) -> None:
+    """Admin delete is now soft -- S3 assets survive until cron."""
+    from app.models.track import Track
+
     uploader = await _seed_user(
         db_session, telegram_id=400030
+    )
+    admin = await _seed_user(
+        db_session, telegram_id=400031
     )
     track = await _seed_track(
         db_session,
@@ -142,15 +148,19 @@ async def test_admin_service_delete_track_calls_s3(
         "app.services.admin_service.s3.delete_object",
         new_callable=AsyncMock,
     ) as delete_mock:
-        ok = await service.delete_track(track.id)
+        ok = await service.delete_track(
+            track.id, actor_id=admin.id, reason="admin"
+        )
     assert ok is True
-    paths = sorted(
-        call.args[0] for call in delete_mock.call_args_list
-    )
-    assert paths == [
-        "covers/x.jpg",
-        "uploads/x.mp3",
-    ]
+    delete_mock.assert_not_called()
+    surviving = await db_session.get(Track, track.id)
+    assert surviving is not None
+    assert surviving.is_active is False
+    assert surviving.deleted_at is not None
+    assert surviving.deleted_by_id == admin.id
+    assert surviving.deleted_reason == "admin"
+    assert surviving.file_key == "uploads/x.mp3"
+    assert surviving.cover_key == "covers/x.jpg"
 
 
 async def test_admin_service_resolve_complaint(

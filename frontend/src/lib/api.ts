@@ -2127,6 +2127,40 @@ export const api = {
     return request('/api/v1/users/me/restore', { method: 'POST' })
   },
 
+  getDeletionStatus(): Promise<{
+    pending: boolean
+    deleted_at: string | null
+    grace_until: string | null
+  }> {
+    return request('/api/v1/users/me/deletion-status')
+  },
+
+  restoreTrack(trackId: number): Promise<TrackResponse> {
+    return request(`/api/v1/tracks/${trackId}/restore`, {
+      method: 'POST',
+    })
+  },
+
+  getMyTrash(
+    page = 1,
+    size = 50,
+  ): Promise<TrackListResponse> {
+    return request(
+      `/api/v1/tracks/me/trash?page=${page}&size=${size}`,
+    )
+  },
+
+  getOfflineEligibility(trackId: number): Promise<{
+    allowed: boolean
+    reason: string
+    max_track_bytes: number
+    max_total_bytes_per_user: number
+  }> {
+    return request(
+      `/api/v1/tracks/${trackId}/offline-eligibility`,
+    )
+  },
+
   getFollowingFeed(page = 1, size = 20): Promise<TrackListResponse> {
     return request(`/api/v1/users/me/feed?page=${page}&size=${size}`)
   },

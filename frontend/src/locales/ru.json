@@ -558,9 +558,16 @@
         "hint": "Pull-очередь /internal/compute (аудио-фичи, индексы похожести и т.д.). Больший priority забирается первым. Pin ограничивает, кто может сделать claim; снятие lease возвращает зависший claimed в pending.",
         "empty": "Нет строк в этом списке",
         "type": "Тип задачи",
+        "target": "Объект",
+        "attempts": "Попытки",
+        "error": "Ошибка",
         "priority": "Приоритет",
         "pin": "Закрепить воркера",
-        "releaseLease": "Снять lease"
+        "releaseLease": "Снять lease",
+        "allStatuses": "Все статусы",
+        "allTypes": "Все типы",
+        "refresh": "Обновить",
+        "loading": "Загрузка…"
       },
       "auditSection": {
         "title": "Аудит воркеров (последние 200)",

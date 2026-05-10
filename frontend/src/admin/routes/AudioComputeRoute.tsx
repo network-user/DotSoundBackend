@@ -72,13 +72,17 @@ interface GenericComputeJobRow {
   job_type: string
   target_kind: string | null
   target_id: string | null
+  feature_version: string | null
   status: string
   priority: number
+  attempts: number
+  max_attempts: number | null
   pinned_worker_id: string | null
   claimed_by: string | null
-  attempts: number
   last_error: string | null
   created_at: string | null
+  finished_at: string | null
+  next_attempt_at: string | null
 }
 
 function LyricsJobRoutingControls({
@@ -488,11 +492,23 @@ export function AudioComputeRoute() {
       })
     },
   })
+  const [genericStatusFilter, setGenericStatusFilter] =
+    useState('')
+  const [genericTypeFilter, setGenericTypeFilter] =
+    useState('')
   const genericJobs = useQuery({
-    queryKey: ['admin', 'compute', 'generic-jobs'],
+    queryKey: [
+      'admin',
+      'compute',
+      'generic-jobs',
+      genericStatusFilter,
+      genericTypeFilter,
+    ],
     queryFn: () =>
       adminApi.listGenericComputeJobs({
-        limit: 100,
+        limit: 200,
+        status: genericStatusFilter || undefined,
+        job_type: genericTypeFilter || undefined,
       }),
     refetchInterval: 20_000,
     refetchIntervalInBackground: false,
@@ -1118,6 +1134,23 @@ export function AudioComputeRoute() {
         },
         {
           header: t(
+            'admin.audioCompute.genericJobs.target',
+          ),
+          id: 'target',
+          cell: (i) => {
+            const row = i.row.original
+            if (!row.target_kind && !row.target_id) {
+              return '–'
+            }
+            return (
+              <span className="admin-mono">
+                {row.target_kind}:{row.target_id}
+              </span>
+            )
+          },
+        },
+        {
+          header: t(
             'admin.audioCompute.table.status',
           ),
           cell: (i) => (
@@ -1129,6 +1162,72 @@ export function AudioComputeRoute() {
               {i.row.original.status}
             </StatusPill>
           ),
+        },
+        {
+          header: t(
+            'admin.audioCompute.genericJobs.attempts',
+          ),
+          id: 'attempts',
+          cell: (i) => {
+            const row = i.row.original
+            return (
+              <span
+                title={`max: ${row.max_attempts ?? '?'}`}
+              >
+                {row.attempts}
+                {row.max_attempts
+                  ? `/${row.max_attempts}`
+                  : ''}
+              </span>
+            )
+          },
+        },
+        {
+          header: t(
+            'admin.audioCompute.genericJobs.error',
+          ),
+          id: 'error',
+          cell: (i) => {
+            const err = i.row.original.last_error
+            if (!err) return '–'
+            return (
+              <span
+                className="admin-mono"
+                title={err}
+                style={{
+                  maxWidth: 200,
+                  display: 'inline-block',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  color: 'var(--admin-danger, #c00)',
+                }}
+              >
+                {err}
+              </span>
+            )
+          },
+        },
+        {
+          header: t(
+            'admin.audioCompute.table.when',
+          ),
+          id: 'created_at',
+          cell: (i) => {
+            const d = i.row.original.created_at
+            if (!d) return '–'
+            return (
+              <span
+                title={i.row.original.finished_at
+                  ? `finished: ${new Date(i.row.original.finished_at).toLocaleString()}`
+                  : i.row.original.next_attempt_at
+                    ? `next: ${new Date(i.row.original.next_attempt_at).toLocaleString()}`
+                    : undefined}
+              >
+                {new Date(d).toLocaleString()}
+              </span>
+            )
+          },
         },
         {
           header: t(
@@ -1919,6 +2018,64 @@ export function AudioComputeRoute() {
             'admin.audioCompute.genericJobs.hint',
           )}
         </p>
+        <div
+          className="admin-toolbar"
+          style={{ marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}
+        >
+          <select
+            value={genericStatusFilter}
+            onChange={(e) =>
+              setGenericStatusFilter(e.target.value)
+            }
+          >
+            <option value="">
+              {t('admin.audioCompute.genericJobs.allStatuses')}
+            </option>
+            <option value="pending">pending</option>
+            <option value="claimed">claimed</option>
+            <option value="succeeded">succeeded</option>
+            <option value="failed">failed</option>
+          </select>
+          <select
+            value={genericTypeFilter}
+            onChange={(e) =>
+              setGenericTypeFilter(e.target.value)
+            }
+          >
+            <option value="">
+              {t('admin.audioCompute.genericJobs.allTypes')}
+            </option>
+            <option value="track_audio_features">
+              track_audio_features
+            </option>
+            <option value="catalog_ingest_normalize">
+              catalog_ingest_normalize
+            </option>
+            <option value="artist_features_update">
+              artist_features_update
+            </option>
+            <option value="artist_similarity_index">
+              artist_similarity_index
+            </option>
+            <option value="track_similarity_index">
+              track_similarity_index
+            </option>
+          </select>
+          <MotionPress
+            variant="ghost"
+            onClick={() =>
+              genericJobs.refetch()
+            }
+            disabled={genericJobs.isFetching}
+          >
+            {t('admin.audioCompute.genericJobs.refresh')}
+          </MotionPress>
+          {genericJobs.isFetching && (
+            <span className="admin-card__sub">
+              {t('admin.audioCompute.genericJobs.loading')}
+            </span>
+          )}
+        </div>
         <DataTable
           columns={genericJobColumns}
           rows={

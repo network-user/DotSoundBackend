@@ -196,44 +196,75 @@ class AdminService:
     async def get_track(self, track_id: int) -> Track | None:
         return await self._repo.get_track(track_id)
 
-    async def delete_track(self, track_id: int) -> bool:
-        from app.services.audio_blob_service import (
-            AudioBlobService,
+    async def delete_track(
+        self,
+        track_id: int,
+        *,
+        actor_id: int,
+        reason: str = "admin",
+    ) -> bool:
+        """Admin-side soft-delete.
+
+        Tracks are moved to "trash" with ``deleted_at = now()``
+        and ``deleted_reason = reason`` (``admin`` by default,
+        ``dmca`` for rights-holder takedowns). External assets
+        survive until the daily hard-delete cron processes the
+        per-reason grace period from PrivateCore.
+        """
+        from app.repositories.track import TrackRepository
+        from app.services.search_index_notify import (
+            schedule_delete_track,
         )
 
-        track = await self._repo.get_track(track_id)
+        repo = TrackRepository(self._session)
+        track = await repo.admin_soft_delete(
+            track_id, by_user_id=actor_id, reason=reason
+        )
         if track is None:
             return False
-        ab = AudioBlobService(self._session)
-        await ab.try_release_for_track(track)
-        await self._session.refresh(track)
-        try:
-            await s3.delete_objects_by_prefix(f"hls/{track_id}/")
-        except Exception:
-            logger.warning(
-                "admin_hls_prefix_delete_failed",
-                track_id=track_id,
-            )
-        if not track.blob_id and track.file_key:
-            try:
-                await s3.delete_object(track.file_key)
-            except Exception:
-                logger.warning(
-                    "admin_s3_delete_failed",
-                    track_id=track_id,
-                    file_key=track.file_key,
-                )
-        if track.cover_key:
-            try:
-                await s3.delete_object(track.cover_key)
-            except Exception:
-                logger.warning(
-                    "admin_s3_cover_delete_failed",
-                    track_id=track_id,
-                    cover_key=track.cover_key,
-                )
-        await self._session.delete(track)
+        await schedule_delete_track(track_id)
         return True
+
+    async def restore_track(self, track_id: int) -> Track | None:
+        from app.repositories.track import TrackRepository
+        from app.services.search_index_notify import (
+            schedule_reindex_track,
+        )
+
+        repo = TrackRepository(self._session)
+        track = await repo.admin_restore(track_id)
+        if track is None:
+            return None
+        await schedule_reindex_track(track_id)
+        return track
+
+    async def hard_delete_track_now(
+        self, track_id: int, *, actor_id: int
+    ) -> bool:
+        """Bypass grace period and wipe the track immediately."""
+        from app.services.track_hard_delete_service import (
+            TrackHardDeleteService,
+        )
+
+        svc = TrackHardDeleteService(self._session)
+        return await svc.hard_delete_one(
+            track_id, actor_id=actor_id
+        )
+
+    async def list_deleted_tracks(
+        self,
+        *,
+        page: int,
+        size: int,
+        search: str | None = None,
+    ) -> tuple[list[Track], int]:
+        from app.repositories.track import TrackRepository
+
+        repo = TrackRepository(self._session)
+        offset = (page - 1) * size
+        return await repo.list_admin_deleted(
+            offset=offset, limit=size, search=search
+        )
 
     async def upload_track_cover(
         self,

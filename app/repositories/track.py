@@ -1,5 +1,7 @@
+from datetime import UTC, datetime
+
 import structlog
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -485,6 +487,65 @@ class TrackRepository(BaseRepository[Track]):
         )
         await self._session.flush()
 
+    async def find_existing_by_normalized_title_artist(
+        self,
+        pairs: list[tuple[str, str]],
+        *,
+        candidate_cap: int = 5000,
+    ) -> dict[tuple[str, str], Track]:
+        """Batched preflight lookup for the import pipeline.
+
+        Given a list of normalized ``(title, artist)`` pairs, returns
+        a mapping from each matched pair to the best existing Track
+        (most-played wins on ties). Pairs without a hit are simply
+        absent from the result dict — callers fall through to the
+        external matcher.
+
+        Normalization is the caller's responsibility (use
+        :func:`app.utils.text_normalize.normalize_for_match`); the SQL
+        side mirrors it via ``lower(trim(coalesce(...)))`` so an
+        index on ``title`` is still usable as a prefilter.
+        """
+        if not pairs:
+            return {}
+        unique_titles: list[str] = []
+        seen: set[str] = set()
+        for title, _artist in pairs:
+            if title and title not in seen:
+                seen.add(title)
+                unique_titles.append(title)
+        if not unique_titles:
+            return {}
+        norm_title = func.lower(func.trim(Track.title))
+        norm_artist = func.lower(
+            func.trim(func.coalesce(Track.artist, ""))
+        )
+        result = await self._session.execute(
+            select(Track)
+            .where(
+                norm_title.in_(unique_titles),
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
+                self._playback_listing_allowed(),
+                self._playable_filter(),
+            )
+            .order_by(Track.play_count.desc())
+            .limit(candidate_cap)
+        )
+        candidates = list(result.scalars().all())
+        wanted: set[tuple[str, str]] = {
+            (t, a) for t, a in pairs if t
+        }
+        out: dict[tuple[str, str], Track] = {}
+        for track in candidates:
+            t_norm = (track.title or "").strip().lower()
+            a_norm = (track.artist or "").strip().lower()
+            key = (t_norm, a_norm)
+            if key in wanted and key not in out:
+                out[key] = track
+        return out
+
     async def get_active_by_uploader_and_blob_id(
         self,
         user_id: int,
@@ -507,8 +568,140 @@ class TrackRepository(BaseRepository[Track]):
         track = await self.get_by_id(track_id)
         if not track or track.uploaded_by_id != user_id:
             return None
+        if track.deleted_at is not None:
+            return None
         track.is_active = False
+        track.deleted_at = datetime.now(UTC)
+        track.deleted_by_id = user_id
+        track.deleted_reason = "owner"
         await self._session.flush()
+        return track
+
+    async def restore_by_owner(
+        self, track_id: int, user_id: int
+    ) -> Track | None:
+        track = await self.get_by_id(track_id)
+        if not track or track.uploaded_by_id != user_id:
+            return None
+        if track.deleted_at is None:
+            return None
+        if track.deleted_reason not in ("owner", None):
+            return None
+        track.is_active = True
+        track.deleted_at = None
+        track.deleted_by_id = None
+        track.deleted_reason = None
+        await self._session.flush()
+        return track
+
+    async def admin_soft_delete(
+        self,
+        track_id: int,
+        *,
+        by_user_id: int,
+        reason: str,
+    ) -> Track | None:
+        track = await self.get_by_id(track_id)
+        if not track:
+            return None
+        if track.deleted_at is not None:
+            return track
+        track.is_active = False
+        track.deleted_at = datetime.now(UTC)
+        track.deleted_by_id = by_user_id
+        track.deleted_reason = reason
+        await self._session.flush()
+        return track
+
+    async def admin_restore(self, track_id: int) -> Track | None:
+        track = await self.get_by_id(track_id)
+        if not track or track.deleted_at is None:
+            return None
+        track.is_active = True
+        track.deleted_at = None
+        track.deleted_by_id = None
+        track.deleted_reason = None
+        await self._session.flush()
+        return track
+
+    async def list_user_trash(
+        self,
+        user_id: int,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[Track], int]:
+        condition = (
+            (Track.uploaded_by_id == user_id)
+            & Track.deleted_at.is_not(None)
+            & (Track.deleted_reason == "owner")
+        )
+        total_result = await self._session.execute(
+            select(func.count()).where(condition)
+        )
+        total = int(total_result.scalar_one())
+        rows = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.deleted_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(rows.scalars().all()), total
+
+    async def list_admin_deleted(
+        self,
+        *,
+        offset: int = 0,
+        limit: int = 50,
+        search: str | None = None,
+    ) -> tuple[list[Track], int]:
+        condition: ColumnElement[bool] = Track.deleted_at.is_not(None)
+        if search:
+            pattern = f"%{search.strip()}%"
+            condition = condition & (
+                Track.title.ilike(pattern)
+                | Track.artist.ilike(pattern)
+            )
+        total_result = await self._session.execute(
+            select(func.count()).where(condition)
+        )
+        total = int(total_result.scalar_one())
+        rows = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.deleted_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(rows.scalars().all()), total
+
+    async def list_hard_delete_candidates(
+        self,
+        *,
+        limit: int = 50,
+    ) -> list[Track]:
+        rows = await self._session.execute(
+            select(Track)
+            .where(Track.deleted_at.is_not(None))
+            .order_by(Track.deleted_at.asc())
+            .limit(limit)
+        )
+        return list(rows.scalars().all())
+
+    async def hard_delete_track(self, track_id: int) -> bool:
+        result = await self._session.execute(
+            delete(Track).where(Track.id == track_id)
+        )
+        await self._session.flush()
+        return result.rowcount > 0
+
+    async def get_for_owner_including_trash(
+        self, track_id: int, user_id: int
+    ) -> Track | None:
+        track = await self.get_by_id(track_id)
+        if not track or track.uploaded_by_id != user_id:
+            return None
         return track
 
     async def get_adjacent(

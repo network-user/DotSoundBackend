@@ -517,6 +517,51 @@ async def get_cover(
 
 
 @router.get(
+    "/{track_id}/offline-eligibility",
+    summary=(
+        "Whether this track may be saved into the local PWA cache"
+    ),
+)
+@limiter.limit("120/minute")
+async def offline_eligibility(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+) -> dict[str, object]:
+    from app.services.offline_policy_adapter import (
+        OFFLINE_MAX_TOTAL_BYTES_PER_USER,
+        OFFLINE_MAX_TRACK_BYTES,
+        is_offline_allowed,
+    )
+
+    structlog.contextvars.bind_contextvars(track_id=track_id)
+    service = TrackService(session)
+    track = await service.get_track(
+        track_id, viewer=current_user
+    )
+    if not track:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    _check_access(track, current_user)
+    allowed, reason = is_offline_allowed(
+        catalog_type=track.catalog_type,
+        access_mode=track.access_mode,
+        file_size_bytes=track.file_size_bytes,
+    )
+    return {
+        "allowed": allowed,
+        "reason": reason,
+        "max_track_bytes": OFFLINE_MAX_TRACK_BYTES,
+        "max_total_bytes_per_user": (
+            OFFLINE_MAX_TOTAL_BYTES_PER_USER
+        ),
+    }
+
+
+@router.get(
     "/{track_id}/audio",
     summary="Proxy-stream audio with HTTP Range support",
     response_model=None,
@@ -575,6 +620,18 @@ async def audio_stream(
             }
             if content_range:
                 headers["Content-Range"] = content_range
+            from app.services.offline_policy_adapter import (
+                is_offline_allowed,
+            )
+
+            allowed, _reason = is_offline_allowed(
+                catalog_type=track.catalog_type,
+                access_mode=track.access_mode,
+                file_size_bytes=track.file_size_bytes,
+            )
+            headers["X-Offline-Allowed"] = (
+                "1" if allowed else "0"
+            )
             logger.info(
                 "audio_stream_from_cache",
                 track_id=track_id,

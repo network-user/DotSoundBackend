@@ -172,7 +172,7 @@
     "info": "Info",
     "public": "Make public",
     "private": "Make private",
-    "deleteConfirm": "Tap again to delete the track",
+    "deleteConfirm": "Tap again — move to trash (restorable)",
     "delete": "Delete track",
     "sourceTelegram": "Telegram",
     "sourceUpload": "Upload",
