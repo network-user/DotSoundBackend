@@ -530,3 +530,97 @@ async def test_worker_preflight_skips_unplayable_local_track(
     await session.refresh(job)
     assert sc.search.await_count == 1
     assert job.failed_tracks == 1
+
+
+@patch(f"{_MOD}.SoundCloudService")
+@patch(f"{_MOD}.AsyncSessionLocal")
+async def test_worker_resumes_from_completed_failed_cursor(
+    mock_session_local: MagicMock,
+    mock_sc_cls: MagicMock,
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=3220)
+    selected = [
+        {"title": "Already1", "artist": "X"},
+        {"title": "Already2", "artist": "X"},
+        {"title": "Fresh", "artist": "X"},
+    ]
+    job = await _make_job(session, user.id, selected)
+    job.completed_tracks = 1
+    job.failed_tracks = 1
+    await session.commit()
+    mock_session_local.return_value = _session_ctx(session)
+
+    sc = _mock_sc_service(search_result=[])
+    mock_sc_cls.return_value = sc
+
+    from app.services.external_import_worker import (
+        process_external_import_job,
+    )
+
+    await process_external_import_job(job.id)
+
+    assert sc.search.await_count == 1
+
+
+@patch(f"{_MOD}.SoundCloudService")
+@patch(f"{_MOD}.AsyncSessionLocal")
+async def test_worker_aborts_when_lease_lost(
+    mock_session_local: MagicMock,
+    mock_sc_cls: MagicMock,
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=3221)
+    selected = [
+        {"title": "A", "artist": "X"},
+        {"title": "B", "artist": "X"},
+    ]
+    job = await _make_job(session, user.id, selected)
+    mock_session_local.return_value = _session_ctx(session)
+
+    call_n = {"n": 0}
+
+    async def _search_side_effect(*_a: object, **_kw: object) -> list[dict]:
+        call_n["n"] += 1
+        if call_n["n"] == 1:
+            await session.refresh(job)
+            data = dict(job.tracks_data or {})
+            data["worker_lease"] = "stolen"
+            job.tracks_data = data
+            await session.commit()
+        return []
+
+    sc = MagicMock()
+    sc.search = AsyncMock(side_effect=_search_side_effect)
+    sc.import_or_get_track = AsyncMock()
+    mock_sc_cls.return_value = sc
+
+    from app.services.external_import_worker import (
+        process_external_import_job,
+    )
+
+    await process_external_import_job(job.id)
+
+    assert sc.search.await_count == 1
+
+
+async def test_sweep_stuck_jobs_resets_stale_importing(
+    session: AsyncSession,
+) -> None:
+    from datetime import UTC, datetime, timedelta
+    from unittest.mock import patch as _patch
+
+    user = await _make_user(session, telegram_id=3222)
+    job = await _make_job(session, user.id, [{"title": "X", "artist": "Y"}])
+    job.updated_at = datetime.now(UTC) - timedelta(hours=2)
+    await session.commit()
+
+    from app.services import import_queue_dispatcher as dispatcher_mod
+
+    with _patch.object(dispatcher_mod, "AsyncSessionLocal") as mock_local:
+        mock_local.return_value = _session_ctx(session)
+        count = await dispatcher_mod.sweep_stuck_jobs()
+
+    assert count == 1
+    await session.refresh(job)
+    assert job.status == "queued"

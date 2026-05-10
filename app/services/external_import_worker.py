@@ -4,6 +4,7 @@ import difflib
 import hashlib
 import json
 import random
+import uuid
 
 import structlog
 from sqlalchemy import select
@@ -115,6 +116,11 @@ async def _search_with_retry(
     return []
 
 
+def _lease_lost(job: ImportJob, expected_lease: str) -> bool:
+    actual = (job.tracks_data or {}).get("worker_lease")
+    return actual != expected_lease
+
+
 async def _preflight_local_matches(
     track_repo: TrackRepository,
     selected: list,  # type: ignore[type-arg]
@@ -213,8 +219,9 @@ async def process_external_import_job(job_id: int) -> None:
             )
             return
 
-        selected = (job.tracks_data or {}).get("selected", [])
-        if not selected:
+        existing_data = job.tracks_data or {}
+        selected_full = existing_data.get("selected", [])
+        if not selected_full:
             job.status = "done"
             job.total_tracks = 0
             await session.commit()
@@ -226,11 +233,36 @@ async def process_external_import_job(job_id: int) -> None:
             await send_import_job_finished_notification(session, job)
             return
 
+        # Resume: completed + failed counters double as a cursor.
+        # Every per-item branch already increments exactly one of
+        # them, so a worker restart picks up where the previous run
+        # was forced to stop without rescanning processed items.
+        cursor = int(job.completed_tracks or 0) + int(job.failed_tracks or 0)
+        cursor = max(0, min(cursor, len(selected_full)))
+        selected = selected_full[cursor:]
+
+        # Worker lease: any zombie worker that wakes up after
+        # ``sweep_stuck_jobs`` reset this row will see a different
+        # lease on its next refresh and exit instead of fighting
+        # the new worker for the same job.
+        worker_lease = uuid.uuid4().hex
+        job.tracks_data = {**existing_data, "worker_lease": worker_lease}
+        await session.commit()
+        await session.refresh(job)
+
         sc_service = SoundCloudService(settings.sc_client_id, session)
         library_repo = UserTrackLibraryRepository(session)
         track_repo = TrackRepository(session)
-        imported: list[dict] = []
-        not_matched: list[dict] = []
+        imported: list[dict] = list(existing_data.get("imported", []))
+        not_matched: list[dict] = list(existing_data.get("not_matched", []))
+
+        if cursor > 0:
+            logger.info(
+                "external_import_resume",
+                job_id=job_id,
+                cursor=cursor,
+                remaining=len(selected),
+            )
 
         local_matches = await _preflight_local_matches(track_repo, selected)
         if local_matches:
@@ -250,6 +282,12 @@ async def process_external_import_job(job_id: int) -> None:
             await session.refresh(job)
             if job.status == "cancelled":
                 break
+            if _lease_lost(job, worker_lease):
+                logger.warning(
+                    "external_import_lease_lost",
+                    job_id=job_id,
+                )
+                return
 
             local_match = _lookup_local_match(local_matches, item)
             if local_match is not None:
@@ -279,6 +317,16 @@ async def process_external_import_job(job_id: int) -> None:
                     )
                 except Exception as exc:
                     await session.rollback()
+                    await session.refresh(job)
+                    job.failed_tracks += 1
+                    not_matched.append(
+                        {
+                            "title": local_match.title,
+                            "artist": local_match.artist,
+                            "reason": f"local_match_link_failed: {exc}",
+                        }
+                    )
+                    await session.commit()
                     logger.warning(
                         "external_import_local_match_link_failed",
                         job_id=job_id,
@@ -548,6 +596,12 @@ async def process_external_import_job(job_id: int) -> None:
                     )
 
         await session.refresh(job)
+        if _lease_lost(job, worker_lease):
+            logger.warning(
+                "external_import_lease_lost_at_finalize",
+                job_id=job_id,
+            )
+            return
         if job.status != "cancelled":
             job.status = "done"
 

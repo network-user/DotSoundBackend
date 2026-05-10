@@ -35,6 +35,10 @@ _PROM_ELASTICSEARCH_QUERIES = None
 _PROM_RADIO_REQUESTS = None
 _PROM_RADIO_GUARD_HITS = None
 _PROM_RADIO_QUEUE_SIZE = None
+_PROM_RECSYS_LISTEN_OUTCOMES = None
+_PROM_RECSYS_SAVE_ACTIONS = None
+_PROM_RECSYS_PIPELINE_LATENCY = None
+_PROM_RECSYS_IMPRESSION_POSITION = None
 
 
 def _is_internal_ip(client_host: str | None) -> bool:
@@ -195,6 +199,59 @@ def setup_metrics(application: object) -> None:
         "Returned radio queue size per request.",
         ["surface"],
         buckets=(0, 1, 3, 5, 10, 20, 30, 50),
+        registry=registry,
+    )
+    global _PROM_RECSYS_LISTEN_OUTCOMES
+    global _PROM_RECSYS_SAVE_ACTIONS
+    global _PROM_RECSYS_PIPELINE_LATENCY
+    global _PROM_RECSYS_IMPRESSION_POSITION
+    _PROM_RECSYS_LISTEN_OUTCOMES = Counter(
+        "recsys_listen_outcomes_total",
+        (
+            "Listen outcomes for tracks shown by recsys, per "
+            "surface (completed/skipped_quick/skipped/partial)."
+        ),
+        ["surface", "outcome"],
+        registry=registry,
+    )
+    _PROM_RECSYS_SAVE_ACTIONS = Counter(
+        "recsys_save_actions_total",
+        (
+            "Post-impression actions (like/playlist_add/dislike) "
+            "attributed back to a recsys surface."
+        ),
+        ["surface", "action"],
+        registry=registry,
+    )
+    _PROM_RECSYS_PIPELINE_LATENCY = Histogram(
+        "recsys_pipeline_seconds",
+        (
+            "Time spent in recsys pipeline stages "
+            "(retrieval/ranking/rerank/total)."
+        ),
+        ["surface", "stage"],
+        buckets=(
+            0.005,
+            0.01,
+            0.025,
+            0.05,
+            0.1,
+            0.25,
+            0.5,
+            1.0,
+            2.5,
+            5.0,
+        ),
+        registry=registry,
+    )
+    _PROM_RECSYS_IMPRESSION_POSITION = Histogram(
+        "recsys_listen_position",
+        (
+            "Rank position (1-based) of tracks that resulted in "
+            "a qualified listen, per surface."
+        ),
+        ["surface"],
+        buckets=(1, 2, 3, 5, 8, 13, 21, 34, 55, 89),
         registry=registry,
     )
 
@@ -534,3 +591,72 @@ def radio_request_observed(
         )
     if guard_hit and _PROM_RADIO_GUARD_HITS is not None:
         _PROM_RADIO_GUARD_HITS.labels(surface=surface).inc()
+
+
+_RECSYS_LISTEN_OUTCOMES = frozenset(
+    {"completed", "skipped_quick", "skipped", "partial"}
+)
+_RECSYS_SAVE_ACTIONS = frozenset({"like", "playlist_add", "dislike"})
+_RECSYS_PIPELINE_STAGES = frozenset(
+    {"retrieval", "ranking", "rerank", "total"}
+)
+
+
+def recsys_listen_outcome_observed(
+    *,
+    surface: str,
+    outcome: str,
+) -> None:
+    if outcome not in _RECSYS_LISTEN_OUTCOMES:
+        return
+    if _PROM_RECSYS_LISTEN_OUTCOMES is None:
+        return
+    _PROM_RECSYS_LISTEN_OUTCOMES.labels(
+        surface=surface,
+        outcome=outcome,
+    ).inc()
+
+
+def recsys_save_action_observed(
+    *,
+    surface: str,
+    action: str,
+) -> None:
+    if action not in _RECSYS_SAVE_ACTIONS:
+        return
+    if _PROM_RECSYS_SAVE_ACTIONS is None:
+        return
+    _PROM_RECSYS_SAVE_ACTIONS.labels(
+        surface=surface,
+        action=action,
+    ).inc()
+
+
+def recsys_pipeline_stage_observed(
+    *,
+    surface: str,
+    stage: str,
+    duration_seconds: float,
+) -> None:
+    if stage not in _RECSYS_PIPELINE_STAGES:
+        return
+    if _PROM_RECSYS_PIPELINE_LATENCY is None:
+        return
+    _PROM_RECSYS_PIPELINE_LATENCY.labels(
+        surface=surface,
+        stage=stage,
+    ).observe(max(0.0, float(duration_seconds)))
+
+
+def recsys_impression_position_observed(
+    *,
+    surface: str,
+    position: int,
+) -> None:
+    if _PROM_RECSYS_IMPRESSION_POSITION is None:
+        return
+    if position < 1:
+        return
+    _PROM_RECSYS_IMPRESSION_POSITION.labels(
+        surface=surface,
+    ).observe(int(position))

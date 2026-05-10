@@ -56,13 +56,12 @@ ALLOWED_ERROR_CODES: frozenset[str] = frozenset(
         "private",
         "invalid_url",
         "provider_unavailable",
+        "scan_timeout",
     }
 )
 
 
-async def scan_playlist_url(
-    source: str, url: str
-) -> dict[str, Any]:
+async def scan_playlist_url(source: str, url: str) -> dict[str, Any]:
     """Return a normalized track list for an external playlist/album URL.
 
     Shape::
@@ -83,12 +82,27 @@ async def scan_playlist_url(
     concurrent yt-dlp threads under high load.
     """
     loop = asyncio.get_event_loop()
-    result: PlaylistScanResult = await loop.run_in_executor(
-        _get_scan_executor(),
-        fetch_external_playlist,
-        source,
-        url,
-    )
+    timeout = float(settings.scan_timeout_seconds)
+    try:
+        result: PlaylistScanResult = await asyncio.wait_for(
+            loop.run_in_executor(
+                _get_scan_executor(),
+                fetch_external_playlist,
+                source,
+                url,
+            ),
+            timeout=timeout,
+        )
+    except TimeoutError as exc:
+        logger.warning(
+            "external_scan_timeout",
+            source=source,
+            timeout_seconds=timeout,
+        )
+        raise ProviderError(
+            code="scan_timeout",
+            message=f"Scan exceeded {int(timeout)}s",
+        ) from exc
 
     if result.status == "ok":
         return {

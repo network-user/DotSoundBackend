@@ -29,12 +29,8 @@ ALLOWED_METRICS: dict[str, str] = {
         "))"
     ),
     "active_websockets": ("sum(active_websocket_connections)"),
-    "radio_requests_5m": (
-        "sum(rate(radio_requests_total[5m]))"
-    ),
-    "radio_guard_hits_5m": (
-        "sum(rate(radio_guard_hits_total[5m]))"
-    ),
+    "radio_requests_5m": ("sum(rate(radio_requests_total[5m]))"),
+    "radio_guard_hits_5m": ("sum(rate(radio_guard_hits_total[5m]))"),
     "radio_queue_size_avg_5m": (
         "avg(rate(radio_queue_size_sum[5m]) / "
         "clamp_min(rate(radio_queue_size_count[5m]), 1e-9))"
@@ -44,6 +40,42 @@ ALLOWED_METRICS: dict[str, str] = {
     ),
     "container_mem": (
         "sum by (name) (" "container_memory_working_set_bytes" ")"
+    ),
+    "recsys_completion_rate_5m": (
+        "sum by (surface) ("
+        "rate(recsys_listen_outcomes_total"
+        '{outcome="completed"}[5m])'
+        ") / clamp_min(sum by (surface) ("
+        "rate(recsys_listen_outcomes_total[5m])"
+        "), 1e-9)"
+    ),
+    "recsys_skip_quick_rate_5m": (
+        "sum by (surface) ("
+        "rate(recsys_listen_outcomes_total"
+        '{outcome="skipped_quick"}[5m])'
+        ") / clamp_min(sum by (surface) ("
+        "rate(recsys_listen_outcomes_total[5m])"
+        "), 1e-9)"
+    ),
+    "recsys_save_rate_5m": (
+        "sum by (surface) ("
+        "rate(recsys_save_actions_total"
+        '{action="playlist_add"}[5m])'
+        ") / clamp_min(sum by (surface) ("
+        "rate(recsys_listen_outcomes_total[5m])"
+        "), 1e-9)"
+    ),
+    "recsys_pipeline_p95_5m": (
+        "histogram_quantile(0.95, "
+        "sum by (le, surface, stage) ("
+        "rate(recsys_pipeline_seconds_bucket[5m])"
+        "))"
+    ),
+    "recsys_listen_position_p50_5m": (
+        "histogram_quantile(0.50, "
+        "sum by (le, surface) ("
+        "rate(recsys_listen_position_bucket[5m])"
+        "))"
     ),
 }
 

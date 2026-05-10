@@ -171,7 +171,12 @@ class AppSettings(BaseSettings):
     # caps how many slots one user can occupy at the same time, so
     # a single power-user cannot starve the queue.
     import_max_concurrent_jobs: int = 10
-    import_per_user_max_concurrent: int = 2
+    # Held at 1 because ``ImportService._get_active_job`` already
+    # blocks a user from starting a second scan while any of their
+    # jobs is in {scanning, ready, importing, queued}. Setting >1
+    # here is unreachable from the public API and only confuses
+    # the queue accounting in the dispatcher.
+    import_per_user_max_concurrent: int = 1
     import_queue_dispatch_interval_seconds: float = 30.0
 
     # Stuck-job recovery. The dispatcher loop also acts as a sweeper:
@@ -234,6 +239,13 @@ class AppSettings(BaseSettings):
     # Prevents exhausting the default ThreadPoolExecutor under load
     # (100 concurrent scans × 1 thread each = thread starvation).
     scan_executor_max_workers: int = 8
+
+    # Hard ceiling on a single ``fetch_external_playlist`` call.
+    # yt-dlp can hang for minutes on a slow upstream; without a cap
+    # the scan_executor thread is held forever and eventually the
+    # pool is exhausted. On timeout we surface ``provider_unavailable``
+    # with code ``scan_timeout`` so the UI can prompt a retry.
+    scan_timeout_seconds: float = 120.0
 
     # Public selector forwarded into PrivateCore to pick the
     # lyrics provider. Internals of each provider remain opaque
@@ -363,9 +375,7 @@ class AppSettings(BaseSettings):
         raw = (self.admin_panel_path or "").strip().strip("/")
         if not raw:
             return "admin"
-        cleaned = "".join(
-            ch for ch in raw if ch.isalnum() or ch in {"-", "_"}
-        )
+        cleaned = "".join(ch for ch in raw if ch.isalnum() or ch in {"-", "_"})
         return cleaned or "admin"
 
     @property

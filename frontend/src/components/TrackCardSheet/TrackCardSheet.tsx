@@ -25,6 +25,12 @@ import { Waveform } from '@/components/Waveform/Waveform'
 import { WaveformBar } from '@/components/Waveform/WaveformBar'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { showIsland } from '@/lib/island'
+import {
+  downloadTrack as offlineDownloadTrack,
+  isCached as offlineIsCached,
+  OfflineNotAllowedError,
+  removeTrack as offlineRemoveTrack,
+} from '@/lib/offlineCache'
 import { useSound } from '@/store/SoundContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import {
@@ -1484,6 +1490,37 @@ export function TrackCardSheet({
               {t('trackSheet.complaint')}
             </span>
           </MotionPress>
+
+          {track && track.access_mode !== 'third_party_stream' && (
+            <MotionPress
+              type="button"
+              variant="ghost"
+              className={`tcs-action-btn${
+                offlineSaved ? ' active' : ''
+              }`}
+              haptic="light"
+              disabled={offlineBusy || !track}
+              onClick={handleSaveOffline}
+            >
+              <Icon
+                name={offlineSaved ? 'check' : 'download'}
+                size={20}
+              />
+              <span className="tcs-action-label">
+                {offlineBusy
+                  ? '…'
+                  : offlineSaved
+                    ? t(
+                        'trackSheet.offlineSaved',
+                        'В оффлайне',
+                      )
+                    : t(
+                        'trackSheet.saveOffline',
+                        'Сохранить оффлайн',
+                      )}
+              </span>
+            </MotionPress>
+          )}
         </div>
 
         {extrasOpen && (

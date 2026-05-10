@@ -150,6 +150,16 @@ async def auth_telegram(
     user, created = (
         await service.register_or_update(user_data)
     )
+
+    from app.services.abuse_guard import evaluate_auth_event
+
+    await evaluate_auth_event(
+        request,
+        session=session,
+        kind="register" if created else "login",
+        user_id=user.id,
+    )
+
     token = create_access_token(
         user.id, user.is_admin
     )

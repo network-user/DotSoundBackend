@@ -1,3 +1,5 @@
+import uuid
+
 import httpx
 import structlog
 from dotsound_private_core.services import (
@@ -21,6 +23,12 @@ from app.services.cover_worker import (
     generate_and_upload_cover,
 )
 
+
+def _lease_lost(job: ImportJob, expected_lease: str) -> bool:
+    actual = (job.tracks_data or {}).get("worker_lease")
+    return actual != expected_lease
+
+
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _BOT_DOWNLOAD_TIMEOUT = 60.0
@@ -38,8 +46,9 @@ async def process_import_job(job_id: int) -> None:
             )
             return
 
-        selected = (job.tracks_data or {}).get("selected", [])
-        if not selected:
+        existing_data = job.tracks_data or {}
+        selected_full = existing_data.get("selected", [])
+        if not selected_full:
             job.status = "done"
             job.total_tracks = 0
             await session.commit()
@@ -48,21 +57,43 @@ async def process_import_job(job_id: int) -> None:
                 send_import_job_finished_notification,
             )
 
-            await send_import_job_finished_notification(
-                session, job
-            )
+            await send_import_job_finished_notification(session, job)
             return
+
+        cursor = int(job.completed_tracks or 0) + int(job.failed_tracks or 0)
+        cursor = max(0, min(cursor, len(selected_full)))
+        selected = selected_full[cursor:]
+
+        worker_lease = uuid.uuid4().hex
+        job.tracks_data = {**existing_data, "worker_lease": worker_lease}
+        await session.commit()
+        await session.refresh(job)
 
         headers = build_internal_headers(settings.bot_internal_secret)
         library_repo = UserTrackLibraryRepository(session)
         track_repo = TrackRepository(session)
         blob_service = AudioBlobService(session)
 
-        imported_tracks: list[dict] = []
+        imported_tracks: list[dict] = list(existing_data.get("imported", []))
+
+        if cursor > 0:
+            logger.info(
+                "telegram_import_resume",
+                job_id=job_id,
+                cursor=cursor,
+                remaining=len(selected),
+            )
 
         for i, audio_info in enumerate(selected):
+            await session.refresh(job)
             if job.status == "cancelled":
                 break
+            if _lease_lost(job, worker_lease):
+                logger.warning(
+                    "telegram_import_lease_lost",
+                    job_id=job_id,
+                )
+                return
 
             file_id = audio_info.get("file_id", "")
             title = audio_info.get("title", "Unknown")
@@ -112,11 +143,9 @@ async def process_import_job(job_id: int) -> None:
                     ext,
                     mime or "audio/mpeg",
                 )
-                existing = (
-                    await track_repo.get_active_by_uploader_and_blob_id(
-                        job.user_id,
-                        audio_blob.id,
-                    )
+                existing = await track_repo.get_active_by_uploader_and_blob_id(
+                    job.user_id,
+                    audio_blob.id,
                 )
                 if existing is not None:
                     try:
@@ -166,9 +195,7 @@ async def process_import_job(job_id: int) -> None:
                 )
                 session.add(track)
                 await session.flush()
-                await blob_service.attach_playback_blob(
-                    track, audio_blob
-                )
+                await blob_service.attach_playback_blob(track, audio_blob)
 
                 try:
                     await library_repo.add(
@@ -254,6 +281,14 @@ async def process_import_job(job_id: int) -> None:
             await session.commit()
             await session.refresh(job)
 
+        await session.refresh(job)
+        if _lease_lost(job, worker_lease):
+            logger.warning(
+                "telegram_import_lease_lost_at_finalize",
+                job_id=job_id,
+            )
+            return
+
         if job.status != "cancelled":
             job.status = "done"
 
@@ -267,9 +302,7 @@ async def process_import_job(job_id: int) -> None:
             send_import_job_finished_notification,
         )
 
-        await send_import_job_finished_notification(
-            session, job
-        )
+        await send_import_job_finished_notification(session, job)
 
         logger.info(
             "import_job_finished",

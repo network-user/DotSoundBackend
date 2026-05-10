@@ -34,6 +34,7 @@ def _supports_skip_locked(session: AsyncSession) -> bool:
     bind = session.get_bind()
     return getattr(bind.dialect, "name", "") == "postgresql"
 
+
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _WORKER_BG_TASK_STOP_TIMEOUT: float = 15.0
