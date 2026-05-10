@@ -234,25 +234,44 @@ async def _prefetch_sc_searches(
                     query=query,
                 )
 
+    # Chunked dispatch: huge jobs (10k+ tracks) would otherwise spawn
+    # thousands of asyncio.Task objects up front and skip a cancel
+    # checkpoint until the whole queue drains. Per-chunk gather
+    # bounds memory and lets us bail out at chunk boundaries too.
+    chunk_size = max(1, int(settings.import_sc_prefetch_chunk_size))
     seen: set[str] = set()
-    tasks: list[asyncio.Task[None]] = []
+    pending: list[asyncio.Task[None]] = []
+    total_queries = 0
+
+    async def _flush() -> None:
+        nonlocal pending
+        if not pending:
+            return
+        await asyncio.gather(*pending, return_exceptions=True)
+        pending = []
+
     for item in items:
+        if cancelled:
+            break
         title = (item.get("title") or "").strip()
         artist = (item.get("artist") or "").strip()
         q = _build_query(title, artist)
         if q and q not in seen:
             seen.add(q)
-            tasks.append(asyncio.create_task(_fetch_one(q)))
+            pending.append(asyncio.create_task(_fetch_one(q)))
+            total_queries += 1
         # Pre-warm title-only query used by the fallback retry path.
         if title and artist and title not in seen:
             seen.add(title)
-            tasks.append(asyncio.create_task(_fetch_one(title)))
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+            pending.append(asyncio.create_task(_fetch_one(title)))
+            total_queries += 1
+        if len(pending) >= chunk_size:
+            await _flush()
+    await _flush()
     logger.info(
         "external_import_prefetch_stats",
         job_id=job_id,
-        total_queries=len(tasks),
+        total_queries=total_queries,
         cache_hits=stats["cache_hits"],
         live_calls=stats["live_calls"],
         errors=stats["errors"],

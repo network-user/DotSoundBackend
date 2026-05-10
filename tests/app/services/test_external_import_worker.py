@@ -725,6 +725,35 @@ async def test_prefetch_short_circuits_on_cancel() -> None:
     assert sc.search.await_count < 10
 
 
+async def test_prefetch_chunks_huge_imports() -> None:
+    """Huge item lists must be flushed in chunk_size batches."""
+    from app.services import external_import_worker as mod
+
+    sc = MagicMock()
+    sc.search = AsyncMock(return_value=[])
+
+    items = [
+        {"title": f"T{i}", "artist": f"A{i}"} for i in range(7)
+    ]
+
+    with (
+        patch.object(
+            mod, "_get_cached_sc_search", new=AsyncMock(return_value=None)
+        ),
+        patch.object(mod, "_set_cached_sc_search", new=AsyncMock()),
+        patch.object(mod, "_jitter_delay", return_value=0.0),
+        patch.object(
+            mod.settings, "import_sc_prefetch_chunk_size", 4
+        ),
+    ):
+        await mod._prefetch_sc_searches(
+            sc, items, job_id=1, slow=False
+        )
+
+    # 7 items × 2 query forms = 14 SC search calls in total.
+    assert sc.search.await_count == 14
+
+
 async def test_sweep_stuck_jobs_resets_stale_importing(
     session: AsyncSession,
 ) -> None:

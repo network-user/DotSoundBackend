@@ -213,6 +213,11 @@ class AppSettings(BaseSettings):
     # many search requests can be in-flight simultaneously. Keep it ≤
     # the global ``soundcloud_slot`` semaphore capacity (default 4).
     import_sc_prefetch_concurrency: int = 3
+    # Prefetch chunk size: huge jobs (10k+ tracks) would otherwise
+    # spawn thousands of asyncio.Task objects up front and defer
+    # cancel/lease checks until the entire queue drains. Chunking
+    # gives us a natural checkpoint between batches.
+    import_sc_prefetch_chunk_size: int = 500
 
     # Telegram import path: a transient bot/network failure used to
     # kill the import for that track. With a small retry budget the
