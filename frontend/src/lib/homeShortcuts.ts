@@ -30,6 +30,12 @@ export const MIX_SHORTCUT_TILES = [
     morph: 'bookmark' as const,
   },
   {
+    path: '/my-top',
+    labelKey: 'quickMyTop' as const,
+    profileIcon: 'chart',
+    morph: 'star' as const,
+  },
+  {
     path: '/radio',
     labelKey: 'quickRadio' as const,
     profileIcon: 'radio',

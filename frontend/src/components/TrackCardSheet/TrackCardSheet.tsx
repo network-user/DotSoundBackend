@@ -829,6 +829,65 @@ export function TrackCardSheet({
     } catch {}
   }, [track, updateTrack])
 
+  const [offlineSaved, setOfflineSaved] = useState(false)
+  const [offlineBusy, setOfflineBusy] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    if (!track) {
+      setOfflineSaved(false)
+      return
+    }
+    void offlineIsCached(track.id).then((ok) => {
+      if (!cancelled) setOfflineSaved(ok)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [track?.id])
+
+  const handleSaveOffline = useCallback(async () => {
+    if (!track) return
+    setOfflineBusy(true)
+    try {
+      if (offlineSaved) {
+        await offlineRemoveTrack(track.id)
+        setOfflineSaved(false)
+        showIsland({
+          kind: 'toast',
+          title: t(
+            'trackSheet.offlineRemoved',
+            'Удалено из оффлайна',
+          ),
+        })
+      } else {
+        await offlineDownloadTrack(track)
+        setOfflineSaved(true)
+        showIsland({
+          kind: 'toast',
+          title: t(
+            'trackSheet.offlineSavedToast',
+            'Сохранено для оффлайна',
+          ),
+        })
+      }
+    } catch (err) {
+      const reason =
+        err instanceof OfflineNotAllowedError
+          ? err.reason
+          : 'unknown'
+      showIsland({
+        kind: 'error',
+        title: t(
+          'trackSheet.offlineFailed',
+          'Не удалось сохранить ({{reason}})',
+          { reason },
+        ),
+      })
+    } finally {
+      setOfflineBusy(false)
+    }
+  }, [track, offlineSaved, t])
+
   const exit = useExitTransition(
     Boolean(isCardOpen && track),
   )

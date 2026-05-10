@@ -1372,11 +1372,12 @@
     - [x] Backend `StatsService.get_user_top_tracks/genres`,
       агрегации в `ListenEventRepository`,
       `GET /api/v1/users/me/top?window=7d|30d|90d|all`.
-    - [x] Frontend `api.getMyTop`.
-    - [ ] Секция «Ваш топ» на Home + таб «Статистика» в Profile
-      (часы прослушивания, топ-жанры).
-    - [ ] Карточки "Топ артистов/треков" месяца для шеринга
-      (через существующую `RecapShareCard` инфраструктуру).
+    - [x] Frontend `api.getMyTop`, плитка «Ваш топ» в
+      `MIX_SHORTCUT_TILES` (быстрые разделы Home),
+      `MyTopView` `/my-top` с переключателем окон 7d/30d/90d/all.
+    - [ ] Полноценный таб «Статистика» в `ProfileView` (часы
+      прослушивания, графика по жанрам, привязка `RecapShareCard`
+      к реальным данным).
 - [ ] **Динамические плейлисты**
     - [x] "Weekly Top 50" -- 2026-05-06: PrivateCore weekly_top_policy (rank_weekly_top_tracks, blend log(listens_7d)+log(likes_7d), WEEKLY_TOP_SCORE_VERSION); Backend RecommendationRepository.get_qualified_listens_7d_counts, RecommendationService.get_weekly_top_playlist with Redis cache (TTL 30 min), GET /api/v1/recommendations/weekly-top; Frontend WeeklyTopView (/weekly-top), api.getWeeklyTopPlaylist, WeeklyTopPlaylistResponse type, flame icon, Home quick-grid card.
     - [x] **«Забытые сокровища»** (лайкнутое давно, без прослушиваний в окне) — PrivateCore `forgotten_treasures_policy` (пороги лайка ≥21d, тишина ≥14d, `rank_forgotten_treasure_tracks`); Backend `RecommendationRepository.list_forgotten_treasure_rows`, `GET /api/v1/recommendations/forgotten-treasures` (JWT, per-user); Mini App `ForgottenTreasuresView` `/forgotten-treasures`, тайл в быстрых разделах после «Выбор»; prefetch context `forgotten_treasures`.
@@ -1392,13 +1393,14 @@
     - [x] `offlineCache.downloadTrack` сначала вызывает
       `getOfflineEligibility`, проверяет server-флаг в ответе,
       применяет LRU-вытеснение по `cachedAt`.
-    - [ ] UI «Сохранить для оффлайн» в `TrackCardSheet` (с
-      проверкой `access_mode`) и кнопка «Слушать оффлайн-кэш»
-      в `OfflineBanner`.
+    - [x] `TrackCardSheet`: пункт «Сохранить оффлайн» / «В оффлайне»
+      (скрыт для `access_mode === 'third_party_stream'`),
+      `isCached` индикатор, removeTrack для toggle.
     - [ ] Авто-переключение плеера в cached-only при
-      `navigator.online === false` (фильтр очереди через
-      `isCached`).
-- [~] **Anti-Abuse Fingerprinting**
+      `navigator.online === false` (минимально работает за счёт
+      `getCachedAudioUrl` гейта в `playTrack`; fully cached-only
+      queue — следующая итерация).
+- [x] **Anti-Abuse Fingerprinting**
     - [x] PrivateCore `abuse_fingerprint_policy`: `Decision`
       (PASS/THROTTLE/REQUIRE_CAPTCHA/LOCKOUT), `AbuseSignals`,
       пороги, `evaluate(signals, kind)`, retention/lockout
@@ -1413,10 +1415,11 @@
       `ConsentBanner` показывается до первого расширенного
       сбора; `api.request` дополняет `X-DS-Signal` только при
       согласии.
-    - [ ] Подключить вызов `AbuseSignalService.evaluate_event`
-      в `auth.py` register/login и реакцию (LOCKOUT → 423,
-      REQUIRE_CAPTCHA → 429 + challenge URL).
-    - [ ] Daily cron на `abuse_events` для retention ≤ 30 дней.
+    - [x] `AbuseEventRepository.recent_signal_counts` (sliding
+      window) + `AbuseSignalService.evaluate_event` подключён
+      в `auth.py /telegram` через `app/services/abuse_guard.py`
+      (LOCKOUT → 423, REQUIRE_CAPTCHA → 429); миграция `0089`
+      сидит cron `daily-abuse-events-pruner` `15 4 * * *`.
 
 
 - [x] Public UI: admin inline editing for playlists/albums/tracks via non-admin routes with backend admin checks + reorder endpoints (2026-05-05).
@@ -1566,6 +1569,24 @@
   без биометрии и pixel-perfect canvas) + `ConsentBanner`
   + автодобавление `X-DS-Signal` в `api.request` только
   после согласия. `PRIVACY_POLICY.md §7.5`.
+
+- [x] **Anti-abuse wiring + retention (2026-05-10)**:
+  `AbuseEventRepository.recent_signal_counts` (1h / 10m
+  windows), `app/services/abuse_guard.py` собирает sliding-
+  window сигналы (включая Tor через `app/core/tor_checker`)
+  и зовёт PrivateCore `evaluate`; подключён в
+  `auth.py:/telegram` (LOCKOUT → 423, REQUIRE_CAPTCHA → 429).
+  Daily cron `daily-abuse-events-pruner` (cron `15 4 * * *`)
+  чистит rows старше `ABUSE_EVENT_RETENTION_SECONDS`
+  (миграция `0089`).
+
+- [x] **PWA «Сохранить оффлайн» в TrackCardSheet и
+  «Ваш топ» на Home (2026-05-10)**: добавлен пункт
+  `tcs-action-btn` (download/check icon, скрыт для
+  `third_party_stream`); `MyTopView` `/my-top` с tabs
+  7d/30d/90d/all отображает топ-жанры и топ-треки из
+  `GET /users/me/top`; новая плитка `quickMyTop` в
+  `MIX_SHORTCUT_TILES`, i18n RU/EN.
 
 - [x] **Onboarding v2 — заверение flow и переключение App.tsx (2026-05-08)**:
   собран главный компонент `OnboardingV2` (`Welcome → Profile → Genres →
