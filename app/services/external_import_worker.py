@@ -182,15 +182,33 @@ async def _prefetch_sc_searches(
     call. This separates the *search* latency from the serial main loop
     so both phases (search prefetch + ``import_or_get_track``) overlap
     in wall-clock time.
+
+    Cancellation: a 1000-track prefetch can take 10–20 minutes. If the
+    user cancels mid-prefetch we'd otherwise keep burning SC API calls
+    until the queue drains. The shared ``cancelled`` flag short-circuits
+    every remaining task as soon as any slot observes the Redis cancel
+    flag.
     """
     concurrency = max(1, int(settings.import_sc_prefetch_concurrency))
     sem = asyncio.Semaphore(concurrency)
+    cancelled = False
 
     async def _fetch_one(query: str) -> None:
+        nonlocal cancelled
+        if cancelled:
+            return
         cached = await _get_cached_sc_search(query)
         if cached is not None:
             return
         async with sem:
+            if cancelled:
+                return
+            # One Redis check per real SC call. Cheap (a single
+            # GET) and bounds the worst-case lag between cancel
+            # and shutdown to roughly one slot's jitter+search.
+            if await is_cancel_flag_set(job_id):
+                cancelled = True
+                return
             await asyncio.sleep(_jitter_delay(slow))
             try:
                 hits = await _search_with_retry(
@@ -224,6 +242,11 @@ async def _prefetch_sc_searches(
             tasks.append(asyncio.create_task(_fetch_one(title)))
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
+    if cancelled:
+        logger.info(
+            "external_import_prefetch_cancelled",
+            job_id=job_id,
+        )
 
 
 def _build_query(title: str, artist: str) -> str:
