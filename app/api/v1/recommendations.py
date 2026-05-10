@@ -398,6 +398,27 @@ async def get_forgotten_treasures_playlist(
     )
 
 
+@router.get(
+    "/home-highlight",
+    summary=(
+        "Pick a single hero track for the Mini App home screen "
+        "(weekly_top / your_top / forgotten_treasures / "
+        "personalized) with stable per-user TTL"
+    ),
+)
+async def get_home_highlight(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, object] | None:
+    from app.services.home_highlight_service import (
+        HomeHighlightService,
+    )
+
+    svc = HomeHighlightService(db)
+    payload = await svc.get_for_user(user.id)
+    return payload
+
+
 @router.post(
     "/daily-playlist/refresh",
     status_code=status.HTTP_204_NO_CONTENT,

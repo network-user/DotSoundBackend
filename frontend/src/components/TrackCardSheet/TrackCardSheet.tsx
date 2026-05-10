@@ -1442,7 +1442,7 @@ export function TrackCardSheet({
             variant="ghost"
             className={`tcs-action-btn${liked ? ' active' : ''}`}
             haptic={liked ? 'light' : 'medium'}
-            onClick={() => toggleLike(track.id)}
+            onClick={() => toggleLike(track.id, track)}
           >
             <MorphIcon
               name="heart"

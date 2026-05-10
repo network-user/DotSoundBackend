@@ -18,14 +18,32 @@ import { dismissIsland, showIsland } from '@/lib/island'
 import { getInternalUserId } from '@/lib/telegram'
 import { hapticNotification, hapticSelection } from '@/lib/telegram'
 import type { LyricsResponse, Track } from '@/types/api'
+import {
+  coverBlobToFile,
+  extractAudioMetadata,
+  type AudioMetadata,
+} from '@/lib/audioMetadata'
+import {
+  clearDraft,
+  saveDraft,
+  type UploadDraft,
+} from '@/lib/uploadDraft'
 import { LyricsEditor } from '../TrackCardSheet/LyricsEditor'
 import { UploadStepAudio } from './steps/UploadStepAudio'
 import { UploadStepDetails } from './steps/UploadStepDetails'
 import { UploadStepCover } from './steps/UploadStepCover'
 import { UploadStepPreview } from './steps/UploadStepPreview'
 
+interface AutoFilledFlags {
+  title?: boolean
+  artist?: boolean
+  genre?: boolean
+  cover?: boolean
+}
+
 interface Props {
   onSuccess: (track: Track) => void
+  initialDraft?: UploadDraft | null
 }
 
 const WIZARD_HINTS = [
@@ -37,24 +55,28 @@ const WIZARD_HINTS = [
 
 const SEARCH_DEBOUNCE_MS = 220
 
-export function UploadFileTab({ onSuccess }: Props) {
+export function UploadFileTab({ onSuccess, initialDraft }: Props) {
   const { t } = useTranslation()
   const reduce = useReducedMotion()
   const transition = reduce ? TWEEN_FAST : SPRING_GENTLE
 
-  const [title, setTitle] = useState('')
-  const [artist, setArtist] = useState('')
-  const [artistMode, setArtistMode] = useState<'profile' | 'custom'>('custom')
+  const [title, setTitle] = useState(initialDraft?.title ?? '')
+  const [artist, setArtist] = useState(initialDraft?.artistName ?? '')
+  const [artistMode, setArtistMode] = useState<'profile' | 'custom'>(
+    initialDraft?.artistMode ?? 'custom',
+  )
   const [profileArtistName, setProfileArtistName] = useState<string | null>(
     null,
   )
-  const [artistQuery, setArtistQuery] = useState('')
+  const [artistQuery, setArtistQuery] = useState(
+    initialDraft?.artistQuery ?? '',
+  )
   const [artistOpen, setArtistOpen] = useState(false)
   const [artistSearching, setArtistSearching] = useState(false)
   const [artistResults, setArtistResults] = useState<string[]>([])
 
-  const [genre, setGenre] = useState('')
-  const [genreQuery, setGenreQuery] = useState('')
+  const [genre, setGenre] = useState(initialDraft?.genre ?? '')
+  const [genreQuery, setGenreQuery] = useState(initialDraft?.genreQuery ?? '')
   const [genreOpen, setGenreOpen] = useState(false)
   const [genreSearching, setGenreSearching] = useState(false)
   const [genreResults, setGenreResults] = useState<string[]>([])
@@ -64,17 +86,32 @@ export function UploadFileTab({ onSuccess }: Props) {
   const [audioDuration, setAudioDuration] = useState<number | null>(null)
   const [coverFile, setCoverFile] = useState<File | null>(null)
   const [coverPreview, setCoverPreview] = useState<string | null>(null)
-  const [isPublic, setIsPublic] = useState(true)
-  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [isPublic, setIsPublic] = useState(initialDraft?.isPublic ?? true)
+  const [termsAccepted, setTermsAccepted] = useState(
+    initialDraft?.termsAccepted ?? false,
+  )
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadDone, setUploadDone] = useState(false)
-  const [lyrics, setLyrics] = useState<LyricsResponse | null>(null)
+  const [lyrics, setLyrics] = useState<LyricsResponse | null>(
+    initialDraft?.lyricsPlainText
+      ? {
+          track_id: 0,
+          plain_text: initialDraft.lyricsPlainText,
+          synced_lines: initialDraft.lyricsSyncedLines ?? null,
+          source: 'manual',
+          created_at: '',
+          updated_at: '',
+        }
+      : null,
+  )
   const [showLyricsEditor, setShowLyricsEditor] = useState(false)
   const [localAudioUrl, setLocalAudioUrl] = useState<string | null>(null)
   const [coverDragging, setCoverDragging] = useState(false)
   const [audioDragging, setAudioDragging] = useState(false)
   const [wizardStep, setWizardStep] = useState(0)
+  const [autoFilled, setAutoFilled] = useState<AutoFilledFlags>({})
+  const [autoDetecting, setAutoDetecting] = useState(false)
 
   useEffect(() => {
     api.getGenres().then(setGenres).catch(() => {})
@@ -221,6 +258,38 @@ export function UploadFileTab({ onSuccess }: Props) {
     }
   }, [localAudioUrl])
 
+  useEffect(() => {
+    if (uploading) return
+    const timer = window.setTimeout(() => {
+      saveDraft({
+        stepIndex: wizardStep,
+        title,
+        artistMode,
+        artistName: artist,
+        artistQuery,
+        genre,
+        genreQuery,
+        isPublic,
+        termsAccepted,
+        lyricsPlainText: lyrics?.plain_text ?? '',
+        lyricsSyncedLines: lyrics?.synced_lines ?? null,
+      })
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [
+    title,
+    artist,
+    artistMode,
+    artistQuery,
+    genre,
+    genreQuery,
+    isPublic,
+    termsAccepted,
+    lyrics,
+    wizardStep,
+    uploading,
+  ])
+
   const applyAudioFile = (file: File) => {
     setError('')
     setAudioFile(file)
@@ -235,6 +304,58 @@ export function UploadFileTab({ onSuccess }: Props) {
     tmp.onloadedmetadata = () => {
       setAudioDuration(tmp.duration)
     }
+
+    setAutoDetecting(true)
+    void extractAudioMetadata(file)
+      .then((meta) => applyAutoFilled(meta, file.name))
+      .catch(() => {})
+      .finally(() => setAutoDetecting(false))
+  }
+
+  function applyAutoFilled(meta: AudioMetadata, fileName: string): void {
+    const next: AutoFilledFlags = {}
+    if (meta.title && !title.trim()) {
+      setTitle(meta.title)
+      next.title = true
+    }
+    if (
+      meta.artist &&
+      artistMode === 'custom' &&
+      !artist.trim() &&
+      !artistQuery.trim()
+    ) {
+      setArtist(meta.artist)
+      setArtistQuery(meta.artist)
+      next.artist = true
+    }
+    if (meta.genre && !genre.trim() && !genreQuery.trim()) {
+      const normalized =
+        normalizedGenres.get(meta.genre.toLowerCase()) ?? meta.genre
+      setGenre(normalized)
+      setGenreQuery(normalized)
+      next.genre = true
+    }
+    if (meta.cover && !coverFile) {
+      void coverBlobToFile(
+        meta.cover,
+        sanitizeFileStem(fileName),
+      ).then((file) => {
+        setCoverFile(file)
+        const reader = new FileReader()
+        reader.onload = (ev) =>
+          setCoverPreview(ev.target?.result as string)
+        reader.readAsDataURL(file)
+        setAutoFilled((prev) => ({ ...prev, cover: true }))
+      })
+    }
+    if (Object.keys(next).length) {
+      setAutoFilled((prev) => ({ ...prev, ...next }))
+    }
+  }
+
+  function sanitizeFileStem(fileName: string): string {
+    const stem = fileName.replace(/\.[a-z0-9]+$/i, '')
+    return stem.replace(/[^\w.-]+/g, '_').slice(0, 64) || 'cover'
   }
 
   const applyCoverFile = (file: File) => {
@@ -245,11 +366,22 @@ export function UploadFileTab({ onSuccess }: Props) {
     reader.onload = (ev) =>
       setCoverPreview(ev.target?.result as string)
     reader.readAsDataURL(file)
+    clearAutoFlag('cover')
   }
 
   const clearCover = () => {
     setCoverFile(null)
     setCoverPreview(null)
+    clearAutoFlag('cover')
+  }
+
+  const clearAutoFlag = (field: keyof AutoFilledFlags) => {
+    setAutoFilled((prev) => {
+      if (!prev[field]) return prev
+      const next = { ...prev }
+      delete next[field]
+      return next
+    })
   }
 
   const reset = () => {
@@ -277,6 +409,8 @@ export function UploadFileTab({ onSuccess }: Props) {
     setIsPublic(true)
     setTermsAccepted(false)
     setWizardStep(0)
+    setAutoFilled({})
+    setAutoDetecting(false)
   }
 
   function syncGenreArtistDraft() {
@@ -410,6 +544,7 @@ export function UploadFileTab({ onSuccess }: Props) {
       })
       hapticNotification('success')
 
+      clearDraft()
       window.setTimeout(async () => {
         const fullTrack = await api.getTrack(uploaded.id)
         reset()
@@ -497,6 +632,9 @@ export function UploadFileTab({ onSuccess }: Props) {
               setIsPublic={setIsPublic}
               termsAccepted={termsAccepted}
               setTermsAccepted={setTermsAccepted}
+              autoDetecting={autoDetecting}
+              autoFilled={autoFilled}
+              onClearAutoFlag={clearAutoFlag}
             />
           )}
           {wizardStep === 2 && (
@@ -506,6 +644,7 @@ export function UploadFileTab({ onSuccess }: Props) {
               onCoverFile={applyCoverFile}
               onCoverClear={clearCover}
               onDragChange={setCoverDragging}
+              fromAudioTag={Boolean(autoFilled.cover)}
             />
           )}
           {wizardStep === 3 && (

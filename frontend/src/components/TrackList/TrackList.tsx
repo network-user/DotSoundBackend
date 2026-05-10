@@ -75,7 +75,7 @@ export function TrackList({
                         'Like',
                       ),
                 onTrigger: () => {
-                  void toggleLike(tr.id)
+                  void toggleLike(tr.id, tr)
                 },
               }}
               rightAction={{

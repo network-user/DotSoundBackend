@@ -307,7 +307,7 @@ export function DislikedView() {
               icon: liked ? 'heart' : 'heart-outline',
               label: t('redesign.tracks.swipeLike'),
               onTrigger: () => {
-                void toggleLike(track.id)
+                void toggleLike(track.id, track)
               },
             }}
             rightAction={{

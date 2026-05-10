@@ -42,6 +42,9 @@ export function UsersRoute() {
   const [search, setSearch] = useState('')
   const [activeOnly, setActiveOnly] =
     useState<boolean | undefined>(undefined)
+  const [listView, setListView] = useState<
+    'all' | 'deleted'
+  >('all')
   const [busyId, setBusyId] = useState<number | null>(null)
   const [statsPeriod, setStatsPeriod] = useState<
     'today' | '7d' | '30d' | 'all'
@@ -55,14 +58,23 @@ export function UsersRoute() {
       page,
       search,
       activeOnly,
+      listView,
     ],
-    queryFn: () =>
-      adminApi.listUsers({
+    queryFn: () => {
+      if (listView === 'deleted') {
+        return adminApi.listDeletedUsers({
+          page,
+          size: 25,
+          search: search || undefined,
+        })
+      }
+      return adminApi.listUsers({
         page,
         size: 25,
         search: search || undefined,
         is_active: activeOnly,
-      }),
+      })
+    },
     placeholderData: keepPreviousData,
   })
   const adminStats = useQuery({
@@ -123,6 +135,51 @@ export function UsersRoute() {
     setBusyId(u.id)
     try {
       await adminApi.unbanUser(u.id)
+      refresh()
+    } catch (err) {
+      await showAlert(
+        t('admin.common.errorWithMessage', {
+          message: (err as Error).message,
+        }),
+      )
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleRestoreDeletedUser = async (u: UserRow) => {
+    setBusyId(u.id)
+    try {
+      await adminApi.restoreUser(u.id)
+      refresh()
+    } catch (err) {
+      await showAlert(
+        t('admin.common.errorWithMessage', {
+          message: (err as Error).message,
+        }),
+      )
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const handleHardDeleteUserForever = async (
+    u: UserRow,
+  ) => {
+    const ok = await showConfirm(
+      t(
+        'admin.users.confirmHardDelete',
+        'Удалить пользователя {{name}} безвозвратно? Все ' +
+          'связанные данные (включая admin-журнал по этому ' +
+          'user_id и аватар) будут удалены немедленно.',
+        { name: userDisplayName(u) },
+      ),
+      { danger: true },
+    )
+    if (!ok) return
+    setBusyId(u.id)
+    try {
+      await adminApi.hardDeleteUserForever(u.id)
       refresh()
     } catch (err) {
       await showAlert(
@@ -249,30 +306,57 @@ export function UsersRoute() {
               flexWrap: 'wrap',
             }}
           >
-            {u.is_active ? (
-              <MotionPress
-                variant="ghost"
-                disabled={busy}
-                onClick={() => handleBan(u)}
-              >
-                {t('admin.users.actionBan')}
-              </MotionPress>
+            {listView === 'deleted' ? (
+              <>
+                <MotionPress
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => handleRestoreDeletedUser(u)}
+                >
+                  {t(
+                    'admin.users.actionRestore',
+                    'Восстановить',
+                  )}
+                </MotionPress>
+                <MotionPress
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => handleHardDeleteUserForever(u)}
+                >
+                  {t(
+                    'admin.users.actionHardDelete',
+                    'Удалить навсегда',
+                  )}
+                </MotionPress>
+              </>
             ) : (
-              <MotionPress
-                variant="ghost"
-                disabled={busy}
-                onClick={() => handleUnban(u)}
-              >
-                {t('admin.users.actionUnban')}
-              </MotionPress>
+              <>
+                {u.is_active ? (
+                  <MotionPress
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => handleBan(u)}
+                  >
+                    {t('admin.users.actionBan')}
+                  </MotionPress>
+                ) : (
+                  <MotionPress
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => handleUnban(u)}
+                  >
+                    {t('admin.users.actionUnban')}
+                  </MotionPress>
+                )}
+                <MotionPress
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => handleForceLogout(u)}
+                >
+                  {t('admin.users.actionLogout')}
+                </MotionPress>
+              </>
             )}
-            <MotionPress
-              variant="ghost"
-              disabled={busy}
-              onClick={() => handleForceLogout(u)}
-            >
-              {t('admin.users.actionLogout')}
-            </MotionPress>
             {/* [REGULATORY-DISABLED v1] DM-сообщения админа
             пользователю отключены вместе с чат-стеком (149-ФЗ
             ст. 10.1). Восстановить вместе с
@@ -402,34 +486,48 @@ export function UsersRoute() {
             setPage(1)
           }}
         />
-        <select
-          value={
-            activeOnly === undefined
-              ? 'all'
-              : activeOnly
-                ? 'active'
-                : 'banned'
-          }
-          onChange={(e) => {
-            const v = e.target.value
-            setActiveOnly(
-              v === 'all'
-                ? undefined
-                : v === 'active',
-            )
+        <AdminRangeSwitch
+          groupId="admin-users-list-scope"
+          value={listView}
+          onChange={(v) => {
+            setListView(v as 'all' | 'deleted')
             setPage(1)
           }}
-        >
-          <option value="all">
-            {t('admin.users.filterAll')}
-          </option>
-          <option value="active">
-            {t('admin.users.filterActive')}
-          </option>
-          <option value="banned">
-            {t('admin.users.filterBanned')}
-          </option>
-        </select>
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'deleted', label: 'Deleted' },
+          ]}
+        />
+        {listView === 'all' && (
+          <select
+            value={
+              activeOnly === undefined
+                ? 'all'
+                : activeOnly
+                  ? 'active'
+                  : 'banned'
+            }
+            onChange={(e) => {
+              const v = e.target.value
+              setActiveOnly(
+                v === 'all'
+                  ? undefined
+                  : v === 'active',
+              )
+              setPage(1)
+            }}
+          >
+            <option value="all">
+              {t('admin.users.filterAll')}
+            </option>
+            <option value="active">
+              {t('admin.users.filterActive')}
+            </option>
+            <option value="banned">
+              {t('admin.users.filterBanned')}
+            </option>
+          </select>
+        )}
       </div>
       <DataTable
         columns={columns}

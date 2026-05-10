@@ -238,6 +238,37 @@ class AdminRepository:
         total_result = await self._session.execute(count_query)
         return rows, int(total_result.scalar_one())
 
+    async def list_deleted_users(
+        self,
+        *,
+        page: int = 1,
+        size: int = 25,
+        search: str | None = None,
+    ) -> tuple[list[User], int]:
+        condition = User.deleted_at.is_not(None)
+        if search:
+            pattern = f"%{search.strip()}%"
+            cond = or_(
+                User.username.ilike(pattern),
+                User.email.ilike(pattern),
+                User.first_name.ilike(pattern),
+                User.last_name.ilike(pattern),
+                User.display_name.ilike(pattern),
+            )
+            condition = condition & cond
+        total_q = select(func.count(User.id)).where(condition)
+        total = int(
+            (await self._session.execute(total_q)).scalar_one()
+        )
+        rows = await self._session.execute(
+            select(User)
+            .where(condition)
+            .order_by(desc(User.deleted_at))
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+        return list(rows.scalars().all()), total
+
     async def get_user(self, user_id: int) -> User | None:
         result = await self._session.execute(
             select(User).where(User.id == user_id)

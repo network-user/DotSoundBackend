@@ -8654,7 +8654,6 @@ html.ds-low-glass .tcs-sheet {
   background: var(--accent);
   border-radius: 4px;
   min-width: 6px;
-  transition: width 400ms var(--ease-out);
 }
 
 .pst-genre-bar__val {

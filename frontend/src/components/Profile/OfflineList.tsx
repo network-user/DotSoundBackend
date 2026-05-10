@@ -110,7 +110,12 @@ export function OfflineList() {
         </MotionPress>
       </div>
       <div className="track-list re-tl-root">
-        {items.map((it) => (
+        {items
+          .filter(
+            (it): it is OfflineRecord & { track: NonNullable<OfflineRecord['track']> } =>
+              Boolean(it.track),
+          )
+          .map((it) => (
           <div
             key={it.trackId}
             className="offline-list-row offline-list-row--card"

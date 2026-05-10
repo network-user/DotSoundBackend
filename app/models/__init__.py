@@ -36,6 +36,10 @@ from app.models.conversation import (
 from app.models.dislike import Dislike
 from app.models.encryption_key import EncryptionKey
 from app.models.eq_settings import UserEqSettings
+from app.models.experiment import (
+    Experiment,
+    ExperimentAssignment,
+)
 from app.models.follow import UserFollow
 from app.models.genre_mix_override import GenreMixOverride
 from app.models.genre_sample import GenreSample
@@ -68,6 +72,7 @@ from app.models.scheduled_job import ScheduledJob
 from app.models.search_event import SearchEvent
 from app.models.track import Track
 from app.models.track_audio_features import TrackAudioFeatures
+from app.models.track_embedding import TrackEmbedding
 from app.models.track_info import TrackInfo
 from app.models.track_playback_failure_event import (
     TrackPlaybackFailureEvent,
@@ -77,6 +82,7 @@ from app.models.track_similarity import TrackSimilarity
 from app.models.track_snippet import TrackSnippet
 from app.models.upload_meta import TrackUploadMeta
 from app.models.user import User
+from app.models.user_embedding import UserEmbedding
 from app.models.user_linked_account import UserLinkedAccount
 from app.models.user_preference import UserPreference
 from app.models.user_track_library import UserTrackLibrary
@@ -135,6 +141,10 @@ __all__ = [
     "SearchEvent",
     "Track",
     "TrackAudioFeatures",
+    "TrackEmbedding",
+    "Experiment",
+    "ExperimentAssignment",
+    "UserEmbedding",
     "TrackPreviewClip",
     "TrackSimilarity",
     "TrackSnippet",

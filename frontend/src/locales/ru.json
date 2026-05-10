@@ -93,6 +93,19 @@
     "myTracksUpload": "Загрузить трек",
     "avatarEditHint": "Сменить фото профиля"
   },
+  "myTop": {
+    "title": "Ваш топ",
+    "hint": "Топ треков и жанров на основе ваших прослушиваний.",
+    "empty": "Пока недостаточно прослушиваний для построения топа.",
+    "window7d": "7 дней",
+    "window30d": "30 дней",
+    "window90d": "90 дней",
+    "windowAll": "Всё время",
+    "topGenres": "Топ жанров",
+    "topTracks": "Топ треков",
+    "hoursByDay": "Минуты по дням",
+    "hoursTotal": "Всего: {{m}} мин"
+  },
   "playlists": {
     "title": "Плейлисты",
     "subtitle": "Твои подборки",
@@ -113,7 +126,20 @@
     "interfaceSoundLevel": "Громкость UI",
     "interfaceFeedbackTest": "Проверка отклика",
     "testSound": "Звук",
-    "testHaptic": "Вибро"
+    "testHaptic": "Вибро",
+    "offlineAutoCache": "Авто-сохранение лайкнутых треков",
+    "offlineLimit": "Лимит оффлайн-кеша",
+    "offlineLimitNone": "Без лимита",
+    "offlineUsage": "Использовано {{used}} из {{quota}}",
+    "offlineClear": "Очистить",
+    "offlineClearDone": "Оффлайн-кеш очищен"
+  },
+  "offline": {
+    "cached": "В оффлайне",
+    "autoCacheIntro": {
+      "title": "Лайкнутые треки сохраняются для оффлайна",
+      "disable": "Нажмите, чтобы отключить"
+    }
   },
   "lyrics": {
     "detectText": "Определить текст",

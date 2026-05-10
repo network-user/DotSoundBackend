@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -7,6 +8,10 @@ import {
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
+import {
+  getCachedIdsSync,
+  subscribeCacheChanges,
+} from '@/lib/offlineCache'
 import {
   usePlayerActions,
   usePlayerMeta,
@@ -53,6 +58,17 @@ export function TrackCard({
   const confirmTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null)
+  const [cachedOffline, setCachedOffline] = useState(
+    () => getCachedIdsSync().has(track.id),
+  )
+  useEffect(() => {
+    const sync = () =>
+      setCachedOffline(getCachedIdsSync().has(track.id))
+    sync()
+    return subscribeCacheChanges(sync)
+  }, [track.id])
+  const showCachedDot =
+    cachedOffline && track.access_mode === 'internal_stream'
 
   const isCurrentTrack =
     currentTrack?.id === track.id
@@ -80,7 +96,7 @@ export function TrackCard({
           : t('redesign.tracks.like'),
         icon: 'heart',
         onPick: () => {
-          void toggleLike(track.id)
+          void toggleLike(track.id, track)
         },
       },
       {
@@ -166,7 +182,7 @@ export function TrackCard({
 
   const handleLike = async (e: MouseEvent) => {
     e.stopPropagation()
-    await toggleLike(track.id)
+    await toggleLike(track.id, track)
   }
 
   const handleDelete = async (e: MouseEvent) => {
@@ -298,6 +314,19 @@ export function TrackCard({
             className="track-card-actions"
             onClick={(e) => e.stopPropagation()}
           >
+            {showCachedDot && (
+              <span
+                className="track-card-cached-dot"
+                aria-label={t('offline.cached', {
+                  defaultValue: 'В оффлайне',
+                })}
+                title={t('offline.cached', {
+                  defaultValue: 'В оффлайне',
+                })}
+              >
+                <Icon name="check-circle" size={14} />
+              </span>
+            )}
             <MotionPress
               variant="icon"
               className={`track-card-like${liked ? ' liked spring' : ''}`}

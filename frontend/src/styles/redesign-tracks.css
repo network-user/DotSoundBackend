@@ -558,3 +558,21 @@
     display: none;
   }
 }
+
+.track-card-cached-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 2px;
+  color: #2ecc71;
+  opacity: 0.92;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+body.monochrome .track-card-cached-dot {
+  color: var(--text, #fff);
+  opacity: 0.6;
+}

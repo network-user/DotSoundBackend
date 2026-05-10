@@ -58,6 +58,92 @@ async def admin_list_users(
     )
 
 
+@router.get(
+    "/users/deleted",
+    response_model=AdminUserListResponse,
+    summary="[Admin] List soft-deleted users (pending hard-delete)",
+)
+@limiter.limit("60/minute")
+async def admin_list_deleted_users(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(25, ge=1, le=100),
+    search: str | None = Query(None, max_length=128),
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminUserListResponse:
+    service = AdminService(session)
+    users, total = await service.list_deleted_users(
+        page=page, size=size, search=search
+    )
+    return AdminUserListResponse(
+        items=[UserResponse.model_validate(u) for u in users],
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+@router.post(
+    "/users/{user_id}/restore",
+    response_model=UserResponse,
+    summary=(
+        "[Admin] Restore a soft-deleted user (clears deleted_at)"
+    ),
+)
+@limiter.limit("30/minute")
+async def admin_restore_user(
+    request: Request,
+    user_id: int,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> UserResponse:
+    service = AdminService(session)
+    user = await service.restore_user(user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not in trash",
+        )
+    logger.info(
+        "admin_user_restored",
+        target_user_id=user_id,
+        by_admin_id=admin.id,
+    )
+    return UserResponse.model_validate(user)
+
+
+@router.delete(
+    "/users/{user_id}/forever",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary=(
+        "[Admin] Hard-delete a user immediately (irreversible). "
+        "Requires step-up confirmation in the UI."
+    ),
+)
+@limiter.limit("10/minute")
+async def admin_hard_delete_user(
+    request: Request,
+    user_id: int,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> None:
+    service = AdminService(session)
+    ok = await service.hard_delete_user_now(
+        user_id, actor_id=admin.id
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    logger.info(
+        "admin_user_hard_deleted",
+        target_user_id=user_id,
+        by_admin_id=admin.id,
+    )
+
+
 @router.patch(
     "/users/{user_id}",
     response_model=UserResponse,

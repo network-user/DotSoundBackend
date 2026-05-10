@@ -2195,6 +2195,23 @@ export const api = {
     )
   },
 
+  getHomeHighlight(): Promise<
+    | {
+        kind: string
+        reason_code: string
+        track_id: number
+        title: string
+        artist: string | null
+        cover_key: string | null
+        access_mode: string
+        catalog_type: string
+        generated_at: string
+      }
+    | null
+  > {
+    return request('/api/v1/recommendations/home-highlight')
+  },
+
   getFollowingFeed(page = 1, size = 20): Promise<TrackListResponse> {
     return request(`/api/v1/users/me/feed?page=${page}&size=${size}`)
   },

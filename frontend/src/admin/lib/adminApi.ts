@@ -705,6 +705,33 @@ export const adminApi = {
       page: number
       size: number
     }>('/users', { query: params }),
+  listDeletedUsers: (params: {
+    page?: number
+    size?: number
+    search?: string
+  }) =>
+    adminFetch<{
+      items: Array<Record<string, unknown>>
+      total: number
+      page: number
+      size: number
+    }>('/users/deleted', {
+      method: 'GET',
+      query: {
+        page: params.page ?? 1,
+        size: params.size ?? 25,
+        ...(params.search ? { search: params.search } : {}),
+      },
+    }),
+  restoreUser: (userId: number) =>
+    adminFetch<Record<string, unknown>>(
+      `/users/${userId}/restore`,
+      { method: 'POST', body: {} },
+    ),
+  hardDeleteUserForever: (userId: number) =>
+    adminFetch<void>(`/users/${userId}/forever`, {
+      method: 'DELETE',
+    }),
   banUser: (userId: number) =>
     adminFetch<{ id: number; is_active: boolean }>(
       `/users-ext/${userId}/ban`,

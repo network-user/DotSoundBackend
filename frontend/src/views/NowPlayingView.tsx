@@ -138,7 +138,7 @@ export function NowPlayingView() {
       )
     }
     haptic(liked ? 'light' : 'medium')
-    await toggleLike(track.id)
+    await toggleLike(track.id, track)
   }
 
   const internalUid = getInternalUserId()

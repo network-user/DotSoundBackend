@@ -361,6 +361,80 @@ class AdminService:
             search=search,
         )
 
+    async def list_deleted_users(
+        self,
+        *,
+        page: int,
+        size: int,
+        search: str | None = None,
+    ) -> tuple[list[User], int]:
+        return await self._repo.list_deleted_users(
+            page=page, size=size, search=search
+        )
+
+    async def restore_user(
+        self, user_id: int
+    ) -> User | None:
+        from app.repositories.user import UserRepository
+
+        return await UserRepository(self._session).restore(
+            user_id
+        )
+
+    async def hard_delete_user_now(
+        self, user_id: int, *, actor_id: int
+    ) -> bool:
+        """Bypass grace period and erase the user immediately.
+
+        Mirrors the daily ``AccountDeletionService`` cron but
+        for a single target after admin step-up confirm.
+        """
+        from sqlalchemy import delete as sa_delete
+
+        from app.core import s3
+        from app.models.admin_action_log import AdminActionLog
+        from app.repositories.user import UserRepository
+
+        user_repo = UserRepository(self._session)
+        user = await user_repo.get_by_id(user_id)
+        if user is None:
+            return False
+        avatar_key = user.avatar_key
+
+        try:
+            await self._session.execute(
+                sa_delete(AdminActionLog).where(
+                    AdminActionLog.user_id == user_id
+                )
+            )
+            await self._session.flush()
+        except Exception:
+            logger.warning(
+                "admin_user_hard_delete_log_purge_failed",
+                user_id=user_id,
+                actor_id=actor_id,
+                exc_info=True,
+            )
+
+        ok = await user_repo.hard_delete(user_id)
+        if ok and avatar_key:
+            try:
+                await s3.delete_object(avatar_key)
+            except Exception:
+                logger.warning(
+                    "admin_user_hard_delete_avatar_cleanup_failed",
+                    user_id=user_id,
+                    avatar_key=avatar_key,
+                    exc_info=True,
+                )
+        if ok:
+            logger.info(
+                "admin_user_hard_delete_done",
+                user_id=user_id,
+                actor_id=actor_id,
+            )
+        return ok
+
     async def update_user(
         self,
         user_id: int,

@@ -132,6 +132,7 @@ async def _emit_listen(
             started_at=datetime.now(UTC),
             duration_listened_seconds=120,
             total_duration_seconds=180,
+            last_position_seconds=0,
             completed=completed,
             skipped=False,
             source_context=None,
@@ -200,3 +201,40 @@ async def test_get_user_top_genres_returns_genre_with_count(
     assert items, "expected at least one genre"
     assert items[0][0] == "rock"
     assert items[0][1] >= 1
+
+
+async def test_get_user_minutes_by_day_buckets(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, 1703)
+    track = await _make_track(session, user.id)
+    for _ in range(3):
+        await _emit_listen(session, user.id, track.id)
+
+    svc = StatsService(session)
+    rows = await svc.get_user_minutes_by_day(
+        user.id, days=7
+    )
+    assert rows, "expected at least one bucket"
+    # 3 listens of 120 sec each = 360 sec = 6 minutes,
+    # likely all on the same UTC day, so one bucket of 6.
+    total_minutes = sum(m for (_, m) in rows)
+    assert total_minutes >= 6
+
+
+async def test_get_user_minutes_by_day_clamps_days(
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, 1704)
+    svc = StatsService(session)
+    # ridiculously large value should be clamped to 90;
+    # zero/negative should be clamped to 1. We only verify
+    # the call does not raise.
+    rows1 = await svc.get_user_minutes_by_day(
+        user.id, days=10_000
+    )
+    rows2 = await svc.get_user_minutes_by_day(
+        user.id, days=-5
+    )
+    assert isinstance(rows1, list)
+    assert isinstance(rows2, list)

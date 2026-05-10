@@ -8,6 +8,7 @@ interface Props {
   onCoverFile: (file: File) => void
   onCoverClear: () => void
   onDragChange: (dragging: boolean) => void
+  fromAudioTag?: boolean
 }
 
 export function UploadStepCover({
@@ -16,6 +17,7 @@ export function UploadStepCover({
   onCoverFile,
   onCoverClear,
   onDragChange,
+  fromAudioTag,
 }: Props) {
   const { t } = useTranslation()
 
@@ -58,6 +60,11 @@ export function UploadStepCover({
         <span className="cover-label ru-up-cover__label">
           {t('redesign.upload.file.coverLabel')}
         </span>
+        {fromAudioTag && coverPreview && (
+          <span className="ru-up-auto-chip ru-up-auto-chip--static">
+            <span>{t('redesign.upload.file.coverFromTag')}</span>
+          </span>
+        )}
       </label>
       <input
         id="cover-input"

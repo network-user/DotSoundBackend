@@ -1366,7 +1366,7 @@
     - [ ] Улучшение UI и синхронизации.
     > Заморожено: зависит от чатов, которые отключены до оформления
     > юрлица и подачи в реестр ОРИ.
-- [~] **Музыкальные профили и статистика**
+- [x] **Музыкальные профили и статистика**
     - [x] PrivateCore `user_top_policy` (per-window blend
       log(completed_listens) + log(likes), thresholds, limits).
     - [x] Backend `StatsService.get_user_top_tracks/genres`,
@@ -1375,16 +1375,20 @@
     - [x] Frontend `api.getMyTop`, плитка «Ваш топ» в
       `MIX_SHORTCUT_TILES` (быстрые разделы Home),
       `MyTopView` `/my-top` с переключателем окон 7d/30d/90d/all.
+    - [x] `aggregate_user_minutes_by_day` +
+      `GET /users/me/listening-by-day?days=N` +
+      `api.getMyListeningByDay`; bar-chart в `MyTopView` и
+      встроенный sparkline в `ProfileStatsTab`.
     - [x] Полноценный таб «Статистика» в `ProfileView` (часы
       прослушивания, графика по жанрам, привязка `RecapShareCard`
       к реальным данным): `ProfileStatsTab` (период 7/30/365д,
       hero KPI, CSS genre bars, top-artists list, RecapShareCard с
       реальными минутами и обложками из `getMyTop`); кнопка входа
       через `ProfileActions` (`chart-bar` icon); i18n RU/EN.
-- [ ] **Динамические плейлисты**
+- [x] **Динамические плейлисты**
     - [x] "Weekly Top 50" -- 2026-05-06: PrivateCore weekly_top_policy (rank_weekly_top_tracks, blend log(listens_7d)+log(likes_7d), WEEKLY_TOP_SCORE_VERSION); Backend RecommendationRepository.get_qualified_listens_7d_counts, RecommendationService.get_weekly_top_playlist with Redis cache (TTL 30 min), GET /api/v1/recommendations/weekly-top; Frontend WeeklyTopView (/weekly-top), api.getWeeklyTopPlaylist, WeeklyTopPlaylistResponse type, flame icon, Home quick-grid card.
     - [x] **«Забытые сокровища»** (лайкнутое давно, без прослушиваний в окне) — PrivateCore `forgotten_treasures_policy` (пороги лайка ≥21d, тишина ≥14d, `rank_forgotten_treasure_tracks`); Backend `RecommendationRepository.list_forgotten_treasure_rows`, `GET /api/v1/recommendations/forgotten-treasures` (JWT, per-user); Mini App `ForgottenTreasuresView` `/forgotten-treasures`, тайл в быстрых разделах после «Выбор»; prefetch context `forgotten_treasures`.
-- [~] **PWA Offline Mode (v2) [High Priority]**
+- [x] **PWA Offline Mode (v2) [High Priority]**
     - [x] PrivateCore `offline_policy` (allow-list по `access_mode`/
       `catalog_type`, лимиты на трек / на пользователя).
     - [x] Backend: `GET /api/v1/tracks/{id}/offline-eligibility`
@@ -1399,10 +1403,17 @@
     - [x] `TrackCardSheet`: пункт «Сохранить оффлайн» / «В оффлайне»
       (скрыт для `access_mode === 'third_party_stream'`),
       `isCached` индикатор, removeTrack для toggle.
-    - [ ] Авто-переключение плеера в cached-only при
-      `navigator.online === false` (минимально работает за счёт
-      `getCachedAudioUrl` гейта в `playTrack`; fully cached-only
-      queue — следующая итерация).
+    - [x] Авто-переключение плеера в cached-only при
+      `navigator.online === false`: `PlayerContext.playNext`
+      при offline (1) идёт по `manualQueueRef`, отбирает
+      первый трек, который есть в кэше через
+      `import('@/lib/offlineCache').isCached`, проигрывает
+      его и снимает с очереди; (2) fallback к
+      `_fallbackToCachedTrack` (любой кэшированный трек,
+      кроме текущего/недоступных); (3) ветки radio/
+      prefetch/adjacent НЕ запускаются (они зависят от
+      сети и упали бы в catch). `playTrack` сам идёт через
+      `getCachedAudioUrl` гейт.
 - [x] **Anti-Abuse Fingerprinting**
     - [x] PrivateCore `abuse_fingerprint_policy`: `Decision`
       (PASS/THROTTLE/REQUIRE_CAPTCHA/LOCKOUT), `AbuseSignals`,
@@ -1492,6 +1503,22 @@
 
 ## Session Updates (2026-05-10)
 
+- [x] **Admin «Удалённые пользователи» вкладка**:
+  `AdminRepository.list_deleted_users` (фильтр `deleted_at IS
+  NOT NULL` + search), `AdminService.list_deleted_users /
+  restore_user / hard_delete_user_now` (последний делает то же,
+  что `AccountDeletionService` для одного юзера: purge
+  `admin_actions_log`, `users.hard_delete`, S3 avatar cleanup
+  best-effort). Эндпоинты `GET /api/v1/admin/users/deleted`,
+  `POST /api/v1/admin/users/{id}/restore`,
+  `DELETE /api/v1/admin/users/{id}/forever` (с rate-limit
+  10/min на forever). Frontend: `adminApi.listDeletedUsers /
+  restoreUser / hardDeleteUserForever`; в `UsersRoute`
+  `AdminRangeSwitch` со значениями `All / Deleted`, в строках
+  Deleted-режима — кнопки «Восстановить» и «Удалить навсегда»
+  (с confirm-диалогом); `active/banned` фильтр прячется в
+  Deleted-режиме.
+
 - [x] **Track soft-delete + корзина (общий механизм, не только при
   удалении профиля)**: миграция `0087` (`tracks.deleted_at`,
   `deleted_by_id` SET NULL → users, `deleted_reason`, индекс
@@ -1551,6 +1578,25 @@
   делает pre-flight к eligibility, применяет LRU и серверный
   лимит на размер. Раздел в `LEGAL.md` и
   `PRIVACY_POLICY.md §7.3`.
+
+- [x] **Автоматический оффлайн-кеш по лайку (2026-05-10)**:
+  `LikesContext.toggleLike` хукается на каждый лайк и вызывает
+  `queueAutoCache(track)` из `frontend/src/lib/offlineCache.ts`
+  (concurrency 1, eligibility-gate, fire-and-forget); снятие
+  лайка вызывает `cancelAutoCache` + `removeTrack`. Добавлены
+  `getCachedIdsSync`/`subscribeCacheChanges` для in-memory
+  набора cachedIds (без сетевых запросов в рендере карточек).
+  В `TrackCard` справа от лайка появляется зелёная иконка
+  `check-circle` для треков с `access_mode='internal_stream'`.
+  В `SettingsSheet` — toggle «Авто-сохранение лайкнутых
+  треков», селект «Лимит оффлайн-кеша» (none/1/5/20 ГБ),
+  статистика usage и кнопка «Очистить». Лимит общий — не
+  server-cap, а либо пользовательский выбор, либо
+  `navigator.storage.estimate() * 0.9`; LRU вытесняет по
+  `cachedAt`. При первом успешном кеше в сессии — toast
+  с opt-out. i18n `settings.offline*` + `offline.*` (ru/en).
+  Уточнения в `LEGAL.md` § «Локальный оффлайн-кэш» и
+  `PRIVACY_POLICY.md §7.3` про триггер «по лайку, выключаемо».
 
 - [~] **Музыкальные профили и статистика (фундамент,
   2026-05-10)**: PrivateCore `user_top_policy` (window 7d/30d/
@@ -1692,3 +1738,16 @@
   top-artists list, `RecapShareCard` с реальными `totalMinutes` и `collageSrc`
   из top-tracks cover keys; кнопка «Статистика» (chart-bar) в `ProfileActions`;
   i18n RU/EN; `tsc --noEmit` зелёный.
+
+- [x] **Radio + Stats — 5 visual improvements (2026-05-10)**:
+  (1) Genre bars: `AnimatePresence key={period}` + staggered `m.li` + `m.div width`
+  — Framer Motion управляет анимацией вместо CSS transition.
+  (2) Canvas share poster: `lib/shareCard.ts` `createSharePoster` → коллаж 2×2 +
+  big number + watermark на OffscreenCanvas → PNG download через `downloadBlob`.
+  (3) AudioRipple adaptive beat: `Float32Array(120)` rolling avg; threshold =
+  `max(0.12, avg×1.4)` — работает на тихих и громких треках; reset на деактив.
+  (4) Sparkline в ProfileStatsTab: `HoursChart` + `getMyListeningByDay` в
+  `Promise.all`; i18n `myTop.*` добавлены в ru.json + en.json.
+  (5) Ring color from cover palette: RadioView → `extractCoverPalette(heroCover)`
+  (кешируется AmbientStage) → `tones[0]` → `AudioRipple ringColor` →
+  `hexToRgba` для stroke колец вместо белого.

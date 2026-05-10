@@ -13,11 +13,13 @@ interprets it.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from dotsound_private_core.services.recommendation_engine import (
     get_algorithm_version,
 )
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.recommendation_impression import (
@@ -25,6 +27,8 @@ from app.models.recommendation_impression import (
 )
 
 logger = structlog.get_logger(__name__)
+
+_RECENT_IMPRESSION_LOOKBACK_MIN = 60
 
 
 class RecsysTelemetryService:
@@ -47,10 +51,7 @@ class RecsysTelemetryService:
         if not track_ids:
             return ""
         rec_id = uuid.uuid4().hex
-        version = (
-            algorithm_version
-            or get_algorithm_version()
-        )
+        version = algorithm_version or get_algorithm_version()
         rows = [
             RecommendationImpression(
                 user_id=user_id,
@@ -74,3 +75,33 @@ class RecsysTelemetryService:
             count=len(track_ids),
         )
         return rec_id
+
+    async def find_recent_impression_for_listen(
+        self,
+        *,
+        user_id: int,
+        track_id: int,
+        lookback_minutes: int = _RECENT_IMPRESSION_LOOKBACK_MIN,
+    ) -> tuple[str, int] | None:
+        cutoff = datetime.now(UTC) - timedelta(
+            minutes=max(1, lookback_minutes)
+        )
+        stmt = (
+            select(
+                RecommendationImpression.surface,
+                RecommendationImpression.position,
+            )
+            .where(
+                RecommendationImpression.user_id == user_id,
+                RecommendationImpression.track_id == track_id,
+                RecommendationImpression.created_at >= cutoff,
+            )
+            .order_by(RecommendationImpression.created_at.desc())
+            .limit(1)
+        )
+        row = (await self._session.execute(stmt)).first()
+        if row is None:
+            return None
+        surface_value = str(row[0])
+        position_value = int(row[1])
+        return surface_value, position_value

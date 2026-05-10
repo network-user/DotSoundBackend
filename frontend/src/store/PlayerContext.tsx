@@ -1738,11 +1738,37 @@ export function PlayerProvider({
       typeof navigator !== 'undefined' &&
       navigator.onLine === false
     if (isOffline) {
+      // 1. Honour the user's explicit queue first, but only
+      //    pick tracks that are also cached locally.
+      if (manualQueueRef.current.length > 0) {
+        const { isCached } = await import(
+          '@/lib/offlineCache'
+        )
+        for (
+          let i = 0;
+          i < manualQueueRef.current.length;
+          i += 1
+        ) {
+          const item = manualQueueRef.current[i]
+          if (
+            !item ||
+            unavailableTrackIdsRef.current.has(item.id)
+          )
+            continue
+          if (await isCached(item.id)) {
+            manualQueueRef.current.splice(i, 1)
+            setQueue([...manualQueueRef.current])
+            await playTrack(item)
+            return true
+          }
+        }
+      }
+      // 2. Fall back to any cached track in IDB.
       const ok = await _fallbackToCachedTrack(track.id)
       if (ok) return true
-      // fall through: maybe manualQueueRef has tracks the user
-      // already cached implicitly; the playTrack pipeline will
-      // try getCachedAudioUrl before going to the network.
+      // 3. Nothing cached — give up; do NOT attempt radio /
+      //    prefetch / adjacent (all rely on the network).
+      return false
     }
     try {
       if (manualQueueRef.current.length > 0) {
@@ -1862,9 +1888,10 @@ export function PlayerProvider({
       const next = cached.find(
         (rec) =>
           rec.trackId !== excludeId &&
-          !unavailableTrackIdsRef.current.has(rec.trackId),
+          !unavailableTrackIdsRef.current.has(rec.trackId) &&
+          rec.track !== undefined,
       )
-      if (!next) return false
+      if (!next || !next.track) return false
       await playTrack(next.track)
       return true
     } catch {

@@ -294,6 +294,54 @@
   font-size: var(--fs-14);
 }
 
+.ru-up-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.ru-up-auto-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--r-pill);
+  border: 1px solid var(--border);
+  background: var(--glass-medium-bg, rgba(255, 255, 255, 0.04));
+  color: var(--text-secondary);
+  font-size: var(--fs-11);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.ru-up-auto-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  color: var(--text);
+}
+
+.ru-up-auto-chip--static {
+  cursor: default;
+  pointer-events: none;
+}
+
+.ru-up-auto-chip__sep {
+  opacity: 0.5;
+}
+
+.ru-up-auto-detecting {
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-md, 12px);
+  background: var(--glass-medium-bg, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+  margin-bottom: var(--space-3);
+}
+
 /* Import source picker (.ri-imp-*) */
 
 .ru-imp-root {

@@ -51,6 +51,7 @@ from app.repositories.artist_catalog import (
 from app.repositories.artist_follow import (
     ArtistFollowRepository,
 )
+from app.repositories.embedding import EmbeddingRepository
 from app.repositories.genre_mix_override import (
     GenreMixOverrideRepository,
 )
@@ -113,6 +114,7 @@ class RecommendationService:
         self._listen_repo = ListenEventRepository(session)
         self._follow_repo = ArtistFollowRepository(session)
         self._catalog_repo = ArtistCatalogRepository(session)
+        self._embedding_repo = EmbeddingRepository(session)
         self._telemetry = RecsysTelemetryService(session)
         self._session = session
 
@@ -724,8 +726,22 @@ class RecommendationService:
                 neighbor_pick
             )
 
+        embedding_neighbors = await self._embedding_repo.find_neighbors(
+            seed_track_id=seed.id,
+            k=max(limit * 2, 30),
+            exclude_ids={seed.id},
+        )
+        embedding_track_ids = [tid for tid, _ in embedding_neighbors]
+        embedding_tracks: list[Track] = []
+        if embedding_track_ids:
+            embedding_tracks = await self._rec_repo.get_tracks_by_ids(
+                embedding_track_ids
+            )
+
         by_id: dict[int, Track] = {t.id: t for t in candidates}
         for t in extra_tracks:
+            by_id.setdefault(t.id, t)
+        for t in embedding_tracks:
             by_id.setdefault(t.id, t)
         merged_candidates = list(by_id.values())
 

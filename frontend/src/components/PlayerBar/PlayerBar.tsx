@@ -176,7 +176,7 @@ export function PlayerBar() {
       )
     }
     haptic(liked ? 'light' : 'medium')
-    await toggleLike(track.id)
+    await toggleLike(track.id, track)
   }
 
   const handleLike = async (e: MouseEvent) => {

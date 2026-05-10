@@ -12,6 +12,18 @@ import { api, getApiErrorMessage } from '@/lib/api'
 import { getUserId } from '@/lib/telegram'
 import { showIsland } from '@/lib/island'
 import { queueMutation } from '@/lib/pendingEvents'
+import {
+  cancelAutoCache,
+  ensureCachedIdsLoaded,
+  getAutoCacheEnabled,
+  getAutoCacheOnboardingShown,
+  isOfflineCacheSupported,
+  markAutoCacheOnboardingShown,
+  queueAutoCache,
+  removeTrack as removeOfflineTrack,
+  setAutoCacheEnabled,
+} from '@/lib/offlineCache'
+import type { Track } from '@/types/api'
 
 function _isNetworkError(e: unknown): boolean {
   if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -27,7 +39,10 @@ function _isNetworkError(e: unknown): boolean {
 interface LikesContextValue {
   isLiked: (trackId: number) => boolean
   isDisliked: (trackId: number) => boolean
-  toggleLike: (trackId: number) => Promise<void>
+  toggleLike: (
+    trackId: number,
+    trackHint?: Track,
+  ) => Promise<void>
   toggleDislike: (trackId: number) => Promise<void>
   reloadLikes: () => void
 }
@@ -67,6 +82,35 @@ export function LikesProvider({ children }: { children: ReactNode }) {
     }).catch(() => {})
   }, [authTick])
 
+  useEffect(() => {
+    if (!isOfflineCacheSupported()) return
+    void ensureCachedIdsLoaded()
+  }, [])
+
+  const offlineToastShownRef =
+    useState<{ shown: boolean }>(() => ({
+      shown: getAutoCacheOnboardingShown(),
+    }))[0]
+
+  const showAutoCacheOnboarding = useCallback(() => {
+    if (offlineToastShownRef.shown) return
+    offlineToastShownRef.shown = true
+    markAutoCacheOnboardingShown()
+    showIsland({
+      kind: 'toast',
+      title: t('offline.autoCacheIntro.title', {
+        defaultValue:
+          'Лайкнутые треки сохраняются для оффлайна',
+      }),
+      hint: t('offline.autoCacheIntro.disable', {
+        defaultValue:
+          'Нажмите, чтобы отключить',
+      }),
+      onClick: () => setAutoCacheEnabled(false),
+      durationMs: 7000,
+    })
+  }, [t, offlineToastShownRef])
+
   const isLiked = useCallback(
     (trackId: number) => likedIds.has(trackId),
     [likedIds],
@@ -77,7 +121,10 @@ export function LikesProvider({ children }: { children: ReactNode }) {
     [dislikedIds],
   )
 
-  const toggleLike = useCallback(async (trackId: number) => {
+  const toggleLike = useCallback(async (
+    trackId: number,
+    trackHint?: Track,
+  ) => {
     const uid = getUserId()
     if (!uid) return
 
@@ -101,6 +148,14 @@ export function LikesProvider({ children }: { children: ReactNode }) {
       if (liked) {
         setDislikedIds((prev) => _withIds(prev, ids, false))
       }
+      if (liked && getAutoCacheEnabled()) {
+        queueAutoCache(trackHint ?? trackId, {
+          onFirstSuccess: showAutoCacheOnboarding,
+        })
+      } else if (!liked) {
+        cancelAutoCache(trackId)
+        void removeOfflineTrack(trackId)
+      }
     } catch (e) {
       if (_isNetworkError(e)) {
         await queueMutation(
@@ -120,7 +175,7 @@ export function LikesProvider({ children }: { children: ReactNode }) {
         durationMs: 3500,
       })
     }
-  }, [likedIds, dislikedIds, t])
+  }, [likedIds, dislikedIds, t, showAutoCacheOnboarding])
 
   const toggleDislike = useCallback(async (trackId: number) => {
     const uid = getUserId()

@@ -6,6 +6,10 @@ const DB_NAME = 'dotsound-offline'
 const DB_VERSION = 1
 const STORE = 'tracks'
 
+const LS_AUTO_CACHE = 'setting-offline-auto-cache'
+const LS_CACHE_LIMIT = 'setting-offline-cache-limit'
+const LS_ONBOARDING = 'ds:auto-cache-toast-shown'
+
 const LEGACY_AUDIO = (id: number) =>
   `/api/v1/tracks/${id}/audio`
 
@@ -17,14 +21,14 @@ export function trackProgressiveAudioUrl(
 
 interface OfflineRecord {
   trackId: number
-  track: Track
+  track?: Track
   cachedAt: number
   bytes: number
   audioUrl: string
 }
 
-function audioUrlForTrack(track: Track): string {
-  return trackProgressiveAudioUrl(track.id)
+function audioUrlForTrackId(trackId: number): string {
+  return trackProgressiveAudioUrl(trackId)
 }
 
 async function openDb(): Promise<IDBDatabase> {
@@ -43,7 +47,7 @@ async function openDb(): Promise<IDBDatabase> {
   })
 }
 
-function isSupported(): boolean {
+export function isOfflineCacheSupported(): boolean {
   return (
     typeof window !== 'undefined' &&
     'caches' in window &&
@@ -54,7 +58,7 @@ function isSupported(): boolean {
 export async function isCached(
   trackId: number,
 ): Promise<boolean> {
-  if (!isSupported()) return false
+  if (!isOfflineCacheSupported()) return false
   try {
     const db = await openDb()
     return new Promise<boolean>((resolve) => {
@@ -78,7 +82,7 @@ export async function isCached(
 export async function getCachedAudioUrl(
   trackId: number,
 ): Promise<string | null> {
-  if (!isSupported()) return null
+  if (!isOfflineCacheSupported()) return null
   try {
     const cache = await caches.open(CACHE_NAME)
     let res = await cache.match(
@@ -103,9 +107,14 @@ export class OfflineNotAllowedError extends Error {
   }
 }
 
+interface EligibilityLimits {
+  maxTrackBytes: number
+  maxTotalBytes: number
+}
+
 async function checkOfflineEligibility(
   trackId: number,
-): Promise<{ maxTrackBytes: number; maxTotalBytes: number }> {
+): Promise<EligibilityLimits> {
   const res = (await api.getOfflineEligibility(trackId)) as {
     allowed: boolean
     reason: string
@@ -121,7 +130,59 @@ async function checkOfflineEligibility(
   }
 }
 
+const CACHE_LIMIT_BYTES: Record<string, number> = {
+  '1gb': 1 * 1024 * 1024 * 1024,
+  '5gb': 5 * 1024 * 1024 * 1024,
+  '20gb': 20 * 1024 * 1024 * 1024,
+}
+
+export type CacheLimitChoice =
+  | 'none'
+  | '1gb'
+  | '5gb'
+  | '20gb'
+
+export function getCacheLimitChoice(): CacheLimitChoice {
+  if (typeof localStorage === 'undefined') return 'none'
+  const v = localStorage.getItem(LS_CACHE_LIMIT)
+  if (
+    v === '1gb' ||
+    v === '5gb' ||
+    v === '20gb' ||
+    v === 'none'
+  )
+    return v
+  return 'none'
+}
+
+export function setCacheLimitChoice(v: CacheLimitChoice): void {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem(LS_CACHE_LIMIT, v)
+}
+
+async function resolveCacheCeiling(): Promise<number> {
+  const choice = getCacheLimitChoice()
+  if (choice !== 'none') return CACHE_LIMIT_BYTES[choice]
+  try {
+    if (
+      typeof navigator !== 'undefined' &&
+      'storage' in navigator &&
+      navigator.storage &&
+      'estimate' in navigator.storage
+    ) {
+      const est = await navigator.storage.estimate()
+      if (est.quota && Number.isFinite(est.quota)) {
+        return Math.floor(est.quota * 0.9)
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return Number.POSITIVE_INFINITY
+}
+
 async function evictUntilUnder(maxBytes: number): Promise<void> {
+  if (!Number.isFinite(maxBytes)) return
   const records = await getCachedTracks()
   let total = records.reduce((s, r) => s + r.bytes, 0)
   if (total <= maxBytes) return
@@ -136,13 +197,17 @@ async function evictUntilUnder(maxBytes: number): Promise<void> {
 }
 
 export async function downloadTrack(
-  track: Track,
+  trackOrId: Track | number,
   onProgress?: (loaded: number, total: number) => void,
 ): Promise<void> {
-  if (!isSupported())
+  if (!isOfflineCacheSupported())
     throw new Error('Offline cache не поддерживается')
-  const limits = await checkOfflineEligibility(track.id)
-  const url = audioUrlForTrack(track)
+  const trackId =
+    typeof trackOrId === 'number' ? trackOrId : trackOrId.id
+  const trackMeta =
+    typeof trackOrId === 'number' ? undefined : trackOrId
+  const limits = await checkOfflineEligibility(trackId)
+  const url = audioUrlForTrackId(trackId)
   const res = await fetch(url, {
     credentials: 'include',
   })
@@ -177,9 +242,10 @@ export async function downloadTrack(
   if (blob.size > limits.maxTrackBytes) {
     throw new OfflineNotAllowedError('track_too_large')
   }
-  await evictUntilUnder(
-    Math.max(0, limits.maxTotalBytes - blob.size),
-  )
+  const ceiling = await resolveCacheCeiling()
+  if (Number.isFinite(ceiling)) {
+    await evictUntilUnder(Math.max(0, ceiling - blob.size))
+  }
   const cache = await caches.open(CACHE_NAME)
   await cache.put(
     url,
@@ -197,8 +263,8 @@ export async function downloadTrack(
     const tx = db.transaction(STORE, 'readwrite')
     const store = tx.objectStore(STORE)
     const record: OfflineRecord = {
-      trackId: track.id,
-      track,
+      trackId,
+      track: trackMeta,
       cachedAt: Date.now(),
       bytes: blob.size,
       audioUrl: url,
@@ -208,12 +274,14 @@ export async function downloadTrack(
     req.onerror = () => reject(req.error)
     tx.oncomplete = () => db.close()
   })
+  cachedIds.add(trackId)
+  notifyCacheChange()
 }
 
 export async function removeTrack(
   trackId: number,
 ): Promise<void> {
-  if (!isSupported()) return
+  if (!isOfflineCacheSupported()) return
   try {
     const cache = await caches.open(CACHE_NAME)
     await cache.delete(LEGACY_AUDIO(trackId))
@@ -232,12 +300,15 @@ export async function removeTrack(
   } catch {
     /* ignore */
   }
+  if (cachedIds.delete(trackId)) {
+    notifyCacheChange()
+  }
 }
 
 export async function getCachedTracks(): Promise<
   OfflineRecord[]
 > {
-  if (!isSupported()) return []
+  if (!isOfflineCacheSupported()) return []
   try {
     const db = await openDb()
     return new Promise<OfflineRecord[]>((resolve) => {
@@ -286,7 +357,7 @@ export async function getStorageInfo(): Promise<{
 }
 
 export async function clearAllOffline(): Promise<void> {
-  if (!isSupported()) return
+  if (!isOfflineCacheSupported()) return
   try {
     await caches.delete(CACHE_NAME)
     const db = await openDb()
@@ -300,6 +371,129 @@ export async function clearAllOffline(): Promise<void> {
     })
   } catch {
     /* ignore */
+  }
+  if (cachedIds.size > 0) {
+    cachedIds.clear()
+    notifyCacheChange()
+  }
+}
+
+const cachedIds = new Set<number>()
+const cacheChangeListeners = new Set<() => void>()
+let cachedIdsLoaded = false
+let cachedIdsLoading: Promise<void> | null = null
+
+function notifyCacheChange(): void {
+  for (const fn of cacheChangeListeners) fn()
+}
+
+export function subscribeCacheChanges(
+  cb: () => void,
+): () => void {
+  cacheChangeListeners.add(cb)
+  return () => {
+    cacheChangeListeners.delete(cb)
+  }
+}
+
+export function getCachedIdsSync(): Set<number> {
+  return cachedIds
+}
+
+export async function ensureCachedIdsLoaded(): Promise<void> {
+  if (cachedIdsLoaded) return
+  if (cachedIdsLoading) {
+    await cachedIdsLoading
+    return
+  }
+  cachedIdsLoading = (async () => {
+    const records = await getCachedTracks()
+    cachedIds.clear()
+    for (const r of records) cachedIds.add(r.trackId)
+    cachedIdsLoaded = true
+    notifyCacheChange()
+  })()
+  await cachedIdsLoading
+  cachedIdsLoading = null
+}
+
+export function getAutoCacheEnabled(): boolean {
+  if (typeof localStorage === 'undefined') return true
+  return localStorage.getItem(LS_AUTO_CACHE) !== 'false'
+}
+
+export function setAutoCacheEnabled(v: boolean): void {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem(LS_AUTO_CACHE, String(v))
+}
+
+export function getAutoCacheOnboardingShown(): boolean {
+  if (typeof localStorage === 'undefined') return true
+  return localStorage.getItem(LS_ONBOARDING) === '1'
+}
+
+export function markAutoCacheOnboardingShown(): void {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem(LS_ONBOARDING, '1')
+}
+
+interface AutoCacheRequest {
+  trackId: number
+  track?: Track
+  onSuccess?: () => void
+}
+
+const autoCacheQueue: AutoCacheRequest[] = []
+const autoCacheSeenInSession = new Set<number>()
+let autoCacheRunning = false
+
+async function runAutoCacheLoop(): Promise<void> {
+  if (autoCacheRunning) return
+  autoCacheRunning = true
+  try {
+    while (autoCacheQueue.length > 0) {
+      const next = autoCacheQueue.shift()
+      if (!next) continue
+      if (cachedIds.has(next.trackId)) continue
+      try {
+        await downloadTrack(next.track ?? next.trackId)
+        next.onSuccess?.()
+      } catch {
+        /* swallow — eligibility denial or transient failure */
+      }
+    }
+  } finally {
+    autoCacheRunning = false
+  }
+}
+
+export function queueAutoCache(
+  trackOrId: Track | number,
+  options?: { onFirstSuccess?: () => void },
+): void {
+  if (!isOfflineCacheSupported()) return
+  if (!getAutoCacheEnabled()) return
+  const trackId =
+    typeof trackOrId === 'number' ? trackOrId : trackOrId.id
+  const track =
+    typeof trackOrId === 'number' ? undefined : trackOrId
+  if (autoCacheSeenInSession.has(trackId)) return
+  autoCacheSeenInSession.add(trackId)
+  if (cachedIds.has(trackId)) return
+  autoCacheQueue.push({
+    trackId,
+    track,
+    onSuccess: options?.onFirstSuccess,
+  })
+  void runAutoCacheLoop()
+}
+
+export function cancelAutoCache(trackId: number): void {
+  autoCacheSeenInSession.delete(trackId)
+  for (let i = autoCacheQueue.length - 1; i >= 0; i--) {
+    if (autoCacheQueue[i].trackId === trackId) {
+      autoCacheQueue.splice(i, 1)
+    }
   }
 }
 

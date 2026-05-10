@@ -641,7 +641,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   ) => {
     e.stopPropagation()
     const track = await ensureImported(r)
-    if (track) await toggleLike(track.id)
+    if (track) await toggleLike(track.id, track)
   }
   const handleLikeYT = async (
     e: React.MouseEvent,
@@ -649,7 +649,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   ) => {
     e.stopPropagation()
     const track = await ensureImportedYT(r)
-    if (track) await toggleLike(track.id)
+    if (track) await toggleLike(track.id, track)
   }
   const handleLikeBC = async (
     e: React.MouseEvent,
@@ -657,7 +657,7 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   ) => {
     e.stopPropagation()
     const track = await ensureImportedBC(r)
-    if (track) await toggleLike(track.id)
+    if (track) await toggleLike(track.id, track)
   }
 
   const clearSearch = () => {

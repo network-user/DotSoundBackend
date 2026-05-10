@@ -93,6 +93,19 @@
     "myTracksUpload": "Upload track",
     "avatarEditHint": "Change profile photo"
   },
+  "myTop": {
+    "title": "Your Top",
+    "hint": "Top tracks and genres based on your listening history.",
+    "empty": "Not enough listens yet to build your top.",
+    "window7d": "7 days",
+    "window30d": "30 days",
+    "window90d": "90 days",
+    "windowAll": "All time",
+    "topGenres": "Top Genres",
+    "topTracks": "Top Tracks",
+    "hoursByDay": "Minutes by day",
+    "hoursTotal": "Total: {{m}} min"
+  },
   "playlists": {
     "title": "Playlists",
     "subtitle": "Your collections",
@@ -113,7 +126,20 @@
     "interfaceSoundLevel": "UI volume",
     "interfaceFeedbackTest": "Feedback test",
     "testSound": "Sound",
-    "testHaptic": "Haptic"
+    "testHaptic": "Haptic",
+    "offlineAutoCache": "Auto-cache liked tracks",
+    "offlineLimit": "Offline cache limit",
+    "offlineLimitNone": "No limit",
+    "offlineUsage": "Used {{used}} of {{quota}}",
+    "offlineClear": "Clear",
+    "offlineClearDone": "Offline cache cleared"
+  },
+  "offline": {
+    "cached": "Offline",
+    "autoCacheIntro": {
+      "title": "Liked tracks are saved for offline",
+      "disable": "Tap to disable"
+    }
   },
   "lyrics": {
     "detectText": "Detect lyrics",

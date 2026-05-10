@@ -18,6 +18,16 @@ import { useExitTransition } from '@/hooks/useExitTransition'
 import { canInstallPwa } from '@/components/PwaInstall/InstallPrompt'
 import { showIsland } from '@/lib/island'
 import { useSound } from '@/store/SoundContext'
+import {
+  clearAllOffline,
+  getAutoCacheEnabled,
+  getCacheLimitChoice,
+  getStorageInfo,
+  isOfflineCacheSupported,
+  setAutoCacheEnabled,
+  setCacheLimitChoice,
+  type CacheLimitChoice,
+} from '@/lib/offlineCache'
 import { AccountDangerZone } from './AccountDangerZone'
 import { SettingsLegalSection } from './SettingsLegalSection'
 import { LinkedAccounts } from './LinkedAccounts'
@@ -66,6 +76,20 @@ export function SettingsSheet({
     useState<boolean>(() => sound.enabled)
   const [soundVolume, setSoundVolume] =
     useState<number>(() => sound.volume)
+  const [autoCacheEnabled, setAutoCacheEnabledState] =
+    useState<boolean>(() => getAutoCacheEnabled())
+  const [cacheLimit, setCacheLimit] =
+    useState<CacheLimitChoice>(() => getCacheLimitChoice())
+  const [storage, setStorage] = useState<{
+    used: number
+    quota: number
+  }>({ used: 0, quota: 0 })
+
+  useEffect(() => {
+    if (!open) return
+    if (!isOfflineCacheSupported()) return
+    void getStorageInfo().then(setStorage)
+  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -143,6 +167,41 @@ export function SettingsSheet({
       String(next),
     )
     prefetchCtx?.setEnabled(next)
+  }
+
+  const handleAutoCacheToggle = () => {
+    feedbackTap()
+    const next = !autoCacheEnabled
+    setAutoCacheEnabledState(next)
+    setAutoCacheEnabled(next)
+  }
+
+  const handleCacheLimitChange = (
+    value: CacheLimitChoice,
+  ) => {
+    setCacheLimit(value)
+    setCacheLimitChoice(value)
+    hapticSelection()
+  }
+
+  const handleClearOffline = async () => {
+    feedbackTap()
+    await clearAllOffline()
+    setStorage(await getStorageInfo())
+    showIsland({
+      kind: 'toast',
+      title: t('settings.offlineClearDone', {
+        defaultValue: 'Оффлайн-кеш очищен',
+      }),
+      durationMs: 2200,
+    })
+  }
+
+  const formatBytes = (n: number): string => {
+    if (!n || n <= 0) return '0 МБ'
+    const mb = n / (1024 * 1024)
+    if (mb < 1024) return `${mb.toFixed(0)} МБ`
+    return `${(mb / 1024).toFixed(2)} ГБ`
   }
 
   const handleLanguageChange = (lng: string) => {
@@ -317,6 +376,83 @@ export function SettingsSheet({
               <div className="settings-toggle-dot" />
             </div>
           </div>
+
+          {isOfflineCacheSupported() && (
+            <>
+              <div
+                className="settings-item"
+                onClick={handleAutoCacheToggle}
+              >
+                <Icon name="cloud-download" size={20} />
+                <span>
+                  {t('settings.offlineAutoCache', {
+                    defaultValue:
+                      'Авто-сохранение лайкнутых треков',
+                  })}
+                </span>
+                <div
+                  className={`settings-toggle${autoCacheEnabled ? ' on' : ''}`}
+                >
+                  <div className="settings-toggle-dot" />
+                </div>
+              </div>
+
+              {autoCacheEnabled && (
+                <div className="settings-item">
+                  <Icon name="layers" size={20} />
+                  <span>
+                    {t('settings.offlineLimit', {
+                      defaultValue: 'Лимит оффлайн-кеша',
+                    })}
+                  </span>
+                  <select
+                    className="settings-select"
+                    value={cacheLimit}
+                    onChange={(e) =>
+                      handleCacheLimitChange(
+                        e.target
+                          .value as CacheLimitChoice,
+                      )
+                    }
+                  >
+                    <option value="none">
+                      {t('settings.offlineLimitNone', {
+                        defaultValue: 'Без лимита',
+                      })}
+                    </option>
+                    <option value="1gb">1 ГБ</option>
+                    <option value="5gb">5 ГБ</option>
+                    <option value="20gb">20 ГБ</option>
+                  </select>
+                </div>
+              )}
+
+              {autoCacheEnabled && (
+                <div className="settings-item settings-item--feedback">
+                  <Icon name="info" size={20} />
+                  <span>
+                    {t('settings.offlineUsage', {
+                      used: formatBytes(storage.used),
+                      quota: formatBytes(storage.quota),
+                      defaultValue:
+                        'Используется {{used}} из {{quota}}',
+                    })}
+                  </span>
+                  <MotionPress
+                    type="button"
+                    variant="ghost"
+                    haptic="medium"
+                    className="settings-mini-btn"
+                    onClick={handleClearOffline}
+                  >
+                    {t('settings.offlineClear', {
+                      defaultValue: 'Очистить',
+                    })}
+                  </MotionPress>
+                </div>
+              )}
+            </>
+          )}
 
           <div
             className="settings-item"
