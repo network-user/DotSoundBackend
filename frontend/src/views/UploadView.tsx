@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
@@ -15,6 +15,12 @@ import { UploadFileTab } from '@/components/Upload/UploadFileTab'
 import { UploadSoundCloudTab } from '@/components/Upload/UploadSoundCloudTab'
 import { UploadYouTubeTab } from '@/components/Upload/UploadYouTubeTab'
 import { UploadBandcampTab } from '@/components/Upload/UploadBandcampTab'
+import {
+  clearDraft,
+  hasMeaningfulDraft,
+  loadDraft,
+  type UploadDraft,
+} from '@/lib/uploadDraft'
 import type { Track } from '@/types/api'
 
 type Tab = 'file' | 'soundcloud' | 'youtube' | 'bandcamp'
@@ -25,6 +31,28 @@ export function UploadView() {
   const reduce = useReducedMotion()
   const { playTrack } = usePlayerActions()
   const [tab, setTab] = useState<Tab>('file')
+  const [pendingDraft, setPendingDraft] = useState<UploadDraft | null>(null)
+  const [appliedDraft, setAppliedDraft] = useState<UploadDraft | null>(null)
+
+  useEffect(() => {
+    const draft = loadDraft()
+    if (draft && hasMeaningfulDraft(draft)) {
+      setPendingDraft(draft)
+    }
+  }, [])
+
+  const handleContinueDraft = () => {
+    hapticSelection()
+    setAppliedDraft(pendingDraft)
+    setPendingDraft(null)
+  }
+
+  const handleDiscardDraft = () => {
+    hapticSelection()
+    clearDraft()
+    setPendingDraft(null)
+    setAppliedDraft(null)
+  }
 
   const handleSuccess = async (track: Track) => {
     hapticNotification('success')
@@ -84,6 +112,31 @@ export function UploadView() {
         ))}
       </div>
 
+      {pendingDraft && (
+        <div className="ru-up-draft-banner" role="status">
+          <div className="ru-up-draft-banner__text">
+            <strong>{t('redesign.upload.draftBanner.title')}</strong>
+            <p>{t('redesign.upload.draftBanner.subtitle')}</p>
+          </div>
+          <div className="ru-up-draft-banner__actions">
+            <MotionPress
+              type="button"
+              variant="primary"
+              onClick={handleContinueDraft}
+            >
+              {t('redesign.upload.draftBanner.continue')}
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="ghost"
+              onClick={handleDiscardDraft}
+            >
+              {t('redesign.upload.draftBanner.discard')}
+            </MotionPress>
+          </div>
+        </div>
+      )}
+
       <div className="ru-up-panel">
         <AnimatePresence mode="wait">
           <m.div
@@ -98,7 +151,10 @@ export function UploadView() {
             transition={transition}
           >
             {tab === 'file' && (
-              <UploadFileTab onSuccess={handleSuccess} />
+              <UploadFileTab
+                onSuccess={handleSuccess}
+                initialDraft={appliedDraft}
+              />
             )}
             {tab === 'soundcloud' && (
               <UploadSoundCloudTab

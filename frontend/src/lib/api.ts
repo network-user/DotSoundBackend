@@ -2146,7 +2146,7 @@ export const api = {
     return request('/api/v1/users/me/deletion-status')
   },
 
-  restoreTrack(trackId: number): Promise<TrackResponse> {
+  restoreTrack(trackId: number): Promise<Track> {
     return request(`/api/v1/tracks/${trackId}/restore`, {
       method: 'POST',
     })

@@ -136,6 +136,7 @@
   },
   "offline": {
     "cached": "Offline",
+    "onlyCachedHint": "Offline: only saved tracks are available",
     "autoCacheIntro": {
       "title": "Liked tracks are saved for offline",
       "disable": "Tap to disable"

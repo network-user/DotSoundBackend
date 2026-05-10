@@ -107,6 +107,13 @@
       "radioMoodHintCinematic": "Широкий звук",
       "radioMoodHintRetro": "Ностальгия",
       "radioMoodHintAcoustic": "Тепло и воздух",
+      "highlight": {
+        "weekly_top": "Топ недели",
+        "your_top": "Ваш топ",
+        "forgotten_treasures": "Забытое сокровище",
+        "staff_pick": "Выбор редакции",
+        "personalized": "Подобрано для вас"
+      },
       "mixPlayAll": "Слушать всё",
       "mixShuffle": "Вперемешку",
       "untitled": "Без названия",
@@ -514,6 +521,12 @@
       "progressHint": "Отправляем файл…",
       "doneToast": "Трек загружен",
       "ambientAlt": "Предпросмотр обложки",
+      "draftBanner": {
+        "title": "Продолжить предыдущую загрузку?",
+        "subtitle": "Название, артист и текст сохранены. Прикрепите аудиофайл заново, чтобы продолжить.",
+        "continue": "Продолжить",
+        "discard": "Не нужно"
+      },
       "file": {
         "audioLabel": "Аудиофайл",
         "audioPick": "Выбрать файл",

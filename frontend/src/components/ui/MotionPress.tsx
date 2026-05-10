@@ -19,6 +19,7 @@ export type MotionPressVariant =
   | 'ghost'
   | 'icon'
   | 'subtle'
+  | 'danger'
 
 export type MotionPressHaptic =
   | 'light'
@@ -55,6 +56,7 @@ const VARIANT_CLASS: Record<MotionPressVariant, string> = {
   ghost: 'mp-press mp-press--ghost',
   icon: 'mp-press mp-press--icon',
   subtle: 'mp-press mp-press--subtle',
+  danger: 'mp-press mp-press--danger',
 }
 
 export const MotionPress = forwardRef<

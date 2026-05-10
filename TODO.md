@@ -615,12 +615,24 @@
   ownership (backend by user id), unique-name enforcement with migration
   auto-dedupe, auto-rename owned artist on `display_name` update, and
   UploadFileTab mode switch (`I am this artist` vs manual artist).
-- [ ] **Home recommendations: richer highlight endpoint** — добавить
-  отдельные данные для крупной карточки главного экрана: editorial label,
-  reason/highlight metadata, стабильный hero image и компактные carousel
-  controls. Реализовать отдельным backend/frontend проходом после review
-  границ Backend/PrivateCore; текущий UI использует существующие
-  `continue` / `personalized` / `user_choice` / fallback tracks.
+- [x] **Home recommendations: richer highlight endpoint** —
+  PrivateCore `home_highlight_policy` (kinds: `weekly_top` /
+  `your_top` / `forgotten_treasures` / `staff_pick` /
+  `personalized`, weighted blend с freshness-decay,
+  cold-start фильтр персональных kind'ов); backend
+  `HomeHighlightService` собирает кандидатов из
+  `recommendation_service.get_weekly_top_playlist`,
+  `stats_service.get_user_top_tracks`,
+  `recommendation_service.get_forgotten_treasures_playlist`,
+  и recent uploads (`track_repo.list_active`); per-user Redis
+  cache TTL 10 мин (`HOME_HIGHLIGHT_TTL_SECONDS`); endpoint
+  `GET /api/v1/recommendations/home-highlight` возвращает
+  `{kind, reason_code, track_id, title, artist, cover_key,
+  access_mode, catalog_type}` или `null` для cold-start.
+  Frontend: `api.getHomeHighlight`, `HomeView` использует
+  highlight для hero-карточки (eyebrow через
+  `redesign.home.highlight.{reason_code}`, fallback на
+  существующий `featuredSource`); i18n RU/EN.
 
 ## Админка / альбомы (2026-05-04)
 

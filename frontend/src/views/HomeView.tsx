@@ -337,6 +337,16 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   >(null)
   const [recentlyPlayed, setRecentlyPlayed] = useState<Track[] | null>(null)
   const [fallbackTracks, setFallbackTracks] = useState<Track[] | null>(null)
+  const [highlight, setHighlight] = useState<{
+    kind: string
+    reason_code: string
+    track_id: number
+    title: string
+    artist: string | null
+    cover_key: string | null
+    access_mode: string
+    catalog_type: string
+  } | null>(null)
 
   useEffect(() => {
     const uid = getInternalUserId()
@@ -355,6 +365,11 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
           .then((data) => setFallbackTracks(data.items))
           .catch(() => setFallbackTracks([]))
       })
+
+    api
+      .getHomeHighlight()
+      .then((res) => setHighlight(res ?? null))
+      .catch(() => setHighlight(null))
 
     api
       .getGenreMixes()
@@ -577,16 +592,34 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     sectionMap.get('personalized') ||
     sectionMap.get('user_choice') ||
     sectionMap.get('popular')
+  const highlightTrack: Track | null = highlight
+    ? ({
+        id: highlight.track_id,
+        title: highlight.title,
+        artist: highlight.artist,
+        cover_key: highlight.cover_key,
+        access_mode: highlight.access_mode,
+        catalog_type: highlight.catalog_type,
+      } as unknown as Track)
+    : null
   const featuredTrack =
+    highlightTrack ||
     featuredSource?.tracks?.[0] ||
     fallbackTracks?.[0] ||
     null
+  const highlightEyebrow = highlight
+    ? t(
+        `redesign.home.highlight.${highlight.reason_code}`,
+        highlight.reason_code,
+      )
+    : null
   const featuredEyebrow =
-    featuredSource &&
+    highlightEyebrow ||
+    (featuredSource &&
     (featuredSource.section_type === 'continue' ||
       featuredSource.section_type === 'user_choice')
       ? featuredSource.title
-      : brandLabel
+      : brandLabel)
   const loadingFeatured =
     sections === null && fallbackTracks === null
   const heroCoverSrc = featuredTrack

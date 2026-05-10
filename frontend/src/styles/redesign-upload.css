@@ -342,6 +342,46 @@
   margin-bottom: var(--space-3);
 }
 
+.ru-up-draft-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-lg, 14px);
+  border: 1px solid var(--border);
+  background: var(--glass-medium-bg, rgba(255, 255, 255, 0.04));
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.ru-up-draft-banner__text {
+  flex: 1 1 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ru-up-draft-banner__text strong {
+  font-size: var(--fs-15);
+  font-weight: 700;
+}
+
+.ru-up-draft-banner__text p {
+  margin: 0;
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.ru-up-draft-banner__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
 /* Import source picker (.ri-imp-*) */
 
 .ru-imp-root {

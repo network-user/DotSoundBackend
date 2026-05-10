@@ -152,9 +152,9 @@ function readApicFrame(
     return undefined
   }
   const finalMime = mime || guessMimeFromBytes(data) || 'image/jpeg'
-  const owned = new Uint8Array(data.byteLength)
-  owned.set(data)
-  const blob = new Blob([owned.buffer as ArrayBuffer], {
+  const owned = new ArrayBuffer(data.byteLength)
+  new Uint8Array(owned).set(data)
+  const blob = new Blob([owned], {
     type: finalMime,
   })
   return { blob, mime: finalMime }

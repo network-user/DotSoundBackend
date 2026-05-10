@@ -1567,6 +1567,20 @@ export function PlayerProvider({
         return
       }
 
+      if (
+        typeof navigator !== 'undefined' &&
+        navigator.onLine === false
+      ) {
+        showIsland({
+          kind: 'toast',
+          title: i18n.t('offline.onlyCachedHint', {
+            defaultValue:
+              'Без сети доступны только сохранённые треки',
+          }),
+          durationMs: 3500,
+        })
+      }
+
       if (newTrack.access_mode === 'third_party_stream') {
         const ovr = getThirdPartyStreamOverride(
           newTrack.id,

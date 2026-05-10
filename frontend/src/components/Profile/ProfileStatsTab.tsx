@@ -151,8 +151,11 @@ export function ProfileStatsTab() {
 
   const handleShare = () => {
     const text = `${minutes} ${minutesCaption} ${headline} — DotSound`
-    if (tg?.shareText) {
-      tg.shareText(text)
+    const shareText = (tg as unknown as {
+      shareText?: (t: string) => void
+    } | undefined)?.shareText
+    if (shareText) {
+      shareText(text)
     } else {
       void navigator.clipboard.writeText(text).then(() => {
         showIsland({

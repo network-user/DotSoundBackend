@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -17,6 +18,7 @@ import {
   ensureCachedIdsLoaded,
   getAutoCacheEnabled,
   getAutoCacheOnboardingShown,
+  getCachedIdsSync,
   isOfflineCacheSupported,
   markAutoCacheOnboardingShown,
   queueAutoCache,
@@ -74,11 +76,45 @@ export function LikesProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const catchUpRanRef = useRef(false)
+
   useEffect(() => {
     const uid = getUserId()
     if (!uid) return
-    api.getLikedTracks(uid, 1, 200).then((data) => {
+    api.getLikedTracks(uid, 1, 200).then(async (data) => {
       setLikedIds(new Set(data.items.map((t) => t.id)))
+      if (
+        !isOfflineCacheSupported() ||
+        !getAutoCacheEnabled() ||
+        catchUpRanRef.current
+      )
+        return
+      catchUpRanRef.current = true
+      await ensureCachedIdsLoaded()
+      const cached = getCachedIdsSync()
+      const pending = data.items.filter(
+        (tr) =>
+          tr.access_mode === 'internal_stream' &&
+          !cached.has(tr.id),
+      )
+      if (pending.length === 0) return
+      const idle =
+        (
+          window as unknown as {
+            requestIdleCallback?: (
+              cb: () => void,
+              opts?: { timeout?: number },
+            ) => number
+          }
+        ).requestIdleCallback ??
+        ((cb: () => void) => window.setTimeout(cb, 2000))
+      idle(() => {
+        for (const tr of pending.slice(0, 5)) {
+          queueAutoCache(tr, {
+            onFirstSuccess: showAutoCacheOnboarding,
+          })
+        }
+      })
     }).catch(() => {})
   }, [authTick])
 

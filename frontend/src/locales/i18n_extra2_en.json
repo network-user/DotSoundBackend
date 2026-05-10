@@ -107,6 +107,13 @@
       "radioMoodHintCinematic": "Wide sound",
       "radioMoodHintRetro": "Nostalgic",
       "radioMoodHintAcoustic": "Warm and airy",
+      "highlight": {
+        "weekly_top": "Weekly top",
+        "your_top": "Your top",
+        "forgotten_treasures": "Forgotten gem",
+        "staff_pick": "Staff pick",
+        "personalized": "Picked for you"
+      },
       "mixPlayAll": "Play all",
       "mixShuffle": "Shuffle",
       "untitled": "Untitled",
@@ -508,6 +515,12 @@
       "progressHint": "Sending audio…",
       "doneToast": "Track uploaded",
       "ambientAlt": "Cover preview",
+      "draftBanner": {
+        "title": "Continue your previous upload?",
+        "subtitle": "Title, artist and lyrics are saved. Re-attach the audio file to continue.",
+        "continue": "Continue",
+        "discard": "Discard"
+      },
       "file": {
         "audioLabel": "Audio file",
         "audioPick": "Choose file",
