@@ -225,6 +225,37 @@ class ListenEventRepository(
             (str(r[0]), int(r[1] or 0)) for r in rows if r[0]
         ]
 
+    async def aggregate_user_minutes_by_day(
+        self,
+        user_id: int,
+        *,
+        since: datetime,
+    ) -> list[tuple[str, int]]:
+        """Return ``(date_iso, minutes_listened)`` rows since ``since``.
+
+        Uses ``func.date()`` to bucket events by UTC day. Result is
+        sorted oldest-first so the UI can render a bar chart left-
+        to-right.
+        """
+        date_col = func.date(ListenEvent.created_at).label("d")
+        seconds_sum = func.sum(
+            ListenEvent.duration_listened_seconds
+        ).label("seconds")
+        stmt = (
+            select(date_col, seconds_sum)
+            .where(
+                ListenEvent.user_id == user_id,
+                ListenEvent.created_at >= since,
+            )
+            .group_by(date_col)
+            .order_by(date_col.asc())
+        )
+        rows = (await self._session.execute(stmt)).all()
+        return [
+            (str(r[0]), int((r[1] or 0) // 60))
+            for r in rows
+        ]
+
     @staticmethod
     def window_to_since(
         window: str, *, now: datetime | None = None

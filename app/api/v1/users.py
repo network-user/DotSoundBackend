@@ -181,6 +181,31 @@ async def delete_me(
 
 
 @router.get(
+    "/me/listening-by-day",
+    summary=(
+        "Per-day listening minutes for the last N days (1..90)"
+    ),
+)
+@limiter.limit("60/minute")
+async def my_listening_by_day(
+    request: Request,
+    days: int = Query(7, ge=1, le=90),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, object]:
+    svc = StatsService(session)
+    rows = await svc.get_user_minutes_by_day(
+        current_user.id, days=days
+    )
+    return {
+        "days": days,
+        "buckets": [
+            {"date": d, "minutes": m} for (d, m) in rows
+        ],
+    }
+
+
+@router.get(
     "/me/top",
     response_model=UserTopResponse,
     summary="Top tracks/genres for the current user (per window)",

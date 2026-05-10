@@ -30,6 +30,21 @@ interface ApiTopTrack {
   cover_key: string | null
 }
 
+interface DayBucket {
+  date: string
+  minutes: number
+}
+
+const WINDOW_TO_DAYS: Record<
+  '7d' | '30d' | '90d' | 'all',
+  number
+> = {
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+  all: 90,
+}
+
 export function MyTopView() {
   const { t } = useTranslation()
   const [windowKey, setWindowKey] = useState<
@@ -37,17 +52,23 @@ export function MyTopView() {
   >('30d')
   const [tracks, setTracks] = useState<ApiTopTrack[]>([])
   const [genres, setGenres] = useState<ApiTopGenre[]>([])
+  const [buckets, setBuckets] = useState<DayBucket[]>([])
   const [loading, setLoading] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await api.getMyTop(windowKey)
-      setTracks(res.top_tracks)
-      setGenres(res.top_genres)
+      const [top, hours] = await Promise.all([
+        api.getMyTop(windowKey),
+        api.getMyListeningByDay(WINDOW_TO_DAYS[windowKey]),
+      ])
+      setTracks(top.top_tracks)
+      setGenres(top.top_genres)
+      setBuckets(hours.buckets)
     } catch {
       setTracks([])
       setGenres([])
+      setBuckets([])
     } finally {
       setLoading(false)
     }
@@ -99,7 +120,9 @@ export function MyTopView() {
         <div className="page-loading">
           {t('common.loading', 'Загрузка…')}
         </div>
-      ) : trackList.length === 0 && genres.length === 0 ? (
+      ) : trackList.length === 0 &&
+        genres.length === 0 &&
+        buckets.length === 0 ? (
         <div className="page-empty">
           {t(
             'myTop.empty',
@@ -108,6 +131,25 @@ export function MyTopView() {
         </div>
       ) : (
         <>
+          {buckets.length > 0 ? (
+            <section className="my-top-hours">
+              <h2>
+                {t(
+                  'myTop.hoursByDay',
+                  'Минуты прослушивания по дням',
+                )}
+              </h2>
+              <ListeningHoursChart buckets={buckets} />
+              <div className="my-top-hours__total settings-hint">
+                {t('myTop.hoursTotal', 'Всего: {{m}} мин', {
+                  m: buckets.reduce(
+                    (s, b) => s + b.minutes,
+                    0,
+                  ),
+                })}
+              </div>
+            </section>
+          ) : null}
           {genres.length > 0 ? (
             <section className="my-top-genres">
               <h2>{t('myTop.topGenres', 'Топ жанров')}</h2>

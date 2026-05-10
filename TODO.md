@@ -1375,9 +1375,12 @@
     - [x] Frontend `api.getMyTop`, плитка «Ваш топ» в
       `MIX_SHORTCUT_TILES` (быстрые разделы Home),
       `MyTopView` `/my-top` с переключателем окон 7d/30d/90d/all.
-    - [ ] Полноценный таб «Статистика» в `ProfileView` (часы
+    - [x] Полноценный таб «Статистика» в `ProfileView` (часы
       прослушивания, графика по жанрам, привязка `RecapShareCard`
-      к реальным данным).
+      к реальным данным): `ProfileStatsTab` (период 7/30/365д,
+      hero KPI, CSS genre bars, top-artists list, RecapShareCard с
+      реальными минутами и обложками из `getMyTop`); кнопка входа
+      через `ProfileActions` (`chart-bar` icon); i18n RU/EN.
 - [ ] **Динамические плейлисты**
     - [x] "Weekly Top 50" -- 2026-05-06: PrivateCore weekly_top_policy (rank_weekly_top_tracks, blend log(listens_7d)+log(likes_7d), WEEKLY_TOP_SCORE_VERSION); Backend RecommendationRepository.get_qualified_listens_7d_counts, RecommendationService.get_weekly_top_playlist with Redis cache (TTL 30 min), GET /api/v1/recommendations/weekly-top; Frontend WeeklyTopView (/weekly-top), api.getWeeklyTopPlaylist, WeeklyTopPlaylistResponse type, flame icon, Home quick-grid card.
     - [x] **«Забытые сокровища»** (лайкнутое давно, без прослушиваний в окне) — PrivateCore `forgotten_treasures_policy` (пороги лайка ≥21d, тишина ≥14d, `rank_forgotten_treasure_tracks`); Backend `RecommendationRepository.list_forgotten_treasure_rows`, `GET /api/v1/recommendations/forgotten-treasures` (JWT, per-user); Mini App `ForgottenTreasuresView` `/forgotten-treasures`, тайл в быстрых разделах после «Выбор»; prefetch context `forgotten_treasures`.
@@ -1662,3 +1665,18 @@
     `import_cancel_flag_ttl_seconds`, `import_lease_check_every_n_items`,
     `import_sc_prefetch_concurrency`, `import_telegram_download_*`,
     `scan_timeout_seconds`.
+
+- [x] **Radio disc audio-reactive visualizer (2026-05-10)**: `AudioRipple`
+  компонент заменяет `BeatPulse` на RadioView — при воспроизведении
+  считывает низкочастотную энергию из Web Audio `AnalyserNode` (bass bins
+  0–690 Hz) и: (1) синхронно ведёт `--bp-phase` → CSS scale/bounce вместо
+  BPM-сайна; (2) при превышении порога рождает canvas ripple-кольца,
+  расширяющиеся от края диска наружу с fade 860 мс. Фолбэк на BPM-сайн
+  при недоступном analyser. `canvas z-index: -1` внутри stacking context
+  → кольца под обложкой, но видимы как halo. `tsc --noEmit` зелёный.
+
+- [x] **Profile stats tab (2026-05-10)**: `ProfileStatsTab` (период 7/30/365д),
+  hero-KPI (минуты/часы), CSS genre bars (ширина пропорционально maxGenreMin),
+  top-artists list, `RecapShareCard` с реальными `totalMinutes` и `collageSrc`
+  из top-tracks cover keys; кнопка «Статистика» (chart-bar) в `ProfileActions`;
+  i18n RU/EN; `tsc --noEmit` зелёный.

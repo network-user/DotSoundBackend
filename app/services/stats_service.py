@@ -55,6 +55,18 @@ class StatsService:
         )
         return tracks, window
 
+    async def get_user_minutes_by_day(
+        self, user_id: int, *, days: int
+    ) -> list[tuple[str, int]]:
+        """Return per-day listening minutes for the last ``days`` days."""
+        from datetime import UTC, datetime, timedelta
+
+        bounded = max(1, min(days, 90))
+        since = datetime.now(UTC) - timedelta(days=bounded)
+        return await self._listen_repo.aggregate_user_minutes_by_day(
+            user_id, since=since
+        )
+
     async def get_user_top_genres(
         self, user_id: int, *, window: str
     ) -> tuple[list[tuple[str, int]], str]:

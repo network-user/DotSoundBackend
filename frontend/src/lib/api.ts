@@ -2186,6 +2186,15 @@ export const api = {
     return request(`/api/v1/users/me/top?window=${window}`)
   },
 
+  getMyListeningByDay(days = 7): Promise<{
+    days: number
+    buckets: Array<{ date: string; minutes: number }>
+  }> {
+    return request(
+      `/api/v1/users/me/listening-by-day?days=${days}`,
+    )
+  },
+
   getFollowingFeed(page = 1, size = 20): Promise<TrackListResponse> {
     return request(`/api/v1/users/me/feed?page=${page}&size=${size}`)
   },
