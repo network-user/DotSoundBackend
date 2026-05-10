@@ -227,3 +227,15 @@ body.ds-perf-lite {
     --glass-noise-opacity: 0;
   }
 }
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --glass-blur-soft: none;
+    --glass-blur-medium: none;
+    --glass-blur-strong: none;
+    --glass-saturate: none;
+    --glass-backdrop-fixed: none;
+    --glass-backdrop-fixed-player: none;
+    --glass-noise-opacity: 0;
+  }
+}

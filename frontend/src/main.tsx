@@ -1,4 +1,4 @@
-import '@/lib/i18n'
+import { i18nReady } from '@/lib/i18n'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
@@ -51,22 +51,24 @@ if (
     })
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <LazyMotion features={domAnimation}>
-      <BrowserRouter basename="/mini_app">
-        <SoundProvider>
-          <AdminProvider>
-            <PrefetchProvider>
-              <PlayerProvider>
-                <LikesProvider>
-                  <App />
-                </LikesProvider>
-              </PlayerProvider>
-            </PrefetchProvider>
-          </AdminProvider>
-        </SoundProvider>
-      </BrowserRouter>
-    </LazyMotion>
-  </StrictMode>,
-)
+void i18nReady.then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <LazyMotion features={domAnimation}>
+        <BrowserRouter basename="/mini_app">
+          <SoundProvider>
+            <AdminProvider>
+              <PrefetchProvider>
+                <PlayerProvider>
+                  <LikesProvider>
+                    <App />
+                  </LikesProvider>
+                </PlayerProvider>
+              </PrefetchProvider>
+            </AdminProvider>
+          </SoundProvider>
+        </BrowserRouter>
+      </LazyMotion>
+    </StrictMode>,
+  )
+})

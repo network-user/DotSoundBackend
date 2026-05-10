@@ -1,12 +1,6 @@
 import i18n from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import LanguageDetector from 'i18next-browser-languagedetector'
-import ru from '@/locales/ru.json'
-import en from '@/locales/en.json'
-import ruX1 from '@/locales/i18n_extra_ru.json'
-import enX1 from '@/locales/i18n_extra_en.json'
-import ruX2 from '@/locales/i18n_extra2_ru.json'
-import enX2 from '@/locales/i18n_extra2_en.json'
 
 type JsonObj = Record<string, unknown>
 const BRAND_RU = '.\u0437\u0432\u0443\u043a'
@@ -53,21 +47,55 @@ function localizeRuBrand(v: unknown): unknown {
   return v
 }
 
-const enT = deepMerge(
-  deepMerge(
-    en as unknown as JsonObj,
-    enX1 as unknown as JsonObj,
-  ),
-  enX2 as unknown as JsonObj,
-)
-const ruMerged = deepMerge(
-  deepMerge(
-    ru as unknown as JsonObj,
-    ruX1 as unknown as JsonObj,
-  ),
-  ruX2 as unknown as JsonObj,
-)
-const ruT = localizeRuBrand(ruMerged) as JsonObj
+async function loadLocaleBundle(
+  lang: 'ru' | 'en',
+): Promise<JsonObj> {
+  if (lang === 'ru') {
+    const [base, x1, x2] = await Promise.all([
+      import('@/locales/ru.json'),
+      import('@/locales/i18n_extra_ru.json'),
+      import('@/locales/i18n_extra2_ru.json'),
+    ])
+    const merged = deepMerge(
+      deepMerge(
+        base.default as unknown as JsonObj,
+        x1.default as unknown as JsonObj,
+      ),
+      x2.default as unknown as JsonObj,
+    )
+    return localizeRuBrand(merged) as JsonObj
+  }
+  const [base, x1, x2] = await Promise.all([
+    import('@/locales/en.json'),
+    import('@/locales/i18n_extra_en.json'),
+    import('@/locales/i18n_extra2_en.json'),
+  ])
+  return deepMerge(
+    deepMerge(
+      base.default as unknown as JsonObj,
+      x1.default as unknown as JsonObj,
+    ),
+    x2.default as unknown as JsonObj,
+  )
+}
+
+const loadedLocales = new Set<string>()
+
+async function ensureLocale(lang: string): Promise<void> {
+  const normalized = lang.toLowerCase().startsWith('ru')
+    ? 'ru'
+    : 'en'
+  if (loadedLocales.has(normalized)) return
+  const bundle = await loadLocaleBundle(normalized)
+  i18n.addResourceBundle(
+    normalized,
+    'translation',
+    bundle,
+    true,
+    true,
+  )
+  loadedLocales.add(normalized)
+}
 
 function getTelegramLanguage(): string | undefined {
   try {
@@ -89,27 +117,53 @@ const customDetector = {
 const detector = new LanguageDetector()
 detector.addDetector(customDetector)
 
-i18n
-  .use(detector)
-  .use(initReactI18next)
-  .init({
-    resources: {
-      en: { translation: enT },
-      ru: { translation: ruT },
-    },
-    fallbackLng: 'ru',
-    detection: {
-      order: [
-        'telegramDetector',
-        'localStorage',
-        'navigator',
-      ],
-      caches: ['localStorage'],
-      lookupLocalStorage: 'i18nextLng',
-    },
-    interpolation: {
-      escapeValue: false,
-    },
+function detectInitialLanguage(): 'ru' | 'en' {
+  try {
+    const tg = getTelegramLanguage()
+    if (tg) return tg.toLowerCase().startsWith('ru') ? 'ru' : 'en'
+    const stored = localStorage.getItem('i18nextLng')
+    if (stored)
+      return stored.toLowerCase().startsWith('ru') ? 'ru' : 'en'
+    const nav = navigator.language
+    if (nav)
+      return nav.toLowerCase().startsWith('ru') ? 'ru' : 'en'
+  } catch {
+    /* ignore */
+  }
+  return 'ru'
+}
+
+const initialLang = detectInitialLanguage()
+
+export const i18nReady: Promise<typeof i18n> =
+  loadLocaleBundle(initialLang).then(async (bundle) => {
+    loadedLocales.add(initialLang)
+    await i18n
+      .use(detector)
+      .use(initReactI18next)
+      .init({
+        resources: {
+          [initialLang]: { translation: bundle },
+        },
+        fallbackLng: initialLang,
+        lng: initialLang,
+        detection: {
+          order: [
+            'telegramDetector',
+            'localStorage',
+            'navigator',
+          ],
+          caches: ['localStorage'],
+          lookupLocalStorage: 'i18nextLng',
+        },
+        interpolation: {
+          escapeValue: false,
+        },
+      })
+    i18n.on('languageChanged', (lng) => {
+      void ensureLocale(lng)
+    })
+    return i18n
   })
 
 export default i18n

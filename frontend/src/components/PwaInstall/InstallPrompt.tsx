@@ -3,16 +3,13 @@ import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { showIsland } from '@/lib/island'
 import { MotionPress } from '@/components/ui/MotionPress'
-import {
-  m,
-  VARIANTS_FADE_UP,
-} from '@/lib/motion'
-import {
-  hapticNotification,
-  isTelegram,
-} from '@/lib/telegram'
+import { m, VARIANTS_FADE_UP } from '@/lib/motion'
+import { hapticNotification, isTelegram } from '@/lib/telegram'
 import {
   hasDeferredPrompt,
+  isIOS,
+  isIOSSafari,
+  isStandalone,
   subscribePromptChange,
   triggerPwaInstall,
 } from '@/lib/pwaInstall'
@@ -30,62 +27,15 @@ type PanelMode =
   | 'ios_other'
   | 'menu_hint'
 
-function isStandalone(): boolean {
-  try {
-    return (
-      window.matchMedia(
-        '(display-mode: standalone)',
-      ).matches ||
-      (window.navigator as Navigator & {
-        standalone?: boolean
-      }).standalone === true
-    )
-  } catch {
-    return false
-  }
-}
-
-function isIOS(): boolean {
-  try {
-    const ua = navigator.userAgent || ''
-    if (/iPad|iPhone|iPod/.test(ua)) {
-      return true
-    }
-    if (
-      /Mac/.test(navigator.platform)
-      && ((navigator as Navigator & { maxTouchPoints?: number })
-        .maxTouchPoints ?? 0) > 1
-    ) {
-      return true
-    }
-    return false
-  } catch {
-    return false
-  }
-}
-
-function isIOSSafariForCopy(): boolean {
-  try {
-    const ua = navigator.userAgent || ''
-    if (!isIOS()) return false
-    return (
-      /Safari/.test(ua)
-      && !/CriOS|FxiOS|EdgiOS|OPiOS|OPT\//.test(ua)
-    )
-  } catch {
-    return false
-  }
-}
-
 function recentlyDismissed(): boolean {
   try {
     const v =
       localStorage.getItem(STORAGE_KEY) ||
       localStorage.getItem(ONB_SEEN_KEY)
     if (!v) return false
-    const dismissedAt = Number(v)
     const days =
-      (Date.now() - dismissedAt) / (1000 * 60 * 60 * 24)
+      (Date.now() - Number(v)) /
+      (1000 * 60 * 60 * 24)
     return days < 14
   } catch {
     return false
@@ -108,9 +58,8 @@ function bumpVisits(): number {
 export function InstallPrompt() {
   const { t } = useTranslation()
   const [visible, setVisible] = useState(false)
-  const [panelMode, setPanelMode] = useState<PanelMode | null>(
-    null,
-  )
+  const [panelMode, setPanelMode] =
+    useState<PanelMode | null>(null)
   const [bipAvailable, setBipAvailable] = useState(
     hasDeferredPrompt,
   )
@@ -140,7 +89,6 @@ export function InstallPrompt() {
       })
       hapticNotification('success')
     }
-
     window.addEventListener('appinstalled', onInstalled)
 
     let tDelay: number | undefined
@@ -168,9 +116,7 @@ export function InstallPrompt() {
     } else if (isIOS()) {
       tDelay = window.setTimeout(() => {
         setPanelMode(
-          isIOSSafariForCopy()
-            ? 'ios_safari'
-            : 'ios_other',
+          isIOSSafari() ? 'ios_safari' : 'ios_other',
         )
         setVisible(true)
       }, DELAY_MS)
@@ -193,9 +139,7 @@ export function InstallPrompt() {
     }
   }, [t])
 
-  if (!visible || panelMode === null) {
-    return null
-  }
+  if (!visible || panelMode === null) return null
 
   const dismiss = (persist = true) => {
     setVisible(false)
@@ -214,27 +158,17 @@ export function InstallPrompt() {
 
   const install = async () => {
     const result = await triggerPwaInstall()
-    if (result === null) {
-      dismiss()
-      return
-    }
-    if (result === 'accepted') {
-      hapticNotification('success')
-    }
+    if (result === null) { dismiss(); return }
+    if (result === 'accepted') hapticNotification('success')
     dismiss(result === 'dismissed')
   }
 
   const hint = () => {
     switch (panelMode) {
-      case 'ios_safari':
-        return t('pwa.safari')
-      case 'ios_other':
-        return t('pwa.ios')
-      case 'menu_hint':
-        return t('pwa.other')
-      case 'bip':
-      default:
-        return t('pwa.valueProp')
+      case 'ios_safari': return t('pwa.safari')
+      case 'ios_other':  return t('pwa.ios')
+      case 'menu_hint':  return t('pwa.other')
+      default:           return t('pwa.valueProp')
     }
   }
 

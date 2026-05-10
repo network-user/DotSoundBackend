@@ -2175,6 +2175,525 @@ body.ds-perf-lite .queue-eq-bars span {
   color: var(--text);
 }
 
+/* ---------- PWA Install Guide Modal ---------- */
+
+.ig-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: rgba(0, 0, 0, 0.72);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-end;
+}
+
+.ig-card {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  background: var(--glass-tint-3);
+  -webkit-backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  border-top: 1px solid var(--glass-edge);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  box-shadow: var(--shadow-sheet);
+  display: flex;
+  flex-direction: column;
+  max-height: 88svh;
+  overflow: hidden;
+}
+
+/* Header */
+.ig-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-3) var(--space-2);
+  flex-shrink: 0;
+}
+
+.ig-header-title {
+  flex: 1;
+  text-align: center;
+  font-weight: 600;
+  font-size: var(--fs-15);
+  color: var(--text);
+}
+
+.ig-icon-btn {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.ig-icon-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ig-chevron-left {
+  display: inline-flex;
+  transform: rotate(180deg);
+}
+
+/* Step dots */
+.ig-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-1) var(--space-4) var(--space-3);
+  flex-shrink: 0;
+}
+
+.ig-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  transition:
+    background var(--dur-med) var(--ease-standard),
+    width var(--dur-med) var(--ease-standard),
+    border-radius var(--dur-med) var(--ease-standard);
+  flex-shrink: 0;
+}
+
+.ig-dot--active {
+  background: var(--accent);
+  width: 20px;
+  border-radius: 3px;
+}
+
+.ig-dot--done {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* Step viewport */
+.ig-viewport {
+  flex: 1;
+  overflow: hidden;
+  padding: 0 var(--space-5) var(--space-3);
+  min-height: 0;
+}
+
+.ig-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+/* Step visual area */
+.ig-visual {
+  width: 100%;
+  height: 168px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.ig-visual--menu {
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+
+/* Step text */
+.ig-step-text {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  text-align: center;
+}
+
+.ig-step-counter {
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-wide);
+}
+
+.ig-step-title {
+  font-size: var(--fs-18);
+  font-weight: 700;
+  letter-spacing: var(--ls-tight);
+  color: var(--text);
+  margin: 0;
+}
+
+.ig-step-desc {
+  font-size: var(--fs-14);
+  color: var(--text-secondary);
+  line-height: var(--lh-normal);
+  margin: 0;
+  max-width: 260px;
+}
+
+/* Navigation row */
+.ig-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  padding-bottom: calc(var(--space-3) + var(--safe-bottom, 0px));
+  border-top: 1px solid var(--glass-edge);
+  flex-shrink: 0;
+}
+
+.ig-nav-btn {
+  min-height: var(--tap);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-14);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-4);
+  white-space: nowrap;
+}
+
+.ig-nav-btn--primary {
+  flex: 1;
+  justify-content: center;
+  font-weight: 600;
+  font-size: var(--fs-15);
+}
+
+.ig-nav-btn--back {
+  color: var(--text-secondary);
+  padding-left: var(--space-2);
+}
+
+.ig-nav-btn--back:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Mock: iOS phone with toolbar ── */
+
+.ig-mock-phone {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.ig-mock-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3);
+}
+
+.ig-mock-address-pill {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: var(--r-pill);
+  padding: 5px 16px;
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+}
+
+.ig-mock-address-pill--android {
+  flex: 1;
+  text-align: center;
+  border-radius: var(--r-sm);
+}
+
+.ig-mock-ios-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: rgba(30, 30, 30, 0.85);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ig-mock-nav-btn {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 18px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.ig-mock-nav-btn--dim {
+  opacity: 0.3;
+}
+
+.ig-mock-spacer {
+  flex: 1;
+}
+
+.ig-mock-share-btn {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+.ig-mock-dots-btn {
+  font-size: 13px;
+  letter-spacing: 1px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+  color: var(--text);
+}
+
+/* ── Mock: Android bar ── */
+
+.ig-mock-android-chrome {
+  width: 100%;
+  padding: var(--space-3);
+}
+
+.ig-mock-android-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: rgba(30, 30, 30, 0.9);
+  border-radius: var(--r-md);
+  padding: var(--space-2) var(--space-3);
+}
+
+.ig-mock-three-dots {
+  font-size: 18px;
+  line-height: 1;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+  color: var(--text);
+}
+
+/* ── Mock: Sheet / dropdown list ── */
+
+.ig-mock-sheet,
+.ig-mock-dropdown {
+  width: calc(100% - 2 * var(--space-3));
+  background: rgba(32, 32, 32, 0.97);
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+  margin: var(--space-3);
+}
+
+.ig-mock-dropdown {
+  margin: var(--space-2) var(--space-3);
+  width: 200px;
+}
+
+.ig-mock-sheet-grip {
+  width: 36px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--r-pill);
+  margin: var(--space-2) auto var(--space-1);
+}
+
+.ig-mock-sheet-item {
+  padding: 9px var(--space-4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-13);
+  color: rgba(200, 200, 200, 0.75);
+  position: relative;
+  overflow: hidden;
+}
+
+.ig-mock-sheet-item:last-child {
+  border-bottom: 0;
+}
+
+/* ── Mock: iOS confirm dialog ── */
+
+.ig-mock-dialog {
+  background: rgba(32, 32, 32, 0.97);
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  margin: var(--space-4);
+  overflow: hidden;
+  padding: var(--space-3) var(--space-3) 0;
+  width: calc(100% - 2 * var(--space-4));
+}
+
+.ig-mock-dialog-title {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  margin-bottom: var(--space-2);
+}
+
+.ig-mock-dialog-app {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: center;
+  margin-bottom: var(--space-3);
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+}
+
+.ig-mock-app-icon {
+  width: 26px;
+  height: 26px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ig-mock-dialog-btns {
+  display: flex;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.ig-mock-dialog-btn {
+  flex: 1;
+  text-align: center;
+  padding: var(--space-2) var(--space-1);
+  font-size: var(--fs-13);
+  color: rgba(150, 150, 150, 0.7);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+}
+
+.ig-mock-dialog-btn:last-child {
+  border-right: 0;
+}
+
+/* ── Mock: Android BIP icon ── */
+
+.ig-mock-bip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ig-mock-bip-icon {
+  width: 72px;
+  height: 72px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-xl);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  animation: ig-bip-float 2.4s ease-in-out infinite;
+  position: relative;
+  z-index: 1;
+}
+
+.ig-mock-bip-pulse {
+  position: absolute;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--r-xl);
+  background: rgba(255, 255, 255, 0.06);
+  animation: ig-bip-ring 2.4s ease-out infinite;
+}
+
+/* ── Highlight animations ── */
+
+.ig-mock-highlight-ring {
+  animation: ig-ring-pulse 1.8s ease-in-out infinite;
+  border-radius: var(--r-sm);
+  outline: 2px solid rgba(255, 255, 255, 0);
+}
+
+.ig-mock-item-highlight {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: var(--text) !important;
+  animation: ig-item-pulse 1.8s ease-in-out infinite;
+}
+
+.ig-mock-item-highlight .ig-mock-tap-ring {
+  position: absolute;
+  right: var(--space-3);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: ig-dot-ping 1.8s ease-out infinite;
+}
+
+@keyframes ig-ring-pulse {
+  0%, 100% {
+    outline-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.07);
+  }
+  50% {
+    outline-color: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.14);
+  }
+}
+
+@keyframes ig-item-pulse {
+  0%, 100% { background: rgba(255, 255, 255, 0.1) !important; }
+  50%       { background: rgba(255, 255, 255, 0.18) !important; }
+}
+
+@keyframes ig-dot-ping {
+  0%    { transform: scale(1); opacity: 1; }
+  70%   { transform: scale(2.2); opacity: 0; }
+  100%  { transform: scale(1); opacity: 0; }
+}
+
+@keyframes ig-bip-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+@keyframes ig-bip-ring {
+  0%   { transform: scale(1); opacity: 0.5; }
+  70%  { transform: scale(1.8); opacity: 0; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+/* ---------- Standalone mode — hide all install UI ---------- */
+
+@media (display-mode: standalone) {
+  .pwa-onb-overlay,
+  .ig-overlay,
+  .install-prompt {
+    display: none !important;
+  }
+}
+
 /* ---------- Page transitions (View Transitions API) ---------- */
 
 ::view-transition-old(root) {
