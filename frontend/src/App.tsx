@@ -97,6 +97,7 @@ import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
 import { CookieNotice } from '@/components/Legal/CookieNotice'
 import { OfflineBanner } from '@/components/ui/OfflineBanner'
+import { ConsentBanner } from '@/components/Legal/ConsentBanner'
 import { DynamicIslandHost } from '@/components/ui/DynamicIsland'
 import { InstallPrompt } from '@/components/PwaInstall/InstallPrompt'
 import {
@@ -678,6 +679,7 @@ export function App() {
     <div id="app">
       <DynamicIslandHost />
       <OfflineBanner />
+      <ConsentBanner />
       {!needsOnboarding && !needsAuth && <ImportActivityBanner />}
       <main id="main">
         <ErrorBoundary>

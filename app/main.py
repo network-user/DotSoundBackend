@@ -218,11 +218,16 @@ def create_app() -> FastAPI:
         _rate_limit_exceeded_handler,  # type: ignore[arg-type]
     )
 
+    from app.middlewares.abuse_signal import (
+        AbuseSignalMiddleware,
+    )
+
     application.add_middleware(SlowAPIMiddleware)
     application.add_middleware(SecureStaticMiddleware)
     application.add_middleware(AdminSecurityMiddleware)
     application.add_middleware(SecurityHeadersMiddleware)
     application.add_middleware(InternalApiAllowlistMiddleware)
+    application.add_middleware(AbuseSignalMiddleware)
     application.add_middleware(RequestLoggingMiddleware)
     application.add_middleware(
         CORSMiddleware,

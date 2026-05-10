@@ -1,11 +1,13 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.like import Like
 from app.models.listen_event import ListenEvent
 from app.models.search_event import SearchEvent
+from app.models.track import Track
 from app.repositories.base import BaseRepository
 
 logger = structlog.get_logger(__name__)
@@ -142,6 +144,102 @@ class ListenEventRepository(
             )
         )
         return int(r.scalar_one())
+
+    async def aggregate_user_top_tracks(
+        self,
+        user_id: int,
+        *,
+        since: datetime | None,
+        candidate_limit: int = 200,
+    ) -> list[tuple[int, int, int]]:
+        """Return ``(track_id, completed_listens, likes)`` rows.
+
+        ``completed_listens`` counts events with ``completed=True``;
+        ``likes`` is 1 if the user has liked the track else 0
+        (per the policy contract — we do not need richer
+        like-history granularity here).
+        """
+        completed_count = func.sum(
+            case((ListenEvent.completed.is_(True), 1), else_=0)
+        )
+        liked_flag = func.max(
+            case((Like.user_id.is_not(None), 1), else_=0)
+        )
+        stmt = (
+            select(
+                ListenEvent.track_id,
+                completed_count.label("completed"),
+                liked_flag.label("liked"),
+            )
+            .outerjoin(
+                Like,
+                (Like.track_id == ListenEvent.track_id)
+                & (Like.user_id == user_id),
+            )
+            .where(ListenEvent.user_id == user_id)
+            .group_by(ListenEvent.track_id)
+            .order_by(completed_count.desc())
+            .limit(candidate_limit)
+        )
+        if since is not None:
+            stmt = stmt.where(
+                ListenEvent.created_at >= since
+            )
+        rows = (await self._session.execute(stmt)).all()
+        return [
+            (int(r[0]), int(r[1] or 0), int(r[2] or 0))
+            for r in rows
+        ]
+
+    async def aggregate_user_top_genres(
+        self,
+        user_id: int,
+        *,
+        since: datetime | None,
+        candidate_limit: int = 50,
+    ) -> list[tuple[str, int]]:
+        completed_count = func.sum(
+            case((ListenEvent.completed.is_(True), 1), else_=0)
+        )
+        stmt = (
+            select(
+                Track.genre,
+                completed_count.label("completed"),
+            )
+            .join(Track, Track.id == ListenEvent.track_id)
+            .where(
+                ListenEvent.user_id == user_id,
+                Track.genre.is_not(None),
+                Track.genre != "",
+            )
+            .group_by(Track.genre)
+            .order_by(completed_count.desc())
+            .limit(candidate_limit)
+        )
+        if since is not None:
+            stmt = stmt.where(
+                ListenEvent.created_at >= since
+            )
+        rows = (await self._session.execute(stmt)).all()
+        return [
+            (str(r[0]), int(r[1] or 0)) for r in rows if r[0]
+        ]
+
+    @staticmethod
+    def window_to_since(
+        window: str, *, now: datetime | None = None
+    ) -> datetime | None:
+        """Map a normalized window code to a UTC ``since``."""
+        from datetime import UTC
+
+        moment = now if now is not None else datetime.now(UTC)
+        if window == "7d":
+            return moment - timedelta(days=7)
+        if window == "30d":
+            return moment - timedelta(days=30)
+        if window == "90d":
+            return moment - timedelta(days=90)
+        return None
 
     async def get_user_listen_rows_since(
         self,

@@ -16,9 +16,10 @@ retry it.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 
 import structlog
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from taskiq import TaskiqEvents, TaskiqState
 
@@ -76,12 +77,54 @@ async def _kiq_for_job(job: ImportJob) -> None:
         await process_import_job.kiq(job.id)
 
 
+async def sweep_stuck_jobs() -> int:
+    """Reset jobs that have been ``importing`` with no progress.
+
+    A worker crash, restart, or hard kill can leave an ImportJob
+    pinned to ``importing`` forever — it never receives the
+    ``done``/``failed`` transition that would normally release the
+    concurrency slot. We use ``ImportJob.updated_at`` as a free
+    heartbeat: any commit inside the worker (per-track progress,
+    cursor advance, status change) bumps it. If nothing has
+    happened for ``import_job_stuck_after_seconds``, we assume the
+    worker is gone and flip the row back to ``queued`` so the
+    dispatcher promotes it again. The new worker resumes from
+    ``tracks_data['cursor_index']`` and a fresh ``worker_lease``
+    causes any zombie worker that later wakes up to abort cleanly.
+    """
+    threshold_seconds = int(settings.import_job_stuck_after_seconds)
+    if threshold_seconds <= 0:
+        return 0
+    cutoff = datetime.now(UTC) - timedelta(seconds=threshold_seconds)
+    async with AsyncSessionLocal() as session:
+        stmt = (
+            update(ImportJob)
+            .where(
+                ImportJob.status == "importing",
+                ImportJob.updated_at < cutoff,
+            )
+            .values(status="queued")
+            .returning(ImportJob.id)
+        )
+        result = await session.execute(stmt)
+        ids = [int(row[0]) for row in result.all()]
+        if ids:
+            await session.commit()
+            logger.warning(
+                "import_dispatcher_swept_stuck_jobs",
+                job_ids=ids,
+                stuck_after_seconds=threshold_seconds,
+            )
+        return len(ids)
+
+
 async def dispatch_once() -> int:
     """Promote up to ``slots`` queued jobs into ``importing``.
 
     Returns the number of jobs actually promoted (0 when no slots
     were free or no queued jobs existed).
     """
+    await sweep_stuck_jobs()
     async with AsyncSessionLocal() as session:
         global_active = await _count_active(session)
         slots = max(

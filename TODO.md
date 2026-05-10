@@ -1366,10 +1366,17 @@
     - [ ] Улучшение UI и синхронизации.
     > Заморожено: зависит от чатов, которые отключены до оформления
     > юрлица и подачи в реестр ОРИ.
-- [ ] **Музыкальные профили и статистика**
-    - [ ] Карточки "Топ артистов/треков" месяца для шеринга.
-    - [ ] Детальная статистика в профиле (часы прослушивания, любимые жанры).
-    - [ ] Секция "Ваш топ" на главной.
+- [~] **Музыкальные профили и статистика**
+    - [x] PrivateCore `user_top_policy` (per-window blend
+      log(completed_listens) + log(likes), thresholds, limits).
+    - [x] Backend `StatsService.get_user_top_tracks/genres`,
+      агрегации в `ListenEventRepository`,
+      `GET /api/v1/users/me/top?window=7d|30d|90d|all`.
+    - [x] Frontend `api.getMyTop`.
+    - [ ] Секция «Ваш топ» на Home + таб «Статистика» в Profile
+      (часы прослушивания, топ-жанры).
+    - [ ] Карточки "Топ артистов/треков" месяца для шеринга
+      (через существующую `RecapShareCard` инфраструктуру).
 - [ ] **Динамические плейлисты**
     - [x] "Weekly Top 50" -- 2026-05-06: PrivateCore weekly_top_policy (rank_weekly_top_tracks, blend log(listens_7d)+log(likes_7d), WEEKLY_TOP_SCORE_VERSION); Backend RecommendationRepository.get_qualified_listens_7d_counts, RecommendationService.get_weekly_top_playlist with Redis cache (TTL 30 min), GET /api/v1/recommendations/weekly-top; Frontend WeeklyTopView (/weekly-top), api.getWeeklyTopPlaylist, WeeklyTopPlaylistResponse type, flame icon, Home quick-grid card.
     - [x] **«Забытые сокровища»** (лайкнутое давно, без прослушиваний в окне) — PrivateCore `forgotten_treasures_policy` (пороги лайка ≥21d, тишина ≥14d, `rank_forgotten_treasure_tracks`); Backend `RecommendationRepository.list_forgotten_treasure_rows`, `GET /api/v1/recommendations/forgotten-treasures` (JWT, per-user); Mini App `ForgottenTreasuresView` `/forgotten-treasures`, тайл в быстрых разделах после «Выбор»; prefetch context `forgotten_treasures`.
@@ -1391,9 +1398,25 @@
     - [ ] Авто-переключение плеера в cached-only при
       `navigator.online === false` (фильтр очереди через
       `isCached`).
-- [ ] **Anti-Abuse Fingerprinting**
-    - [ ] Перенос логики в PrivateCore.
-    - [ ] Анализ поведения для борьбы с накрутками.
+- [~] **Anti-Abuse Fingerprinting**
+    - [x] PrivateCore `abuse_fingerprint_policy`: `Decision`
+      (PASS/THROTTLE/REQUIRE_CAPTCHA/LOCKOUT), `AbuseSignals`,
+      пороги, `evaluate(signals, kind)`, retention/lockout
+      константы.
+    - [x] Backend: миграция `0088_abuse_events`,
+      `AbuseEvent` модель, `AbuseSignalMiddleware`
+      (`X-DS-Signal` capture), `AbuseSignalService.evaluate_event`,
+      `abuse_fingerprint_adapter` для PrivateCore.
+    - [x] Frontend: `lib/clientSignals.ts` (opaque hash:
+      UA-class + webgl-vendor-class + timezone + language;
+      без canvas-pixel/audio/fonts/biometrics);
+      `ConsentBanner` показывается до первого расширенного
+      сбора; `api.request` дополняет `X-DS-Signal` только при
+      согласии.
+    - [ ] Подключить вызов `AbuseSignalService.evaluate_event`
+      в `auth.py` register/login и реакцию (LOCKOUT → 423,
+      REQUIRE_CAPTCHA → 429 + challenge URL).
+    - [ ] Daily cron на `abuse_events` для retention ≤ 30 дней.
 
 
 - [x] Public UI: admin inline editing for playlists/albums/tracks via non-admin routes with backend admin checks + reorder endpoints (2026-05-05).
@@ -1512,6 +1535,37 @@
   «Listening Party (v2)», «Chats / Track Share» — в TODO
   помечены `[FROZEN — legal hold]`; код жив, не реализуем
   новые пункты до оформления юрлица и подачи в реестр ОРИ.
+
+- [~] **PWA Offline v2 — фундамент (2026-05-10)**: PrivateCore
+  `offline_policy` + backend
+  `GET /api/v1/tracks/{id}/offline-eligibility`, заголовок
+  `X-Offline-Allowed` на HLS и progressive `/audio`. Workbox-плагин
+  `cacheWillUpdate` отказывает в записи ответов с
+  `X-Offline-Allowed: 0`. Frontend `offlineCache.downloadTrack`
+  делает pre-flight к eligibility, применяет LRU и серверный
+  лимит на размер. Раздел в `LEGAL.md` и
+  `PRIVACY_POLICY.md §7.3`.
+
+- [~] **Музыкальные профили и статистика (фундамент,
+  2026-05-10)**: PrivateCore `user_top_policy` (window 7d/30d/
+  90d/all, blend log(completed)+log(likes), thresholds);
+  backend `ListenEventRepository.aggregate_user_top_tracks/
+  genres`, `StatsService.get_user_top_tracks/genres`,
+  `GET /api/v1/users/me/top`; frontend `api.getMyTop` готов
+  к использованию (UI Home/Profile — следующая итерация).
+  `PRIVACY_POLICY.md §7.4`.
+
+- [~] **Anti-Abuse Fingerprinting (фундамент, 2026-05-10)**:
+  PrivateCore `abuse_fingerprint_policy` (Decision PASS/
+  THROTTLE/REQUIRE_CAPTCHA/LOCKOUT, opaque `AbuseSignals`,
+  пороги, retention 30 дней, lockout 15 мин); backend
+  миграция `0088_abuse_events`, `AbuseEvent` модель,
+  `AbuseSignalMiddleware` (читает `X-DS-Signal`),
+  `AbuseSignalService.evaluate_event` (decision + persist
+  best-effort). Frontend `lib/clientSignals.ts` (opaque hash
+  без биометрии и pixel-perfect canvas) + `ConsentBanner`
+  + автодобавление `X-DS-Signal` в `api.request` только
+  после согласия. `PRIVACY_POLICY.md §7.5`.
 
 - [x] **Onboarding v2 — заверение flow и переключение App.tsx (2026-05-08)**:
   собран главный компонент `OnboardingV2` (`Welcome → Profile → Genres →

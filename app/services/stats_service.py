@@ -6,6 +6,8 @@ from app.models.track import Track
 from app.models.user import User
 from app.repositories.follow import FollowRepository
 from app.repositories.like import LikeRepository
+from app.repositories.signal import ListenEventRepository
+from app.repositories.track import TrackRepository
 from app.schemas.user import TrackStatsItem, UserStatsResponse
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -18,6 +20,71 @@ class StatsService:
         self._session = session
         self._like_repo = LikeRepository(session)
         self._follow_repo = FollowRepository(session)
+        self._listen_repo = ListenEventRepository(session)
+        self._track_repo = TrackRepository(session)
+
+    async def get_user_top_tracks(
+        self, user_id: int, *, window: str
+    ) -> tuple[list[Track], str]:
+        from dotsound_private_core.services.user_top_policy import (
+            MAX_TOP_TRACKS,
+            TrackAggregate,
+            normalize_window,
+            rank_user_top_tracks,
+        )
+
+        window = normalize_window(window)
+        since = ListenEventRepository.window_to_since(window)
+        rows = await self._listen_repo.aggregate_user_top_tracks(
+            user_id, since=since
+        )
+        ranked = rank_user_top_tracks(
+            [
+                TrackAggregate(
+                    track_id=tid,
+                    completed_listens=completed,
+                    likes=likes,
+                )
+                for (tid, completed, likes) in rows
+            ],
+            limit=MAX_TOP_TRACKS,
+        )
+        track_ids = [int(r.key) for r in ranked]
+        tracks = await self._track_repo.get_by_ids_preserve_order(
+            track_ids
+        )
+        return tracks, window
+
+    async def get_user_top_genres(
+        self, user_id: int, *, window: str
+    ) -> tuple[list[tuple[str, int]], str]:
+        from dotsound_private_core.services.user_top_policy import (
+            MAX_TOP_GENRES,
+            GenreAggregate,
+            normalize_window,
+            rank_user_top_genres,
+        )
+
+        window = normalize_window(window)
+        since = ListenEventRepository.window_to_since(window)
+        rows = await self._listen_repo.aggregate_user_top_genres(
+            user_id, since=since
+        )
+        score_by_genre = {g: c for (g, c) in rows}
+        ranked = rank_user_top_genres(
+            [
+                GenreAggregate(genre=g, completed_listens=c)
+                for (g, c) in rows
+            ],
+            limit=MAX_TOP_GENRES,
+        )
+        return (
+            [
+                (str(r.key), score_by_genre.get(str(r.key), 0))
+                for r in ranked
+            ],
+            window,
+        )
 
     async def get_author_stats(
         self, user_id: int

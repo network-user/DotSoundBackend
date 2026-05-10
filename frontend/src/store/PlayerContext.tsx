@@ -1259,18 +1259,34 @@ export function PlayerProvider({
         void safePlay(audio)
         return
       }
-      playNext().then((played) => {
-        if (
-          !played &&
-          repeatModeRef.current === 'all' &&
-          audioRef.current &&
-          track
-        ) {
-          const cur = audioRef.current
-          cur.currentTime = 0
-          void safePlay(cur)
+      const doNext = () => {
+        playNext().then((played) => {
+          if (
+            !played &&
+            repeatModeRef.current === 'all' &&
+            audioRef.current &&
+            track
+          ) {
+            const cur = audioRef.current
+            cur.currentTime = 0
+            void safePlay(cur)
+          }
+        })
+      }
+      if (radioModeRef.current) {
+        const nextQueued = manualQueueRef.current.find(
+          (t) => !unavailableTrackIdsRef.current.has(t.id),
+        )
+        const isBuffered =
+          nextQueued != null &&
+          (preloadHlsTrackIdRef.current === nextQueued.id ||
+            getPrefetchManager().wasWarm(nextQueued.id))
+        if (!isBuffered) {
+          setTimeout(doNext, 1500)
+          return
         }
-      })
+      }
+      doNext()
     }
       const onError = () => {
       const a = audioRef.current

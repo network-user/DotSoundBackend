@@ -56,6 +56,11 @@ class DeletionStatusResponse(BaseModel):
     grace_until: datetime | None = None
 
 
+class TopGenreItem(BaseModel):
+    genre: str
+    completed_listens: int = Field(ge=0)
+
+
 class AvatarResponse(BaseModel):
     avatar_url: str
 
@@ -79,4 +84,14 @@ class UserStatsResponse(BaseModel):
     following_count: int = 0
     top_tracks: list[TrackStatsItem] = Field(
         description="Top 5 most played tracks"
+    )
+
+
+class UserTopResponse(BaseModel):
+    window: str
+    top_tracks: list[TrackStatsItem] = Field(
+        default_factory=list,
+    )
+    top_genres: list[TopGenreItem] = Field(
+        default_factory=list,
     )

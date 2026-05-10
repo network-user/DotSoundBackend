@@ -36,9 +36,12 @@ from app.schemas.user import (
     AvatarResponse,
     DeleteAccountRequest,
     DeletionStatusResponse,
+    TopGenreItem,
+    TrackStatsItem,
     UserCreate,
     UserResponse,
     UserStatsResponse,
+    UserTopResponse,
     UserUpdateRequest,
 )
 from app.services.album_service import AlbumService
@@ -175,6 +178,41 @@ async def delete_me(
             detail="Invalid confirmation text",
         )
     return {"status": "deletion_scheduled"}
+
+
+@router.get(
+    "/me/top",
+    response_model=UserTopResponse,
+    summary="Top tracks/genres for the current user (per window)",
+)
+@limiter.limit("60/minute")
+async def my_top(
+    request: Request,
+    window: str = Query(
+        "30d",
+        description="Time window: 7d|30d|90d|all",
+        max_length=4,
+    ),
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UserTopResponse:
+    svc = StatsService(session)
+    tracks, window_norm = await svc.get_user_top_tracks(
+        current_user.id, window=window
+    )
+    genres, _ = await svc.get_user_top_genres(
+        current_user.id, window=window_norm
+    )
+    return UserTopResponse(
+        window=window_norm,
+        top_tracks=[
+            TrackStatsItem.model_validate(t) for t in tracks
+        ],
+        top_genres=[
+            TopGenreItem(genre=g, completed_listens=c)
+            for (g, c) in genres
+        ],
+    )
 
 
 @router.get(

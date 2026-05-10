@@ -415,3 +415,118 @@ async def test_worker_handles_search_error(
 
     result = await session.execute(select(Track))
     assert result.scalars().first() is None
+
+
+@patch(
+    "app.services.import_lyrics_worker" ".process_import_lyrics_task.kiq",
+    new_callable=AsyncMock,
+)
+@patch(f"{_MOD}.SoundCloudService")
+@patch(f"{_MOD}.AsyncSessionLocal")
+async def test_worker_preflight_skips_sc_when_local_match(
+    mock_session_local: MagicMock,
+    mock_sc_cls: MagicMock,
+    mock_lyrics_kiq: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    importer = await _make_user(session, telegram_id=3210)
+    uploader = await _make_user(session, telegram_id=3211)
+
+    existing = Track(
+        title="Preflight Song",
+        artist="Preflight Artist",
+        source="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+        source_platform="soundcloud",
+        sc_url="https://soundcloud.com/x/preflight",
+        source_name="SoundCloud",
+        is_public=True,
+        uploaded_by_id=uploader.id,
+    )
+    session.add(existing)
+    await session.flush()
+    await session.refresh(existing)
+
+    selected = [
+        {
+            "title": "  PREFLIGHT SONG  ",
+            "artist": "preflight artist",
+            "duration_seconds": 200,
+        }
+    ]
+    job = await _make_job(session, importer.id, selected)
+    mock_session_local.return_value = _session_ctx(session)
+
+    sc = _mock_sc_service(search_result=[])
+    mock_sc_cls.return_value = sc
+
+    from app.services.external_import_worker import (
+        process_external_import_job,
+    )
+
+    await process_external_import_job(job.id)
+
+    await session.refresh(job)
+    assert job.status == "done"
+    assert job.completed_tracks == 1
+    assert job.failed_tracks == 0
+    assert sc.search.await_count == 0
+
+    imported = (job.tracks_data or {}).get("imported", [])
+    assert len(imported) == 1
+    assert imported[0]["track_id"] == existing.id
+    assert imported[0].get("local_match") is True
+
+    from app.repositories.user_track_library import (
+        UserTrackLibraryRepository,
+    )
+
+    library_repo = UserTrackLibraryRepository(session)
+    assert await library_repo.has(importer.id, existing.id) is True
+    mock_lyrics_kiq.assert_awaited_once_with(job.id)
+
+
+@patch(
+    "app.services.import_lyrics_worker" ".process_import_lyrics_task.kiq",
+    new_callable=AsyncMock,
+)
+@patch(f"{_MOD}.SoundCloudService")
+@patch(f"{_MOD}.AsyncSessionLocal")
+async def test_worker_preflight_skips_unplayable_local_track(
+    mock_session_local: MagicMock,
+    mock_sc_cls: MagicMock,
+    _mock_lyrics_kiq: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    user = await _make_user(session, telegram_id=3212)
+
+    unplayable = Track(
+        title="Ghost",
+        artist="Nobody",
+        source="internal",
+        catalog_type="ugc",
+        access_mode="internal_stream",
+        source_platform=None,
+        is_public=True,
+        uploaded_by_id=user.id,
+    )
+    session.add(unplayable)
+    await session.flush()
+
+    selected = [{"title": "Ghost", "artist": "Nobody"}]
+    job = await _make_job(session, user.id, selected)
+    mock_session_local.return_value = _session_ctx(session)
+
+    sc = _mock_sc_service(search_result=[])
+    mock_sc_cls.return_value = sc
+
+    from app.services.external_import_worker import (
+        process_external_import_job,
+    )
+
+    await process_external_import_job(job.id)
+
+    await session.refresh(job)
+    assert sc.search.await_count == 1
+    assert job.failed_tracks == 1

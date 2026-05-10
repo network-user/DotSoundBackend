@@ -174,6 +174,16 @@ class AppSettings(BaseSettings):
     import_per_user_max_concurrent: int = 2
     import_queue_dispatch_interval_seconds: float = 30.0
 
+    # Stuck-job recovery. The dispatcher loop also acts as a sweeper:
+    # any job whose status has been ``importing`` but whose row was
+    # not updated for at least this many seconds is reset back to
+    # ``queued`` so a fresh worker can resume it. Workers carry a
+    # per-run lease token in ``tracks_data['worker_lease']`` so a
+    # zombie worker that wakes up after the sweep aborts gracefully
+    # without double-counting tracks.
+    import_job_stuck_after_seconds: int = 600
+    import_job_heartbeat_min_interval_seconds: float = 30.0
+
     # Per-track pacing for external import jobs. Prevents rapid-fire
     # API calls that trigger platform-side IP bans.
     # SLOW_MODE kicks in when a job contains more than THRESHOLD tracks.

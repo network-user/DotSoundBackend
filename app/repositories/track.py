@@ -55,15 +55,9 @@ class TrackRepository(BaseRepository[Track]):
     @staticmethod
     def _exclude_hidden_sources() -> ColumnElement[bool]:
         hidden = ("youtube",)
-        source_platform = func.lower(
-            func.coalesce(Track.source_platform, "")
-        )
-        imported_from = func.lower(
-            func.coalesce(Track.imported_from, "")
-        )
-        return (~source_platform.in_(hidden)) & (
-            ~imported_from.in_(hidden)
-        )
+        source_platform = func.lower(func.coalesce(Track.source_platform, ""))
+        imported_from = func.lower(func.coalesce(Track.imported_from, ""))
+        return (~source_platform.in_(hidden)) & (~imported_from.in_(hidden))
 
     @staticmethod
     def _playback_listing_allowed() -> ColumnElement[bool]:
@@ -237,11 +231,7 @@ class TrackRepository(BaseRepository[Track]):
                 | Track.artist.ilike(pattern)
                 | Track.genre.ilike(pattern)
             )
-        condition = (
-            base & self._playable_filter()
-            if playable_only
-            else base
-        )
+        condition = base & self._playable_filter() if playable_only else base
         logger.debug(
             "db_search_tracks",
             query=query,
@@ -320,9 +310,7 @@ class TrackRepository(BaseRepository[Track]):
                 & Track.duration_seconds.isnot(None)
                 & Track.duration_seconds.between(low, high)
             )
-            duration_diff = func.abs(
-                Track.duration_seconds - duration_seconds
-            )
+            duration_diff = func.abs(Track.duration_seconds - duration_seconds)
         else:
             duration_diff = case(
                 (Track.duration_seconds.is_(None), 999999),
@@ -481,9 +469,7 @@ class TrackRepository(BaseRepository[Track]):
         if external_id is not None:
             values["external_id"] = external_id
         await self._session.execute(
-            update(Track)
-            .where(Track.id == track_id)
-            .values(**values)
+            update(Track).where(Track.id == track_id).values(**values)
         )
         await self._session.flush()
 
@@ -517,9 +503,6 @@ class TrackRepository(BaseRepository[Track]):
         if not unique_titles:
             return {}
         norm_title = func.lower(func.trim(Track.title))
-        norm_artist = func.lower(
-            func.trim(func.coalesce(Track.artist, ""))
-        )
         result = await self._session.execute(
             select(Track)
             .where(
@@ -534,9 +517,7 @@ class TrackRepository(BaseRepository[Track]):
             .limit(candidate_cap)
         )
         candidates = list(result.scalars().all())
-        wanted: set[tuple[str, str]] = {
-            (t, a) for t, a in pairs if t
-        }
+        wanted: set[tuple[str, str]] = {(t, a) for t, a in pairs if t}
         out: dict[tuple[str, str], Track] = {}
         for track in candidates:
             t_norm = (track.title or "").strip().lower()
@@ -660,8 +641,7 @@ class TrackRepository(BaseRepository[Track]):
         if search:
             pattern = f"%{search.strip()}%"
             condition = condition & (
-                Track.title.ilike(pattern)
-                | Track.artist.ilike(pattern)
+                Track.title.ilike(pattern) | Track.artist.ilike(pattern)
             )
         total_result = await self._session.execute(
             select(func.count()).where(condition)

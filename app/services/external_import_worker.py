@@ -223,9 +223,7 @@ async def process_external_import_job(job_id: int) -> None:
                 send_import_job_finished_notification,
             )
 
-            await send_import_job_finished_notification(
-                session, job
-            )
+            await send_import_job_finished_notification(session, job)
             return
 
         sc_service = SoundCloudService(settings.sc_client_id, session)
@@ -248,7 +246,7 @@ async def process_external_import_job(job_id: int) -> None:
         delay_multiplier = 1.0
         sc_call_index = 0
 
-        for idx, item in enumerate(selected):
+        for item in selected:
             await session.refresh(job)
             if job.status == "cancelled":
                 break
@@ -390,9 +388,7 @@ async def process_external_import_job(job_id: int) -> None:
             # combined query miss.
             if best_match is None and artist and results:
                 try:
-                    results_title_only = (
-                        await _get_cached_sc_search(title)
-                    )
+                    results_title_only = await _get_cached_sc_search(title)
                     if results_title_only is None:
                         results_title_only = await _search_with_retry(
                             sc_service,
@@ -402,17 +398,13 @@ async def process_external_import_job(job_id: int) -> None:
                             delay_multiplier=delay_multiplier,
                             job_id=job_id,
                         )
-                        await _set_cached_sc_search(
-                            title, results_title_only
-                        )
+                        await _set_cached_sc_search(title, results_title_only)
                     best_match = _pick_best_sc_match(
                         results_title_only,
                         target_title=title,
                         target_duration_s=(
                             int(target_duration)
-                            if isinstance(
-                                target_duration, int | float
-                            )
+                            if isinstance(target_duration, int | float)
                             else None
                         ),
                     )
@@ -571,9 +563,7 @@ async def process_external_import_job(job_id: int) -> None:
             send_import_job_finished_notification,
         )
 
-        await send_import_job_finished_notification(
-            session, job
-        )
+        await send_import_job_finished_notification(session, job)
 
         logger.info(
             "external_import_finished",

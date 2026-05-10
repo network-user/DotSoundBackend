@@ -23,15 +23,9 @@ class RecommendationRepository:
     @staticmethod
     def _exclude_hidden_sources():  # noqa: ANN205
         hidden = ("youtube",)
-        source_platform = func.lower(
-            func.coalesce(Track.source_platform, "")
-        )
-        imported_from = func.lower(
-            func.coalesce(Track.imported_from, "")
-        )
-        return (~source_platform.in_(hidden)) & (
-            ~imported_from.in_(hidden)
-        )
+        source_platform = func.lower(func.coalesce(Track.source_platform, ""))
+        imported_from = func.lower(func.coalesce(Track.imported_from, ""))
+        return (~source_platform.in_(hidden)) & (~imported_from.in_(hidden))
 
     async def get_candidate_tracks(
         self,
@@ -297,15 +291,9 @@ class RecommendationRepository:
         candidate_pool_limit: int = 1000,
     ) -> dict[int, int]:
         cutoff = datetime.now(UTC) - timedelta(days=days)
-        qualified = (
-            ListenEvent.skipped.is_(False)
-            & (
-                ListenEvent.completed.is_(True)
-                | (
-                    ListenEvent.duration_listened_seconds
-                    >= 30
-                )
-            )
+        qualified = ListenEvent.skipped.is_(False) & (
+            ListenEvent.completed.is_(True)
+            | (ListenEvent.duration_listened_seconds >= 30)
         )
         active_public = (
             select(Track.id)
@@ -331,10 +319,7 @@ class RecommendationRepository:
             .order_by(func.count().desc())
             .limit(candidate_pool_limit)
         )
-        return {
-            int(tid): int(c)
-            for tid, c in result.all()
-        }
+        return {int(tid): int(c) for tid, c in result.all()}
 
     async def get_recent_listen_events(
         self,
@@ -437,9 +422,7 @@ class RecommendationRepository:
         last_listen_sq = (
             select(
                 ListenEvent.track_id,
-                func.max(ListenEvent.created_at).label(
-                    "last_at"
-                ),
+                func.max(ListenEvent.created_at).label("last_at"),
             )
             .where(ListenEvent.user_id == user_id)
             .group_by(ListenEvent.track_id)
@@ -471,12 +454,8 @@ class RecommendationRepository:
             .order_by(Like.created_at.asc())
             .limit(fetch_cap)
         )
-        rows = (
-            await self._session.execute(stmt)
-        ).all()
+        rows = (await self._session.execute(stmt)).all()
         out: list[tuple[int, datetime, datetime | None]] = []
         for tid, liked_at, last_at in rows:
-            out.append(
-                (int(tid), liked_at, last_at)
-            )
+            out.append((int(tid), liked_at, last_at))
         return out

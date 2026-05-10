@@ -259,6 +259,17 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
       `Bearer ${accessToken}`,
     )
   }
+  if (!headers.has('X-DS-Signal')) {
+    try {
+      const { getClientSignalToken } = await import(
+        '@/lib/clientSignals'
+      )
+      const token = await getClientSignalToken()
+      if (token) headers.set('X-DS-Signal', token)
+    } catch {
+      /* ignore — anti-abuse signal is best-effort */
+    }
+  }
 
   const method = (opts.method || 'GET').toUpperCase()
   const canRetry = RETRY_SAFE_METHODS.has(method)
@@ -2159,6 +2170,20 @@ export const api = {
     return request(
       `/api/v1/tracks/${trackId}/offline-eligibility`,
     )
+  },
+
+  getMyTop(window: '7d' | '30d' | '90d' | 'all' = '30d'): Promise<{
+    window: string
+    top_tracks: Array<{
+      id: number
+      title: string
+      artist: string | null
+      play_count: number
+      cover_key: string | null
+    }>
+    top_genres: Array<{ genre: string; completed_listens: number }>
+  }> {
+    return request(`/api/v1/users/me/top?window=${window}`)
   },
 
   getFollowingFeed(page = 1, size = 20): Promise<TrackListResponse> {

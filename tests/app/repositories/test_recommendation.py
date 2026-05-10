@@ -70,9 +70,7 @@ async def test_get_recent_listen_events_returns_within_window(
     )
 
     repo = RecommendationRepository(session)
-    events = await repo.get_recent_listen_events(
-        user_id=user.id, days=30
-    )
+    events = await repo.get_recent_listen_events(user_id=user.id, days=30)
     assert len(events) == 1
     assert events[0].duration_listened_seconds == 120
 
@@ -151,20 +149,14 @@ async def test_get_unique_savers_per_track_counts_distinct_owners(
         playlist = Playlist(name="p", owner_id=owner.id)
         session.add(playlist)
         await session.flush()
-        session.add(
-            PlaylistTrack(
-                playlist_id=playlist.id, track_id=track.id
-            )
-        )
+        session.add(PlaylistTrack(playlist_id=playlist.id, track_id=track.id))
         await session.flush()
 
     second_playlist = Playlist(name="p2", owner_id=owner_a.id)
     session.add(second_playlist)
     await session.flush()
     session.add(
-        PlaylistTrack(
-            playlist_id=second_playlist.id, track_id=track.id
-        )
+        PlaylistTrack(playlist_id=second_playlist.id, track_id=track.id)
     )
     await session.flush()
 
@@ -228,7 +220,5 @@ async def test_get_unique_listeners_empty_input(
     session: AsyncSession,
 ) -> None:
     repo = RecommendationRepository(session)
-    out = await repo.get_unique_listeners_per_track(
-        track_ids=[], days=7
-    )
+    out = await repo.get_unique_listeners_per_track(track_ids=[], days=7)
     assert out == {}
