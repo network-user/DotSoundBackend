@@ -78,6 +78,8 @@ _RADIO_CACHE_TTL = 30 * 60
 _RADIO_SKIP_GUARD_SECONDS = 1
 _RADIO_LAST_QUEUE_TTL = 20
 _RADIO_TUNING_KEY = "recsys.radio_tuning"
+_DIVERSITY_RERANK_KEY = "recsys.diversity_rerank"
+_DEFAULT_DIVERSITY_LAMBDA = 0.7
 
 
 def _midnight_ttl() -> int:
@@ -91,96 +93,64 @@ def _midnight_ttl() -> int:
 def _weekly_ttl() -> int:
     now = datetime.now(UTC)
     days_ahead = (7 - now.weekday()) % 7 or 7
-    next_monday = (
-        now + timedelta(days=days_ahead)
-    ).replace(hour=0, minute=0, second=0, microsecond=0)
+    next_monday = (now + timedelta(days=days_ahead)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
     return max(1, int((next_monday - now).total_seconds()))
 
 
 def _weekly_top_ttl() -> int:
     return 30 * 60
 
+
 logger = structlog.get_logger(__name__)
 
 
 class RecommendationService:
-    def __init__(
-        self, session: AsyncSession
-    ) -> None:
-        self._rec_repo = RecommendationRepository(
-            session
-        )
-        self._pref_repo = PreferenceRepository(
-            session
-        )
-        self._listen_repo = ListenEventRepository(
-            session
-        )
-        self._follow_repo = ArtistFollowRepository(
-            session
-        )
-        self._catalog_repo = ArtistCatalogRepository(
-            session
-        )
-        self._telemetry = RecsysTelemetryService(
-            session
-        )
+    def __init__(self, session: AsyncSession) -> None:
+        self._rec_repo = RecommendationRepository(session)
+        self._pref_repo = PreferenceRepository(session)
+        self._listen_repo = ListenEventRepository(session)
+        self._follow_repo = ArtistFollowRepository(session)
+        self._catalog_repo = ArtistCatalogRepository(session)
+        self._telemetry = RecsysTelemetryService(session)
         self._session = session
 
     async def _merge_language_affinity(
         self,
         user_id: int,
     ) -> tuple[dict[str, float], str | None]:
-        row = await self._session.get(
-            User, user_id
-        )
+        row = await self._session.get(User, user_id)
         locale = row.locale if row else None
-        events = await self._listen_repo.get_recent(
-            user_id, limit=200
-        )
+        events = await self._listen_repo.get_recent(user_id, limit=200)
         tids = {e.track_id for e in events}
         if not tids:
             return (
-                cold_start_language_affinity_weights(
-                    locale
-                ),
+                cold_start_language_affinity_weights(locale),
                 locale,
             )
-        tracks = await self._rec_repo.get_tracks_by_ids(
-            list(tids)
-        )
+        tracks = await self._rec_repo.get_tracks_by_ids(list(tids))
         by_id = {t.id: t for t in tracks}
         raw: dict[str, float] = defaultdict(float)
         for e in events:
             t = by_id.get(e.track_id)
             if not t:
                 continue
-            code = infer_listening_language_code(
-                t.title, t.artist
-            )
+            code = infer_listening_language_code(t.title, t.artist)
             if not code:
                 continue
             w = 1.0
             if e.completed:
                 w += 0.5
-            dur = float(
-                e.duration_listened_seconds or 0
-            )
+            dur = float(e.duration_listened_seconds or 0)
             w += min(1.0, dur / 180.0) * 0.25
             raw[code] += w
-        if (
-            locale
-            and str(locale).lower().startswith("ru")
-        ):
-            raw["ru"] = (
-                raw.get("ru", 0.0) + LOCALE_RU_BONUS
-            )
+        if locale and str(locale).lower().startswith("ru"):
+            raw["ru"] = raw.get("ru", 0.0) + LOCALE_RU_BONUS
         total = sum(raw.values())
         if total <= 0:
             return (
-                cold_start_language_affinity_weights(
-                    locale
-                ),
+                cold_start_language_affinity_weights(locale),
                 locale,
             )
         return (
@@ -191,54 +161,30 @@ class RecommendationService:
     async def _build_user_prefs(
         self, user_id: int
     ) -> tuple[UserPrefs, str | None]:
-        pref = await self._pref_repo.get_by_user_id(
-            user_id
-        )
-        liked_ids = (
-            await self._rec_repo.get_liked_track_ids(
-                user_id
-            )
-        )
+        pref = await self._pref_repo.get_by_user_id(user_id)
+        liked_ids = await self._rec_repo.get_liked_track_ids(user_id)
 
         from app.models.dislike import Dislike
 
-        dislike_result = (
-            await self._session.execute(
-                select(Dislike.track_id).where(
-                    Dislike.user_id == user_id
-                )
-            )
+        dislike_result = await self._session.execute(
+            select(Dislike.track_id).where(Dislike.user_id == user_id)
         )
-        disliked_ids = set(
-            dislike_result.scalars().all()
-        )
+        disliked_ids = set(dislike_result.scalars().all())
 
-        implicit_disliked_ids = (
-            await self._get_implicit_dislike_ids(
-                user_id
-            )
-        )
+        implicit_disliked_ids = await self._get_implicit_dislike_ids(user_id)
         (
             language_aff,
             locale,
-        ) = await self._merge_language_affinity(
-            user_id
-        )
+        ) = await self._merge_language_affinity(user_id)
 
         onboarding_artist_ids: list[int] = (
-            (pref.preferred_artist_ids or [])
-            if pref
-            else []
+            (pref.preferred_artist_ids or []) if pref else []
         )
-        followed_artist_ids = (
-            await self._follow_repo.list_followed_artist_ids(
-                user_id
-            )
+        followed_artist_ids = await self._follow_repo.list_followed_artist_ids(
+            user_id
         )
         merged_artist_ids = list(
-            dict.fromkeys(
-                onboarding_artist_ids + followed_artist_ids
-            )
+            dict.fromkeys(onboarding_artist_ids + followed_artist_ids)
         )
         if merged_artist_ids:
             cat_repo = self._catalog_repo
@@ -253,19 +199,11 @@ class RecommendationService:
 
         return (
             UserPrefs(
-                preferred_genres=(
-                    pref.preferred_genres or []
-                    if pref
-                    else []
-                ),
+                preferred_genres=(pref.preferred_genres or [] if pref else []),
                 preferred_artist_ids=merged_artist_ids,
                 similar_artist_ids=similar_artist_ids,
                 similar_artist_weights=similar_artist_weights,
-                preferred_moods=(
-                    pref.preferred_moods or []
-                    if pref
-                    else []
-                ),
+                preferred_moods=(pref.preferred_moods or [] if pref else []),
                 liked_track_ids=liked_ids,
                 disliked_track_ids=disliked_ids,
                 implicit_dislike_track_ids=implicit_disliked_ids,
@@ -297,28 +235,21 @@ class RecommendationService:
             genre_filter=genre_filter,
         )
 
-    async def _get_implicit_dislike_ids(
-        self, user_id: int
-    ) -> set[int]:
-        cutoff = datetime.now(
-            UTC
-        ) - timedelta(
+    async def _get_implicit_dislike_ids(self, user_id: int) -> set[int]:
+        cutoff = datetime.now(UTC) - timedelta(
             days=IMPLICIT_DISLIKE_WINDOW_DAYS
         )
         stmt = (
             select(
                 ListenEventModel.track_id,
-                func.count(
-                    ListenEventModel.id
-                ).label("c"),
+                func.count(ListenEventModel.id).label("c"),
             )
             .where(
                 ListenEventModel.user_id == user_id,
                 ListenEventModel.skipped.is_(True),
                 ListenEventModel.duration_listened_seconds
                 < IMPLICIT_DISLIKE_QUICK_SKIP_SECONDS,
-                ListenEventModel.created_at
-                >= cutoff,
+                ListenEventModel.created_at >= cutoff,
             )
             .group_by(ListenEventModel.track_id)
             .having(
@@ -326,19 +257,13 @@ class RecommendationService:
                 >= IMPLICIT_DISLIKE_MIN_OCCURRENCES
             )
         )
-        rows = (
-            await self._session.execute(stmt)
-        ).all()
+        rows = (await self._session.execute(stmt)).all()
         return {tid for tid, _ in rows}
 
     async def _build_listen_history(
         self, user_id: int
     ) -> list[RecListenEvent]:
-        events = (
-            await self._listen_repo.get_recent(
-                user_id, limit=200
-            )
-        )
+        events = await self._listen_repo.get_recent(user_id, limit=200)
         return [
             RecListenEvent(
                 track_id=e.track_id,
@@ -347,9 +272,7 @@ class RecommendationService:
                 created_at=(
                     e.created_at
                     if e.created_at.tzinfo
-                    else e.created_at.replace(
-                        tzinfo=UTC
-                    )
+                    else e.created_at.replace(tzinfo=UTC)
                 ),
                 duration_listened_seconds=float(
                     e.duration_listened_seconds or 0
@@ -362,9 +285,7 @@ class RecommendationService:
     async def _tracks_to_features(
         self, tracks: list[Track]
     ) -> list[TrackFeatures]:
-        return await build_track_features(
-            self._session, tracks
-        )
+        return await build_track_features(self._session, tracks)
 
     async def _get_unseen_candidates(
         self,
@@ -374,16 +295,10 @@ class RecommendationService:
         user_prefs: UserPrefs | None = None,
         user_locale: str | None = None,
     ) -> list[Track]:
-        listened = (
-            await self._rec_repo.get_listened_track_ids(
-                user_id
-            )
-        )
+        listened = await self._rec_repo.get_listened_track_ids(user_id)
         ex = listened
         strat = should_boost_russian_discovery(
-            user_prefs.language_affinity
-            if user_prefs
-            else None,
+            user_prefs.language_affinity if user_prefs else None,
             user_locale,
         )
         if strat:
@@ -409,18 +324,14 @@ class RecommendationService:
         if not candidates or not settings.sc_client_id:
             return []
 
-        sc_svc = SoundCloudService(
-            settings.sc_client_id, self._session
-        )
+        sc_svc = SoundCloudService(settings.sc_client_id, self._session)
         track_ids: list[int] = []
         for c in candidates:
             if not c.external_url:
                 continue
             try:
                 dur_ms = (
-                    c.duration_seconds * 1000
-                    if c.duration_seconds
-                    else None
+                    c.duration_seconds * 1000 if c.duration_seconds else None
                 )
                 sc_uri = (
                     f"soundcloud:tracks:{c.external_id}"
@@ -459,28 +370,13 @@ class RecommendationService:
                 )
         return track_ids
 
-    async def get_home_sections(
-        self, user_id: int
-    ) -> dict:
-        pref = await self._pref_repo.get_by_user_id(
-            user_id
-        )
-        listen_count = (
-            await self._listen_repo.count_for_user(
-                user_id
-            )
-        )
+    async def get_home_sections(self, user_id: int) -> dict:
+        pref = await self._pref_repo.get_by_user_id(user_id)
+        listen_count = await self._listen_repo.count_for_user(user_id)
 
         maturity = determine_maturity(
-            onboarding_completed=(
-                bool(pref and pref.onboarding_completed)
-            ),
-            calibration_completed=(
-                bool(
-                    pref
-                    and pref.calibration_completed
-                )
-            ),
+            onboarding_completed=(bool(pref and pref.onboarding_completed)),
+            calibration_completed=(bool(pref and pref.calibration_completed)),
             enrichment_done=False,
             listen_count=listen_count,
         )
@@ -489,10 +385,8 @@ class RecommendationService:
         highlights: list[dict] = []
         highlight_track_ids: set[int] = set()
 
-        continue_tracks = (
-            await self._rec_repo.get_incomplete_listens(
-                user_id, limit=10
-            )
+        continue_tracks = await self._rec_repo.get_incomplete_listens(
+            user_id, limit=10
         )
         if continue_tracks:
             sections.append(
@@ -514,19 +408,11 @@ class RecommendationService:
         (
             user_prefs,
             user_locale,
-        ) = await self._build_user_prefs(
-            user_id
-        )
-        history = (
-            await self._build_listen_history(
-                user_id
-            )
-        )
+        ) = await self._build_user_prefs(user_id)
+        history = await self._build_listen_history(user_id)
 
         genre_filter = (
-            pref.preferred_genres
-            if pref and pref.preferred_genres
-            else None
+            pref.preferred_genres if pref and pref.preferred_genres else None
         )
         candidates = await self._scoring_candidate_tracks(
             user_id,
@@ -537,32 +423,18 @@ class RecommendationService:
         )
 
         if candidates:
-            features = (
-                await self._tracks_to_features(
-                    candidates
-                )
-            )
-            scored = score_tracks_for_user(
-                user_prefs, history, features
-            )
-            scored_ids = [
-                s.track_id for s in scored[:20]
-            ]
-            track_map = {
-                t.id: t for t in candidates
-            }
+            features = await self._tracks_to_features(candidates)
+            scored = score_tracks_for_user(user_prefs, history, features)
+            scored_ids = [s.track_id for s in scored[:20]]
+            track_map = {t.id: t for t in candidates}
             for_you = [
-                track_map[tid]
-                for tid in scored_ids
-                if tid in track_map
+                track_map[tid] for tid in scored_ids if tid in track_map
             ]
             if for_you:
                 sections.append(
                     {
                         "title": "Для вас",
-                        "section_type": (
-                            "personalized"
-                        ),
+                        "section_type": ("personalized"),
                         "tracks": for_you,
                     }
                 )
@@ -582,25 +454,16 @@ class RecommendationService:
         if genre_filter:
             popular_genre = candidates[:15]
             if popular_genre:
-                title = (
-                    f"Популярное: "
-                    f"{genre_filter[0]}"
-                )
+                title = f"Популярное: " f"{genre_filter[0]}"
                 sections.append(
                     {
                         "title": title,
-                        "section_type": (
-                            "genre_popular"
-                        ),
+                        "section_type": ("genre_popular"),
                         "tracks": popular_genre,
                     }
                 )
 
-        recent = (
-            await self._rec_repo.get_recent_tracks(
-                days=7, limit=15
-            )
-        )
+        recent = await self._rec_repo.get_recent_tracks(days=7, limit=15)
         if recent:
             sections.append(
                 {
@@ -610,11 +473,7 @@ class RecommendationService:
                 }
             )
 
-        user_choice = (
-            await self.get_user_choice_playlist(
-                limit=40
-            )
-        )
+        user_choice = await self.get_user_choice_playlist(limit=40)
         if user_choice:
             sections.append(
                 {
@@ -639,34 +498,23 @@ class RecommendationService:
                         highlight_track_ids.add(t.id)
                         break
 
-        if (
-            pref
-            and pref.preferred_artist_ids
-        ):
-            artist_tracks = (
-                await self._rec_repo.get_tracks_by_artist_ids(
-                    pref.preferred_artist_ids,
-                    limit=15,
-                )
+        if pref and pref.preferred_artist_ids:
+            artist_tracks = await self._rec_repo.get_tracks_by_artist_ids(
+                pref.preferred_artist_ids,
+                limit=15,
             )
             if artist_tracks:
                 sections.append(
                     {
-                        "title": (
-                            "Любимые исполнители"
-                        ),
-                        "section_type": (
-                            "fav_artists"
-                        ),
+                        "title": ("Любимые исполнители"),
+                        "section_type": ("fav_artists"),
                         "tracks": artist_tracks,
                     }
                 )
 
         if not sections:
-            popular = (
-                await self._rec_repo.get_candidate_tracks_stratified(
-                    total_limit=50,
-                )
+            popular = await self._rec_repo.get_candidate_tracks_stratified(
+                total_limit=50,
             )
             sections.append(
                 {
@@ -690,25 +538,19 @@ class RecommendationService:
             "maturity": maturity,
         }
 
-    async def get_user_choice_playlist(
-        self, limit: int = 100
-    ) -> list[Track]:
+    async def get_user_choice_playlist(self, limit: int = 100) -> list[Track]:
         from dotsound_private_core.services.playcount_policy import (
             UserChoiceTrackInput,
             rank_user_choice_tracks,
         )
 
-        pool = (
-            await self._rec_repo.get_candidate_tracks_stratified(
-                total_limit=400,
-            )
+        pool = await self._rec_repo.get_candidate_tracks_stratified(
+            total_limit=400,
         )
         if not pool:
             return []
         ids = [t.id for t in pool]
-        like_map = await self._rec_repo.get_likes_7d_count_by_track_ids(
-            ids
-        )
+        like_map = await self._rec_repo.get_likes_7d_count_by_track_ids(ids)
         items: list[UserChoiceTrackInput] = [
             UserChoiceTrackInput(
                 track_id=t.id,
@@ -717,12 +559,8 @@ class RecommendationService:
             )
             for t in pool
         ]
-        ordered = rank_user_choice_tracks(
-            items, limit=limit
-        )
-        return await self._rec_repo.get_tracks_by_ids(
-            ordered
-        )
+        ordered = rank_user_choice_tracks(items, limit=limit)
+        return await self._rec_repo.get_tracks_by_ids(ordered)
 
     async def get_weekly_top_playlist(
         self,
@@ -758,21 +596,15 @@ class RecommendationService:
             except (TypeError, ValueError):
                 pass
 
-        listens_map = (
-            await self._rec_repo.get_qualified_listens_7d_counts(
-                days=WEEKLY_TOP_WINDOW_DAYS,
-                candidate_pool_limit=max(
-                    400, size * 6
-                ),
-            )
+        listens_map = await self._rec_repo.get_qualified_listens_7d_counts(
+            days=WEEKLY_TOP_WINDOW_DAYS,
+            candidate_pool_limit=max(400, size * 6),
         )
         track_ids = list(listens_map.keys())
         likes_map: dict[int, int] = {}
         if track_ids:
-            likes_map = (
-                await self._rec_repo.get_likes_7d_count_by_track_ids(
-                    track_ids
-                )
+            likes_map = await self._rec_repo.get_likes_7d_count_by_track_ids(
+                track_ids
             )
         items = [
             WeeklyTopTrackInput(
@@ -782,9 +614,7 @@ class RecommendationService:
             )
             for tid in track_ids
         ]
-        ordered_ids = rank_weekly_top_tracks(
-            items, limit=size
-        )
+        ordered_ids = rank_weekly_top_tracks(items, limit=size)
         now = datetime.now(UTC)
         ttl = _weekly_top_ttl()
         payload: dict[str, Any] = {
@@ -792,9 +622,7 @@ class RecommendationService:
             "score_version": WEEKLY_TOP_SCORE_VERSION,
             "window_days": WEEKLY_TOP_WINDOW_DAYS,
             "generated_at": now.isoformat(),
-            "expires_at": (
-                now + timedelta(seconds=ttl)
-            ).isoformat(),
+            "expires_at": (now + timedelta(seconds=ttl)).isoformat(),
             "from_cache": False,
         }
         try:
@@ -828,12 +656,8 @@ class RecommendationService:
         sized = FORGOTTEN_DEFAULT_LIMIT if limit <= 0 else limit
         size = max(1, min(int(sized), FORGOTTEN_MAX_LIMIT))
         now = datetime.now(UTC)
-        like_cutoff = now - timedelta(
-            days=FORGOTTEN_MIN_LIKE_AGE_DAYS
-        )
-        silence_cutoff = now - timedelta(
-            days=FORGOTTEN_SILENCE_DAYS
-        )
+        like_cutoff = now - timedelta(days=FORGOTTEN_MIN_LIKE_AGE_DAYS)
+        silence_cutoff = now - timedelta(days=FORGOTTEN_SILENCE_DAYS)
         rows = await self._rec_repo.list_forgotten_treasure_rows(
             user_id,
             like_cutoff=like_cutoff,
@@ -859,14 +683,10 @@ class RecommendationService:
             "min_like_age_days": FORGOTTEN_MIN_LIKE_AGE_DAYS,
             "silence_days": FORGOTTEN_SILENCE_DAYS,
             "generated_at": now.isoformat(),
-            "expires_at": (
-                now + timedelta(seconds=900)
-            ).isoformat(),
+            "expires_at": (now + timedelta(seconds=900)).isoformat(),
         }
 
-    async def get_similar(
-        self, track_id: int, limit: int = 10
-    ) -> list[Track]:
+    async def get_similar(self, track_id: int, limit: int = 10) -> list[Track]:
         from app.repositories.artist import (
             ArtistRepository,
         )
@@ -885,42 +705,26 @@ class RecommendationService:
 
         neighbor_ids: list[int] = []
         if seed_artist_ids:
-            neighbor_ids = await (
-                self._catalog_repo.get_station_neighbor_track_ids_for_artists(
-                    seed_artist_ids,
-                    exclude_track_ids=frozenset({seed.id}),
-                    limit=120,
-                )
+            neighbor_ids = await self._catalog_repo.get_station_neighbor_track_ids_for_artists(
+                seed_artist_ids,
+                exclude_track_ids=frozenset({seed.id}),
+                limit=120,
             )
 
-        candidates = (
-            await self._rec_repo.get_candidate_tracks_stratified(
-                total_limit=100,
-                genre_filter=(
-                    [seed.genre]
-                    if seed.genre
-                    else None
-                ),
-                exclude_ids={seed.id},
-            )
+        candidates = await self._rec_repo.get_candidate_tracks_stratified(
+            total_limit=100,
+            genre_filter=([seed.genre] if seed.genre else None),
+            exclude_ids={seed.id},
         )
 
-        neighbor_pick = [
-            tid
-            for tid in neighbor_ids
-            if tid != seed.id
-        ][:80]
+        neighbor_pick = [tid for tid in neighbor_ids if tid != seed.id][:80]
         extra_tracks: list[Track] = []
         if neighbor_pick:
-            extra_tracks = (
-                await self._rec_repo.get_tracks_by_ids(
-                    neighbor_pick
-                )
+            extra_tracks = await self._rec_repo.get_tracks_by_ids(
+                neighbor_pick
             )
 
-        by_id: dict[int, Track] = {
-            t.id: t for t in candidates
-        }
+        by_id: dict[int, Track] = {t.id: t for t in candidates}
         for t in extra_tracks:
             by_id.setdefault(t.id, t)
         merged_candidates = list(by_id.values())
@@ -929,9 +733,7 @@ class RecommendationService:
             return []
 
         all_tracks = [seed] + merged_candidates
-        features = await self._tracks_to_features(
-            all_tracks
-        )
+        features = await self._tracks_to_features(all_tracks)
         seed_feat = features[0]
         candidate_feats = features[1:]
 
@@ -940,32 +742,20 @@ class RecommendationService:
             candidate_feats,
             limit=limit,
             station_neighbor_track_ids=(
-                frozenset(neighbor_ids)
-                if neighbor_ids
-                else None
+                frozenset(neighbor_ids) if neighbor_ids else None
             ),
         )
         track_map = {t.id: t for t in merged_candidates}
         return [
-            track_map[s.track_id]
-            for s in scored
-            if s.track_id in track_map
+            track_map[s.track_id] for s in scored if s.track_id in track_map
         ]
 
-    async def get_daily_mix(
-        self, user_id: int, size: int = 30
-    ) -> list[Track]:
+    async def get_daily_mix(self, user_id: int, size: int = 30) -> list[Track]:
         (
             user_prefs,
             user_locale,
-        ) = await self._build_user_prefs(
-            user_id
-        )
-        history = (
-            await self._build_listen_history(
-                user_id
-            )
-        )
+        ) = await self._build_user_prefs(user_id)
+        history = await self._build_listen_history(user_id)
 
         candidates = await self._scoring_candidate_tracks(
             user_id,
@@ -983,36 +773,30 @@ class RecommendationService:
             user_locale=user_locale,
         )
         all_tracks = candidates + [
-            t
-            for t in unseen
-            if t.id
-            not in {c.id for c in candidates}
+            t for t in unseen if t.id not in {c.id for c in candidates}
         ]
-        features = await self._tracks_to_features(
-            all_tracks
-        )
+        features = await self._tracks_to_features(all_tracks)
         feat_by_id = {f.track_id: f for f in features}
-        cand_features = [
-            feat_by_id[t.id] for t in candidates
-        ]
+        cand_features = [feat_by_id[t.id] for t in candidates]
         unseen_features = [
-            feat_by_id[t.id]
-            for t in unseen
-            if t.id in feat_by_id
+            feat_by_id[t.id] for t in unseen if t.id in feat_by_id
         ]
+        rerank_enabled, rerank_lambda = await self._load_diversity_rerank(
+            user_id=user_id
+        )
         scored = build_daily_mix(
             user_prefs,
             history,
             cand_features,
             size,
             unseen_candidates=unseen_features,
+            use_diversity_rerank=rerank_enabled,
+            diversity_lambda=rerank_lambda,
         )
 
         track_map = {t.id: t for t in all_tracks}
         result = [
-            track_map[s.track_id]
-            for s in scored
-            if s.track_id in track_map
+            track_map[s.track_id] for s in scored if s.track_id in track_map
         ]
         await self._telemetry.record_impressions(
             user_id=user_id,
@@ -1021,22 +805,15 @@ class RecommendationService:
         )
         return result
 
-    async def get_genre_mixes(
-        self, user_id: int
-    ) -> list[dict]:
+    async def get_genre_mixes(self, user_id: int) -> list[dict]:
         (
             user_prefs,
             user_locale,
         ) = await self._build_user_prefs(user_id)
-        history = await self._build_listen_history(
-            user_id
-        )
+        history = await self._build_listen_history(user_id)
 
         genres: list[str] = list(
-            dict.fromkeys(
-                user_prefs.preferred_genres
-                or []
-            )
+            dict.fromkeys(user_prefs.preferred_genres or [])
         )[:MAX_GENRE_MIXES]
 
         if not genres:
@@ -1044,17 +821,11 @@ class RecommendationService:
                 TrackRepository,
             )
 
-            track_repo = TrackRepository(
-                self._session
-            )
-            all_genres = (
-                await track_repo.get_unique_genres()
-            )
+            track_repo = TrackRepository(self._session)
+            all_genres = await track_repo.get_unique_genres()
             genres = all_genres[:MAX_GENRE_MIXES]
 
-        candidates_by_genre: dict[
-            str, list[TrackFeatures]
-        ] = {}
+        candidates_by_genre: dict[str, list[TrackFeatures]] = {}
         for genre in genres:
             pool = await self._scoring_candidate_tracks(
                 user_id,
@@ -1064,11 +835,7 @@ class RecommendationService:
                 user_locale,
             )
             if pool:
-                feats = (
-                    await self._tracks_to_features(
-                        pool
-                    )
-                )
+                feats = await self._tracks_to_features(pool)
                 candidates_by_genre[genre] = feats
 
         if not candidates_by_genre:
@@ -1084,14 +851,8 @@ class RecommendationService:
                 TrackRepository,
             )
 
-            track_repo = TrackRepository(
-                self._session
-            )
-            tracks = (
-                await track_repo.get_by_ids_preserve_order(
-                    mix.track_ids
-                )
-            )
+            track_repo = TrackRepository(self._session)
+            tracks = await track_repo.get_by_ids_preserve_order(mix.track_ids)
             output.append(
                 {
                     "genre": mix.genre,
@@ -1100,35 +861,22 @@ class RecommendationService:
                 }
             )
 
-        override_repo = GenreMixOverrideRepository(
-            self._session
-        )
+        override_repo = GenreMixOverrideRepository(self._session)
         overrides = await override_repo.get_by_genres(
             [m["genre"] for m in output]
         )
-        overrides_by_genre = {
-            row.genre.lower(): row for row in overrides
-        }
+        overrides_by_genre = {row.genre.lower(): row for row in overrides}
         for item in output:
-            override = overrides_by_genre.get(
-                item["genre"].lower()
-            )
+            override = overrides_by_genre.get(item["genre"].lower())
             if not override:
                 continue
             from app.repositories.track import (
                 TrackRepository,
             )
 
-            track_repo = TrackRepository(
-                self._session
-            )
-            override_tracks = (
-                await track_repo.get_by_ids_preserve_order(
-                    [
-                        int(tid)
-                        for tid in (override.track_ids or [])
-                    ]
-                )
+            track_repo = TrackRepository(self._session)
+            override_tracks = await track_repo.get_by_ids_preserve_order(
+                [int(tid) for tid in (override.track_ids or [])]
             )
             if override_tracks:
                 item["tracks"] = override_tracks
@@ -1150,26 +898,15 @@ class RecommendationService:
         )
 
         track_repo = TrackRepository(self._session)
-        override_repo = GenreMixOverrideRepository(
-            self._session
-        )
-        override = await override_repo.get_by_genre(
-            clean_genre
-        )
+        override_repo = GenreMixOverrideRepository(self._session)
+        override = await override_repo.get_by_genre(clean_genre)
 
         tracks: list[Track] = []
-        title = (
-            f"Mix: {clean_genre[:1].upper()}{clean_genre[1:]}"
-        )
+        title = f"Mix: {clean_genre[:1].upper()}{clean_genre[1:]}"
 
         if override is not None:
-            override_tracks = (
-                await track_repo.get_by_ids_preserve_order(
-                    [
-                        int(tid)
-                        for tid in (override.track_ids or [])
-                    ]
-                )
+            override_tracks = await track_repo.get_by_ids_preserve_order(
+                [int(tid) for tid in (override.track_ids or [])]
             )
             if override_tracks:
                 tracks = override_tracks
@@ -1179,14 +916,8 @@ class RecommendationService:
             (
                 user_prefs,
                 user_locale,
-            ) = await self._build_user_prefs(
-                user_id
-            )
-            history = (
-                await self._build_listen_history(
-                    user_id
-                )
-            )
+            ) = await self._build_user_prefs(user_id)
+            history = await self._build_listen_history(user_id)
             pool = await self._scoring_candidate_tracks(
                 user_id,
                 100,
@@ -1195,9 +926,7 @@ class RecommendationService:
                 user_locale,
             )
             if pool:
-                feats = await self._tracks_to_features(
-                    pool
-                )
+                feats = await self._tracks_to_features(pool)
                 mixes = build_genre_mixes(
                     user_prefs,
                     history,
@@ -1205,10 +934,8 @@ class RecommendationService:
                 )
                 if mixes:
                     mix = mixes[0]
-                    tracks = (
-                        await track_repo.get_by_ids_preserve_order(
-                            mix.track_ids
-                        )
+                    tracks = await track_repo.get_by_ids_preserve_order(
+                        mix.track_ids
                     )
                     if override is None:
                         title = mix.title
@@ -1246,17 +973,11 @@ class RecommendationService:
             raise ValueError("track_ids must be unique")
 
         track_repo = TrackRepository(self._session)
-        tracks = await track_repo.get_by_ids_preserve_order(
-            track_ids
-        )
+        tracks = await track_repo.get_by_ids_preserve_order(track_ids)
         if len(tracks) != len(track_ids):
-            raise ValueError(
-                "some tracks were not found"
-            )
+            raise ValueError("some tracks were not found")
 
-        override_repo = GenreMixOverrideRepository(
-            self._session
-        )
+        override_repo = GenreMixOverrideRepository(self._session)
         await override_repo.upsert(
             genre=clean_genre,
             title=clean_title,
@@ -1296,15 +1017,9 @@ class RecommendationService:
         cache_key = None
         last_key = None
         if user_id:
-            cache_key = (
-                f"rec:radio:{user_id}:{seed_track_id}:{exclude_hash}"
-            )
-            last_key = (
-                f"rec:radio:last:{user_id}:{seed_track_id}"
-            )
-            guard_key = (
-                f"rec:radio:guard:{user_id}:{seed_track_id}"
-            )
+            cache_key = f"rec:radio:{user_id}:{seed_track_id}:{exclude_hash}"
+            last_key = f"rec:radio:last:{user_id}:{seed_track_id}"
+            guard_key = f"rec:radio:guard:{user_id}:{seed_track_id}"
             can_fetch = await redis.set(
                 guard_key,
                 "1",
@@ -1338,9 +1053,7 @@ class RecommendationService:
                 return tracks
 
         track_repo = TrackRepository(self._session)
-        seed = await track_repo.get_by_id(
-            seed_track_id
-        )
+        seed = await track_repo.get_by_id(seed_track_id)
         if not seed:
             radio_request_observed(
                 surface="recommendations_radio",
@@ -1357,9 +1070,7 @@ class RecommendationService:
                 user_prefs,
                 user_locale,
             ) = await self._build_user_prefs(user_id)
-            radio_tuning = await self._load_radio_tuning(
-                user_id=user_id
-            )
+            radio_tuning = await self._load_radio_tuning(user_id=user_id)
 
         if user_id and user_prefs is not None:
             candidates = await self._scoring_candidate_tracks(
@@ -1370,11 +1081,7 @@ class RecommendationService:
                 user_locale,
             )
         else:
-            candidates = (
-                await self._rec_repo.get_candidate_tracks(
-                    limit=200
-                )
-            )
+            candidates = await self._rec_repo.get_candidate_tracks(limit=200)
         if not candidates:
             radio_request_observed(
                 surface="recommendations_radio",
@@ -1392,20 +1099,18 @@ class RecommendationService:
             )
 
         exclude_set = set(exclude_normalized)
-        all_tracks = [seed] + [
-            t for t in candidates
-            if t.id not in exclude_set
-        ] + [
-            t
-            for t in unseen
-            if t.id != seed.id
-            and t.id
-            not in {c.id for c in candidates}
-            and t.id not in exclude_set
-        ]
-        features = await self._tracks_to_features(
-            all_tracks
+        all_tracks = (
+            [seed]
+            + [t for t in candidates if t.id not in exclude_set]
+            + [
+                t
+                for t in unseen
+                if t.id != seed.id
+                and t.id not in {c.id for c in candidates}
+                and t.id not in exclude_set
+            ]
         )
+        features = await self._tracks_to_features(all_tracks)
         feat_by_id = {f.track_id: f for f in features}
         seed_feat = feat_by_id[seed.id]
         cand_features = [
@@ -1417,8 +1122,7 @@ class RecommendationService:
             [
                 feat_by_id[t.id]
                 for t in unseen
-                if t.id in feat_by_id
-                and t.id != seed.id
+                if t.id in feat_by_id and t.id != seed.id
             ]
             if unseen
             else None
@@ -1426,12 +1130,11 @@ class RecommendationService:
 
         history: list[RecListenEvent] = []
         if user_id:
-            history = (
-                await self._build_listen_history(
-                    user_id
-                )
-            )
+            history = await self._build_listen_history(user_id)
 
+        rerank_enabled, rerank_lambda = await self._load_diversity_rerank(
+            user_id=user_id
+        )
         scored = build_radio_queue(
             seed_feat,
             history,
@@ -1439,13 +1142,13 @@ class RecommendationService:
             queue_size,
             unseen_candidates=unseen_features,
             tuning=radio_tuning,
+            use_diversity_rerank=rerank_enabled,
+            diversity_lambda=rerank_lambda,
         )
 
         track_map = {t.id: t for t in all_tracks}
         result = [
-            track_map[s.track_id]
-            for s in scored
-            if s.track_id in track_map
+            track_map[s.track_id] for s in scored if s.track_id in track_map
         ]
         if cache_key and result:
             await redis.setex(
@@ -1472,9 +1175,38 @@ class RecommendationService:
         )
         return result
 
-    async def _load_radio_tuning(
-        self, *, user_id: int
-    ) -> RadioTuning:
+    async def _load_diversity_rerank(
+        self, *, user_id: int | None
+    ) -> tuple[bool, float | None]:
+        repo = AppSettingsRepository(self._session)
+        raw = await repo.get_value(_DIVERSITY_RERANK_KEY, default={})
+        if not isinstance(raw, dict):
+            return False, None
+        if not bool(raw.get("enabled", False)):
+            return False, None
+
+        lambda_raw = raw.get("diversity_lambda", _DEFAULT_DIVERSITY_LAMBDA)
+        try:
+            lambda_value = float(lambda_raw)
+        except (TypeError, ValueError):
+            lambda_value = _DEFAULT_DIVERSITY_LAMBDA
+        lambda_value = max(0.0, min(1.0, lambda_value))
+
+        if user_id is None:
+            return True, lambda_value
+
+        split_raw = raw.get("ab_split_percent_b", 100)
+        try:
+            split_int = int(split_raw)
+        except (TypeError, ValueError):
+            split_int = 100
+        split_int = max(0, min(100, split_int))
+        bucket = user_id % 100
+        if bucket < split_int:
+            return True, lambda_value
+        return False, None
+
+    async def _load_radio_tuning(self, *, user_id: int) -> RadioTuning:
         repo = AppSettingsRepository(self._session)
         raw = await repo.get_value(_RADIO_TUNING_KEY, default={})
         if not isinstance(raw, dict):
@@ -1491,11 +1223,7 @@ class RecommendationService:
             split_int = 50
         split_int = max(0, min(100, split_int))
         bucket = user_id % 100
-        variant_key = (
-            "variant_b"
-            if bucket < split_int
-            else "variant_a"
-        )
+        variant_key = "variant_b" if bucket < split_int else "variant_a"
         variant = raw.get(variant_key)
         if not isinstance(variant, dict):
             variant = raw.get("variant_a")
@@ -1508,12 +1236,8 @@ class RecommendationService:
         key = f"rec:global_top:{limit}"
         cached = await redis.get(key)
         if cached:
-            return await self._rec_repo.get_tracks_by_ids(
-                json.loads(cached)
-            )
-        tracks = await self._rec_repo.get_popular_tracks(
-            limit=limit
-        )
+            return await self._rec_repo.get_tracks_by_ids(json.loads(cached))
+        tracks = await self._rec_repo.get_popular_tracks(limit=limit)
         await redis.setex(
             key,
             _midnight_ttl(),
@@ -1521,9 +1245,7 @@ class RecommendationService:
         )
         return tracks
 
-    async def get_daily_playlist(
-        self, user_id: int
-    ) -> dict:
+    async def get_daily_playlist(self, user_id: int) -> dict:
         redis = get_redis_client()
         key = f"rec:daily:{user_id}"
         cached = await redis.get(key)
@@ -1533,12 +1255,8 @@ class RecommendationService:
         (
             user_prefs,
             user_locale,
-        ) = await self._build_user_prefs(
-            user_id
-        )
-        history = await self._build_listen_history(
-            user_id
-        )
+        ) = await self._build_user_prefs(user_id)
+        history = await self._build_listen_history(user_id)
         candidates = await self._scoring_candidate_tracks(
             user_id,
             200,
@@ -1552,38 +1270,32 @@ class RecommendationService:
             user_locale=user_locale,
         )
         all_tracks = candidates + [
-            t
-            for t in unseen
-            if t.id
-            not in {c.id for c in candidates}
+            t for t in unseen if t.id not in {c.id for c in candidates}
         ]
-        features = await self._tracks_to_features(
-            all_tracks
-        )
+        features = await self._tracks_to_features(all_tracks)
         feat_by_id = {f.track_id: f for f in features}
-        cand_features = [
-            feat_by_id[t.id] for t in candidates
-        ]
+        cand_features = [feat_by_id[t.id] for t in candidates]
         unseen_features = [
-            feat_by_id[t.id]
-            for t in unseen
-            if t.id in feat_by_id
+            feat_by_id[t.id] for t in unseen if t.id in feat_by_id
         ]
+        rerank_enabled, rerank_lambda = await self._load_diversity_rerank(
+            user_id=user_id
+        )
         scored = build_daily_mix(
             user_prefs,
             history,
             cand_features,
             _DAILY_SIZE,
             unseen_candidates=unseen_features,
+            use_diversity_rerank=rerank_enabled,
+            diversity_lambda=rerank_lambda,
         )
 
         from app.services.external_discovery_service import (
             ExternalDiscoveryService,
         )
 
-        external = await ExternalDiscoveryService(
-            self._session
-        ).discover(
+        external = await ExternalDiscoveryService(self._session).discover(
             user_prefs.preferred_genres,
             language_affinity=user_prefs.language_affinity,
             user_locale=user_locale,
@@ -1594,9 +1306,7 @@ class RecommendationService:
 
         track_map = {t.id: t for t in all_tracks}
         internal_ids = [
-            s.track_id
-            for s in int_scored
-            if s.track_id in track_map
+            s.track_id for s in int_scored if s.track_id in track_map
         ]
         global_top = await self.get_global_top()
         external_track_ids = await self._import_external_candidates(
@@ -1605,8 +1315,7 @@ class RecommendationService:
         await self._telemetry.record_impressions(
             user_id=user_id,
             surface="daily_playlist",
-            track_ids=internal_ids
-            + external_track_ids,
+            track_ids=internal_ids + external_track_ids,
         )
 
         ttl = _midnight_ttl()
@@ -1614,22 +1323,14 @@ class RecommendationService:
         payload: dict = {
             "internal_track_ids": internal_ids,
             "external_track_ids": external_track_ids,
-            "global_top_ids": [
-                t.id for t in global_top
-            ],
+            "global_top_ids": [t.id for t in global_top],
             "generated_at": now.isoformat(),
-            "expires_at": (
-                now + timedelta(seconds=ttl)
-            ).isoformat(),
+            "expires_at": (now + timedelta(seconds=ttl)).isoformat(),
         }
-        await redis.setex(
-            key, ttl, json.dumps(payload)
-        )
+        await redis.setex(key, ttl, json.dumps(payload))
         return payload
 
-    async def get_weekly_playlist(
-        self, user_id: int
-    ) -> dict:
+    async def get_weekly_playlist(self, user_id: int) -> dict:
         redis = get_redis_client()
         key = f"rec:weekly:{user_id}"
         cached = await redis.get(key)
@@ -1639,12 +1340,8 @@ class RecommendationService:
         (
             user_prefs,
             user_locale,
-        ) = await self._build_user_prefs(
-            user_id
-        )
-        history = await self._build_listen_history(
-            user_id
-        )
+        ) = await self._build_user_prefs(user_id)
+        history = await self._build_listen_history(user_id)
         candidates = await self._scoring_candidate_tracks(
             user_id,
             300,
@@ -1659,22 +1356,13 @@ class RecommendationService:
             user_locale=user_locale,
         )
         all_tracks = candidates + [
-            t
-            for t in unseen
-            if t.id
-            not in {c.id for c in candidates}
+            t for t in unseen if t.id not in {c.id for c in candidates}
         ]
-        features = await self._tracks_to_features(
-            all_tracks
-        )
+        features = await self._tracks_to_features(all_tracks)
         feat_by_id = {f.track_id: f for f in features}
-        cand_features = [
-            feat_by_id[t.id] for t in candidates
-        ]
+        cand_features = [feat_by_id[t.id] for t in candidates]
         unseen_features = [
-            feat_by_id[t.id]
-            for t in unseen
-            if t.id in feat_by_id
+            feat_by_id[t.id] for t in unseen if t.id in feat_by_id
         ]
         scored = build_weekly_mix(
             user_prefs,
@@ -1688,9 +1376,7 @@ class RecommendationService:
             ExternalDiscoveryService,
         )
 
-        external = await ExternalDiscoveryService(
-            self._session
-        ).discover(
+        external = await ExternalDiscoveryService(self._session).discover(
             user_prefs.preferred_genres,
             limit_per_source=20,
             language_affinity=user_prefs.language_affinity,
@@ -1704,9 +1390,7 @@ class RecommendationService:
 
         track_map = {t.id: t for t in all_tracks}
         internal_ids = [
-            s.track_id
-            for s in int_scored
-            if s.track_id in track_map
+            s.track_id for s in int_scored if s.track_id in track_map
         ]
         external_track_ids = await self._import_external_candidates(
             ext_picked, user_id
@@ -1714,8 +1398,7 @@ class RecommendationService:
         await self._telemetry.record_impressions(
             user_id=user_id,
             surface="weekly_playlist",
-            track_ids=internal_ids
-            + external_track_ids,
+            track_ids=internal_ids + external_track_ids,
         )
 
         ttl = _weekly_ttl()
@@ -1724,21 +1407,13 @@ class RecommendationService:
             "internal_track_ids": internal_ids,
             "external_track_ids": external_track_ids,
             "generated_at": now.isoformat(),
-            "expires_at": (
-                now + timedelta(seconds=ttl)
-            ).isoformat(),
+            "expires_at": (now + timedelta(seconds=ttl)).isoformat(),
         }
-        await redis.setex(
-            key, ttl, json.dumps(payload)
-        )
+        await redis.setex(key, ttl, json.dumps(payload))
         return payload
 
-    async def refresh_daily_playlist(
-        self, user_id: int
-    ) -> dict:
+    async def refresh_daily_playlist(self, user_id: int) -> dict:
         redis = get_redis_client()
         await redis.delete(f"rec:daily:{user_id}")
-        await redis.delete(
-            f"rec:global_top:{_GLOBAL_TOP_SIZE}"
-        )
+        await redis.delete(f"rec:global_top:{_GLOBAL_TOP_SIZE}")
         return await self.get_daily_playlist(user_id)

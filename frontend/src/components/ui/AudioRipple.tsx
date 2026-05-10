@@ -9,19 +9,31 @@ export interface AudioRippleProps {
   bpm?: number
   active?: boolean
   getAnalyser?: () => AnalyserNode | null
+  ringColor?: string
   className?: string
   children: ReactNode
 }
 
 const BASS_BINS = 4
-const BEAT_THRESHOLD = 0.50
 const BEAT_COOLDOWN_MS = 320
 const RING_DURATION_MS = 860
+const BEAT_MULTIPLIER = 1.4
+const MIN_BEAT_ENERGY = 0.12
+const HISTORY_SIZE = 120
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '')
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  return `rgba(${r},${g},${b},${alpha.toFixed(3)})`
+}
 
 export function AudioRipple({
   bpm = 120,
   active = true,
   getAnalyser,
+  ringColor,
   className,
   children,
 }: AudioRippleProps) {
@@ -33,6 +45,13 @@ export function AudioRipple({
   const rafRef = useRef<number | null>(null)
   const startRef = useRef<number>(performance.now())
   const fpsGateRef = useRef<number>(0)
+
+  // Adaptive beat detection: circular buffer of energy history
+  const energyHistoryRef = useRef<Float32Array>(
+    new Float32Array(HISTORY_SIZE),
+  )
+  const energyIdxRef = useRef<number>(0)
+  const energySumRef = useRef<number>(0)
 
   useEffect(() => {
     const span = spanRef.current
@@ -60,9 +79,27 @@ export function AudioRipple({
         for (let i = 0; i < BASS_BINS; i++) sum += freqData[i]
         const energy = sum / (BASS_BINS * 255)
 
+        // Update rolling average
+        const oldest =
+          energyHistoryRef.current[energyIdxRef.current]!
+        energySumRef.current += energy - oldest
+        energyHistoryRef.current[energyIdxRef.current] = energy
+        energyIdxRef.current =
+          (energyIdxRef.current + 1) % HISTORY_SIZE
+        const avgEnergy = energySumRef.current / HISTORY_SIZE
+
         phase = Math.min(1, energy)
 
-        if (canvas && energy > BEAT_THRESHOLD && now - lastBeatRef.current > BEAT_COOLDOWN_MS) {
+        // Adaptive beat: energy exceeds running average by multiplier
+        const beatThreshold = Math.max(
+          MIN_BEAT_ENERGY,
+          avgEnergy * BEAT_MULTIPLIER,
+        )
+        if (
+          canvas &&
+          energy > beatThreshold &&
+          now - lastBeatRef.current > BEAT_COOLDOWN_MS
+        ) {
           lastBeatRef.current = now
           ringsRef.current.push({ born: now })
         }
@@ -80,35 +117,36 @@ export function AudioRipple({
       span.style.setProperty('--bp-phase', phase.toFixed(3))
 
       // Draw ripple rings
-      if (canvas && ringsRef.current.length > 0) {
-        const ctx = canvas.getContext('2d')
-        if (ctx) {
-          ctx.clearRect(0, 0, canvas.width, canvas.height)
-          const cx = canvas.width / 2
-          const cy = canvas.height / 2
-          // discR in canvas units ≈ half the span width
-          // canvas.width = span.offsetWidth * 2, so discR = span.offsetWidth / 2
-          const discR = canvas.width / 4
+      if (canvas) {
+        if (ringsRef.current.length > 0) {
+          const ctx = canvas.getContext('2d')
+          if (ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            const cx = canvas.width / 2
+            const cy = canvas.height / 2
+            const discR = canvas.width / 4
 
-          ringsRef.current = ringsRef.current.filter((ring) => {
-            const age = now - ring.born
-            if (age >= RING_DURATION_MS) return false
-            const progress = age / RING_DURATION_MS
-            // Start at disc edge, expand 85% of disc-radius beyond it
-            const r = discR + discR * 0.85 * progress
-            const alpha = (1 - progress) * 0.55
+            ringsRef.current = ringsRef.current.filter((ring) => {
+              const age = now - ring.born
+              if (age >= RING_DURATION_MS) return false
+              const progress = age / RING_DURATION_MS
+              const r = discR + discR * 0.85 * progress
+              const alpha = (1 - progress) * 0.55
 
-            ctx.beginPath()
-            ctx.arc(cx, cy, r, 0, Math.PI * 2)
-            ctx.strokeStyle = `rgba(255,255,255,${alpha.toFixed(3)})`
-            ctx.lineWidth = Math.max(0.5, 2.5 - progress * 2)
-            ctx.stroke()
-            return true
-          })
+              ctx.beginPath()
+              ctx.arc(cx, cy, r, 0, Math.PI * 2)
+              ctx.strokeStyle = ringColor
+                ? hexToRgba(ringColor, alpha)
+                : `rgba(255,255,255,${alpha.toFixed(3)})`
+              ctx.lineWidth = Math.max(0.5, 2.5 - progress * 2)
+              ctx.stroke()
+              return true
+            })
+          }
+        } else {
+          const ctx = canvas.getContext('2d')
+          ctx?.clearRect(0, 0, canvas.width, canvas.height)
         }
-      } else if (canvas && ringsRef.current.length === 0) {
-        const ctx = canvas.getContext('2d')
-        ctx?.clearRect(0, 0, canvas.width, canvas.height)
       }
 
       rafRef.current = requestAnimationFrame(tick)
@@ -121,11 +159,14 @@ export function AudioRipple({
         cancelAnimationFrame(rafRef.current)
         rafRef.current = null
       }
+      // Reset adaptive state so next activation starts fresh
+      energyHistoryRef.current.fill(0)
+      energySumRef.current = 0
+      energyIdxRef.current = 0
       span.style.setProperty('--bp-phase', '0')
     }
-  }, [bpm, active, getAnalyser, reduce])
+  }, [bpm, active, getAnalyser, ringColor, reduce])
 
-  // Keep canvas pixel size in sync with span layout size
   useEffect(() => {
     const span = spanRef.current
     const canvas = canvasRef.current

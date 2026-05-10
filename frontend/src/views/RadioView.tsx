@@ -16,6 +16,7 @@ import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { showIsland } from '@/lib/island'
 import { api } from '@/lib/api'
+import { extractCoverPalette } from '@/lib/coverPalette'
 import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
 import {
   usePlayerActions,
@@ -76,6 +77,9 @@ export function RadioView() {
   const [radioPreviewTracks, setRadioPreviewTracks] = useState<
     Track[]
   >([])
+  const [accentColor, setAccentColor] = useState<string | undefined>(
+    undefined,
+  )
   const historyRef = useRef<Track[]>([])
   const switchingRef = useRef(false)
   const discPointerRef = useRef<{
@@ -89,6 +93,20 @@ export function RadioView() {
     ? coverUrl(currentTrack.cover_key)
     : null
   const bpm = 120
+
+  useEffect(() => {
+    if (!heroCover) {
+      setAccentColor(undefined)
+      return
+    }
+    let cancelled = false
+    void extractCoverPalette(heroCover).then((palette) => {
+      if (!cancelled) setAccentColor(palette?.tones[0])
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [heroCover])
   const discIsLive = radioMode && isPlaying
   const discSwipeEnabled = radioMode && Boolean(currentTrack)
   const nextTrack = queue[0] ?? radioPreviewTracks[0] ?? null
@@ -430,6 +448,7 @@ export function RadioView() {
               bpm={bpm}
               active={discIsLive}
               getAnalyser={getAnalyser}
+              ringColor={accentColor}
               className="rh-radio-disc-pulse"
             >
               <div className="rh-radio-disc-viewport">

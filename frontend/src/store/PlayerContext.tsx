@@ -1734,6 +1734,16 @@ export function PlayerProvider({
 
   const playNext = async (): Promise<boolean> => {
     if (!track) return false
+    const isOffline =
+      typeof navigator !== 'undefined' &&
+      navigator.onLine === false
+    if (isOffline) {
+      const ok = await _fallbackToCachedTrack(track.id)
+      if (ok) return true
+      // fall through: maybe manualQueueRef has tracks the user
+      // already cached implicitly; the playTrack pipeline will
+      // try getCachedAudioUrl before going to the network.
+    }
     try {
       if (manualQueueRef.current.length > 0) {
         const nextIdx = manualQueueRef.current.findIndex(

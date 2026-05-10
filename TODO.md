@@ -1597,10 +1597,14 @@
     строках этой вкладки — кнопки `Восстановить`
     (`adminApi.restoreTrack`) и `Удалить навсегда`
     (`adminApi.hardDeleteTrackForever` со step-up confirm).
-  - `PlayerContext.playNext`: при отсутствии next через
-    API и `navigator.onLine === false` падает в
-    `_fallbackToCachedTrack`, который тянет из
-    `getCachedTracks` следующий доступный кэшированный трек.
+  - `PlayerContext.playNext`: при `navigator.onLine === false`
+    в начале вызывает `_fallbackToCachedTrack(track.id)`
+    (offline-first); если кэш пуст или все треки уже
+    проигрывались — падает обратно к обычным веткам
+    manualQueue/radio/prefetch/adjacent. Если все ветки тоже
+    не нашли next — повторно пробует кэш как последний шанс
+    (через `import('@/lib/offlineCache').getCachedTracks` с
+    фильтром `unavailableTrackIdsRef`).
   - `ListenerStats` показывает CTA «Открыть Ваш топ →»,
     ведущий на `/my-top`.
   - `app/api/v1/auth_email.py /verify` подключён к
@@ -1609,6 +1613,14 @@
   - `app/models/__init__.py` импортирует `AbuseEvent`
     (включает таблицу в `Base.metadata.create_all` для
     in-memory pytest БД).
+  - Listening-by-day: `aggregate_user_minutes_by_day`
+    в `ListenEventRepository`, `StatsService.get_user_minutes_by_day`,
+    `GET /api/v1/users/me/listening-by-day?days=N` (1-90);
+    `api.getMyListeningByDay` + bar-chart в `MyTopView`
+    (`my-top-hours__*` стили в `global.css`); i18n RU/EN
+    `myTop.hoursByDay` / `myTop.hoursTotal`.
+  - i18n `myTop.*`, `trash.*`, `consent.*` (RU/EN)
+    в `i18n_extra_*.json`.
   - Тесты: `tests/app/repositories/test_abuse_event.py`
     (recent_signal_counts: empty / short-vs-long window /
     failed_login_burst по score, `prune_older_than`),

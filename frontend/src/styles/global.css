@@ -10015,3 +10015,104 @@ html.ds-low-glass .tcs-sheet {
     margin-inline: auto;
   }
 }
+
+/* MyTopView listening-by-day chart */
+.my-top-window-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.my-top-hours {
+  margin: 16px 0 24px;
+}
+.my-top-hours__chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 96px;
+  padding: 8px 0;
+  margin-top: 8px;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+}
+.my-top-hours__bar-wrap {
+  flex: 1 1 auto;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  min-width: 4px;
+}
+.my-top-hours__bar {
+  width: 100%;
+  background: var(--accent, #d6d6d6);
+  border-radius: 2px;
+  transition: height 0.25s ease;
+}
+.my-top-hours__total {
+  margin-top: 6px;
+}
+.my-top-genres__list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+.my-top-genres__item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-soft, #1f1f1f);
+}
+.trash-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+}
+.trash-list__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft, #1f1f1f);
+}
+.trash-list__title {
+  font-weight: 500;
+}
+.trash-list__artist {
+  color: var(--text-secondary, #888);
+  font-size: 13px;
+}
+.consent-banner {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 1500;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--bg-elevated, rgba(20, 20, 20, 0.96));
+  border: 1px solid var(--border, #2a2a2a);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 420px;
+  margin-inline: auto;
+}
+.consent-banner__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.consent-banner__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.settings-danger-zone__pending {
+  padding: 12px 0;
+}
+.listener-stats__footer {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+}

@@ -157,6 +157,30 @@
     "openPlaylistAria": "Open playlist: {{name}}",
     "playlistsTabEmpty": "No playlists match this search"
   },
+  "myTop": {
+    "title": "Your top",
+    "hint": "Top tracks and genres based on your listens.",
+    "window7d": "7 days",
+    "window30d": "30 days",
+    "window90d": "90 days",
+    "windowAll": "All time",
+    "empty": "Not enough listens yet to build a top.",
+    "topGenres": "Top genres",
+    "topTracks": "Top tracks",
+    "hoursByDay": "Minutes listened by day",
+    "hoursTotal": "Total: {{m}} min"
+  },
+  "trash": {
+    "title": "Deleted tracks",
+    "hint": "You can restore tracks during the grace period; after that they are erased permanently.",
+    "empty": "Trash is empty.",
+    "restore": "Restore"
+  },
+  "consent": {
+    "body": "We use minimal analytics solely to protect against automated sign-ups (retention up to 30 days). No ads, no third parties.",
+    "accept": "Accept",
+    "minimal": "Essential only"
+  },
   "trackCard": {
     "queued": "Added to queue",
     "hiddenByMod": "Hidden by moderation",

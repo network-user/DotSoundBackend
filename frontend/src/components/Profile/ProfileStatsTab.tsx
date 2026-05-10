@@ -1,17 +1,33 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AnimatePresence } from 'framer-motion'
+import { m, useReducedMotion } from '@/lib/motion'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { RecapShareCard } from '@/components/Recap/RecapShareCard'
 import { RECAP_MOCK_COVERS } from '@/components/Recap/recapMock'
 import { api } from '@/lib/api'
 import { showIsland } from '@/lib/island'
 import { tg } from '@/lib/telegram'
+import { createSharePoster, downloadBlob } from '@/lib/shareCard'
 
-const PERIODS: { id: 7 | 30 | 365; labelKey: string; defaultLabel: string }[] = [
-  { id: 7, labelKey: 'profile.listenStats.period_7', defaultLabel: '7 дней' },
-  { id: 30, labelKey: 'profile.listenStats.period_30', defaultLabel: '30 дней' },
-  { id: 365, labelKey: 'profile.listenStats.period_365', defaultLabel: 'Год' },
-]
+const PERIODS: { id: 7 | 30 | 365; labelKey: string; defaultLabel: string }[] =
+  [
+    {
+      id: 7,
+      labelKey: 'profile.listenStats.period_7',
+      defaultLabel: '7 дней',
+    },
+    {
+      id: 30,
+      labelKey: 'profile.listenStats.period_30',
+      defaultLabel: '30 дней',
+    },
+    {
+      id: 365,
+      labelKey: 'profile.listenStats.period_365',
+      defaultLabel: 'Год',
+    },
+  ]
 
 function formatMinutes(min: number): string {
   if (min < 60) return `${min} мин`
@@ -32,34 +48,68 @@ interface ListeningStats {
   top_genres: { name: string; minutes: number; plays: number }[]
 }
 
+interface DayBucket {
+  date: string
+  minutes: number
+}
+
 interface ApiTopTrack {
   id: number
   cover_key: string | null
 }
 
+function HoursChart({ buckets }: { buckets: DayBucket[] }) {
+  const max = Math.max(1, ...buckets.map((b) => b.minutes))
+  return (
+    <div className="my-top-hours__chart" aria-hidden>
+      {buckets.map((b) => {
+        const pct = Math.round((b.minutes / max) * 100)
+        return (
+          <div
+            key={b.date}
+            className="my-top-hours__bar-wrap"
+            title={`${b.date}: ${b.minutes} мин`}
+          >
+            <div
+              className="my-top-hours__bar"
+              style={{ height: `${Math.max(2, pct)}%` }}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function ProfileStatsTab() {
   const { t } = useTranslation()
+  const reduce = useReducedMotion()
   const [period, setPeriod] = useState<7 | 30 | 365>(30)
   const [stats, setStats] = useState<ListeningStats | null>(null)
+  const [buckets, setBuckets] = useState<DayBucket[]>([])
   const [topTracks, setTopTracks] = useState<ApiTopTrack[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
       const topWindow =
         period === 7 ? '7d' : period === 30 ? '30d' : '90d'
-      const [listenRes, topRes] = await Promise.all([
+      const [listenRes, topRes, dayRes] = await Promise.all([
         api.getMyListeningStats(period),
         api.getMyTop(topWindow as '7d' | '30d' | '90d'),
+        api.getMyListeningByDay(period === 365 ? 90 : period),
       ])
       setStats(listenRes as unknown as ListeningStats)
       setTopTracks(
         (topRes.top_tracks as unknown as ApiTopTrack[]).slice(0, 4),
       )
+      setBuckets((dayRes.buckets as DayBucket[]) ?? [])
     } catch {
       setStats(null)
       setTopTracks([])
+      setBuckets([])
     } finally {
       setLoading(false)
     }
@@ -93,15 +143,43 @@ export function ProfileStatsTab() {
         : 'profile.listenStats.period_365',
     period === 7 ? '7 дней' : period === 30 ? '30 дней' : 'Год',
   )
+  const headline = `${t('profile.stats.shareHeadline', 'За')} ${periodLabel}`
+  const minutesCaption = t(
+    'profile.stats.minutesCaption',
+    'минут прослушано',
+  )
 
   const handleShare = () => {
-    const text = `${minutes} ${t('profile.stats.minutesCaption', 'минут прослушано')} ${t('profile.stats.shareHeadline', 'за')} ${periodLabel} — DotSound`
+    const text = `${minutes} ${minutesCaption} ${headline} — DotSound`
     if (tg?.shareText) {
       tg.shareText(text)
     } else {
       void navigator.clipboard.writeText(text).then(() => {
-        showIsland({ kind: 'toast', title: t('redesign.track.copyDone', 'Скопировано'), durationMs: 2000 })
+        showIsland({
+          kind: 'toast',
+          title: t('redesign.track.copyDone', 'Скопировано'),
+          durationMs: 2000,
+        })
       })
+    }
+  }
+
+  const handleSave = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      const blob = await createSharePoster({
+        totalMinutes: minutes,
+        headline,
+        minutesCaption,
+        brandLabel: '.звук',
+        collageSrc,
+      })
+      if (blob) {
+        downloadBlob(blob, 'dotsound-stats.png')
+      }
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -142,38 +220,82 @@ export function ProfileStatsTab() {
               {formatMinutes(minutes)}
             </div>
             <div className="pst-hero__label">
-              {t('profile.listenStats.minutes', 'Минуты прослушивания')}
+              {t(
+                'profile.listenStats.minutes',
+                'Минуты прослушивания',
+              )}
             </div>
           </div>
 
+          {/* Listening sparkline */}
+          {buckets.length > 0 && (
+            <section className="my-top-hours pst-section">
+              <h2 className="pst-section__title">
+                {t(
+                  'myTop.hoursByDay',
+                  'Минуты прослушивания по дням',
+                )}
+              </h2>
+              <HoursChart buckets={buckets} />
+            </section>
+          )}
+
+          {/* Genre bars with AnimatePresence on period change */}
           {genres.length > 0 && (
             <section className="pst-section">
               <h2 className="pst-section__title">
                 {t('profile.stats.genres', 'По жанрам')}
               </h2>
-              <ul className="pst-genre-bars">
-                {genres.map((g) => (
-                  <li key={g.name} className="pst-genre-bar">
-                    <span className="pst-genre-bar__name">
-                      {g.name}
-                    </span>
-                    <div className="pst-genre-bar__track">
-                      <div
-                        className="pst-genre-bar__fill"
-                        style={{
-                          width: `${(g.minutes / maxGenreMin) * 100}%`,
-                        }}
-                      />
-                    </div>
-                    <span className="pst-genre-bar__val">
-                      {formatMinutes(g.minutes)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+              <AnimatePresence mode="wait" initial={false}>
+                <m.ul
+                  key={period}
+                  className="pst-genre-bars"
+                  initial={reduce ? { opacity: 1 } : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={reduce ? { opacity: 1 } : { opacity: 0 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  {genres.map((g, i) => (
+                    <m.li
+                      key={g.name}
+                      className="pst-genre-bar"
+                      initial={
+                        reduce ? {} : { opacity: 0, x: -6 }
+                      }
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{
+                        duration: 0.22,
+                        delay: reduce ? 0 : i * 0.04,
+                      }}
+                    >
+                      <span className="pst-genre-bar__name">
+                        {g.name}
+                      </span>
+                      <div className="pst-genre-bar__track">
+                        <m.div
+                          className="pst-genre-bar__fill"
+                          initial={reduce ? undefined : { width: 0 }}
+                          animate={{
+                            width: `${(g.minutes / maxGenreMin) * 100}%`,
+                          }}
+                          transition={{
+                            duration: 0.4,
+                            delay: reduce ? 0 : i * 0.04 + 0.1,
+                            ease: 'easeOut',
+                          }}
+                        />
+                      </div>
+                      <span className="pst-genre-bar__val">
+                        {formatMinutes(g.minutes)}
+                      </span>
+                    </m.li>
+                  ))}
+                </m.ul>
+              </AnimatePresence>
             </section>
           )}
 
+          {/* Top artists */}
           {artists.length > 0 && (
             <section className="pst-section">
               <h2 className="pst-section__title">
@@ -197,6 +319,7 @@ export function ProfileStatsTab() {
             </section>
           )}
 
+          {/* Share card */}
           <section className="pst-section">
             <h2 className="pst-section__title">
               {t('profile.stats.shareTitle', 'Поделиться')}
@@ -204,19 +327,17 @@ export function ProfileStatsTab() {
             <RecapShareCard
               brandLabel=".звук"
               totalMinutes={minutes}
-              headline={`${t('profile.stats.shareHeadline', 'За')} ${periodLabel}`}
-              minutesCaption={t(
-                'profile.stats.minutesCaption',
-                'минут прослушано',
-              )}
+              headline={headline}
+              minutesCaption={minutesCaption}
               collageSrc={collageSrc}
-              saveLabel={t('profile.stats.save', 'Сохранить')}
+              saveLabel={
+                saving
+                  ? t('common.loading', 'Загрузка…')
+                  : t('profile.stats.save', 'Сохранить')
+              }
               shareLabel={t('profile.stats.share', 'Поделиться')}
-              exportTodoHint={t(
-                'profile.stats.exportHint',
-                'Скоро: сохранение в галерею',
-              )}
-              onSave={() => {}}
+              exportTodoHint=""
+              onSave={() => void handleSave()}
               onShare={handleShare}
             />
           </section>

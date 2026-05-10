@@ -45,6 +45,33 @@ const WINDOW_TO_DAYS: Record<
   all: 90,
 }
 
+function ListeningHoursChart({
+  buckets,
+}: {
+  buckets: DayBucket[]
+}) {
+  const max = Math.max(1, ...buckets.map((b) => b.minutes))
+  return (
+    <div className="my-top-hours__chart" aria-hidden>
+      {buckets.map((b) => {
+        const pct = Math.round((b.minutes / max) * 100)
+        return (
+          <div
+            key={b.date}
+            className="my-top-hours__bar-wrap"
+            title={`${b.date}: ${b.minutes} мин`}
+          >
+            <div
+              className="my-top-hours__bar"
+              style={{ height: `${Math.max(2, pct)}%` }}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function MyTopView() {
   const { t } = useTranslation()
   const [windowKey, setWindowKey] = useState<
