@@ -362,7 +362,9 @@ async def test_worker_respects_cancel_between_items(
 
     call_count = {"n": 0}
 
-    async def _search_side_effect(*_a, **_kw):
+    async def _search_side_effect(
+        *_a: object, **_kw: object
+    ) -> list[dict]:
         call_count["n"] += 1
         if call_count["n"] == 1:
             await session.refresh(job)
@@ -602,6 +604,125 @@ async def test_worker_aborts_when_lease_lost(
     await process_external_import_job(job.id)
 
     assert sc.search.await_count == 1
+
+
+async def test_prefetch_skips_cache_hits() -> None:
+    """Cache hits must not enter the semaphore or hit SoundCloud."""
+    from app.services import external_import_worker as mod
+
+    sc = MagicMock()
+    sc.search = AsyncMock(return_value=[])
+
+    items = [{"title": "Hit", "artist": "Cached"}]
+    cached_payload = [{"id": 1, "title": "Hit"}]
+
+    with (
+        patch.object(
+            mod,
+            "_get_cached_sc_search",
+            new=AsyncMock(return_value=cached_payload),
+        ),
+        patch.object(mod, "_set_cached_sc_search", new=AsyncMock()) as setter,
+    ):
+        await mod._prefetch_sc_searches(
+            sc, items, job_id=1, slow=False
+        )
+
+    assert sc.search.await_count == 0
+    assert setter.await_count == 0
+
+
+async def test_prefetch_warms_both_query_forms() -> None:
+    """Real miss must pre-warm ``artist+title`` AND title-only queries."""
+    from app.services import external_import_worker as mod
+
+    sc = MagicMock()
+    sc.search = AsyncMock(return_value=[{"id": 1, "title": "X"}])
+
+    items = [{"title": "Song", "artist": "Artist"}]
+    setter_calls: list[str] = []
+
+    async def _capture_set(query: str, _hits: list[dict]) -> None:
+        setter_calls.append(query)
+
+    set_mock = AsyncMock(side_effect=_capture_set)
+    with (
+        patch.object(
+            mod, "_get_cached_sc_search", new=AsyncMock(return_value=None)
+        ),
+        patch.object(mod, "_set_cached_sc_search", new=set_mock),
+        patch.object(mod, "_jitter_delay", return_value=0.0),
+    ):
+        await mod._prefetch_sc_searches(
+            sc, items, job_id=1, slow=False
+        )
+
+    assert sc.search.await_count == 2
+    assert sorted(setter_calls) == ["Artist Song", "Song"]
+
+
+async def test_prefetch_swallows_search_errors() -> None:
+    """A failed prefetch must not raise; the main loop will retry live."""
+    from app.services import external_import_worker as mod
+
+    sc = MagicMock()
+    sc.search = AsyncMock(side_effect=RuntimeError("boom"))
+
+    items = [{"title": "Song", "artist": "Artist"}]
+
+    with (
+        patch.object(
+            mod, "_get_cached_sc_search", new=AsyncMock(return_value=None)
+        ),
+        patch.object(mod, "_set_cached_sc_search", new=AsyncMock()) as setter,
+        patch.object(mod, "_jitter_delay", return_value=0.0),
+    ):
+        await mod._prefetch_sc_searches(
+            sc, items, job_id=1, slow=False
+        )
+
+    assert setter.await_count == 0
+
+
+async def test_prefetch_short_circuits_on_cancel() -> None:
+    """Once the cancel flag is set, no further SC calls fire."""
+    from app.services import external_import_worker as mod
+
+    sc = MagicMock()
+    sc.search = AsyncMock(return_value=[])
+
+    items = [
+        {"title": f"T{i}", "artist": f"A{i}"} for i in range(20)
+    ]
+
+    cancel_state = {"cancelled": False}
+
+    async def _is_cancel(_job_id: int) -> bool:
+        return cancel_state["cancelled"]
+
+    async def _search_side_effect(
+        *_a: object, **_kw: object
+    ) -> list[dict]:
+        # Trip the cancel flag after the very first search succeeds.
+        cancel_state["cancelled"] = True
+        return []
+
+    with (
+        patch.object(
+            mod, "_get_cached_sc_search", new=AsyncMock(return_value=None)
+        ),
+        patch.object(mod, "_set_cached_sc_search", new=AsyncMock()),
+        patch.object(mod, "_jitter_delay", return_value=0.0),
+        patch.object(mod, "is_cancel_flag_set", new=_is_cancel),
+    ):
+        sc.search.side_effect = _search_side_effect
+        await mod._prefetch_sc_searches(
+            sc, items, job_id=1, slow=False
+        )
+
+    # 20 items × 2 query forms = 40 tasks. With concurrency=3 and a
+    # cancel after the first search, only a handful should reach SC.
+    assert sc.search.await_count < 10
 
 
 async def test_sweep_stuck_jobs_resets_stale_importing(
