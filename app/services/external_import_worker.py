@@ -192,22 +192,27 @@ async def _prefetch_sc_searches(
     concurrency = max(1, int(settings.import_sc_prefetch_concurrency))
     sem = asyncio.Semaphore(concurrency)
     cancelled = False
+    stats = {"cache_hits": 0, "live_calls": 0, "errors": 0, "skipped": 0}
 
     async def _fetch_one(query: str) -> None:
         nonlocal cancelled
         if cancelled:
+            stats["skipped"] += 1
             return
         cached = await _get_cached_sc_search(query)
         if cached is not None:
+            stats["cache_hits"] += 1
             return
         async with sem:
             if cancelled:
+                stats["skipped"] += 1
                 return
             # One Redis check per real SC call. Cheap (a single
             # GET) and bounds the worst-case lag between cancel
             # and shutdown to roughly one slot's jitter+search.
             if await is_cancel_flag_set(job_id):
                 cancelled = True
+                stats["skipped"] += 1
                 return
             await asyncio.sleep(_jitter_delay(slow))
             try:
@@ -220,7 +225,9 @@ async def _prefetch_sc_searches(
                     job_id=job_id,
                 )
                 await _set_cached_sc_search(query, hits)
+                stats["live_calls"] += 1
             except Exception:
+                stats["errors"] += 1
                 logger.debug(
                     "external_import_prefetch_miss",
                     job_id=job_id,
@@ -242,11 +249,16 @@ async def _prefetch_sc_searches(
             tasks.append(asyncio.create_task(_fetch_one(title)))
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
-    if cancelled:
-        logger.info(
-            "external_import_prefetch_cancelled",
-            job_id=job_id,
-        )
+    logger.info(
+        "external_import_prefetch_stats",
+        job_id=job_id,
+        total_queries=len(tasks),
+        cache_hits=stats["cache_hits"],
+        live_calls=stats["live_calls"],
+        errors=stats["errors"],
+        skipped=stats["skipped"],
+        cancelled=cancelled,
+    )
 
 
 def _build_query(title: str, artist: str) -> str:
@@ -386,10 +398,6 @@ async def process_external_import_job(job_id: int) -> None:
                 sc_items,
                 job_id=job_id,
                 slow=slow,
-            )
-            logger.info(
-                "external_import_prefetch_done",
-                job_id=job_id,
             )
         consecutive_failures = 0
         delay_multiplier = 1.0
