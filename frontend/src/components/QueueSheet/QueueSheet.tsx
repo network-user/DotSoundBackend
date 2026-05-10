@@ -5,7 +5,7 @@ import { useExitTransition } from '@/hooks/useExitTransition'
 import {
   usePlayerActions,
   usePlayerMeta,
-  usePlayerState,
+  usePlayerPlayback,
 } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
 import { SwipeRow } from '@/components/ui/SwipeRow'
@@ -28,7 +28,7 @@ export function QueuePanelContent({
     queue,
     history,
   } = usePlayerMeta()
-  const { isPlaying } = usePlayerState()
+  const { isPlaying } = usePlayerPlayback()
   const {
     closeQueue,
     playTrack,

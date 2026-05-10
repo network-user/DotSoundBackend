@@ -99,6 +99,10 @@ import { CookieNotice } from '@/components/Legal/CookieNotice'
 import { OfflineBanner } from '@/components/ui/OfflineBanner'
 import { DynamicIslandHost } from '@/components/ui/DynamicIsland'
 import { InstallPrompt } from '@/components/PwaInstall/InstallPrompt'
+import {
+  PwaOnboardingModal,
+  shouldShowPwaOnboardingModal,
+} from '@/components/PwaInstall/PwaOnboardingModal'
 import { QueueSheet } from '@/components/QueueSheet/QueueSheet'
 import { BannedScreen } from '@/components/BannedScreen/BannedScreen'
 import { SystemEventListener } from '@/components/Notifications/SystemEventListener'
@@ -240,6 +244,7 @@ export function App() {
   >({})
   const [needsOnboarding, setNeedsOnboarding] =
     useState(false)
+  const [showPwaModal, setShowPwaModal] = useState(false)
   const [bannedReason, setBannedReason] = useState<
     string | null
   >(null)
@@ -660,6 +665,9 @@ export function App() {
         onComplete={() => {
           setNeedsOnboarding(false)
           reloadLikes()
+          if (shouldShowPwaOnboardingModal()) {
+            setShowPwaModal(true)
+          }
         }}
       />
     )
@@ -797,6 +805,11 @@ export function App() {
       <Equalizer />
       <QueueSheet />
       <InstallPrompt />
+      {showPwaModal && (
+        <PwaOnboardingModal
+          onDismiss={() => setShowPwaModal(false)}
+        />
+      )}
       <SystemEventListener />
       <CookieNotice />
       <SettingsSheet

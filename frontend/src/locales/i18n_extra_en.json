@@ -95,7 +95,18 @@
     "installLabel": "Install .sound",
     "installCta": "Install",
     "ok": "OK",
-    "closeAria": "Close"
+    "closeAria": "Close",
+    "onbTitle": "Add .sound to your screen",
+    "onbSubtitle": "Works like a native app — no browser bar, no address line.",
+    "onbBenefit1": "Instant launch from home screen",
+    "onbBenefit2": "Full-screen player without browser UI",
+    "onbBenefit3": "Works on slow connections",
+    "onbInstallCta": "Install",
+    "onbLater": "Later",
+    "onbIosSafariStep1": "Tap Share",
+    "onbIosOtherStep1": "Tap Share or ⋯",
+    "onbIosStep2": "Choose \u201cAdd to Home Screen\u201d",
+    "onbMenuHint": "Open the browser menu and choose \u201cInstall app\u201d"
   },
   "search": {
     "placeholder": "Track or artist…",

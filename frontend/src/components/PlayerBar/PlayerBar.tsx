@@ -5,6 +5,10 @@ import {
   type CSSProperties,
   type MouseEvent,
 } from 'react'
+import {
+  PlayerBarSeek,
+  PlayerBarTime,
+} from './PlayerBarProgress'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { type PanInfo } from 'framer-motion'
@@ -13,14 +17,13 @@ import { useLikes } from '@/store/LikesContext'
 import {
   usePlayerActions,
   usePlayerMeta,
-  usePlayerState,
+  usePlayerPlayback,
 } from '@/store/PlayerContext'
 import { getUserId, haptic } from '@/lib/telegram'
 import { useRipple } from '@/components/ui/Ripple'
 import {
   m,
   SPRING_GENTLE,
-  SPRING_SNAPPY,
   useReducedMotion,
 } from '@/lib/motion'
 import { MotionPress } from '@/components/ui/MotionPress'
@@ -39,26 +42,13 @@ const PLATFORM_LABELS: Record<string, string> = {
   yandex: 'Яндекс Музыка',
 }
 
-function fmt(sec: number) {
-  if (!sec || isNaN(sec)) return '0:00'
-  const m = Math.floor(sec / 60)
-  const s = Math.floor(sec % 60)
-    .toString()
-    .padStart(2, '0')
-  return `${m}:${s}`
-}
-
 const SWIPE_UP_THRESHOLD = 80
 
 export function PlayerBar() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const reduce = useReducedMotion()
-  const {
-    currentTime,
-    duration,
-    isPlaying,
-  } = usePlayerState()
+  const { duration, isPlaying } = usePlayerPlayback()
   const {
     track,
     volume,
@@ -91,13 +81,12 @@ export function PlayerBar() {
   const [addToPlOpen, setAddToPlOpen] = useState(false)
   const [volumePinned, setVolumePinned] = useState(false)
   const [volumeHover, setVolumeHover] = useState(false)
-  const [smoothCurrentTime, setSmoothCurrentTime] = useState(0)
   const overflowRef = useRef<HTMLDivElement>(null)
   const volumeRef = useRef<HTMLDivElement>(null)
   const volumeCloseTimerRef = useRef<number | null>(null)
   const playRef = useRef<HTMLButtonElement>(null)
+  const playerBarRef = useRef<HTMLDivElement>(null)
   useRipple(playRef)
-  const targetPct = duration ? (smoothCurrentTime / duration) * 100 : 0
 
   const volumeOpen =
     showBarVolume && (volumePinned || volumeHover)
@@ -165,32 +154,8 @@ export function PlayerBar() {
     }
   }, [overflowOpen, volumeOpen])
 
-  useEffect(() => {
-    setSmoothCurrentTime(currentTime)
-  }, [currentTime, track?.id])
-
-  useEffect(() => {
-    if (!isPlaying) {
-      setSmoothCurrentTime(currentTime)
-      return
-    }
-    let rafId = 0
-    const frame = () => {
-      setSmoothCurrentTime(getPreciseTime())
-      rafId = window.requestAnimationFrame(frame)
-    }
-    rafId = window.requestAnimationFrame(frame)
-    return () => {
-      window.cancelAnimationFrame(rafId)
-    }
-  }, [currentTime, getPreciseTime, isPlaying, track?.id])
-
   if (!track) return null
 
-  const pct = Math.max(
-    0,
-    Math.min(100, Number(targetPct.toFixed(3))),
-  )
   const liked = isLiked(track.id)
 
   const coverSrc = track.cover_key
@@ -247,13 +212,6 @@ export function PlayerBar() {
     }
   }
 
-  const seekStyle = {
-    '--progress': `${pct}%`,
-  } as CSSProperties
-  const playerBarStyle = {
-    '--progress': `${pct}%`,
-  } as CSSProperties
-
   const repeatTitle =
     repeatMode === 'none'
       ? 'Повтор выкл.'
@@ -276,9 +234,9 @@ export function PlayerBar() {
   return (
     <>
     <m.div
+      ref={playerBarRef}
       id="player-bar"
       className="rp-player-bar"
-      style={playerBarStyle}
       drag={reduce ? false : 'y'}
       dragConstraints={{ top: -8, bottom: 0 }}
       dragElastic={0.25}
@@ -290,25 +248,14 @@ export function PlayerBar() {
         className="rp-player-bar__hint"
         aria-hidden="true"
       />
-      <div
-        id="pb-seek-wrap"
-        className="pb-seek-zone rp-player-seek"
-      >
-        <m.input
-          type="range"
-          id="pb-seek"
-          min={0}
-          max={100}
-          step={0.1}
-          value={pct}
-          style={seekStyle}
-          aria-label="Перемотка трека"
-          onChange={(e) =>
-            seek(Number(e.currentTarget.value))
-          }
-          transition={SPRING_SNAPPY}
-        />
-      </div>
+      <PlayerBarSeek
+        duration={duration}
+        trackId={track.id}
+        isPlaying={isPlaying}
+        getPreciseTime={getPreciseTime}
+        onSeek={seek}
+        parentRef={playerBarRef}
+      />
 
       <div id="pb-row" className="pb-row-v2">
         <div
@@ -692,10 +639,12 @@ export function PlayerBar() {
         </div>
       </div>
 
-      <div id="pb-time">
-        <span>{fmt(smoothCurrentTime)}</span>
-        <span>{fmt(duration)}</span>
-      </div>
+      <PlayerBarTime
+        duration={duration}
+        trackId={track.id}
+        isPlaying={isPlaying}
+        getPreciseTime={getPreciseTime}
+      />
 
       {hlsError && (
         <div

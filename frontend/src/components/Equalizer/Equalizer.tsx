@@ -5,7 +5,7 @@ import { api } from '@/lib/api'
 import {
   usePlayerActions,
   usePlayerMeta,
-  usePlayerState,
+  usePlayerPlayback,
 } from '@/store/PlayerContext'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
@@ -40,7 +40,7 @@ const PRESET_NAMES = Object.keys(PRESETS)
 export function Equalizer() {
   const { t } = useTranslation()
   const reduceMotion = useReducedMotion()
-  const { isPlaying } = usePlayerState()
+  const { isPlaying } = usePlayerPlayback()
   const {
     isEqOpen,
     track,

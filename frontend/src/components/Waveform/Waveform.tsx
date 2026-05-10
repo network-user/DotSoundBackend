@@ -3,7 +3,7 @@ import {
   useRef,
   type MutableRefObject,
 } from 'react'
-import { usePlayerActions, usePlayerState } from '@/store/PlayerContext'
+import { usePlayerActions, usePlayerPlayback } from '@/store/PlayerContext'
 
 interface Props {
   height?: number
@@ -194,7 +194,7 @@ export function Waveform({
   )
   const smoothedRef = useRef<Float32Array | null>(null)
   const intervalRef = useRef<number | null>(null)
-  const { isPlaying } = usePlayerState()
+  const { isPlaying } = usePlayerPlayback()
   const { getAnalyser } = usePlayerActions()
 
   useEffect(() => {

@@ -206,6 +206,15 @@ interface PlayerStateValue {
   isPlaying: boolean
 }
 
+interface PlayerPlaybackValue {
+  isPlaying: boolean
+  duration: number
+}
+
+interface PlayerTimeValue {
+  currentTime: number
+}
+
 interface PlayerActionsValue {
   playTrack: (t: Track, url?: string) => Promise<void>
   togglePlay: () => void
@@ -286,6 +295,10 @@ interface PlayerMetaValue {
 }
 
 const PlayerStateCtx = createContext<PlayerStateValue | null>(null)
+const PlayerPlaybackCtx =
+  createContext<PlayerPlaybackValue | null>(null)
+const PlayerTimeCtx =
+  createContext<PlayerTimeValue | null>(null)
 const PlayerActionsCtx = createContext<PlayerActionsValue | null>(null)
 const PlayerMetaCtx = createContext<PlayerMetaValue | null>(null)
 
@@ -2211,6 +2224,16 @@ export function PlayerProvider({
     [currentTime, duration, isPlaying],
   )
 
+  const playbackValue = useMemo<PlayerPlaybackValue>(
+    () => ({ isPlaying, duration }),
+    [isPlaying, duration],
+  )
+
+  const timeValue = useMemo<PlayerTimeValue>(
+    () => ({ currentTime }),
+    [currentTime],
+  )
+
   const openComplaint = useCallback(
     () => setIsComplaintOpen(true), [],
   )
@@ -2356,12 +2379,16 @@ export function PlayerProvider({
   return (
     <PlayerContext.Provider value={legacyValue}>
       <PlayerStateCtx.Provider value={stateValue}>
-        <PlayerActionsCtx.Provider value={actionsValue}>
-          <PlayerMetaCtx.Provider value={metaValue}>
-            <audio ref={audioRef} preload="none" />
-            {children}
-          </PlayerMetaCtx.Provider>
-        </PlayerActionsCtx.Provider>
+        <PlayerPlaybackCtx.Provider value={playbackValue}>
+          <PlayerTimeCtx.Provider value={timeValue}>
+            <PlayerActionsCtx.Provider value={actionsValue}>
+              <PlayerMetaCtx.Provider value={metaValue}>
+                <audio ref={audioRef} preload="none" />
+                {children}
+              </PlayerMetaCtx.Provider>
+            </PlayerActionsCtx.Provider>
+          </PlayerTimeCtx.Provider>
+        </PlayerPlaybackCtx.Provider>
       </PlayerStateCtx.Provider>
     </PlayerContext.Provider>
   )
@@ -2381,6 +2408,24 @@ export function usePlayerState() {
   if (!ctx)
     throw new Error(
       'usePlayerState must be used within PlayerProvider',
+    )
+  return ctx
+}
+
+export function usePlayerPlayback() {
+  const ctx = useContext(PlayerPlaybackCtx)
+  if (!ctx)
+    throw new Error(
+      'usePlayerPlayback must be used within PlayerProvider',
+    )
+  return ctx
+}
+
+export function usePlayerTime() {
+  const ctx = useContext(PlayerTimeCtx)
+  if (!ctx)
+    throw new Error(
+      'usePlayerTime must be used within PlayerProvider',
     )
   return ctx
 }

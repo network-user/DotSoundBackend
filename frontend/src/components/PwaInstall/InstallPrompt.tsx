@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { showIsland } from '@/lib/island'
@@ -11,9 +11,15 @@ import {
   hapticNotification,
   isTelegram,
 } from '@/lib/telegram'
+import {
+  hasDeferredPrompt,
+  subscribePromptChange,
+  triggerPwaInstall,
+} from '@/lib/pwaInstall'
 
 const STORAGE_KEY = 'pwa-install-dismissed-at'
 const VISIT_KEY = 'pwa-visit-count'
+const ONB_SEEN_KEY = 'pwa-onb-seen'
 const DELAY_MS = 30_000
 const FALLBACK_NO_BIP_MS = 55_000
 const MIN_VISITS = 2
@@ -23,13 +29,6 @@ type PanelMode =
   | 'ios_safari'
   | 'ios_other'
   | 'menu_hint'
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>
-  userChoice: Promise<{
-    outcome: 'accepted' | 'dismissed'
-  }>
-}
 
 function isStandalone(): boolean {
   try {
@@ -80,7 +79,9 @@ function isIOSSafariForCopy(): boolean {
 
 function recentlyDismissed(): boolean {
   try {
-    const v = localStorage.getItem(STORAGE_KEY)
+    const v =
+      localStorage.getItem(STORAGE_KEY) ||
+      localStorage.getItem(ONB_SEEN_KEY)
     if (!v) return false
     const dismissedAt = Number(v)
     const days =
@@ -110,9 +111,9 @@ export function InstallPrompt() {
   const [panelMode, setPanelMode] = useState<PanelMode | null>(
     null,
   )
-  const promptRef =
-    useRef<BeforeInstallPromptEvent | null>(null)
-  const bipEventReceived = useRef(false)
+  const [bipAvailable, setBipAvailable] = useState(
+    hasDeferredPrompt,
+  )
 
   useEffect(() => {
     if (isTelegram()) return
@@ -121,20 +122,6 @@ export function InstallPrompt() {
     const visits = bumpVisits()
     if (visits < MIN_VISITS) return
 
-    const onBefore = (e: Event) => {
-      e.preventDefault()
-      if (isIOS()) {
-        return
-      }
-      bipEventReceived.current = true
-      promptRef.current =
-        e as BeforeInstallPromptEvent
-      setPanelMode('bip')
-      window.setTimeout(
-        () => setVisible(true),
-        DELAY_MS,
-      )
-    }
     const onInstalled = () => {
       setVisible(false)
       setPanelMode(null)
@@ -146,22 +133,40 @@ export function InstallPrompt() {
       } catch {
         /* ignore */
       }
-      showIsland({ kind: 'toast', title: t('pwa.installed'), durationMs: 2400 })
+      showIsland({
+        kind: 'toast',
+        title: t('pwa.installed'),
+        durationMs: 2400,
+      })
       hapticNotification('success')
     }
 
-    window.addEventListener(
-      'beforeinstallprompt',
-      onBefore as EventListener,
-    )
-    window.addEventListener(
-      'appinstalled',
-      onInstalled,
-    )
+    window.addEventListener('appinstalled', onInstalled)
 
-    let tIos: ReturnType<typeof setTimeout> | undefined
-    if (isIOS()) {
-      tIos = setTimeout(() => {
+    let tDelay: number | undefined
+    let tFallback: number | undefined
+
+    const unsubBip = subscribePromptChange(() => {
+      const available = hasDeferredPrompt()
+      setBipAvailable(available)
+      if (available && !isIOS()) {
+        clearTimeout(tFallback)
+        setPanelMode('bip')
+        tDelay = window.setTimeout(
+          () => setVisible(true),
+          DELAY_MS,
+        )
+      }
+    })
+
+    if (hasDeferredPrompt() && !isIOS()) {
+      setPanelMode('bip')
+      tDelay = window.setTimeout(
+        () => setVisible(true),
+        DELAY_MS,
+      )
+    } else if (isIOS()) {
+      tDelay = window.setTimeout(() => {
         setPanelMode(
           isIOSSafariForCopy()
             ? 'ios_safari'
@@ -170,23 +175,17 @@ export function InstallPrompt() {
         setVisible(true)
       }, DELAY_MS)
     } else {
-      tIos = setTimeout(() => {
-        if (bipEventReceived.current) {
-          return
-        }
+      tFallback = window.setTimeout(() => {
+        if (hasDeferredPrompt()) return
         setPanelMode('menu_hint')
         setVisible(true)
       }, FALLBACK_NO_BIP_MS)
     }
 
     return () => {
-      if (tIos !== undefined) {
-        clearTimeout(tIos)
-      }
-      window.removeEventListener(
-        'beforeinstallprompt',
-        onBefore as EventListener,
-      )
+      clearTimeout(tDelay)
+      clearTimeout(tFallback)
+      unsubBip()
       window.removeEventListener(
         'appinstalled',
         onInstalled,
@@ -214,21 +213,15 @@ export function InstallPrompt() {
   }
 
   const install = async () => {
-    const evt = promptRef.current
-    if (!evt) {
+    const result = await triggerPwaInstall()
+    if (result === null) {
       dismiss()
       return
     }
-    try {
-      await evt.prompt()
-      const choice = await evt.userChoice
-      if (choice.outcome === 'accepted') {
-        hapticNotification('success')
-      }
-      dismiss(choice.outcome === 'dismissed')
-    } catch {
-      dismiss()
+    if (result === 'accepted') {
+      hapticNotification('success')
     }
+    dismiss(result === 'dismissed')
   }
 
   const hint = () => {
@@ -246,7 +239,7 @@ export function InstallPrompt() {
   }
 
   const usePrimaryForInstall =
-    panelMode === 'bip' && promptRef.current !== null
+    panelMode === 'bip' && bipAvailable
 
   return (
     <m.div
@@ -274,7 +267,7 @@ export function InstallPrompt() {
             variant="primary"
             className="install-prompt__btn primary"
             haptic="medium"
-            onClick={install}
+            onClick={() => void install()}
           >
             {t('pwa.installCta')}
           </MotionPress>

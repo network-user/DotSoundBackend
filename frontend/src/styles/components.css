@@ -1995,6 +1995,186 @@ body.ds-perf-lite .queue-eq-bars span {
   background: var(--accent-hover);
 }
 
+/* ---------- PWA Onboarding Modal ---------- */
+
+.pwa-onb-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background: rgba(0, 0, 0, 0.72);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-end;
+}
+
+.pwa-onb-card {
+  width: 100%;
+  background: var(--glass-tint-3);
+  -webkit-backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  border-top: 1px solid var(--glass-edge);
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+  padding: var(--space-6) var(--space-5);
+  padding-bottom: calc(
+    var(--space-6) + var(--safe-bottom, 0px)
+  );
+  box-shadow: var(--shadow-sheet);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+  max-width: 480px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.pwa-onb-icon-wrap {
+  width: 56px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-lg);
+  margin-bottom: var(--space-1);
+}
+
+.pwa-onb-title {
+  font-size: var(--fs-18);
+  font-weight: 700;
+  letter-spacing: var(--ls-tight);
+  margin: 0;
+  color: var(--text);
+}
+
+.pwa-onb-subtitle {
+  font-size: var(--fs-14);
+  color: var(--text-secondary);
+  line-height: var(--lh-normal);
+  margin: 0;
+  max-width: 280px;
+}
+
+.pwa-onb-benefits {
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 300px;
+}
+
+.pwa-onb-benefits li {
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pwa-onb-benefits li::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.pwa-onb-ios-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 300px;
+  margin-top: var(--space-1);
+}
+
+.pwa-onb-ios-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+}
+
+.pwa-onb-ios-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-edge);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-12);
+  font-weight: 600;
+  flex-shrink: 0;
+  color: var(--text);
+}
+
+.pwa-onb-ios-text {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  line-height: var(--lh-normal);
+}
+
+.pwa-onb-ios-share-icon {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  color: var(--text);
+}
+
+.pwa-onb-hint {
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+  line-height: var(--lh-normal);
+  margin: var(--space-1) 0 0;
+  max-width: 280px;
+}
+
+.pwa-onb-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 320px;
+  margin-top: var(--space-3);
+}
+
+.pwa-onb-btn--primary {
+  width: 100%;
+  min-height: var(--tap-comfort);
+  border-radius: var(--r-pill);
+  font-weight: 600;
+  font-size: var(--fs-15);
+}
+
+.pwa-onb-btn--ghost {
+  background: transparent;
+  border: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+  cursor: pointer;
+  padding: var(--space-2) var(--space-4);
+  min-height: var(--tap);
+  border-radius: var(--r-sm);
+}
+
+.pwa-onb-btn--ghost:hover {
+  color: var(--text);
+}
+
 /* ---------- Page transitions (View Transitions API) ---------- */
 
 ::view-transition-old(root) {

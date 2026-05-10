@@ -20,7 +20,7 @@ import { getPrefetchManager } from '@/lib/prefetch/PrefetchManager'
 import {
   usePlayerActions,
   usePlayerMeta,
-  usePlayerState,
+  usePlayerPlayback,
 } from '@/store/PlayerContext'
 import {
   m,
@@ -57,7 +57,7 @@ export function RadioView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { track: currentTrack, queue } = usePlayerMeta()
-  const { isPlaying } = usePlayerState()
+  const { isPlaying } = usePlayerPlayback()
   const {
     playNext,
     playTrack,

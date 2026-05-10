@@ -11,6 +11,7 @@ import { api } from '@/lib/api'
 import { installGlassPerformanceClass } from '@/lib/glassPerformance'
 import { installViewportListener } from '@/lib/telegram'
 import { installOnlineFlush } from '@/lib/pendingEvents'
+import { captureBeforeInstallPrompt } from '@/lib/pwaInstall'
 import { LazyMotion, domAnimation } from '@/lib/motion'
 import { App } from './App'
 import './styles/tokens.css'
@@ -32,6 +33,7 @@ import './styles/legal.css'
 installGlassPerformanceClass()
 installViewportListener()
 installOnlineFlush()
+captureBeforeInstallPrompt()
 
 api.restoreSession()
 

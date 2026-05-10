@@ -10,7 +10,7 @@ import { useLikes } from '@/store/LikesContext'
 import {
   usePlayerActions,
   usePlayerMeta,
-  usePlayerState,
+  usePlayerPlayback,
 } from '@/store/PlayerContext'
 import { getInternalUserId } from '@/lib/telegram'
 import { api } from '@/lib/api'
@@ -44,7 +44,7 @@ export function TrackCard({
   const { t } = useTranslation()
   const { isLiked, toggleLike } = useLikes()
   const { track: currentTrack } = usePlayerMeta()
-  const { isPlaying } = usePlayerState()
+  const { isPlaying } = usePlayerPlayback()
   const { playTrack, addToQueue } = usePlayerActions()
   const desktopFine = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
