@@ -1810,6 +1810,12 @@ export const api = {
     })
   },
 
+  replayOnboarding(): Promise<void> {
+    return request('/api/v1/onboarding/replay', {
+      method: 'POST',
+    })
+  },
+
   seedOnboardingTracks(
     trackIds: number[],
   ): Promise<import('@/types/api').SeedTracksResponse> {

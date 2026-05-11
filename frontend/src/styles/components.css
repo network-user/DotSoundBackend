@@ -2030,6 +2030,9 @@ body.ds-perf-lite .queue-eq-bars span {
   max-width: 480px;
   margin: 0 auto;
   width: 100%;
+  max-height: calc(92svh - var(--safe-top, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .pwa-onb-icon-wrap {

@@ -561,6 +561,82 @@ async def offline_eligibility(
     }
 
 
+@router.post(
+    "/offline-eligibility-batch",
+    summary=(
+        "Batch eligibility check for the local PWA cache"
+    ),
+)
+@limiter.limit("60/minute")
+async def offline_eligibility_batch(
+    request: Request,
+    payload: dict[str, list[int]],
+    session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+) -> dict[str, object]:
+    from app.services.offline_policy_adapter import (
+        OFFLINE_MAX_TOTAL_BYTES_PER_USER,
+        OFFLINE_MAX_TRACK_BYTES,
+        is_offline_allowed,
+    )
+
+    raw_ids = payload.get("track_ids") or []
+    if not isinstance(raw_ids, list):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="track_ids must be a list",
+        )
+    if len(raw_ids) > 200:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="too many ids (max 200)",
+        )
+    ids: list[int] = []
+    seen: set[int] = set()
+    for raw in raw_ids:
+        if not isinstance(raw, int):
+            continue
+        if raw in seen:
+            continue
+        seen.add(raw)
+        ids.append(raw)
+
+    service = TrackService(session)
+    items: dict[str, dict[str, object]] = {}
+    for tid in ids:
+        track = await service.get_track(tid, viewer=current_user)
+        if not track:
+            items[str(tid)] = {
+                "allowed": False,
+                "reason": "not_found",
+            }
+            continue
+        try:
+            _check_access(track, current_user)
+        except HTTPException:
+            items[str(tid)] = {
+                "allowed": False,
+                "reason": "forbidden",
+            }
+            continue
+        allowed, reason = is_offline_allowed(
+            catalog_type=track.catalog_type,
+            access_mode=track.access_mode,
+            file_size_bytes=track.file_size_bytes,
+        )
+        items[str(tid)] = {
+            "allowed": allowed,
+            "reason": reason,
+        }
+    return {
+        "items": items,
+        "max_track_bytes": OFFLINE_MAX_TRACK_BYTES,
+        "max_total_bytes_per_user": (
+            OFFLINE_MAX_TOTAL_BYTES_PER_USER
+        ),
+    }
+
+
 @router.get(
     "/{track_id}/audio",
     summary="Proxy-stream audio with HTTP Range support",

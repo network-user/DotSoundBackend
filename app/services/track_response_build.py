@@ -2,17 +2,38 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from urllib.parse import quote
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
+from app.repositories.artist import ArtistRepository
 from app.repositories.lyrics import LyricsRepository
 from app.repositories.track import TrackRepository
 from app.schemas.track import (
+    TrackArtistBrief,
     TrackPlaybackVariantBrief,
     TrackResponse,
 )
 from app.services.playback_variant_service import PlaybackVariantService
+
+
+def _artist_briefs(
+    rows: list[tuple],
+) -> list[TrackArtistBrief]:
+    return [
+        TrackArtistBrief(
+            id=artist.id,
+            name=artist.name,
+            role=role,
+            image_url=(
+                f"/api/v1/tracks/cover_proxy?key={quote(artist.image_key, safe='')}"
+                if artist.image_key
+                else None
+            ),
+        )
+        for artist, role, _ in rows
+    ]
 
 
 async def dedupe_and_build_track_list(
@@ -29,6 +50,7 @@ async def build_track_response(
     track: Track,
     *,
     include_has_lyrics: bool = True,
+    preloaded_artists: list[tuple] | None = None,
 ) -> TrackResponse:
     base = TrackResponse.model_validate(track)
     pvs = PlaybackVariantService(session)
@@ -67,6 +89,17 @@ async def build_track_response(
             enriched = base.model_copy(
                 update={"playback_variants": briefs},
             )
+
+    if preloaded_artists is not None:
+        artist_rows = preloaded_artists
+    else:
+        artist_rows = await ArtistRepository(session).get_track_artists_with_roles(
+            int(enriched.id)
+        )
+    enriched = enriched.model_copy(
+        update={"track_artists": _artist_briefs(artist_rows)}
+    )
+
     if not include_has_lyrics:
         return enriched
     has_l = await LyricsRepository(
@@ -81,9 +114,21 @@ async def build_track_responses(
 ) -> list[TrackResponse]:
     if not tracks:
         return []
+
+    # Batch-load all track-artist links in one query
+    track_ids = [t.id for t in tracks]
+    artists_by_track = await ArtistRepository(session).get_tracks_artists_with_roles_batch(
+        track_ids
+    )
+
     results = await asyncio.gather(
         *[
-            build_track_response(session, t, include_has_lyrics=False)
+            build_track_response(
+                session,
+                t,
+                include_has_lyrics=False,
+                preloaded_artists=artists_by_track.get(t.id, []),
+            )
             for t in tracks
         ],
     )

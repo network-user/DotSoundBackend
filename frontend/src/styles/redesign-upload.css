@@ -5,11 +5,11 @@
 .ru-up-root {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 .ru-up-header {
-  padding: 0 var(--space-1);
+  padding: 24px 20px 0;
 }
 
 .ru-up-header h2 {
@@ -29,8 +29,8 @@
 .ru-up-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  padding: 0 var(--space-1);
+  gap: var(--space-3);
+  padding: 0 20px;
 }
 
 .ru-up-tab {
@@ -345,10 +345,10 @@
 .ru-up-draft-banner {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-4);
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-5);
   border-radius: var(--r-lg, 14px);
   border: 1px solid var(--border);
   background: var(--glass-medium-bg, rgba(255, 255, 255, 0.04));
@@ -361,7 +361,7 @@
   flex: 1 1 240px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
 }
 
 .ru-up-draft-banner__text strong {

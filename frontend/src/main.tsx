@@ -13,6 +13,7 @@ import { installViewportListener } from '@/lib/telegram'
 import { installOnlineFlush } from '@/lib/pendingEvents'
 import { captureBeforeInstallPrompt } from '@/lib/pwaInstall'
 import { LazyMotion, domAnimation } from '@/lib/motion'
+import { OfflineErrorBoundary } from '@/components/OfflineErrorBoundary/OfflineErrorBoundary'
 import { App } from './App'
 import './styles/tokens.css'
 import './styles/global.css'
@@ -54,21 +55,23 @@ if (
 void i18nReady.then(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <LazyMotion features={domAnimation}>
-        <BrowserRouter basename="/mini_app">
-          <SoundProvider>
-            <AdminProvider>
-              <PrefetchProvider>
-                <PlayerProvider>
-                  <LikesProvider>
-                    <App />
-                  </LikesProvider>
-                </PlayerProvider>
-              </PrefetchProvider>
-            </AdminProvider>
-          </SoundProvider>
-        </BrowserRouter>
-      </LazyMotion>
+      <OfflineErrorBoundary>
+        <LazyMotion features={domAnimation}>
+          <BrowserRouter basename="/mini_app">
+            <SoundProvider>
+              <AdminProvider>
+                <PrefetchProvider>
+                  <PlayerProvider>
+                    <LikesProvider>
+                      <App />
+                    </LikesProvider>
+                  </PlayerProvider>
+                </PrefetchProvider>
+              </AdminProvider>
+            </SoundProvider>
+          </BrowserRouter>
+        </LazyMotion>
+      </OfflineErrorBoundary>
     </StrictMode>,
   )
 })

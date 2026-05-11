@@ -42,8 +42,31 @@ ALLOWED_TASK_NAMES: frozenset[str] = frozenset(
         "lyrics_discovery_sweep_task",
         "generate_and_upload_cover",
         "admin.alert.send",
+        "normalize_track_titles_batch",
     }
 )
+
+
+@router.post("/normalize-track-titles")
+async def trigger_title_normalization(
+    offset: int = Query(0, ge=0),
+    batch_size: int = Query(200, ge=10, le=1000),
+    _admin: User = Depends(require_capability("tasks.run")),
+) -> dict[str, Any]:
+    """Queue one batch of the retroactive title-artist normalization.
+
+    Chain batches by incrementing ``offset`` by ``batch_size`` until
+    the response contains ``"done": true``.
+    """
+    from app.services.track_title_normalization_task import (
+        normalize_track_titles_batch,
+    )
+
+    result = await normalize_track_titles_batch.kiq(
+        offset=offset, batch_size=batch_size
+    )
+    task_id = getattr(result, "task_id", None)
+    return {"task_id": task_id, "offset": offset, "batch_size": batch_size}
 
 
 @router.get("/queues")

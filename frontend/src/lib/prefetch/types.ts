@@ -34,6 +34,13 @@ export interface PrefetchPolicySnapshot {
   concurrentPrefetchLimit: number
   skipThirdPartyAudioCache: boolean
   lookaheadByContext: Partial<Record<PrefetchContextName, number>>
+  /**
+   * How many warmed tracks (per enqueue call) to escalate from
+   * "warm prefix" to "fully downloaded into offline cache" — only
+   * when on a non-slow connection and within quota. Saved with
+   * pinned:false so the GC can evict them later.
+   */
+  fullDownloadAhead?: number
 }
 
 export interface PrefetchTrackBrief {
@@ -85,6 +92,7 @@ export const DEFAULT_PREFETCH_POLICY: PrefetchPolicySnapshot = {
   evictionPolicy: 'lru',
   concurrentPrefetchLimit: 3,
   skipThirdPartyAudioCache: true,
+  fullDownloadAhead: 2,
   lookaheadByContext: {
     home: 3,
     album: 5,

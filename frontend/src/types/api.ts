@@ -7,6 +7,13 @@ export interface TrackPlaybackVariantBrief {
   is_primary_for_display: boolean
 }
 
+export interface TrackArtistBrief {
+  id: number
+  name: string
+  role: string  // "primary" | "featured"
+  image_url: string | null
+}
+
 export interface Track {
   id: number
   title: string
@@ -37,6 +44,7 @@ export interface Track {
   created_at: string
   waveform_data: number[] | null
   playback_variants?: TrackPlaybackVariantBrief[]
+  track_artists?: TrackArtistBrief[]
   resume_position_seconds?: number | null
   last_listen_at?: string | null
   last_listen_seconds?: number | null

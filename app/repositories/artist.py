@@ -177,6 +177,47 @@ class ArtistRepository(BaseRepository[Artist]):
         )
         return list(result.scalars().all())
 
+    async def get_track_artists_with_roles(
+        self, track_id: int
+    ) -> list[tuple[Artist, str, int]]:
+        result = await self._session.execute(
+            select(Artist, TrackArtist.role, TrackArtist.position)
+            .join(TrackArtist, TrackArtist.artist_id == Artist.id)
+            .where(TrackArtist.track_id == track_id)
+            .order_by(TrackArtist.position)
+        )
+        return [(row[0], row[1], row[2]) for row in result.all()]
+
+    async def get_tracks_artists_with_roles_batch(
+        self, track_ids: list[int]
+    ) -> dict[int, list[tuple[Artist, str, int]]]:
+        if not track_ids:
+            return {}
+        result = await self._session.execute(
+            select(Artist, TrackArtist.role, TrackArtist.position, TrackArtist.track_id)
+            .join(TrackArtist, TrackArtist.artist_id == Artist.id)
+            .where(TrackArtist.track_id.in_(track_ids))
+            .order_by(TrackArtist.track_id, TrackArtist.position)
+        )
+        out: dict[int, list[tuple[Artist, str, int]]] = {}
+        for artist, role, position, track_id in result.all():
+            out.setdefault(track_id, []).append((artist, role, position))
+        return out
+
+    async def get_all_artist_track_ids(
+        self,
+        artist_id: int,
+        limit: int = 500,
+    ) -> list[int]:
+        """All track ids where artist has any credit (primary or featured)."""
+        result = await self._session.execute(
+            select(TrackArtist.track_id)
+            .where(TrackArtist.artist_id == artist_id)
+            .order_by(TrackArtist.track_id.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def list_similar_artists_from_similarity_index(
         self,
         artist_id: int,

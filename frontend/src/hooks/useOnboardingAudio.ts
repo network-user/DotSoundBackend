@@ -110,6 +110,7 @@ export function useOnboardingAudio(): UseOnboardingAudio {
         a.pause()
         a.muted = false
         a.src = src
+        a.load()
       } catch {
         /* ignore */
       }

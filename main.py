@@ -34,6 +34,7 @@ if __name__ == "__main__":
             "app.services.snippet_worker",
             "app.services.artist_stats_worker",
             "app.services.account_deletion_worker",
+            "app.services.track_title_normalization_task",
         ],
         stdout=sys.stdout,
         stderr=sys.stderr,

@@ -12,23 +12,25 @@ import {
 import { RadioPage } from './pages/RadioPage'
 import { ImportPage } from './pages/ImportPage'
 import { CardsPage } from './pages/CardsPage'
-import { SwipesPage } from './pages/SwipesPage'
+import { MixPage } from './pages/MixPage'
 import { ReadyPage } from './pages/ReadyPage'
 
 interface Props {
   onComplete: () => void
 }
 
-const PAGE_KEYS = ['radio', 'import', 'cards', 'swipes', 'ready'] as const
+const PAGE_KEYS = ['radio', 'import', 'cards', 'mix', 'ready'] as const
 type PageKey = (typeof PAGE_KEYS)[number]
 
 const PAGE_COMPONENTS: Record<PageKey, () => JSX.Element> = {
   radio: RadioPage,
   import: ImportPage,
   cards: CardsPage,
-  swipes: SwipesPage,
+  mix: MixPage,
   ready: ReadyPage,
 }
+
+const TR = (key: string) => `redesign.tutorial.${key}`
 
 export function WelcomeTutorial({ onComplete }: Props) {
   const { t } = useTranslation()
@@ -91,10 +93,10 @@ export function WelcomeTutorial({ onComplete }: Props) {
           >
             <Page />
             <h2 className="welcome-tutorial-title">
-              {t(`tutorial.${pageKey}.title`)}
+              {t(TR(`${pageKey}.title`))}
             </h2>
             <p className="welcome-tutorial-body">
-              {t(`tutorial.${pageKey}.body`)}
+              {t(TR(`${pageKey}.body`))}
             </p>
           </motion.div>
         </AnimatePresence>
@@ -121,10 +123,10 @@ export function WelcomeTutorial({ onComplete }: Props) {
               className="onboarding-skip"
               onClick={back}
               disabled={finishing}
-              ariaLabel={t('tutorial.back')}
+              ariaLabel={t(TR('back'))}
             >
               <Icon name="chevron-left" size={18} />
-              {t('tutorial.back')}
+              {t(TR('back'))}
             </MotionPress>
           ) : (
             <MotionPress
@@ -135,7 +137,7 @@ export function WelcomeTutorial({ onComplete }: Props) {
               onClick={() => void finish()}
               disabled={finishing}
             >
-              {t('tutorial.skip')}
+              {t(TR('skip'))}
             </MotionPress>
           )}
           <MotionPress
@@ -146,7 +148,7 @@ export function WelcomeTutorial({ onComplete }: Props) {
             onClick={next}
             disabled={finishing}
           >
-            {isLast ? t('tutorial.start') : t('tutorial.next')}
+            {isLast ? t(TR('start')) : t(TR('next'))}
           </MotionPress>
         </div>
       </div>

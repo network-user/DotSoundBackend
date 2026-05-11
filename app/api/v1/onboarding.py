@@ -117,6 +117,22 @@ async def acknowledge_tutorial(
     return {"status": "ok"}
 
 
+@router.post("/replay")
+@limiter.limit("3/minute")
+async def replay_onboarding(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """User-facing reset: clear preferences, dislikes and tutorial
+    state so the onboarding wizard runs again and recommendations
+    are rebuilt from scratch.
+    """
+    svc = OnboardingService(db)
+    await svc.replay_onboarding(user.id)
+    return {"status": "ok"}
+
+
 @router.post(
     "/seed-tracks",
     response_model=SeedTracksResponse,

@@ -4,6 +4,7 @@
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
@@ -496,6 +497,56 @@ export function TrackCardSheet({
       requestAnimationFrame(() => onOpenArtist(name))
     },
     [closeCard, onOpenArtist],
+  )
+
+  const renderArtists = useCallback(
+    (t: typeof track) => {
+      if (!t) return <span>—</span>
+      const linked = t.track_artists ?? []
+      if (linked.length === 0) {
+        return (
+          <span
+            style={t.artist && onOpenArtist ? { cursor: 'pointer' } : undefined}
+            onClick={() => t.artist && goToArtist(t.artist)}
+          >
+            {t.artist ?? '—'}
+          </span>
+        )
+      }
+      const primary = linked.filter((a) => a.role === 'primary')
+      const featured = linked.filter((a) => a.role !== 'primary')
+      const makeSpan = (name: string, key: string | number) => (
+        <span
+          key={key}
+          style={onOpenArtist ? { cursor: 'pointer' } : undefined}
+          onClick={() => goToArtist(name)}
+        >
+          {name}
+        </span>
+      )
+      const primaryParts = primary.map((a) => makeSpan(a.name, a.id))
+      const featParts = featured.map((a) => makeSpan(a.name, a.id))
+      return (
+        <>
+          {primaryParts.length > 0
+            ? primaryParts.reduce<ReactNode[]>(
+                (acc, el, i) => (i === 0 ? [el] : [...acc, ', ', el]),
+                [],
+              )
+            : (t.artist && makeSpan(t.artist, 'primary'))}
+          {featParts.length > 0 && (
+            <span className="tcs-artist-feat">
+              {' feat. '}
+              {featParts.reduce<ReactNode[]>(
+                (acc, el, i) => (i === 0 ? [el] : [...acc, ', ', el]),
+                [],
+              )}
+            </span>
+          )}
+        </>
+      )
+    },
+    [goToArtist, onOpenArtist],
   )
 
   const handleBackdrop = (
@@ -1190,20 +1241,8 @@ export function TrackCardSheet({
                 <h2 className="tcs-title">
                   {track.title}
                 </h2>
-                <p
-                  className="tcs-artist"
-                  onClick={() => {
-                    if (track.artist && onOpenArtist) {
-                      goToArtist(track.artist)
-                    }
-                  }}
-                  style={
-                    track.artist
-                      ? { cursor: 'pointer' }
-                      : undefined
-                  }
-                >
-                  {track.artist ?? '—'}
+                <p className="tcs-artist">
+                  {renderArtists(track)}
                 </p>
               </div>
               <button
@@ -1265,20 +1304,8 @@ export function TrackCardSheet({
                   </button>
                 )}
               </div>
-              <p
-                className="tcs-artist"
-                onClick={() => {
-                  if (track.artist && onOpenArtist) {
-                    goToArtist(track.artist)
-                  }
-                }}
-                style={
-                  track.artist
-                    ? { cursor: 'pointer' }
-                    : undefined
-                }
-              >
-                {track.artist ?? '—'}
+              <p className="tcs-artist">
+                {renderArtists(track)}
               </p>
             </>
           )}

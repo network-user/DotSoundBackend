@@ -20,15 +20,22 @@ import { showIsland } from '@/lib/island'
 import { useSound } from '@/store/SoundContext'
 import {
   clearAllOffline,
+  clearUnpinned,
   getAutoCacheEnabled,
   getCacheLimitChoice,
+  getStorageBreakdown,
   getStorageInfo,
+  getUnpinnedTtlDays,
   isOfflineCacheSupported,
+  runCacheGC,
   setAutoCacheEnabled,
   setCacheLimitChoice,
+  setUnpinnedTtlDays,
   type CacheLimitChoice,
+  type StorageBreakdown,
 } from '@/lib/offlineCache'
 import { AccountDangerZone } from './AccountDangerZone'
+import { ResetRecommendationsSection } from './ResetRecommendationsSection'
 import { SettingsLegalSection } from './SettingsLegalSection'
 import { LinkedAccounts } from './LinkedAccounts'
 import { OAuthImportAccounts } from './OAuthImportAccounts'
@@ -84,11 +91,18 @@ export function SettingsSheet({
     used: number
     quota: number
   }>({ used: 0, quota: 0 })
+  const [breakdown, setBreakdown] = useState<StorageBreakdown | null>(
+    null,
+  )
+  const [ttlDays, setTtlDays] = useState<number>(() =>
+    getUnpinnedTtlDays(),
+  )
 
   useEffect(() => {
     if (!open) return
     if (!isOfflineCacheSupported()) return
     void getStorageInfo().then(setStorage)
+    void getStorageBreakdown().then(setBreakdown)
   }, [open])
 
   useEffect(() => {
@@ -188,12 +202,41 @@ export function SettingsSheet({
     feedbackTap()
     await clearAllOffline()
     setStorage(await getStorageInfo())
+    setBreakdown(await getStorageBreakdown())
     showIsland({
       kind: 'toast',
       title: t('settings.offlineClearDone', {
         defaultValue: 'Оффлайн-кеш очищен',
       }),
       durationMs: 2200,
+    })
+  }
+
+  const handleClearAutoCache = async () => {
+    feedbackTap()
+    const removed = await clearUnpinned()
+    setStorage(await getStorageInfo())
+    setBreakdown(await getStorageBreakdown())
+    showIsland({
+      kind: 'toast',
+      title: t('settings.offlineAutoClearDone', {
+        count: removed,
+        defaultValue:
+          'Удалено {{count}} временных треков',
+      }),
+      durationMs: 2400,
+    })
+  }
+
+  const handleTtlChange = (
+    value: number,
+  ) => {
+    setTtlDays(value)
+    setUnpinnedTtlDays(value)
+    hapticSelection()
+    void runCacheGC({ force: true }).then(async () => {
+      setStorage(await getStorageInfo())
+      setBreakdown(await getStorageBreakdown())
     })
   }
 
@@ -451,6 +494,67 @@ export function SettingsSheet({
                   </MotionPress>
                 </div>
               )}
+
+              {autoCacheEnabled && breakdown && breakdown.count > 0 && (
+                <div className="settings-item settings-item--feedback">
+                  <Icon name="info" size={20} />
+                  <span>
+                    {t('settings.offlineBreakdown', {
+                      pinned: formatBytes(
+                        breakdown.byPinned.pinned,
+                      ),
+                      unpinned: formatBytes(
+                        breakdown.byPinned.unpinned,
+                      ),
+                      defaultValue:
+                        'Сохранено: {{pinned}} · Прогрев: {{unpinned}}',
+                    })}
+                  </span>
+                  {breakdown.byPinned.unpinned > 0 && (
+                    <MotionPress
+                      type="button"
+                      variant="ghost"
+                      haptic="medium"
+                      className="settings-mini-btn"
+                      onClick={handleClearAutoCache}
+                    >
+                      {t('settings.offlineClearAuto', {
+                        defaultValue: 'Очистить прогрев',
+                      })}
+                    </MotionPress>
+                  )}
+                </div>
+              )}
+
+              {autoCacheEnabled && (
+                <div className="settings-item">
+                  <Icon name="clock" size={20} />
+                  <span>
+                    {t('settings.offlineUnpinnedTtl', {
+                      days: ttlDays,
+                      defaultValue:
+                        'Хранить прогрев: {{days}} дн.',
+                    })}
+                  </span>
+                  <select
+                    className="settings-select"
+                    value={String(ttlDays)}
+                    onChange={(e) =>
+                      handleTtlChange(
+                        Number.parseInt(
+                          e.currentTarget.value,
+                          10,
+                        ),
+                      )
+                    }
+                  >
+                    <option value="1">1</option>
+                    <option value="3">3</option>
+                    <option value="7">7</option>
+                    <option value="14">14</option>
+                  </select>
+                </div>
+              )}
             </>
           )}
 
@@ -643,6 +747,7 @@ export function SettingsSheet({
             <span>{t('settings.trashLink', 'Корзина треков')}</span>
           </MotionPress>
 
+          <ResetRecommendationsSection onClose={onClose} />
           <SettingsLegalSection />
           <AccountDangerZone />
         </div>

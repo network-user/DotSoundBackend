@@ -297,8 +297,23 @@ export function OnboardingV2({ onComplete }: Props) {
   )
 
   const togglePreview = useCallback(() => {
-    audio.toggle({ step: 'swipe' })
-  }, [audio])
+    const tr = tasteTracks[tasteIndex]
+    if (!tr) return
+    if (
+      audio.state === 'playing' ||
+      (audio.state === 'paused' &&
+        audio.currentTrackId === tr.id)
+    ) {
+      audio.toggle({ step: 'swipe' })
+      return
+    }
+    audio.prime()
+    audio.playTrack(
+      tr.id,
+      `/api/v1/track-preview/${tr.id}/segment.mp4`,
+      { step: 'swipe' },
+    )
+  }, [audio, tasteTracks, tasteIndex])
 
   const finalizeSwipe = useCallback(
     async (decisions: typeof tasteDecisions) => {
@@ -663,7 +678,8 @@ export function OnboardingV2({ onComplete }: Props) {
 
       <audio
         ref={audio.audioRef}
-        preload="none"
+        preload="auto"
+        playsInline
         style={{ display: 'none' }}
       />
     </div>
@@ -902,8 +918,13 @@ function GenresStep({
         window.clearTimeout(timerRef.current)
       }
       a.pause()
-      a.src = `/api/v1/track-preview/${track.id}/segment.mp4`
       a.muted = false
+      a.src = `/api/v1/track-preview/${track.id}/segment.mp4`
+      try {
+        a.load()
+      } catch {
+        /* ignore */
+      }
       a.onended = () => {
         if (timerRef.current !== null) {
           window.clearTimeout(timerRef.current)
@@ -942,6 +963,11 @@ function GenresStep({
       // priming and a.play() is blocked by autoplay policy.
       a.muted = true
       a.src = GENRE_SILENT_WAV
+      try {
+        a.load()
+      } catch {
+        /* ignore */
+      }
       void a.play().catch(() => {})
 
       let queue = queuesRef.current.get(genre)
@@ -1145,7 +1171,8 @@ function GenresStep({
       </div>
       <audio
         ref={genreAudioRef}
-        preload="none"
+        preload="auto"
+        playsInline
         style={{ display: 'none' }}
       />
     </>

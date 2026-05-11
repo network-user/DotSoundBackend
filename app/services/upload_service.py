@@ -186,6 +186,7 @@ class UploadService:
         from app.services.artist_service import ArtistService
 
         artist_svc = ArtistService(self._session)
+        linked_count = 0
         if use_profile_artist and uploader_id is not None and artist:
             owned_artist = await artist_svc.ensure_owned_artist_for_user(
                 user_id=uploader_id,
@@ -197,18 +198,32 @@ class UploadService:
                 role="primary",
                 position=0,
             )
+            linked_count = 1
         elif artist:
             try:
-                await artist_svc.resolve_and_link(
+                linked = await artist_svc.resolve_and_link(
                     track_id=track.id,
                     raw_artist_string=artist,
                     source="internal",
                 )
+                linked_count = len(linked)
             except Exception:
                 logger.warning(
                     "upload_artist_link_failed",
                     track_id=track.id,
                 )
+
+        try:
+            await artist_svc.link_title_artists(
+                track_id=track.id,
+                title=title,
+                existing_artist_count=linked_count,
+            )
+        except Exception:
+            logger.warning(
+                "upload_title_artist_link_failed",
+                track_id=track.id,
+            )
 
         return track
 

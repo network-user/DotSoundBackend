@@ -46,6 +46,11 @@ export default defineConfig({
         'icon-192.png',
         'icon-512.png',
         'icon-maskable-512.png',
+        'sounds/notify-error.wav',
+        'sounds/notify-info.wav',
+        'sounds/notify-success.wav',
+        'sounds/notify-warning.wav',
+        'sounds/tap-soft.wav',
       ],
       manifest: {
         name: '.\u0437\u0432\u0443\u043a — музыка',
@@ -202,6 +207,31 @@ export default defineConfig({
                   },
                 },
               ],
+            },
+          },
+          {
+            urlPattern:
+              /\/api\/v1\/users\/\d+\/(?:likes|history|preferences|me)/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'user-shell-cache',
+              expiration: {
+                maxEntries: 40,
+                maxAgeSeconds: 60 * 60 * 24 * 7,
+              },
+              cacheableResponse: { statuses: [200] },
+            },
+          },
+          {
+            urlPattern: /\/api\/v1\/users\/me(?:\?.*)?$/,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'user-shell-cache',
+              expiration: {
+                maxEntries: 5,
+                maxAgeSeconds: 60 * 60 * 24 * 7,
+              },
+              cacheableResponse: { statuses: [200] },
             },
           },
           {

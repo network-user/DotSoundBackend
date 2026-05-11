@@ -15,6 +15,8 @@ import { showIsland } from '@/lib/island'
 import i18n from '@/lib/i18n'
 import {
   getCachedAudioUrl,
+  getCachedIdsSync,
+  markPlayed as markCachePlayed,
   trackProgressiveAudioUrl,
 } from '@/lib/offlineCache'
 import { queueOrSend } from '@/lib/pendingEvents'
@@ -314,25 +316,40 @@ const _PLAYER_SNAPSHOT_KEY = 'player-snapshot'
 const _PLAYER_LEGACY_TRACK_KEY = 'player-track'
 const _PLAYER_LEGACY_TIME_KEY = 'player-time'
 
-type _PlayerSnapshotV1 = {
-  v: 1
+type _PlayerSnapshotV2 = {
+  v: 2
   track: Track
   time: number
+  queue?: Track[]
+  savedAt?: number
 }
+
+const _QUEUE_PERSIST_MAX = 100
+const _QUEUE_PERSIST_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 function _cloneTrackForStorage(t: Track): Track {
   const { resume_position_seconds: _r, ...rest } = t
   return rest as Track
 }
 
-function _saveState(t: Track | null, s: number) {
+function _saveState(
+  t: Track | null,
+  s: number,
+  queue?: Track[],
+) {
   if (!t) return
   const time = Number.isFinite(s) ? s : 0
   try {
-    const payload: _PlayerSnapshotV1 = {
-      v: 1,
+    const payload: _PlayerSnapshotV2 = {
+      v: 2,
       track: _cloneTrackForStorage(t),
       time,
+      savedAt: Date.now(),
+    }
+    if (queue && queue.length > 0) {
+      payload.queue = queue
+        .slice(0, _QUEUE_PERSIST_MAX)
+        .map(_cloneTrackForStorage)
     }
     localStorage.setItem(
       _PLAYER_SNAPSHOT_KEY,
@@ -345,25 +362,50 @@ function _saveState(t: Track | null, s: number) {
   }
 }
 
-function _loadState() {
+function _loadState(): {
+  track: Track | null
+  time: number
+  queue?: Track[]
+} {
   try {
     const snapRaw = localStorage.getItem(
       _PLAYER_SNAPSHOT_KEY,
     )
     if (snapRaw) {
-      const snap = JSON.parse(
-        snapRaw,
-      ) as Partial<_PlayerSnapshotV1>
-      if (
-        snap?.v === 1 &&
-        snap.track &&
+      const snap = JSON.parse(snapRaw) as {
+        v?: number
+        track?: Track
+        time?: number
+        queue?: Track[]
+        savedAt?: number
+      }
+      const looksValid =
+        (snap?.v === 1 || snap?.v === 2) &&
+        !!snap.track &&
         typeof snap.track.id === 'number' &&
         typeof snap.time === 'number' &&
         Number.isFinite(snap.time)
-      ) {
+      if (looksValid) {
+        let queue: Track[] | undefined
+        if (
+          snap.v === 2 &&
+          Array.isArray(snap.queue) &&
+          snap.queue.length > 0
+        ) {
+          const fresh =
+            typeof snap.savedAt !== 'number' ||
+            Date.now() - snap.savedAt < _QUEUE_PERSIST_TTL_MS
+          if (fresh) {
+            queue = snap.queue.filter(
+              (t: Track | null | undefined): t is Track =>
+                t != null && typeof t.id === 'number',
+            )
+          }
+        }
         return {
           track: snap.track as Track,
-          time: snap.time,
+          time: snap.time as number,
+          queue,
         }
       }
     }
@@ -383,10 +425,11 @@ function _loadState() {
       Number.isFinite(safeTime)
     ) {
       try {
-        const migrated: _PlayerSnapshotV1 = {
-          v: 1,
+        const migrated: _PlayerSnapshotV2 = {
+          v: 2,
           track: _cloneTrackForStorage(track),
           time: safeTime,
+          savedAt: Date.now(),
         }
         localStorage.setItem(
           _PLAYER_SNAPSHOT_KEY,
@@ -882,16 +925,42 @@ export function PlayerProvider({
     if (!audio || restoredRef.current) return
     restoredRef.current = true
     const saved = _loadState()
+    if (saved.queue && saved.queue.length > 0) {
+      manualQueueRef.current = [...saved.queue]
+      setQueue([...saved.queue])
+    }
     if (saved.track) {
-      setTrack(saved.track)
+      let restoredTrack: Track = saved.track
+      let restoredTime: number = saved.time
+      const isOffline =
+        typeof navigator !== 'undefined' &&
+        navigator.onLine === false
+      if (isOffline) {
+        const cached = getCachedIdsSync()
+        if (cached.size > 0 && !cached.has(saved.track.id)) {
+          const fromQueue = (saved.queue ?? []).find((t) =>
+            cached.has(t.id),
+          )
+          if (fromQueue) {
+            restoredTrack = fromQueue
+            restoredTime = 0
+            manualQueueRef.current =
+              manualQueueRef.current.filter(
+                (t) => t.id !== fromQueue.id,
+              )
+            setQueue([...manualQueueRef.current])
+          }
+        }
+      }
+      setTrack(restoredTrack)
       audio.crossOrigin = 'anonymous'
       audio.volume = volume
 
       const seekAfterLoad = () => {
-        if (saved.time > 0) {
-          setCurrentTime(saved.time)
+        if (restoredTime > 0) {
+          setCurrentTime(restoredTime)
           const onMeta = () => {
-            audio.currentTime = saved.time
+            audio.currentTime = restoredTime
             audio.removeEventListener(
               'loadedmetadata',
               onMeta,
@@ -904,31 +973,47 @@ export function PlayerProvider({
         }
       }
 
-      if (!saved.track.is_public) {
-        api.getStream(saved.track.id)
-          .then((stream) => {
-            srcAssignedAtRef.current = Date.now()
-            audio.src = stream.url
-            seekAfterLoad()
-          })
-          .catch(() => {})
-      } else {
-        const hlsUrl = `/api/v1/tracks/${saved.track.id}/hls/master.m3u8`
-        const fallback = trackProgressiveAudioUrl(
-          saved.track.id,
+      void (async () => {
+        const cachedUrl = await getCachedAudioUrl(
+          restoredTrack.id,
         )
-
-        if (Hls.isSupported()) {
+        if (cachedUrl) {
           srcAssignedAtRef.current = Date.now()
-          startHlsPlayback(audio, hlsUrl, fallback, false)
-            .then(seekAfterLoad)
+          audio.src = cachedUrl
+          seekAfterLoad()
+          return
+        }
+        if (isOffline) {
+          // Не пытаемся достучаться до сети — оставим
+          // плеер с восстановленным треком, но без src.
+          return
+        }
+        if (!restoredTrack.is_public) {
+          api.getStream(restoredTrack.id)
+            .then((stream) => {
+              srcAssignedAtRef.current = Date.now()
+              audio.src = stream.url
+              seekAfterLoad()
+            })
             .catch(() => {})
         } else {
-          srcAssignedAtRef.current = Date.now()
-          audio.src = fallback
-          seekAfterLoad()
+          const hlsUrl = `/api/v1/tracks/${restoredTrack.id}/hls/master.m3u8`
+          const fallback = trackProgressiveAudioUrl(
+            restoredTrack.id,
+          )
+
+          if (Hls.isSupported()) {
+            srcAssignedAtRef.current = Date.now()
+            startHlsPlayback(audio, hlsUrl, fallback, false)
+              .then(seekAfterLoad)
+              .catch(() => {})
+          } else {
+            srcAssignedAtRef.current = Date.now()
+            audio.src = fallback
+            seekAfterLoad()
+          }
         }
-      }
+      })()
     }
   }, [])
 
@@ -950,11 +1035,27 @@ export function PlayerProvider({
         lastTrackIdRef.current === track.id &&
         Number.isFinite(a.currentTime)
       ) {
-        _saveState(track, a.currentTime)
+        _saveState(
+          track,
+          a.currentTime,
+          manualQueueRef.current,
+        )
       }
     }, _SAVE_INTERVAL)
     return () => clearInterval(i)
   }, [track])
+
+  useEffect(() => {
+    if (!track) return
+    const handle = window.setTimeout(() => {
+      _saveState(
+        track,
+        audioRef.current?.currentTime ?? 0,
+        manualQueueRef.current,
+      )
+    }, 500)
+    return () => window.clearTimeout(handle)
+  }, [track, queue])
 
   const toggleRepeat = useCallback(() => {
     setRepeatMode((prev) => {
@@ -1567,6 +1668,7 @@ export function PlayerProvider({
       if (cachedUrl) {
         await startDirectPlayback(audio, cachedUrl)
         if (bail()) return
+        void markCachePlayed(newTrack.id).catch(() => {})
         _updateMediaSession(
           newTrack,
           audio,

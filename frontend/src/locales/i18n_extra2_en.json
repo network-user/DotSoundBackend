@@ -810,24 +810,24 @@
       "back": "Back",
       "start": "Get started",
       "radio": {
-        "title": "Radio mode",
-        "body": "An endless stream tuned to your mood. Start radio on Home — it picks tracks and adapts to your likes."
+        "title": "Radio — endless stream",
+        "body": "Start radio on Home for a non-stop stream that adapts to your likes, dislikes and skips. One tap and the music flows; switch tracks with a swipe whenever you want."
       },
       "import": {
-        "title": "Your music",
-        "body": "Bring playlists from Telegram, Yandex Music, Spotify and SoundCloud, or search for specific tracks — everything lands in your library."
+        "title": "Bring your music in a minute",
+        "body": "Pull playlists from Telegram, Yandex Music, Spotify and SoundCloud by link, or search for favourite tracks right inside import — everything lands in your library and feeds your recommendations."
       },
       "cards": {
-        "title": "Track card",
-        "body": "Open a card to see lyrics, artist info, and to control playback."
+        "title": "Track card & lyrics",
+        "body": "Open a card to see synced lyrics (with translation when available), artist info, similar tracks, and quick actions — like, share, add to a playlist."
       },
-      "swipes": {
-        "title": "Swipes that matter",
-        "body": "Like or dislike — short signals that make recommendations sharper with every gesture."
+      "mix": {
+        "title": "Daily mix & smart playlists",
+        "body": "Your daily mix and themed playlists refresh automatically based on what you play, like and skip. The more you listen, the sharper the picks get."
       },
       "ready": {
         "title": "All set",
-        "body": "You're ready. Pro tip: starting radio on Home is the quickest way to hear how everything fits together."
+        "body": "Start radio on Home — that's the quickest way to see everything in action. Settings and a one-tap recommendations reset live in your profile."
       }
     },
     "achievements": {},

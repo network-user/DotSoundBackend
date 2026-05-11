@@ -269,6 +269,42 @@ class ArtistService:
     async def get_track_artists(self, track_id: int) -> list[Artist]:
         return await self._repo.get_track_artists(track_id)
 
+    async def link_title_artists(
+        self,
+        track_id: int,
+        title: str,
+        existing_artist_count: int = 0,
+    ) -> None:
+        from app.services.title_normalizer import parse_title
+        parsed = parse_title(title)
+        if parsed.is_empty():
+            return
+        pos = existing_artist_count
+        for name in parsed.all_names():
+            normalized = normalize_name(name)
+            if not normalized:
+                continue
+            try:
+                artist = await self._find_or_create(
+                    canonical=name,
+                    normalized=normalized,
+                    source="internal",
+                    external_id=None,
+                )
+                await self._repo.link_track(
+                    track_id=track_id,
+                    artist_id=artist.id,
+                    role="featured",
+                    position=pos,
+                )
+                pos += 1
+            except Exception:
+                logger.warning(
+                    "title_artist_link_failed",
+                    track_id=track_id,
+                    artist_name=name,
+                )
+
     async def list_artist_tracks(
         self,
         artist_id: int,
@@ -277,7 +313,7 @@ class ArtistService:
         public_only: bool = True,
         max_artist_tracks: int = 500,
     ) -> tuple[list[Track], int]:
-        track_ids = await self._repo.get_artist_track_ids(
+        track_ids = await self._repo.get_all_artist_track_ids(
             artist_id, limit=max_artist_tracks
         )
         if not track_ids:

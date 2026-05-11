@@ -5,6 +5,13 @@ from urllib.parse import quote
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 
+class TrackArtistBrief(BaseModel):
+    id: int
+    name: str
+    role: str  # "primary" | "featured"
+    image_url: str | None = None
+
+
 class TrackPlaybackVariantBrief(BaseModel):
     track_id: int
     source: str
@@ -48,6 +55,9 @@ class TrackResponse(BaseModel):
     created_at: datetime
     waveform_data: list[float] | None = None
     playback_variants: list[TrackPlaybackVariantBrief] = Field(
+        default_factory=list,
+    )
+    track_artists: list[TrackArtistBrief] = Field(
         default_factory=list,
     )
     resume_position_seconds: int | None = None

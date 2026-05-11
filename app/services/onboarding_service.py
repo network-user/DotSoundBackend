@@ -195,6 +195,39 @@ class OnboardingService:
         )
         return pref
 
+    async def replay_onboarding(self, user_id: int) -> UserPreference:
+        """User-facing reset: re-enter onboarding and rebuild the
+        recommendation profile.
+
+        Clears genre/artist/mood preferences, completion flags and the
+        post-onboarding tutorial seen flag, plus removes the user's
+        taste-swipe dislikes so the recsys starts from a clean slate.
+        Likes are kept — they represent the user's library and should
+        not be wiped by a soft reset.
+        """
+        from sqlalchemy import delete
+
+        from app.models.dislike import Dislike
+
+        await self._session.execute(
+            delete(Dislike).where(Dislike.user_id == user_id)
+        )
+        pref = await self._pref_repo.upsert(
+            user_id=user_id,
+            onboarding_completed=False,
+            calibration_completed=False,
+            onboarding_import_acknowledged=False,
+            preferred_genres=None,
+            preferred_artist_ids=None,
+            preferred_moods=None,
+            tutorial_seen_at=None,
+        )
+        logger.info(
+            "onboarding_replay",
+            user_id=user_id,
+        )
+        return pref
+
     async def save_preferences(
         self,
         user_id: int,

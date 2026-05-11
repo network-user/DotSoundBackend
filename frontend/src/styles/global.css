@@ -2432,6 +2432,18 @@ body.ds-perf-lite .tcs-video-pulse {
   margin-top: 4px;
 }
 
+.tcs-artist span[style*="cursor"] {
+  transition: color 0.15s ease;
+}
+
+.tcs-artist span[style*="cursor"]:hover {
+  color: var(--text);
+}
+
+.tcs-artist-feat {
+  opacity: 0.75;
+}
+
 .tcs-last-listen {
   font-size: 13px;
   color: var(--text-secondary);
