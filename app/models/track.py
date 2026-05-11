@@ -57,6 +57,13 @@ class Track(Base, TimestampMixin):
             postgresql_where=text("blob_id IS NOT NULL AND is_active IS TRUE"),
             sqlite_where=text("blob_id IS NOT NULL AND is_active = 1"),
         ),
+        Index(
+            "ix_tracks_user_audio_hash",
+            "uploaded_by_id",
+            "audio_hash",
+            postgresql_where=text("audio_hash IS NOT NULL"),
+            sqlite_where=text("audio_hash IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -216,6 +223,10 @@ class Track(Base, TimestampMixin):
     )
     deleted_reason: Mapped[str | None] = mapped_column(
         String(32),
+        nullable=True,
+    )
+    audio_hash: Mapped[str | None] = mapped_column(
+        String(64),
         nullable=True,
     )
 

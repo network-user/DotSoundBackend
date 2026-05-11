@@ -6,6 +6,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
+from app.core.observability import offline_eligibility_observed
 from app.core.rate_limit import limiter
 from app.dependencies import get_db, get_optional_user
 from app.models.user import User
@@ -36,11 +37,12 @@ def _offline_header(track: object) -> dict[str, str]:
     catalog_type = getattr(track, "catalog_type", "") or ""
     access_mode = getattr(track, "access_mode", "") or ""
     file_size_bytes = getattr(track, "file_size_bytes", None)
-    allowed, _reason = is_offline_allowed(
+    allowed, reason = is_offline_allowed(
         catalog_type=catalog_type,
         access_mode=access_mode,
         file_size_bytes=file_size_bytes,
     )
+    offline_eligibility_observed(allowed=allowed, reason=reason)
     return {"X-Offline-Allowed": "1" if allowed else "0"}
 
 

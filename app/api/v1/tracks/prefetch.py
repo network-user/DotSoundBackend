@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field
 
 from app.config import settings
+from app.core.observability import offline_prefetch_observed
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user
 from app.models.user import User
@@ -20,10 +21,13 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 def _log_prefetch_done(task: asyncio.Task[None]) -> None:
     exc = task.exception()
     if exc is not None:
+        offline_prefetch_observed(outcome="error")
         logger.warning(
             "prefetch_track_urls_failed",
             err=str(exc),
         )
+    else:
+        offline_prefetch_observed(outcome="completed")
 
 
 class PrefetchRequest(BaseModel):
@@ -52,4 +56,5 @@ async def prefetch_tracks(
 
     task = asyncio.create_task(prefetch_track_urls(body.track_ids))
     task.add_done_callback(_log_prefetch_done)
+    offline_prefetch_observed(outcome="accepted")
     return PrefetchResponse(accepted=len(body.track_ids))

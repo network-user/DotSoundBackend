@@ -51,6 +51,10 @@ async def _get_or_create_conversation_key(
     )
 
     if row:
+        if len(row.encrypted_key) < 12 + 16:
+            raise RuntimeError(
+                "encryption_key_blob_truncated"
+            )
         master = _master_aesgcm()
         nonce = row.encrypted_key[:12]
         ciphertext = row.encrypted_key[12:]

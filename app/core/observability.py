@@ -39,6 +39,8 @@ _PROM_RECSYS_LISTEN_OUTCOMES = None
 _PROM_RECSYS_SAVE_ACTIONS = None
 _PROM_RECSYS_PIPELINE_LATENCY = None
 _PROM_RECSYS_IMPRESSION_POSITION = None
+_PROM_OFFLINE_ELIGIBILITY = None
+_PROM_OFFLINE_PREFETCH = None
 
 
 def _is_internal_ip(client_host: str | None) -> bool:
@@ -252,6 +254,27 @@ def setup_metrics(application: object) -> None:
         ),
         ["surface"],
         buckets=(1, 2, 3, 5, 8, 13, 21, 34, 55, 89),
+        registry=registry,
+    )
+
+    global _PROM_OFFLINE_ELIGIBILITY
+    global _PROM_OFFLINE_PREFETCH
+    _PROM_OFFLINE_ELIGIBILITY = Counter(
+        "offline_eligibility_checks_total",
+        (
+            "Offline-eligibility checks resolved by the policy "
+            "adapter, labelled by allowed flag and reason code."
+        ),
+        ["allowed", "reason"],
+        registry=registry,
+    )
+    _PROM_OFFLINE_PREFETCH = Counter(
+        "offline_prefetch_calls_total",
+        (
+            "Prefetch API invocations by outcome "
+            "(accepted/rejected/error)."
+        ),
+        ["outcome"],
         registry=registry,
     )
 
@@ -660,3 +683,24 @@ def recsys_impression_position_observed(
     _PROM_RECSYS_IMPRESSION_POSITION.labels(
         surface=surface,
     ).observe(int(position))
+
+
+def offline_eligibility_observed(
+    *,
+    allowed: bool,
+    reason: str,
+) -> None:
+    """Record one offline-eligibility decision."""
+    if _PROM_OFFLINE_ELIGIBILITY is None:
+        return
+    _PROM_OFFLINE_ELIGIBILITY.labels(
+        allowed="1" if allowed else "0",
+        reason=reason or "unknown",
+    ).inc()
+
+
+def offline_prefetch_observed(*, outcome: str) -> None:
+    """Record one prefetch-API call outcome."""
+    if _PROM_OFFLINE_PREFETCH is None:
+        return
+    _PROM_OFFLINE_PREFETCH.labels(outcome=outcome).inc()

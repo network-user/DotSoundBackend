@@ -34,6 +34,14 @@ import { UploadStepDetails } from './steps/UploadStepDetails'
 import { UploadStepCover } from './steps/UploadStepCover'
 import { UploadStepPreview } from './steps/UploadStepPreview'
 import { UploadProgressView } from './UploadProgressView'
+import { DuplicateModal } from './DuplicateModal'
+import { flagUploadV2 } from '@/lib/flags'
+import { computeAudioHash } from '@/lib/audioHash'
+import {
+  checkDuplicate,
+  initUpload,
+  uploadFile,
+} from '@/lib/chunkedUploader'
 
 interface AutoFilledFlags {
   title?: boolean
@@ -114,6 +122,13 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
   const [autoFilled, setAutoFilled] = useState<AutoFilledFlags>({})
   const [autoDetecting, setAutoDetecting] = useState(false)
   const [uploadedTrackId, setUploadedTrackId] = useState<number | null>(null)
+  const [audioHash, setAudioHash] = useState<string | null>(null)
+  const [dupeMatch, setDupeMatch] = useState<{
+    trackId: number
+    title: string | null
+    uploadedAt: string | null
+  } | null>(null)
+  const [allowDupe, setAllowDupe] = useState(false)
 
   useEffect(() => {
     api.getGenres().then(setGenres).catch(() => {})
@@ -312,6 +327,28 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
       .then((meta) => applyAutoFilled(meta, file.name))
       .catch(() => {})
       .finally(() => setAutoDetecting(false))
+
+    setAudioHash(null)
+    setDupeMatch(null)
+    setAllowDupe(false)
+    if (flagUploadV2()) {
+      void (async () => {
+        try {
+          const hash = await computeAudioHash(file)
+          setAudioHash(hash)
+          const res = await checkDuplicate(hash, file.size)
+          if (res.exists && res.track_id) {
+            setDupeMatch({
+              trackId: res.track_id,
+              title: res.title ?? null,
+              uploadedAt: res.uploaded_at ?? null,
+            })
+          }
+        } catch {
+          /* hash/dedupe is best-effort — never block the user */
+        }
+      })()
+    }
   }
 
   function applyAutoFilled(meta: AudioMetadata, fileName: string): void {
@@ -505,6 +542,11 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
       return
     }
 
+    if (dupeMatch && !allowDupe) {
+      // user must resolve the duplicate prompt first
+      return
+    }
+
     setUploading(true)
     setUploadDone(false)
 
@@ -515,20 +557,41 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
         title: t('redesign.upload.progressTitle'),
         hint: t('redesign.upload.progressHint'),
       })
-      const fd = new FormData()
-      fd.append('file', audioFile)
-      fd.append('title', title.trim())
-      if (artist.trim()) fd.append('artist', artist.trim())
-      fd.append(
-        'use_profile_artist',
-        artistMode === 'profile' ? 'true' : 'false',
-      )
-      if (genre.trim()) fd.append('genre', genre.trim())
-      if (coverFile) fd.append('cover', coverFile)
-      fd.append('is_public', String(isPublic))
-      fd.append('upload_terms_accepted', 'true')
 
-      const uploaded = await api.uploadTrack(fd)
+      let uploaded: { id: number }
+
+      if (flagUploadV2()) {
+        const plan = await initUpload({
+          filename: audioFile.name,
+          mime: audioFile.type || 'audio/mpeg',
+          total_size: audioFile.size,
+          audio_hash: audioHash,
+          title: title.trim(),
+          artist: artist.trim() || null,
+          use_profile_artist: artistMode === 'profile',
+          genre: genre.trim() || null,
+          is_public: isPublic,
+          upload_terms_accepted: true,
+        })
+        const result = await uploadFile(plan, audioFile, {
+          cover: coverFile,
+        })
+        uploaded = { id: result.track_id }
+      } else {
+        const fd = new FormData()
+        fd.append('file', audioFile)
+        fd.append('title', title.trim())
+        if (artist.trim()) fd.append('artist', artist.trim())
+        fd.append(
+          'use_profile_artist',
+          artistMode === 'profile' ? 'true' : 'false',
+        )
+        if (genre.trim()) fd.append('genre', genre.trim())
+        if (coverFile) fd.append('cover', coverFile)
+        fd.append('is_public', String(isPublic))
+        fd.append('upload_terms_accepted', 'true')
+        uploaded = await api.uploadTrack(fd)
+      }
 
       if (lyrics) {
         if (lyrics.synced_lines) {
@@ -580,7 +643,39 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
     )
   }
 
+  const dupeModal =
+    dupeMatch && audioFile ? (
+      <DuplicateModal
+        filename={audioFile.name}
+        existingTitle={dupeMatch.title}
+        existingTrackId={dupeMatch.trackId}
+        uploadedAt={dupeMatch.uploadedAt}
+        onOpen={async (id) => {
+          try {
+            const full = await api.getTrack(id)
+            setDupeMatch(null)
+            reset()
+            onSuccess(full)
+          } catch {
+            setDupeMatch(null)
+          }
+        }}
+        onUploadAnyway={() => {
+          setAllowDupe(true)
+          setDupeMatch(null)
+        }}
+        onCancel={() => {
+          setDupeMatch(null)
+          setAudioFile(null)
+          if (localAudioUrl) URL.revokeObjectURL(localAudioUrl)
+          setLocalAudioUrl(null)
+        }}
+      />
+    ) : null
+
   return (
+    <>
+      {dupeModal}
     <form id="upload-form" noValidate onSubmit={handleSubmit}>
       <div className="ru-up-wizard-head">
         <h3>{t(`redesign.upload.${WIZARD_HINTS[wizardStep][0]}`)}</h3>
@@ -743,5 +838,6 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
         </div>
       )}
     </form>
+    </>
   )
 }

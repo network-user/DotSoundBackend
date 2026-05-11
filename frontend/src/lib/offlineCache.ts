@@ -218,6 +218,16 @@ async function resolveCacheCeiling(): Promise<number> {
   return Number.POSITIVE_INFINITY
 }
 
+/** Effective ceiling for the local cache in bytes.
+ *
+ * Returns the user-selected limit when set, otherwise 90% of the
+ * browser storage quota. ``Infinity`` means no usable ceiling
+ * could be determined.
+ */
+export async function getEffectiveCacheLimit(): Promise<number> {
+  return resolveCacheCeiling()
+}
+
 async function evictUntilUnder(maxBytes: number): Promise<void> {
   if (!Number.isFinite(maxBytes)) return
   const records = await getCachedTracks()
@@ -242,6 +252,14 @@ export type DownloadOptions = {
   onProgress?: (loaded: number, total: number) => void
   source?: CacheSource
   pinned?: boolean
+  signal?: AbortSignal
+}
+
+export class DownloadAbortedError extends Error {
+  constructor() {
+    super('Download aborted')
+    this.name = 'DownloadAbortedError'
+  }
 }
 
 function defaultPinnedForSource(source: CacheSource): boolean {
@@ -266,10 +284,17 @@ export async function downloadTrack(
     typeof trackOrId === 'number' ? trackOrId : trackOrId.id
   const trackMeta =
     typeof trackOrId === 'number' ? undefined : trackOrId
+  const signal = opts.signal
+  const throwIfAborted = () => {
+    if (signal?.aborted) throw new DownloadAbortedError()
+  }
+  throwIfAborted()
   const limits = await checkOfflineEligibility(trackId)
+  throwIfAborted()
   const url = audioUrlForTrackId(trackId)
   const res = await fetch(url, {
     credentials: 'include',
+    signal,
   })
   if (!res.ok || !res.body) {
     throw new Error(
@@ -283,25 +308,45 @@ export async function downloadTrack(
     res.headers.get('content-length') || 0,
   )
   const reader = res.body.getReader()
-  const parts: BlobPart[] = []
+  let parts: BlobPart[] | null = []
   let loaded = 0
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    const buf = value.buffer.slice(
-      value.byteOffset,
-      value.byteOffset + value.byteLength,
-    ) as ArrayBuffer
-    parts.push(buf)
-    loaded += value.byteLength
-    opts.onProgress?.(loaded, total)
+  const cancelReader = () => {
+    try {
+      void reader.cancel()
+    } catch {
+      /* ignore */
+    }
+  }
+  const onAbort = () => cancelReader()
+  signal?.addEventListener('abort', onAbort)
+  try {
+    while (true) {
+      if (signal?.aborted) throw new DownloadAbortedError()
+      const { done, value } = await reader.read()
+      if (done) break
+      const buf = value.buffer.slice(
+        value.byteOffset,
+        value.byteOffset + value.byteLength,
+      ) as ArrayBuffer
+      parts.push(buf)
+      loaded += value.byteLength
+      opts.onProgress?.(loaded, total)
+    }
+  } catch (err) {
+    parts = null
+    cancelReader()
+    throw err
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
   }
   const blob = new Blob(parts, {
     type: res.headers.get('content-type') || 'audio/mpeg',
   })
+  parts = null
   if (blob.size > limits.maxTrackBytes) {
     throw new OfflineNotAllowedError('track_too_large')
   }
+  throwIfAborted()
   const ceiling = await resolveCacheCeiling()
   if (Number.isFinite(ceiling)) {
     await evictUntilUnder(Math.max(0, ceiling - blob.size))
@@ -318,34 +363,60 @@ export async function downloadTrack(
       },
     }),
   )
-  const db = await openDb()
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite')
-    const store = tx.objectStore(STORE)
-    const getReq = store.get(trackId)
-    getReq.onsuccess = () => {
-      const existing = getReq.result as OfflineRecord | undefined
-      const nextPinned =
-        existing?.pinned === true ? true : pinned
-      const record: OfflineRecord = {
-        trackId,
-        track: trackMeta ?? existing?.track,
-        cachedAt: Date.now(),
-        bytes: blob.size,
-        audioUrl: url,
-        source: existing?.source === 'liked' || existing?.source === 'manual'
-          ? existing.source
-          : source,
-        pinned: nextPinned,
-        lastPlayedAt: existing?.lastPlayedAt ?? null,
+  // Past this point Cache API has the blob. If IDB write fails,
+  // roll back the cache entry so isCached()/getCachedAudioUrl() stay
+  // consistent.
+  let dbInstance: IDBDatabase | null = null
+  try {
+    dbInstance = await openDb()
+    const db = dbInstance
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE, 'readwrite')
+      const store = tx.objectStore(STORE)
+      const getReq = store.get(trackId)
+      tx.onabort = () =>
+        reject(tx.error ?? new Error('IDB transaction aborted'))
+      tx.onerror = () =>
+        reject(tx.error ?? new Error('IDB transaction error'))
+      getReq.onsuccess = () => {
+        const existing = getReq.result as OfflineRecord | undefined
+        const nextPinned =
+          existing?.pinned === true ? true : pinned
+        const record: OfflineRecord = {
+          trackId,
+          track: trackMeta ?? existing?.track,
+          cachedAt: Date.now(),
+          bytes: blob.size,
+          audioUrl: url,
+          source:
+            existing?.source === 'liked' || existing?.source === 'manual'
+              ? existing.source
+              : source,
+          pinned: nextPinned,
+          lastPlayedAt: existing?.lastPlayedAt ?? null,
+        }
+        const putReq = store.put(record)
+        putReq.onsuccess = () => resolve()
+        putReq.onerror = () =>
+          reject(putReq.error ?? new Error('IDB put failed'))
       }
-      const putReq = store.put(record)
-      putReq.onsuccess = () => resolve()
-      putReq.onerror = () => reject(putReq.error)
+      getReq.onerror = () =>
+        reject(getReq.error ?? new Error('IDB get failed'))
+    })
+  } catch (err) {
+    try {
+      await cache.delete(url)
+    } catch {
+      /* best effort rollback */
     }
-    getReq.onerror = () => reject(getReq.error)
-    tx.oncomplete = () => db.close()
-  })
+    throw err
+  } finally {
+    try {
+      dbInstance?.close()
+    } catch {
+      /* ignore */
+    }
+  }
   cachedIds.add(trackId)
   notifyCacheChange()
 }

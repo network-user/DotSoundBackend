@@ -7,7 +7,7 @@ from dotsound_private_core.services.abuse import (
     TOR_REFRESH_TTL,
 )
 
-from app.config import settings
+from app.core.redis import get_redis_client
 
 logger: structlog.stdlib.BoundLogger = (
     structlog.get_logger(__name__)
@@ -16,7 +16,6 @@ logger: structlog.stdlib.BoundLogger = (
 
 async def refresh_tor_exit_nodes() -> int:
     import httpx
-    import redis.asyncio as aioredis
 
     try:
         async with httpx.AsyncClient(
@@ -38,14 +37,13 @@ async def refresh_tor_exit_nodes() -> int:
         logger.warning("tor_list_empty")
         return 0
 
-    r = aioredis.from_url(settings.redis_url)
+    r = get_redis_client()
     pipe = r.pipeline()
     pipe.delete(TOR_REDIS_KEY)
     for ip in ips:
         pipe.sadd(TOR_REDIS_KEY, ip)
     pipe.expire(TOR_REDIS_KEY, TOR_REFRESH_TTL)
     await pipe.execute()
-    await r.aclose()
 
     logger.info(
         "tor_exit_nodes_refreshed", count=len(ips)
@@ -54,9 +52,6 @@ async def refresh_tor_exit_nodes() -> int:
 
 
 async def is_tor_exit_node(ip: str) -> bool:
-    import redis.asyncio as aioredis
-
-    r = aioredis.from_url(settings.redis_url)
+    r = get_redis_client()
     result = await r.sismember(TOR_REDIS_KEY, ip)
-    await r.aclose()
     return bool(result)

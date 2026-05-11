@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core import s3
+from app.core.observability import offline_eligibility_observed
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db, get_optional_user
 from app.models.track import Track
@@ -551,6 +552,16 @@ async def offline_eligibility(
         access_mode=track.access_mode,
         file_size_bytes=track.file_size_bytes,
     )
+    offline_eligibility_observed(allowed=allowed, reason=reason)
+    logger.info(
+        "offline_eligibility_decision",
+        track_id=track_id,
+        allowed=allowed,
+        reason=reason,
+        catalog_type=track.catalog_type,
+        access_mode=track.access_mode,
+        file_size_bytes=track.file_size_bytes,
+    )
     return {
         "allowed": allowed,
         "reason": reason,
@@ -610,6 +621,9 @@ async def offline_eligibility_batch(
                 "allowed": False,
                 "reason": "not_found",
             }
+            offline_eligibility_observed(
+                allowed=False, reason="not_found"
+            )
             continue
         try:
             _check_access(track, current_user)
@@ -618,12 +632,16 @@ async def offline_eligibility_batch(
                 "allowed": False,
                 "reason": "forbidden",
             }
+            offline_eligibility_observed(
+                allowed=False, reason="forbidden"
+            )
             continue
         allowed, reason = is_offline_allowed(
             catalog_type=track.catalog_type,
             access_mode=track.access_mode,
             file_size_bytes=track.file_size_bytes,
         )
+        offline_eligibility_observed(allowed=allowed, reason=reason)
         items[str(tid)] = {
             "allowed": allowed,
             "reason": reason,

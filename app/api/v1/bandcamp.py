@@ -1,3 +1,5 @@
+from urllib.parse import urlparse
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
@@ -51,10 +53,17 @@ async def import_bandcamp_track(
 ) -> TrackResponse:
     structlog.contextvars.bind_contextvars(bc_url=data.bc_url)
 
-    if "bandcamp.com" not in data.bc_url:
+    try:
+        parsed = urlparse(data.bc_url)
+    except ValueError:
+        parsed = None
+    host = (parsed.hostname or "").lower() if parsed else ""
+    if parsed is None or parsed.scheme not in ("http", "https") or not (
+        host == "bandcamp.com" or host.endswith(".bandcamp.com")
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="URL должен быть ссылкой на трек с bandcamp.com.",
+            detail="URL must be a link to a track on bandcamp.com.",
         )
 
     service = BandcampService(session)

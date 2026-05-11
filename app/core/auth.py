@@ -56,11 +56,7 @@ def verify_telegram_init_data(
     if not hmac.compare_digest(
         computed_hash, received_hash
     ):
-        logger.debug(
-            "telegram_hmac_mismatch",
-            computed=computed_hash,
-            received=received_hash,
-        )
+        logger.debug("telegram_hmac_mismatch")
         raise AuthError("Invalid initData signature")
 
     auth_date_str = parsed.get("auth_date", [None])[0]

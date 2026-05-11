@@ -55,6 +55,7 @@ export function PlayerBar() {
     repeatMode,
     shuffleOn,
     hlsError,
+    isPlayingFromCache,
   } = usePlayerMeta()
   const {
     togglePlay,
@@ -312,6 +313,25 @@ export function PlayerBar() {
               >
                 {track.title}
               </p>
+              {isPlayingFromCache && (
+                <span
+                  className="pb-offline-badge"
+                  title={t('offline.playingFromCache', {
+                    defaultValue: 'Играет из кэша',
+                  })}
+                  aria-label={t('offline.playingFromCache', {
+                    defaultValue: 'Играет из кэша',
+                  })}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    opacity: 0.7,
+                    flexShrink: 0,
+                  }}
+                >
+                  <Icon name="download" size={14} />
+                </span>
+              )}
             </div>
             <div
               style={{

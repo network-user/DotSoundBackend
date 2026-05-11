@@ -472,6 +472,22 @@ export const api = {
     return request('/api/v1/tracks/upload', { method: 'POST', body: formData })
   },
 
+  getTrackEditContext(trackId: number): Promise<{
+    track_id: number
+    title: string
+    artist: string | null
+    genre: string | null
+    description: string | null
+    is_public: boolean
+    cover_key: string | null
+    has_lyrics: boolean
+    is_processing: boolean
+    can_edit_artist: boolean
+    can_delete: boolean
+  }> {
+    return request(`/api/v1/tracks/${trackId}/edit-context`)
+  },
+
   updateTrack(
     trackId: number,
     data: {

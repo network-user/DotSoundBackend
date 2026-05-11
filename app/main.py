@@ -114,7 +114,10 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
                             error=str(exc),
                         )
 
-            asyncio.create_task(_es_init_background())
+            _es_init_bg_task = asyncio.create_task(
+                _es_init_background()
+            )
+            application.state._es_init_bg_task = _es_init_bg_task
             play_stop = asyncio.Event()
             drain_task = asyncio.create_task(
                 _elasticsearch_drain_lifecycle(play_stop)

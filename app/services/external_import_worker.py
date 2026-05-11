@@ -109,6 +109,7 @@ async def _search_with_retry(
                 if exc.retry_after
                 else base_delay * (2**attempt) * delay_multiplier
             )
+            wait = min(float(wait), 300.0)
             logger.warning(
                 "external_import_rate_limited",
                 job_id=job_id,

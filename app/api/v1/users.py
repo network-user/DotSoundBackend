@@ -147,7 +147,6 @@ async def update_me(
         )
     if data.locale is not None and user:
         user.locale = data.locale
-        session = service._repo._session
         await session.flush()
         await session.refresh(user)
     if not user:

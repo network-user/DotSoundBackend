@@ -41,7 +41,14 @@ async def _preload_lyrics_assets(_state: TaskiqState) -> None:
     )
 
     logger.info("lyrics_assets_preload_start")
-    await asyncio.to_thread(warmup_lyrics_provider)
+    try:
+        await asyncio.wait_for(
+            asyncio.to_thread(warmup_lyrics_provider),
+            timeout=60.0,
+        )
+    except TimeoutError:
+        logger.warning("lyrics_assets_preload_timeout")
+        return
     logger.info("lyrics_assets_preload_done")
 
 

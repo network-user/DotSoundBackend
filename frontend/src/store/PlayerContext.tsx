@@ -202,6 +202,7 @@ interface PlayerContextValue {
   setSleepTimerMinutes: (minutes: number) => void
   setSleepTimerEndOfTrack: () => void
   cancelSleepTimer: () => void
+  isPlayingFromCache: boolean
 }
 
 interface PlayerStateValue {
@@ -301,6 +302,7 @@ interface PlayerMetaValue {
     trackId: number
     commentId: number
   } | null
+  isPlayingFromCache: boolean
 }
 
 const PlayerStateCtx = createContext<PlayerStateValue | null>(null)
@@ -695,6 +697,7 @@ export function PlayerProvider({
     () => localStorage.getItem('player-shuffle') === 'true',
   )
   const [hlsError, setHlsError] = useState<string | null>(null)
+  const [isPlayingFromCache, setIsPlayingFromCache] = useState(false)
   const [sleepMode, setSleepMode] = useState<
     'off' | 'minutes' | 'end-of-track'
   >('off')
@@ -1670,6 +1673,7 @@ export function PlayerProvider({
     } catch {
     }
     setIsPlaying(false)
+    setIsPlayingFromCache(false)
     setCurrentTime(0)
     setDuration(0)
     _saveState(newTrack, 0)
@@ -1716,6 +1720,7 @@ export function PlayerProvider({
       )
       if (bail()) return
       if (cachedUrl) {
+        setIsPlayingFromCache(true)
         await startDirectPlayback(audio, cachedUrl)
         if (bail()) return
         void markCachePlayed(newTrack.id).catch(() => {})
@@ -2604,6 +2609,7 @@ export function PlayerProvider({
       playbackRate, queue, history,
       abLoop,
       pendingCommentFocus,
+      isPlayingFromCache,
     }),
     [
       track, volume,
@@ -2614,6 +2620,7 @@ export function PlayerProvider({
       playbackRate, queue, history,
       abLoop,
       pendingCommentFocus,
+      isPlayingFromCache,
     ],
   )
 

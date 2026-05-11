@@ -115,6 +115,66 @@ class UploadService:
         if cover and cover.filename:
             cover_key = await self._upload_cover(cover, uploader_id)
 
+        # Сохраняем оригинальный файл во временное хранилище S3
+        import re
+
+        safe_name = re.sub(r"[^\w.\-]", "_", file.filename or "track")[:100]
+        raw_key = f"temp/raw/legacy_{uploader_id or 'anon'}_{safe_name}"
+        await s3.upload_object(
+            key=raw_key,
+            data=data,
+            content_type=mime,
+        )
+
+        return await self.finalize_from_s3(
+            raw_key=raw_key,
+            original_filename=file.filename or "track.mp3",
+            mime=mime,
+            total_size=len(data),
+            title=title,
+            artist=artist,
+            use_profile_artist=use_profile_artist,
+            genre=genre,
+            cover_key=cover_key,
+            uploader_id=uploader_id,
+            is_public=is_public,
+            audio_hash=None,
+            link_artists=True,
+        )
+
+    async def finalize_from_s3(
+        self,
+        *,
+        raw_key: str,
+        original_filename: str,
+        mime: str,
+        total_size: int,
+        title: str,
+        artist: str | None,
+        use_profile_artist: bool,
+        genre: str | None,
+        cover_key: str | None,
+        uploader_id: int | None,
+        is_public: bool,
+        audio_hash: str | None,
+        link_artists: bool = True,
+    ) -> Track:
+        """Create the Track row and schedule downstream pipeline for a file
+        already persisted to S3 (used by chunked v2 + legacy v1)."""
+
+        if uploader_id is not None:
+            used_bytes = await self._repo.get_total_uploaded_bytes(uploader_id)
+            if used_bytes + total_size > _MAX_STORAGE_QUOTA:
+                logger.warning(
+                    "upload_rejected_quota_finalize",
+                    used=used_bytes,
+                    new=total_size,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Quota Exceeded: 3GB maximum storage reached.",
+                )
+
         track = await self._repo.create(
             title=title,
             artist=artist,
@@ -127,7 +187,8 @@ class UploadService:
             uploaded_by_id=uploader_id,
             is_public=is_public,
             processing_status="processing",
-            file_size_bytes=len(data),
+            file_size_bytes=total_size,
+            audio_hash=audio_hash,
         )
         if uploader_id is not None:
             await self._library_repo.add(
@@ -139,6 +200,7 @@ class UploadService:
             "upload_track_record_created",
             track_id=track.id,
             has_cover=cover_key is not None,
+            audio_hash=audio_hash,
         )
 
         from app.services.track_ingest_schedule_service import (
@@ -156,22 +218,10 @@ class UploadService:
             },
         )
 
-        # Сохраняем оригинальный файл во временное хранилище S3 для обработки воркером
-        # Это позволяет передать задачу в другой контейнер без передачи огромных байтов в памяти
-        import re
-
-        safe_name = re.sub(r"[^\w.\-]", "_", file.filename or "track")[:100]
-        raw_key = f"temp/raw/{track.id}_{safe_name}"
-        await s3.upload_object(
-            key=raw_key,
-            data=data,
-            content_type=mime,
-        )
-
         await transcode_and_upload.kiq(
             track_id=track.id,
             raw_key=raw_key,
-            original_filename=file.filename or "track.mp3",
+            original_filename=original_filename,
         )
 
         if not cover_key:
@@ -182,6 +232,9 @@ class UploadService:
         )
 
         await schedule_reindex_track(track.id)
+
+        if not link_artists:
+            return track
 
         from app.services.artist_service import ArtistService
 

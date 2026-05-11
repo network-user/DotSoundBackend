@@ -17,6 +17,7 @@ _HLS_TIME = 10
 _HI_BITRATE = "128k"
 _LO_BITRATE = "64k"
 _LOUDNORM_FILTER = "loudnorm=I=-14:TP=-1:LRA=11"
+_FFMPEG_TIMEOUT_SEC = 600
 
 _MASTER_PLAYLIST = (
     "#EXTM3U\n"
@@ -73,7 +74,20 @@ async def transcode_and_upload(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await process.communicate()
+        try:
+            _, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=_FFMPEG_TIMEOUT_SEC,
+            )
+        except TimeoutError:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+            await process.wait()
+            logger.error("ffmpeg_timeout", track_id=track_id)
+            await _update_track_status(track_id, "error", None, None)
+            return
 
         if process.returncode != 0:
             logger.error(
@@ -177,7 +191,19 @@ async def transcode_hls_only(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        _, stderr = await process.communicate()
+        try:
+            _, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=_FFMPEG_TIMEOUT_SEC,
+            )
+        except TimeoutError:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+            await process.wait()
+            logger.error("ffmpeg_hls_timeout", track_id=track_id)
+            return
 
         if process.returncode != 0:
             logger.error(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_current_user, get_db
@@ -35,7 +35,7 @@ async def add_comment(
 async def get_comments(
     track_id: int,
     cursor: int | None = None,
-    limit: int = 20,
+    limit: int = Query(20, ge=1, le=50),
     focus_comment_id: int | None = None,
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
@@ -45,7 +45,7 @@ async def get_comments(
         track_id,
         user.id,
         cursor,
-        min(limit, 50),
+        limit,
         focus_comment_id,
     )
 

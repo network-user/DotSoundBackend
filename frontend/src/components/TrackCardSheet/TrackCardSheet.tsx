@@ -27,6 +27,7 @@ import { WaveformBar } from '@/components/Waveform/WaveformBar'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { showIsland } from '@/lib/island'
 import {
+  DownloadAbortedError,
   downloadTrack as offlineDownloadTrack,
   isCached as offlineIsCached,
   OfflineNotAllowedError,
@@ -889,6 +890,10 @@ export function TrackCardSheet({
 
   const [offlineSaved, setOfflineSaved] = useState(false)
   const [offlineBusy, setOfflineBusy] = useState(false)
+  const [offlineProgress, setOfflineProgress] = useState<number | null>(
+    null,
+  )
+  const offlineAbortRef = useRef<AbortController | null>(null)
   useEffect(() => {
     let cancelled = false
     if (!track) {
@@ -903,9 +908,22 @@ export function TrackCardSheet({
     }
   }, [track?.id])
 
+  useEffect(
+    () => () => {
+      offlineAbortRef.current?.abort()
+      offlineAbortRef.current = null
+    },
+    [],
+  )
+
   const handleSaveOffline = useCallback(async () => {
     if (!track) return
+    if (offlineBusy && offlineAbortRef.current) {
+      offlineAbortRef.current.abort()
+      return
+    }
     setOfflineBusy(true)
+    setOfflineProgress(null)
     try {
       if (offlineSaved) {
         await offlineRemoveTrack(track.id)
@@ -918,7 +936,16 @@ export function TrackCardSheet({
           ),
         })
       } else {
-        await offlineDownloadTrack(track)
+        const ctrl = new AbortController()
+        offlineAbortRef.current = ctrl
+        await offlineDownloadTrack(track, {
+          signal: ctrl.signal,
+          onProgress: (loaded, total) => {
+            if (total > 0) {
+              setOfflineProgress(loaded / total)
+            }
+          },
+        })
         setOfflineSaved(true)
         showIsland({
           kind: 'toast',
@@ -929,22 +956,34 @@ export function TrackCardSheet({
         })
       }
     } catch (err) {
-      const reason =
-        err instanceof OfflineNotAllowedError
-          ? err.reason
-          : 'unknown'
-      showIsland({
-        kind: 'error',
-        title: t(
-          'trackSheet.offlineFailed',
-          'Не удалось сохранить ({{reason}})',
-          { reason },
-        ),
-      })
+      if (err instanceof DownloadAbortedError) {
+        showIsland({
+          kind: 'toast',
+          title: t(
+            'trackSheet.offlineCancelled',
+            'Скачивание отменено',
+          ),
+        })
+      } else {
+        const reason =
+          err instanceof OfflineNotAllowedError
+            ? err.reason
+            : 'unknown'
+        showIsland({
+          kind: 'error',
+          title: t(
+            'trackSheet.offlineFailed',
+            'Не удалось сохранить ({{reason}})',
+            { reason },
+          ),
+        })
+      }
     } finally {
+      offlineAbortRef.current = null
       setOfflineBusy(false)
+      setOfflineProgress(null)
     }
-  }, [track, offlineSaved, t])
+  }, [track, offlineSaved, offlineBusy, t])
 
   const exit = useExitTransition(
     Boolean(isCardOpen && track),
@@ -1599,16 +1638,32 @@ export function TrackCardSheet({
                 offlineSaved ? ' active' : ''
               }`}
               haptic="light"
-              disabled={offlineBusy || !track}
+              disabled={!track}
               onClick={handleSaveOffline}
+              title={
+                offlineBusy
+                  ? t(
+                      'trackSheet.offlineCancelHint',
+                      'Нажмите, чтобы отменить',
+                    )
+                  : undefined
+              }
             >
               <Icon
-                name={offlineSaved ? 'check' : 'download'}
+                name={
+                  offlineBusy
+                    ? 'x'
+                    : offlineSaved
+                      ? 'check'
+                      : 'download'
+                }
                 size={20}
               />
               <span className="tcs-action-label">
                 {offlineBusy
-                  ? '…'
+                  ? offlineProgress != null
+                    ? `${Math.round(offlineProgress * 100)}%`
+                    : '…'
                   : offlineSaved
                     ? t(
                         'trackSheet.offlineSaved',

@@ -81,6 +81,7 @@ from app.models.track_preview_clip import TrackPreviewClip
 from app.models.track_similarity import TrackSimilarity
 from app.models.track_snippet import TrackSnippet
 from app.models.upload_meta import TrackUploadMeta
+from app.models.upload_session import UploadSession
 from app.models.user import User
 from app.models.user_embedding import UserEmbedding
 from app.models.user_linked_account import UserLinkedAccount
@@ -154,6 +155,7 @@ __all__ = [
     "TrackLyrics",
     "TrackLyricsTranslation",
     "TrackUploadMeta",
+    "UploadSession",
     "User",
     "UserBlock",
     "UserEqSettings",

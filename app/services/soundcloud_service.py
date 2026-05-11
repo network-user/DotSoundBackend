@@ -1024,6 +1024,8 @@ class SoundCloudService:
                         continue
                     if r.status_code != 200:
                         continue
+                    if len(r.content) > 5 * 1024 * 1024:
+                        continue
                     ct = r.headers.get("content-type", "image/jpeg")
                     return r.content, ct.split(";")[0].strip()
         except Exception:

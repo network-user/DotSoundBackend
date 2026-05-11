@@ -124,9 +124,11 @@ import {
   setAdminRuntimeConfig,
 } from '@/lib/adminPath'
 import { useLikes } from '@/store/LikesContext'
+import { useUploadQueueAutoResume } from '@/lib/uploadQueueAutoResume'
 
 const SearchView = lazy(() => import('@/views/SearchView').then(m => ({ default: m.SearchView })))
 const UploadView = lazy(() => import('@/views/UploadView').then(m => ({ default: m.UploadView })))
+const TrackEditView = lazy(() => import('@/views/TrackEditView').then(m => ({ default: m.TrackEditView })))
 const TrashView = lazy(() => import('@/views/TrashView').then(m => ({ default: m.TrashView })))
 const MyTopView = lazy(() => import('@/views/MyTopView').then(m => ({ default: m.MyTopView })))
 const LibraryView = lazy(() => import('@/views/LibraryView').then(m => ({ default: m.LibraryView })))
@@ -225,6 +227,7 @@ function AnimatedRoutes({
 export function App() {
   const brandLabel = useBrandLabel()
   const { reloadLikes } = useLikes()
+  useUploadQueueAutoResume()
   const navigate = useNavigate()
   const location = useLocation()
   const prefetch = useOptionalPrefetch()
@@ -733,6 +736,7 @@ export function App() {
             }
           />
           <Route path="/upload" element={<UploadView />} />
+          <Route path="/track/:trackId/edit" element={<TrackEditView />} />
           <Route path="/trash" element={<TrashView />} />
           <Route path="/my-top" element={<MyTopView />} />
           <Route path="/library" element={<LibraryView />} />
