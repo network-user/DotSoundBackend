@@ -473,6 +473,90 @@ export const api = {
     return request('/api/v1/tracks/upload', { method: 'POST', body: formData })
   },
 
+  getMyArtist(): Promise<{
+    has_artist: boolean
+    display_name: string | null
+    artist: {
+      id: number
+      name: string
+      image_key: string | null
+      bio: string | null
+      country: string | null
+      birth_date: string | null
+      birthplace: string | null
+      website_url: string | null
+    } | null
+  }> {
+    return request('/api/v1/artists/me')
+  },
+
+  ensureMyArtist(): Promise<{
+    artist: {
+      id: number
+      name: string
+      image_key: string | null
+      bio: string | null
+      country: string | null
+      birth_date: string | null
+      birthplace: string | null
+      website_url: string | null
+    }
+  }> {
+    return request('/api/v1/artists/me/ensure', { method: 'POST' })
+  },
+
+  updateMyArtist(patch: {
+    bio?: string | null
+    country?: string | null
+    birth_date?: string | null
+    birthplace?: string | null
+    website_url?: string | null
+  }): Promise<{
+    id: number
+    name: string
+    image_key: string | null
+    bio: string | null
+    country: string | null
+    birth_date: string | null
+    birthplace: string | null
+    website_url: string | null
+  }> {
+    return request('/api/v1/artists/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    })
+  },
+
+  uploadMyArtistAvatar(formData: FormData): Promise<{
+    id: number
+    name: string
+    image_key: string | null
+    bio: string | null
+    country: string | null
+    birth_date: string | null
+    birthplace: string | null
+    website_url: string | null
+  }> {
+    return request('/api/v1/artists/me/avatar', {
+      method: 'POST',
+      body: formData,
+    })
+  },
+
+  removeMyArtistAvatar(): Promise<{
+    id: number
+    name: string
+    image_key: string | null
+    bio: string | null
+    country: string | null
+    birth_date: string | null
+    birthplace: string | null
+    website_url: string | null
+  }> {
+    return request('/api/v1/artists/me/avatar', { method: 'DELETE' })
+  },
+
   getTrackEditContext(trackId: number): Promise<{
     track_id: number
     title: string

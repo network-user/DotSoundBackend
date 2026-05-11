@@ -61,5 +61,40 @@
   },
   "common": {
     "back": "Back"
+  },
+  "artistEdit": {
+    "title": "Artist profile",
+    "becomeTitle": "Become an artist on the platform",
+    "becomeNeedName": "To create an artist profile, set a display name in your profile first — it will be your artist name.",
+    "becomeWithName": "Your artist name will be \"{{name}}\" — it stays in sync with your profile name. After creation you can add an avatar, bio and more.",
+    "becomeAction": "Create artist profile",
+    "goSetName": "Open profile",
+    "changeAvatar": "Change",
+    "nameSyncHint": "Artist name stays in sync with your profile name.",
+    "sectionBio": "Bio",
+    "bioLabel": "Tell about yourself",
+    "bioPlaceholder": "Genre, story, influences, projects…",
+    "sectionWhere": "Where you're from",
+    "countryLabel": "Country (ISO code, e.g. US)",
+    "birthplaceLabel": "City",
+    "birthDateLabel": "Birth date",
+    "sectionWeb": "Links",
+    "websiteLabel": "Website",
+    "completion": "{{pct}}% complete",
+    "completionLabel": "Profile completion",
+    "removeAvatar": "Remove avatar"
+  },
+  "profileCard": {
+    "artistTitle": "Your artist profile",
+    "artistSubtitle": "Name: {{name}} · tap to edit",
+    "artistNudge": "{{pct}}% complete — add bio and avatar",
+    "becomeTitle": "Become an artist on the platform",
+    "becomeSubtitle": "Artist name = your handle",
+    "open": "Open artist profile"
+  },
+  "uploadArtistPreview": {
+    "exists": "Track will be attributed to your artist profile",
+    "willCreate": "Artist profile will be created automatically",
+    "edit": "Edit"
   }
 }

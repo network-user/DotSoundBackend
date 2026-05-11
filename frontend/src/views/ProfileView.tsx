@@ -25,6 +25,7 @@ import { ProfileHero } from '@/components/Profile/ProfileHero'
 import { ProfileStats } from '@/components/Profile/ProfileStats'
 import { ListenerStats } from '@/components/Profile/ListenerStats'
 import { ProfileActions } from '@/components/Profile/ProfileActions'
+import { ArtistProfileCard } from '@/components/Profile/ArtistProfileCard'
 import { ProfileTrackList } from '@/components/Profile/ProfileTrackList'
 import { ImportView } from '@/components/Import/ImportView'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
@@ -448,6 +449,7 @@ export function ProfileView({
             />
             <ProfileStats stats={stats} />
             <ListenerStats />
+            <ArtistProfileCard />
             <ProfileActions
               onOpenImport={() => setTab('import')}
               onOpenComplaints={() =>

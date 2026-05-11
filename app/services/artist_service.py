@@ -176,6 +176,67 @@ class ArtistService:
     async def get_by_id(self, artist_id: int) -> Artist | None:
         return await self._repo.get_by_id(artist_id)
 
+    async def get_owned_for_user(
+        self, user_id: int
+    ) -> Artist | None:
+        return await self._repo.find_by_owner_user_id(user_id)
+
+    async def update_owned_profile(
+        self,
+        *,
+        user_id: int,
+        bio: str | None | object = ...,
+        country: str | None | object = ...,
+        birth_date: object = ...,
+        birthplace: str | None | object = ...,
+        website_url: str | None | object = ...,
+        image_key: str | None | object = ...,
+    ) -> Artist:
+        """Patch artist-only fields on the owned artist row.
+
+        Each kwarg accepts ``...`` (unset, leave as-is) or an
+        explicit value (including ``None`` for clear). The ``name``
+        is intentionally NOT editable here -- it follows
+        ``user.display_name`` via ``user_service.update_profile``.
+        """
+        owned = await self._repo.find_by_owner_user_id(user_id)
+        if owned is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    "Artist profile not created yet. "
+                    "Call POST /artists/me/ensure first."
+                ),
+            )
+        changed = False
+        if bio is not ...:
+            owned.bio = bio if not bio else str(bio).strip() or None
+            changed = True
+        if country is not ...:
+            owned.country = (
+                str(country).strip().upper()[:2] if country else None
+            )
+            changed = True
+        if birth_date is not ...:
+            owned.birth_date = birth_date  # type: ignore[assignment]
+            changed = True
+        if birthplace is not ...:
+            owned.birthplace = (
+                str(birthplace).strip()[:128] if birthplace else None
+            )
+            changed = True
+        if website_url is not ...:
+            owned.website_url = (
+                str(website_url).strip()[:512] if website_url else None
+            )
+            changed = True
+        if image_key is not ...:
+            owned.image_key = image_key  # type: ignore[assignment]
+            changed = True
+        if changed:
+            await self._session.flush()
+        return owned
+
     async def find_or_create_by_name(self, raw_name: str) -> Artist | None:
         """Look up artist by (fuzzy) name, creating a new row if missing.
 

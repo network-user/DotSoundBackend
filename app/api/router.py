@@ -5,6 +5,7 @@ from app.api.v1 import (
     admin,
     albums,
     artists,
+    artists_me,
     auth,
     auth_email,
     bandcamp,
@@ -76,6 +77,7 @@ api_router.include_router(onboarding.router)
 api_router.include_router(recommendations.router)
 api_router.include_router(search.router)
 api_router.include_router(signals.router)
+api_router.include_router(artists_me.router)
 api_router.include_router(artists.router)
 api_router.include_router(prefetch_router.router)
 api_router.include_router(audio_compute.router)

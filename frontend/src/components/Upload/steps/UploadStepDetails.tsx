@@ -3,6 +3,7 @@ import { MotionPress } from '@/components/ui/MotionPress'
 import { hapticNotification, hapticSelection } from '@/lib/telegram'
 import type { LyricsResponse } from '@/types/api'
 import { UploadComboBox } from './UploadComboBox'
+import { ProfileArtistPreview } from '../ProfileArtistPreview'
 
 type ArtistMode = 'profile' | 'custom'
 
@@ -193,13 +194,12 @@ export function UploadStepDetails(props: Props) {
             {t('redesign.upload.file.artistModeCustom')}
           </MotionPress>
         </div>
-        {artistMode === 'profile' && (
+        {artistMode === 'profile' && profileArtistName && (
+          <ProfileArtistPreview />
+        )}
+        {artistMode === 'profile' && !profileArtistName && (
           <p className="upload-artist-profile-note">
-            {profileArtistName
-              ? t('redesign.upload.file.artistProfileNote', {
-                  name: profileArtistName,
-                })
-              : t('redesign.upload.file.artistProfileEmpty')}
+            {t('redesign.upload.file.artistProfileEmpty')}
           </p>
         )}
         {artistMode === 'custom' && (

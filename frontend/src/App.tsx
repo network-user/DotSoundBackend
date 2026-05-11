@@ -129,6 +129,7 @@ import { useUploadQueueAutoResume } from '@/lib/uploadQueueAutoResume'
 const SearchView = lazy(() => import('@/views/SearchView').then(m => ({ default: m.SearchView })))
 const UploadView = lazy(() => import('@/views/UploadView').then(m => ({ default: m.UploadView })))
 const TrackEditView = lazy(() => import('@/views/TrackEditView').then(m => ({ default: m.TrackEditView })))
+const ArtistProfileEditView = lazy(() => import('@/views/ArtistProfileEditView').then(m => ({ default: m.ArtistProfileEditView })))
 const TrashView = lazy(() => import('@/views/TrashView').then(m => ({ default: m.TrashView })))
 const MyTopView = lazy(() => import('@/views/MyTopView').then(m => ({ default: m.MyTopView })))
 const LibraryView = lazy(() => import('@/views/LibraryView').then(m => ({ default: m.LibraryView })))
@@ -737,6 +738,7 @@ export function App() {
           />
           <Route path="/upload" element={<UploadView />} />
           <Route path="/track/:trackId/edit" element={<TrackEditView />} />
+          <Route path="/profile/artist" element={<ArtistProfileEditView />} />
           <Route path="/trash" element={<TrashView />} />
           <Route path="/my-top" element={<MyTopView />} />
           <Route path="/library" element={<LibraryView />} />
