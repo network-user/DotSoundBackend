@@ -12,6 +12,8 @@ import {
   updateIsland,
   dismissIsland,
 } from '@/lib/island'
+import { useTranslation } from 'react-i18next'
+import { SearchImportPanel } from '@/components/Import/SearchImportPanel'
 import { SoundCloudPlaylistUrlModal } from '@/components/Import/SoundCloudPlaylistUrlModal'
 import { SpotifyUrlModal } from '@/components/Import/SpotifyUrlModal'
 import { VkMusicUrlModal } from '@/components/Import/VkMusicUrlModal'
@@ -44,11 +46,14 @@ const MAX_POLLS = 150
 const POLL_MS = 2000
 
 export function OnboardingImportStep({ onDone }: Props) {
+  const { t } = useTranslation()
   const [status, setStatus] = useState<OnboardingStatus | null>(null)
   const [yandexOpen, setYandexOpen] = useState(false)
   const [vkOpen, setVkOpen] = useState(false)
   const [scOpen, setScOpen] = useState(false)
   const [spotifyOpen, setSpotifyOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchAddedMsg, setSearchAddedMsg] = useState<string | null>(null)
   const [importMethod, setImportMethod] = useState<
     null | 'vk' | 'spotify'
   >(null)
@@ -948,6 +953,25 @@ export function OnboardingImportStep({ onDone }: Props) {
           variant="subtle"
           haptic="light"
           className="onboarding-import-card"
+          onClick={() => setSearchOpen(true)}
+          disabled={busy}
+        >
+          <span className="onboarding-import-card-icon">
+            <Icon name="search" size={24} />
+          </span>
+          <span className="onboarding-import-card-title">
+            {t('redesign.onboardingV2.importSearch.cardTitle')}
+          </span>
+          <span className="hint">
+            {t('redesign.onboardingV2.importSearch.cardHint')}
+          </span>
+        </MotionPress>
+
+        <MotionPress
+          type="button"
+          variant="subtle"
+          haptic="light"
+          className="onboarding-import-card"
           onClick={() => setYandexOpen(true)}
           disabled={busy}
         >
@@ -1071,6 +1095,25 @@ export function OnboardingImportStep({ onDone }: Props) {
         onClose={() => setScOpen(false)}
         onScan={onSoundCloudUrl}
       />
+      <SearchImportPanel
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onDone={(count) => {
+          setSearchOpen(false)
+          setSearchAddedMsg(
+            t('redesign.onboardingV2.importSearch.added', { count }),
+          )
+          window.setTimeout(() => setSearchAddedMsg(null), 3500)
+        }}
+      />
+      {searchAddedMsg && (
+        <p
+          className="onboarding-subtitle"
+          style={{ marginTop: 12 }}
+        >
+          {searchAddedMsg}
+        </p>
+      )}
     </div>
   )
 }

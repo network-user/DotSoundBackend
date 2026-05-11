@@ -1099,6 +1099,406 @@
   }
 }
 
+/* ─── Search-import panel ──────────────────────────── */
+
+.search-import-modal .search-import-results {
+  margin-top: 8px;
+  max-height: 48vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-right: 4px;
+}
+
+.search-import-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.search-import-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.search-import-item.is-selected {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.search-import-item input[type='checkbox'] {
+  flex-shrink: 0;
+}
+
+.search-import-play {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 0;
+  color: #fff;
+  cursor: pointer;
+}
+
+.search-import-play:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.search-import-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.search-import-title {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-import-artist {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Welcome tutorial ─────────────────────────────── */
+
+.welcome-tutorial {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, #000);
+  color: var(--text, #fff);
+  z-index: 100;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.welcome-tutorial::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      ellipse 60% 40% at 50% 0%,
+      rgba(255, 255, 255, 0.07),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 80% 50% at 50% 100%,
+      rgba(255, 255, 255, 0.04),
+      transparent 70%
+    );
+  pointer-events: none;
+  z-index: -1;
+}
+
+.welcome-tutorial-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) 28px 16px;
+  overflow: hidden;
+}
+
+.welcome-tutorial-page {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 22px;
+}
+
+.welcome-tutorial-title {
+  font-size: clamp(26px, 6vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.welcome-tutorial-body {
+  font-size: 15px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+  max-width: 340px;
+}
+
+.welcome-tutorial-footer {
+  padding: 12px 24px max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: linear-gradient(
+    to top,
+    var(--bg, #000) 70%,
+    rgba(0, 0, 0, 0)
+  );
+}
+
+.welcome-tutorial-dots {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+}
+
+.welcome-tutorial-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  transition: background-color 200ms ease, width 200ms ease;
+}
+
+.welcome-tutorial-dot.is-active {
+  background: var(--accent, #fff);
+  width: 18px;
+  border-radius: 999px;
+}
+
+.welcome-tutorial-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ─── Tutorial illustrations ──────────────────────── */
+
+.tutorial-illustration {
+  width: 220px;
+  height: 220px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tutorial-illustration-radio .tutorial-radio-disk {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 70%),
+    #000;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+}
+
+.tutorial-radio-label {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.tutorial-radio-wave {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+.tutorial-illustration-import .tutorial-import-stack {
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tutorial-import-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+}
+
+.tutorial-import-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.12));
+}
+
+.tutorial-import-bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.tutorial-import-plus {
+  position: absolute;
+  right: -4px;
+  top: -4px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent, #fff);
+  color: var(--bg, #000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 20px rgba(255, 255, 255, 0.18);
+}
+
+.tutorial-illustration-cards .tutorial-card-mock {
+  width: 180px;
+  border-radius: 18px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tutorial-card-cover {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.04) 60%),
+    #1a1a1a;
+}
+
+.tutorial-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tutorial-card-title-bar,
+.tutorial-card-artist-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.tutorial-card-artist-bar {
+  width: 60%;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.tutorial-card-lyrics {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tutorial-card-line {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.tutorial-illustration-swipes .tutorial-swipe-card {
+  width: 160px;
+  height: 200px;
+  border-radius: 18px;
+  background: #111;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+
+.tutorial-swipe-cover {
+  flex: 1;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.04) 60%),
+    #222;
+}
+
+.tutorial-swipe-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.tutorial-swipe-bar--short {
+  width: 60%;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.tutorial-swipe-badge {
+  position: absolute;
+  top: 12px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 2px solid currentColor;
+  pointer-events: none;
+}
+
+.tutorial-swipe-badge--like {
+  right: 10px;
+  color: #2ade7e;
+  transform: rotate(8deg);
+}
+
+.tutorial-swipe-badge--nope {
+  left: 10px;
+  color: #ff5566;
+  transform: rotate(-8deg);
+}
+
+.tutorial-illustration-ready .tutorial-ready-check {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: rgba(42, 222, 126, 0.16);
+  color: #2ade7e;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-tutorial-page {
+    transition: none !important;
+  }
+}
+
 /* ─── Small screens tweaks ─────────────────────────── */
 
 @media (max-width: 380px) {

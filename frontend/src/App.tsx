@@ -87,6 +87,7 @@ import { useOptionalPrefetch } from '@/store/PrefetchContext'
 import { tg, getInitData } from '@/lib/telegram'
 import { AuthScreen } from '@/components/Auth/AuthScreen'
 import { OnboardingV2 } from '@/components/Onboarding/OnboardingV2'
+import { WelcomeTutorial } from '@/components/Tutorial/WelcomeTutorial'
 import { AuthorView } from '@/components/AuthorView/AuthorView'
 import { BottomNav } from '@/components/BottomNav/BottomNav'
 import { ComplaintModal } from '@/components/ComplaintModal/ComplaintModal'
@@ -248,6 +249,7 @@ export function App() {
   >({})
   const [needsOnboarding, setNeedsOnboarding] =
     useState(false)
+  const [needsTutorial, setNeedsTutorial] = useState(false)
   const [showPwaModal, setShowPwaModal] = useState(false)
   const [bannedReason, setBannedReason] = useState<
     string | null
@@ -571,6 +573,8 @@ export function App() {
         .then(s => {
           if (!s.onboarding_completed) {
             setNeedsOnboarding(true)
+          } else if (!s.tutorial_seen) {
+            setNeedsTutorial(true)
           }
         })
         .catch(() => {})
@@ -669,11 +673,20 @@ export function App() {
       <OnboardingV2
         onComplete={() => {
           setNeedsOnboarding(false)
+          setNeedsTutorial(true)
           reloadLikes()
           if (shouldShowPwaOnboardingModal()) {
             setShowPwaModal(true)
           }
         }}
+      />
+    )
+  }
+
+  if (needsTutorial) {
+    return (
+      <WelcomeTutorial
+        onComplete={() => setNeedsTutorial(false)}
       />
     )
   }
