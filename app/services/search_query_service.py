@@ -74,7 +74,7 @@ def _track_search_should_clauses(
                 "type": "best_fields",
                 "fields": fields,
                 "fuzziness": fuzz,
-                "fuzzy_max_expansions": fmax,
+                "max_expansions": fmax,
                 "boost": 0.35,
             }
         },
@@ -190,7 +190,7 @@ async def es_suggest_mixed(
                 "type": "best_fields",
                 "fields": ["title^2", "artist^2", "title_translit^1.5", "artist_translit^1.5"],
                 "fuzziness": fuzz,
-                "fuzzy_max_expansions": fmax,
+                "max_expansions": fmax,
                 "boost": 0.25,
             }
         },
@@ -253,7 +253,7 @@ async def es_suggest_mixed(
                     "soundcloud_permalink",
                 ],
                 "fuzziness": fuzz,
-                "fuzzy_max_expansions": fmax,
+                "max_expansions": fmax,
                 "boost": 0.25,
             }
         },
@@ -392,7 +392,7 @@ async def es_search_artists(q: str, *, limit: int = 20) -> list[int] | None:
                 "type": "best_fields",
                 "fields": artist_fields,
                 "fuzziness": fuzz,
-                "fuzzy_max_expansions": fmax,
+                "max_expansions": fmax,
                 "boost": 0.35,
             }
         },

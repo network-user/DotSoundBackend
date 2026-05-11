@@ -1,16 +1,22 @@
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { useBrandLabel } from '@/lib/brand'
+import { isTelegram } from '@/lib/telegram'
+import { api } from '@/lib/api'
 
 interface Source {
   id: string
   label: string
   icon: string
   available: boolean
+  /** Reason shown next to the row when not available. */
+  unavailableReasonKey?: string
+  unavailableReasonFallback?: string
 }
 
-const SOURCES: Source[] = [
+const BASE_SOURCES: Source[] = [
   { id: 'telegram', label: 'Telegram', icon: 'source-telegram', available: true },
   { id: 'yandex', label: 'Яндекс Музыка', icon: 'source-yandex', available: true },
   { id: 'vk', label: 'VK Музыка', icon: 'source-vk', available: false },
@@ -25,6 +31,36 @@ interface Props {
 export function ImportSourcePicker({ onSelect }: Props) {
   const { t } = useTranslation()
   const brandLabel = useBrandLabel()
+  const [telegramLinked, setTelegramLinked] = useState<boolean>(
+    () => isTelegram(),
+  )
+
+  useEffect(() => {
+    if (isTelegram()) {
+      setTelegramLinked(true)
+      return
+    }
+    api
+      .getLinkStatus()
+      .then((s) => {
+        setTelegramLinked(Boolean(s.telegram_linked))
+      })
+      .catch(() => {
+        setTelegramLinked(false)
+      })
+  }, [])
+
+  const sources: Source[] = BASE_SOURCES.map((src) => {
+    if (src.id !== 'telegram') return src
+    if (telegramLinked) return src
+    return {
+      ...src,
+      available: false,
+      unavailableReasonKey: 'redesign.upload.import.requiresTelegramLink',
+      unavailableReasonFallback:
+        'Привяжите Telegram в настройках',
+    }
+  })
   return (
     <div className="import-sources ru-imp-root">
       <div className="view-header ru-imp-header">
@@ -34,7 +70,7 @@ export function ImportSourcePicker({ onSelect }: Props) {
         </span>
       </div>
       <div className="import-source-list ru-imp-list">
-        {SOURCES.map((src) => (
+        {sources.map((src) => (
           <MotionPress
             key={src.id}
             type="button"
@@ -59,7 +95,13 @@ export function ImportSourcePicker({ onSelect }: Props) {
             <span className="ru-imp-row__label">{src.label}</span>
             {!src.available && (
               <span className="ru-imp-row__badge">
-                {t('redesign.upload.import.comingSoon')}
+                {src.unavailableReasonKey
+                  ? t(src.unavailableReasonKey, {
+                      defaultValue:
+                        src.unavailableReasonFallback ??
+                        t('redesign.upload.import.comingSoon'),
+                    })
+                  : t('redesign.upload.import.comingSoon')}
               </span>
             )}
             {src.available && (

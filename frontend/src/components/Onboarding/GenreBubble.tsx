@@ -4,6 +4,8 @@ import type { OnboardingGenreBubble } from '@/types/api'
 interface Props {
   bubble: OnboardingGenreBubble
   selected: boolean
+  isPlaying?: boolean
+  isLoading?: boolean
   onToggle: (genre: string) => void
 }
 
@@ -14,6 +16,8 @@ function coverUrl(key: string): string {
 export function GenreBubble({
   bubble,
   selected,
+  isPlaying = false,
+  isLoading = false,
   onToggle,
 }: Props) {
   const covers = useMemo(
@@ -64,10 +68,19 @@ export function GenreBubble({
     )
   }
 
+  const stateClass = [
+    'onb-v2-bubble',
+    selected ? 'is-selected' : '',
+    isPlaying ? 'is-playing' : '',
+    isLoading ? 'is-loading' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
   return (
     <button
       type="button"
-      className={`onb-v2-bubble${selected ? ' is-selected' : ''}`}
+      className={stateClass}
       onClick={() => onToggle(bubble.genre)}
       aria-pressed={selected}
     >
@@ -79,6 +92,22 @@ export function GenreBubble({
       <span className="onb-v2-bubble__name">
         {bubble.genre}
       </span>
+      {isLoading && (
+        <span
+          className="onb-v2-bubble__loader"
+          aria-hidden="true"
+        />
+      )}
+      {isPlaying && !isLoading && (
+        <span
+          className="onb-v2-bubble__eq"
+          aria-hidden="true"
+        >
+          <span className="onb-v2-bubble__eq-bar" />
+          <span className="onb-v2-bubble__eq-bar" />
+          <span className="onb-v2-bubble__eq-bar" />
+        </span>
+      )}
       {selected && (
         <span
           className="onb-v2-bubble__check"

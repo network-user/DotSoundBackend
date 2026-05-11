@@ -930,6 +930,33 @@ export function OnboardingImportStep({ onDone }: Props) {
         </p>
       )}
 
+      <div className="onboarding-import-section-label">
+        Поиск в нашем каталоге
+      </div>
+      <div className="onboarding-import-cards">
+        <MotionPress
+          type="button"
+          variant="subtle"
+          haptic="light"
+          className="onboarding-import-card onboarding-import-card--accent"
+          onClick={() => setSearchOpen(true)}
+          disabled={busy}
+        >
+          <span className="onboarding-import-card-icon">
+            <Icon name="search" size={24} />
+          </span>
+          <span className="onboarding-import-card-title">
+            {t('redesign.onboardingV2.importSearch.cardTitle')}
+          </span>
+          <span className="hint">
+            {t('redesign.onboardingV2.importSearch.cardHint')}
+          </span>
+        </MotionPress>
+      </div>
+
+      <div className="onboarding-import-section-label">
+        Перенести из других сервисов
+      </div>
       <div className="onboarding-import-cards">
         {showTg && (
           <MotionPress
@@ -947,25 +974,6 @@ export function OnboardingImportStep({ onDone }: Props) {
             <span className="hint">Аудио из вашего профиля</span>
           </MotionPress>
         )}
-
-        <MotionPress
-          type="button"
-          variant="subtle"
-          haptic="light"
-          className="onboarding-import-card"
-          onClick={() => setSearchOpen(true)}
-          disabled={busy}
-        >
-          <span className="onboarding-import-card-icon">
-            <Icon name="search" size={24} />
-          </span>
-          <span className="onboarding-import-card-title">
-            {t('redesign.onboardingV2.importSearch.cardTitle')}
-          </span>
-          <span className="hint">
-            {t('redesign.onboardingV2.importSearch.cardHint')}
-          </span>
-        </MotionPress>
 
         <MotionPress
           type="button"

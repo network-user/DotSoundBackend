@@ -140,7 +140,7 @@ export function SearchImportPanel({ open, onClose, onDone }: Props) {
       try {
         a.pause()
         a.muted = false
-        a.src = `/api/v1/track-preview/${id}/segment.mp4`
+        a.src = `/api/v1/tracks/${id}/audio?force_progressive=true`
       } catch {
         /* ignore */
       }

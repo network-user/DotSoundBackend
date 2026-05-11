@@ -1269,34 +1269,31 @@
     height: 52px;
   }
 
-  .rh-radio-hero-waveform {
-    height: clamp(56px, 21vw, 92px);
-    opacity: 0.76;
+  .rh-radio-hero-wave-bg,
+  .rh-radio-hero-wave-bg--style1,
+  .rh-radio-hero-wave-bg--style2,
+  .rh-radio-hero-wave-bg--style3 {
+    z-index: 2 !important;
   }
 
-  .rh-radio-hero-waveform--reflection {
-    margin-top: 2px;
-    opacity: 0.4;
-  }
-
-  .rh-radio-hero-wave-bg--style1 .rh-radio-hero-waveform {
-    height: clamp(48px, 18vw, 72px);
-    opacity: 0.42;
-  }
-
-  .rh-radio-hero-wave-bg--style1 .rh-radio-hero-waveform--reflection {
-    margin-top: -5px;
-    opacity: 0.14;
-  }
-
+  .rh-radio-hero-wave-bg .rh-radio-hero-waveform,
+  .rh-radio-hero-wave-bg--style1 .rh-radio-hero-waveform,
+  .rh-radio-hero-wave-bg--style2 .rh-radio-hero-waveform,
   .rh-radio-hero-wave-bg--style3 .rh-radio-hero-waveform {
-    height: clamp(68px, 24vw, 106px);
-    opacity: 0.7;
+    height: clamp(86px, 26vw, 124px) !important;
+    opacity: 1 !important;
+    mix-blend-mode: normal !important;
+    filter: none !important;
   }
 
+  .rh-radio-hero-wave-bg .rh-radio-hero-waveform--reflection,
+  .rh-radio-hero-wave-bg--style1 .rh-radio-hero-waveform--reflection,
+  .rh-radio-hero-wave-bg--style2 .rh-radio-hero-waveform--reflection,
   .rh-radio-hero-wave-bg--style3 .rh-radio-hero-waveform--reflection {
-    margin-top: 5px;
-    opacity: 0.34;
+    margin-top: 2px !important;
+    opacity: 0.5 !important;
+    mix-blend-mode: normal !important;
+    filter: none !important;
   }
 
   .rh-radio-hero-wave-bg--style3::after {

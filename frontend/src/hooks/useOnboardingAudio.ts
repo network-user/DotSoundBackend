@@ -8,6 +8,7 @@ import { trackActivationEvent } from '@/lib/activation'
 
 export type OnboardingAudioState =
   | 'idle'
+  | 'loading'
   | 'playing'
   | 'paused'
   | 'blocked'
@@ -114,6 +115,7 @@ export function useOnboardingAudio(): UseOnboardingAudio {
       } catch {
         /* ignore */
       }
+      setState('loading')
       const p = a.play()
       if (!p) return
       p.then(() => {

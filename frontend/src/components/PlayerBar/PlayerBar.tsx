@@ -312,45 +312,68 @@ export function PlayerBar() {
               >
                 {track.title}
               </p>
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                minWidth: 0,
+              }}
+            >
               {radioMode && (
                 <MotionPress
                   variant="ghost"
                   haptic="selection"
-                  className="player-radio-badge player-radio-badge--active"
+                  className="player-radio-pill"
                   onClick={(e) => {
                     e.stopPropagation()
                     navigate('/radio')
                   }}
                   title={t('redesign.playerBar.radioMode')}
+                  ariaLabel={t('redesign.playerBar.radioMode')}
                 >
-                  <Icon name="radio-fill" size={14} className="player-radio-badge__icon" />
-                  <span className="player-radio-badge__text">{t('redesign.playerBar.radioMode')}</span>
+                  <span
+                    className="player-radio-pill__waves"
+                    aria-hidden="true"
+                  >
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                  <span className="player-radio-pill__label">
+                    LIVE
+                  </span>
                 </MotionPress>
               )}
+              <p
+                className={
+                  desktopFineNav && track.artist
+                    ? 'pb-artist hint pb-artist--nav'
+                    : 'pb-artist hint'
+                }
+                dir="auto"
+                style={
+                  desktopFineNav && track.artist
+                    ? {
+                        cursor: 'pointer',
+                        flex: 1,
+                        minWidth: 0,
+                      }
+                    : { flex: 1, minWidth: 0 }
+                }
+                onClick={
+                  desktopFineNav && track.artist
+                    ? (e) => {
+                        e.stopPropagation()
+                        void goArtistByName(track.artist)
+                      }
+                    : undefined
+                }
+              >
+                {track.artist ?? '—'}
+              </p>
             </div>
-            <p
-              className={
-                desktopFineNav && track.artist
-                  ? 'pb-artist hint pb-artist--nav'
-                  : 'pb-artist hint'
-              }
-              dir="auto"
-              style={
-                desktopFineNav && track.artist
-                  ? { cursor: 'pointer' }
-                  : undefined
-              }
-              onClick={
-                desktopFineNav && track.artist
-                  ? (e) => {
-                      e.stopPropagation()
-                      void goArtistByName(track.artist)
-                    }
-                  : undefined
-              }
-            >
-              {track.artist ?? '—'}
-            </p>
           </div>
           {track.source_platform &&
             track.source_platform !== 'soundcloud' &&

@@ -2697,6 +2697,14 @@ body.ds-perf-lite .queue-eq-bars span {
   }
 }
 
+/* ---------- Desktop — hide install prompt (mobile-only UI) ---------- */
+
+@media (hover: hover) and (pointer: fine) {
+  .install-prompt {
+    display: none !important;
+  }
+}
+
 /* ---------- Page transitions (View Transitions API) ---------- */
 
 ::view-transition-old(root) {

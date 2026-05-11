@@ -809,25 +809,30 @@
       "next": "Next",
       "back": "Back",
       "start": "Get started",
+      "welcome": {
+        "title": "Music that learns your taste",
+        "body": "Non-stop radio, sharp picks and easy import from other services. A few quick slides and you are ready.",
+        "cta": "Let's go"
+      },
       "radio": {
-        "title": "Radio — endless stream",
-        "body": "Start radio on Home for a non-stop stream that adapts to your likes, dislikes and skips. One tap and the music flows; switch tracks with a swipe whenever you want."
+        "title": "Radio, an endless stream",
+        "body": "Start radio on the home screen for a non-stop stream. It learns from your likes, dislikes and skips. One tap and the music plays, swipe to switch tracks anytime."
       },
       "import": {
         "title": "Bring your music in a minute",
-        "body": "Pull playlists from Telegram, Yandex Music, Spotify and SoundCloud by link, or search for favourite tracks right inside import — everything lands in your library and feeds your recommendations."
+        "body": "Pull playlists by link from Telegram, Yandex Music, Spotify and SoundCloud. Or search favourite tracks right inside import, they land in your library and start shaping recommendations."
       },
       "cards": {
-        "title": "Track card & lyrics",
-        "body": "Open a card to see synced lyrics (with translation when available), artist info, similar tracks, and quick actions — like, share, add to a playlist."
+        "title": "Track card and lyrics",
+        "body": "Open a card to see synced lyrics with translation, artist info and similar tracks. Like, share and add to a playlist are right there."
       },
       "mix": {
-        "title": "Daily mix & smart playlists",
+        "title": "Daily mix and smart playlists",
         "body": "Your daily mix and themed playlists refresh automatically based on what you play, like and skip. The more you listen, the sharper the picks get."
       },
       "ready": {
         "title": "All set",
-        "body": "Start radio on Home — that's the quickest way to see everything in action. Settings and a one-tap recommendations reset live in your profile."
+        "body": "Start radio on Home and hear everything come together. Settings and a one-tap recommendations reset live in your profile."
       }
     },
     "achievements": {},

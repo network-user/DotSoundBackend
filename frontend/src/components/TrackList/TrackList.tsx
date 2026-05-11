@@ -15,6 +15,12 @@ interface Props {
     label: string
     onClick: () => void
   }
+  /**
+   * Tracks list that should be used as playback context when the
+   * user taps an individual card (defaults to `tracks`). Set
+   * explicitly when the rendered list is a slice of a larger queue.
+   */
+  contextTracks?: Track[]
 }
 
 export function TrackList({
@@ -22,6 +28,7 @@ export function TrackList({
   flavor = 'default',
   emptyMessage = 'Ничего не найдено',
   emptyCta,
+  contextTracks,
 }: Props) {
   const { t } = useTranslation()
   const { isLiked, toggleLike } = useLikes()
@@ -97,7 +104,10 @@ export function TrackList({
                 },
               }}
             >
-              <TrackCard track={tr} />
+              <TrackCard
+                track={tr}
+                contextTracks={contextTracks ?? tracks}
+              />
             </SwipeRow>
           </div>
         )

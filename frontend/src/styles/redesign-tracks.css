@@ -44,6 +44,25 @@
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
+.re-tc-cover-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.42);
+  color: #fff;
+  pointer-events: none;
+  border-radius: inherit;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transition: opacity 160ms ease;
+}
+
+.re-tc-cover-wrap.is-current .re-tc-cover-overlay {
+  opacity: 1;
+}
+
 .re-tc-cover {
   width: 100%;
   height: 100%;

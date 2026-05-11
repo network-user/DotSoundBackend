@@ -152,6 +152,11 @@ async def scan_telegram_profile(
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> ImportJobResponse:
+    if current_user.telegram_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="telegram_not_linked",
+        )
     service = ImportService(session)
     job = await service.scan_telegram_profile(current_user.id)
     return ImportJobResponse.model_validate(job)

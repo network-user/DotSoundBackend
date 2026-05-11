@@ -151,7 +151,9 @@ interface PlayerContextValue {
   clearHlsError: () => void
   playTrack: (
     t: Track,
-    url?: string,
+    optsOrUrl?:
+      | string
+      | { url?: string; contextTracks?: Track[] },
   ) => Promise<void>
   togglePlay: () => void
   seek: (pct: number) => void
@@ -218,7 +220,12 @@ interface PlayerTimeValue {
 }
 
 interface PlayerActionsValue {
-  playTrack: (t: Track, url?: string) => Promise<void>
+  playTrack: (
+    t: Track,
+    optsOrUrl?:
+      | string
+      | { url?: string; contextTracks?: Track[] },
+  ) => Promise<void>
   togglePlay: () => void
   seek: (pct: number) => void
   seekToSeconds: (sec: number) => void
@@ -1129,6 +1136,8 @@ export function PlayerProvider({
     [],
   )
 
+  const pendingPlaybackErrorRef = useRef<number | null>(null)
+
   const showPlaybackErrorOnce = useCallback(
     (trackId: number | null, title: string) => {
       const now = Date.now()
@@ -1145,11 +1154,25 @@ export function PlayerProvider({
         message: title,
         atMs: now,
       }
-      showIsland({
-        kind: 'error',
-        title,
-        durationMs: 3600,
-      })
+      if (pendingPlaybackErrorRef.current != null) {
+        window.clearTimeout(pendingPlaybackErrorRef.current)
+      }
+      pendingPlaybackErrorRef.current = window.setTimeout(() => {
+        pendingPlaybackErrorRef.current = null
+        const a = audioRef.current
+        if (!a) return
+        if (trackId !== null && lastTrackIdRef.current !== trackId) {
+          return
+        }
+        if (!a.paused && a.currentTime > 0.15 && !a.error) {
+          return
+        }
+        showIsland({
+          kind: 'error',
+          title,
+          durationMs: 3600,
+        })
+      }, 2500)
     },
     [],
   )
@@ -1576,8 +1599,35 @@ export function PlayerProvider({
 
   const playTrack = async (
     newTrack: Track,
-    overrideUrl?: string,
+    optsOrUrl?:
+      | string
+      | { url?: string; contextTracks?: Track[] },
   ) => {
+    const overrideUrl: string | undefined =
+      typeof optsOrUrl === 'string'
+        ? optsOrUrl
+        : optsOrUrl?.url
+    const contextTracks: Track[] | undefined =
+      typeof optsOrUrl === 'object' && optsOrUrl !== null
+        ? optsOrUrl.contextTracks
+        : undefined
+    if (contextTracks && contextTracks.length > 0) {
+      const idx = contextTracks.findIndex(
+        (it) => it.id === newTrack.id,
+      )
+      const tail =
+        idx >= 0
+          ? contextTracks.slice(idx + 1)
+          : contextTracks.filter(
+              (it) => it.id !== newTrack.id,
+            )
+      manualQueueRef.current = [...tail]
+      setQueue([...tail])
+      radioModeRef.current = false
+      radioSeedTrackIdRef.current = null
+      setRadioMode(false)
+      setRadioSeedTrackId(null)
+    }
     const session = ++playSessionRef.current
     const bail = () => session !== playSessionRef.current
     const audio = audioRef.current
@@ -1855,6 +1905,17 @@ export function PlayerProvider({
     radioSeedTrackIdRef.current = null
     setRadioMode(false)
     setRadioSeedTrackId(null)
+    manualQueueRef.current = []
+    setQueue([])
+    const a = audioRef.current
+    if (a && !a.paused) {
+      try {
+        a.pause()
+      } catch {
+        /* ignore */
+      }
+    }
+    setIsPlaying(false)
   }
 
   const playNext = async (): Promise<boolean> => {
@@ -1977,20 +2038,6 @@ export function PlayerProvider({
         await playTrack(next)
         return true
         }
-      }
-      const adj = await api.getAdjacentTracks(
-        track.id,
-      )
-      if (
-        adj.next_id &&
-        !unavailableTrackIdsRef.current.has(adj.next_id)
-      ) {
-        const t = await api.getTrack(adj.next_id)
-        if (unavailableTrackIdsRef.current.has(t.id)) {
-          return false
-        }
-        await playTrack(t)
-        return true
       }
       return await _fallbackToCachedTrack(track.id)
     } catch {

@@ -1144,7 +1144,7 @@ body.monochrome #app {
   --pb-fill: clamp(0%, var(--progress, 0%), 100%);
   position: fixed;
   bottom: calc(
-    var(--nav-h) + env(safe-area-inset-bottom, 0px)
+    var(--nav-h) + env(safe-area-inset-bottom, 0px) - 2px
   );
   left: 0;
   right: 0;
@@ -1153,7 +1153,7 @@ body.monochrome #app {
     var(--glass-saturate) brightness(1.04);
   -webkit-backdrop-filter: var(--glass-blur-strong)
     var(--glass-saturate) brightness(1.04);
-  border-top: 1px solid var(--glass-edge);
+  border-top: none;
   z-index: 165;
   padding: 0;
   isolation: isolate;
@@ -5109,7 +5109,40 @@ html.le-lyrics-sync-open body {
   gap: 10px;
   width: 100%;
   max-width: 400px;
+  margin: 0 auto 16px;
+}
+
+.onboarding-import-section-label {
+  width: 100%;
+  max-width: 400px;
   margin: 0 auto 8px;
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted, rgba(255, 255, 255, 0.5));
+}
+
+.onboarding-import-section-label + .onboarding-import-cards {
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.onboarding-import-cards:last-of-type {
+  border-bottom: none !important;
+  padding-bottom: 0 !important;
+  margin-bottom: 8px !important;
+}
+
+.onboarding-import-card--accent {
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.onboarding-import-card--accent .onboarding-import-card-icon {
+  background: rgba(255, 255, 255, 0.18) !important;
 }
 
 .onboarding-import-card {
@@ -7763,6 +7796,69 @@ html.ds-low-glass .tcs-sheet {
   flex-shrink: 0;
 }
 
+/* Animated "LIVE" radio pill in PlayerBar (sits in artist row) */
+.player-radio-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px 2px 5px;
+  border-radius: 999px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 88%, transparent) 0%,
+    color-mix(in srgb, var(--accent) 60%, #ffffff 12%) 100%
+  );
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: none;
+  -webkit-tap-highlight-color: transparent;
+  animation: radioPillPulse 1.8s ease-in-out infinite;
+}
+.player-radio-pill:hover {
+  filter: brightness(1.08);
+}
+.player-radio-pill__waves {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 9px;
+}
+.player-radio-pill__waves > span {
+  display: block;
+  width: 2px;
+  background: #ffffff;
+  border-radius: 1px;
+  height: 30%;
+  animation: radioBarBounce 0.95s ease-in-out infinite;
+}
+.player-radio-pill__waves > span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.player-radio-pill__waves > span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+.player-radio-pill__label {
+  font-feature-settings: 'tnum' 1;
+}
+@keyframes radioPillPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 38%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent);
+  }
+}
+@keyframes radioBarBounce {
+  0%, 100% { height: 30%; }
+  50% { height: 100%; }
+}
+
 /* Radio mode badge in PlayerBar */
 .player-radio-badge {
   display: inline-flex;
@@ -10220,6 +10316,28 @@ html.ds-low-glass .tcs-sheet {
 }
 .consent-banner__text .consent-banner__agreement:hover {
   color: var(--accent-hover, #e0e0e0);
+}
+.consent-banner__links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.3;
+}
+.consent-banner__links .consent-banner__agreement {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent, #fff);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.consent-banner__links .consent-banner__agreement:hover {
+  color: var(--accent-hover, #e0e0e0);
+}
+.consent-banner__sep {
+  color: rgba(255, 255, 255, 0.35);
 }
 .consent-banner__actions {
   display: flex;

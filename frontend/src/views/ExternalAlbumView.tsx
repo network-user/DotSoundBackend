@@ -132,7 +132,7 @@ export function ExternalAlbumView() {
   const handlePlayAll = useCallback(async () => {
     if (!tracks || tracks.length === 0) return
     try {
-      await playTrack(tracks[0])
+      await playTrack(tracks[0], { contextTracks: tracks })
     } catch (e) {
       showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }

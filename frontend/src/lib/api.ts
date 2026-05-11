@@ -1851,7 +1851,7 @@ export const api = {
   },
 
   trackPreviewSegmentPath(trackId: number): string {
-    return `/api/v1/track-preview/${trackId}/segment.mp4`
+    return `/api/v1/tracks/${trackId}/audio?force_progressive=true`
   },
 
   getOnboardingArtists(

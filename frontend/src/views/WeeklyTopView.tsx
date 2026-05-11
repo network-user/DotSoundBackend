@@ -124,7 +124,7 @@ export function WeeklyTopView() {
   const handlePlayAllHero = useCallback(async () => {
     if (!playList.length) return
     try {
-      await playTrack(playList[0])
+      await playTrack(playList[0], { contextTracks: playList })
     } catch (e) {
       showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
@@ -134,9 +134,8 @@ export function WeeklyTopView() {
     if (!playList.length) return
     try {
       if (!shuffleOn) toggleShuffle()
-      const pick =
-        playList[Math.floor(Math.random() * playList.length)]
-      await playTrack(pick)
+      const shuffled = [...playList].sort(() => Math.random() - 0.5)
+      await playTrack(shuffled[0], { contextTracks: shuffled })
     } catch (e) {
       showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }

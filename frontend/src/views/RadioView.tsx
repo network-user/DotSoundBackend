@@ -354,17 +354,6 @@ export function RadioView() {
               : t('redesign.home.radioSubtitleIdle')}
           </span>
         </div>
-        {radioMode && (
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={handleStop}
-            aria-label={t('redesign.home.radioStopAria')}
-            title={t('redesign.home.radioStopAria')}
-          >
-            <Icon name="x" size={20} />
-          </button>
-        )}
       </div>
 
       <AmbientStage

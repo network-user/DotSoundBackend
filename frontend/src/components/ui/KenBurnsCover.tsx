@@ -58,7 +58,6 @@ export function KenBurnsCover({
         sizes={srcSet ? 'min(92vw, 480px)' : undefined}
         alt={alt}
         loading="eager"
-        // @ts-expect-error fetchpriority not in framer-motion types yet
         fetchPriority="high"
         draggable={false}
         animate={{

@@ -310,7 +310,7 @@ export function OnboardingV2({ onComplete }: Props) {
     audio.prime()
     audio.playTrack(
       tr.id,
-      `/api/v1/track-preview/${tr.id}/segment.mp4`,
+      `/api/v1/tracks/${tr.id}/audio?force_progressive=true`,
       { step: 'swipe' },
     )
   }, [audio, tasteTracks, tasteIndex])
@@ -398,7 +398,7 @@ export function OnboardingV2({ onComplete }: Props) {
     autoPlayedTrackRef.current = tr.id
     audio.playTrack(
       tr.id,
-      `/api/v1/track-preview/${tr.id}/segment.mp4`,
+      `/api/v1/tracks/${tr.id}/audio?force_progressive=true`,
       { step: 'swipe' },
     )
   }, [step, tasteIndex, tasteTracks, audio])
@@ -414,16 +414,17 @@ export function OnboardingV2({ onComplete }: Props) {
   const handleCompleteFinish = useCallback(
     (openImport: boolean) => {
       hapticSelection()
-      onComplete()
       if (openImport) {
         try {
-          window.location.assign(
-            '/mini_app/profile?import=1',
+          window.localStorage.setItem(
+            'ds_pending_import_open',
+            '1',
           )
         } catch {
           /* ignore */
         }
       }
+      onComplete()
     },
     [onComplete],
   )
@@ -531,8 +532,10 @@ export function OnboardingV2({ onComplete }: Props) {
                     ? audio.currentTrackId
                     : null
                 }
+                audioLoading={audio.state === 'loading'}
                 audioBlocked={
-                  audio.state === 'blocked'
+                  audio.state === 'blocked' ||
+                  audio.state === 'error'
                 }
                 onLike={() => recordDecision('like')}
                 onDislike={() =>
@@ -680,7 +683,9 @@ export function OnboardingV2({ onComplete }: Props) {
         ref={audio.audioRef}
         preload="auto"
         playsInline
-        style={{ display: 'none' }}
+        aria-hidden
+        tabIndex={-1}
+        className="onb-v2-hidden-audio"
       />
     </div>
   )
@@ -871,6 +876,12 @@ function GenresStep({
     ((genre: string) => void) | null
   >(null)
   const bubblesRef = useRef(bubbles)
+  const [playingGenre, setPlayingGenre] = useState<
+    string | null
+  >(null)
+  const [loadingGenre, setLoadingGenre] = useState<
+    string | null
+  >(null)
 
   const stopGenreAudio = useCallback(() => {
     if (timerRef.current !== null) {
@@ -884,6 +895,8 @@ function GenresStep({
       a.src = ''
     }
     playingGenreRef.current = null
+    setPlayingGenre(null)
+    setLoadingGenre(null)
   }, [])
 
   const playNext = useCallback(
@@ -919,7 +932,7 @@ function GenresStep({
       }
       a.pause()
       a.muted = false
-      a.src = `/api/v1/track-preview/${track.id}/segment.mp4`
+      a.src = `/api/v1/tracks/${track.id}/audio?force_progressive=true`
       try {
         a.load()
       } catch {
@@ -932,19 +945,35 @@ function GenresStep({
         }
         playNextRef.current?.(genre)
       }
-      timerRef.current = window.setTimeout(() => {
-        timerRef.current = null
-        if (genreAudioRef.current) {
-          genreAudioRef.current.pause()
-          genreAudioRef.current.onended = null
-        }
-        playNextRef.current?.(genre)
-      }, 15000)
-      void a.play().catch(() => {
-        if (playingGenreRef.current === genre) {
-          stopGenreAudio()
-        }
-      })
+      setLoadingGenre(genre)
+      const playPromise = a.play()
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise
+          .then(() => {
+            if (playingGenreRef.current !== genre) return
+            setLoadingGenre(null)
+            setPlayingGenre(genre)
+            // Start the 15s window only once playback
+            // actually began so a slow transcode doesn't
+            // eat into the preview window.
+            if (timerRef.current !== null) {
+              window.clearTimeout(timerRef.current)
+            }
+            timerRef.current = window.setTimeout(() => {
+              timerRef.current = null
+              if (genreAudioRef.current) {
+                genreAudioRef.current.pause()
+                genreAudioRef.current.onended = null
+              }
+              playNextRef.current?.(genre)
+            }, 15000)
+          })
+          .catch(() => {
+            if (playingGenreRef.current === genre) {
+              stopGenreAudio()
+            }
+          })
+      }
     },
     [stopGenreAudio],
   )
@@ -955,6 +984,8 @@ function GenresStep({
     async (genre: string) => {
       stopGenreAudio()
       playingGenreRef.current = genre
+      setLoadingGenre(genre)
+      setPlayingGenre(null)
       const a = genreAudioRef.current
       if (!a) return
 
@@ -999,7 +1030,7 @@ function GenresStep({
           idxRef.current.set(genre, 0)
         } catch {
           if (playingGenreRef.current === genre) {
-            playingGenreRef.current = null
+            stopGenreAudio()
           }
           a.muted = false
           return
@@ -1008,7 +1039,7 @@ function GenresStep({
 
       if (!queue || queue.length === 0) {
         if (playingGenreRef.current === genre) {
-          playingGenreRef.current = null
+          stopGenreAudio()
         }
         return
       }
@@ -1150,6 +1181,8 @@ function GenresStep({
                 selected={selected.includes(
                   b.genre,
                 )}
+                isPlaying={playingGenre === b.genre}
+                isLoading={loadingGenre === b.genre}
                 onToggle={handleToggle}
               />
             ))}
@@ -1173,7 +1206,9 @@ function GenresStep({
         ref={genreAudioRef}
         preload="auto"
         playsInline
-        style={{ display: 'none' }}
+        aria-hidden
+        tabIndex={-1}
+        className="onb-v2-hidden-audio"
       />
     </>
   )
@@ -1184,6 +1219,7 @@ interface SwipeStepProps {
   index: number
   loading: boolean
   playingId: number | null
+  audioLoading: boolean
   audioBlocked: boolean
   onLike: () => void
   onDislike: () => void
@@ -1197,6 +1233,7 @@ function SwipeStep({
   index,
   loading,
   playingId,
+  audioLoading,
   audioBlocked,
   onLike,
   onDislike,
@@ -1245,6 +1282,7 @@ function SwipeStep({
               key={top.id}
               track={top}
               isPlaying={playingId === top.id}
+              audioLoading={audioLoading}
               audioBlocked={audioBlocked}
               onLike={onLike}
               onDislike={onDislike}
@@ -1337,6 +1375,7 @@ function SwipeBackdropCard({
 interface SwipeCardProps {
   track: Track
   isPlaying: boolean
+  audioLoading: boolean
   audioBlocked: boolean
   onLike: () => void
   onDislike: () => void
@@ -1347,6 +1386,7 @@ interface SwipeCardProps {
 function SwipeCard({
   track,
   isPlaying,
+  audioLoading,
   audioBlocked,
   onLike,
   onDislike,
@@ -1371,6 +1411,40 @@ function SwipeCard({
     [1, 0],
   )
 
+  const tapTimerRef = useRef<number | null>(null)
+  const lastTapAtRef = useRef(0)
+
+  useEffect(() => {
+    return () => {
+      if (tapTimerRef.current !== null) {
+        window.clearTimeout(tapTimerRef.current)
+        tapTimerRef.current = null
+      }
+    }
+  }, [])
+
+  const handleTap = useCallback(() => {
+    const now = Date.now()
+    const dt = now - lastTapAtRef.current
+    lastTapAtRef.current = now
+    if (
+      dt < 320 &&
+      tapTimerRef.current !== null
+    ) {
+      window.clearTimeout(tapTimerRef.current)
+      tapTimerRef.current = null
+      onLike()
+      return
+    }
+    if (tapTimerRef.current !== null) {
+      window.clearTimeout(tapTimerRef.current)
+    }
+    tapTimerRef.current = window.setTimeout(() => {
+      tapTimerRef.current = null
+      onTogglePreview()
+    }, 240)
+  }, [onLike, onTogglePreview])
+
   const handleDragEnd = (
     _: unknown,
     info: PanInfo,
@@ -1387,16 +1461,17 @@ function SwipeCard({
     return (
       <div
         className="onb-v2-swipe-card"
-        onClick={onTogglePreview}
+        onClick={handleTap}
         role="button"
         tabIndex={0}
       >
         <CoverArt
           track={track}
           isPlaying={isPlaying}
+          isLoading={audioLoading}
         />
         <CardInfo track={track} />
-        {audioBlocked && <MuteHint />}
+        {audioBlocked && !audioLoading && <MuteHint />}
       </div>
     )
   }
@@ -1412,7 +1487,7 @@ function SwipeCard({
       dragElastic={0.6}
       style={{ x, rotate }}
       onDragEnd={handleDragEnd}
-      onTap={onTogglePreview}
+      onTap={handleTap}
       whileTap={{ cursor: 'grabbing' }}
       transition={SPRING_SNAPPY}
       exit={{
@@ -1424,6 +1499,7 @@ function SwipeCard({
       <CoverArt
         track={track}
         isPlaying={isPlaying}
+        isLoading={audioLoading}
       />
       <CardInfo track={track} />
       <m.span
@@ -1440,7 +1516,7 @@ function SwipeCard({
       >
         {t('redesign.onboardingV2.swipe.badgeNope')}
       </m.span>
-      {audioBlocked && <MuteHint />}
+      {audioBlocked && !audioLoading && <MuteHint />}
     </m.div>
   )
 }
@@ -1461,11 +1537,13 @@ function MuteHint() {
 interface CardArtProps {
   track: Track
   isPlaying?: boolean
+  isLoading?: boolean
 }
 
 function CoverArt({
   track,
   isPlaying = false,
+  isLoading = false,
 }: CardArtProps) {
   return (
     <div className="onb-v2-swipe-card__cover">
@@ -1478,15 +1556,20 @@ function CoverArt({
         className={[
           'onb-v2-swipe-card__play-pulse',
           isPlaying ? 'is-playing' : '',
+          isLoading ? 'is-loading' : '',
         ]
           .filter(Boolean)
           .join(' ')}
         aria-hidden="true"
       >
-        <Icon
-          name={isPlaying ? 'pause' : 'play'}
-          size={28}
-        />
+        {isLoading ? (
+          <span className="onb-v2-swipe-card__spinner" />
+        ) : (
+          <Icon
+            name={isPlaying ? 'pause' : 'play'}
+            size={28}
+          />
+        )}
       </span>
     </div>
   )

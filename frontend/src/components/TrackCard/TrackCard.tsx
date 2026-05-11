@@ -37,6 +37,11 @@ interface Props {
   summarySuffix?: string | null
   onDeleted?: (trackId: number) => void
   onVisibilityChanged?: (track: Track) => void
+  /**
+   * Sibling tracks that should become the playback queue when this
+   * card is clicked. If omitted, only the single track is played.
+   */
+  contextTracks?: Track[] | null
 }
 
 export function TrackCard({
@@ -45,12 +50,13 @@ export function TrackCard({
   summarySuffix = null,
   onDeleted,
   onVisibilityChanged,
+  contextTracks = null,
 }: Props) {
   const { t } = useTranslation()
   const { isLiked, toggleLike } = useLikes()
   const { track: currentTrack } = usePlayerMeta()
   const { isPlaying } = usePlayerPlayback()
-  const { playTrack, addToQueue } = usePlayerActions()
+  const { playTrack, addToQueue, togglePlay } = usePlayerActions()
   const desktopFine = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
   const [confirmingDelete, setConfirmingDelete] =
@@ -177,7 +183,15 @@ export function TrackCard({
   ])
 
   const handleClick = () => {
-    playTrack(track)
+    if (isCurrentTrack) {
+      togglePlay()
+      return
+    }
+    if (contextTracks && contextTracks.length > 0) {
+      void playTrack(track, { contextTracks })
+      return
+    }
+    void playTrack(track)
   }
 
   const handleLike = async (e: MouseEvent) => {
@@ -238,7 +252,7 @@ export function TrackCard({
       >
         <div className={rowClass}>
           <div
-            className={`re-tc-cover-wrap${isTrackPlaying ? ' is-playing' : ''}`}
+            className={`re-tc-cover-wrap${isTrackPlaying ? ' is-playing' : ''}${isCurrentTrack ? ' is-current' : ''}`}
           >
             {coverSrc ? (
               <BeatPulse
@@ -246,7 +260,7 @@ export function TrackCard({
                 active={isTrackPlaying}
               >
                 <SharedCover
-                  trackId={track.id}
+                  trackId={isCurrentTrack ? null : track.id}
                   src={coverSrc}
                   alt=""
                   className="re-tc-cover"
@@ -255,6 +269,17 @@ export function TrackCard({
             ) : (
               <div className="re-tc-cover-fallback">
                 <Icon name="music" size={22} />
+              </div>
+            )}
+            {isCurrentTrack && (
+              <div
+                className="re-tc-cover-overlay"
+                aria-hidden="true"
+              >
+                <Icon
+                  name={isPlaying ? 'pause' : 'play'}
+                  size={20}
+                />
               </div>
             )}
           </div>

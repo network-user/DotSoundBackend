@@ -1,6 +1,10 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AnimatePresence, motion } from 'framer-motion'
+import {
+  AnimatePresence,
+  motion,
+  type PanInfo,
+} from 'framer-motion'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
@@ -9,6 +13,7 @@ import {
   TWEEN_FAST,
   useReducedMotion,
 } from '@/lib/motion'
+import { WelcomePage } from './pages/WelcomePage'
 import { RadioPage } from './pages/RadioPage'
 import { ImportPage } from './pages/ImportPage'
 import { CardsPage } from './pages/CardsPage'
@@ -19,16 +24,14 @@ interface Props {
   onComplete: () => void
 }
 
-const PAGE_KEYS = ['radio', 'import', 'cards', 'mix', 'ready'] as const
-type PageKey = (typeof PAGE_KEYS)[number]
-
-const PAGE_COMPONENTS: Record<PageKey, () => JSX.Element> = {
-  radio: RadioPage,
-  import: ImportPage,
-  cards: CardsPage,
-  mix: MixPage,
-  ready: ReadyPage,
-}
+const PAGE_KEYS = [
+  'welcome',
+  'radio',
+  'import',
+  'cards',
+  'mix',
+  'ready',
+] as const
 
 const TR = (key: string) => `redesign.tutorial.${key}`
 
@@ -39,8 +42,9 @@ export function WelcomeTutorial({ onComplete }: Props) {
   const [finishing, setFinishing] = useState(false)
 
   const pageKey = PAGE_KEYS[index]
+  const isWelcome = pageKey === 'welcome'
   const isLast = index === PAGE_KEYS.length - 1
-  const Page = PAGE_COMPONENTS[pageKey]
+  const Page = pageKey
 
   const finish = useCallback(async () => {
     if (finishing) return
@@ -65,6 +69,19 @@ export function WelcomeTutorial({ onComplete }: Props) {
     setIndex((i) => Math.max(i - 1, 0))
   }, [])
 
+  const handlePan = useCallback(
+    (_: unknown, info: PanInfo) => {
+      const dx = info.offset.x
+      const threshold = 80
+      if (dx < -threshold) {
+        next()
+      } else if (dx > threshold) {
+        back()
+      }
+    },
+    [next, back],
+  )
+
   const variants = useMemo(() => {
     if (reduceMotion) {
       return {
@@ -80,24 +97,61 @@ export function WelcomeTutorial({ onComplete }: Props) {
     }
   }, [reduceMotion])
 
+  const renderPage = () => {
+    switch (Page) {
+      case 'welcome':
+        return (
+          <WelcomePage onStart={next} disabled={finishing} />
+        )
+      case 'radio':
+        return <RadioPage />
+      case 'import':
+        return <ImportPage />
+      case 'cards':
+        return <CardsPage />
+      case 'mix':
+        return <MixPage />
+      case 'ready':
+        return <ReadyPage />
+      default:
+        return null
+    }
+  }
+
   return (
     <div className="welcome-tutorial">
-      <div className="welcome-tutorial-stage">
+      <div
+        className={
+          'welcome-tutorial-stage' +
+          (isWelcome ? ' is-welcome' : '')
+        }
+      >
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={pageKey}
-            className="welcome-tutorial-page"
+            className={
+              'welcome-tutorial-page' +
+              (isWelcome ? ' is-welcome' : '')
+            }
             initial={variants.initial}
             animate={variants.animate}
             exit={variants.exit}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.25}
+            onPanEnd={handlePan}
           >
-            <Page />
-            <h2 className="welcome-tutorial-title">
-              {t(TR(`${pageKey}.title`))}
-            </h2>
-            <p className="welcome-tutorial-body">
-              {t(TR(`${pageKey}.body`))}
-            </p>
+            {renderPage()}
+            {!isWelcome && (
+              <>
+                <h2 className="welcome-tutorial-title">
+                  {t(TR(`${pageKey}.title`))}
+                </h2>
+                <p className="welcome-tutorial-body">
+                  {t(TR(`${pageKey}.body`))}
+                </p>
+              </>
+            )}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -140,16 +194,18 @@ export function WelcomeTutorial({ onComplete }: Props) {
               {t(TR('skip'))}
             </MotionPress>
           )}
-          <MotionPress
-            type="button"
-            variant="primary"
-            haptic="medium"
-            className="onboarding-next"
-            onClick={next}
-            disabled={finishing}
-          >
-            {isLast ? t(TR('start')) : t(TR('next'))}
-          </MotionPress>
+          {!isWelcome && (
+            <MotionPress
+              type="button"
+              variant="primary"
+              haptic="medium"
+              className="onboarding-next"
+              onClick={next}
+              disabled={finishing}
+            >
+              {isLast ? t(TR('start')) : t(TR('next'))}
+            </MotionPress>
+          )}
         </div>
       </div>
     </div>

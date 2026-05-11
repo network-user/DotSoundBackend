@@ -96,7 +96,6 @@ import { OauthConnectionsReturn } from '@/components/Settings/OauthConnectionsRe
 import { Equalizer } from '@/components/Equalizer/Equalizer'
 import { FullscreenLyrics } from '@/components/FullscreenLyrics/FullscreenLyrics'
 import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
-import { CookieNotice } from '@/components/Legal/CookieNotice'
 import { OfflineBanner } from '@/components/ui/OfflineBanner'
 import { ConsentBanner } from '@/components/Legal/ConsentBanner'
 import { DynamicIslandHost } from '@/components/ui/DynamicIsland'
@@ -686,7 +685,23 @@ export function App() {
   if (needsTutorial) {
     return (
       <WelcomeTutorial
-        onComplete={() => setNeedsTutorial(false)}
+        onComplete={() => {
+          setNeedsTutorial(false)
+          try {
+            const pendingImport =
+              window.localStorage.getItem(
+                'ds_pending_import_open',
+              ) === '1'
+            if (pendingImport) {
+              window.localStorage.removeItem(
+                'ds_pending_import_open',
+              )
+              navigate('/profile?import=1')
+            }
+          } catch {
+            /* ignore */
+          }
+        }}
       />
     )
   }
@@ -832,7 +847,6 @@ export function App() {
         />
       )}
       <SystemEventListener />
-      <CookieNotice />
       <SettingsSheet
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}

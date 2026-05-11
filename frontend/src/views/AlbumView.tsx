@@ -92,7 +92,7 @@ export function AlbumView() {
   const handlePlayAll = useCallback(async () => {
     if (!tracks || tracks.length === 0) return
     try {
-      await playTrack(tracks[0])
+      await playTrack(tracks[0], { contextTracks: tracks })
     } catch (e) {
       showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
@@ -102,9 +102,8 @@ export function AlbumView() {
     if (!tracks || tracks.length === 0) return
     try {
       if (!shuffleOn) toggleShuffle()
-      const pick =
-        tracks[Math.floor(Math.random() * tracks.length)]
-      await playTrack(pick)
+      const shuffled = [...tracks].sort(() => Math.random() - 0.5)
+      await playTrack(shuffled[0], { contextTracks: shuffled })
     } catch (e) {
       showIsland({ kind: 'error', title: getApiErrorMessage(e, t('redesign.artist.playError')), durationMs: 4000 })
     }
