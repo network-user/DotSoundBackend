@@ -275,7 +275,7 @@ export function TrackEditView() {
         <MotionPress
           type="button"
           variant="ghost"
-          onPress={() => navigate(-1)}
+          onClick={() => navigate(-1)}
           aria-label={t('common.back', 'Назад')}
         >
           ←
@@ -397,7 +397,7 @@ export function TrackEditView() {
               type="button"
               variant="primary"
               disabled={busy}
-              onPress={() => coverInputRef.current?.click()}
+              onClick={() => coverInputRef.current?.click()}
             >
               {t('trackEdit.uploadCover', 'Загрузить обложку')}
             </MotionPress>
@@ -405,7 +405,7 @@ export function TrackEditView() {
               type="button"
               variant="ghost"
               disabled={busy}
-              onPress={async () => {
+              onClick={async () => {
                 setBusy(true)
                 try {
                   await api.regenerateTrackCover(trackId)
@@ -445,7 +445,7 @@ export function TrackEditView() {
         <MotionPress
           type="button"
           variant="primary"
-          onPress={() => navigate(`/?openTrack=${trackId}&lyrics=1`)}
+          onClick={() => navigate(`/?openTrack=${trackId}&lyrics=1`)}
         >
           {t('trackEdit.openLyricsEditor', 'Открыть редактор лирики')}
         </MotionPress>
@@ -493,7 +493,7 @@ export function TrackEditView() {
             type="button"
             variant="danger"
             disabled={busy}
-            onPress={handleDelete}
+            onClick={handleDelete}
           >
             {t('trackEdit.deleteTrack', 'Удалить трек')}
           </MotionPress>

@@ -62,21 +62,21 @@ export function DuplicateModal({
           <MotionPress
             type="button"
             variant="primary"
-            onPress={() => onOpen(existingTrackId)}
+            onClick={() => onOpen(existingTrackId)}
           >
             {t('upload.dupe.open', 'Открыть существующий')}
           </MotionPress>
           <MotionPress
             type="button"
             variant="ghost"
-            onPress={onUploadAnyway}
+            onClick={onUploadAnyway}
           >
             {t('upload.dupe.uploadAnyway', 'Загрузить как копию')}
           </MotionPress>
           <MotionPress
             type="button"
             variant="ghost"
-            onPress={onCancel}
+            onClick={onCancel}
           >
             {t('common.cancel', 'Отмена')}
           </MotionPress>

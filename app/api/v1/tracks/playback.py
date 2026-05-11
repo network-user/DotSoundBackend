@@ -18,6 +18,12 @@ from app.models.track import Track
 from app.models.user import User
 from app.repositories.track import TrackRepository
 from app.schemas.card import TrackCardResponse
+from app.schemas.offline import (
+    OfflineEligibilityBatchItem,
+    OfflineEligibilityBatchRequest,
+    OfflineEligibilityBatchResponse,
+    OfflineEligibilityResponse,
+)
 from app.schemas.share import ShareResponse
 from app.schemas.snippet import SnippetCreateRequest, SnippetOut
 from app.schemas.track import (
@@ -519,6 +525,7 @@ async def get_cover(
 
 @router.get(
     "/{track_id}/offline-eligibility",
+    response_model=OfflineEligibilityResponse,
     summary=(
         "Whether this track may be saved into the local PWA cache"
     ),
@@ -529,7 +536,7 @@ async def offline_eligibility(
     track_id: int,
     session: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
-) -> dict[str, object]:
+) -> OfflineEligibilityResponse:
     from app.services.offline_policy_adapter import (
         OFFLINE_MAX_TOTAL_BYTES_PER_USER,
         OFFLINE_MAX_TRACK_BYTES,
@@ -562,18 +569,17 @@ async def offline_eligibility(
         access_mode=track.access_mode,
         file_size_bytes=track.file_size_bytes,
     )
-    return {
-        "allowed": allowed,
-        "reason": reason,
-        "max_track_bytes": OFFLINE_MAX_TRACK_BYTES,
-        "max_total_bytes_per_user": (
-            OFFLINE_MAX_TOTAL_BYTES_PER_USER
-        ),
-    }
+    return OfflineEligibilityResponse(
+        allowed=allowed,
+        reason=reason,
+        max_track_bytes=OFFLINE_MAX_TRACK_BYTES,
+        max_total_bytes_per_user=OFFLINE_MAX_TOTAL_BYTES_PER_USER,
+    )
 
 
 @router.post(
     "/offline-eligibility-batch",
+    response_model=OfflineEligibilityBatchResponse,
     summary=(
         "Batch eligibility check for the local PWA cache"
     ),
@@ -581,46 +587,33 @@ async def offline_eligibility(
 @limiter.limit("60/minute")
 async def offline_eligibility_batch(
     request: Request,
-    payload: dict[str, list[int]],
+    payload: OfflineEligibilityBatchRequest,
     session: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
-) -> dict[str, object]:
+) -> OfflineEligibilityBatchResponse:
     from app.services.offline_policy_adapter import (
         OFFLINE_MAX_TOTAL_BYTES_PER_USER,
         OFFLINE_MAX_TRACK_BYTES,
         is_offline_allowed,
     )
 
-    raw_ids = payload.get("track_ids") or []
-    if not isinstance(raw_ids, list):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="track_ids must be a list",
-        )
-    if len(raw_ids) > 200:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="too many ids (max 200)",
-        )
     ids: list[int] = []
     seen: set[int] = set()
-    for raw in raw_ids:
-        if not isinstance(raw, int):
-            continue
+    for raw in payload.track_ids:
         if raw in seen:
             continue
         seen.add(raw)
         ids.append(raw)
 
     service = TrackService(session)
-    items: dict[str, dict[str, object]] = {}
+    items: dict[str, OfflineEligibilityBatchItem] = {}
     for tid in ids:
         track = await service.get_track(tid, viewer=current_user)
         if not track:
-            items[str(tid)] = {
-                "allowed": False,
-                "reason": "not_found",
-            }
+            items[str(tid)] = OfflineEligibilityBatchItem(
+                allowed=False,
+                reason="not_found",
+            )
             offline_eligibility_observed(
                 allowed=False, reason="not_found"
             )
@@ -628,10 +621,10 @@ async def offline_eligibility_batch(
         try:
             _check_access(track, current_user)
         except HTTPException:
-            items[str(tid)] = {
-                "allowed": False,
-                "reason": "forbidden",
-            }
+            items[str(tid)] = OfflineEligibilityBatchItem(
+                allowed=False,
+                reason="forbidden",
+            )
             offline_eligibility_observed(
                 allowed=False, reason="forbidden"
             )
@@ -642,17 +635,15 @@ async def offline_eligibility_batch(
             file_size_bytes=track.file_size_bytes,
         )
         offline_eligibility_observed(allowed=allowed, reason=reason)
-        items[str(tid)] = {
-            "allowed": allowed,
-            "reason": reason,
-        }
-    return {
-        "items": items,
-        "max_track_bytes": OFFLINE_MAX_TRACK_BYTES,
-        "max_total_bytes_per_user": (
-            OFFLINE_MAX_TOTAL_BYTES_PER_USER
-        ),
-    }
+        items[str(tid)] = OfflineEligibilityBatchItem(
+            allowed=allowed,
+            reason=reason,
+        )
+    return OfflineEligibilityBatchResponse(
+        items=items,
+        max_track_bytes=OFFLINE_MAX_TRACK_BYTES,
+        max_total_bytes_per_user=OFFLINE_MAX_TOTAL_BYTES_PER_USER,
+    )
 
 
 @router.get(

@@ -51,31 +51,39 @@ async function loadLocaleBundle(
   lang: 'ru' | 'en',
 ): Promise<JsonObj> {
   if (lang === 'ru') {
-    const [base, x1, x2] = await Promise.all([
+    const [base, x1, x2, x3] = await Promise.all([
       import('@/locales/ru.json'),
       import('@/locales/i18n_extra_ru.json'),
       import('@/locales/i18n_extra2_ru.json'),
+      import('@/locales/i18n_extra3_ru.json'),
     ])
     const merged = deepMerge(
+      deepMerge(
+        deepMerge(
+          base.default as unknown as JsonObj,
+          x1.default as unknown as JsonObj,
+        ),
+        x2.default as unknown as JsonObj,
+      ),
+      x3.default as unknown as JsonObj,
+    )
+    return localizeRuBrand(merged) as JsonObj
+  }
+  const [base, x1, x2, x3] = await Promise.all([
+    import('@/locales/en.json'),
+    import('@/locales/i18n_extra_en.json'),
+    import('@/locales/i18n_extra2_en.json'),
+    import('@/locales/i18n_extra3_en.json'),
+  ])
+  return deepMerge(
+    deepMerge(
       deepMerge(
         base.default as unknown as JsonObj,
         x1.default as unknown as JsonObj,
       ),
       x2.default as unknown as JsonObj,
-    )
-    return localizeRuBrand(merged) as JsonObj
-  }
-  const [base, x1, x2] = await Promise.all([
-    import('@/locales/en.json'),
-    import('@/locales/i18n_extra_en.json'),
-    import('@/locales/i18n_extra2_en.json'),
-  ])
-  return deepMerge(
-    deepMerge(
-      base.default as unknown as JsonObj,
-      x1.default as unknown as JsonObj,
     ),
-    x2.default as unknown as JsonObj,
+    x3.default as unknown as JsonObj,
   )
 }
 

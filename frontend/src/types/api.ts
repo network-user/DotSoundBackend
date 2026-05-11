@@ -1116,3 +1116,38 @@ export interface AccountImportBody {
   source?: 'liked' | 'playlist'
   playlist_id?: string | null
 }
+
+/** Stable reason codes returned by the offline-eligibility API.
+ *
+ * Mirrors ``app/schemas/offline.py::OfflineEligibilityReason``.
+ * Keep both ends in sync when adding/removing codes.
+ */
+export type OfflineEligibilityReason =
+  | 'ok'
+  | 'third_party_stream'
+  | 'official_embed'
+  | 'external_reference'
+  | 'unknown_mode'
+  | 'unknown_access_mode'
+  | 'track_too_large'
+  | 'policy_unavailable'
+  | 'not_found'
+  | 'forbidden'
+
+export interface OfflineEligibilityResponse {
+  allowed: boolean
+  reason: OfflineEligibilityReason | string
+  max_track_bytes: number
+  max_total_bytes_per_user: number
+}
+
+export interface OfflineEligibilityBatchItem {
+  allowed: boolean
+  reason: OfflineEligibilityReason | string
+}
+
+export interface OfflineEligibilityBatchResponse {
+  items: Record<string, OfflineEligibilityBatchItem>
+  max_track_bytes: number
+  max_total_bytes_per_user: number
+}

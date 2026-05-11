@@ -822,3 +822,88 @@
   justify-content: center;
   margin-top: var(--space-2);
 }
+
+/* -------- v2 polish: drop-zone, chips, counters --- */
+
+.ru-up-drop {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  --mx: 50%;
+  --my: 50%;
+}
+
+.ru-up-drop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    320px circle at var(--mx) var(--my),
+    rgba(125, 125, 255, 0.10),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 220ms ease;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.ru-up-drop:hover::before,
+.ru-up-drop[data-state='dragover']::before {
+  opacity: 1;
+}
+
+.ru-up-drop[data-state='dragover'] {
+  transform: translateY(-2px);
+  border-style: solid;
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px rgba(125, 125, 255, 0.18),
+    0 10px 28px rgba(0, 0, 0, 0.10);
+}
+
+.ru-up-drop[data-state='ready'] {
+  border-style: solid;
+  border-color: var(--border);
+}
+
+.ru-up-drop[data-state='ready'] .ru-up-drop__glyph {
+  color: var(--success, #2bb673);
+}
+
+.ru-up-drop__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+
+/* Inline character counter under wizard inputs */
+.ru-up-charcount {
+  display: block;
+  text-align: right;
+  margin-top: 6px;
+  font-size: var(--fs-11);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  transition: color 180ms ease;
+}
+
+.ru-up-charcount--near {
+  color: #d4a14a;
+}
+
+.ru-up-charcount--over {
+  color: var(--danger, #e84a4a);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ru-up-drop::before {
+    transition: none;
+  }
+  .ru-up-drop[data-state='dragover'] {
+    transform: none;
+  }
+}

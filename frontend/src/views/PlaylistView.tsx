@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { Icon } from '@/components/Icon/Icon'
+import { BulkDownloadButton } from '@/components/Offline/BulkDownloadButton'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
@@ -243,6 +244,7 @@ export function PlaylistView() {
               <Icon name="shuffle" size={16} />
               <span>{t('redesign.artist.shuffle')}</span>
             </MotionPress>
+            <BulkDownloadButton tracks={tracks} />
           </div>
         </div>
       </AmbientStage>

@@ -130,7 +130,7 @@ export function UploadProgressViewV2({
           <MotionPress
             type="button"
             variant="ghost"
-            onPress={onCancel}
+            onClick={onCancel}
           >
             {t('common.cancel', 'Отмена')}
           </MotionPress>
@@ -139,7 +139,7 @@ export function UploadProgressViewV2({
           <MotionPress
             type="button"
             variant="primary"
-            onPress={onOpen}
+            onClick={onOpen}
           >
             {t('upload.v2.openTrack', 'Открыть трек')}
           </MotionPress>
@@ -148,7 +148,7 @@ export function UploadProgressViewV2({
           <MotionPress
             type="button"
             variant="ghost"
-            onPress={onAnother}
+            onClick={onAnother}
           >
             {t('upload.v2.uploadAnother', 'Загрузить ещё')}
           </MotionPress>

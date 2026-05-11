@@ -17,6 +17,12 @@ function fmtDuration(sec: number | null): string {
   return `${m}:${s}`
 }
 
+function fmtBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} Б`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`
+}
+
 export function UploadStepAudio({
   audioFile,
   audioDuration,
@@ -37,7 +43,21 @@ export function UploadStepAudio({
         {t('redesign.upload.file.audioLabel')}
       </label>
       <div
-        className={`audio-drop-zone ru-up-drop${audioDragging ? ' drag-over' : ''}`}
+        className={`audio-drop-zone ru-up-drop${audioDragging ? ' drag-over' : ''}${audioFile ? ' has-file' : ''}`}
+        data-state={
+          audioDragging
+            ? 'dragover'
+            : audioFile
+              ? 'ready'
+              : 'idle'
+        }
+        onMouseMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect()
+          const x = ((e.clientX - rect.left) / rect.width) * 100
+          const y = ((e.clientY - rect.top) / rect.height) * 100
+          e.currentTarget.style.setProperty('--mx', `${x}%`)
+          e.currentTarget.style.setProperty('--my', `${y}%`)
+        }}
         onDragOver={(e: DragEvent) => {
           e.preventDefault()
           onDragChange(true)
@@ -55,19 +75,27 @@ export function UploadStepAudio({
         }}
       >
         <span className="ru-up-drop__glyph" aria-hidden>
-          <MorphIcon name="upload" size={28} />
+          <MorphIcon name={audioFile ? 'music' : 'upload'} size={28} />
         </span>
         <label className="file-pick-btn ru-up-drop__pick" htmlFor="audio-input">
-          {t('redesign.upload.file.audioPick')}
+          {audioFile
+            ? t('redesign.upload.file.audioReplace', 'Заменить файл')
+            : t('redesign.upload.file.audioPick')}
         </label>
         <p className="file-name ru-up-drop__name">
           {audioFile
             ? audioFile.name
             : t('redesign.upload.file.audioDropHint')}
         </p>
-        {audioFile && audioDuration !== null && (
+        {audioFile && (
           <p className="file-meta ru-up-drop__meta">
-            {fmtDuration(audioDuration)}
+            <span>{fmtBytes(audioFile.size)}</span>
+            {audioDuration !== null ? (
+              <>
+                <span aria-hidden> · </span>
+                <span>{fmtDuration(audioDuration)}</span>
+              </>
+            ) : null}
           </p>
         )}
       </div>

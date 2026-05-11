@@ -104,6 +104,7 @@ import type {
   FollowedArtistListResponse,
   GenreMixesResponse,
   GenreMixItem,
+  OfflineEligibilityResponse,
 } from '@/types/api'
 
 let accessToken: string | null = null
@@ -2212,12 +2213,9 @@ export const api = {
     )
   },
 
-  getOfflineEligibility(trackId: number): Promise<{
-    allowed: boolean
-    reason: string
-    max_track_bytes: number
-    max_total_bytes_per_user: number
-  }> {
+  getOfflineEligibility(
+    trackId: number,
+  ): Promise<OfflineEligibilityResponse> {
     return request(
       `/api/v1/tracks/${trackId}/offline-eligibility`,
     )

@@ -14,10 +14,12 @@ vi.mock('@/lib/api', () => ({
 
 import {
   cancelAutoCache,
+  DownloadAbortedError,
   getAutoCacheEnabled,
   getAutoCacheOnboardingShown,
   getCacheLimitChoice,
   getCachedIdsSync,
+  getEffectiveCacheLimit,
   isOfflineCacheSupported,
   markAutoCacheOnboardingShown,
   queueAutoCache,
@@ -111,5 +113,31 @@ describe('subscribeCacheChanges', () => {
 
   it('cachedIds starts empty in fresh env', () => {
     expect(getCachedIdsSync().size).toBe(0)
+  })
+})
+
+describe('DownloadAbortedError', () => {
+  it('extends Error and carries the right name', () => {
+    const err = new DownloadAbortedError()
+    expect(err).toBeInstanceOf(Error)
+    expect(err.name).toBe('DownloadAbortedError')
+  })
+})
+
+describe('getEffectiveCacheLimit', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('returns the explicit GB choice when set', async () => {
+    setCacheLimitChoice('5gb')
+    const limit = await getEffectiveCacheLimit()
+    expect(limit).toBe(5 * 1024 * 1024 * 1024)
+  })
+
+  it('returns Infinity when no limit and no storage quota', async () => {
+    setCacheLimitChoice('none')
+    const limit = await getEffectiveCacheLimit()
+    expect(limit).toBe(Number.POSITIVE_INFINITY)
   })
 })

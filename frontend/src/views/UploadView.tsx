@@ -12,6 +12,7 @@ import { MotionPress } from '@/components/ui/MotionPress'
 import { hapticNotification, hapticSelection } from '@/lib/telegram'
 import { usePlayerActions } from '@/store/PlayerContext'
 import { UploadFileTab } from '@/components/Upload/UploadFileTab'
+import { UploadQueueBadge } from '@/components/Upload/UploadQueueBadge'
 import { UploadSoundCloudTab } from '@/components/Upload/UploadSoundCloudTab'
 import { UploadYouTubeTab } from '@/components/Upload/UploadYouTubeTab'
 import { UploadBandcampTab } from '@/components/Upload/UploadBandcampTab'
@@ -76,7 +77,10 @@ export function UploadView() {
       className="view active upload-view ru-up-root"
     >
       <div className="view-header upload-view__header ru-up-header">
-        <h2>{t('redesign.upload.screenTitle')}</h2>
+        <div className="upload-view__header-row">
+          <h2>{t('redesign.upload.screenTitle')}</h2>
+          <UploadQueueBadge />
+        </div>
         <p className="upload-view__subtitle ru-up-subtitle">
           {t('redesign.upload.screenSubtitle')}
         </p>

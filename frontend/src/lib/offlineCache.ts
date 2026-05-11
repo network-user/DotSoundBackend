@@ -152,12 +152,7 @@ interface EligibilityLimits {
 async function checkOfflineEligibility(
   trackId: number,
 ): Promise<EligibilityLimits> {
-  const res = (await api.getOfflineEligibility(trackId)) as {
-    allowed: boolean
-    reason: string
-    max_track_bytes: number
-    max_total_bytes_per_user: number
-  }
+  const res = await api.getOfflineEligibility(trackId)
   if (!res.allowed) {
     throw new OfflineNotAllowedError(res.reason)
   }
@@ -891,5 +886,94 @@ function startGcScheduler(): void {
 }
 
 startGcScheduler()
+
+export interface BulkDownloadProgress {
+  done: number
+  total: number
+  ok: number
+  skipped: number
+  failed: number
+  currentTrackId: number | null
+}
+
+export interface BulkDownloadResult {
+  ok: number
+  skipped: number
+  failed: number
+  aborted: boolean
+}
+
+export interface BulkDownloadOptions {
+  signal?: AbortSignal
+  source?: CacheSource
+  pinned?: boolean
+  onProgress?: (state: BulkDownloadProgress) => void
+}
+
+/** Download every track in ``tracks`` into the offline cache.
+ *
+ * Runs sequentially so a single shared abort signal can stop the
+ * batch cleanly and so we don't multiply network pressure. Tracks
+ * already cached are counted as ``skipped`` and not re-downloaded.
+ * Per-track failures (ineligible / network error) don't abort the
+ * batch — they're tallied in ``failed``.
+ */
+export async function downloadTracksBulk(
+  tracks: Track[],
+  options: BulkDownloadOptions = {},
+): Promise<BulkDownloadResult> {
+  const signal = options.signal
+  const source: CacheSource = options.source ?? 'manual'
+  const pinned =
+    options.pinned ?? defaultPinnedForSource(source)
+  const total = tracks.length
+  let ok = 0
+  let skipped = 0
+  let failed = 0
+  let aborted = false
+
+  const emit = (currentTrackId: number | null, done: number) => {
+    options.onProgress?.({
+      done,
+      total,
+      ok,
+      skipped,
+      failed,
+      currentTrackId,
+    })
+  }
+
+  emit(null, 0)
+
+  for (let i = 0; i < tracks.length; i++) {
+    if (signal?.aborted) {
+      aborted = true
+      break
+    }
+    const track = tracks[i]
+    emit(track.id, i)
+    if (isCachedSync(track.id)) {
+      skipped += 1
+      continue
+    }
+    try {
+      await downloadTrack(track, {
+        source,
+        pinned,
+        signal,
+      })
+      ok += 1
+    } catch (err) {
+      if (err instanceof DownloadAbortedError) {
+        aborted = true
+        break
+      }
+      failed += 1
+    }
+  }
+
+  emit(null, ok + skipped + failed)
+  return { ok, skipped, failed, aborted }
+}
 
 export type { OfflineRecord }

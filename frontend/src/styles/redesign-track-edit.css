@@ -361,3 +361,19 @@
   gap: var(--space-2);
   margin-top: var(--space-2);
 }
+
+/* Upload view header layout (badge + title row) */
+.upload-view__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Cancel button container in legacy progress block */
+.progress-cancel-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}

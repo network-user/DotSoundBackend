@@ -7,6 +7,7 @@
   type ReactNode,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { api } from '@/lib/api'
 import {
   getInternalUserId,
@@ -124,6 +125,7 @@ function coverSrcSet(k: string, v: number): string {
 export function TrackCardSheet({
   onOpenArtist,
 }: Props) {
+  const navigate = useNavigate()
   const {
     currentTime,
     duration,
@@ -1875,6 +1877,20 @@ export function TrackCardSheet({
               {t('trackSheet.editing')}
             </div>
             <div className="tcs-edit-actions">
+              {isOwner && (
+                <button
+                  className="tcs-edit-btn"
+                  onClick={() =>
+                    navigate(`/track/${track.id}/edit`)
+                  }
+                >
+                  <Icon name="edit" size={18} />
+                  {t(
+                    'trackSheet.openEditPage',
+                    'Редактировать трек',
+                  )}
+                </button>
+              )}
               {canEditUi && (
                 <>
                   <button

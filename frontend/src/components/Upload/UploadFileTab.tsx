@@ -38,6 +38,7 @@ import { DuplicateModal } from './DuplicateModal'
 import { flagUploadV2 } from '@/lib/flags'
 import { computeAudioHash } from '@/lib/audioHash'
 import {
+  cancelUpload,
   checkDuplicate,
   initUpload,
   uploadFile,
@@ -129,6 +130,11 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
     uploadedAt: string | null
   } | null>(null)
   const [allowDupe, setAllowDupe] = useState(false)
+  const [v2Progress, setV2Progress] = useState<{
+    pct: number
+    abort: AbortController
+    uploadId: string | null
+  } | null>(null)
 
   useEffect(() => {
     api.getGenres().then(setGenres).catch(() => {})
@@ -561,6 +567,8 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
       let uploaded: { id: number }
 
       if (flagUploadV2()) {
+        const abort = new AbortController()
+        setV2Progress({ pct: 0, abort, uploadId: null })
         const plan = await initUpload({
           filename: audioFile.name,
           mime: audioFile.type || 'audio/mpeg',
@@ -573,9 +581,20 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
           is_public: isPublic,
           upload_terms_accepted: true,
         })
+        setV2Progress({ pct: 0, abort, uploadId: plan.upload_id })
         const result = await uploadFile(plan, audioFile, {
           cover: coverFile,
+          signal: abort.signal,
+          onProgress: ({ completedBytes, totalBytes }) => {
+            const pct = totalBytes > 0
+              ? Math.min(100, Math.round((completedBytes / totalBytes) * 100))
+              : 0
+            setV2Progress((prev) =>
+              prev ? { ...prev, pct } : prev,
+            )
+          },
         })
+        setV2Progress(null)
         uploaded = { id: result.track_id }
       } else {
         const fd = new FormData()
@@ -615,9 +634,29 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
       if (islandId) dismissIsland(islandId)
       setUploading(false)
       setUploadDone(false)
-      setError(resolveSubmitError(err))
-      hapticNotification('error')
+      setV2Progress(null)
+      const isAbort =
+        err instanceof DOMException && err.name === 'AbortError'
+      if (!isAbort) {
+        setError(resolveSubmitError(err))
+        hapticNotification('error')
+      }
     }
+  }
+
+  const handleCancelV2 = async () => {
+    if (!v2Progress) return
+    v2Progress.abort.abort()
+    if (v2Progress.uploadId) {
+      try {
+        await cancelUpload(v2Progress.uploadId)
+      } catch {
+        /* best-effort */
+      }
+    }
+    setV2Progress(null)
+    setUploading(false)
+    setUploadDone(false)
   }
 
   const draftArtistLabel =
@@ -826,15 +865,40 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
         <div>
           <div className="progress-bar-wrap">
             <div
-              className={`progress-bar-fill${uploadDone ? '' : ' shimmer'}`}
-              style={{ width: uploadDone ? '100%' : undefined }}
+              className={`progress-bar-fill${
+                uploadDone || v2Progress ? '' : ' shimmer'
+              }`}
+              style={{
+                width: uploadDone
+                  ? '100%'
+                  : v2Progress
+                    ? `${v2Progress.pct}%`
+                    : undefined,
+              }}
             />
           </div>
           <p className="progress-label">
             {uploadDone
               ? t('redesign.upload.file.progressProcessing')
-              : t('redesign.upload.file.progressUploading')}
+              : v2Progress
+                ? t(
+                    'redesign.upload.file.progressUploadingPct',
+                    'Загрузка {{pct}}%',
+                    { pct: v2Progress.pct },
+                  )
+                : t('redesign.upload.file.progressUploading')}
           </p>
+          {v2Progress && !uploadDone ? (
+            <div className="progress-cancel-wrap">
+              <MotionPress
+                type="button"
+                variant="ghost"
+                onClick={handleCancelV2}
+              >
+                {t('common.cancel', 'Отмена')}
+              </MotionPress>
+            </div>
+          ) : null}
         </div>
       )}
     </form>

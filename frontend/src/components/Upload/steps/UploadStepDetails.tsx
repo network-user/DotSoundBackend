@@ -137,6 +137,17 @@ export function UploadStepDetails(props: Props) {
             if (autoFilled.title) onClearAutoFlag('title')
           }}
         />
+        <span
+          className={`ru-up-charcount${
+            title.length > 236
+              ? title.length >= 256
+                ? ' ru-up-charcount--over'
+                : ' ru-up-charcount--near'
+              : ''
+          }`}
+        >
+          {title.length}/256
+        </span>
       </div>
 
       <div className="form-group genre-search-group">

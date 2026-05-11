@@ -28,6 +28,7 @@ import { ProfileActions } from '@/components/Profile/ProfileActions'
 import { ProfileTrackList } from '@/components/Profile/ProfileTrackList'
 import { ImportView } from '@/components/Import/ImportView'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
+import { UploadQueueBadge } from '@/components/Upload/UploadQueueBadge'
 import { ProfileAdminButton } from '@/components/Admin/ProfileAdminButton'
 import { ProfileDebugMenu } from '@/components/Admin/ProfileDebugMenu'
 import { MyComplaintsList } from '@/components/Profile/MyComplaintsList'
@@ -350,6 +351,7 @@ export function ProfileView({
               {t('profile.title')}
             </h1>
             <div className="profile-header-actions">
+              <UploadQueueBadge />
               <NotificationBell />
               <ProfileAdminButton />
               <ProfileDebugMenu
