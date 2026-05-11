@@ -57,39 +57,20 @@ class PlaybackVariantService:
 
         dur = int(track.duration_seconds)
         tol = title_duration_match_tolerance_pct()
-        current_pf = (track.source_platform or "").strip().lower()
-
-        for pf in EXTERNAL_SOURCE_PLATFORM_ORDER:
-            if pf == current_pf:
-                continue
-            found = await self._tracks.find_by_title_and_duration(
-                title,
-                dur,
-                platform=pf,
-                tolerance_pct=tol,
-                limit=5,
-            )
-            for c in found:
-                if c.id != track.id and self._artist_compatible(
-                    track.artist,
-                    c.artist,
-                ):
-                    ids.add(c.id)
-
-        if current_pf in EXTERNAL_SOURCE_PLATFORM_ORDER:
-            found_same = await self._tracks.find_by_title_and_duration(
-                title,
-                dur,
-                platform=current_pf,
-                tolerance_pct=tol,
-                limit=5,
-            )
-            for c in found_same:
-                if c.id != track.id and self._artist_compatible(
-                    track.artist,
-                    c.artist,
-                ):
-                    ids.add(c.id)
+        platforms = list(EXTERNAL_SOURCE_PLATFORM_ORDER)
+        found = await self._tracks.find_variants_by_title_and_duration(
+            title,
+            dur,
+            platforms=platforms,
+            tolerance_pct=tol,
+            limit=5 * max(1, len(platforms)),
+        )
+        for c in found:
+            if c.id != track.id and self._artist_compatible(
+                track.artist,
+                c.artist,
+            ):
+                ids.add(c.id)
 
         return sorted(ids)
 

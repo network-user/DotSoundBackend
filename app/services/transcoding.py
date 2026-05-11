@@ -16,6 +16,7 @@ logger = structlog.stdlib.get_logger(__name__)
 _HLS_TIME = 10
 _HI_BITRATE = "128k"
 _LO_BITRATE = "64k"
+_LOUDNORM_FILTER = "loudnorm=I=-14:TP=-1:LRA=11"
 
 _MASTER_PLAYLIST = (
     "#EXTM3U\n"
@@ -55,16 +56,17 @@ async def transcode_and_upload(
 
         process = await asyncio.create_subprocess_exec(
             "ffmpeg", "-y", "-i", temp_in_path,
+            "-filter_complex", f"[0:a:0]{_LOUDNORM_FILTER}[norm]",
             # Output 1: MP3 192k for range streaming fallback
-            "-map", "0:a:0", "-c:a", "libmp3lame", "-b:a", "192k",
+            "-map", "[norm]", "-c:a", "libmp3lame", "-b:a", "192k",
             "-vn", temp_mp3_path,
             # Output 2: HLS 128k (high quality)
-            "-map", "0:a:0", "-c:a", "aac", "-b:a", _HI_BITRATE,
+            "-map", "[norm]", "-c:a", "aac", "-b:a", _HI_BITRATE,
             "-vn", "-hls_time", str(_HLS_TIME), "-hls_list_size", "0",
             "-hls_segment_filename", f"{hi_dir}/%03d.ts",
             f"{hi_dir}/playlist.m3u8",
             # Output 3: HLS 64k (low quality / bad connection)
-            "-map", "0:a:0", "-c:a", "aac", "-b:a", _LO_BITRATE,
+            "-map", "[norm]", "-c:a", "aac", "-b:a", _LO_BITRATE,
             "-vn", "-hls_time", str(_HLS_TIME), "-hls_list_size", "0",
             "-hls_segment_filename", f"{lo_dir}/%03d.ts",
             f"{lo_dir}/playlist.m3u8",
@@ -163,11 +165,12 @@ async def transcode_hls_only(
 
         process = await asyncio.create_subprocess_exec(
             "ffmpeg", "-y", "-i", temp_in_path,
-            "-map", "0:a:0", "-c:a", "aac", "-b:a", _HI_BITRATE,
+            "-filter_complex", f"[0:a:0]{_LOUDNORM_FILTER}[norm]",
+            "-map", "[norm]", "-c:a", "aac", "-b:a", _HI_BITRATE,
             "-vn", "-hls_time", str(_HLS_TIME), "-hls_list_size", "0",
             "-hls_segment_filename", f"{hi_dir}/%03d.ts",
             f"{hi_dir}/playlist.m3u8",
-            "-map", "0:a:0", "-c:a", "aac", "-b:a", _LO_BITRATE,
+            "-map", "[norm]", "-c:a", "aac", "-b:a", _LO_BITRATE,
             "-vn", "-hls_time", str(_HLS_TIME), "-hls_list_size", "0",
             "-hls_segment_filename", f"{lo_dir}/%03d.ts",
             f"{lo_dir}/playlist.m3u8",

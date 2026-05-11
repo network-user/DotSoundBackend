@@ -6,7 +6,6 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.redis import get_redis_client
@@ -16,11 +15,9 @@ from app.dependencies import (
     require_step_up,
 )
 from app.models.background_job import BackgroundJob
-from app.models.compute_job import ComputeJob
-from app.models.lyrics_job import LyricsJob
 from app.models.scheduled_job import ScheduledJob
 from app.models.user import User
-from app.models.worker_audit import WorkerAuditLog
+from app.repositories.admin_tasks import AdminTasksRepository
 from app.services import compute_queue_service as q
 from app.services.cancellation import signal_cancel
 
@@ -28,12 +25,8 @@ router = APIRouter(prefix="/tasks", tags=["admin-tasks"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _COMPUTE_JOB_LABELS: dict[str, str] = {
-    q.JOB_TRACK_AUDIO_FEATURES: (
-        "Audio analysis & 15s preview clip"
-    ),
-    q.JOB_CATALOG_INGEST_NORMALIZE: (
-        "Catalog ingest / normalization"
-    ),
+    q.JOB_TRACK_AUDIO_FEATURES: ("Audio analysis & 15s preview clip"),
+    q.JOB_CATALOG_INGEST_NORMALIZE: ("Catalog ingest / normalization"),
     q.JOB_ARTIST_FEATURES_UPDATE: "Artist audio profile update",
     q.JOB_ARTIST_SIMILARITY_INDEX: "Artist similarity index",
     q.JOB_TRACK_SIMILARITY_INDEX: "Track similarity index",
@@ -81,9 +74,7 @@ async def list_queues(
 @router.get("/lyrics-jobs/{job_id}")
 async def get_lyrics_job(
     job_id: str,
-    _admin: User = Depends(
-        require_capability("tasks.manage")
-    ),
+    _admin: User = Depends(require_capability("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Detail view of a single lyrics job.
@@ -99,23 +90,16 @@ async def get_lyrics_job(
         get_lyrics_progress,
     )
 
-    row = (
-        await session.execute(
-            select(LyricsJob).where(LyricsJob.id == job_id)
-        )
-    ).scalar_one_or_none()
+    repo = AdminTasksRepository(session)
+    row = await repo.get_lyrics_job(job_id)
     if row is None:
-        raise HTTPException(
-            status_code=404, detail="job not found"
-        )
+        raise HTTPException(status_code=404, detail="job not found")
 
     progress: dict[str, Any] | None = None
     progress_id = row.progress_id
     if progress_id:
         try:
-            progress = await get_lyrics_progress(
-                progress_id
-            )
+            progress = await get_lyrics_progress(progress_id)
         except Exception:
             logger.exception(
                 "admin_lyrics_progress_read_failed",
@@ -148,9 +132,7 @@ async def get_lyrics_job(
 @router.post("/lyrics-jobs/{job_id}/cancel")
 async def cancel_lyrics_job(
     job_id: str,
-    _admin: User = Depends(
-        require_capability("tasks.manage")
-    ),
+    _admin: User = Depends(require_capability("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Cancel a lyrics / compute job (see ``lyrics_job_cancel``)."""
@@ -160,17 +142,13 @@ async def cancel_lyrics_job(
 
     out = await cancel_lyrics_job_for_admin(session, job_id)
     if out is None:
-        raise HTTPException(
-            status_code=404, detail="job not found"
-        )
+        raise HTTPException(status_code=404, detail="job not found")
     return out
 
 
 @router.post("/lyrics-jobs/cancel-queued")
 async def cancel_all_queued_lyrics_jobs(
-    _admin: User = Depends(
-        require_capability("tasks.manage")
-    ),
+    _admin: User = Depends(require_capability("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Bulk-cancel every lyrics job currently in ``queued`` state.
@@ -182,11 +160,7 @@ async def cancel_all_queued_lyrics_jobs(
 
     from app.services.lyrics_worker import CANCEL_KEY_PREFIX
 
-    queued_rows = (
-        await session.execute(
-            select(LyricsJob).where(LyricsJob.status == "queued")
-        )
-    ).scalars().all()
+    queued_rows = await AdminTasksRepository(session).list_queued_lyrics_jobs()
 
     if not queued_rows:
         return {"cancelled": 0, "items": []}
@@ -229,23 +203,12 @@ async def list_lyrics_jobs(
     _admin: User = Depends(require_capability("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    query = select(LyricsJob)
-    count_query = select(func.count(LyricsJob.id))
-    if status:
-        query = query.where(LyricsJob.status == status)
-        count_query = count_query.where(LyricsJob.status == status)
-    if profile:
-        query = query.where(LyricsJob.profile == profile)
-        count_query = count_query.where(LyricsJob.profile == profile)
-    query = (
-        query.order_by(desc(LyricsJob.created_at))
-        .offset((page - 1) * size)
-        .limit(size)
+    rows, total = await AdminTasksRepository(session).list_lyrics_jobs(
+        status=status,
+        profile=profile,
+        page=page,
+        size=size,
     )
-    result = await session.execute(query)
-    rows = list(result.scalars().all())
-    total_result = await session.execute(count_query)
-    total = int(total_result.scalar_one())
     return {
         "total": total,
         "page": page,
@@ -285,25 +248,12 @@ async def list_compute_jobs(
     _admin: User = Depends(require_capability("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    query = select(ComputeJob)
-    count_query = select(func.count(ComputeJob.id))
-    if status:
-        query = query.where(ComputeJob.status == status)
-        count_query = count_query.where(ComputeJob.status == status)
-    if job_type:
-        query = query.where(ComputeJob.job_type == job_type)
-        count_query = count_query.where(
-            ComputeJob.job_type == job_type
-        )
-    query = (
-        query.order_by(ComputeJob.created_at.desc())
-        .offset((page - 1) * size)
-        .limit(size)
+    rows, total = await AdminTasksRepository(session).list_compute_jobs(
+        status=status,
+        job_type=job_type,
+        page=page,
+        size=size,
     )
-    result = await session.execute(query)
-    rows = list(result.scalars().all())
-    total_result = await session.execute(count_query)
-    total = int(total_result.scalar_one())
     return {
         "total": total,
         "page": page,
@@ -339,12 +289,10 @@ async def list_worker_audit(
     _admin: User = Depends(require_capability("audio_compute.view_audit")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    query = select(WorkerAuditLog)
-    if worker_id:
-        query = query.where(WorkerAuditLog.worker_id == worker_id)
-    query = query.order_by(desc(WorkerAuditLog.created_at)).limit(limit)
-    result = await session.execute(query)
-    rows = list(result.scalars().all())
+    rows = await AdminTasksRepository(session).list_worker_audit(
+        worker_id=worker_id,
+        limit=limit,
+    )
     return {
         "items": [
             {
@@ -483,57 +431,18 @@ async def tasks_overview(
     except Exception:
         pass
 
-    bgjob_counts_rows = (
-        await session.execute(
-            select(
-                BackgroundJob.status,
-                func.count(BackgroundJob.id),
-            ).group_by(BackgroundJob.status)
-        )
-    ).all()
-    bgjob_counts = {
-        status: int(count) for status, count in bgjob_counts_rows
-    }
-
-    compute_counts_rows = (
-        await session.execute(
-            select(
-                ComputeJob.status, func.count(ComputeJob.id)
-            ).group_by(ComputeJob.status)
-        )
-    ).all()
-    compute_counts = {
-        status: int(count) for status, count in compute_counts_rows
-    }
-
-    lyrics_counts_rows = (
-        await session.execute(
-            select(
-                LyricsJob.status, func.count(LyricsJob.id)
-            ).group_by(LyricsJob.status)
-        )
-    ).all()
-    lyrics_counts = {
-        status: int(count) for status, count in lyrics_counts_rows
-    }
-
-    upcoming_rows = (
-        await session.execute(
-            select(ScheduledJob)
-            .where(ScheduledJob.enabled.is_(True))
-            .order_by(ScheduledJob.next_run_at.asc().nulls_last())
-            .limit(20)
-        )
-    ).scalars().all()
+    repo = AdminTasksRepository(session)
+    bgjob_counts = await repo.count_background_jobs_by_status()
+    compute_counts = await repo.count_compute_jobs_by_status()
+    lyrics_counts = await repo.count_lyrics_jobs_by_status()
+    upcoming_rows = await repo.list_upcoming_schedules(limit=20)
 
     return {
         "queues": queues,
         "background_jobs": bgjob_counts,
         "compute_jobs": compute_counts,
         "lyrics_jobs": lyrics_counts,
-        "upcoming_schedules": [
-            _serialize_schedule(r) for r in upcoming_rows
-        ],
+        "upcoming_schedules": [_serialize_schedule(r) for r in upcoming_rows],
     }
 
 
@@ -547,31 +456,12 @@ async def list_background_jobs(
     _admin: User = Depends(require_capability("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    query = select(BackgroundJob)
-    count_query = select(func.count(BackgroundJob.id))
-    if name:
-        query = query.where(BackgroundJob.name == name)
-        count_query = count_query.where(BackgroundJob.name == name)
-    if queue:
-        query = query.where(BackgroundJob.queue == queue)
-        count_query = count_query.where(BackgroundJob.queue == queue)
-    if status:
-        query = query.where(BackgroundJob.status == status)
-        count_query = count_query.where(
-            BackgroundJob.status == status
-        )
-    query = (
-        query.order_by(desc(BackgroundJob.created_at))
-        .offset((page - 1) * size)
-        .limit(size)
-    )
-    rows = list(
-        (await session.execute(query)).scalars().all()
-    )
-    total = int(
-        (
-            await session.execute(count_query)
-        ).scalar_one()
+    rows, total = await AdminTasksRepository(session).list_background_jobs(
+        name=name,
+        queue=queue,
+        status=status,
+        page=page,
+        size=size,
     )
     return {
         "total": total,
@@ -587,7 +477,7 @@ async def get_background_job(
     _admin: User = Depends(require_capability("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    row = await session.get(BackgroundJob, job_id)
+    row = await AdminTasksRepository(session).get_background_job(job_id)
     if row is None:
         raise HTTPException(status_code=404, detail="job not found")
     return _serialize_bgjob(row)
@@ -599,7 +489,7 @@ async def cancel_background_job(
     _admin: User = Depends(require_capability("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    row = await session.get(BackgroundJob, job_id)
+    row = await AdminTasksRepository(session).get_background_job(job_id)
     if row is None:
         raise HTTPException(status_code=404, detail="job not found")
     if row.status in ("done", "failed_terminal", "cancelled"):
@@ -622,7 +512,7 @@ async def retry_background_job(
         enqueue,
     )
 
-    row = await session.get(BackgroundJob, job_id)
+    row = await AdminTasksRepository(session).get_background_job(job_id)
     if row is None:
         raise HTTPException(status_code=404, detail="job not found")
     from app.core.tkq import broker as _broker
@@ -642,9 +532,7 @@ async def retry_background_job(
             parent_job_id=row.id,
         )
     except IdempotencySkipped as exc:
-        raise HTTPException(
-            status_code=409, detail=str(exc)
-        ) from exc
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"new_job_id": new_id, "parent_job_id": row.id}
 
 
@@ -668,17 +556,7 @@ async def list_schedules(
     _admin: User = Depends(require_capability("tasks.manage")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    rows = list(
-        (
-            await session.execute(
-                select(ScheduledJob).order_by(
-                    ScheduledJob.name.asc()
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
+    rows = await AdminTasksRepository(session).list_all_schedules()
     return {"items": [_serialize_schedule(r) for r in rows]}
 
 
@@ -700,11 +578,8 @@ async def create_schedule(
         )
     _validate_cron(cron)
 
-    existing = (
-        await session.execute(
-            select(ScheduledJob).where(ScheduledJob.name == name)
-        )
-    ).scalar_one_or_none()
+    repo = AdminTasksRepository(session)
+    existing = await repo.find_schedule_by_name(name)
     if existing is not None:
         raise HTTPException(
             status_code=409,
@@ -720,7 +595,7 @@ async def create_schedule(
         payload=body.get("payload") or None,
         enabled=bool(body.get("enabled", True)),
     )
-    session.add(row)
+    await repo.add(row)
     await session.commit()
     return _serialize_schedule(row)
 
@@ -732,11 +607,9 @@ async def update_schedule(
     _admin: User = Depends(require_step_up("tasks.run")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    row = await session.get(ScheduledJob, schedule_id)
+    row = await AdminTasksRepository(session).get_schedule(schedule_id)
     if row is None:
-        raise HTTPException(
-            status_code=404, detail="schedule not found"
-        )
+        raise HTTPException(status_code=404, detail="schedule not found")
 
     if "cron" in body:
         cron = (body.get("cron") or "").strip()
@@ -762,12 +635,10 @@ async def delete_schedule(
     _admin: User = Depends(require_step_up("tasks.run")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    row = await session.get(ScheduledJob, schedule_id)
+    row = await AdminTasksRepository(session).get_schedule(schedule_id)
     if row is None:
-        raise HTTPException(
-            status_code=404, detail="schedule not found"
-        )
-    await session.delete(row)
+        raise HTTPException(status_code=404, detail="schedule not found")
+    await AdminTasksRepository(session).delete(row)
     await session.commit()
     return {"deleted": schedule_id}
 
@@ -783,8 +654,6 @@ async def run_schedule_now(
     if job_id is None:
         raise HTTPException(
             status_code=400,
-            detail=(
-                "schedule not found or task not registered"
-            ),
+            detail=("schedule not found or task not registered"),
         )
     return {"job_id": job_id, "schedule_id": schedule_id}

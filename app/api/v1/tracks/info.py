@@ -36,20 +36,11 @@ async def get_track_info(
     db: AsyncSession = Depends(get_db),
     user: User | None = Depends(get_optional_user),
 ) -> TrackInfoResponse:
-    from sqlalchemy import select
-
-    from app.models.track import Track
-
-    result = await db.execute(
-        select(Track.id, Track.is_public, Track.uploaded_by_id).where(
-            Track.id == track_id
-        )
-    )
-    row = result.first()
-    if row is None:
+    info_repo = TrackRepository(db)
+    access = await info_repo.get_access_info(track_id)
+    if access is None:
         raise HTTPException(status_code=404, detail="Track not found")
-
-    _, is_public, owner_id = row
+    is_public, owner_id = access
     if not is_public and (user is None or user.id != owner_id):
         raise HTTPException(status_code=403, detail="Access denied")
 
@@ -70,17 +61,9 @@ async def refresh_track_info(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> TrackInfoResponse:
-    from sqlalchemy import select
-
-    from app.models.track import Track
-
-    result = await db.execute(
-        select(Track.id, Track.is_public, Track.uploaded_by_id).where(
-            Track.id == track_id
-        )
-    )
-    row = result.first()
-    if row is None:
+    info_repo = TrackRepository(db)
+    access = await info_repo.get_access_info(track_id)
+    if access is None:
         raise HTTPException(status_code=404, detail="Track not found")
 
     svc = TrackInfoService(db)

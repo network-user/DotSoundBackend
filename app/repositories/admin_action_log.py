@@ -7,6 +7,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.admin_action_log import AdminActionLog
+from app.models.login_history import LoginHistory
 
 
 class AdminActionLogRepository:
@@ -99,5 +100,18 @@ class AdminActionLogRepository:
         if until is not None:
             query = query.where(AdminActionLog.created_at <= until)
         query = query.order_by(desc(AdminActionLog.created_at)).limit(50_000)
+        result = await self._session.execute(query)
+        return list(result.scalars().all())
+
+    async def list_login_history(
+        self,
+        *,
+        user_id: int | None = None,
+        limit: int = 100,
+    ) -> list[LoginHistory]:
+        query = select(LoginHistory)
+        if user_id is not None:
+            query = query.where(LoginHistory.user_id == user_id)
+        query = query.order_by(desc(LoginHistory.created_at)).limit(limit)
         result = await self._session.execute(query)
         return list(result.scalars().all())

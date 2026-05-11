@@ -351,7 +351,7 @@ async def devices_confirm(
 
 
 @router.post("/step-up", response_model=AdminMessageResponse)
-@limiter.limit("10/minute")
+@limiter.limit("2/minute")
 async def step_up(
     request: Request,
     payload: AdminStepUpRequest = Body(...),
@@ -511,7 +511,9 @@ async def disable(
     "/backup-code/use",
     response_model=AdminMessageResponse,
 )
+@limiter.limit("5/minute")
 async def use_backup_code(
+    request: Request,
     payload: AdminDisableRequest = Body(...),
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),

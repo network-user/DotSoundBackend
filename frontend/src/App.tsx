@@ -117,6 +117,7 @@ import {
   disconnectWS,
   setWSTokenProvider,
 } from '@/lib/ws'
+import { stopAllLyricsTaskSubscriptions } from '@/store/lyricsTaskStore'
 import {
   getConfiguredAdminPanelPath,
   normalizeAdminPathSegment,
@@ -588,6 +589,7 @@ export function App() {
     setAuthorId(null)
   const handleLogout = () => {
     disconnectWS()
+    stopAllLyricsTaskSubscriptions()
     api.logout()
     setSettingsOpen(false)
     setNeedsAuth(true)

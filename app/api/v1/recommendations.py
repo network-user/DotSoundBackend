@@ -46,16 +46,14 @@ router = APIRouter(
 )
 
 
-@router.get(
-    "/home", response_model=HomePageResponse
-)
+@router.get("/home", response_model=HomePageResponse)
 async def get_home(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = RecommendationService(db)
     data = await svc.get_home_sections(user.id)
-    
+
     sections = []
     listen_repo = ListenEventRepository(db)
     for s in data["sections"]:
@@ -66,15 +64,15 @@ async def get_home(
             )
             if positions:
                 tracks_out = [
-                    t.model_copy(
-                        update={
-                            "resume_position_seconds": positions.get(
-                                t.id
-                            )
-                        }
+                    (
+                        t.model_copy(
+                            update={
+                                "resume_position_seconds": positions.get(t.id)
+                            }
+                        )
+                        if positions.get(t.id) is not None
+                        else t
                     )
-                    if positions.get(t.id) is not None
-                    else t
                     for t in tracks_out
                 ]
         sections.append(
@@ -84,7 +82,7 @@ async def get_home(
                 tracks=tracks_out,
             )
         )
-        
+
     highlights = []
     for h in data.get("highlights", []):
         track_out = await dedupe_and_build_track_list(db, [h["track"]])
@@ -97,7 +95,7 @@ async def get_home(
                     "hero_image_key": h.get("hero_image_key"),
                 }
             )
-            
+
     return HomePageResponse(
         sections=sections,
         highlights=highlights,
@@ -115,9 +113,7 @@ async def get_similar(
     db: AsyncSession = Depends(get_db),
 ):
     svc = RecommendationService(db)
-    tracks = await svc.get_similar(
-        track_id, limit
-    )
+    tracks = await svc.get_similar(track_id, limit)
     return SimilarTracksResponse(
         seed_track_id=track_id,
         tracks=await dedupe_and_build_track_list(db, tracks),
@@ -136,9 +132,7 @@ async def get_daily_mix(
     tracks = await svc.get_daily_mix(user.id)
     return DailyMixResponse(
         tracks=await dedupe_and_build_track_list(db, tracks),
-        generated_at=datetime.now(
-            UTC
-        ).isoformat(),
+        generated_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -154,9 +148,7 @@ async def get_genre_mixes(
     mixes = await svc.get_genre_mixes(user.id)
     result = []
     for mix in mixes:
-        tracks_out = await dedupe_and_build_track_list(
-            db, mix["tracks"]
-        )
+        tracks_out = await dedupe_and_build_track_list(db, mix["tracks"])
         result.append(
             GenreMixItemResponse(
                 genre=mix["genre"],
@@ -186,9 +178,7 @@ async def get_genre_mix(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="genre mix not found",
         )
-    tracks_out = await dedupe_and_build_track_list(
-        db, mix["tracks"]
-    )
+    tracks_out = await dedupe_and_build_track_list(db, mix["tracks"])
     return GenreMixItemResponse(
         genre=mix["genre"],
         title=mix["title"],
@@ -224,9 +214,7 @@ async def save_genre_mix_override(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
-    tracks_out = await dedupe_and_build_track_list(
-        db, saved["tracks"]
-    )
+    tracks_out = await dedupe_and_build_track_list(db, saved["tracks"])
     return GenreMixItemResponse(
         genre=saved["genre"],
         title=saved["title"],
@@ -234,9 +222,7 @@ async def save_genre_mix_override(
     )
 
 
-@router.get(
-    "/radio", response_model=RadioQueueResponse
-)
+@router.get("/radio", response_model=RadioQueueResponse)
 async def get_radio(
     seed_track_id: int = Query(...),
     queue_size: int = Query(default=20, le=50),
@@ -247,11 +233,9 @@ async def get_radio(
     exclude: list[int] = []
     if exclude_ids:
         try:
-            exclude = [
-                int(x)
-                for x in exclude_ids.split(",")
-                if x.strip()
-            ][:200]
+            exclude = [int(x) for x in exclude_ids.split(",") if x.strip()][
+                :200
+            ]
         except ValueError:
             exclude = []
     svc = RecommendationService(db)
@@ -329,14 +313,10 @@ async def get_weekly_playlist(
 async def get_user_choice_playlist(
     _user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(
-        default=100, ge=1, le=200
-    ),
+    limit: int = Query(default=100, ge=1, le=200),
 ):
     svc = RecommendationService(db)
-    tracks = await svc.get_user_choice_playlist(
-        limit=limit
-    )
+    tracks = await svc.get_user_choice_playlist(limit=limit)
     return UserChoicePlaylistResponse(
         tracks=await dedupe_and_build_track_list(db, tracks),
         generated_at=datetime.now(UTC).isoformat(),
@@ -354,13 +334,9 @@ async def get_weekly_top_playlist(
     limit: int = Query(default=50, ge=1, le=100),
 ):
     svc = RecommendationService(db)
-    payload = await svc.get_weekly_top_playlist(
-        limit=limit
-    )
+    payload = await svc.get_weekly_top_playlist(limit=limit)
     repo = RecommendationRepository(db)
-    tracks = await repo.get_tracks_by_ids(
-        payload.get("track_ids", [])
-    )
+    tracks = await repo.get_tracks_by_ids(payload.get("track_ids", []))
     return WeeklyTopPlaylistResponse(
         tracks=await dedupe_and_build_track_list(db, tracks),
         generated_at=payload["generated_at"],
@@ -385,9 +361,7 @@ async def get_forgotten_treasures_playlist(
         limit=limit,
     )
     repo = RecommendationRepository(db)
-    tracks = await repo.get_tracks_by_ids(
-        payload["track_ids"]
-    )
+    tracks = await repo.get_tracks_by_ids(payload["track_ids"])
     return ForgottenTreasuresPlaylistResponse(
         tracks=await dedupe_and_build_track_list(db, tracks),
         generated_at=payload["generated_at"],
@@ -447,10 +421,6 @@ async def get_discover(
     trending_limit: int = Query(default=10, ge=1, le=20),
     artist_limit: int = Query(default=8, ge=1, le=20),
 ) -> DiscoverResponse:
-    from sqlalchemy import desc, func, select  # noqa: PLC0415
-
-    from app.models.track import Track as TrackModel  # noqa: PLC0415
-
     rec_repo = RecommendationRepository(db)
     artist_repo = ArtistRepository(db)
 
@@ -458,53 +428,16 @@ async def get_discover(
     trending_out = await dedupe_and_build_track_list(db, trending_raw)
 
     artists_raw = await artist_repo.list_popular(limit=artist_limit)
-    artists_out = [
-        ArtistResponse.model_validate(a) for a in artists_raw
-    ]
+    artists_out = [ArtistResponse.model_validate(a) for a in artists_raw]
 
-    genre_ranked = (
-        select(
-            TrackModel.genre.label("genre"),
-            TrackModel.cover_key.label("cover_key"),
-            func.count(TrackModel.id)
-            .over(partition_by=TrackModel.genre)
-            .label("cnt"),
-            func.row_number()
-            .over(
-                partition_by=TrackModel.genre,
-                order_by=(
-                    TrackModel.play_count.desc(),
-                    TrackModel.id.desc(),
-                ),
-            )
-            .label("rn"),
-        )
-        .where(
-            TrackModel.genre.isnot(None),
-            TrackModel.genre != "",
-            TrackModel.is_active.is_(True),
-            TrackModel.is_public.is_(True),
-        )
-        .subquery()
-    )
-    genre_rows = await db.execute(
-        select(
-            genre_ranked.c.genre,
-            genre_ranked.c.cnt,
-            genre_ranked.c.cover_key,
-        )
-        .where(genre_ranked.c.rn == 1)
-        .order_by(desc(genre_ranked.c.cnt))
-        .limit(12)
-    )
     genre_cards = [
         DiscoverGenreCard(
-            genre=str(row[0]),
-            title=str(row[0]),
-            track_count=int(row[1]),
-            cover_key=str(row[2]) if row[2] else None,
+            genre=g,
+            title=g,
+            track_count=cnt,
+            cover_key=cover,
         )
-        for row in genre_rows.all()
+        for g, cnt, cover in await rec_repo.get_genre_cards(limit=12)
     ]
 
     recent_genres: list[str] = []

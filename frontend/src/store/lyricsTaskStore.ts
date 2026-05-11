@@ -321,6 +321,17 @@ function getSnapshot(): Map<number, TaskState> {
   return tasks
 }
 
+export function stopAllLyricsTaskSubscriptions(): void {
+  for (const trackId of Array.from(eventSources.keys())) {
+    stopSubscription(trackId)
+  }
+  for (const trackId of Array.from(pollTimers.keys())) {
+    stopSubscription(trackId)
+  }
+  tasks = new Map()
+  notify()
+}
+
 export function useLyricsTask(trackId: number) {
   const store = useSyncExternalStore(subscribe, getSnapshot)
 

@@ -97,6 +97,7 @@ export function disconnectWS() {
     clearTimeout(reconnectTimer)
     reconnectTimer = null
   }
+  reconnectDelay = 1000
   socket?.close()
   socket = null
 }

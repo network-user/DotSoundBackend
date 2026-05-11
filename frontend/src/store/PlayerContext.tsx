@@ -600,7 +600,8 @@ export function PlayerProvider({
   const [duration, setDuration] = useState(0)
   const [volume, setVolumeState] = useState(() => {
     const s = localStorage.getItem('player-volume')
-    return s ? parseFloat(s) : 0.8
+    const n = s == null ? Number.NaN : Number(s)
+    return Number.isFinite(n) ? n : 0.8
   })
   const [isComplaintOpen, setIsComplaintOpen] =
     useState(false)

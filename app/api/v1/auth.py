@@ -51,9 +51,7 @@ from app.schemas.user import UserCreate
 from app.services.user_service import UserService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-logger: structlog.stdlib.BoundLogger = (
-    structlog.get_logger(__name__)
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _redis_client: Any = None
 
@@ -63,9 +61,7 @@ async def _get_redis() -> Any:
     if _redis_client is None:
         import redis.asyncio as aioredis
 
-        _redis_client = aioredis.from_url(
-            settings.redis_url
-        )
+        _redis_client = aioredis.from_url(settings.redis_url)
     return _redis_client
 
 
@@ -76,9 +72,7 @@ class AuthConfigResponse(BaseModel):
     admin_api_path: str | None = None
 
 
-@router.get(
-    "/config", response_model=AuthConfigResponse
-)
+@router.get("/config", response_model=AuthConfigResponse)
 async def get_auth_config(
     user: User | None = Depends(get_optional_user),
 ) -> AuthConfigResponse:
@@ -111,18 +105,12 @@ async def auth_telegram(
             detail="Telegram auth is not configured",
         )
     try:
-        tg_user = verify_telegram_init_data(
-            body.init_data
-        )
+        tg_user = verify_telegram_init_data(body.init_data)
     except AuthError as exc:
         logger.warning(
             "telegram_auth_failed",
             error=str(exc),
-            client_ip=(
-                request.client.host
-                if request.client
-                else None
-            ),
+            client_ip=(request.client.host if request.client else None),
             init_data_len=len(body.init_data),
         )
         raise HTTPException(
@@ -134,22 +122,14 @@ async def auth_telegram(
     user_data = UserCreate(
         telegram_id=int(tg_user["id"]),  # type: ignore[arg-type]
         username=(
-            str(tg_user["username"])
-            if tg_user.get("username")
-            else None
+            str(tg_user["username"]) if tg_user.get("username") else None
         ),
-        first_name=str(
-            tg_user.get("first_name", "")
-        ),
+        first_name=str(tg_user.get("first_name", "")),
         last_name=(
-            str(tg_user["last_name"])
-            if tg_user.get("last_name")
-            else None
+            str(tg_user["last_name"]) if tg_user.get("last_name") else None
         ),
     )
-    user, created = (
-        await service.register_or_update(user_data)
-    )
+    user, created = await service.register_or_update(user_data)
 
     from app.services.abuse_guard import evaluate_auth_event
 
@@ -160,9 +140,7 @@ async def auth_telegram(
         user_id=user.id,
     )
 
-    token = create_access_token(
-        user.id, user.is_admin
-    )
+    token = create_access_token(user.id, user.is_admin)
     logger.info(
         "telegram_auth_success",
         user_id=user.id,
@@ -197,9 +175,7 @@ async def generate_auth_code(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Internal secret not configured",
         )
-    secret = request.headers.get(
-        INTERNAL_SECRET_HEADER, ""
-    )
+    secret = request.headers.get(INTERNAL_SECRET_HEADER, "")
     if secret != settings.bot_internal_secret:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -208,16 +184,11 @@ async def generate_auth_code(
 
     redis = await _get_redis()
 
-    cooldown_key = (
-        f"{COOLDOWN_PREFIX}{body.telegram_id}"
-    )
+    cooldown_key = f"{COOLDOWN_PREFIX}{body.telegram_id}"
     if await redis.exists(cooldown_key):
         raise HTTPException(
-            status_code=(
-                status.HTTP_429_TOO_MANY_REQUESTS
-            ),
-            detail="Too many failed attempts. "
-            "Try again later",
+            status_code=(status.HTTP_429_TOO_MANY_REQUESTS),
+            detail="Too many failed attempts. " "Try again later",
         )
 
     code = generate_code()
@@ -262,49 +233,29 @@ async def verify_telegram_code(
     await redis.delete(key)
 
     service = UserService(session)
-    user = await service.get_by_telegram_id(
-        telegram_id
-    )
+    user = await service.get_by_telegram_id(telegram_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
 
-    token = create_access_token(
-        user.id, user.is_admin
-    )
+    token = create_access_token(user.id, user.is_admin)
 
-    client_ip = (
-        request.client.host
-        if request.client
-        else "unknown"
-    )
-    user_agent = request.headers.get(
-        "user-agent", ""
-    )
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "")
     now = datetime.now(UTC)
 
     try:
-        async with httpx.AsyncClient(
-            timeout=10
-        ) as client:
+        async with httpx.AsyncClient(timeout=10) as client:
             await client.post(
-                send_login_notification_url(
-                    settings.bot_internal_url
-                ),
-                headers=build_internal_headers(
-                    settings.bot_internal_secret
-                ),
+                send_login_notification_url(settings.bot_internal_url),
+                headers=build_internal_headers(settings.bot_internal_secret),
                 json={
                     "telegram_id": telegram_id,
                     "ip": mask_ip(client_ip),
-                    "device": parse_user_agent(
-                        user_agent
-                    ),
-                    "time": now.strftime(
-                        "%d.%m.%Y, %H:%M UTC"
-                    ),
+                    "device": parse_user_agent(user_agent),
+                    "time": now.strftime("%d.%m.%Y, %H:%M UTC"),
                 },
             )
     except Exception:
@@ -349,11 +300,7 @@ async def internal_token(
     body: InternalTokenRequest,
     session: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    client_ip = (
-        request.client.host
-        if request.client
-        else "unknown"
-    )
+    client_ip = request.client.host if request.client else "unknown"
 
     if not is_internal_ip(client_ip):
         logger.warning(
@@ -368,21 +315,12 @@ async def internal_token(
 
     if not settings.bot_internal_secret:
         raise HTTPException(
-            status_code=(
-                status.HTTP_503_SERVICE_UNAVAILABLE
-            ),
+            status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
             detail="Internal secret not configured",
         )
 
-    provided = (
-        request.headers.get(
-            INTERNAL_SECRET_HEADER, ""
-        )
-        .encode()
-    )
-    expected = (
-        settings.bot_internal_secret.encode()
-    )
+    provided = request.headers.get(INTERNAL_SECRET_HEADER, "").encode()
+    expected = settings.bot_internal_secret.encode()
     if not hmac.compare_digest(provided, expected):
         logger.warning(
             "internal_token_bad_secret",
@@ -395,9 +333,7 @@ async def internal_token(
         )
 
     service = UserService(session)
-    user = await service.get_by_telegram_id(
-        body.telegram_id
-    )
+    user = await service.get_by_telegram_id(body.telegram_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -410,9 +346,7 @@ async def internal_token(
         ttl_minutes=INTERNAL_TOKEN_TTL_MIN,
     )
 
-    user_agent = request.headers.get(
-        "user-agent", ""
-    )
+    user_agent = request.headers.get("user-agent", "")
     logger.info(
         "internal_token_issued",
         user_id=user.id,
@@ -440,6 +374,11 @@ if settings.debug:
         user_id: int,
         session: AsyncSession = Depends(get_db),
     ) -> TokenResponse:
+        if not settings.debug:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Not Found",
+            )
         service = UserService(session)
         user = await service.get_by_id(user_id)
         if not user:
@@ -449,18 +388,10 @@ if settings.debug:
                 first_name="Mock",
                 last_name="Tester",
             )
-            user, _ = (
-                await service.register_or_update(
-                    user_data
-                )
-            )
+            user, _ = await service.register_or_update(user_data)
 
-        token = create_access_token(
-            user.id, user.is_admin
-        )
-        logger.warning(
-            "mock_auth_used", user_id=user.id
-        )
+        token = create_access_token(user.id, user.is_admin)
+        logger.warning("mock_auth_used", user_id=user.id)
         return TokenResponse(
             access_token=token,
             user_id=user.id,

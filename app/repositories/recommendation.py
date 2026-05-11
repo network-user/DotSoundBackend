@@ -135,6 +135,51 @@ class RecommendationRepository:
                     break
         return out[:total_limit]
 
+    async def get_genre_cards(
+        self,
+        limit: int = 12,
+    ) -> list[tuple[str, int, str | None]]:
+        from sqlalchemy import desc
+
+        ranked = (
+            select(
+                Track.genre.label("genre"),
+                Track.cover_key.label("cover_key"),
+                func.count(Track.id)
+                .over(partition_by=Track.genre)
+                .label("cnt"),
+                func.row_number()
+                .over(
+                    partition_by=Track.genre,
+                    order_by=(
+                        Track.play_count.desc(),
+                        Track.id.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .where(
+                Track.genre.isnot(None),
+                Track.genre != "",
+                Track.deleted_at.is_(None),
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
+            )
+            .subquery()
+        )
+        result = await self._session.execute(
+            select(ranked.c.genre, ranked.c.cnt, ranked.c.cover_key)
+            .where(ranked.c.rn == 1)
+            .order_by(desc(ranked.c.cnt))
+            .limit(limit)
+        )
+        return [
+            (str(row[0]), int(row[1]), str(row[2]) if row[2] else None)
+            for row in result.all()
+        ]
+
     async def get_popular_tracks(self, limit: int = 20) -> list[Track]:
         result = await self._session.execute(
             select(Track)

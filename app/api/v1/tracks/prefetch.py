@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 
+import structlog
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field
 
@@ -13,6 +14,16 @@ from app.dependencies import get_current_user
 from app.models.user import User
 
 router = APIRouter()
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _log_prefetch_done(task: asyncio.Task[None]) -> None:
+    exc = task.exception()
+    if exc is not None:
+        logger.warning(
+            "prefetch_track_urls_failed",
+            err=str(exc),
+        )
 
 
 class PrefetchRequest(BaseModel):
@@ -39,5 +50,6 @@ async def prefetch_tracks(
 ) -> PrefetchResponse:
     from app.services.audio_cache_prefetch import prefetch_track_urls
 
-    asyncio.create_task(prefetch_track_urls(body.track_ids))
+    task = asyncio.create_task(prefetch_track_urls(body.track_ids))
+    task.add_done_callback(_log_prefetch_done)
     return PrefetchResponse(accepted=len(body.track_ids))

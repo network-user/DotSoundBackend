@@ -14,6 +14,112 @@
 
 ---
 
+## Аудит + фиксы (2026-05-11)
+
+- [x] **Security + boundary + logic + perf + frontend pass (1 PR vector)**
+  — глубокий аудит всего проекта по запросу пользователя; план в
+  `~/.claude/plans/serene-humming-gray.md`. Сделано в 6 логических
+  блоках:
+  - **Commit 1 (security):** `internal_api_allowlist` теперь читает
+    `X-Forwarded-For` только если непосредственный peer входит в
+    новый `INTERNAL_API_TRUSTED_PROXIES` allowlist (раньше использовался
+    только `request.client.host`); admin `step-up` rate-limit понижен
+    с 10/min до 2/min; admin `/backup-code/use` получил
+    `@limiter.limit("5/minute")` (раньше без лимита); mock-auth
+    endpoint получил runtime-guard `if not settings.debug → 404`
+    как defence-in-depth поверх import-time gating.
+  - **Commit 2 (security IDOR-проверки):** все три гипотезы агента
+    оказались ложными или non-bug — colisten PATCH уже проверяет
+    host/dj; playlist invite — это shareable capability token (by
+    design); `/users/{id}` уже имеет rate-limit; comment deletion —
+    auth-check корректен. Изменений нет.
+  - **Commit 3 (public/private boundary):** прямой SQL вынесен из
+    `api/v1/recommendations.py` (genre cards) в новый
+    `RecommendationRepository.get_genre_cards`; из
+    `api/v1/tracks/info.py` (access check x2) в новый
+    `TrackRepository.get_access_info`; из `api/v1/admin/audit.py`
+    (login history) в `AdminActionLogRepository.list_login_history`.
+  - **Commit 4 (logic/soft-delete):** `TrackRepository._playback_listing_allowed`
+    теперь AND-ит `Track.deleted_at IS NULL` — фильтр распространяется
+    на все list-методы, использующие helper (9 callsite); добавлен
+    финальный tie-breaker `TrackComment.id.desc()` в
+    cursor-пагинации комментариев.
+  - **Commit 5 (performance):** `PlaybackVariantService.resolve_variant_track_ids`
+    перешёл с per-platform цикла (≈5-10 SELECT/трек) на единый запрос
+    через новый `TrackRepository.find_variants_by_title_and_duration(platforms=[...])`;
+    `prefetch` task получил `add_done_callback` с логированием ошибок.
+  - **Commit 6 (frontend):** `ws.ts disconnectWS` теперь сбрасывает
+    `reconnectDelay` (после logout/relogin WS подключается быстро, а
+    не через 30с); `PlayerContext` volume инициализация защищена от
+    `NaN` при отсутствующем localStorage; добавлен
+    `stopAllLyricsTaskSubscriptions()` в `lyricsTaskStore` и вызван
+    из `handleLogout` в `App.tsx`; Onboarding welcome-кнопка
+    блокируется при `bootstrapErr`.
+  - Помечены ложноположительные: SEC-1/7 (mock-auth уже gated на
+    импорте; colisten owner-check уже есть), большая часть FE-2/F-3/F-6/F-9
+    (cleanup/try-catch уже на месте).
+  - Backend: py_compile зелёный, ruff показал только pre-existing
+    annotation ошибки на не-затронутых функциях. Black применён к
+    `internal_api_allowlist.py`, `track.py`, `recommendation.py`,
+    `recommendations.py`.
+
+### Follow-up (вынести отдельным PR)
+
+- [x] **Admin ORM cleanup B-3-tail:** `app/api/v1/admin/tasks.py`
+  ≈30 точек прямого SQL вынесены в новый
+  `app/repositories/admin_tasks.py` (`AdminTasksRepository`).
+  Все 14 хендлеров теперь не содержат `select()`, `session.execute()`
+  или `session.get()`. Внутренние модели остаются только для
+  серилизаторов и factory (ScheduledJob ctor) — это разрешено.
+- [ ] **P-3 recommendations build batching:** сейчас секции в
+  `/recommendations/home` собираются последовательно (loop по
+  sections с `dedupe_and_build_track_list` на каждой). Можно
+  объединить в один build-pass — но требует snapshot-теста на
+  состав/порядок ответа до рефактора.
+- [-] **F-2/F-3/F-11 frontend race (false positive на bug-severity):**
+  при второй проверке закрытое `let cancelled = false` в каждом
+  effect run + `if (!cancelled) setState(...)` гард корректно
+  фильтрует stale-ответы. AbortController дал бы только экономию
+  сети — отдельная задача категории «оптимизация», не баг.
+- [ ] **OTP attempt counter (S-4):** OTP /verify-code сейчас
+  защищён только slowapi per-IP лимитом + Redis-key lookup. Глобальный
+  per-telegram-id счётчик lockout-decision'а (через PrivateCore)
+  закрыл бы коллективный multi-IP brute. Lower priority — структурно
+  лук-ап-by-key уже почти constant-time.
+- [ ] **JWT user revocation (jti):** user-tokens сейчас живут до
+  expire (7 дней) без возможности отозвать. Admin-tokens уже
+  поддерживают jti+Redis-blocklist — расширить на user-tokens.
+- [x] **HLS path-traversal review:** проверены HLS-роуты
+  (`hls.py:master/variant/segment`), `cover_proxy`
+  (`tracks/discovery.py:cover_proxy`), `video_proxy`
+  (`tracks/playback.py:video_proxy`), `secure_static.py` (token
+  gate), StaticFiles mount, и весь upload-pipeline (`core/s3.py`).
+  Все векторы защищены: `track_id: int` валидируется FastAPI;
+  `variant` — allowlist `{"hi","lo"}`; `segment` — strict
+  `endswith(".ts") + segment[:-3].isdigit()`; `cover_proxy.key` —
+  `".." in key` + `startswith("/")` + allowlist-префиксы;
+  upload-keys всегда uuid4-composed, user filename для video
+  проходит `re.sub(r"[^\w.\-]", "_", ...)[:100]`. Path-traversal
+  уязвимостей не найдено.
+  - Побочное наблюдение (не path-traversal, но безопасность):
+    `cover_proxy` обслуживает префиксы `voice/` и `chat_photos/`
+    — приватный контент. Защита capability-by-key: ключи uuid4-hex,
+    угадать нельзя, но логирование/утечка ключа = доступ. Стоит
+    рассмотреть auth-check для этих двух префиксов отдельно (или
+    вынести их в отдельный signed-URL endpoint). Не блокер.
+- [ ] **`cover_proxy` private-content hardening:** найдено в HLS
+  review — `voice/` и `chat_photos/` обслуживаются через
+  публичный `cover_proxy` без auth. Защита только по
+  capability-by-key (uuid4 hex). Рекомендуется: вынести в
+  отдельный endpoint с авторизацией владельца/собеседника, или
+  использовать signed URL.
+- [ ] **WebSocket DoS-защита:** `ws.py` транслирует всем online без
+  лимита по размеру очереди — отдельный аудит + bench.
+- [ ] **Black-cleanup unrelated files:** при чтении проекта черновик
+  заметил pre-existing non-black-compliant блоки в `app/api/v1/auth.py`,
+  `app/services/track_response_build.py`. Можно прогнать `make format`
+  отдельным cosmetic-коммитом.
+
 ## Upload UX optimization (2026-05-11)
 
 - [x] **Upload-flow: автозаполнение + drafts + lyrics editor + post-upload SSE**

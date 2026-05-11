@@ -358,6 +358,12 @@ class AppSettings(BaseSettings):
     # service refuses to start. In dev the defaults below cover
     # localhost and Docker internal networks.
     internal_api_allowed_cidrs: str = ""
+    # Trusted reverse-proxy CIDRs. When the immediate upstream
+    # peer (request.client.host) is in this list, the internal-API
+    # middleware reads the trailing entry of ``X-Forwarded-For`` as
+    # the real client IP. Empty by default — only enable when the
+    # service is actually behind a proxy that rewrites XFF.
+    internal_api_trusted_proxies: str = ""
     #: Optional semver floor for packaged DotSoundComputeWorker binaries.
     #: When set (e.g. ``0.3.0``), ``/workers/heartbeat`` sets
     # ``worker_package_version_below_min`` from the worker's reported
@@ -394,6 +400,13 @@ class AppSettings(BaseSettings):
                     "172.16.0.0/12",
                     "192.168.0.0/16",
                 ]
+            return []
+        return [piece.strip() for piece in raw.split(",") if piece.strip()]
+
+    @property
+    def internal_api_trusted_proxies_list(self) -> list[str]:
+        raw = (self.internal_api_trusted_proxies or "").strip()
+        if not raw:
             return []
         return [piece.strip() for piece in raw.split(",") if piece.strip()]
 

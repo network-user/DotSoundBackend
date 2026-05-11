@@ -61,10 +61,22 @@ class TrackRepository(BaseRepository[Track]):
 
     @staticmethod
     def _playback_listing_allowed() -> ColumnElement[bool]:
-        return or_(
+        return Track.deleted_at.is_(None) & or_(
             Track.playback_suppressed_until.is_(None),
             Track.playback_suppressed_until <= func.now(),
         )
+
+    async def get_access_info(self, track_id: int) -> tuple[bool, int] | None:
+        result = await self._session.execute(
+            select(Track.is_public, Track.uploaded_by_id).where(
+                Track.id == track_id,
+                Track.deleted_at.is_(None),
+            )
+        )
+        row = result.first()
+        if row is None:
+            return None
+        return bool(row[0]), int(row[1])
 
     async def list_active(
         self,
@@ -251,6 +263,38 @@ class TrackRepository(BaseRepository[Track]):
             .limit(limit)
         )
         return list(tracks_result.scalars().all()), total
+
+    async def find_variants_by_title_and_duration(
+        self,
+        title: str,
+        duration_seconds: int,
+        *,
+        platforms: list[str],
+        tolerance_pct: float = 0.10,
+        limit: int = 50,
+    ) -> list[Track]:
+        if not platforms:
+            return []
+        low = int(duration_seconds * (1.0 - tolerance_pct))
+        high = int(duration_seconds * (1.0 + tolerance_pct))
+        low = max(low, duration_seconds - 10)
+        high = max(high, duration_seconds + 10)
+        pattern = f"%{title}%"
+        condition = (
+            Track.is_active.is_(True)
+            & Track.is_public.is_(True)
+            & self._playback_listing_allowed()
+            & Track.source_platform.in_(platforms)
+            & Track.title.ilike(pattern)
+            & Track.duration_seconds.between(low, high)
+        )
+        result = await self._session.execute(
+            select(Track)
+            .where(condition)
+            .order_by(Track.play_count.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
     async def find_by_title_and_duration(
         self,

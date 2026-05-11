@@ -20,9 +20,7 @@ from starlette.responses import JSONResponse, Response
 
 from app.config import settings
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _INTERNAL_PREFIX = "/api/v1/internal/"
 
@@ -38,25 +36,26 @@ class InternalApiAllowlistMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self,
         request: Request,
-        call_next: Callable[
-            [Request], Awaitable[Response]
-        ],
+        call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        if not request.url.path.startswith(
-            _INTERNAL_PREFIX
-        ):
+        if not request.url.path.startswith(_INTERNAL_PREFIX):
             return await call_next(request)
 
-        client_ip = (
-            request.client.host
-            if request.client
-            else None
-        )
+        peer_ip = request.client.host if request.client else None
+        client_ip = peer_ip
+        trusted_proxies = settings.internal_api_trusted_proxies_list
+        if trusted_proxies and is_ip_in_cidrs(peer_ip, trusted_proxies):
+            xff = request.headers.get("x-forwarded-for", "")
+            if xff:
+                candidate = xff.split(",")[-1].strip()
+                if candidate:
+                    client_ip = candidate
         cidrs = settings.internal_api_allowed_cidrs_list
         if not is_ip_in_cidrs(client_ip, cidrs):
             logger.warning(
                 "internal_api_ip_blocked",
                 ip=client_ip,
+                peer_ip=peer_ip,
                 path=request.url.path,
                 method=request.method,
             )

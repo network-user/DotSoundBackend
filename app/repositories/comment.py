@@ -96,6 +96,7 @@ class CommentRepository:
         q = q.order_by(
             TrackComment.is_pinned.desc(),
             TrackComment.created_at.desc(),
+            TrackComment.id.desc(),
         ).limit(limit)
         rows = await self._s.execute(q)
         return list(rows.scalars().all())
@@ -123,6 +124,7 @@ class CommentRepository:
         q = q.order_by(
             TrackComment.is_pinned.desc(),
             TrackComment.created_at.desc(),
+            TrackComment.id.desc(),
         ).limit(limit)
         rows = await self._s.execute(q)
         return list(rows.scalars().all())

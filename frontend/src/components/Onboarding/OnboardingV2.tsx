@@ -188,6 +188,7 @@ export function OnboardingV2({ onComplete }: Props) {
   }, [step, audio])
 
   const handleWelcomeStart = () => {
+    if (bootstrapErr) return
     hapticSelection()
     audio.prime()
     goNext('welcome')
