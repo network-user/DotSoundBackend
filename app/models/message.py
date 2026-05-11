@@ -44,6 +44,7 @@ class Message(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="SET NULL"),
         type_=BigInteger,
         nullable=True,
+        index=True,
     )
     type: Mapped[str] = mapped_column(
         String(20), server_default="text", nullable=False

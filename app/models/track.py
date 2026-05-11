@@ -137,6 +137,7 @@ class Track(Base, TimestampMixin):
     album_id: Mapped[int | None] = mapped_column(
         ForeignKey("albums.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     album_position: Mapped[int | None] = mapped_column(
         Integer,

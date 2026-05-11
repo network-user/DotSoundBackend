@@ -183,6 +183,18 @@ class PlaylistService:
     async def list_featured(self, limit: int = 20) -> list[Playlist]:
         return await self._repo.list_featured(limit=limit)
 
+    async def list_featured_with_tracks(
+        self, limit: int = 20
+    ) -> list[tuple[Playlist, list[Track]]]:
+        """Featured playlists with their tracks in a single batch query."""
+        playlists = await self._repo.list_featured(limit=limit)
+        if not playlists:
+            return []
+        tracks_by_id = await self._repo.get_tracks_bulk(
+            [p.id for p in playlists]
+        )
+        return [(p, tracks_by_id.get(p.id, [])) for p in playlists]
+
     async def upload_owner_cover(
         self,
         playlist_id: int,

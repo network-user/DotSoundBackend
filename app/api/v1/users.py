@@ -13,18 +13,18 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
-from app.models.track import Track
 from app.models.user import User
 from app.repositories.complaint import (
     ComplaintRepository,
 )
+from app.repositories.login_history import LoginHistoryRepository
+from app.repositories.track import TrackRepository
 from app.schemas.album import AlbumResponse
 from app.schemas.complaint import ComplaintResponse
 from app.schemas.eq import (
@@ -454,14 +454,9 @@ async def get_my_listen_history(
         return TrackListResponse(
             items=[], total=0, page=1, size=1
         )
-    result = await session.execute(
-        select(Track).where(
-            Track.id.in_(track_ids),
-            Track.is_active.is_(True),
-        )
+    rows = await TrackRepository(session).list_active_by_ids_preserve_order(
+        track_ids
     )
-    by_id = {t.id: t for t in result.scalars().all()}
-    rows = [by_id[tid] for tid in track_ids if tid in by_id]
     items = await dedupe_and_build_track_list(session, rows)
     items = merge_recent_listen_meta_into_responses(
         items,
@@ -662,17 +657,9 @@ async def get_login_history(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied",
         )
-    from sqlalchemy import select
-
-    from app.models.login_history import LoginHistory
-
-    result = await session.execute(
-        select(LoginHistory)
-        .where(LoginHistory.user_id == user_id)
-        .order_by(LoginHistory.created_at.desc())
-        .limit(10)
+    rows = await LoginHistoryRepository(session).list_for_user(
+        user_id, limit=10
     )
-    rows = result.scalars().all()
     return [
         {
             "id": r.id,

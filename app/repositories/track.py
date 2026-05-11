@@ -218,6 +218,48 @@ class TrackRepository(BaseRepository[Track]):
         by_id = {t.id: t for t in result.scalars().all()}
         return [by_id[i] for i in track_ids if i in by_id]
 
+    async def list_active_by_ids_preserve_order(
+        self, track_ids: list[int]
+    ) -> list[Track]:
+        """Like :meth:`get_by_ids_preserve_order` but also drops
+        soft-deleted rows. Used in user-facing recent/history feeds.
+        """
+        if not track_ids:
+            return []
+        result = await self._session.execute(
+            select(Track).where(
+                Track.id.in_(track_ids),
+                Track.is_active.is_(True),
+            )
+        )
+        by_id = {t.id: t for t in result.scalars().all()}
+        return [by_id[i] for i in track_ids if i in by_id]
+
+    async def list_internal_pending_hls(self) -> list[Track]:
+        """Active internal-source tracks that still lack an HLS manifest."""
+        result = await self._session.execute(
+            select(Track).where(
+                Track.source == "internal",
+                Track.file_key.is_not(None),
+                Track.hls_manifest_key.is_(None),
+                Track.is_active.is_(True),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def list_popular_genres(
+        self, *, limit: int = 50
+    ) -> list[str]:
+        """Top non-null genres ordered by track count."""
+        result = await self._session.execute(
+            select(Track.genre)
+            .where(Track.genre.is_not(None))
+            .group_by(Track.genre)
+            .order_by(func.count(Track.id).desc())
+            .limit(limit)
+        )
+        return [g for g in result.scalars().all() if g is not None]
+
     async def search(
         self,
         query: str,

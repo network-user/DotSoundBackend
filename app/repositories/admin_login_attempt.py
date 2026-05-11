@@ -51,6 +51,17 @@ class AdminLoginAttemptRepository:
         )
         return int(result.scalar_one())
 
+    async def list_for_user(
+        self, user_id: int, *, limit: int = 50
+    ) -> list[AdminLoginAttempt]:
+        result = await self._session.execute(
+            select(AdminLoginAttempt)
+            .where(AdminLoginAttempt.user_id == user_id)
+            .order_by(desc(AdminLoginAttempt.created_at))
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def list_recent(
         self,
         *,

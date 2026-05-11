@@ -32,7 +32,6 @@ from dotsound_private_core.services.admin_security_policy import (
 )
 from fastapi import APIRouter, Query, WebSocket
 from fastapi import status as ws_status
-from sqlalchemy import desc, select
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 from app.config import settings
@@ -45,13 +44,14 @@ from app.core.observability import (
     ws_gauge_dec,
     ws_gauge_inc,
 )
-from app.models.lyrics_job import LyricsJob
+from app.core.redis import get_redis_client
 from app.repositories.admin_device import (
     AdminDeviceRepository,
 )
 from app.repositories.admin_session import (
     AdminSessionRepository,
 )
+from app.repositories.lyrics_job import LyricsJobRepository
 from app.services.admin_dashboard_service import (
     collect_overview,
 )
@@ -81,6 +81,40 @@ ALLOWED_CHANNELS: frozenset[str] = frozenset(
         "job_trace",
     }
 )
+
+_WS_LIMIT_KEY_PREFIX = "admin:ws:conn:"
+_WS_LIMIT_TTL_SECONDS = 60 * 60 * 2
+_WS_MAX_CONN_PER_USER = 5
+
+
+async def _acquire_ws_slot(user_id: int) -> bool:
+    """Atomically claim a per-user WS connection slot in Redis.
+
+    Returns ``False`` when the user already holds the configured
+    maximum concurrent connections. The counter has a safety TTL so
+    a crashed process cannot leak slots indefinitely.
+    """
+    redis = get_redis_client()
+    key = f"{_WS_LIMIT_KEY_PREFIX}{user_id}"
+    count = await redis.incr(key)
+    if count == 1:
+        await redis.expire(key, _WS_LIMIT_TTL_SECONDS)
+    if count > _WS_MAX_CONN_PER_USER:
+        await redis.decr(key)
+        return False
+    return True
+
+
+async def _release_ws_slot(user_id: int) -> None:
+    redis = get_redis_client()
+    key = f"{_WS_LIMIT_KEY_PREFIX}{user_id}"
+    try:
+        value = await redis.decr(key)
+    except Exception:
+        return
+    if value is not None and value <= 0:
+        with contextlib.suppress(Exception):
+            await redis.delete(key)
 
 
 async def _authenticate(
@@ -149,22 +183,10 @@ async def _push_tasks_progress(
     last_seen_id: list[str],
 ) -> None:
     async with AsyncSessionLocal() as session:
-        result = await session.execute(
-            select(LyricsJob)
-            .where(
-                LyricsJob.status.in_(
-                    [
-                        "queued",
-                        "running",
-                        "error",
-                        "done",
-                    ]
-                )
-            )
-            .order_by(desc(LyricsJob.updated_at))
-            .limit(40)
+        rows = await LyricsJobRepository(session).list_recent(
+            statuses=("queued", "running", "error", "done"),
+            limit=40,
         )
-        rows = list(result.scalars().all())
     items = [
         {
             "id": row.id,
@@ -490,6 +512,10 @@ async def admin_ws(
         await websocket.close(code=4401)
         return
     user_id, _device_id = auth
+    if not await _acquire_ws_slot(user_id):
+        logger.warning("admin_ws_quota_exceeded", user_id=user_id)
+        await websocket.close(code=4429)
+        return
     if proto:
         await websocket.accept(subprotocol=proto)
     else:
@@ -594,5 +620,6 @@ async def admin_ws(
         with contextlib.suppress(asyncio.CancelledError):
             await push_task
         ws_gauge_dec()
+        await _release_ws_slot(user_id)
         with contextlib.suppress(Exception):
             await websocket.close(code=ws_status.WS_1000_NORMAL_CLOSURE)

@@ -54,6 +54,31 @@ class AdminSessionRepository:
         )
         return result.scalar_one_or_none()
 
+    async def list_for_user(
+        self, user_id: int, *, limit: int = 100
+    ) -> list[AdminSession]:
+        result = await self._session.execute(
+            select(AdminSession)
+            .where(AdminSession.user_id == user_id)
+            .order_by(desc(AdminSession.created_at))
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def revoke_all_active_for_user(self, user_id: int) -> int:
+        result = await self._session.execute(
+            select(AdminSession).where(
+                AdminSession.user_id == user_id,
+                AdminSession.revoked_at.is_(None),
+            )
+        )
+        rows = list(result.scalars().all())
+        now = datetime.now(UTC)
+        for row in rows:
+            row.revoked_at = now
+        await self._session.flush()
+        return len(rows)
+
     async def list_active_for_user(self, user_id: int) -> list[AdminSession]:
         result = await self._session.execute(
             select(AdminSession)

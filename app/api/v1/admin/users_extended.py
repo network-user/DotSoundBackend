@@ -19,7 +19,6 @@ from fastapi import (
     Query,
     status,
 )
-from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import (
@@ -28,15 +27,20 @@ from app.dependencies import (
     require_capability,
     require_step_up,
 )
-from app.models.admin_capability import (
-    AdminCapability,
-)
-from app.models.admin_login_attempt import (
-    AdminLoginAttempt,
-)
-from app.models.admin_session import AdminSession
-from app.models.login_history import LoginHistory
 from app.models.user import User
+from app.repositories.admin_capability import (
+    AdminCapabilityRepository,
+)
+from app.repositories.admin_login_attempt import (
+    AdminLoginAttemptRepository,
+)
+from app.repositories.admin_session import (
+    AdminSessionRepository,
+)
+from app.repositories.login_history import (
+    LoginHistoryRepository,
+)
+from app.repositories.user import UserRepository
 from app.services.admin_alert_service import (
     dispatch_alert,
 )
@@ -56,13 +60,9 @@ async def login_history(
     _admin: User = Depends(require_capability("audit.view")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    result = await session.execute(
-        select(LoginHistory)
-        .where(LoginHistory.user_id == user_id)
-        .order_by(desc(LoginHistory.created_at))
-        .limit(limit)
+    rows = await LoginHistoryRepository(session).list_for_user(
+        user_id, limit=limit
     )
-    rows = list(result.scalars().all())
     return {
         "items": [
             {
@@ -84,13 +84,9 @@ async def admin_login_attempts(
     _admin: User = Depends(require_capability("security.view")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    result = await session.execute(
-        select(AdminLoginAttempt)
-        .where(AdminLoginAttempt.user_id == user_id)
-        .order_by(desc(AdminLoginAttempt.created_at))
-        .limit(limit)
+    rows = await AdminLoginAttemptRepository(session).list_for_user(
+        user_id, limit=limit
     )
-    rows = list(result.scalars().all())
     return {
         "items": [
             {
@@ -112,13 +108,9 @@ async def admin_sessions(
     _admin: User = Depends(require_capability("security.view")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    result = await session.execute(
-        select(AdminSession)
-        .where(AdminSession.user_id == user_id)
-        .order_by(desc(AdminSession.created_at))
-        .limit(100)
+    rows = await AdminSessionRepository(session).list_for_user(
+        user_id, limit=100
     )
-    rows = list(result.scalars().all())
     return {
         "items": [
             {
@@ -197,7 +189,7 @@ async def force_logout(
     """
     from app.core.redis import get_redis_client
 
-    target = await session.get(User, user_id)
+    target = await UserRepository(session).get_by_id(user_id)
     if not target:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -205,17 +197,9 @@ async def force_logout(
         )
 
     now = datetime.now(UTC)
-    revoked = 0
-    result = await session.execute(
-        select(AdminSession).where(
-            AdminSession.user_id == user_id,
-            AdminSession.revoked_at.is_(None),
-        )
-    )
-    for row in result.scalars().all():
-        row.revoked_at = now
-        revoked += 1
-    await session.flush()
+    revoked = await AdminSessionRepository(
+        session
+    ).revoke_all_active_for_user(user_id)
 
     try:
         redis = get_redis_client()
@@ -328,32 +312,24 @@ async def grant_capability(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="unknown capability",
         )
-    target = await session.get(User, user_id)
+    target = await UserRepository(session).get_by_id(user_id)
     if not target or not target.is_admin:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="user is not admin",
         )
-    existing = await session.execute(
-        select(AdminCapability).where(
-            AdminCapability.user_id == user_id,
-            AdminCapability.capability == capability,
-        )
-    )
-    if existing.scalar_one_or_none() is not None:
+    cap_repo = AdminCapabilityRepository(session)
+    if await cap_repo.find_grant(user_id, capability) is not None:
         return {
             "user_id": user_id,
             "capability": capability,
             "granted": False,
         }
-    row = AdminCapability(
+    await cap_repo.grant(
         user_id=user_id,
         capability=capability,
         granted_by=admin.id,
-        granted_at=datetime.now(UTC),
     )
-    session.add(row)
-    await session.flush()
     await dispatch_alert(
         event_type="admin_capability_granted",
         severity="info",
@@ -375,20 +351,14 @@ async def revoke_capability(
     admin: User = Depends(require_step_up("users.revoke_capability")),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    result = await session.execute(
-        select(AdminCapability).where(
-            AdminCapability.user_id == user_id,
-            AdminCapability.capability == capability,
-        )
-    )
-    row = result.scalar_one_or_none()
+    cap_repo = AdminCapabilityRepository(session)
+    row = await cap_repo.find_grant(user_id, capability)
     if row is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="capability row not found",
         )
-    await session.delete(row)
-    await session.flush()
+    await cap_repo.revoke(row)
     return {
         "user_id": user_id,
         "capability": capability,
@@ -402,10 +372,9 @@ async def list_capabilities(
     _admin: User = Depends(require_admin_session),
     session: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    result = await session.execute(
-        select(AdminCapability).where(AdminCapability.user_id == user_id)
+    rows = await AdminCapabilityRepository(session).list_grants_for_user(
+        user_id
     )
-    rows = list(result.scalars().all())
     return {
         "items": [
             {

@@ -12,7 +12,6 @@ from fastapi import (
     UploadFile,
     status,
 )
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
@@ -596,17 +595,9 @@ async def admin_transcode_batch(
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
 ) -> dict:
-    from app.models.track import Track
+    from app.repositories.track import TrackRepository
 
-    result = await session.execute(
-        select(Track).where(
-            Track.source == "internal",
-            Track.file_key.is_not(None),
-            Track.hls_manifest_key.is_(None),
-            Track.is_active.is_(True),
-        )
-    )
-    tracks = list(result.scalars().all())
+    tracks = await TrackRepository(session).list_internal_pending_hls()
     for track in tracks:
         if track.file_key is None:
             continue
@@ -875,12 +866,13 @@ async def admin_get_upload_meta(
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
 ) -> dict:
-    from app.models.upload_meta import TrackUploadMeta
-
-    result = await session.execute(
-        select(TrackUploadMeta).where(TrackUploadMeta.track_id == track_id)
+    from app.repositories.track_upload_meta import (
+        TrackUploadMetaRepository,
     )
-    meta = result.scalar_one_or_none()
+
+    meta = await TrackUploadMetaRepository(session).get_by_track_id(
+        track_id
+    )
     if not meta:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

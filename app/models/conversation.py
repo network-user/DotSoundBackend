@@ -32,6 +32,7 @@ class Conversation(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="CASCADE"),
         type_=BigInteger,
         nullable=False,
+        index=True,
     )
 
 

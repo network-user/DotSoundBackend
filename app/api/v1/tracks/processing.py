@@ -19,15 +19,15 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
-from app.models.compute_job import ComputeJob
 from app.models.lyrics import TrackLyrics
 from app.models.track import Track
 from app.models.user import User
+from app.repositories.compute_job import ComputeJobRepository
+from app.repositories.lyrics import LyricsRepository
 
 router = APIRouter(prefix="", tags=["tracks-processing"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -131,10 +131,7 @@ async def _compute_snapshot(
     )
     audio_stage = _combine_compute_stages(audio_status, catalog_status)
 
-    lyrics_result = await session.execute(
-        select(TrackLyrics).where(TrackLyrics.track_id == track.id)
-    )
-    lyrics_row = lyrics_result.scalar_one_or_none()
+    lyrics_row = await LyricsRepository(session).get_by_track_id(track.id)
     lyrics_stage = _derive_lyrics_stage(lyrics_row, audio_stage)
 
     overall = _derive_overall(cover_stage, audio_stage, lyrics_stage)
@@ -151,17 +148,9 @@ async def _compute_snapshot(
 async def _get_compute_job_status(
     session: AsyncSession, track_id: int, job_type: str
 ) -> str | None:
-    result = await session.execute(
-        select(ComputeJob.status)
-        .where(
-            ComputeJob.target_kind == "track",
-            ComputeJob.target_id == str(track_id),
-            ComputeJob.job_type == job_type,
-        )
-        .limit(1)
+    return await ComputeJobRepository(session).get_status_for_track(
+        track_id=track_id, job_type=job_type
     )
-    row = result.scalar_one_or_none()
-    return row if isinstance(row, str) else None
 
 
 def _map_compute_status(raw: str | None) -> str:

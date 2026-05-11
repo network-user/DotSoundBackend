@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,3 +34,45 @@ class AdminCapabilityRepository:
         return [
             str(row) for row in result.scalars().all()
         ]
+
+    async def list_grants_for_user(
+        self, user_id: int
+    ) -> list[AdminCapability]:
+        result = await self._session.execute(
+            select(AdminCapability).where(
+                AdminCapability.user_id == user_id
+            )
+        )
+        return list(result.scalars().all())
+
+    async def find_grant(
+        self, user_id: int, capability: str
+    ) -> AdminCapability | None:
+        result = await self._session.execute(
+            select(AdminCapability).where(
+                AdminCapability.user_id == user_id,
+                AdminCapability.capability == capability,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def grant(
+        self,
+        *,
+        user_id: int,
+        capability: str,
+        granted_by: int,
+    ) -> AdminCapability:
+        row = AdminCapability(
+            user_id=user_id,
+            capability=capability,
+            granted_by=granted_by,
+            granted_at=datetime.now(UTC),
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return row
+
+    async def revoke(self, row: AdminCapability) -> None:
+        await self._session.delete(row)
+        await self._session.flush()

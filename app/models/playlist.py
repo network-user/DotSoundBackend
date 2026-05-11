@@ -33,6 +33,7 @@ class Playlist(Base, TimestampMixin):
         ForeignKey("users.id", ondelete="CASCADE"),
         type_=BigInteger,
         nullable=False,
+        index=True,
     )
     is_public: Mapped[bool] = mapped_column(
         Boolean, server_default="true", nullable=False

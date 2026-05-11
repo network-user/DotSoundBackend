@@ -53,10 +53,9 @@ async def get_featured_playlists(
     session: AsyncSession = Depends(get_db),
 ) -> list[PlaylistWithTracksResponse]:
     service = PlaylistService(session)
-    playlists = await service.list_featured(limit=limit)
+    pairs = await service.list_featured_with_tracks(limit=limit)
     results = []
-    for p in playlists:
-        tracks = await service.get_tracks(p.id)
+    for p, tracks in pairs:
         resp = PlaylistWithTracksResponse.model_validate(p)
         resp.tracks = await dedupe_and_build_track_list(session, tracks)
         results.append(resp)

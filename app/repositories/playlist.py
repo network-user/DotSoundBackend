@@ -295,3 +295,31 @@ class PlaylistRepository:
             .order_by(PlaylistTrack.position)
         )
         return list(result.scalars().all())
+
+    async def get_tracks_bulk(
+        self, playlist_ids: list[int]
+    ) -> dict[int, list[Track]]:
+        """Batch counterpart to :meth:`get_tracks` for N playlists."""
+        if not playlist_ids:
+            return {}
+        result = await self._session.execute(
+            select(PlaylistTrack.playlist_id, Track)
+            .join(
+                PlaylistTrack,
+                PlaylistTrack.track_id == Track.id,
+            )
+            .where(
+                PlaylistTrack.playlist_id.in_(playlist_ids),
+                Track.is_active.is_(True),
+                self._exclude_hidden_sources(),
+                TrackRepository._playback_listing_allowed(),
+            )
+            .order_by(
+                PlaylistTrack.playlist_id,
+                PlaylistTrack.position,
+            )
+        )
+        out: dict[int, list[Track]] = {pid: [] for pid in playlist_ids}
+        for pid, track in result.all():
+            out[pid].append(track)
+        return out

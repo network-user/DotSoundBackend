@@ -1,10 +1,9 @@
 import structlog
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dependencies import get_db
-from app.models.track import Track
+from app.repositories.track import TrackRepository
 
 router = APIRouter(prefix="/metadata", tags=["metadata"])
 logger = structlog.stdlib.get_logger(__name__)
@@ -19,12 +18,5 @@ async def get_popular_genres(
     session: AsyncSession = Depends(get_db),
     limit: int = Query(50, ge=1, le=200),
 ) -> list[str]:
-    from sqlalchemy import func
-    result = await session.execute(
-        select(Track.genre)
-        .where(Track.genre.is_not(None))
-        .group_by(Track.genre)
-        .order_by(func.count(Track.id).desc())
-        .limit(limit)
-    )
-    return [genre for genre in result.scalars().all() if genre is not None]
+    repo = TrackRepository(session)
+    return await repo.list_popular_genres(limit=limit)
