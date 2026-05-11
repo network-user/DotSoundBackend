@@ -29,6 +29,7 @@ import './styles/redesign-artist.css'
 import './styles/redesign-recap.css'
 import './styles/redesign-upload.css'
 import './styles/redesign-track-edit.css'
+import './styles/redesign-profile.css'
 import './styles/onboarding.css'
 import './styles/legal.css'
 

@@ -96,5 +96,39 @@
     "exists": "Track will be attributed to your artist profile",
     "willCreate": "Artist profile will be created automatically",
     "edit": "Edit"
+  },
+  "profile": {
+    "share": {
+      "open": "Share profile",
+      "title": "Share profile",
+      "close": "Close",
+      "tabLink": "Link",
+      "tabQr": "QR",
+      "tabCard": "Card",
+      "copy": "Copy",
+      "copied": "Link copied",
+      "copyFail": "Couldn't copy",
+      "shareTelegram": "Send in Telegram",
+      "shareNative": "Share",
+      "shareText": "{{name}} on DotSound",
+      "loading": "Loading…",
+      "tracks": "Tracks",
+      "plays": "Plays",
+      "followers": "Followers",
+      "qrFail": "QR unavailable"
+    },
+    "trackAction": {
+      "share": "Share",
+      "open": "Open page",
+      "makePrivate": "Make private",
+      "makePublic": "Make public",
+      "delete": "Delete",
+      "copied": "Link copied",
+      "copyFail": "Couldn't copy",
+      "shareFail": "Share failed"
+    },
+    "listenStats": {
+      "trendAria": "Listening trend by day"
+    }
   }
 }

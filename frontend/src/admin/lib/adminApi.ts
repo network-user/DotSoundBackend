@@ -566,6 +566,45 @@ export const adminApi = {
     adminFetch<Record<string, unknown>>(
       '/system/services',
     ),
+  outboundStatus: () =>
+    adminFetch<{
+      available: boolean
+      mode?: 'direct' | 'proxy' | 'tor' | 'hybrid'
+      tor?: {
+        available: boolean
+        circuit_uses_cap: number
+        newnym_min_interval_s: number
+        control_port: number | null
+      }
+      proxies?: {
+        configured: number
+        prefer_tor: boolean
+      }
+      quarantine?: {
+        active_total: number
+        active_tor_circuits: number
+        active_proxies: number
+        default_ttl_s: number
+      }
+      limits?: {
+        default_timeout_s: number
+        max_retries: number
+        backoff_base_s: number
+        backoff_cap_s: number
+        breaker_failure_threshold: number
+        breaker_reset_s: number
+      }
+      backend?: string
+      services?: Array<{
+        service: string
+        requests: number
+        transport_errors: number
+        breaker: string
+        by_status: Record<string, number>
+      }>
+      rotation_events?: Record<string, number>
+      burned_identities?: Record<string, number>
+    }>('/system/outbound-status'),
   dashboardTimeseries: (
     metric: string,
     minutes: number,

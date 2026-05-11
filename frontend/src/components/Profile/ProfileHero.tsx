@@ -1,11 +1,13 @@
 import {
   type ChangeEvent,
+  type CSSProperties,
   useRef,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { useSound } from '@/store/SoundContext'
+import type { CoverPalette } from '@/lib/coverPalette'
 
 const _ALLOWED_AVATAR_MIMES = new Set([
   'image/jpeg',
@@ -42,6 +44,7 @@ interface Props {
   editMode: boolean
   displayName: string
   saving: boolean
+  palette?: CoverPalette | null
   onEditStart: () => void
   onSave: () => void
   onCancel: () => void
@@ -52,6 +55,21 @@ interface Props {
   ) => void
 }
 
+function hexToRgba(hex: string, alpha: number): string {
+  const v = hex.replace('#', '')
+  const r = parseInt(v.slice(0, 2), 16)
+  const g = parseInt(v.slice(2, 4), 16)
+  const b = parseInt(v.slice(4, 6), 16)
+  if (
+    Number.isNaN(r) ||
+    Number.isNaN(g) ||
+    Number.isNaN(b)
+  ) {
+    return `rgba(255,255,255,${alpha})`
+  }
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 export function ProfileHero({
   avatarImageUrl,
   shownName,
@@ -59,6 +77,7 @@ export function ProfileHero({
   editMode,
   displayName,
   saving,
+  palette,
   onEditStart,
   onSave,
   onCancel,
@@ -99,8 +118,19 @@ export function ProfileHero({
     </span>
   )
 
+  const heroStyle: CSSProperties | undefined = palette
+    ? ({
+        '--rp-hero-tone-1': hexToRgba(palette.tones[0], 0.34),
+        '--rp-hero-tone-2': hexToRgba(palette.tones[1], 0.22),
+      } as CSSProperties)
+    : undefined
+
   return (
-    <div className="profile-hero">
+    <div
+      className="profile-hero rp-hero-bg"
+      data-palette-ready={palette ? 'true' : 'false'}
+      style={heroStyle}
+    >
       <div className="profile-hero__avatar-wrap">
         {editMode ? (
           <MotionPress

@@ -148,15 +148,23 @@ async def test_chunk_idempotent_and_completes(
     finalize = AsyncMock()
     fake_track = MagicMock(id=42)
     finalize.return_value = fake_track
+    fake_hash = "f" * 64
     with _patch_s3(s3_client), patch(
         f"{_MOD}.UploadService"
-    ) as upload_svc_cls:
+    ) as upload_svc_cls, patch(
+        f"{_MOD}.s3.compute_sha256_streaming",
+        new_callable=AsyncMock,
+        return_value=fake_hash,
+    ) as hash_mock:
         upload_svc_cls.return_value.finalize_from_s3 = finalize
         track = await svc.complete(
             upload_id=rec.upload_id, user_id=user.id
         )
     assert track.id == 42
     finalize.assert_awaited_once()
+    hash_mock.assert_awaited_once()
+    kwargs = finalize.await_args.kwargs
+    assert kwargs["source_sha256"] == fake_hash
 
 
 async def test_complete_rejects_incomplete(session: AsyncSession) -> None:

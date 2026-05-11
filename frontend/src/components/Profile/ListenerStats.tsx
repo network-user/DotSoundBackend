@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
+import {
+  Sparkline,
+  type SparklinePoint,
+} from '@/components/Profile/Sparkline'
+import { StatsRowSkeleton } from '@/components/Profile/Skeleton'
 
 interface ListenerStats {
   period_days: number
@@ -31,6 +36,7 @@ export function ListenerStats() {
   const [period, setPeriod] = useState<7 | 30 | 365>(30)
   const [data, setData] = useState<ListenerStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [trend, setTrend] = useState<SparklinePoint[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -49,6 +55,18 @@ export function ListenerStats() {
           setLoading(false)
         }
       })
+    api
+      .getMyListeningByDay(period)
+      .then((res) => {
+        if (cancelled) return
+        const pts: SparklinePoint[] = (res.buckets || []).map(
+          (b) => ({ date: b.date, value: b.minutes }),
+        )
+        setTrend(pts)
+      })
+      .catch(() => {
+        if (!cancelled) setTrend([])
+      })
     return () => {
       cancelled = true
     }
@@ -58,6 +76,11 @@ export function ListenerStats() {
   const tracks = data?.tracks_listened ?? 0
   const topArtist = data?.top_artists?.[0]
   const topGenre = data?.top_genres?.[0]
+
+  const trendHasData = useMemo(
+    () => trend.some((p) => p.value > 0),
+    [trend],
+  )
 
   return (
     <div className="listener-stats">
@@ -92,36 +115,18 @@ export function ListenerStats() {
         </div>
       </div>
 
+      {!loading && trendHasData && (
+        <Sparkline
+          points={trend}
+          ariaLabel={t(
+            'profile.listenStats.trendAria',
+            'Тренд прослушивания по дням',
+          )}
+        />
+      )}
+
       {loading ? (
-        <div className="profile-stats">
-          <div className="stat-item">
-            <div className="stat-value">…</div>
-            <div className="stat-label">
-              {t(
-                'profile.listenStats.minutes',
-                'Минуты',
-              )}
-            </div>
-          </div>
-          <div className="stat-item">
-            <div className="stat-value">…</div>
-            <div className="stat-label">
-              {t(
-                'profile.listenStats.tracks',
-                'Уник. треков',
-              )}
-            </div>
-          </div>
-          <div className="stat-item">
-            <div className="stat-value">…</div>
-            <div className="stat-label">
-              {t(
-                'profile.listenStats.topArtist',
-                'Топ-артист',
-              )}
-            </div>
-          </div>
-        </div>
+        <StatsRowSkeleton />
       ) : (
         <div className="profile-stats">
           <div className="stat-item">

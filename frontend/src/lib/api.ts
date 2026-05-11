@@ -38,6 +38,7 @@ import type {
   SCSearchResult,
   SearchSuggestResponse,
   ShareResponse,
+  ShareCardResponse,
   StreamResponse,
   SyncedLine,
   TokenResponse,
@@ -860,6 +861,10 @@ export const api = {
 
   getShareLinks(trackId: number): Promise<ShareResponse> {
     return request(`/api/v1/tracks/${trackId}/share`)
+  },
+
+  getProfileShareCard(userId: number): Promise<ShareCardResponse> {
+    return request(`/api/v1/users/${userId}/share-card`)
   },
 
   // ── Lyrics ────────────────────────────────────────────────────────────────

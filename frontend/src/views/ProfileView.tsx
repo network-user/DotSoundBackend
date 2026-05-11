@@ -22,6 +22,11 @@ import { Icon } from '@/components/Icon/Icon'
 import { showIsland } from '@/lib/island'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { ProfileHero } from '@/components/Profile/ProfileHero'
+import { ProfileShareModal } from '@/components/Profile/ProfileShareModal'
+import {
+  extractCoverPalette,
+  type CoverPalette,
+} from '@/lib/coverPalette'
 import { ProfileStats } from '@/components/Profile/ProfileStats'
 import { ListenerStats } from '@/components/Profile/ListenerStats'
 import { ProfileActions } from '@/components/Profile/ProfileActions'
@@ -58,6 +63,13 @@ export function ProfileView({
   )
   const [tab, setTab] =
     useState<ProfileTab>('profile')
+  const [navDirection, setNavDirection] = useState<
+    'forward' | 'back'
+  >('forward')
+  const goTab = (next: ProfileTab) => {
+    setNavDirection(next === 'profile' ? 'back' : 'forward')
+    setTab(next)
+  }
   const [stats, setStats] =
     useState<UserStatsResponse | null>(null)
   const [myTracks, setMyTracks] = useState<Track[]>(
@@ -80,6 +92,8 @@ export function ProfileView({
     useState<string | null>(null)
   const [pendingAvatarFile, setPendingAvatarFile] =
     useState<File | null>(null)
+  const [palette, setPalette] = useState<CoverPalette | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<number>>(new Set())
   const deleteTimers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map())
   const [serverDebug, setServerDebug] = useState(false)
@@ -313,6 +327,25 @@ export function ProfileView({
     pendingAvatarPreview ||
     currentAvatarRemote ||
     null
+
+  useEffect(() => {
+    if (!heroAvatarImage) {
+      setPalette(null)
+      return
+    }
+    let cancelled = false
+    extractCoverPalette(heroAvatarImage)
+      .then((p) => {
+        if (!cancelled) setPalette(p)
+      })
+      .catch(() => {
+        if (!cancelled) setPalette(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [heroAvatarImage])
+
   const shownName = displayName || fallbackName
   const feedbackTap = () => {
     hapticSelection()
@@ -352,6 +385,22 @@ export function ProfileView({
               {t('profile.title')}
             </h1>
             <div className="profile-header-actions">
+              <MotionPress
+                type="button"
+                variant="icon"
+                haptic="light"
+                className="icon-btn"
+                ariaLabel={t(
+                  'profile.share.open',
+                  'Поделиться профилем',
+                )}
+                onClick={() => {
+                  feedbackTap()
+                  setShareOpen(true)
+                }}
+              >
+                <Icon name="share" size={20} />
+              </MotionPress>
               <UploadQueueBadge />
               <NotificationBell />
               <ProfileAdminButton />
@@ -387,7 +436,7 @@ export function ProfileView({
               ariaLabel={t('profile.backToProfile')}
               onClick={() => {
                 feedbackTap()
-                setTab('profile')
+                goTab('profile')
               }}
             >
               <Icon name="chevron-left" size={18} />
@@ -436,6 +485,7 @@ export function ProfileView({
               editMode={editMode}
               displayName={displayName}
               saving={saving}
+              palette={palette}
               onEditStart={handleEditStart}
               onSave={handleSave}
               onCancel={handleCancelEdit}
@@ -451,14 +501,10 @@ export function ProfileView({
             <ListenerStats />
             <ArtistProfileCard />
             <ProfileActions
-              onOpenImport={() => setTab('import')}
-              onOpenComplaints={() =>
-                setTab('complaints')
-              }
-              onOpenDislikes={() =>
-                setTab('dislikes')
-              }
-              onOpenStats={() => setTab('stats')}
+              onOpenImport={() => goTab('import')}
+              onOpenComplaints={() => goTab('complaints')}
+              onOpenDislikes={() => goTab('dislikes')}
+              onOpenStats={() => goTab('stats')}
             />
             <ProfileTrackList
               tracks={myTracks}
@@ -471,16 +517,29 @@ export function ProfileView({
           </>
         )}
 
-        {tab === 'import' && (
-          <ImportView active={tab === 'import'} />
+        {!isMainTab && (
+          <div
+            key={tab}
+            className="rp-subview"
+            data-direction={navDirection}
+          >
+            {tab === 'import' && (
+              <ImportView active={tab === 'import'} />
+            )}
+            {tab === 'complaints' && <MyComplaintsList />}
+            {tab === 'dislikes' && <DislikedView />}
+            {tab === 'stats' && <ProfileStatsTab />}
+          </div>
         )}
-
-        {tab === 'complaints' && <MyComplaintsList />}
-
-        {tab === 'dislikes' && <DislikedView />}
-
-        {tab === 'stats' && <ProfileStatsTab />}
       </div>
+
+      {shareOpen && getInternalUserId() && (
+        <ProfileShareModal
+          open={shareOpen}
+          userId={getInternalUserId() as number}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
     </section>
   )
 }

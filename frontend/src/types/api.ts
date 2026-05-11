@@ -550,6 +550,20 @@ export interface ShareResponse {
   telegram_share_url: string
 }
 
+export interface ShareCardResponse {
+  user_id: number
+  display_name: string
+  username: string | null
+  avatar_url: string | null
+  profile_url: string
+  deep_link: string | null
+  total_tracks: number
+  total_plays: number
+  total_likes: number
+  followers_count: number
+  top_track_titles: string[]
+}
+
 // ── Follow ──────────────────────────────────────────────────────────────────
 
 export interface FollowToggleResponse {

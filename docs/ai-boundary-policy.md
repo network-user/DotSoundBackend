@@ -170,6 +170,60 @@ PUBLIC (Backend adapter):
   - `if should_burn_code(attempts): await redis.delete(code_key)`
   - Redis/DB orchestration calling PrivateCore decisions
 
+## Outbound HTTP Layer (Opaque)
+
+All external HTTP traffic from PrivateCore — to music providers,
+artist info sources, lyrics providers, library APIs — flows through
+a single internal *outbound layer* that lives **only** in
+`DotSoundPrivateCore`. Its responsibilities (IP rotation, transport
+fingerprinting, per-service throttling, identity quarantine, retry
+policy) are not part of the public Backend's surface.
+
+Backend code, comments, log strings, docstrings, and commit
+messages MUST NOT name:
+
+* the specific transport technology used for outbound rotation
+  (e.g. the daemon, control protocol or library names);
+* the specific HTTP backend library used for fingerprint
+  impersonation;
+* the specific commercial proxy provider in use, if any;
+* per-service tuning knobs (token-bucket rates, breaker thresholds).
+
+Backend may reference the layer only through opaque names:
+
+* the env var `OUTBOUND_PROFILE` (string; selects an internal
+  preset);
+* the admin endpoint `GET /api/v1/admin/system/outbound-status`,
+  which returns a JSON snapshot the dashboard renders;
+* the import path `dotsound_private_core.services.outbound`, treated
+  as an opaque black box.
+
+If a request needs a new external service, add the service profile
+inside PrivateCore. Do not surface its proxy / rate-limit / breaker
+choices in this repository.
+
+## Storage Dedup (Cross-User, Content-Addressed)
+
+Audio and HLS storage is content-addressed by SHA-256 of the
+original source file (`source_sha256`). Multiple Tracks (across all
+users) may share one `audio_blobs` row and one HLS bundle. The unique
+constraint `(uploaded_by_id, blob_id)` has been dropped; deduplication
+is transparent and never surfaces "this file already belongs to user
+X" to the client.
+
+Concurrency contract:
+
+* `/upload/.../complete` computes `source_sha256` by streaming the
+  assembled multipart object and writes it onto the Track.
+* If an `AudioBlob` already exists for that hash, the transcode is
+  skipped and the existing blob (+ HLS) is attached immediately.
+* If not, `transcode_and_upload` runs; on completion it tags the
+  fresh `AudioBlob` with `source_sha256` and reconciles every
+  pending Track that claimed the same source.
+* The daily `audio-blob-orphan-gc` job reconciles `audio_blobs`
+  rows, `blobs/...` S3 keys, and `hls-blobs/...` prefixes, deleting
+  orphans older than a safety window.
+
 ## Enforcement
 
 - CI runs `scripts/check_boundary_policy.py`.

@@ -1,4 +1,4 @@
-# DotSound — Project Context (auto-generated 2026-04-16, обновлено 2026-04-27)
+# DotSound — Project Context (auto-generated 2026-04-16, обновлено 2026-05-12)
 
 > Открывать при каждом новом сеансе. Обновлять при архитектурных изменениях.
 
@@ -38,8 +38,10 @@
 - **БД:** PostgreSQL 14+, SQLAlchemy 2.x async, Alembic миграции
 - **Очередь:** Redis + Taskiq (воркеры: transcoding, lyrics, cover, import, ES reindex)
 - **Поиск (опц.):** Elasticsearch 8 (`elasticsearch` PyPI, async), индексы `dotsound_tracks` / `dotsound_artists`; при пустом `ELASTICSEARCH_URL` — только PostgreSQL
-- **Хранилище:** MinIO (S3-совместимый)
-- **Исходящий Tor (опц.):** по умолчанию выкл. (`TOR_POOL_ENABLED` в `.env`); пул SOCKS в `app.services.tor_pool` для отдельных внешних API (см. `.env.example`)
+- **Хранилище:** MinIO (S3-совместимый). Аудио-блобы — content-addressed (CAS) по `source_sha256` оригинала: `blobs/{xx}/{sha}.mp3`. HLS-бандл шарится между всеми треками с тем же источником: `hls-blobs/{xx}/{sha}/master.m3u8`. Один `AudioBlob` ↔ много `Track` (между пользователями тоже). Уникальный индекс `(uploaded_by_id, blob_id)` снят (миграция 0097).
+- **Дедупликация загрузок:** двухслойная. (1) Клиентский compound-хеш (head+tail+size) — UX pre-check per-user через `POST /tracks/check-duplicate`. (2) Серверный SHA-256 источника, считается стримом в `/upload/.../complete`, прозрачно дедуплицирует кросс-юзерно. При попадании в существующий блоб транскод пропускается, трек сразу `active`.
+- **GC orphan-блобов:** ежедневный шедулер `audio-blob-orphan-gc` (миграция 0098) реконсилирует `audio_blobs` и S3-префиксы `blobs/`, `hls-blobs/`; удаляет осиротевшее старше 6 часов.
+- **Исходящий HTTP (опц.):** все внешние вызовы из PrivateCore идут через единый opaque outbound-слой (`dotsound_private_core.services.outbound`). Настраивается env-переменными `OUTBOUND_*`. Внутренние детали (транспорт, имперсонация, провайдеры) бэкенду не известны и не упоминаются в этом репо.
 - **Аутентификация:** JWT + Telegram HMAC + Email (magic link) + TOTP 2FA
 - **Real-time:** WebSocket (Redis Pub/Sub), присутствие, typing indicators
 - **Фронтенд:** React 18 + TypeScript + Vite, CSS custom properties (без Tailwind)

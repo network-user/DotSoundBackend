@@ -15,6 +15,7 @@ import {
 } from '@/lib/motion'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { AdminRangeSwitch } from '../components/widgets/AdminRangeSwitch'
+import { OutboundStatusPanel } from '../components/widgets/OutboundStatusPanel'
 
 const ADMIN_DASH_KPI_STAGGER: Variants = {
   hidden: {},
@@ -835,6 +836,8 @@ export function DashboardRoute() {
           />
         </article>
       </section>
+      <OutboundStatusPanel />
+
       <section className="admin-card">
         <h2>{t('admin.dashboard.containers.title')}</h2>
         <p className="admin-card__sub">

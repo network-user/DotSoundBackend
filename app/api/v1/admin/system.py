@@ -92,6 +92,27 @@ async def services_health(
     return response.model_dump()
 
 
+@router.get("/outbound-status")
+async def outbound_status(
+    _admin: User = Depends(require_capability("metrics.view")),
+) -> dict[str, Any]:
+    """Live snapshot of the internal outbound HTTP layer.
+
+    The shape is intentionally opaque: the response describes *what*
+    the layer is doing (mode, identity counts, per-service traffic,
+    breaker states) without naming any specific implementation. Used
+    by the admin dashboard to render an at-a-glance anti-ban posture.
+    """
+    try:
+        from dotsound_private_core.services.outbound import (
+            outbound_status as _privatecore_outbound_status,
+        )
+    except ImportError:
+        return {"available": False}
+    snapshot = await _privatecore_outbound_status()
+    return {"available": True, **snapshot}
+
+
 @router.get("/observability")
 async def observability_status(
     _admin: User = Depends(require_capability("metrics.view")),
