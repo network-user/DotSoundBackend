@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import os
 import shutil
 import tempfile
@@ -80,10 +81,8 @@ async def transcode_and_upload(
                 timeout=_FFMPEG_TIMEOUT_SEC,
             )
         except TimeoutError:
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 process.kill()
-            except ProcessLookupError:
-                pass
             await process.wait()
             logger.error("ffmpeg_timeout", track_id=track_id)
             await _update_track_status(track_id, "error", None, None)
@@ -197,10 +196,8 @@ async def transcode_hls_only(
                 timeout=_FFMPEG_TIMEOUT_SEC,
             )
         except TimeoutError:
-            try:
+            with contextlib.suppress(ProcessLookupError):
                 process.kill()
-            except ProcessLookupError:
-                pass
             await process.wait()
             logger.error("ffmpeg_hls_timeout", track_id=track_id)
             return

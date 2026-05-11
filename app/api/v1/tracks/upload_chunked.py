@@ -13,8 +13,6 @@ Route handlers stay thin: validation + delegation to
 ``ChunkedUploadService`` / ``DedupeService``.
 """
 
-from __future__ import annotations
-
 import structlog
 from fastapi import (
     APIRouter,
