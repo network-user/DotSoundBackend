@@ -50,19 +50,21 @@ class Track(Base, TimestampMixin):
             sqlite_where=text("external_id IS NOT NULL"),
         ),
         Index(
-            "uq_tracks_user_blob_active",
-            "uploaded_by_id",
-            "blob_id",
-            unique=True,
-            postgresql_where=text("blob_id IS NOT NULL AND is_active IS TRUE"),
-            sqlite_where=text("blob_id IS NOT NULL AND is_active = 1"),
-        ),
-        Index(
             "ix_tracks_user_audio_hash",
             "uploaded_by_id",
             "audio_hash",
             postgresql_where=text("audio_hash IS NOT NULL"),
             sqlite_where=text("audio_hash IS NOT NULL"),
+        ),
+        Index(
+            "ix_tracks_source_sha256_pending",
+            "source_sha256",
+            postgresql_where=text(
+                "source_sha256 IS NOT NULL AND blob_id IS NULL"
+            ),
+            sqlite_where=text(
+                "source_sha256 IS NOT NULL AND blob_id IS NULL"
+            ),
         ),
     )
 
@@ -227,6 +229,10 @@ class Track(Base, TimestampMixin):
         nullable=True,
     )
     audio_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+    )
+    source_sha256: Mapped[str | None] = mapped_column(
         String(64),
         nullable=True,
     )

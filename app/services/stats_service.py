@@ -61,7 +61,7 @@ class StatsService:
         """Return per-day listening minutes for the last ``days`` days."""
         from datetime import UTC, datetime, timedelta
 
-        bounded = max(1, min(days, 90))
+        bounded = max(1, min(days, 365))
         since = datetime.now(UTC) - timedelta(days=bounded)
         return await self._listen_repo.aggregate_user_minutes_by_day(
             user_id, since=since

@@ -87,6 +87,31 @@ class UserStatsResponse(BaseModel):
     )
 
 
+class ShareCardResponse(BaseModel):
+    """Public-safe payload for rendering a shareable profile card.
+
+    Used by the frontend to build a preview card with QR / link
+    (Telegram Mini App or web). No private fields are exposed.
+    """
+
+    user_id: int
+    display_name: str
+    username: str | None = None
+    avatar_url: str | None = None
+    profile_url: str
+    deep_link: str | None = Field(
+        default=None,
+        description=(
+            "Telegram t.me deep-link to open the profile inside the bot"
+        ),
+    )
+    total_tracks: int = Field(ge=0, default=0)
+    total_plays: int = Field(ge=0, default=0)
+    total_likes: int = Field(ge=0, default=0)
+    followers_count: int = Field(ge=0, default=0)
+    top_track_titles: list[str] = Field(default_factory=list)
+
+
 class UserTopResponse(BaseModel):
     window: str
     top_tracks: list[TrackStatsItem] = Field(

@@ -231,9 +231,16 @@ async def check_duplicate(
     current_user: User = Depends(get_current_user),
 ) -> DuplicateCheckResponse:
     svc = DedupeService(session)
-    existing = await svc.find_for_user(
-        user_id=current_user.id, audio_hash=body.audio_hash
-    )
+    existing = None
+    if body.source_sha256:
+        existing = await svc.find_for_user_by_source(
+            user_id=current_user.id,
+            source_sha256=body.source_sha256,
+        )
+    if existing is None:
+        existing = await svc.find_for_user(
+            user_id=current_user.id, audio_hash=body.audio_hash
+        )
     if existing is None:
         return DuplicateCheckResponse(exists=False)
     return DuplicateCheckResponse(

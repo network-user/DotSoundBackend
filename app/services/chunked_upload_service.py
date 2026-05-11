@@ -255,6 +255,29 @@ class ChunkedUploadService:
                 },
             )
 
+        try:
+            source_sha256 = await s3.compute_sha256_streaming(
+                record.s3_key
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "upload_chunked_source_hash_failed",
+                upload_id=upload_id,
+                error=str(exc),
+            )
+            source_sha256 = None
+
+        if source_sha256:
+            await self._session.execute(
+                update(UploadSession)
+                .where(UploadSession.id == record.id)
+                .values(
+                    source_sha256=source_sha256,
+                    updated_at=datetime.now(UTC),
+                )
+            )
+            await self._session.flush()
+
         meta = record.meta or {}
         upload_svc = UploadService(self._session)
         track = await upload_svc.finalize_from_s3(
@@ -270,6 +293,7 @@ class ChunkedUploadService:
             uploader_id=record.user_id,
             is_public=bool(meta.get("is_public", True)),
             audio_hash=record.audio_hash,
+            source_sha256=source_sha256,
             link_artists=True,
         )
 

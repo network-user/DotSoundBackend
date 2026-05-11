@@ -35,10 +35,18 @@ async def transcode_and_upload(
     track_id: int,
     raw_key: str,  # Теперь принимаем ключ в S3 вместо байтов
     original_filename: str,
+    source_sha256: str | None = None,
 ) -> None:
-    """Background task: transcode to MP3 192k + HLS 128k/64k, upload all."""
+    """Background task: transcode to MP3 192k + HLS 128k/64k, upload all.
+
+    When ``source_sha256`` is provided the resulting AudioBlob is tagged
+    with it and the HLS bundle is written to a content-addressed prefix
+    so that later uploads of the same source can skip transcoding entirely.
+    Any other Track rows that claimed the same source while this transcode
+    was running are reconciled at the end.
+    """
     structlog.contextvars.bind_contextvars(track_id=track_id)
-    logger.info("transcoding_started")
+    logger.info("transcoding_started", source_sha256=source_sha256)
 
     tmp_dir = tempfile.mkdtemp()
     ext = os.path.splitext(original_filename)[1] or ".tmp"
@@ -104,9 +112,11 @@ async def transcode_and_upload(
             await _update_track_status(track_id, "error", None, None)
             return
 
-        # Upload HLS segments and playlists (per-track, not content-deduped)
+        # Upload HLS segments and playlists. When we know the source
+        # hash we write to a CAS prefix so the bundle can be reused by
+        # later uploads of the same source.
         manifest_key = await _upload_hls(
-            track_id, hi_dir, lo_dir
+            track_id, hi_dir, lo_dir, source_sha256
         )
 
         # CAS MP3 blob: shared across users and imports when bytes match
@@ -121,12 +131,30 @@ async def transcode_and_upload(
             ab, _ = await svc.get_or_create_from_bytes(
                 mp3_data, "mp3", "audio/mpeg"
             )
+            if source_sha256:
+                await svc.claim_source(
+                    blob=ab, source_sha256=source_sha256
+                )
+            await svc.set_hls_manifest_key(
+                blob=ab, hls_manifest_key=manifest_key
+            )
             await svc.attach_playback_blob(track, ab)
             track.processing_status = "active"
             track.file_size_bytes = len(mp3_data)
             track.hls_manifest_key = manifest_key
             file_key_log = track.file_key
+            reconciled = 0
+            if source_sha256:
+                reconciled = await svc.attach_pending_tracks(
+                    source_sha256=source_sha256, blob=ab
+                )
             await session.commit()
+            if reconciled:
+                logger.info(
+                    "transcoding_reconciled_pending_tracks",
+                    source_sha256=source_sha256,
+                    reconciled=reconciled,
+                )
             logger.info(
                 "transcoding_complete",
                 file_key=file_key_log,
@@ -234,10 +262,32 @@ def _read_file_bytes(path: str) -> bytes:
 
 
 async def _upload_hls(
-    track_id: int, hi_dir: str, lo_dir: str
+    track_id: int,
+    hi_dir: str,
+    lo_dir: str,
+    source_sha256: str | None = None,
 ) -> str:
-    """Upload HLS segments + playlists, return master manifest key."""
-    prefix = f"hls/{track_id}"
+    """Upload HLS segments + playlists, return master manifest key.
+
+    When ``source_sha256`` is supplied, the bundle is written under a
+    content-addressed prefix (``hls-blobs/{xx}/{sha}/...``) and the upload
+    is skipped entirely if the master playlist already exists -- meaning
+    a previous transcode of the same source has already produced it.
+    Without ``source_sha256`` we fall back to the legacy per-track prefix.
+    """
+    if source_sha256:
+        prefix = s3.build_cas_hls_prefix(source_sha256)
+        manifest_key = s3.build_cas_hls_master_key(source_sha256)
+        if await s3.object_exists(manifest_key):
+            logger.info(
+                "hls_cas_reused",
+                manifest_key=manifest_key,
+                source_sha256=source_sha256,
+            )
+            return manifest_key
+    else:
+        prefix = f"hls/{track_id}"
+        manifest_key = f"{prefix}/master.m3u8"
 
     for variant, local_dir in (
         ("hi", hi_dir),
@@ -259,7 +309,6 @@ async def _upload_hls(
                 content_type=ctype,
             )
 
-    manifest_key = f"{prefix}/master.m3u8"
     await s3.upload_object(
         key=manifest_key,
         data=_MASTER_PLAYLIST.encode(),

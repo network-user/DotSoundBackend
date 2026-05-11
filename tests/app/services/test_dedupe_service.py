@@ -1,4 +1,4 @@
-"""Tests for DedupeService — per-user audio_hash lookup."""
+"""Tests for DedupeService — per-user audio_hash lookup + source-hash lookup."""
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +23,7 @@ async def _make_track(
     audio_hash: str | None,
     title: str = "T",
     is_active: bool = True,
+    source_sha256: str | None = None,
 ):
     repo = TrackRepository(session)
     return await repo.create(
@@ -40,6 +41,7 @@ async def _make_track(
         file_size_bytes=1024,
         audio_hash=audio_hash,
         is_active=is_active,
+        source_sha256=source_sha256,
     )
 
 
@@ -93,3 +95,30 @@ async def test_inactive_track_ignored(session: AsyncSession) -> None:
     assert (
         await svc.find_for_user(user_id=user.id, audio_hash=h) is None
     )
+
+
+async def test_find_by_source_sha256_per_user(
+    session: AsyncSession,
+) -> None:
+    """The server-side source-hash lookup is still scoped per user
+    because cross-user dedup happens transparently at finalize time
+    (not via this endpoint)."""
+    user = await _make_user(session, 3006)
+    other = await _make_user(session, 3007)
+    src = "f" * 64
+    await _make_track(
+        session,
+        uploader_id=user.id,
+        audio_hash=None,
+        source_sha256=src,
+    )
+    svc = DedupeService(session)
+    own = await svc.find_for_user_by_source(
+        user_id=user.id, source_sha256=src
+    )
+    assert own is not None
+    assert own.source_sha256 == src
+    other_lookup = await svc.find_for_user_by_source(
+        user_id=other.id, source_sha256=src
+    )
+    assert other_lookup is None

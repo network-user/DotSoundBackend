@@ -46,6 +46,9 @@ class UploadSession(Base, TimestampMixin):
     audio_hash: Mapped[str | None] = mapped_column(
         String(64), nullable=True, index=True
     )
+    source_sha256: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
     chunk_size: Mapped[int] = mapped_column(Integer, nullable=False)
     expected_chunks: Mapped[int] = mapped_column(Integer, nullable=False)
     completed_chunks: Mapped[list[int]] = mapped_column(

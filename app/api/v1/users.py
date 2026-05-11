@@ -36,6 +36,7 @@ from app.schemas.user import (
     AvatarResponse,
     DeleteAccountRequest,
     DeletionStatusResponse,
+    ShareCardResponse,
     TopGenreItem,
     TrackStatsItem,
     UserCreate,
@@ -182,13 +183,13 @@ async def delete_me(
 @router.get(
     "/me/listening-by-day",
     summary=(
-        "Per-day listening minutes for the last N days (1..90)"
+        "Per-day listening minutes for the last N days (1..365)"
     ),
 )
 @limiter.limit("60/minute")
 async def my_listening_by_day(
     request: Request,
-    days: int = Query(7, ge=1, le=90),
+    days: int = Query(7, ge=1, le=365),
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, object]:
@@ -391,6 +392,106 @@ async def get_avatar(
         avatar_url = f"https://api.dicebear.com/9.x/identicon/svg?seed={seed}"
 
     return AvatarResponse(avatar_url=avatar_url)
+
+
+@router.get(
+    "/{user_id}/share-card",
+    response_model=ShareCardResponse,
+    summary=(
+        "Public share-card payload for a user profile "
+        "(name, avatar, stats, deep-link/profile URL)"
+    ),
+)
+@limiter.limit("60/minute")
+async def get_share_card(
+    request: Request,
+    user_id: int,
+    session: AsyncSession = Depends(get_db),
+) -> ShareCardResponse:
+    structlog.contextvars.bind_contextvars(user_id=user_id)
+    user_service = UserService(session)
+    user = await user_service.get_by_id(user_id)
+    if not user or user.deleted_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if user.avatar_key:
+        avatar_url: str | None = (
+            f"/api/v1/tracks/cover_proxy?key={user.avatar_key}"
+        )
+    elif user.avatar_seed or user.telegram_id:
+        seed = user.avatar_seed or str(user.telegram_id)
+        avatar_url = (
+            f"https://api.dicebear.com/9.x/identicon/svg?seed={seed}"
+        )
+    else:
+        avatar_url = None
+
+    mini_app_url = (settings.mini_app_url or "").rstrip("/")
+    bot_username = settings.telegram_bot_username or ""
+    profile_url = (
+        f"{mini_app_url}/profile/{user_id}"
+        if mini_app_url
+        else f"/profile/{user_id}"
+    )
+    deep_link = (
+        f"https://t.me/{bot_username}/app?startapp=profile_{user_id}"
+        if bot_username
+        else None
+    )
+
+    stats_service = StatsService(session)
+    try:
+        stats = await stats_service.get_author_stats(user_id)
+    except Exception:
+        stats = None
+    top_titles: list[str] = []
+    if stats and getattr(stats, "top_tracks", None):
+        for row in stats.top_tracks[:3]:
+            title = getattr(row, "title", None)
+            if title:
+                top_titles.append(str(title))
+
+    display_name = (
+        user.display_name
+        or " ".join(
+            filter(
+                None,
+                [
+                    getattr(user, "first_name", None),
+                    getattr(user, "last_name", None),
+                ],
+            )
+        )
+        or user.username
+        or f"user_{user_id}"
+    )
+
+    return ShareCardResponse(
+        user_id=user_id,
+        display_name=display_name,
+        username=user.username,
+        avatar_url=avatar_url,
+        profile_url=profile_url,
+        deep_link=deep_link,
+        total_tracks=int(getattr(stats, "total_tracks", 0) or 0)
+        if stats
+        else 0,
+        total_plays=int(getattr(stats, "total_plays", 0) or 0)
+        if stats
+        else 0,
+        total_likes=int(getattr(stats, "total_likes", 0) or 0)
+        if stats
+        else 0,
+        followers_count=int(
+            getattr(stats, "followers_count", 0) or 0
+        )
+        if stats
+        else 0,
+        top_track_titles=top_titles,
+    )
 
 
 @router.get(

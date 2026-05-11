@@ -24,6 +24,92 @@ class AudioBlobService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def find_by_source_sha256(
+        self, source_sha256: str
+    ) -> AudioBlob | None:
+        """Return the canonical blob for an already-known source, if any."""
+        if not source_sha256:
+            return None
+        res = await self._session.execute(
+            select(AudioBlob).where(
+                AudioBlob.source_sha256 == source_sha256
+            )
+        )
+        return res.scalars().first()
+
+    async def claim_source(
+        self,
+        *,
+        blob: AudioBlob,
+        source_sha256: str,
+    ) -> None:
+        """Tag a freshly-built blob with the originating source hash.
+
+        Idempotent: a concurrent transcode of the same source may have
+        already filled the column, in which case we leave the existing
+        value alone. A non-unique mismatch would be a programmer bug
+        because the partial unique index guards against it.
+        """
+        if not source_sha256:
+            return
+        b = await self._session.get(AudioBlob, blob.id)
+        if b is None:
+            return
+        if b.source_sha256 is None:
+            b.source_sha256 = source_sha256
+            await self._session.flush()
+
+    async def set_hls_manifest_key(
+        self,
+        *,
+        blob: AudioBlob,
+        hls_manifest_key: str,
+    ) -> None:
+        """Record the shared HLS bundle key. First writer wins."""
+        if not hls_manifest_key:
+            return
+        b = await self._session.get(AudioBlob, blob.id)
+        if b is None:
+            return
+        if b.hls_manifest_key is None:
+            b.hls_manifest_key = hls_manifest_key
+            await self._session.flush()
+
+    async def attach_pending_tracks(
+        self,
+        *,
+        source_sha256: str,
+        blob: AudioBlob,
+    ) -> int:
+        """Attach a freshly-built blob to every Track that claimed the same
+        source while transcode was in flight. Returns the number of tracks
+        reconciled (not counting the one that drove the transcode).
+        """
+        if not source_sha256:
+            return 0
+        res = await self._session.execute(
+            select(Track).where(
+                Track.source_sha256 == source_sha256,
+                Track.blob_id.is_(None),
+            )
+        )
+        pending = list(res.scalars().all())
+        if not pending:
+            return 0
+        b = await self._session.get(AudioBlob, blob.id)
+        if b is None:
+            return 0
+        for t in pending:
+            b.ref_count = b.ref_count + 1
+            t.file_key = b.s3_key
+            t.blob_id = b.id
+            t.blob_ref_freed = False
+            t.processing_status = "active"
+            if b.hls_manifest_key:
+                t.hls_manifest_key = b.hls_manifest_key
+        await self._session.flush()
+        return len(pending)
+
     async def get_or_create_from_bytes(
         self,
         data: bytes,

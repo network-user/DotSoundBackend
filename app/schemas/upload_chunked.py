@@ -43,6 +43,9 @@ class UploadCompleteResponse(BaseModel):
 class DuplicateCheckRequest(BaseModel):
     audio_hash: str = Field(..., min_length=64, max_length=64)
     size_bytes: int = Field(..., gt=0)
+    source_sha256: str | None = Field(
+        None, min_length=64, max_length=64
+    )
 
 
 class DuplicateCheckResponse(BaseModel):

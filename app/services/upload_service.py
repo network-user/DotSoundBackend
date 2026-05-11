@@ -157,10 +157,16 @@ class UploadService:
         uploader_id: int | None,
         is_public: bool,
         audio_hash: str | None,
+        source_sha256: str | None = None,
         link_artists: bool = True,
     ) -> Track:
         """Create the Track row and schedule downstream pipeline for a file
-        already persisted to S3 (used by chunked v2 + legacy v1)."""
+        already persisted to S3 (used by chunked v2 + legacy v1).
+
+        If ``source_sha256`` matches an existing AudioBlob, the transcode
+        pipeline is skipped: the Track is attached to the shared blob (and
+        its HLS bundle) immediately and the temporary raw object is deleted.
+        """
 
         if uploader_id is not None:
             used_bytes = await self._repo.get_total_uploaded_bytes(uploader_id)
@@ -175,6 +181,19 @@ class UploadService:
                     detail="Quota Exceeded: 3GB maximum storage reached.",
                 )
 
+        from app.services.audio_blob_service import AudioBlobService
+
+        existing_blob = None
+        if source_sha256:
+            blob_svc = AudioBlobService(self._session)
+            existing_blob = await blob_svc.find_by_source_sha256(
+                source_sha256
+            )
+
+        initial_processing_status = (
+            "active" if existing_blob is not None else "processing"
+        )
+
         track = await self._repo.create(
             title=title,
             artist=artist,
@@ -186,9 +205,10 @@ class UploadService:
             cover_key=cover_key,
             uploaded_by_id=uploader_id,
             is_public=is_public,
-            processing_status="processing",
+            processing_status=initial_processing_status,
             file_size_bytes=total_size,
             audio_hash=audio_hash,
+            source_sha256=source_sha256,
         )
         if uploader_id is not None:
             await self._library_repo.add(
@@ -201,6 +221,8 @@ class UploadService:
             track_id=track.id,
             has_cover=cover_key is not None,
             audio_hash=audio_hash,
+            source_sha256=source_sha256,
+            source_dedup_hit=existing_blob is not None,
         )
 
         from app.services.track_ingest_schedule_service import (
@@ -218,11 +240,31 @@ class UploadService:
             },
         )
 
-        await transcode_and_upload.kiq(
-            track_id=track.id,
-            raw_key=raw_key,
-            original_filename=original_filename,
-        )
+        if existing_blob is not None:
+            blob_svc = AudioBlobService(self._session)
+            await blob_svc.attach_playback_blob(track, existing_blob)
+            if existing_blob.hls_manifest_key:
+                track.hls_manifest_key = existing_blob.hls_manifest_key
+            await self._session.flush()
+            try:
+                await s3.delete_object(raw_key)
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "raw_temp_delete_failed_after_dedup",
+                    raw_key=raw_key,
+                )
+            from app.services.waveform_worker import (
+                generate_waveform_task,
+            )
+
+            await generate_waveform_task.kiq(track.id)
+        else:
+            await transcode_and_upload.kiq(
+                track_id=track.id,
+                raw_key=raw_key,
+                original_filename=original_filename,
+                source_sha256=source_sha256,
+            )
 
         if not cover_key:
             await generate_and_upload_cover.kiq(track.id)

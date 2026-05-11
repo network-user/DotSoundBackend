@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -14,6 +15,7 @@ _session = aioboto3.Session()
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _PRESIGNED_TTL_SECONDS = 3600
+_STREAM_HASH_CHUNK = 1024 * 1024
 
 
 def build_cas_audio_key(
@@ -346,6 +348,48 @@ async def download_object_range(
                 "ContentType", "audio/mpeg"
             ),
         )
+
+
+async def compute_sha256_streaming(file_key: str) -> str:
+    """Stream the object body and compute its SHA-256 without buffering."""
+    sha = hashlib.sha256()
+    async with get_s3_client() as s3:
+        response = await s3.get_object(
+            Bucket=settings.minio_bucket, Key=file_key
+        )
+        async with response["Body"] as stream:
+            while True:
+                chunk = await stream.read(_STREAM_HASH_CHUNK)
+                if not chunk:
+                    break
+                sha.update(chunk)
+    return sha.hexdigest()
+
+
+async def object_exists(file_key: str) -> bool:
+    async with get_s3_client() as s3:
+        try:
+            await s3.head_object(
+                Bucket=settings.minio_bucket, Key=file_key
+            )
+            return True
+        except ClientError as exc:
+            code = exc.response["Error"]["Code"]
+            if code in ("404", "NoSuchKey", "NotFound"):
+                return False
+            raise
+
+
+def build_cas_hls_master_key(source_sha256_hex: str) -> str:
+    prefix = source_sha256_hex[:2]
+    return (
+        f"hls-blobs/{prefix}/{source_sha256_hex}/master.m3u8"
+    )
+
+
+def build_cas_hls_prefix(source_sha256_hex: str) -> str:
+    prefix = source_sha256_hex[:2]
+    return f"hls-blobs/{prefix}/{source_sha256_hex}"
 
 
 async def download_object(file_key: str) -> bytes:

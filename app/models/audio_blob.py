@@ -22,7 +22,13 @@ class AudioBlob(Base, TimestampMixin):
     content_sha256: Mapped[str] = mapped_column(
         String(64), unique=True, index=True, nullable=False
     )
+    source_sha256: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     s3_key: Mapped[str] = mapped_column(Text, nullable=False)
+    hls_manifest_key: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
     content_type: Mapped[str] = mapped_column(
         String(128), nullable=False
     )
