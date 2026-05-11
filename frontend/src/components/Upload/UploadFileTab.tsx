@@ -33,6 +33,7 @@ import { UploadStepAudio } from './steps/UploadStepAudio'
 import { UploadStepDetails } from './steps/UploadStepDetails'
 import { UploadStepCover } from './steps/UploadStepCover'
 import { UploadStepPreview } from './steps/UploadStepPreview'
+import { UploadProgressView } from './UploadProgressView'
 
 interface AutoFilledFlags {
   title?: boolean
@@ -112,6 +113,7 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
   const [wizardStep, setWizardStep] = useState(0)
   const [autoFilled, setAutoFilled] = useState<AutoFilledFlags>({})
   const [autoDetecting, setAutoDetecting] = useState(false)
+  const [uploadedTrackId, setUploadedTrackId] = useState<number | null>(null)
 
   useEffect(() => {
     api.getGenres().then(setGenres).catch(() => {})
@@ -540,16 +542,12 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
       showIsland({
         kind: 'toast',
         title: t('redesign.upload.doneToast'),
-        durationMs: 2800,
+        durationMs: 2200,
       })
       hapticNotification('success')
 
       clearDraft()
-      window.setTimeout(async () => {
-        const fullTrack = await api.getTrack(uploaded.id)
-        reset()
-        onSuccess(fullTrack)
-      }, 600)
+      setUploadedTrackId(uploaded.id)
     } catch (err) {
       if (islandId) dismissIsland(islandId)
       setUploading(false)
@@ -563,6 +561,24 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
     artistMode === 'profile'
       ? profileArtistName?.trim() || artist.trim()
       : artist.trim()
+
+  if (uploadedTrackId !== null) {
+    return (
+      <UploadProgressView
+        trackId={uploadedTrackId}
+        onOpenTrack={async () => {
+          const fullTrack = await api.getTrack(uploadedTrackId)
+          setUploadedTrackId(null)
+          reset()
+          onSuccess(fullTrack)
+        }}
+        onUploadAnother={() => {
+          setUploadedTrackId(null)
+          reset()
+        }}
+      />
+    )
+  }
 
   return (
     <form id="upload-form" noValidate onSubmit={handleSubmit}>

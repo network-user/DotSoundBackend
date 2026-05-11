@@ -15,6 +15,8 @@ from . import (
     auth,
     complaints,
     dashboard,
+    experiments,
+    recsys,
     genre_samples,
     logs,
     manifest,
@@ -48,6 +50,8 @@ router.include_router(manifest.router)
 router.include_router(audio_compute.router)
 router.include_router(auth.router)
 router.include_router(dashboard.router)
+router.include_router(experiments.router)
+router.include_router(recsys.router)
 router.include_router(system.router)
 router.include_router(logs.router)
 router.include_router(metrics.router)

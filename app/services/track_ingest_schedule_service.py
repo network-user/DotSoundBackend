@@ -8,11 +8,12 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services import compute_queue_service as cqs
+from app.services.audio_embedding_dispatch import (
+    enqueue_audio_embedding,
+)
 from app.services.lyrics_service import LyricsService
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 async def schedule_new_track_background_jobs(
@@ -32,6 +33,12 @@ async def schedule_new_track_background_jobs(
         track_id=track_id,
         priority=5,
         payload=catalog_payload,
+    )
+    await enqueue_audio_embedding(
+        session,
+        track_id=track_id,
+        audio_blob_key=f"track:{track_id}",
+        priority=8,
     )
     if skip_lyrics:
         logger.info(

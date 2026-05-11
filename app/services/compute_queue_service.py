@@ -30,9 +30,7 @@ from app.models.compute_job import ComputeJob
 from app.models.compute_worker import ComputeWorker
 from app.services.worker_job_control import worker_claims_blocked
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 DEFAULT_LEASE_MINUTES = 15
 DEFAULT_MAX_ATTEMPTS = 5
@@ -51,6 +49,7 @@ JOB_ARTIST_FEATURES_UPDATE = "artist_features_update"
 JOB_ARTIST_SIMILARITY_INDEX = "artist_similarity_index"
 JOB_TRACK_SIMILARITY_INDEX = "track_similarity_index"
 JOB_CATALOG_INGEST_NORMALIZE = "catalog_ingest_normalize"
+JOB_AUDIO_EMBEDDING = "audio_embedding"
 
 TARGET_KIND_TRACK = "track"
 TARGET_KIND_ARTIST = "artist"
@@ -62,6 +61,7 @@ KNOWN_JOB_TYPES: frozenset[str] = frozenset(
         JOB_ARTIST_SIMILARITY_INDEX,
         JOB_TRACK_SIMILARITY_INDEX,
         JOB_CATALOG_INGEST_NORMALIZE,
+        JOB_AUDIO_EMBEDDING,
     }
 )
 
@@ -104,9 +104,7 @@ async def enqueue(
     of its current status), so callers can post the same intent
     repeatedly without polluting the queue.
     """
-    target_id_str = (
-        None if target_id is None else str(target_id)
-    )
+    target_id_str = None if target_id is None else str(target_id)
 
     existing = await find_existing_job(
         session,
@@ -120,9 +118,7 @@ async def enqueue(
 
     now = _now()
     next_at = (
-        now + timedelta(seconds=delay_seconds)
-        if delay_seconds > 0
-        else now
+        now + timedelta(seconds=delay_seconds) if delay_seconds > 0 else now
     )
     job = ComputeJob(
         id=_new_job_id(),
@@ -186,9 +182,7 @@ async def find_existing_job(
         stmt = stmt.where(ComputeJob.target_id.is_(None))
     else:
         stmt = stmt.where(ComputeJob.target_id == target_id)
-    return (
-        await session.execute(stmt)
-    ).scalar_one_or_none()
+    return (await session.execute(stmt)).scalar_one_or_none()
 
 
 async def claim_next(
@@ -239,12 +233,8 @@ async def claim_next(
         .limit(1)
     )
     if _supports_skip_locked(session):
-        select_stmt = select_stmt.with_for_update(
-            skip_locked=True
-        )
-    job_id = (
-        await session.execute(select_stmt)
-    ).scalar_one_or_none()
+        select_stmt = select_stmt.with_for_update(skip_locked=True)
+    job_id = (await session.execute(select_stmt)).scalar_one_or_none()
     if not job_id:
         return None
 
@@ -364,12 +354,7 @@ async def requeue_stale_claims(
         )
         .limit(int(limit))
     )
-    ids = [
-        row
-        for row in (
-            await session.execute(select_stmt)
-        ).scalars()
-    ]
+    ids = [row for row in (await session.execute(select_stmt)).scalars()]
     if not ids:
         return 0
     update_stmt = (

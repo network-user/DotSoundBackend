@@ -12,6 +12,7 @@ from app.models.track import Track
 from app.models.track_audio_features import TrackAudioFeatures
 from app.models.track_preview_clip import TrackPreviewClip
 from app.models.track_similarity import TrackSimilarity
+from app.repositories.embedding import EmbeddingRepository
 from app.services import compute_queue_service as q
 
 SIMILARITY_INDEX_MAX_EDGES = 500
@@ -73,7 +74,45 @@ async def persist_result(
             r=r,
         )
         return
+    if job.job_type == q.JOB_AUDIO_EMBEDDING:
+        await _persist_audio_embedding(
+            session,
+            job=job,
+            r=r,
+        )
+        return
     raise ValueError(f"unknown_job_type:{job.job_type}")
+
+
+async def _persist_audio_embedding(
+    session: AsyncSession,
+    *,
+    job: ComputeJob,
+    r: dict[str, Any],
+) -> None:
+    tid = _i(job.target_id) if job.target_kind == q.TARGET_KIND_TRACK else 0
+    if tid <= 0:
+        raise ValueError("audio_embedding_invalid_target")
+    raw_embedding = r.get("embedding") or []
+    if not isinstance(raw_embedding, list) or not raw_embedding:
+        return
+    vector: list[float] = []
+    for value in raw_embedding:
+        try:
+            vector.append(float(value))
+        except (TypeError, ValueError):
+            return
+    model_version = (
+        str(r.get("model_version"))
+        if r.get("model_version")
+        else str(job.feature_version)
+    )
+    repo = EmbeddingRepository(session)
+    await repo.upsert(
+        track_id=tid,
+        embedding=vector,
+        model_version=model_version,
+    )
 
 
 async def _persist_track_audio(
@@ -92,9 +131,9 @@ async def _persist_track_audio(
     en = _f(r.get("energy"))
     hlight = _f(r.get("highlight_start_sec"))
     fv_o = r.get("feature_version")
-    fver: str = str(fv_o) if isinstance(
-        fv_o, str
-    ) else str(job.feature_version)
+    fver: str = (
+        str(fv_o) if isinstance(fv_o, str) else str(job.feature_version)
+    )
     if row is None:
         row = TrackAudioFeatures(
             track_id=tid,
@@ -152,9 +191,7 @@ async def _persist_artist_features(
         raise ValueError("artist_features_invalid_target")
     row = await session.get(ArtistFeatures, aid)
     fvo = r.get("feature_version")
-    fver2: str = str(fvo) if isinstance(
-        fvo, str
-    ) else str(job.feature_version)
+    fver2: str = str(fvo) if isinstance(fvo, str) else str(job.feature_version)
     if row is None:
         row = ArtistFeatures(
             artist_id=aid,
@@ -184,9 +221,9 @@ async def _persist_artist_similarity_index(
         raise ValueError("artist_similarity_neighbors_required")
     edges = edges[:SIMILARITY_INDEX_MAX_EDGES]
     fvo3 = r.get("feature_version")
-    fver3: str = str(fvo3) if isinstance(
-        fvo3, str
-    ) else str(job.feature_version)
+    fver3: str = (
+        str(fvo3) if isinstance(fvo3, str) else str(job.feature_version)
+    )
     await session.execute(
         delete(ArtistSimilarity).where(
             ArtistSimilarity.artist_id == aid,
@@ -207,12 +244,14 @@ async def _persist_artist_similarity_index(
                 artist_id=aid,
                 similar_artist_id=o,
                 score=sc,
-                reason_tags=e.get("reason_tags")
-                if isinstance(
-                    e.get("reason_tags"),
-                    list,
-                )
-                else None,
+                reason_tags=(
+                    e.get("reason_tags")
+                    if isinstance(
+                        e.get("reason_tags"),
+                        list,
+                    )
+                    else None
+                ),
                 feature_version=fver3,
             )
         )
@@ -232,9 +271,9 @@ async def _persist_track_similarity_index(
         raise ValueError("track_similarity_neighbors_required")
     edges = edges[:SIMILARITY_INDEX_MAX_EDGES]
     fvo4 = r.get("feature_version")
-    fver4: str = str(fvo4) if isinstance(
-        fvo4, str
-    ) else str(job.feature_version)
+    fver4: str = (
+        str(fvo4) if isinstance(fvo4, str) else str(job.feature_version)
+    )
     await session.execute(
         delete(TrackSimilarity).where(
             TrackSimilarity.track_id == tid,
@@ -244,10 +283,7 @@ async def _persist_track_similarity_index(
     for e in edges:
         if not isinstance(e, dict):
             continue
-        o = _i(
-            e.get("similar_track_id")
-            or e.get("track_id")
-        )
+        o = _i(e.get("similar_track_id") or e.get("track_id"))
         if o <= 0 or o == tid:
             continue
         sc = _f(e.get("score"))
@@ -258,12 +294,14 @@ async def _persist_track_similarity_index(
                 track_id=tid,
                 similar_track_id=o,
                 score=sc,
-                reason_tags=e.get("reason_tags")
-                if isinstance(
-                    e.get("reason_tags"),
-                    list,
-                )
-                else None,
+                reason_tags=(
+                    e.get("reason_tags")
+                    if isinstance(
+                        e.get("reason_tags"),
+                        list,
+                    )
+                    else None
+                ),
                 feature_version=fver4,
             )
         )
@@ -301,9 +339,7 @@ async def get_compute_job_for_worker(
         ComputeJob.id == job_id,
         ComputeJob.claimed_by == worker_id,
     )
-    return (
-        await session.execute(stmt)
-    ).scalar_one_or_none()
+    return (await session.execute(stmt)).scalar_one_or_none()
 
 
 __all__ = [

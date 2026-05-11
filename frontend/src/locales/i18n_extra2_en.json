@@ -521,6 +521,24 @@
         "continue": "Continue",
         "discard": "Discard"
       },
+      "progress": {
+        "titleRunning": "Processing your track",
+        "titleReady": "Track is ready",
+        "titleError": "Something went wrong",
+        "hint": {
+          "processing": "Hang tight — we're analysing audio and looking up lyrics in the background.",
+          "ready": "All set. You can open the track now.",
+          "error": "Some stages failed. The track is saved — you can open it and try again."
+        },
+        "stage": {
+          "uploaded": "Uploaded",
+          "cover": "Cover",
+          "audio_analysis": "Audio analysis",
+          "lyrics": "Lyrics"
+        },
+        "ctaOpen": "Open track",
+        "ctaAnother": "Upload another"
+      },
       "file": {
         "audioLabel": "Audio file",
         "audioPick": "Choose file",

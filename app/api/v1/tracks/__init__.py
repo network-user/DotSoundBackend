@@ -6,7 +6,13 @@ Route registration order matters: /my and /upload must be included before
 
 from fastapi import APIRouter
 
-from . import discovery, hls, info, playback, prefetch, user
+from . import discovery as discovery
+from . import hls as hls
+from . import info as info
+from . import playback as playback
+from . import prefetch as prefetch
+from . import processing as processing
+from . import user as user
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 router.include_router(discovery.router)

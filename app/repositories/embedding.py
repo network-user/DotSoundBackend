@@ -70,6 +70,25 @@ class EmbeddingRepository:
             out[int(tid)] = [float(v) for v in vec]
         return out
 
+    async def list_tracks_missing_embedding(
+        self,
+        *,
+        limit: int = 100,
+    ) -> list[int]:
+        existing_subq = select(TrackEmbedding.track_id).scalar_subquery()
+        result = await self._session.execute(
+            select(Track.id)
+            .where(
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+                TrackRepository._playback_listing_allowed(),
+                Track.id.notin_(existing_subq),
+            )
+            .order_by(Track.created_at.desc())
+            .limit(max(1, int(limit)))
+        )
+        return [int(row[0]) for row in result.all()]
+
     async def find_neighbors(
         self,
         *,
@@ -139,13 +158,9 @@ class EmbeddingRepository:
         scored.sort(key=lambda kv: kv[1], reverse=True)
         return scored[:k]
 
-    async def get_user(
-        self, user_id: int
-    ) -> UserEmbedding | None:
+    async def get_user(self, user_id: int) -> UserEmbedding | None:
         result = await self._session.execute(
-            select(UserEmbedding).where(
-                UserEmbedding.user_id == user_id
-            )
+            select(UserEmbedding).where(UserEmbedding.user_id == user_id)
         )
         return result.scalar_one_or_none()
 

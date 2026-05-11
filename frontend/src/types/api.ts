@@ -511,6 +511,22 @@ export interface LyricsAutoStatusResponse {
   logs?: string[]
 }
 
+export type ProcessingStageStatus =
+  | 'pending'
+  | 'running'
+  | 'done'
+  | 'error'
+  | 'skipped'
+
+export interface ProcessingSnapshot {
+  track_id: number
+  uploaded: ProcessingStageStatus
+  cover: ProcessingStageStatus
+  audio_analysis: ProcessingStageStatus
+  lyrics: ProcessingStageStatus
+  overall: 'processing' | 'ready' | 'error'
+}
+
 // ── Share ───────────────────────────────────────────────────────────────────
 
 export interface ShareResponse {

@@ -64,6 +64,9 @@ from app.repositories.recommendation import (
 from app.repositories.signal import (
     ListenEventRepository,
 )
+from app.services.ab_assignment_service import (
+    ABAssignmentService,
+)
 from app.services.recsys_telemetry import (
     RecsysTelemetryService,
 )
@@ -81,6 +84,12 @@ _RADIO_LAST_QUEUE_TTL = 20
 _RADIO_TUNING_KEY = "recsys.radio_tuning"
 _DIVERSITY_RERANK_KEY = "recsys.diversity_rerank"
 _DEFAULT_DIVERSITY_LAMBDA = 0.7
+_RETRIEVAL_BLEND_KEY = "recsys.retrieval_blend"
+_RADIO_SESSION_KEY_PREFIX = "radio:session:"
+_RADIO_SESSION_TTL = 3600
+_RADIO_SESSION_BUFFER = 16
+_SEQUENTIAL_RADIO_KEY = "recsys.sequential_radio"
+_DEFAULT_SEQUENTIAL_BLEND_WEIGHT = 0.45
 
 
 def _midnight_ttl() -> int:
@@ -814,10 +823,28 @@ class RecommendationService:
         result = [
             track_map[s.track_id] for s in scored if s.track_id in track_map
         ]
+        if await self._load_retrieval_blend_enabled(user_id=user_id):
+            existing_ids = {t.id for t in result}
+            blend_ids = await self._retrieval_blend_track_ids(
+                user_id=user_id,
+                size=size,
+                exclude_ids=existing_ids,
+            )
+            blend_tracks = await self._rec_repo.get_tracks_by_ids(blend_ids)
+            blend_by_id = {t.id: t for t in blend_tracks}
+            ordered_blend = [
+                blend_by_id[tid] for tid in blend_ids if tid in blend_by_id
+            ]
+            result = (result + ordered_blend)[:size]
+        algo_version = await self._algorithm_version_with_arm(
+            experiment_key="daily_mix",
+            user_id=user_id,
+        )
         await self._telemetry.record_impressions(
             user_id=user_id,
             surface="daily_mix",
             track_ids=[t.id for t in result],
+            algorithm_version=algo_version,
         )
         return result
 
@@ -1179,9 +1206,29 @@ class RecommendationService:
                     json.dumps([t.id for t in result]),
                 )
         if user_id and result:
+            algo_version = await self._algorithm_version_with_arm(
+                experiment_key="radio",
+                user_id=user_id,
+            )
             await self._telemetry.record_impressions(
                 user_id=user_id,
                 surface="radio",
+                track_ids=[t.id for t in result],
+                algorithm_version=algo_version,
+            )
+        seq_enabled, seq_weight = await self._load_sequential_radio_settings(
+            user_id=user_id
+        )
+        if seq_enabled and result:
+            result = await self._apply_sequential_blend(
+                baseline_tracks=result,
+                seed_track_id=seed_track_id,
+                user_id=user_id,
+                weight=seq_weight,
+            )
+        if user_id and result:
+            await self._push_radio_session(
+                user_id=user_id,
                 track_ids=[t.id for t in result],
             )
         radio_request_observed(
@@ -1190,6 +1237,204 @@ class RecommendationService:
             queue_size=len(result),
         )
         return result
+
+    async def _algorithm_version_with_arm(
+        self,
+        *,
+        experiment_key: str,
+        user_id: int | None,
+    ) -> str | None:
+        from dotsound_private_core.services.recommendation_engine import (
+            get_algorithm_version,
+        )
+
+        if user_id is None:
+            return None
+        ab_service = ABAssignmentService(self._session)
+        assignment = await ab_service.get_assignment(
+            experiment_key=experiment_key,
+            user_id=user_id,
+        )
+        if assignment is None:
+            return None
+        base_version = get_algorithm_version()
+        return f"{experiment_key}:{assignment.arm}|{base_version}"
+
+    async def _load_sequential_radio_settings(
+        self, *, user_id: int | None
+    ) -> tuple[bool, float]:
+        repo = AppSettingsRepository(self._session)
+        raw = await repo.get_value(_SEQUENTIAL_RADIO_KEY, default={})
+        if not isinstance(raw, dict):
+            return False, _DEFAULT_SEQUENTIAL_BLEND_WEIGHT
+        if not bool(raw.get("enabled", False)):
+            return False, _DEFAULT_SEQUENTIAL_BLEND_WEIGHT
+        weight_raw = raw.get("blend_weight", _DEFAULT_SEQUENTIAL_BLEND_WEIGHT)
+        try:
+            weight = float(weight_raw)
+        except (TypeError, ValueError):
+            weight = _DEFAULT_SEQUENTIAL_BLEND_WEIGHT
+        weight = max(0.0, min(1.0, weight))
+        if user_id is None:
+            return True, weight
+        split_raw = raw.get("ab_split_percent_b", 100)
+        try:
+            split_int = int(split_raw)
+        except (TypeError, ValueError):
+            split_int = 100
+        split_int = max(0, min(100, split_int))
+        if (user_id % 100) < split_int:
+            return True, weight
+        return False, weight
+
+    async def _push_radio_session(
+        self,
+        *,
+        user_id: int | None,
+        track_ids: list[int],
+    ) -> None:
+        if not user_id or not track_ids:
+            return
+        redis = get_redis_client()
+        key = f"{_RADIO_SESSION_KEY_PREFIX}{user_id}"
+        try:
+            for tid in track_ids:
+                await redis.lpush(key, str(int(tid)))
+            await redis.ltrim(key, 0, _RADIO_SESSION_BUFFER - 1)
+            await redis.expire(key, _RADIO_SESSION_TTL)
+        except Exception:
+            logger.warning(
+                "radio_session_push_failed",
+                exc_info=True,
+                user_id=user_id,
+            )
+
+    async def _load_radio_session(
+        self,
+        *,
+        user_id: int | None,
+    ) -> list[int]:
+        if not user_id:
+            return []
+        redis = get_redis_client()
+        key = f"{_RADIO_SESSION_KEY_PREFIX}{user_id}"
+        try:
+            raw_items = await redis.lrange(key, 0, _RADIO_SESSION_BUFFER - 1)
+        except Exception:
+            return []
+        out: list[int] = []
+        for item in raw_items:
+            value = item.decode() if isinstance(item, bytes) else str(item)
+            try:
+                out.append(int(value))
+            except (TypeError, ValueError):
+                continue
+        return list(reversed(out))
+
+    async def _apply_sequential_blend(
+        self,
+        *,
+        baseline_tracks: list[Track],
+        seed_track_id: int,
+        user_id: int | None,
+        weight: float,
+    ) -> list[Track]:
+        if not baseline_tracks:
+            return baseline_tracks
+        recent = await self._load_radio_session(user_id=user_id)
+        if not recent:
+            return baseline_tracks
+        from dotsound_private_core.services.sequential_policy import (
+            SessionContext,
+            blend_with_baseline,
+            trim_session_window,
+        )
+
+        try:
+            from worker.audio.session_ranker import (
+                default_session_ranker,
+            )
+        except Exception:
+            return baseline_tracks
+        ranker = default_session_ranker()
+        context = SessionContext(
+            user_id=user_id,
+            recent_track_ids=trim_session_window(recent),
+            seed_track_id=seed_track_id,
+        )
+        candidate_ids = [t.id for t in baseline_tracks]
+        sequential_scores = ranker.rank_session_continuation(
+            context, candidate_ids
+        )
+        baseline_scores = {
+            t.id: 1.0 / (idx + 1) for idx, t in enumerate(baseline_tracks)
+        }
+        blended = blend_with_baseline(
+            baseline_scores,
+            sequential_scores,
+            sequential_weight=weight,
+        )
+        track_map = {t.id: t for t in baseline_tracks}
+        return [track_map[tid] for tid, _ in blended if tid in track_map]
+
+    async def _load_retrieval_blend_enabled(
+        self, *, user_id: int | None
+    ) -> bool:
+        repo = AppSettingsRepository(self._session)
+        raw = await repo.get_value(_RETRIEVAL_BLEND_KEY, default={})
+        if not isinstance(raw, dict):
+            return False
+        if not bool(raw.get("enabled", False)):
+            return False
+        if user_id is None:
+            return True
+        split_raw = raw.get("ab_split_percent_b", 100)
+        try:
+            split_int = int(split_raw)
+        except (TypeError, ValueError):
+            split_int = 100
+        split_int = max(0, min(100, split_int))
+        return (user_id % 100) < split_int
+
+    async def _retrieval_blend_track_ids(
+        self,
+        *,
+        user_id: int,
+        size: int,
+        exclude_ids: set[int],
+    ) -> list[int]:
+        from dotsound_private_core.services.retrieval_policy import (
+            CandidateBundle,
+            CandidateSource,
+            RetrievedCandidate,
+            merge_candidate_sources,
+        )
+
+        user_neighbors = (
+            await self._embedding_repo.find_track_candidates_for_user(
+                user_id=user_id,
+                k=size * 4,
+                exclude_ids=exclude_ids,
+            )
+        )
+        if not user_neighbors:
+            return []
+        bundle = CandidateBundle(
+            source=CandidateSource.USER_EMBEDDING,
+            candidates=tuple(
+                RetrievedCandidate(
+                    track_id=int(tid),
+                    score=float(score),
+                    source=CandidateSource.USER_EMBEDDING,
+                )
+                for tid, score in user_neighbors
+            ),
+        )
+        merged = merge_candidate_sources(
+            [bundle],
+            output_size=size,
+        )
+        return [c.track_id for c in merged]
 
     async def _load_diversity_rerank(
         self, *, user_id: int | None

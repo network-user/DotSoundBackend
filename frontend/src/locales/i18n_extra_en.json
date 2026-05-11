@@ -239,7 +239,16 @@
       "timecodeModeAria": "Set timecodes",
       "tapToMark": "Tap to set marks",
       "noTimecodes": "No timecodes",
-      "save": "Save"
+      "save": "Save",
+      "importLrc": "Import .lrc",
+      "lrcEmpty": "No timecodes detected in the file.",
+      "lrcInvalid": "File doesn't look like LRC.",
+      "autoDetect": "Auto-detect lyrics",
+      "autoDetectRunning": "Starting auto-detect…",
+      "autoDetectQueued": "Auto-detection queued. Watch the lyrics panel for results.",
+      "autoDetectError": "Could not start auto-detection.",
+      "nudgeMinus": "−50ms",
+      "nudgePlus": "+50ms"
     }
   }
 }

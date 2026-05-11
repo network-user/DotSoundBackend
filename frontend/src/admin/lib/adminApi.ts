@@ -1809,4 +1809,102 @@ export const adminApi = {
       method: 'PUT',
       body: items,
     }),
+
+  listExperiments: () =>
+    adminFetch<
+      {
+        id: number
+        key: string
+        arms: Record<string, number>
+        status: string
+        description: string | null
+        created_at: string
+        updated_at: string
+      }[]
+    >(`/recsys/experiments`),
+
+  createExperiment: (payload: {
+    key: string
+    arms: Record<string, number>
+    description?: string | null
+  }) =>
+    adminFetch<{
+      id: number
+      key: string
+      arms: Record<string, number>
+      status: string
+      description: string | null
+      created_at: string
+      updated_at: string
+    }>(`/recsys/experiments`, {
+      method: 'POST',
+      body: payload,
+    }),
+
+  updateExperiment: (
+    id: number,
+    payload: {
+      arms?: Record<string, number>
+      status?: string
+      description?: string | null
+    },
+  ) =>
+    adminFetch<{
+      id: number
+      key: string
+      arms: Record<string, number>
+      status: string
+      description: string | null
+      created_at: string
+      updated_at: string
+    }>(`/recsys/experiments/${id}`, {
+      method: 'PATCH',
+      body: payload,
+    }),
+
+  deleteExperiment: (id: number) =>
+    adminFetch<{ deleted: boolean }>(
+      `/recsys/experiments/${id}`,
+      { method: 'DELETE' },
+    ),
+
+  experimentStats: (id: number) =>
+    adminFetch<{
+      experiment: {
+        id: number
+        key: string
+        arms: Record<string, number>
+        status: string
+        description: string | null
+        created_at: string
+        updated_at: string
+      }
+      assignment_counts: Record<string, number>
+      arm_outcomes: {
+        arm: string
+        impressions: number
+        completed: number
+        skipped: number
+        completion_rate: number
+        skip_rate: number
+      }[]
+      significance: {
+        arm_a: string
+        arm_b: string
+        lift: number
+        z: number
+        p_value_two_sided: number
+        sample_too_small: boolean
+        significant: boolean
+      } | null
+    }>(`/recsys/experiments/${id}/stats`),
+
+  backfillEmbeddings: (limit: number) =>
+    adminFetch<{
+      enqueued_count: number
+      track_ids: number[]
+    }>(
+      `/recsys/embeddings/backfill?limit=${limit}`,
+      { method: 'POST', body: {} },
+    ),
 }

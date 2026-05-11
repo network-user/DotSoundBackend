@@ -26,6 +26,7 @@ import { MetricsRoute } from './routes/MetricsRoute'
 import { SecurityRoute } from './routes/SecurityRoute'
 import { SettingsRoute } from './routes/SettingsRoute'
 import { SchedulesRoute } from './routes/SchedulesRoute'
+import { RecsysRoute } from './routes/RecsysRoute'
 import { TasksRoute } from './routes/TasksRoute'
 import { AlbumDetailRoute } from './routes/AlbumDetailRoute'
 import { AlbumsListRoute } from './routes/AlbumsListRoute'
@@ -250,6 +251,10 @@ export function AdminApp() {
                 <Route
                   path="settings"
                   element={<SettingsRoute />}
+                />
+                <Route
+                  path="recsys"
+                  element={<RecsysRoute />}
                 />
                 <Route
                   path="profile"

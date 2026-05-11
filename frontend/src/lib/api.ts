@@ -29,6 +29,7 @@ import type {
   LikeToggleResponse,
   LyricsAutoResponse,
   LyricsAutoStatusResponse,
+  ProcessingSnapshot,
   LyricsTranslation,
   LyricsResponse,
   Playlist,
@@ -899,6 +900,18 @@ export const api = {
       {
         method: 'POST',
       },
+    )
+  },
+
+  processingEventsUrl(trackId: number): string {
+    return `/api/v1/tracks/${trackId}/processing/events`
+  },
+
+  getProcessingStatus(
+    trackId: number,
+  ): Promise<ProcessingSnapshot> {
+    return request(
+      `/api/v1/tracks/${trackId}/processing/status`,
     )
   },
 

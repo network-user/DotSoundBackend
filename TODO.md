@@ -14,6 +14,52 @@
 
 ---
 
+## Upload UX optimization (2026-05-11)
+
+- [x] **Upload-flow: автозаполнение + drafts + lyrics editor + post-upload SSE**
+  — четыре независимых улучшения визарда загрузки трека:
+  - **Phase A (auto-metadata)**: новый `frontend/src/lib/audioMetadata.ts`
+    — нативный ID3v2.3/2.4 парсер (title/artist/album/year/genre + APIC
+    cover) без npm-зависимостей, fallback на парсинг имени файла.
+    `UploadFileTab` запускает извлечение асинхронно при выборе аудио,
+    пред-заполняет пустые поля Details/Cover и показывает clearable
+    «Auto-filled» чипы. Если у файла есть APIC — обложка пред-заполняется
+    с пометкой «From audio file».
+  - **Phase B (drafts/resume)**: новый `frontend/src/lib/uploadDraft.ts`
+    — localStorage-схема (TTL 48h, key `dotsound:upload-draft:v1`).
+    `UploadFileTab` сохраняет состояние с debounce 500мс; `UploadView`
+    при mount показывает баннер «Continue / Discard» если черновик есть.
+    Аудио и cover Blob не сохраняются — пользователь перепривязывает файл.
+  - **Phase C (post-upload SSE)**: новый `app/api/v1/tracks/processing.py`
+    — endpoint `GET /tracks/{id}/processing/{events,status}` с owner-check.
+    Стадии opaque (`uploaded`, `cover`, `audio_analysis`, `lyrics`, `ready`,
+    `error`) — без имён внутренних tier-ов / провайдеров. Снапшот
+    собирается из `ComputeJob` (audio_features, catalog_normalize),
+    `TrackLyrics` и `Track.cover_key`. Polling-based SSE (2с тик, 5 мин
+    timeout). Frontend `UploadProgressView` подписывается через
+    EventSource, fallback на `getProcessingStatus`. После Submit визард
+    переключается на progress-view с CTA «Open track» / «Upload another».
+  - **Phase D (lyrics editor)**: `LyricsEditor` получил импорт `.lrc`
+    (новый `frontend/src/lib/lrc.ts` парсит `[mm:ss.xx]` + метаданные
+    `ti/ar/al/offset`), live-подсветку строки при play (`stampedIndex`
+    из `currentTime`), Space/Shift+Space hotkey на шаге sync, ±50мс nudge
+    кнопки на активной строке, и кнопку «Auto-detect lyrics» (вызывает
+    существующий `POST /tracks/{id}/lyrics/auto`) для пост-загрузочного
+    режима с trackId. Paste с LRC-таймкодами в textarea авто-импортирует.
+  - i18n: `i18n_extra2_{en,ru}.json` (`redesign.upload.file.autoFilled*`,
+    `coverFromTag`, `draftBanner.*`, `progress.{stage,hint,cta}*`),
+    `i18n_extra_{en,ru}.json` (`lyrics.editor.{importLrc,autoDetect,
+    nudge*,lrcEmpty,lrcInvalid,autoDetectQueued,autoDetectError}`).
+  - Стили: `redesign-upload.css` (`.ru-up-auto-chip*`, `.ru-up-label-row`,
+    `.ru-up-auto-detecting`, `.ru-up-draft-banner*`, `.ru-up-progress*`)
+    + `global.css` (`.le-secondary-actions`, `.le-secondary-btn`,
+    `.le-info`, `.le-fs-nudge*`).
+  - Boundary: opaque stage labels, no provider/tier leakage; ID3 parser
+    runs client-side; new SSE polling avoids touching worker code paths.
+  - Backend: `poetry run mypy app/api/v1/tracks/processing.py` green;
+    `poetry run ruff check` green; `poetry run black --check` green.
+  - Frontend: `npm run lint` (tsc --noEmit + legacy-toast guard) green.
+
 ## Admin panel hidden path + redirect (2026-05-09)
 
 - [x] **Скрытый URL админ-панели и admin API через `ADMIN_PANEL_PATH`**

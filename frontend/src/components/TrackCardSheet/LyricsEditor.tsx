@@ -1,7 +1,9 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
+  type ChangeEvent,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
@@ -14,6 +16,7 @@ import {
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
+import { looksLikeLrc, parseLrc } from '@/lib/lrc'
 import type {
   LyricsResponse,
   SyncedLine,
@@ -69,8 +72,11 @@ export function LyricsEditor({
   const [history, setHistory] = useState<
     { idx: number; prev: number | null }[]
   >([])
+  const [autoDetectStarting, setAutoDetectStarting] = useState(false)
+  const [autoDetectInfo, setAutoDetectInfo] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const activeRef = useRef<HTMLDivElement>(null)
+  const lrcInputRef = useRef<HTMLInputElement>(null)
 
   const enterSync = () => {
     const split = plainText
@@ -149,6 +155,51 @@ export function LyricsEditor({
       })
     }
   }, [currentLine])
+
+  const stampedIndex = useMemo(() => {
+    if (!isPlaying) return -1
+    const ms = Math.round(currentTime * 1000)
+    let idx = -1
+    for (let i = 0; i < timecodes.length; i++) {
+      const tc = timecodes[i]
+      if (tc !== null && tc <= ms) idx = i
+      else if (tc !== null && tc > ms) break
+    }
+    return idx
+  }, [currentTime, timecodes, isPlaying])
+
+  useEffect(() => {
+    if (step !== 'sync' || !isPlaying) return
+    if (stampedIndex < 0) return
+    setCurrentLine(stampedIndex)
+  }, [step, isPlaying, stampedIndex])
+
+  useEffect(() => {
+    if (step !== 'sync') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return
+      if (e.target instanceof HTMLTextAreaElement) return
+      if (e.code === 'Space' && !e.shiftKey) {
+        e.preventDefault()
+        markCurrent()
+      } else if (e.code === 'Space' && e.shiftKey) {
+        e.preventDefault()
+        undoLast()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [step, currentLine, lines.length, history.length])
+
+  const nudgeCurrent = (deltaMs: number) => {
+    setTimecodes((prev) => {
+      const next = [...prev]
+      const cur = next[currentLine]
+      if (cur === null) return prev
+      next[currentLine] = Math.max(0, cur + deltaMs)
+      return next
+    })
+  }
 
   useEffect(() => {
     if (step !== 'sync') return
@@ -261,6 +312,64 @@ export function LyricsEditor({
     }
   }
 
+  const importLrcText = (text: string) => {
+    const result = parseLrc(text)
+    if (!result.lines.length) {
+      setError(t('lyrics.editor.lrcEmpty'))
+      return
+    }
+    const linesText = result.lines.map((l) => l.text)
+    setPlainText(linesText.join('\n'))
+    setLines(linesText)
+    setTimecodes(result.lines.map((l) => l.time_ms))
+    setHistory([])
+    setCurrentLine(0)
+    setError(null)
+    setStep('sync')
+  }
+
+  const handleLrcFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const raw = String(ev.target?.result ?? '')
+      if (!looksLikeLrc(raw)) {
+        setError(t('lyrics.editor.lrcInvalid'))
+        return
+      }
+      importLrcText(raw)
+    }
+    reader.onerror = () => setError(t('lyrics.editor.lrcInvalid'))
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
+  const handlePasteIntoTextarea = (
+    e: React.ClipboardEvent<HTMLTextAreaElement>,
+  ) => {
+    const pasted = e.clipboardData.getData('text/plain')
+    if (pasted && looksLikeLrc(pasted)) {
+      e.preventDefault()
+      importLrcText(pasted)
+    }
+  }
+
+  const triggerAutoDetect = async () => {
+    if (!trackId || autoDetectStarting) return
+    setAutoDetectStarting(true)
+    setAutoDetectInfo(null)
+    setError(null)
+    try {
+      await api.generateLyrics(trackId, true)
+      setAutoDetectInfo(t('lyrics.editor.autoDetectQueued'))
+    } catch {
+      setError(t('lyrics.editor.autoDetectError'))
+    } finally {
+      setAutoDetectStarting(false)
+    }
+  }
+
   if (step === 'text') {
     return (
       <div className="le-panel">
@@ -287,13 +396,50 @@ export function LyricsEditor({
           maxLength={10000}
           placeholder={t('lyrics.editor.placeholder')}
           value={plainText}
-          onChange={(e) =>
-            setPlainText(e.target.value)
-          }
+          onChange={(e) => setPlainText(e.target.value)}
+          onPaste={handlePasteIntoTextarea}
         />
+        {autoDetectInfo && (
+          <div className="le-info">{autoDetectInfo}</div>
+        )}
         {error && (
           <div className="form-error">{error}</div>
         )}
+        <div className="le-secondary-actions">
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="btn-secondary le-secondary-btn"
+            onClick={() => lrcInputRef.current?.click()}
+            disabled={saving}
+          >
+            {t('lyrics.editor.importLrc')}
+          </MotionPress>
+          {trackId && (
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="btn-secondary le-secondary-btn"
+              onClick={() => {
+                void triggerAutoDetect()
+              }}
+              disabled={saving || autoDetectStarting}
+            >
+              {autoDetectStarting
+                ? t('lyrics.editor.autoDetectRunning')
+                : t('lyrics.editor.autoDetect')}
+            </MotionPress>
+          )}
+          <input
+            ref={lrcInputRef}
+            type="file"
+            accept=".lrc,text/plain"
+            hidden
+            onChange={handleLrcFile}
+          />
+        </div>
         <div className="le-actions">
           <MotionPress
             type="button"
@@ -429,6 +575,38 @@ export function LyricsEditor({
           {t('lyrics.editor.tapToMark')}
         </p>
       </div>
+
+      {timecodes[currentLine] !== null && (
+        <div className="le-fs-nudge">
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="le-fs-nudge-btn"
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation()
+              nudgeCurrent(-50)
+            }}
+          >
+            {t('lyrics.editor.nudgeMinus')}
+          </MotionPress>
+          <span className="le-fs-nudge-time">
+            {msToDisplay(timecodes[currentLine]!)}
+          </span>
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="le-fs-nudge-btn"
+            onClick={(e: React.MouseEvent) => {
+              e.stopPropagation()
+              nudgeCurrent(50)
+            }}
+          >
+            {t('lyrics.editor.nudgePlus')}
+          </MotionPress>
+        </div>
+      )}
 
       <div
         className="le-fs-list"

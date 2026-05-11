@@ -35,9 +35,7 @@ from app.services.worker_job_control import (
     merge_heartbeat_control_payload,
 )
 
-log: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+log: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 router = APIRouter(
     prefix="/internal/compute",
@@ -60,9 +58,7 @@ async def _enforce_rate_limit(
             audit_ip=client_ip(request),
         )
     except rl.WorkerRateLimitExceeded as exc:
-        raise HTTPException(
-            status_code=429
-        ) from exc
+        raise HTTPException(status_code=429) from exc
 
 
 @router.post("/workers/heartbeat")
@@ -89,16 +85,12 @@ async def heartbeat(
     )
     ctl = await merge_heartbeat_control_payload(
         worker,
-        package_version_header=request.headers.get(
-            "X-Worker-Package-Version"
-        ),
+        package_version_header=request.headers.get("X-Worker-Package-Version"),
     )
     await session.commit()
     return {
         "status": "ok",
-        "server_time": int(
-            datetime.now(UTC).timestamp()
-        ),
+        "server_time": int(datetime.now(UTC).timestamp()),
         **ctl,
     }
 
@@ -125,22 +117,16 @@ async def claim(
         spec = json.loads(body or b"{}")
     except (TypeError, ValueError) as exc:
         await session.rollback()
-        raise HTTPException(
-            status_code=400
-        ) from exc
+        raise HTTPException(status_code=400) from exc
     job_types = spec.get("job_types")
     if not isinstance(job_types, list) or not all(
         isinstance(t, str) for t in job_types
     ):
         await session.rollback()
-        raise HTTPException(
-            status_code=400
-        ) from None
+        raise HTTPException(status_code=400) from None
     if not job_types:
         await session.rollback()
-        raise HTTPException(
-            status_code=400
-        ) from None
+        raise HTTPException(status_code=400) from None
     job = await q.claim_next(
         session,
         worker_id=worker.id,
@@ -155,9 +141,7 @@ async def claim(
             status_code=204,
         )
         await session.commit()
-        return Response(
-            status_code=204
-        )
+        return Response(status_code=204)
     out: dict[str, Any] = {
         "job_id": job.id,
         "job_type": job.job_type,
@@ -165,17 +149,19 @@ async def claim(
         "target_id": job.target_id,
         "payload": job.payload,
         "feature_version": job.feature_version,
-        "claim_deadline_at": job.claim_deadline_at.isoformat()
-        if job.claim_deadline_at
-        else None,
+        "claim_deadline_at": (
+            job.claim_deadline_at.isoformat()
+            if job.claim_deadline_at
+            else None
+        ),
     }
-    if job.job_type == q.JOB_TRACK_AUDIO_FEATURES:
-        token = cws.generate_single_use_token(
-            job.id, worker.id
-        )
+    if job.job_type in (
+        q.JOB_TRACK_AUDIO_FEATURES,
+        q.JOB_AUDIO_EMBEDDING,
+    ):
+        token = cws.generate_single_use_token(job.id, worker.id)
         out["audio_url"] = (
-            f"/api/v1/internal/compute/jobs/{job.id}/audio"
-            f"?ott={token}"
+            f"/api/v1/internal/compute/jobs/{job.id}/audio" f"?ott={token}"
         )
     await cws._log_audit(
         session,
@@ -213,16 +199,18 @@ async def download_job_audio(
             audit_ip=client_ip(request),
         )
     except rl.WorkerRateLimitExceeded as exc:
-        raise HTTPException(
-            status_code=429
-        ) from exc
+        raise HTTPException(status_code=429) from exc
 
     job = await session.get(ComputeJob, job_id)
     if (
         job is None
         or job.claimed_by != worker_id
         or job.status != q.STATUS_CLAIMED
-        or job.job_type != q.JOB_TRACK_AUDIO_FEATURES
+        or job.job_type
+        not in (
+            q.JOB_TRACK_AUDIO_FEATURES,
+            q.JOB_AUDIO_EMBEDDING,
+        )
     ):
         raise HTTPException(status_code=404)
     if job.target_kind != q.TARGET_KIND_TRACK or not job.target_id:
@@ -230,9 +218,7 @@ async def download_job_audio(
     try:
         track_id = int(job.target_id)
     except (TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=404
-        ) from exc
+        raise HTTPException(status_code=404) from exc
     track = await session.get(Track, track_id)
     if not track:
         raise HTTPException(status_code=404)
@@ -260,9 +246,7 @@ async def download_job_audio(
 
     if track.file_key:
         try:
-            presigned = await s3.get_presigned_url(
-                track.file_key
-            )
+            presigned = await s3.get_presigned_url(track.file_key)
         except Exception as exc:
             log.warning(
                 "compute_job_audio_presign_failed",
@@ -271,13 +255,9 @@ async def download_job_audio(
                 err=str(exc),
             )
             await session.commit()
-            raise HTTPException(
-                status_code=503
-            ) from exc
+            raise HTTPException(status_code=503) from exc
         if proxy:
-            if not await cws.consume_ott_by_exp(
-                exp, job.id, worker_id
-            ):
+            if not await cws.consume_ott_by_exp(exp, job.id, worker_id):
                 await cws._log_audit(
                     session,
                     worker_id=worker_id,
@@ -292,9 +272,7 @@ async def download_job_audio(
                 url=presigned,
                 status_code=302,
             )
-        if not await cws.consume_ott_by_exp(
-            exp, job.id, worker_id
-        ):
+        if not await cws.consume_ott_by_exp(exp, job.id, worker_id):
             await cws._log_audit(
                 session,
                 worker_id=worker_id,
@@ -321,9 +299,7 @@ async def download_job_audio(
                     sc_ref,
                     use_cache=False,
                 ),
-                timeout=(
-                    settings.lyrics_audio_resolve_timeout_seconds
-                ),
+                timeout=(settings.lyrics_audio_resolve_timeout_seconds),
             )
         except TimeoutError as exc:
             log.warning(
@@ -347,21 +323,13 @@ async def download_job_audio(
                 err=str(exc),
             )
             await session.commit()
-            raise HTTPException(
-                status_code=503
-            ) from exc
+            raise HTTPException(status_code=503) from exc
     if not sc_stream_url:
         await session.commit()
         raise HTTPException(status_code=404)
 
-    if (
-        proxy
-        and stream_protocol == "progressive"
-        and sc_stream_url
-    ):
-        if not await cws.consume_ott_by_exp(
-            exp, job.id, worker_id
-        ):
+    if proxy and stream_protocol == "progressive" and sc_stream_url:
+        if not await cws.consume_ott_by_exp(exp, job.id, worker_id):
             await cws._log_audit(
                 session,
                 worker_id=worker_id,
@@ -376,16 +344,12 @@ async def download_job_audio(
             _stream_sc_cdn_to_worker(
                 sc_stream_url,
                 job_id=job_id,
-                chunk_idle_timeout=(
-                    settings.lyrics_audio_chunk_idle_seconds
-                ),
+                chunk_idle_timeout=(settings.lyrics_audio_chunk_idle_seconds),
             ),
             media_type="application/octet-stream",
         )
 
-    if not await cws.consume_ott_by_exp(
-        exp, job.id, worker_id
-    ):
+    if not await cws.consume_ott_by_exp(exp, job.id, worker_id):
         await cws._log_audit(
             session,
             worker_id=worker_id,
@@ -468,9 +432,7 @@ async def job_result(
     try:
         payload = json.loads(body or b"{}")
     except (TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=400
-        ) from exc
+        raise HTTPException(status_code=400) from exc
     if not isinstance(payload, dict):
         raise HTTPException(status_code=422)
     try:
@@ -490,9 +452,7 @@ async def job_result(
             meta={"reason": str(exc)},
         )
         await session.commit()
-        raise HTTPException(
-            status_code=422
-        ) from exc
+        raise HTTPException(status_code=422) from exc
     await q.mark_succeeded(
         session,
         job=j,
@@ -538,9 +498,7 @@ async def job_fail(
     try:
         event = json.loads(body or b"{}")
     except (TypeError, ValueError) as exc:
-        raise HTTPException(
-            status_code=400
-        ) from exc
+        raise HTTPException(status_code=400) from exc
     r = event.get("reason")
     reason: str = (
         r
