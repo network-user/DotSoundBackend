@@ -55,6 +55,9 @@
   запреты для `UGC`.
 - `docs/legal/LEGAL_TEXTS.md` — канонические продуктовые тексты для
   `upload`, `complaints`, `/legal` и карточек треков.
+- В Mini App маршрут `/legal/anti-abuse-signals` — краткое раскрытие
+  сигналов против автоматических регистраций (черновик; см. также
+  `docs/legal/PRIVACY_POLICY.md`, п. 7.5).
 - `docs/legal/SOURCE_TERMS_CHECKLIST.md` — internal checklist для
   проверки Terms/API внешних источников перед публичным запуском.
 - `docs/legal/SOUNDCLOUD_TERMS_REVIEW.md` — source-specific internal

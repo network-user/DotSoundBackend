@@ -5,6 +5,7 @@ import {
 
 export interface KenBurnsCoverProps {
   src: string
+  srcSet?: string
   alt?: string
   duration?: number
   className?: string
@@ -13,6 +14,7 @@ export interface KenBurnsCoverProps {
 
 export function KenBurnsCover({
   src,
+  srcSet,
   alt = '',
   duration = 18,
   className,
@@ -33,8 +35,11 @@ export function KenBurnsCover({
       >
         <img
           src={src}
+          srcSet={srcSet}
+          sizes={srcSet ? 'min(92vw, 480px)' : undefined}
           alt={alt}
-          loading="lazy"
+          loading="eager"
+          fetchPriority="high"
           draggable={false}
         />
       </div>
@@ -49,8 +54,12 @@ export function KenBurnsCover({
     >
       <m.img
         src={src}
+        srcSet={srcSet}
+        sizes={srcSet ? 'min(92vw, 480px)' : undefined}
         alt={alt}
-        loading="lazy"
+        loading="eager"
+        // @ts-expect-error fetchpriority not in framer-motion types yet
+        fetchPriority="high"
         draggable={false}
         animate={{
           scale: [1, 1.06, 1.02, 1.08, 1],

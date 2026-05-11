@@ -17,6 +17,10 @@ export function LegalView() {
     { id: 'copyright', label: t('redesign.legal.docCopyright') },
     { id: 'terms', label: t('redesign.legal.docTerms') },
     { id: 'privacy', label: t('redesign.legal.docPrivacy') },
+    {
+      id: 'anti-abuse-signals',
+      label: t('redesign.legal.docAntiAbuseSignals'),
+    },
     { id: 'upload-rules', label: t('redesign.legal.docUploadRules') },
     {
       id: 'rightsholders',

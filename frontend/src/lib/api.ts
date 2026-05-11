@@ -1804,6 +1804,22 @@ export const api = {
     })
   },
 
+  acknowledgeTutorial(): Promise<void> {
+    return request('/api/v1/onboarding/tutorial-ack', {
+      method: 'POST',
+    })
+  },
+
+  seedOnboardingTracks(
+    trackIds: number[],
+  ): Promise<import('@/types/api').SeedTracksResponse> {
+    return request('/api/v1/onboarding/seed-tracks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ track_ids: trackIds }),
+    })
+  },
+
   debugResetOnboarding(): Promise<void> {
     return request('/api/v1/users/me/debug/reset-onboarding', {
       method: 'POST',

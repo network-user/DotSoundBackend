@@ -105,15 +105,7 @@ async def _build_artist_detail(
 
     image_url: str | None = None
     if artist.image_key:
-        try:
-            image_url = await s3.get_presigned_url(
-                artist.image_key
-            )
-        except Exception:
-            logger.exception(
-                "artist_image_presign_failed",
-                artist_id=artist_id,
-            )
+        image_url = f"/api/v1/tracks/cover_proxy?key={artist.image_key}"
 
     source_profiles = _build_source_profiles(
         artist.source_profiles

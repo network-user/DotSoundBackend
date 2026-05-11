@@ -553,6 +553,7 @@ export function PlayerProvider({
     message: null,
     atMs: 0,
   })
+  const srcAssignedAtRef = useRef<number>(0)
   const playSessionRef = useRef(0)
   const preloadHlsRef = useRef<Hls | null>(null)
   const preloadHlsTrackIdRef = useRef<number | null>(
@@ -906,6 +907,7 @@ export function PlayerProvider({
       if (!saved.track.is_public) {
         api.getStream(saved.track.id)
           .then((stream) => {
+            srcAssignedAtRef.current = Date.now()
             audio.src = stream.url
             seekAfterLoad()
           })
@@ -917,10 +919,12 @@ export function PlayerProvider({
         )
 
         if (Hls.isSupported()) {
+          srcAssignedAtRef.current = Date.now()
           startHlsPlayback(audio, hlsUrl, fallback, false)
             .then(seekAfterLoad)
             .catch(() => {})
         } else {
+          srcAssignedAtRef.current = Date.now()
           audio.src = fallback
           seekAfterLoad()
         }
@@ -1055,6 +1059,7 @@ export function PlayerProvider({
       url: string,
     ) => {
       audio.crossOrigin = 'anonymous'
+      srcAssignedAtRef.current = Date.now()
       audio.src = url
       audio.volume = volume
       await safePlay(audio)
@@ -1293,6 +1298,9 @@ export function PlayerProvider({
       const a = audioRef.current
       if (!a || !track) return
       const code = a.error?.code
+      if (code === MediaError.MEDIA_ERR_ABORTED) return
+      if (!a.paused && a.currentTime > 0) return
+      if (Date.now() - srcAssignedAtRef.current < 2500) return
       if (
         (code === MediaError.MEDIA_ERR_NETWORK ||
           code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) &&

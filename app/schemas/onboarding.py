@@ -39,6 +39,23 @@ class OnboardingStatusResponse(BaseModel):
     profile_completed: bool = False
     legal_accepted_version: str | None = None
     is_adult_confirmed: bool = False
+    tutorial_seen: bool = False
+
+
+class SeedTracksRequest(BaseModel):
+    """Batch payload from the onboarding search panel.
+
+    Adds likes for every track id in the list so the user starts
+    with a populated library and an explicit positive taste signal.
+    Idempotent: existing likes are skipped.
+    """
+
+    track_ids: list[int] = Field(min_length=1, max_length=50)
+
+
+class SeedTracksResponse(BaseModel):
+    liked: int
+    skipped: int
 
 
 class ArtistBriefResponse(BaseModel):
@@ -137,3 +154,4 @@ class OnboardingBootstrapResponse(BaseModel):
         default_factory=list,
     )
     show_import_offer: bool = False
+    show_tutorial: bool = False

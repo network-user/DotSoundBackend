@@ -323,8 +323,8 @@ export function PlayerBar() {
                   }}
                   title={t('redesign.playerBar.radioMode')}
                 >
-                  <span className="player-radio-badge__dot" />
-                  {t('redesign.playerBar.radioMode')}
+                  <Icon name="radio-fill" size={14} className="player-radio-badge__icon" />
+                  <span className="player-radio-badge__text">{t('redesign.playerBar.radioMode')}</span>
                 </MotionPress>
               )}
             </div>

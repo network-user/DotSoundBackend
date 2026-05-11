@@ -63,7 +63,7 @@ export function CoverImage({
           alt=""
           width={size}
           height={size}
-          loading="lazy"
+          loading="eager"
           decoding="async"
           onError={() => setFailed(true)}
           onLoad={() => setLoaded(true)}

@@ -1,7 +1,8 @@
 import structlog
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.rate_limit import limiter
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.genre_samples import GenrePreviewQueueResponse
@@ -16,6 +17,8 @@ from app.schemas.onboarding import (
     OnboardingProfileSubmitResponse,
     OnboardingStatusResponse,
     ProfileDefaultsResponse,
+    SeedTracksRequest,
+    SeedTracksResponse,
     SmartSkipResponse,
     TasteSwipeBatchRequest,
     TasteSwipeBatchResponse,
@@ -102,6 +105,39 @@ async def acknowledge_import_prompt(
     svc = OnboardingService(db)
     await svc.acknowledge_import_prompt(user.id)
     return {"status": "ok"}
+
+
+@router.post("/tutorial-ack")
+async def acknowledge_tutorial(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    svc = OnboardingService(db)
+    await svc.acknowledge_tutorial(user.id)
+    return {"status": "ok"}
+
+
+@router.post(
+    "/seed-tracks",
+    response_model=SeedTracksResponse,
+)
+@limiter.limit("5/minute")
+async def seed_tracks(
+    request: Request,
+    body: SeedTracksRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> SeedTracksResponse:
+    """Like a batch of tracks the user picked in the onboarding
+    search panel. Used to bootstrap the library + taste signal in
+    one tap.
+    """
+    svc = OnboardingService(db)
+    liked, skipped = await svc.seed_tracks_from_search(
+        user_id=user.id,
+        track_ids=body.track_ids,
+    )
+    return SeedTracksResponse(liked=liked, skipped=skipped)
 
 
 @router.get("/genres", response_model=list[str])

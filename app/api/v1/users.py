@@ -355,13 +355,14 @@ async def upload_my_avatar(
     )
     service = UserService(session)
     await service.update_avatar_key(current_user.id, avatar_key)
-    avatar_url = await s3.get_presigned_url(avatar_key)
     logger.info(
         "avatar_uploaded",
         user_id=current_user.id,
         avatar_key=avatar_key,
     )
-    return AvatarResponse(avatar_url=avatar_url)
+    return AvatarResponse(
+        avatar_url=f"/api/v1/tracks/cover_proxy?key={avatar_key}"
+    )
 
 
 @router.get(
@@ -385,7 +386,7 @@ async def get_avatar(
         )
 
     if user.avatar_key:
-        avatar_url = await s3.get_presigned_url(user.avatar_key)
+        avatar_url = f"/api/v1/tracks/cover_proxy?key={user.avatar_key}"
     else:
         seed = user.avatar_seed or str(user.telegram_id)
         avatar_url = f"https://api.dicebear.com/9.x/identicon/svg?seed={seed}"

@@ -85,7 +85,9 @@ export function RadioView() {
   const discPointerRef = useRef<{
     pointerId: number
     startX: number
+    startY: number
     offsetX: number
+    offsetY: number
   } | null>(null)
   const reduceMotion = useReducedMotion()
 
@@ -240,7 +242,9 @@ export function RadioView() {
     discPointerRef.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
+      startY: e.clientY,
       offsetX: 0,
+      offsetY: 0,
     }
     setIsDiscDragging(true)
     setDiscDragX(0)
@@ -258,6 +262,7 @@ export function RadioView() {
       Math.min(DISC_SWIPE_MAX_OFFSET_PX, rawOffset),
     )
     pointer.offsetX = offset
+    pointer.offsetY = e.clientY - pointer.startY
     setDiscDragX(offset)
     if (Math.abs(offset) > 4) {
       e.preventDefault()
@@ -277,6 +282,7 @@ export function RadioView() {
     }
     if (
       Math.abs(pointer.offsetX) <= DISC_TAP_MAX_OFFSET_PX &&
+      Math.abs(pointer.offsetY) <= DISC_TAP_MAX_OFFSET_PX &&
       radioMode &&
       currentTrack &&
       !switchingRef.current

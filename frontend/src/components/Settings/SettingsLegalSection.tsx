@@ -51,6 +51,13 @@ export function SettingsLegalSection() {
           Политика конфиденциальности
         </a>
         <a
+          href={`${LEGAL_BASE}anti-abuse-signals`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Сигналы против автоматических регистраций
+        </a>
+        <a
           href={`${LEGAL_BASE}copyright`}
           target="_blank"
           rel="noopener noreferrer"

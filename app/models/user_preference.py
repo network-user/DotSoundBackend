@@ -54,3 +54,6 @@ class UserPreference(Base, TimestampMixin):
     adult_confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    tutorial_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )

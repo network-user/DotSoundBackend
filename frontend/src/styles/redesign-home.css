@@ -146,10 +146,16 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-height: 88px;
+  min-height: 96px;
   padding: var(--space-3) var(--space-2);
   text-align: center;
   border-radius: var(--r-lg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.rh-home-quick-card:active {
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .rh-home-quick-card__icon {
@@ -157,10 +163,15 @@
   align-items: center;
   justify-content: center;
   color: var(--text);
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .rh-home-quick-card__label {
   font-size: var(--fs-12);
+  font-weight: 500;
   line-height: var(--lh-tight);
   color: var(--text-secondary);
 }
@@ -1243,6 +1254,11 @@
 }
 
 @media (max-width: 640px) {
+  .rh-radio-hero__inner {
+    min-height: 460px;
+    padding-bottom: 140px;
+  }
+
   .rh-radio-next-card {
     padding: var(--space-3);
   }

@@ -148,6 +148,7 @@
   /* Z-index scale (#player-bar / #nav use 165–166 in global.css) */
   --z-nav: 80;
   --z-player: 90;
+  --z-cookie-notice: 170;
   --z-sheet: 180;
   --z-modal: 185;
   --z-toast: 500;

@@ -359,6 +359,12 @@ export interface OnboardingStatus {
   profile_completed: boolean
   legal_accepted_version: string | null
   is_adult_confirmed: boolean
+  tutorial_seen: boolean
+}
+
+export interface SeedTracksResponse {
+  liked: number
+  skipped: number
 }
 
 export interface OnboardingProfileDefaults {
@@ -394,6 +400,7 @@ export interface OnboardingBootstrap {
   profile_defaults: OnboardingProfileDefaults
   genre_bubbles: OnboardingGenreBubble[]
   show_import_offer: boolean
+  show_tutorial: boolean
 }
 
 export type OnboardingTasteDecision = 'like' | 'dislike' | 'skip'

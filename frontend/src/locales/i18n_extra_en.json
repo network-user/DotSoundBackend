@@ -177,7 +177,9 @@
     "restore": "Restore"
   },
   "consent": {
-    "body": "We use minimal analytics solely to protect against automated sign-ups (retention up to 30 days). No ads, no third parties.",
+    "title": "Protection against automated sign-ups",
+    "body": "We turn on minimal analytics only to slow automated sign-ups; related records are kept for up to 30 days. No ads and no sharing those signals with third parties for marketing. ",
+    "agreementLink": "Full agreement text",
     "accept": "Accept",
     "minimal": "Essential only"
   },

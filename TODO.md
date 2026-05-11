@@ -119,6 +119,11 @@
   заметил pre-existing non-black-compliant блоки в `app/api/v1/auth.py`,
   `app/services/track_response_build.py`. Можно прогнать `make format`
   отдельным cosmetic-коммитом.
+- [ ] **Legal: вычитка `/legal/anti-abuse-signals` под 152-ФЗ:** в Mini
+  App добавлены страница и ссылка из баннера согласия; текущий текст в
+  `frontend/src/views/legalContent.ts` — инженерный черновик. Нужна
+  юридическая правка, синхронизация с `docs/legal/PRIVACY_POLICY.md`
+  (п. 7.5) и финальная публичная редакция.
 
 ## Upload UX optimization (2026-05-11)
 

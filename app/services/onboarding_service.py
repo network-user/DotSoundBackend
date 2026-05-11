@@ -78,6 +78,7 @@ class OnboardingService:
                 can_import_from_telegram=(pf.can_import_from_telegram),
                 has_telegram_profile_music=(pf.has_telegram_profile_music),
                 profile_completed=profile_completed,
+                tutorial_seen=False,
             )
         return OnboardingStatusResponse(
             onboarding_completed=pref.onboarding_completed,
@@ -90,6 +91,7 @@ class OnboardingService:
             profile_completed=profile_completed,
             legal_accepted_version=pref.legal_accepted_version,
             is_adult_confirmed=pref.is_adult_confirmed,
+            tutorial_seen=pref.tutorial_seen_at is not None,
         )
 
     async def acknowledge_import_prompt(self, user_id: int) -> UserPreference:
@@ -102,6 +104,79 @@ class OnboardingService:
             user_id=user_id,
         )
         return pref
+
+    async def acknowledge_tutorial(self, user_id: int) -> UserPreference:
+        """Persist that the user has seen the post-onboarding intro.
+
+        Idempotent — repeated calls do not move the timestamp once set.
+        """
+        existing = await self._pref_repo.get_by_user_id(user_id)
+        if existing and existing.tutorial_seen_at is not None:
+            return existing
+        pref = await self._pref_repo.upsert(
+            user_id=user_id,
+            tutorial_seen_at=datetime.now(UTC),
+        )
+        logger.info(
+            "onboarding_tutorial_acknowledged",
+            user_id=user_id,
+        )
+        return pref
+
+    async def seed_tracks_from_search(
+        self,
+        user_id: int,
+        track_ids: list[int],
+    ) -> tuple[int, int]:
+        """Like every catalog track id from the onboarding search panel.
+
+        Returns ``(liked_now, skipped)`` where ``skipped`` counts ids the
+        user had already liked (idempotent) or that are missing from the
+        catalog.
+        """
+        if not track_ids:
+            return 0, 0
+        from app.repositories.like import LikeRepository
+
+        like_repo = LikeRepository(self._session)
+        deduped: list[int] = []
+        seen: set[int] = set()
+        for tid in track_ids:
+            if tid in seen:
+                continue
+            seen.add(tid)
+            deduped.append(tid)
+
+        result = await self._session.execute(
+            select(Track.id).where(
+                Track.id.in_(deduped),
+                Track.is_active.is_(True),
+                Track.is_public.is_(True),
+            )
+        )
+        valid_ids = {row for row in result.scalars().all()}
+
+        liked_now = 0
+        skipped = 0
+        for tid in deduped:
+            if tid not in valid_ids:
+                skipped += 1
+                continue
+            existing = await like_repo.get(user_id, tid)
+            if existing:
+                skipped += 1
+                continue
+            await like_repo.add(user_id, tid)
+            liked_now += 1
+
+        logger.info(
+            "onboarding_seed_tracks",
+            user_id=user_id,
+            requested=len(track_ids),
+            liked=liked_now,
+            skipped=skipped,
+        )
+        return liked_now, skipped
 
     async def reset_onboarding_state(self, user_id: int) -> UserPreference:
         """Debug / QA: show onboarding wizard again from a clean state."""
@@ -515,11 +590,15 @@ class OnboardingService:
             has_telegram_profile_music=(status.has_telegram_profile_music),
             already_acknowledged=(status.import_prompt_acknowledged),
         )
+        show_tutorial = (
+            status.onboarding_completed and not status.tutorial_seen
+        )
         return OnboardingBootstrapResponse(
             status=status,
             profile_defaults=defaults,
             genre_bubbles=bubbles,
             show_import_offer=show_import,
+            show_tutorial=show_tutorial,
         )
 
     async def get_genre_bubbles(

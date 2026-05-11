@@ -787,6 +787,47 @@
         "importHint": "Telegram, Yandex Music, Spotify, SoundCloud",
         "cta": "To music",
         "ctaImport": "Import"
+      },
+      "importSearch": {
+        "cardTitle": "Find tracks",
+        "cardHint": "Search by title or artist",
+        "modalTitle": "Find your favourite tracks",
+        "modalHint": "Pick tracks you love — they'll land in your library and teach the recommendations.",
+        "placeholder": "Song or artist name",
+        "empty": "Nothing found — try a different query",
+        "loading": "Searching…",
+        "submit": "Add ({{count}})",
+        "submitEmpty": "Pick at least one track",
+        "added": "Tracks added: {{count}}",
+        "fail": "Couldn't add tracks — try again",
+        "previewBlocked": "Tap again to unmute",
+        "close": "Close"
+      }
+    },
+    "tutorial": {
+      "skip": "Skip",
+      "next": "Next",
+      "back": "Back",
+      "start": "Get started",
+      "radio": {
+        "title": "Radio mode",
+        "body": "An endless stream tuned to your mood. Start radio on Home — it picks tracks and adapts to your likes."
+      },
+      "import": {
+        "title": "Your music",
+        "body": "Bring playlists from Telegram, Yandex Music, Spotify and SoundCloud, or search for specific tracks — everything lands in your library."
+      },
+      "cards": {
+        "title": "Track card",
+        "body": "Open a card to see lyrics, artist info, and to control playback."
+      },
+      "swipes": {
+        "title": "Swipes that matter",
+        "body": "Like or dislike — short signals that make recommendations sharper with every gesture."
+      },
+      "ready": {
+        "title": "All set",
+        "body": "You're ready. Pro tip: starting radio on Home is the quickest way to hear how everything fits together."
       }
     },
     "achievements": {},
@@ -795,6 +836,7 @@
       "docCopyright": "Rights holders",
       "docTerms": "User agreement",
       "docPrivacy": "Data policy",
+      "docAntiAbuseSignals": "Anti-abuse registration signals",
       "docUploadRules": "Upload rules",
       "docsTitle": "Legal documents",
       "docsBody": "The app provides core legal documents explaining the content model, complaints flow, user uploads, and data processing.",

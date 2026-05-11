@@ -108,8 +108,15 @@ function fmtListenWhen(iso: string) {
   }).format(d)
 }
 
-function coverUrl(k: string, v: number) {
-  return `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(k)}&v=${v}`
+function coverUrl(k: string, v: number, w?: number) {
+  const base = `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(k)}&v=${v}`
+  return w ? `${base}&w=${w}` : base
+}
+
+function coverSrcSet(k: string, v: number): string {
+  return [120, 240, 480]
+    .map((w) => `${coverUrl(k, v, w)} ${w}w`)
+    .join(', ')
 }
 
 export function TrackCardSheet({
@@ -926,8 +933,11 @@ export function TrackCardSheet({
   if (!exit.mounted || !track) return null
 
   const coverSrc = coverKey
-    ? coverUrl(coverKey, coverVer)
+    ? coverUrl(coverKey, coverVer, 480)
     : null
+  const coverSrcSetAttr = coverKey
+    ? coverSrcSet(coverKey, coverVer)
+    : undefined
   const videoSrc = track.video_key
     ? `/api/v1/tracks/${track.id}/video`
     : null
@@ -1066,6 +1076,7 @@ export function TrackCardSheet({
                   >
                     <KenBurnsCover
                       src={coverSrc}
+                      srcSet={coverSrcSetAttr}
                       alt=""
                       duration={20}
                       className="re-tcs-kb"
@@ -1074,9 +1085,12 @@ export function TrackCardSheet({
                 ) : (
                   <img
                     src={coverSrc}
+                    srcSet={coverSrcSetAttr}
+                    sizes="min(92vw, 480px)"
                     alt=""
                     className="re-tcs-cover-probe"
-                    loading="lazy"
+                    loading="eager"
+                    fetchPriority="high"
                   />
                 )}
                 <img

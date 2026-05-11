@@ -1746,15 +1746,15 @@
 
 .notification-badge {
   position: absolute;
-  top: -2px;
+  top: 8px;
   right: -2px;
   background: #f44;
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 8px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1893,13 +1893,16 @@
 .notification-items {
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .notification-item-row {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   position: relative;
 }
 
@@ -1907,7 +1910,7 @@
   flex: 1;
   min-width: 0;
   width: auto;
-  padding: 14px 8px 14px 20px;
+  padding: 26px 8px 26px 20px;
   border-bottom: none;
   display: flex;
   align-items: flex-start;
@@ -1938,7 +1941,7 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 5px;
 }
 
 .notification-title {
