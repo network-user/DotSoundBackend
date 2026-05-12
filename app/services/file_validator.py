@@ -14,12 +14,83 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(
 )
 
 
+def _mime_with_magic(data: bytes) -> str | None:
+    try:
+        import magic as _magic
+    except ImportError:
+        return None
+    try:
+        return _magic.from_buffer(data, mime=True)
+    except Exception:
+        logger.warning("magic_from_buffer_failed")
+        return None
+
+
+def _mime_from_signatures(data: bytes) -> str | None:
+    if len(data) < 12:
+        return None
+    if data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if data[:4] == b"fLaC":
+        return "audio/flac"
+    if data[:4] == b"OggS":
+        return "audio/ogg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
+        return "audio/wav"
+    if data[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+        return "audio/mpeg"
+    if data[:3] == b"ID3":
+        return "audio/mpeg"
+    if data[:2] in (b"\xff\xf1", b"\xff\xf9"):
+        return "audio/x-hx-aac-adts"
+    if data[4:8] == b"ftyp":
+        head = data[8:32]
+        if b"mp4a" in head or b"M4A " in head:
+            return "audio/mp4"
+        return "video/mp4"
+    if data[:4] == b"\x1a\x45\xdf\xa3":
+        if b"webm" in data[:256].lower():
+            return "video/webm"
+        return "video/x-matroska"
+    return None
+
+
+def _mime_with_pillow(data: bytes) -> str | None:
+    from io import BytesIO
+
+    from PIL import Image
+
+    try:
+        with Image.open(BytesIO(data)) as im:
+            fmt = im.format
+    except Exception:
+        return None
+    if fmt == "JPEG":
+        return "image/jpeg"
+    if fmt == "PNG":
+        return "image/png"
+    if fmt == "WEBP":
+        return "image/webp"
+    return None
+
+
 def _detect_mime(data: bytes) -> str:
     if len(data) < 4:
         return "application/octet-stream"
-    import magic as _magic
-
-    return _magic.from_buffer(data, mime=True)
+    detected = _mime_with_magic(data)
+    if detected is not None:
+        return detected
+    detected = _mime_from_signatures(data)
+    if detected is not None:
+        return detected
+    detected = _mime_with_pillow(data)
+    if detected is not None:
+        return detected
+    return "application/octet-stream"
 
 
 def validate_audio(

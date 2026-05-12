@@ -14,7 +14,6 @@ import { usePlayerActions } from '@/store/PlayerContext'
 import { UploadFileTab } from '@/components/Upload/UploadFileTab'
 import { UploadQueueBadge } from '@/components/Upload/UploadQueueBadge'
 import { UploadSoundCloudTab } from '@/components/Upload/UploadSoundCloudTab'
-import { UploadYouTubeTab } from '@/components/Upload/UploadYouTubeTab'
 import { UploadBandcampTab } from '@/components/Upload/UploadBandcampTab'
 import {
   clearDraft,
@@ -24,7 +23,7 @@ import {
 } from '@/lib/uploadDraft'
 import type { Track } from '@/types/api'
 
-type Tab = 'file' | 'soundcloud' | 'youtube' | 'bandcamp'
+type Tab = 'file' | 'soundcloud' | 'bandcamp'
 
 export function UploadView() {
   const { t } = useTranslation()
@@ -95,7 +94,6 @@ export function UploadView() {
           [
             ['file', 'tabFile'],
             ['soundcloud', 'tabSoundCloud'],
-            ['youtube', 'tabYouTube'],
             ['bandcamp', 'tabBandcamp'],
           ] as const
         ).map(([id, labelKey]) => (
@@ -164,9 +162,6 @@ export function UploadView() {
               <UploadSoundCloudTab
                 onSuccess={handleSuccess}
               />
-            )}
-            {tab === 'youtube' && (
-              <UploadYouTubeTab onSuccess={handleSuccess} />
             )}
             {tab === 'bandcamp' && (
               <UploadBandcampTab

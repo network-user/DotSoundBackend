@@ -99,6 +99,11 @@ class User(Base, TimestampMixin):
     locale: Mapped[str | None] = mapped_column(
         String(10), nullable=True
     )
+    profile_visibility: Mapped[str] = mapped_column(
+        String(20),
+        server_default="public",
+        nullable=False,
+    )
     avatar_blob_id: Mapped[int | None] = mapped_column(
         ForeignKey("image_blobs.id", ondelete="SET NULL"),
         nullable=True,

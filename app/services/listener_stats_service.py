@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-import structlogfrom dotsound_private_core.services.listener_stats_policy import (
+import structlog
+from dotsound_private_core.services.listener_stats_policy import (
     credited_listen_seconds,
     is_allowed_period_days,
     listener_stats_since_utc,

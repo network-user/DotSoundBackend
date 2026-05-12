@@ -251,6 +251,9 @@ export interface UserResponse {
   totp_enabled: boolean
   is_active: boolean
   is_admin?: boolean
+  locale?: string | null
+  profile_visibility?: 'public' | 'followers_only' | 'hidden'
+  profile_access?: 'full' | 'limited'
   created_at: string
 }
 
@@ -767,6 +770,8 @@ export interface AuthorProfile {
   avatar_key: string | null
   is_active: boolean
   created_at: string
+  profile_visibility?: 'public' | 'followers_only' | 'hidden'
+  profile_access?: 'full' | 'limited'
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────────

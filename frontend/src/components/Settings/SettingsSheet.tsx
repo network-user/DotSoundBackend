@@ -9,6 +9,7 @@ import {
   haptic,
   hapticSelection,
   hapticTick,
+  hapticNotification,
   setBackButton,
 } from '@/lib/telegram'
 import { Icon } from '@/components/Icon/Icon'
@@ -116,6 +117,9 @@ export function SettingsSheet({
   const [ttlModalOpen, setTtlModalOpen] = useState(false)
   const [accountExpanded, setAccountExpanded] =
     useState(false)
+  const [profileVisibility, setProfileVisibility] = useState<
+    'public' | 'followers_only' | 'hidden'
+  >('public')
 
   useEffect(() => {
     if (!open) return
@@ -134,6 +138,9 @@ export function SettingsSheet({
         setTwoFAEnabled(
           u.totp_enabled ?? false,
         )
+        if (u.profile_visibility) {
+          setProfileVisibility(u.profile_visibility)
+        }
       })
       .catch(() => {})
   }, [open])
@@ -165,6 +172,35 @@ export function SettingsSheet({
     feedbackTap()
     onClose()
     openEq()
+  }
+
+  const handleProfileVisibility = async (
+    next: 'public' | 'followers_only' | 'hidden',
+  ) => {
+    if (profileVisibility === next) return
+    feedbackTap()
+    try {
+      const u = await api.updateProfile(
+        undefined,
+        undefined,
+        next,
+      )
+      setProfileVisibility(
+        u.profile_visibility ?? 'public',
+      )
+      hapticNotification('success')
+    } catch {
+      hapticNotification('error')
+      showIsland({
+        kind: 'error',
+        title: t(
+          'settings.profilePrivacySaveFail',
+          'Не удалось сохранить настройки',
+        ),
+        iconName: 'alert-triangle',
+        durationMs: 4000,
+      })
+    }
   }
 
   const handleVideoToggle = () => {
@@ -728,6 +764,106 @@ export function SettingsSheet({
               enabled={twoFAEnabled}
               onToggle={setTwoFAEnabled}
             />
+
+            <div className="settings-section-gap--md" />
+
+            <div className="settings-section-header">
+              {t('settings.profilePrivacy', {
+                defaultValue: 'Профиль для других',
+              })}
+            </div>
+
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className={`settings-item settings-privacy-option${
+                profileVisibility === 'public'
+                  ? ' settings-privacy-option--on'
+                  : ''
+              }`}
+              onClick={() => void handleProfileVisibility('public')}
+            >
+              <Icon name="users-listeners" size={20} />
+              <span>
+                {t('settings.profilePrivacyPublic', {
+                  defaultValue: 'Открытый',
+                })}
+                <span className="settings-privacy-sub">
+                  {t('settings.profilePrivacyPublicSub', {
+                    defaultValue:
+                      'Треки, статистика и подписки видны всем',
+                  })}
+                </span>
+              </span>
+              {profileVisibility === 'public' ? (
+                <Icon name="check" size={16} />
+              ) : (
+                <span style={{ width: 16 }} />
+              )}
+            </MotionPress>
+
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className={`settings-item settings-privacy-option${
+                profileVisibility === 'followers_only'
+                  ? ' settings-privacy-option--on'
+                  : ''
+              }`}
+              onClick={() => void handleProfileVisibility('followers_only')}
+            >
+              <Icon name="users-following" size={20} />
+              <span>
+                {t('settings.profilePrivacyFollowers', {
+                  defaultValue: 'Только подписчикам',
+                })}
+                <span className="settings-privacy-sub">
+                  {t('settings.profilePrivacyFollowersSub', {
+                    defaultValue:
+                      'Полный профиль виден только тем, кто подписан',
+                  })}
+                </span>
+              </span>
+              {profileVisibility === 'followers_only' ? (
+                <Icon name="check" size={16} />
+              ) : (
+                <span style={{ width: 16 }} />
+              )}
+            </MotionPress>
+
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className={`settings-item settings-privacy-option${
+                profileVisibility === 'hidden'
+                  ? ' settings-privacy-option--on'
+                  : ''
+              }`}
+              onClick={() => void handleProfileVisibility('hidden')}
+            >
+              <Icon name="cloud-off" size={20} />
+              <span>
+                {t('settings.profilePrivacyHidden', {
+                  defaultValue: 'Скрытый',
+                })}
+                <span className="settings-privacy-sub">
+                  {t('settings.profilePrivacyHiddenSub', {
+                    defaultValue:
+                      'Расширенный профиль и шаринг недоступны другим',
+                  })}
+                </span>
+              </span>
+              {profileVisibility === 'hidden' ? (
+                <Icon name="check" size={16} />
+              ) : (
+                <span style={{ width: 16 }} />
+              )}
+            </MotionPress>
+
+            <div className="settings-section-gap--md" />
 
             <button
               type="button"

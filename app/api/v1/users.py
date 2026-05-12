@@ -18,7 +18,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core import s3
 from app.core.rate_limit import limiter
-from app.dependencies import get_current_user, get_db
+from app.dependencies import (
+    get_current_user,
+    get_db,
+    get_optional_user,
+)
 from app.models.user import User
 from app.repositories.complaint import (
     ComplaintRepository,
@@ -50,6 +54,10 @@ from app.services.eq_service import EqService
 from app.services.follow_service import FollowService
 from app.services.onboarding_service import (
     OnboardingService,
+)
+from app.services.profile_access_service import (
+    ProfileAccessService,
+    build_user_profile_response,
 )
 from app.services.signal_service import (
     SignalService,
@@ -91,7 +99,11 @@ async def register_or_update_user(
         created=created,
         status_code=status_code,
     )
-    return UserResponse.model_validate(user)
+    return build_user_profile_response(
+        user,
+        viewer=user,
+        access_full=True,
+    )
 
 
 @router.get(
@@ -104,17 +116,24 @@ async def get_user(
     request: Request,
     user_id: int,
     session: AsyncSession = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
 ) -> UserResponse:
     structlog.contextvars.bind_contextvars(user_id=user_id)
     service = UserService(session)
     user = await service.get_by_id(user_id)
-    if not user:
+    if not user or user.deleted_at is not None:
         logger.warning("user_not_found_endpoint", user_id=user_id)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    return UserResponse.model_validate(user)
+    access = ProfileAccessService(session)
+    full = await access.can_view_extended(viewer, user)
+    return build_user_profile_response(
+        user,
+        viewer=viewer,
+        access_full=full,
+    )
 
 
 @router.patch(
@@ -130,7 +149,11 @@ async def update_me(
     current_user: User = Depends(get_current_user),
 ) -> UserResponse:
     structlog.contextvars.bind_contextvars(user_id=current_user.id)
-    if not data.display_name and data.locale is None:
+    if (
+        not data.display_name
+        and data.locale is None
+        and data.profile_visibility is None
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No fields to update",
@@ -150,12 +173,20 @@ async def update_me(
         user.locale = data.locale
         await session.flush()
         await session.refresh(user)
+    if data.profile_visibility is not None and user:
+        user.profile_visibility = data.profile_visibility
+        await session.flush()
+        await session.refresh(user)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    return UserResponse.model_validate(user)
+    return build_user_profile_response(
+        user,
+        viewer=current_user,
+        access_full=True,
+    )
 
 
 @router.delete(
@@ -290,7 +321,16 @@ async def restore_me(
             detail="No pending deletion or grace period expired",
         )
     user = await service.get_by_id(current_user.id)
-    return UserResponse.model_validate(user)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+    return build_user_profile_response(
+        user,
+        viewer=current_user,
+        access_full=True,
+    )
 
 
 @router.post(
@@ -379,7 +419,7 @@ async def get_avatar(
     structlog.contextvars.bind_contextvars(user_id=user_id)
     service = UserService(session)
     user = await service.get_by_id(user_id)
-    if not user:
+    if not user or user.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
@@ -407,6 +447,7 @@ async def get_share_card(
     request: Request,
     user_id: int,
     session: AsyncSession = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
 ) -> ShareCardResponse:
     structlog.contextvars.bind_contextvars(user_id=user_id)
     user_service = UserService(session)
@@ -416,6 +457,9 @@ async def get_share_card(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
+    access = ProfileAccessService(session)
+    if not await access.can_view_extended(viewer, user):
+        access.raise_profile_restricted()
 
     if user.avatar_key:
         avatar_url: str | None = (
@@ -693,8 +737,11 @@ async def get_user_tracks(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
 ) -> TrackListResponse:
     structlog.contextvars.bind_contextvars(user_id=user_id)
+    access = ProfileAccessService(session)
+    await access.require_extended(viewer, user_id)
     service = TrackService(session)
     tracks, total = await service.list_public_by_user(user_id, page, size)
     items = await dedupe_and_build_track_list(session, tracks)
@@ -713,8 +760,11 @@ async def get_user_albums(
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=100),
     session: AsyncSession = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
 ) -> list[AlbumResponse]:
     structlog.contextvars.bind_contextvars(user_id=user_id)
+    access = ProfileAccessService(session)
+    await access.require_extended(viewer, user_id)
     service = AlbumService(session)
     albums, _ = await service.list_by_user(user_id, page, size)
     return [AlbumResponse.model_validate(a) for a in albums]
@@ -730,8 +780,11 @@ async def get_user_stats(
     request: Request,
     user_id: int,
     session: AsyncSession = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
 ) -> UserStatsResponse:
     structlog.contextvars.bind_contextvars(user_id=user_id)
+    access = ProfileAccessService(session)
+    await access.require_extended(viewer, user_id)
     service = StatsService(session)
     stats = await service.get_author_stats(user_id)
     logger.info(

@@ -81,6 +81,7 @@ import {
   trackActivationEvent,
 } from '@/lib/activation'
 import { useOptionalPrefetch } from '@/store/PrefetchContext'
+import { isTelegramMiniApp } from '@/lib/platform'
 import { tg, getInitData } from '@/lib/telegram'
 import { AuthScreen } from '@/components/Auth/AuthScreen'
 import { OnboardingV2 } from '@/components/Onboarding/OnboardingV2'
@@ -286,7 +287,7 @@ export function App() {
       if (initSettled) return
       setNeedsAuth(true)
       setIsInitialized(true)
-    }, 9000)
+    }, 25000)
 
     const init = async () => {
       let authenticated = false
@@ -316,6 +317,28 @@ export function App() {
           tg?.initData ? tg.initData.length : 0,
         )
         debug.nativeInitDataRetry = String(
+          window.Telegram?.WebApp?.initData
+            ? window.Telegram.WebApp.initData
+                .length
+            : 0,
+        )
+      }
+      if (!initData && isTelegramMiniApp()) {
+        const pollStart = Date.now()
+        const deadline = pollStart + 4000
+        while (!initData && Date.now() < deadline) {
+          await new Promise((r) =>
+            setTimeout(r, 120),
+          )
+          initData = getInitData()
+        }
+        debug.initDataPollMs = String(
+          Date.now() - pollStart,
+        )
+        debug.sdkInitDataPoll = String(
+          tg?.initData ? tg.initData.length : 0,
+        )
+        debug.nativeInitDataPoll = String(
           window.Telegram?.WebApp?.initData
             ? window.Telegram.WebApp.initData
                 .length
@@ -360,6 +383,7 @@ export function App() {
             ) {
               connectWS(res.access_token)
               markAuthSuccess()
+              setNeedsAuth(false)
               trackActivationEvent('auth_success', {
                 once: true,
                 meta: { via: 'magic_link' },
@@ -437,6 +461,7 @@ export function App() {
         if (!authenticated) {
           setNeedsAuth(true)
         } else {
+          setNeedsAuth(false)
           await fetchAndApplyAdminPath()
           await api.syncSessionUserFlags()
           markAuthSuccess()

@@ -83,19 +83,33 @@
 }
 
 .rp-player-bar--touch {
-  --player-h: 68px;
+  --player-h: 76px;
 }
 
 .rp-player-bar--touch #pb-row.pb-row-v2 {
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
   padding: 0 12px 0 10px;
   align-items: center;
-  height: 68px;
+  height: var(--player-h);
+}
+
+.pb-swipe-track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  touch-action: pan-x;
+  cursor: grab;
+}
+
+.pb-swipe-track:active {
+  cursor: grabbing;
 }
 
 .rp-player-bar--touch .pb-cover-img {
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: 8px;
   flex-shrink: 0;
 }
@@ -140,21 +154,30 @@
 
 /* Seek bar thinner on touch — progress only, no scrub */
 .rp-player-bar--touch #pb-seek-wrap {
-  height: 2px;
+  height: 3px;
+  max-height: 3px;
+  min-height: 0;
+  overflow: hidden;
+  line-height: 0;
+  flex-shrink: 0;
 }
 
 .rp-player-bar--touch #pb-seek {
-  height: 2px;
+  height: 3px;
+  max-height: 3px;
+  margin: 0;
+  padding: 0;
+  vertical-align: top;
   pointer-events: none;
 }
 
 .rp-player-bar--touch #pb-seek::-webkit-slider-runnable-track {
-  height: 2px;
+  height: 3px;
 }
 
 .rp-player-bar--touch #pb-seek::-moz-range-track,
 .rp-player-bar--touch #pb-seek::-moz-range-progress {
-  height: 2px;
+  height: 3px;
 }
 
 .rp-player-bar--touch #pb-seek::-webkit-slider-thumb {
@@ -758,7 +781,7 @@
 
 @media (max-width: 360px) {
   .rp-player-bar {
-    --player-h: 72px;
+    --player-h: 74px;
   }
 }
 

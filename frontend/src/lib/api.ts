@@ -16,7 +16,6 @@ import type {
   ArtistEnrichStatusResponse,
   ArtistEnrichWatchResponse,
   ArtistSupplementalResponse,
-  AuthorProfile,
   AvatarResponse,
   ChatListItem,
   ChatMessage,
@@ -868,10 +867,14 @@ export const api = {
   updateProfile(
     display_name?: string,
     locale?: string,
+    profile_visibility?: 'public' | 'followers_only' | 'hidden',
   ): Promise<UserResponse> {
     const body: Record<string, string> = {}
     if (display_name) body.display_name = display_name
     if (locale !== undefined) body.locale = locale
+    if (profile_visibility !== undefined) {
+      body.profile_visibility = profile_visibility
+    }
     return request('/api/v1/users/me', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -1077,7 +1080,7 @@ export const api = {
 
   // ── Author page ───────────────────────────────────────────────────────────
 
-  getAuthorProfile(userId: number): Promise<AuthorProfile> {
+  getAuthorProfile(userId: number): Promise<UserResponse> {
     return request(`/api/v1/users/${userId}`)
   },
 

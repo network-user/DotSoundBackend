@@ -715,7 +715,12 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
   return (
     <>
       {dupeModal}
-    <form id="upload-form" noValidate onSubmit={handleSubmit}>
+    <form
+      id="upload-form"
+      className="ru-up-file-wizard"
+      noValidate
+      onSubmit={handleSubmit}
+    >
       <div className="ru-up-wizard-head">
         <h3>{t(`redesign.upload.${WIZARD_HINTS[wizardStep][0]}`)}</h3>
         <p>{t(`redesign.upload.${WIZARD_HINTS[wizardStep][1]}`)}</p>

@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.services.file_validator import (
+    _mime_from_signatures,
     scan_for_malware,
     validate_audio,
     validate_image,
@@ -18,7 +19,8 @@ pytestmark = pytest.mark.anyio
 
 
 def _mock_from_buffer(data: bytes, mime: bool = True) -> str:
-    if data.startswith(b"ID3") or data[0:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"):
+    mp3_sig = (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2")
+    if data.startswith(b"ID3") or data[0:2] in mp3_sig:
         return "audio/mpeg"
     if data.startswith(b"\xff\xd8\xff"):
         return "image/jpeg"
@@ -120,10 +122,34 @@ class TestValidateAudio:
         assert exc.value.status_code == 415
 
 
+class TestMimeFromSignatures:
+    def test_jpeg_png_webp(self) -> None:
+        assert _mime_from_signatures(_JPEG_HEADER) == "image/jpeg"
+        assert _mime_from_signatures(_PNG_HEADER) == "image/png"
+
+    def test_webp_riff(self) -> None:
+        webp = (
+            b"RIFF"
+            + (40).to_bytes(4, "little")
+            + b"WEBP"
+            + b"VP8 "
+            + b"\x00" * 32
+        )
+        assert _mime_from_signatures(webp) == "image/webp"
+
+
 class TestValidateImage:
     def test_valid_jpeg(self) -> None:
         result = validate_image(_JPEG_HEADER, "cover.jpg")
         assert result == "image/jpeg"
+
+    def test_valid_jpeg_when_magic_unavailable(self) -> None:
+        with patch(
+            "app.services.file_validator._mime_with_magic",
+            return_value=None,
+        ):
+            result = validate_image(_JPEG_HEADER, "cover.jpg")
+            assert result == "image/jpeg"
 
     def test_valid_png(self) -> None:
         result = validate_image(_PNG_HEADER, "cover.png")

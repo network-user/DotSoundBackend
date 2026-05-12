@@ -14,6 +14,31 @@
 
 ---
 
+## Mini App / ngrok console (2026-05-12)
+
+- [x] **Экран загрузки трека: отступы и без вкладки YouTube**
+  — Больше вертикальных промежутков между шапкой, табами и контентом;
+  panel padding; мастер файла (`ru-up-file-wizard`) с равномерным `gap`;
+  вкладка YouTube скрыта до дальнейшего включения. `UploadView`,
+  `redesign-upload.css`, `global.css` (`#upload-form`), `UploadFileTab`.
+
+- [x] **`/admin/manifest` — лавина запросов при 500**
+  — `AdminContext`: один `useEffect` с отменой in-flight, без цикла
+  `loading`/`failed`; при смене `authTick` манифест перезапрашивается.
+- [x] **`listener_stats_service.py` SyntaxError**
+  — слитая строка `import structlogfrom` разделена на `import structlog`
+  и `from dotsound_private_core...`.
+- [x] **PlayerBar: дубликат `PanInfo`**
+  — один импорт из `framer-motion`, `npm run build` зелёный.
+
+## MIME detection / Windows (2026-05-12)
+
+- [x] **POST `/api/v1/artists/me/avatar` 500 без libmagic**
+  — `file_validator._detect_mime`: при отсутствии `libmagic` (типично
+  Windows без рабочего `python-magic-bin`) используются сигнатуры байтов и
+  Pillow для JPEG/PNG/WebP. Тесты: `TestMimeFromSignatures`,
+  `test_valid_jpeg_when_magic_unavailable`.
+
 ## Track covers display (2026-05-12)
 
 - [x] **Карточка трека / лента**: `cover_key` в ответах подставляется из
@@ -22,6 +47,13 @@
   `test_get_card_falls_back_to_album_cover`.
 
 ## Mini App mobile load (2026-05-12)
+
+- [x] **Telegram Mini App: ложный экран «авторизуйтесь» при живой сессии**
+  — Watchdog 9 с выставлял `needsAuth` до завершения `authTelegram`; при
+  успехе флаг не сбрасывался. Исправлено: `setNeedsAuth(false)` после
+  успешного входа (в т.ч. magic link), watchdog 25 с, до 4 с опроса
+  `initData` внутри Mini App. `frontend/src/App.tsx`, сборка
+  `app/static/mini_app/`.
 
 - [x] **Чёрный экран / долгая «загрузка» в Telegram WebView**
   — Убран warm-boot: мгновенное снятие HTML-лоадера при повторном открытии
@@ -85,6 +117,14 @@
   аватара, кнопки «Загрузить трек» на экране редактирования и на своей
   странице артиста, финальный блок текста/кнопок. Тест:
   `test_cover_proxy_accepts_artist_avatars_prefix`.
+
+- [x] **Приватность публичного профиля + QR под тему**
+  — Миграция `0100_user_profile_visibility`, `ProfileAccessService`, поля
+  `profile_visibility` / `profile_access` в `UserResponse`, 403 на
+  stats/tracks/albums/share-card/followers при скрытом или
+  «только подписчикам» профиле. Настройки в `SettingsSheet`, `AuthorView`:
+  копирование ссылки, модалка QR (`ProfileShareModal` + `initialTab`).
+  Стили QR в `redesign-profile.css`. Тесты: `test_users.py`, `test_user.py`.
 
 ## Mobile player UX (2026-05-12)
 

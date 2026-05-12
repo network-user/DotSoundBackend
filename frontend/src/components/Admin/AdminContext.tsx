@@ -1,9 +1,9 @@
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -90,35 +90,48 @@ export function AdminProvider({
   >({})
   const [authTick, setAuthTick] = useState(0)
   const [langTick, setLangTick] = useState(0)
-
-  const fetchManifest = useCallback(() => {
-    setLoading(true)
-    setFailed(false)
-    api
-      .getAdminManifest(i18n.language)
-      .then((m) => setManifest(m))
-      .catch(() => {
-        setManifest(null)
-        setFailed(true)
-      })
-      .finally(() => setLoading(false))
-  }, [])
+  const prevAuthTickRef = useRef(0)
 
   useEffect(() => {
     if (!getIsAdmin()) return
     if (!api.getToken()) return
     if (authTick === 0) return
-    if (loading) return
-    if (manifest && manifest.locale === i18n.language) {
+    const authBumped = prevAuthTickRef.current !== authTick
+    prevAuthTickRef.current = authTick
+    if (!authBumped && manifest?.locale === i18n.language) {
       return
     }
-    fetchManifest()
+
+    let cancelled = false
+    setLoading(true)
+    setFailed(false)
+    api
+      .getAdminManifest(i18n.language)
+      .then((m) => {
+        if (!cancelled) {
+          setManifest(m)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setManifest(null)
+          setFailed(true)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [
-    fetchManifest,
-    loading,
-    manifest,
     authTick,
     langTick,
+    manifest,
+    i18n.language,
   ])
 
   useEffect(() => {

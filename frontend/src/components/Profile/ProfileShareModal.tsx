@@ -19,21 +19,27 @@ import { showIsland } from '@/lib/island'
 import { formatPlays } from '@/lib/utils'
 import type { ShareCardResponse } from '@/types/api'
 
+type Tab = 'link' | 'qr' | 'card'
+
 interface Props {
   open: boolean
   userId: number
   onClose: () => void
+  initialTab?: Tab
 }
-
-type Tab = 'link' | 'qr' | 'card'
 
 export function ProfileShareModal({
   open,
   userId,
   onClose,
+  initialTab = 'link',
 }: Props) {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<Tab>('link')
+  const [tab, setTab] = useState<Tab>(initialTab)
+
+  useEffect(() => {
+    if (open) setTab(initialTab)
+  }, [open, initialTab])
   const [card, setCard] = useState<ShareCardResponse | null>(
     null,
   )
@@ -74,7 +80,8 @@ export function ProfileShareModal({
     QRCode.toString(shareUrl, {
       type: 'svg',
       margin: 1,
-      color: { dark: '#000000', light: '#ffffff' },
+      errorCorrectionLevel: 'M',
+      color: { dark: '#0a0a0aff', light: '#00000000' },
     })
       .then((svg) => setQrSvg(svg))
       .catch(() => setQrSvg(''))
@@ -207,11 +214,12 @@ export function ProfileShareModal({
           <div className="rp-share-qr">
             {qrSvg ? (
               <div
+                className="rp-share-qr__frame"
                 aria-label="QR"
                 dangerouslySetInnerHTML={{ __html: qrSvg }}
               />
             ) : (
-              <span style={{ color: '#666', fontSize: 12 }}>
+              <span className="rp-share-qr__fail">
                 {t('profile.share.qrFail', 'QR недоступен')}
               </span>
             )}

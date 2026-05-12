@@ -34,7 +34,6 @@ import { useMatchMedia } from '@/hooks/useMatchMedia'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet/AddToPlaylistSheet'
-import { useSwipeX } from '@/hooks/useSwipeX'
 import { useTrackSlidePresence } from '@/hooks/useTrackSlidePresence'
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -45,6 +44,7 @@ const PLATFORM_LABELS: Record<string, string> = {
 }
 
 const SWIPE_UP_THRESHOLD = 80
+const TRACK_SWIPE_PX = 56
 
 export function PlayerBar() {
   const navigate = useNavigate()
@@ -195,7 +195,19 @@ export function PlayerBar() {
     togglePlay()
   }
 
-  const handleDragEnd = (
+  const handleNext = (e: MouseEvent) => {
+    e.stopPropagation()
+    haptic('light')
+    playNext()
+  }
+
+  const handlePrev = (e: MouseEvent) => {
+    e.stopPropagation()
+    haptic('light')
+    playPrev()
+  }
+
+  const handleBarSwipeDragEnd = (
     _: unknown,
     info: PanInfo,
   ) => {
@@ -205,18 +217,19 @@ export function PlayerBar() {
     }
   }
 
-  const coverSwipe = useSwipeX({
-    disabled: desktopFineNav,
-    threshold: 56,
-    onSwipeLeft: () => {
+  const handleTouchTrackSwipeEnd = (
+    _: unknown,
+    info: PanInfo,
+  ) => {
+    const ox = info.offset.x
+    if (ox <= -TRACK_SWIPE_PX) {
       haptic('light')
-      playNext()
-    },
-    onSwipeRight: () => {
+      void playNext()
+    } else if (ox >= TRACK_SWIPE_PX) {
       haptic('light')
-      playPrev()
-    },
-  })
+      void playPrev()
+    }
+  }
 
   const repeatTitle =
     repeatMode === 'none'
@@ -237,6 +250,187 @@ export function PlayerBar() {
         : 'volume-high'
   const telegramUserId = getUserId()
 
+  const coverInner = (
+    <div className="pb-cover-inner">
+      <AnimatePresence initial={false} mode="wait">
+        <m.div
+          key={`${track.id}-${trackChangeSlide.bump}`}
+          className="pb-cover-slide"
+          initial={slidePresence.initial}
+          animate={slidePresence.animate}
+          exit={slidePresence.exit}
+          transition={slidePresence.transition}
+        >
+          {coverSrc ? (
+            <SharedCover
+              trackId={track.id}
+              src={coverSrc}
+              alt=""
+              className="pb-cover-vt"
+            />
+          ) : (
+            <Icon name="music" size={20} />
+          )}
+        </m.div>
+      </AnimatePresence>
+    </div>
+  )
+
+  const desktopCover = (
+    <div
+      className="pb-cover-img pb-clickable pb-cover-with-viz rp-player-cover"
+      onClick={handleOpenCard}
+    >
+      {coverInner}
+    </div>
+  )
+
+  const touchCover = (
+    <div
+      className="pb-cover-img pb-cover-with-viz rp-player-cover"
+      style={{ userSelect: 'none' }}
+    >
+      {coverInner}
+    </div>
+  )
+
+  const renderTrackInfo = () => (
+    <div
+      id="pb-info"
+      className={
+        desktopFineNav ? undefined : 'pb-clickable'
+      }
+    >
+      <div key={track.id} className="pb-info-meta">
+        <div
+          className={
+            desktopFineNav ? 'pb-clickable' : undefined
+          }
+          onClick={
+            desktopFineNav
+              ? handleOpenCard
+              : undefined
+          }
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            minWidth: 0,
+          }}
+        >
+          <p
+            className="pb-title"
+            style={{ flex: 1, minWidth: 0 }}
+            dir="auto"
+          >
+            {track.title}
+          </p>
+          {isPlayingFromCache && (
+            <span
+              className="pb-offline-badge"
+              title={t('offline.playingFromCache', {
+                defaultValue: 'Играет из кэша',
+              })}
+              aria-label={t('offline.playingFromCache', {
+                defaultValue: 'Играет из кэша',
+              })}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                opacity: 0.7,
+                flexShrink: 0,
+              }}
+            >
+              <Icon name="download" size={14} />
+            </span>
+          )}
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            minWidth: 0,
+          }}
+        >
+          {radioMode && (
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
+              className="player-radio-pill"
+              onClick={(e) => {
+                e.stopPropagation()
+                navigate('/radio')
+              }}
+              title={t('redesign.playerBar.radioMode')}
+              ariaLabel={t('redesign.playerBar.radioMode')}
+            >
+              <span
+                className="player-radio-pill__waves"
+                aria-hidden="true"
+              >
+                <span />
+                <span />
+                <span />
+              </span>
+              <span className="player-radio-pill__label">
+                LIVE
+              </span>
+            </MotionPress>
+          )}
+          <p
+            className={
+              desktopFineNav && track.artist
+                ? 'pb-artist hint pb-artist--nav'
+                : 'pb-artist hint'
+            }
+            dir="auto"
+            style={
+              desktopFineNav && track.artist
+                ? {
+                    cursor: 'pointer',
+                    flex: 1,
+                    minWidth: 0,
+                  }
+                : { flex: 1, minWidth: 0 }
+            }
+            onClick={
+              desktopFineNav && track.artist
+                ? (e) => {
+                    e.stopPropagation()
+                    void goArtistByName(track.artist)
+                  }
+                : undefined
+            }
+          >
+            {track.artist ?? '—'}
+          </p>
+        </div>
+      </div>
+      {track.source_platform &&
+        track.source_platform !== 'soundcloud' &&
+        track.source_url && (
+          <a
+            className="pb-source-link"
+            href={track.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            title={`Слушать на ${PLATFORM_LABELS[track.source_platform] ?? track.source_platform}`}
+          >
+            <Icon
+              name={`source-${track.source_platform}`}
+              size={12}
+            />
+            <span>
+              {PLATFORM_LABELS[track.source_platform] ??
+                track.source_platform}
+            </span>
+          </a>
+        )}
+    </div>
+  )
+
   return (
     <>
     <m.div
@@ -253,7 +447,7 @@ export function PlayerBar() {
       dragConstraints={{ top: -8, bottom: 0 }}
       dragElastic={0.25}
       dragMomentum={false}
-      onDragEnd={handleDragEnd}
+      onDragEnd={handleBarSwipeDragEnd}
       transition={SPRING_GENTLE}
     >
       {desktopFineNav ? (
@@ -291,192 +485,44 @@ export function PlayerBar() {
       />
 
       <div id="pb-row" className="pb-row-v2">
-        <div
-          className="pb-cover-img pb-clickable pb-cover-with-viz rp-player-cover"
-          onClick={handleOpenCard}
-          {...(desktopFineNav ? {} : coverSwipe)}
-          style={
-            desktopFineNav
-              ? undefined
-              : {
-                  touchAction: 'pan-x pan-y',
-                  userSelect: 'none',
-                }
-          }
-        >
-          <div className="pb-cover-inner">
-            <AnimatePresence
-              initial={false}
-              mode="wait"
-            >
-              <m.div
-                key={`${track.id}-${trackChangeSlide.bump}`}
-                className="pb-cover-slide"
-                initial={slidePresence.initial}
-                animate={slidePresence.animate}
-                exit={slidePresence.exit}
-                transition={slidePresence.transition}
-              >
-                {coverSrc ? (
-                  <SharedCover
-                    trackId={track.id}
-                    src={coverSrc}
-                    alt=""
-                    className="pb-cover-vt"
-                  />
-                ) : (
-                  <Icon name="music" size={20} />
-                )}
-              </m.div>
-            </AnimatePresence>
-          </div>
-        </div>
-
-        <div
-          id="pb-info"
-          className={
-            desktopFineNav ? undefined : 'pb-clickable'
-          }
-          onClick={
-            desktopFineNav ? undefined : handleOpenCard
-          }
-        >
-          <div
-            key={track.id}
-            className="pb-info-meta"
+        {desktopFineNav ? (
+          <>
+            {desktopCover}
+            {renderTrackInfo()}
+          </>
+        ) : (
+          <m.div
+            className="pb-swipe-track"
+            drag={reduce ? false : 'x'}
+            dragConstraints={{ left: -92, right: 92 }}
+            dragElastic={0.22}
+            dragMomentum={false}
+            dragTransition={{
+              bounceStiffness: 440,
+              bounceDamping: 30,
+            }}
+            onDragEnd={handleTouchTrackSwipeEnd}
+            onTap={() => {
+              openCard()
+            }}
           >
-            <div
-              className={
-                desktopFineNav ? 'pb-clickable' : undefined
-              }
-              onClick={
-                desktopFineNav
-                  ? handleOpenCard
-                  : undefined
-              }
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                minWidth: 0,
-              }}
-            >
-              <p
-                className="pb-title"
-                style={{ flex: 1, minWidth: 0 }}
-                dir="auto"
-              >
-                {track.title}
-              </p>
-              {isPlayingFromCache && (
-                <span
-                  className="pb-offline-badge"
-                  title={t('offline.playingFromCache', {
-                    defaultValue: 'Играет из кэша',
-                  })}
-                  aria-label={t('offline.playingFromCache', {
-                    defaultValue: 'Играет из кэша',
-                  })}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    opacity: 0.7,
-                    flexShrink: 0,
-                  }}
-                >
-                  <Icon name="download" size={14} />
-                </span>
-              )}
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                minWidth: 0,
-              }}
-            >
-              {radioMode && (
-                <MotionPress
-                  variant="ghost"
-                  haptic="selection"
-                  className="player-radio-pill"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    navigate('/radio')
-                  }}
-                  title={t('redesign.playerBar.radioMode')}
-                  ariaLabel={t('redesign.playerBar.radioMode')}
-                >
-                  <span
-                    className="player-radio-pill__waves"
-                    aria-hidden="true"
-                  >
-                    <span />
-                    <span />
-                    <span />
-                  </span>
-                  <span className="player-radio-pill__label">
-                    LIVE
-                  </span>
-                </MotionPress>
-              )}
-              <p
-                className={
-                  desktopFineNav && track.artist
-                    ? 'pb-artist hint pb-artist--nav'
-                    : 'pb-artist hint'
-                }
-                dir="auto"
-                style={
-                  desktopFineNav && track.artist
-                    ? {
-                        cursor: 'pointer',
-                        flex: 1,
-                        minWidth: 0,
-                      }
-                    : { flex: 1, minWidth: 0 }
-                }
-                onClick={
-                  desktopFineNav && track.artist
-                    ? (e) => {
-                        e.stopPropagation()
-                        void goArtistByName(track.artist)
-                      }
-                    : undefined
-                }
-              >
-                {track.artist ?? '—'}
-              </p>
-            </div>
-          </div>
-          {track.source_platform &&
-            track.source_platform !== 'soundcloud' &&
-            track.source_url && (
-              <a
-                className="pb-source-link"
-                href={track.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) =>
-                  e.stopPropagation()
-                }
-                title={`Слушать на ${PLATFORM_LABELS[track.source_platform] ?? track.source_platform}`}
-              >
-                <Icon
-                  name={`source-${track.source_platform}`}
-                  size={12}
-                />
-                <span>
-                  {PLATFORM_LABELS[
-                    track.source_platform
-                  ] ?? track.source_platform}
-                </span>
-              </a>
-            )}
-        </div>
+            {touchCover}
+            {renderTrackInfo()}
+          </m.div>
+        )}
 
         <div id="pb-controls" className="pb-ctl-v2">
+          {desktopFineNav ? (
+            <MotionPress
+              variant="icon"
+              className="ctrl-btn pb-prev"
+              onClick={handlePrev}
+              ariaLabel="Предыдущий"
+              haptic="light"
+            >
+              <Icon name="skip-back" size={18} />
+            </MotionPress>
+          ) : null}
           <MotionPress
             ref={playRef}
             variant="icon"
@@ -500,6 +546,17 @@ export function PlayerBar() {
               />
             </BeatPulse>
           </MotionPress>
+          {desktopFineNav ? (
+            <MotionPress
+              variant="icon"
+              className="ctrl-btn"
+              onClick={handleNext}
+              ariaLabel="Следующий"
+              haptic="light"
+            >
+              <Icon name="skip-forward" size={18} />
+            </MotionPress>
+          ) : null}
           {showBarVolume ? (
             <div
               className="pb-volume-wrap"

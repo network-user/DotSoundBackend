@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,6 +30,10 @@ class UserResponse(BaseModel):
     is_active: bool
     is_admin: bool = False
     locale: str | None = None
+    profile_visibility: Literal["public", "followers_only", "hidden"] = (
+        "public"
+    )
+    profile_access: Literal["full", "limited"] = "full"
     created_at: datetime
 
 
@@ -42,6 +47,9 @@ class UserUpdateRequest(BaseModel):
     locale: str | None = Field(
         None, max_length=10
     )
+    profile_visibility: (
+        Literal["public", "followers_only", "hidden"] | None
+    ) = None
 
 
 class DeleteAccountRequest(BaseModel):

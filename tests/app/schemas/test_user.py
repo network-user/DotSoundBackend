@@ -53,6 +53,13 @@ def test_user_response_valid() -> None:
     assert resp.auth_provider == "telegram"
     assert resp.totp_enabled is False
     assert resp.is_admin is False
+    assert resp.profile_visibility == "public"
+    assert resp.profile_access == "full"
+
+
+def test_user_update_profile_visibility() -> None:
+    req = UserUpdateRequest(profile_visibility="hidden")
+    assert req.profile_visibility == "hidden"
 
 
 def test_user_response_missing_required() -> None:

@@ -5,7 +5,11 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
-from app.dependencies import get_current_user, get_db
+from app.dependencies import (
+    get_current_user,
+    get_db,
+    get_optional_user,
+)
 from app.models.user import User
 from app.schemas.follow import (
     FollowerResponse,
@@ -13,6 +17,7 @@ from app.schemas.follow import (
     FollowToggleResponse,
 )
 from app.services.follow_service import FollowService
+from app.services.profile_access_service import ProfileAccessService
 
 router = APIRouter(prefix="/users", tags=["follows"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -50,7 +55,7 @@ async def follow_status(
     user_id: int,
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict:
+) -> dict[str, bool]:
     service = FollowService(session)
     is_following = await service.is_following(
         follower_id=current_user.id,
@@ -71,8 +76,11 @@ async def list_followers(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
 ) -> FollowListResponse:
     structlog.contextvars.bind_contextvars(user_id=user_id)
+    access = ProfileAccessService(session)
+    await access.require_extended(viewer, user_id)
     service = FollowService(session)
     users, total = await service.list_followers(user_id, page, size)
     items = [FollowerResponse.model_validate(u) for u in users]
@@ -91,8 +99,11 @@ async def list_following(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_db),
+    viewer: User | None = Depends(get_optional_user),
 ) -> FollowListResponse:
     structlog.contextvars.bind_contextvars(user_id=user_id)
+    access = ProfileAccessService(session)
+    await access.require_extended(viewer, user_id)
     service = FollowService(session)
     users, total = await service.list_following(user_id, page, size)
     items = [FollowerResponse.model_validate(u) for u in users]

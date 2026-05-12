@@ -140,3 +140,76 @@ async def test_debug_reset_onboarding_404_when_not_debug(
         headers=headers,
     )
     assert r.status_code == 404
+
+
+async def test_get_user_includes_profile_access_fields(
+    client: AsyncClient,
+) -> None:
+    created = await create_test_user(
+        client, 88001, username="pubpa"
+    )
+    uid = int(created["id"])
+    r = await client.get(f"/api/v1/users/{uid}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["profile_access"] == "full"
+    assert body["profile_visibility"] == "public"
+
+
+async def test_hidden_profile_stats_blocked_for_others(
+    client: AsyncClient,
+) -> None:
+    owner = await create_test_user(
+        client, 88002, username="hidu2"
+    )
+    oid = int(owner["id"])
+    h = await auth_headers(client, 88002)
+    patch = await client.patch(
+        "/api/v1/users/me",
+        headers=h,
+        json={"profile_visibility": "hidden"},
+    )
+    assert patch.status_code == 200
+    stats_other = await client.get(
+        f"/api/v1/users/{oid}/stats",
+    )
+    assert stats_other.status_code == 403
+    prof = await client.get(f"/api/v1/users/{oid}")
+    assert prof.status_code == 200
+    assert prof.json()["profile_access"] == "limited"
+    stats_own = await client.get(
+        f"/api/v1/users/{oid}/stats",
+        headers=h,
+    )
+    assert stats_own.status_code == 200
+
+
+async def test_followers_only_profile_stats_after_follow(
+    client: AsyncClient,
+) -> None:
+    a = await create_test_user(client, 88033, username="ownf33")
+    await create_test_user(client, 88044, username="visf44")
+    aid = int(a["id"])
+    ha = await auth_headers(client, 88033)
+    hb = await auth_headers(client, 88044)
+    pa = await client.patch(
+        "/api/v1/users/me",
+        headers=ha,
+        json={"profile_visibility": "followers_only"},
+    )
+    assert pa.status_code == 200
+    denied = await client.get(
+        f"/api/v1/users/{aid}/stats",
+        headers=hb,
+    )
+    assert denied.status_code == 403
+    fo = await client.post(
+        f"/api/v1/users/{aid}/follow",
+        headers=hb,
+    )
+    assert fo.status_code == 200
+    ok = await client.get(
+        f"/api/v1/users/{aid}/stats",
+        headers=hb,
+    )
+    assert ok.status_code == 200
