@@ -335,7 +335,7 @@ export function NowPlayingView() {
               desktopFineNav
                 ? undefined
                 : {
-                    touchAction: 'pan-x pan-y',
+                    touchAction: 'pan-y',
                     userSelect: 'none',
                   }
             }

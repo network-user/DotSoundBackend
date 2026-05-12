@@ -503,7 +503,9 @@ export function FullscreenLyrics({
               'redesign.player.nextAria',
               'Next track',
             )}
-            onClick={playNext}
+            onClick={() => {
+              void playNext()
+            }}
           >
             <Icon name="skip-forward" size={18} />
           </MotionPress>

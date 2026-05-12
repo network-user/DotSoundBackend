@@ -361,7 +361,16 @@ export class PrefetchManager {
     const eligible: PrefetchInputTrack[] = []
     for (const track of tracks) {
       if (eligible.length >= lookahead) break
-      if (!track || typeof track.id !== 'number') continue
+      if (!track) continue
+      const tid = track.id
+      if (
+        typeof tid !== 'number' ||
+        !Number.isFinite(tid) ||
+        !Number.isInteger(tid) ||
+        tid <= 0
+      ) {
+        continue
+      }
       if (this.warmTrackIds.has(track.id)) {
         this._touchHot(track.id)
         continue

@@ -18,6 +18,7 @@ from app.models.artist import Artist
 from app.repositories.artist import ArtistRepository
 from app.repositories.artist_catalog import ArtistCatalogRepository
 from app.services import artist_catalog_sync_progress as acsp
+from app.services.artist_service import ArtistService
 from app.services.soundcloud_service import (
     SoundCloudService,
     synthetic_soundcloud_id_for_artist_station,
@@ -401,6 +402,8 @@ class ArtistCatalogSyncService:
                 kept=len(clipped),
                 dropped=len(tracks_list) - len(clipped),
             )
+        is_station = rk == DOTSOUND_SC_ARTIST_STATION_RELEASE_KIND
+        artist_svc = ArtistService(self._session) if is_station else None
         ordered_ids: list[int] = []
         for idx, tr in enumerate(clipped):
             if not isinstance(tr, dict):
@@ -410,10 +413,32 @@ class ArtistCatalogSyncService:
                 settings.catalog_uploader_id,
                 skip_background_lyrics=skip_background_lyrics,
             )
-            await self._artists.link_track(
-                track.id,
-                artist_id,
-                position=idx,
-            )
+            if is_station:
+                # Station tracks belong to *other* (similar) artists,
+                # not to the seed artist whose page hosts the station.
+                # Linking them to seed_artist_id would poison
+                # `GET /artists/{seed}/tracks` with foreign tracks.
+                # Instead, resolve and link the track's real artist
+                # string so the proper artist page picks them up.
+                if track.artist and artist_svc is not None:
+                    try:
+                        await artist_svc.resolve_and_link(
+                            track_id=track.id,
+                            raw_artist_string=track.artist,
+                            source="soundcloud",
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "station_track_real_artist_link_failed",
+                            artist_id=artist_id,
+                            track_id=track.id,
+                            error=str(exc),
+                        )
+            else:
+                await self._artists.link_track(
+                    track.id,
+                    artist_id,
+                    position=idx,
+                )
             ordered_ids.append(track.id)
         await self._catalog.replace_release_tracks(rel.id, ordered_ids)

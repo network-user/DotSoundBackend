@@ -75,37 +75,47 @@ export function SettingsPickerModal({
                 onClose()
               }}
             >
-              {optionLayout === 'stacked' ? (
-                <>
-                  <div className="spmodal__pill-text">
-                    <span className="spmodal__pill-label">{opt.label}</span>
-                    {opt.sublabel && (
-                      <span className="spmodal__pill-sub">{opt.sublabel}</span>
+              <div className="spmodal__pill-inner">
+                {optionLayout === 'stacked' ? (
+                  <>
+                    <div className="spmodal__pill-text">
+                      <span className="spmodal__pill-label">
+                        {opt.label}
+                      </span>
+                      {opt.sublabel && (
+                        <span className="spmodal__pill-sub">
+                          {opt.sublabel}
+                        </span>
+                      )}
+                    </div>
+                    {value === opt.value && (
+                      <Icon
+                        name="check"
+                        size={14}
+                        className="spmodal__pill-check"
+                      />
                     )}
-                  </div>
-                  {value === opt.value && (
-                    <Icon
-                      name="check"
-                      size={14}
-                      className="spmodal__pill-check"
-                    />
-                  )}
-                </>
-              ) : (
-                <>
-                  <span className="spmodal__pill-label">{opt.label}</span>
-                  {opt.sublabel && (
-                    <span className="spmodal__pill-sub">{opt.sublabel}</span>
-                  )}
-                  {value === opt.value && (
-                    <Icon
-                      name="check"
-                      size={14}
-                      className="spmodal__pill-check"
-                    />
-                  )}
-                </>
-              )}
+                  </>
+                ) : (
+                  <>
+                    <span className="spmodal__pill-label">
+                      {opt.label}
+                    </span>
+                    {opt.sublabel && (
+                      <span className="spmodal__pill-sub">
+                        {opt.sublabel}
+                      </span>
+                    )}
+                    {value === opt.value && (
+                      <Icon
+                        name="check"
+                        size={14}
+                        className="spmodal__pill-check"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
             </MotionPress>
           ))}
         </div>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
@@ -118,6 +118,8 @@ export function SettingsSheet({
   const [cacheLimitModalOpen, setCacheLimitModalOpen] =
     useState(false)
   const [ttlModalOpen, setTtlModalOpen] = useState(false)
+  const [profilePrivacyModalOpen, setProfilePrivacyModalOpen] =
+    useState(false)
   const [accountExpanded, setAccountExpanded] =
     useState(false)
   const [profileVisibility, setProfileVisibility] = useState<
@@ -374,6 +376,47 @@ export function SettingsSheet({
     TTL_OPTIONS.find(
       (o) => o.value === String(ttlDays),
     )?.label ?? `${ttlDays} дн.`
+
+  const profilePrivacyOptions = useMemo(
+    () => [
+      {
+        value: 'public',
+        label: t('settings.profilePrivacyPublic', {
+          defaultValue: 'Открытый',
+        }),
+        sublabel: t('settings.profilePrivacyPublicSub', {
+          defaultValue:
+            'Профиль, треки, статистика и подписки видны всем, кто открывает страницу.',
+        }),
+      },
+      {
+        value: 'followers_only',
+        label: t('settings.profilePrivacyFollowers', {
+          defaultValue: 'Только подписчикам',
+        }),
+        sublabel: t('settings.profilePrivacyFollowersSub', {
+          defaultValue:
+            'Полный профиль, треки и статистика видны только тем, кто подписан на вас.',
+        }),
+      },
+      {
+        value: 'hidden',
+        label: t('settings.profilePrivacyHidden', {
+          defaultValue: 'Скрытый',
+        }),
+        sublabel: t('settings.profilePrivacyHiddenSub', {
+          defaultValue:
+            'Расширенный профиль и шаринг недоступны другим: минимальная публичная карточка без лишних данных.',
+        }),
+      },
+    ],
+    [t],
+  )
+
+  const profilePrivacyLabel =
+    profilePrivacyOptions.find(
+      (o) => o.value === profileVisibility,
+    )?.label ?? '—'
 
   return (
     <>
@@ -789,93 +832,29 @@ export function SettingsSheet({
               type="button"
               variant="ghost"
               haptic="light"
-              className={`settings-item settings-privacy-option${
-                profileVisibility === 'public'
-                  ? ' settings-privacy-option--on'
-                  : ''
-              }`}
-              onClick={() => void handleProfileVisibility('public')}
+              className="settings-item settings-item--nav"
+              onClick={() => {
+                feedbackTap()
+                setProfilePrivacyModalOpen(true)
+              }}
             >
-              <Icon name="users-listeners" size={20} />
+              <Icon name="eye" size={20} />
               <span>
-                {t('settings.profilePrivacyPublic', {
-                  defaultValue: 'Открытый',
+                {t('settings.profilePrivacyChoice', {
+                  defaultValue: 'Видимость профиля',
                 })}
-                <span className="settings-privacy-sub">
-                  {t('settings.profilePrivacyPublicSub', {
-                    defaultValue:
-                      'Треки, статистика и подписки видны всем',
-                  })}
-                </span>
               </span>
-              {profileVisibility === 'public' ? (
-                <Icon name="check" size={16} />
-              ) : (
-                <span style={{ width: 16 }} />
-              )}
+              <span className="settings-item-value">
+                {profilePrivacyLabel}
+              </span>
+              <Icon
+                name="chevron"
+                size={16}
+                className="settings-chevron"
+              />
             </MotionPress>
 
-            <MotionPress
-              type="button"
-              variant="ghost"
-              haptic="light"
-              className={`settings-item settings-privacy-option${
-                profileVisibility === 'followers_only'
-                  ? ' settings-privacy-option--on'
-                  : ''
-              }`}
-              onClick={() => void handleProfileVisibility('followers_only')}
-            >
-              <Icon name="users-following" size={20} />
-              <span>
-                {t('settings.profilePrivacyFollowers', {
-                  defaultValue: 'Только подписчикам',
-                })}
-                <span className="settings-privacy-sub">
-                  {t('settings.profilePrivacyFollowersSub', {
-                    defaultValue:
-                      'Полный профиль виден только тем, кто подписан',
-                  })}
-                </span>
-              </span>
-              {profileVisibility === 'followers_only' ? (
-                <Icon name="check" size={16} />
-              ) : (
-                <span style={{ width: 16 }} />
-              )}
-            </MotionPress>
-
-            <MotionPress
-              type="button"
-              variant="ghost"
-              haptic="light"
-              className={`settings-item settings-privacy-option${
-                profileVisibility === 'hidden'
-                  ? ' settings-privacy-option--on'
-                  : ''
-              }`}
-              onClick={() => void handleProfileVisibility('hidden')}
-            >
-              <Icon name="cloud-off" size={20} />
-              <span>
-                {t('settings.profilePrivacyHidden', {
-                  defaultValue: 'Скрытый',
-                })}
-                <span className="settings-privacy-sub">
-                  {t('settings.profilePrivacyHiddenSub', {
-                    defaultValue:
-                      'Расширенный профиль и шаринг недоступны другим',
-                  })}
-                </span>
-              </span>
-              {profileVisibility === 'hidden' ? (
-                <Icon name="check" size={16} />
-              ) : (
-                <span style={{ width: 16 }} />
-              )}
-            </MotionPress>
-
-            <div className="settings-section-gap--md" />
+            <div className="settings-section-gap" />
 
             <button
               type="button"
@@ -907,7 +886,7 @@ export function SettingsSheet({
               </span>
             </MotionPress>
 
-            <div className="settings-section-gap--xl" />
+            <div className="settings-section-gap--sm" />
 
             <MotionPress
               type="button"
@@ -1018,6 +997,26 @@ export function SettingsSheet({
         options={TTL_OPTIONS}
         value={String(ttlDays)}
         onChange={handleTtlChange}
+      />
+
+      <SettingsPickerModal
+        open={profilePrivacyModalOpen}
+        onClose={() => setProfilePrivacyModalOpen(false)}
+        title={t('settings.profilePrivacy', {
+          defaultValue: 'Профиль для других',
+        })}
+        description={t('settings.profilePrivacyPickerDesc', {
+          defaultValue:
+            'Кто видит ваш профиль, публичные треки и статистику. Изменить можно в любой момент.',
+        })}
+        options={profilePrivacyOptions}
+        value={profileVisibility}
+        onChange={(value) =>
+          void handleProfileVisibility(
+            value as 'public' | 'followers_only' | 'hidden',
+          )
+        }
+        optionLayout="stacked"
       />
     </>
   )

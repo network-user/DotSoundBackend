@@ -1651,19 +1651,33 @@ export const api = {
   warmTrackStreamCache(
     trackIds: number[],
   ): Promise<AcceptedResponse> {
-    const ids = trackIds.filter(
-      (id) =>
-        typeof id === 'number' &&
-        Number.isFinite(id) &&
-        id > 0,
-    )
+    const ids: number[] = []
+    for (const raw of trackIds) {
+      let n: number
+      if (typeof raw === 'number') {
+        n = raw
+      } else if (typeof raw === 'string') {
+        n = Number.parseInt(raw, 10)
+      } else {
+        continue
+      }
+      if (
+        Number.isFinite(n) &&
+        Number.isInteger(n) &&
+        n > 0
+      ) {
+        ids.push(n)
+      }
+    }
     if (ids.length === 0) {
       return Promise.resolve({ accepted: 0 })
     }
+    const cap = 2000
+    const slice = ids.slice(0, cap)
     return request('/api/v1/tracks/prefetch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ track_ids: ids }),
+      body: JSON.stringify({ track_ids: slice }),
     })
   },
 

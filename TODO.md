@@ -12,12 +12,71 @@
 - `[x]` - завершено
 - `[-]` - отменено / неактуально
 
+- [x] **Главная: скелетоны без конца при pull-to-refresh / зависших запросах**
+  — При ошибке `getHomeRecommendations` после refresh `sections` оставался
+  `null` (вечный скелетон «Продолжить»); catch теперь зеркалит первый mount
+  (`setSections([])` + `getTracks` fallback). Watchdog 22s на первый заход:
+  сброс `null` → `[]` и попытка fallback. Нормализация `data.sections`.
+  Карточка трека: `setLoading(false)` при закрытии до ответа `getTrackCard`.
+  `HomeView.tsx`, `TrackCardSheet.tsx`.
+
+- [x] **Радио и карточка трека: волны на мобильных и реакция на звук**
+  — На `ds-perf-lite` анализатор больше не отключается (FFT 128 вместо 256);
+  в карточке трека волны (`Waveform`) показываются при `isPlaying` даже на телефоне;
+  KenBurns + Ambient по-прежнему только без perf-lite. Плашка LIVE в плеере:
+  `SpectrumMicroBars` по данным анализатора; при `prefers-reduced-motion` — CSS-полоски.
+
+- [x] **Плеер: без автоперехода по prefetch после трека вне радио**
+  — При естественном `ended` вызывается `playNext({ afterNaturalEnd: true })`;
+  ветка `prefetchCacheRef` (рекомендации / `getTrackQueue`) не срабатывает,
+  если не `radioMode` (очередь и дозаполнение радио без изменений);
+  `onClick={playNext}` заменён на обёртку из‑за сигнатуры с опциями.
+  `frontend/src/store/PlayerContext.tsx`, `FullscreenLyrics.tsx`,
+  `TrackCardSheet.tsx`.
+
 - [x] **Инициализация: таймауты 12s/25s не сбрасывают авторизацию при живой сессии**
   — Watchdog не вызывает `setNeedsAuth(true)`, если `api.hasSession()`;
   в `finally` инициализации при наличии сессии `setNeedsAuth(false)`
   (гонка с медленным `fetchAndApplyAdminPath` / `syncSessionUserFlags`).
   Chunked upload: `Authorization` из ключа `auth-token`, не `dotsound:token`.
   `frontend/src/App.tsx`, `frontend/src/lib/chunkedUploader.ts`.
+
+---
+
+## Catalog sync / artist page (2026-05-13)
+
+- [x] **Артист: «Похожее: Giza» примешивалось в популярные треки автора**
+  — `_sync_one_album_expanded` при синхронизации станции
+  (`release_kind = "dotsound_sc_artist_station"`) линковал чужие треки
+  на seed-артиста через `TrackArtist`, поэтому `GET /artists/{id}/tracks`
+  отдавал песни рекомендованных, а не самого артиста. Теперь для станций
+  `link_track(seed)` не вызывается; вместо этого через
+  `ArtistService.resolve_and_link(track.id, track.artist)` каждый трек
+  станции линкуется к своему настоящему артисту. Тест
+  `test_station_sync_does_not_link_foreign_tracks_to_seed` фиксирует
+  регрессию. Для очистки уже залитых грязных связей —
+  `scripts/cleanup_station_artist_links.py` (dry-run по умолчанию,
+  `--apply` для удаления).
+
+---
+
+## Settings sheet UI (2026-05-13)
+
+- [x] **Настройки: видимость профиля через picker, отступы, рекомендации**
+  — Профиль для других: `SettingsPickerModal` со stacked-опциями и описаниями;
+    между «О приложении» и корзиной — `settings-section-gap--sm`;
+    секция рекомендаций: заголовок как у разделов, CTA «Сбросить рекомендации»,
+    текст без онбординга, десктоп-диалог по центру с max-width;
+    `SettingsPickerModal` `optionLayout`, i18n `i18n_extra_*`.
+
+- [x] **POST `/api/v1/tracks/prefetch` 422 + падение настроек из-за тела запроса**
+  — Параметр `body: PrefetchRequest` FastAPI трактовал как query; переименован
+    в `payload` + `Body(...)`, убран `from __future__ import annotations` в
+    `prefetch.py`; лимит списка через константу + срез по `_effective_prefetch_cap()`
+    (в т.ч. при `audio_cache_prefetch_max_ids=0`); тесты
+    `tests/app/api/v1/tracks/test_tracks_prefetch_post.py`; фронт: нормализация id
+    в `warmTrackStreamCache`, фильтр id в `PrefetchManager`, обёртка
+    `spmodal__pill-inner`.
 
 ---
 

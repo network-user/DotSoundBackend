@@ -829,45 +829,15 @@
  * .mp-zone is the draggable row that replaces pb-swipe-track
  * ============================================================ */
 
-/* Restore original touch seek strip (3px, progress-only) */
+/* MiniPlayerBar has its own seek bar — hide legacy strip in touch mode */
 .rp-player-bar--touch #pb-seek-wrap {
-  height: 3px;
-  max-height: 3px;
-  min-height: 0;
-  overflow: hidden;
-  line-height: 0;
-  flex-shrink: 0;
-}
-
-.rp-player-bar--touch #pb-seek {
-  height: 3px;
-  max-height: 3px;
-  margin: 0;
-  padding: 0;
-  vertical-align: top;
-  pointer-events: none;
-}
-
-.rp-player-bar--touch #pb-seek::-webkit-slider-runnable-track {
-  height: 3px;
-}
-
-.rp-player-bar--touch #pb-seek::-moz-range-track,
-.rp-player-bar--touch #pb-seek::-moz-range-progress {
-  height: 3px;
-}
-
-.rp-player-bar--touch #pb-seek::-webkit-slider-thumb {
   display: none;
 }
 
-.rp-player-bar--touch #pb-seek::-moz-range-thumb {
-  display: none;
-}
-
-/* Touch player height — slightly taller than before */
+/* Touch player height — zone (62px) + seek bar (26px) */
 .rp-player-bar--touch {
-  --player-h: 80px;
+  --player-h: 88px;
+  --mp-seek-h: 26px;
 }
 
 .mp-zone {
@@ -876,39 +846,102 @@
   align-items: center;
   gap: 8px;
   padding: 0 6px 0 10px;
-  /* subtract the 3px seek strip so mp-zone fills the rest */
-  height: calc(var(--player-h) - 3px);
+  height: calc(var(--player-h) - var(--mp-seek-h, 26px));
   overflow: hidden;
-  cursor: grab;
+  touch-action: pan-y;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
 
-.mp-zone:active {
-  cursor: grabbing;
-}
-
-/* Swipe direction arrows */
-.mp-dir {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: var(--text-secondary);
+/* Swipeable inner wrapper: cover + info, fills remaining space */
+.mp-swipe-content {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  z-index: 2;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.mp-dir--prev {
-  left: 6px;
+/* ── Seek bar — sibling to mp-zone ───────────────── */
+.mp-seek-wrap {
+  height: var(--mp-seek-h, 26px);
+  display: flex;
+  align-items: center;
+  touch-action: none;
+  padding: 0 2px;
+  box-sizing: border-box;
 }
 
-.mp-dir--next {
-  right: 6px;
+.mp-seek {
+  width: 100%;
+  height: var(--mp-seek-h, 26px);
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  margin: 0;
+  padding: 0;
+  display: block;
+}
+
+.mp-seek::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) var(--progress, 0%),
+    rgba(255, 255, 255, 0.2) var(--progress, 0%),
+    rgba(255, 255, 255, 0.2) 100%
+  );
+}
+
+.mp-seek::-moz-range-track {
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.mp-seek::-moz-range-progress {
+  height: 5px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.mp-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.mp-seek::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.mp-seek:active::-webkit-slider-thumb,
+.mp-seek:focus-visible::-webkit-slider-thumb {
+  opacity: 1;
+}
+
+.mp-seek:active::-moz-range-thumb,
+.mp-seek:focus-visible::-moz-range-thumb {
+  opacity: 1;
 }
 
 /* Album cover */
@@ -1099,7 +1132,8 @@
 
 @media (max-width: 360px) {
   .rp-player-bar--touch {
-    --player-h: 74px;
+    --player-h: 82px;
+    --mp-seek-h: 24px;
   }
 
   .mp-cover {
@@ -1119,7 +1153,8 @@
 
 @media (orientation: landscape) and (max-height: 500px) {
   .rp-player-bar--touch {
-    --player-h: 58px;
+    --player-h: 64px;
+    --mp-seek-h: 22px;
   }
 
   .mp-cover {

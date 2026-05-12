@@ -55,6 +55,15 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return out
 }
 
+const HOME_DATA_WATCHDOG_MS = 22_000
+
+function normalizeHomeSections(
+  raw: HomeSection[] | null | undefined,
+): HomeSection[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+}
+
 function SkeletonBlock({ className }: { className: string }) {
   return <div className={`skeleton ${className}`} />
 }
@@ -349,6 +358,27 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
   } | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+    const watchdogId = window.setTimeout(() => {
+      if (cancelled) return
+      setSections((s) => (s === null ? [] : s))
+      setGenreMixes((g) => (g === null ? [] : g))
+      setFollowedArtists((f) => (f === null ? [] : f))
+      setRecentlyPlayed((r) => (r === null ? [] : r))
+      void api
+        .getTracks({ size: 50 })
+        .then((data) => {
+          if (cancelled) return
+          setFallbackTracks((fb) =>
+            fb === null ? data.items : fb,
+          )
+        })
+        .catch(() => {
+          if (cancelled) return
+          setFallbackTracks((fb) => (fb === null ? [] : fb))
+        })
+    }, HOME_DATA_WATCHDOG_MS)
+
     const uid = getInternalUserId()
     if (uid) {
       api.getUserProfile(uid).then(setMe).catch(() => {})
@@ -357,9 +387,11 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     api
       .getHomeRecommendations()
       .then((data) => {
-        setSections(data.sections)
+        if (cancelled) return
+        setSections(normalizeHomeSections(data.sections))
       })
       .catch(() => {
+        if (cancelled) return
         api
           .getTracks({ size: 50 })
           .then((data) => setFallbackTracks(data.items))
@@ -368,23 +400,52 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
 
     api
       .getHomeHighlight()
-      .then((res) => setHighlight(res ?? null))
-      .catch(() => setHighlight(null))
+      .then((res) => {
+        if (cancelled) return
+        setHighlight(res ?? null)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setHighlight(null)
+      })
 
     api
       .getGenreMixes()
-      .then((data) => setGenreMixes(data.mixes))
-      .catch(() => setGenreMixes([]))
+      .then((data) => {
+        if (cancelled) return
+        setGenreMixes(data.mixes)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setGenreMixes([])
+      })
 
     api
       .getFollowedArtistsList(30)
-      .then((data) => setFollowedArtists(data.items))
-      .catch(() => setFollowedArtists([]))
+      .then((data) => {
+        if (cancelled) return
+        setFollowedArtists(data.items)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setFollowedArtists([])
+      })
 
     api
       .getListenHistory(20)
-      .then((data) => setRecentlyPlayed(data.items))
-      .catch(() => setRecentlyPlayed([]))
+      .then((data) => {
+        if (cancelled) return
+        setRecentlyPlayed(data.items)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setRecentlyPlayed([])
+      })
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(watchdogId)
+    }
   }, [])
 
   const handleRefresh = useCallback(async () => {
@@ -395,9 +456,15 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     await Promise.allSettled([
       api
         .getHomeRecommendations()
-        .then((data) => setSections(data.sections))
+        .then((data) =>
+          setSections(normalizeHomeSections(data.sections)),
+        )
         .catch(() => {
-          setFallbackTracks([])
+          setSections([])
+          return api
+            .getTracks({ size: 50 })
+            .then((data) => setFallbackTracks(data.items))
+            .catch(() => setFallbackTracks([]))
         }),
       api
         .getGenreMixes()

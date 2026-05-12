@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.artist import Artist
+from app.models.artist import Artist, TrackArtist
 from app.models.artist_catalog import (
     ArtistCatalogRelease,
     ArtistCatalogReleaseTrack,
@@ -517,3 +517,122 @@ async def test_sync_artist_similar_station_writes_release(
     assert "Похожее" in rel.title
     assert "Zed" in rel.title
     assert rel.release_kind == DOTSOUND_SC_ARTIST_STATION_RELEASE_KIND
+
+
+@patch(
+    "app.services.artist_catalog_sync_service.SoundCloudService",
+)
+async def test_station_sync_does_not_link_foreign_tracks_to_seed(
+    mock_sc_cls: MagicMock,
+    session: AsyncSession,
+) -> None:
+    """Regression: «Похожее: Giza» content used to be linked to Giza
+    via TrackArtist, polluting `/artists/{giza}/tracks`. Station
+    tracks belong to *other* artists and must not be linked to seed.
+    """
+    seed = Artist(
+        name="Giza",
+        name_normalized="giza",
+        soundcloud_user_id=42,
+    )
+    session.add(seed)
+    await session.flush()
+
+    foreign_payload = {
+        "id": 1234,
+        "permalink_url": "https://soundcloud.com/recidiv/life-is-swag",
+        "title": "life is swag",
+        "user": {"username": "рецидив"},
+        "duration": 92000,
+        "uri": "sc:1234",
+    }
+
+    async def _fake_import(
+        tr: dict,
+        uid: int,
+        *,
+        skip_background_lyrics: bool = True,
+    ) -> Track:
+        user = tr.get("user") or {}
+        t = Track(
+            title=tr.get("title", "T"),
+            artist=user.get("username") or "Unknown",
+            source="soundcloud",
+            catalog_type="external_reference",
+            access_mode="third_party_stream",
+            imported_from="soundcloud",
+            external_id=str(tr.get("id", "0")),
+            sc_url=str(tr.get("permalink_url", "")),
+            uploaded_by_id=None,
+        )
+        session.add(t)
+        await session.flush()
+        await session.refresh(t)
+        return t
+
+    mock_inst = MagicMock()
+    mock_sc_cls.return_value = mock_inst
+    mock_inst.ensure_soundcloud_ids_for_artist = AsyncMock(
+        return_value=True,
+    )
+    mock_inst.sync_artist_soundcloud_uploader_profile = AsyncMock(
+        return_value=None,
+    )
+    mock_inst.fetch_expanded_artist_station_playlist = AsyncMock(
+        return_value={
+            "id": synthetic_soundcloud_id_for_artist_station(42),
+            "tracks": [foreign_payload],
+            "artwork_url": None,
+        },
+    )
+    mock_inst.download_artwork_as_cover_key = AsyncMock(
+        return_value=None,
+    )
+    mock_inst.import_or_get_track = AsyncMock(side_effect=_fake_import)
+
+    svc = ArtistCatalogSyncService(session)
+    out = await svc.sync_artist_similar_station(seed.id)
+    assert out["status"] == "ok"
+
+    track = (
+        await session.execute(
+            select(Track).where(
+                Track.external_id == "1234",
+                Track.imported_from == "soundcloud",
+            )
+        )
+    ).scalar_one()
+
+    seed_link = (
+        await session.execute(
+            select(TrackArtist).where(
+                TrackArtist.artist_id == seed.id,
+                TrackArtist.track_id == track.id,
+            )
+        )
+    ).scalar_one_or_none()
+    assert seed_link is None, (
+        "Station tracks must NOT be linked to the seed artist "
+        "via TrackArtist (would pollute popular-tracks)."
+    )
+
+    real_artist = (
+        await session.execute(
+            select(Artist).where(Artist.name_normalized == "рецидив")
+        )
+    ).scalar_one_or_none()
+    assert real_artist is not None, (
+        "Real artist must be created from the station track's "
+        "artist string."
+    )
+    real_link = (
+        await session.execute(
+            select(TrackArtist).where(
+                TrackArtist.artist_id == real_artist.id,
+                TrackArtist.track_id == track.id,
+            )
+        )
+    ).scalar_one_or_none()
+    assert (
+        real_link is not None
+    ), "Station tracks must be linked to their real artist."

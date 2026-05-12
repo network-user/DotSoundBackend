@@ -2,13 +2,9 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
 } from 'react'
-import {
-  AnimatePresence,
-  type PanInfo,
-  useMotionValue,
-  useTransform,
-} from 'framer-motion'
+import { AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
@@ -23,9 +19,7 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import { SharedCover } from '@/components/ui/SharedCover'
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet/AddToPlaylistSheet'
-
-const SWIPE_X_PX = 54
-const SWIPE_VX = 350
+import { useSwipeX } from '@/hooks/useSwipeX'
 
 const COVER_SPRING = {
   type: 'spring' as const,
@@ -35,13 +29,19 @@ const COVER_SPRING = {
 }
 const INFO_EASE = {
   duration: 0.16,
-  ease: [0.32, 0, 0.18, 1] as [number, number, number, number],
+  ease: [0.32, 0, 0.18, 1] as [
+    number,
+    number,
+    number,
+    number,
+  ],
 }
+const SWIPE_THRESHOLD = 52
 
 export function MiniPlayerBar() {
   const { t } = useTranslation()
   const reduce = useReducedMotion()
-  const { isPlaying } = usePlayerPlayback()
+  const { isPlaying, duration } = usePlayerPlayback()
   const {
     track,
     trackChangeSlide,
@@ -58,6 +58,8 @@ export function MiniPlayerBar() {
     stop,
     toggleShuffle,
     toggleRepeat,
+    seek,
+    getPreciseTime,
   } = usePlayerActions()
   const { isLiked, toggleLike } = useLikes()
   const telegramUserId = getUserId()
@@ -65,19 +67,44 @@ export function MiniPlayerBar() {
   const [likeBurst, setLikeBurst] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [addToPlOpen, setAddToPlOpen] = useState(false)
+  const [swipeDx, setSwipeDx] = useState(0)
   const overflowRef = useRef<HTMLDivElement>(null)
+  const seekInputRef = useRef<HTMLInputElement>(null)
 
-  const x = useMotionValue(0)
-  const prevOpacity = useTransform(
-    x,
-    [0, SWIPE_X_PX * 0.4, SWIPE_X_PX],
-    [0, 0.4, 0.85],
-  )
-  const nextOpacity = useTransform(
-    x,
-    [-SWIPE_X_PX, -SWIPE_X_PX * 0.4, 0],
-    [0.85, 0.4, 0],
-  )
+  useEffect(() => {
+    const el = seekInputRef.current
+    if (!el) return
+    const write = () => {
+      const t = getPreciseTime()
+      const pct = duration
+        ? Math.max(0, Math.min(100, (t / duration) * 100))
+        : 0
+      el.value = String(pct)
+      el.style.setProperty('--progress', `${pct}%`)
+    }
+    write()
+    if (!isPlaying) return
+    let rafId = 0
+    const frame = () => {
+      write()
+      rafId = requestAnimationFrame(frame)
+    }
+    rafId = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(rafId)
+  }, [isPlaying, track?.id, duration, getPreciseTime])
+
+  const barSwipe = useSwipeX({
+    threshold: SWIPE_THRESHOLD,
+    onProgress: setSwipeDx,
+    onSwipeLeft: () => {
+      haptic('light')
+      void playNext()
+    },
+    onSwipeRight: () => {
+      haptic('light')
+      void playPrev()
+    },
+  })
 
   useEffect(() => {
     if (!overflowOpen) return
@@ -106,18 +133,7 @@ export function MiniPlayerBar() {
     : null
   const bpm = (track as unknown as { bpm?: number }).bpm
   const tapBpm = typeof bpm === 'number' ? bpm : 120
-
-  const handleDragEnd = (_: unknown, info: PanInfo) => {
-    const ox = info.offset.x
-    const vx = info.velocity.x
-    if (ox < -SWIPE_X_PX || vx < -SWIPE_VX) {
-      haptic('light')
-      void playNext()
-    } else if (ox > SWIPE_X_PX || vx > SWIPE_VX) {
-      haptic('light')
-      void playPrev()
-    }
-  }
+  const animKey = `${track.id}-${trackChangeSlide.bump}`
 
   const handleLikeClick = async () => {
     if (!liked) {
@@ -128,108 +144,128 @@ export function MiniPlayerBar() {
     await toggleLike(track.id, track)
   }
 
-  const animKey = `${track.id}-${trackChangeSlide.bump}`
-
   return (
     <>
-      <m.div
-        className="mp-zone"
-        drag={reduce ? false : 'x'}
-        dragConstraints={{ left: -120, right: 120 }}
-        dragElastic={0.14}
-        dragMomentum={false}
-        dragTransition={{
-          bounceStiffness: 500,
-          bounceDamping: 40,
-        }}
-        style={{ x }}
-        onDragEnd={handleDragEnd}
+      {/* Seek bar — top of player bar, full width */}
+      <div
+        className="mp-seek-wrap"
+        onPointerDown={(e) => e.stopPropagation()}
       >
-        {/* Swipe direction hints — fade in on drag */}
-        <m.span
-          className="mp-dir mp-dir--prev"
-          style={{ opacity: prevOpacity }}
-          aria-hidden="true"
-        >
-          <Icon name="skip-back" size={13} />
-        </m.span>
-        <m.span
-          className="mp-dir mp-dir--next"
-          style={{ opacity: nextOpacity }}
-          aria-hidden="true"
-        >
-          <Icon name="skip-forward" size={13} />
-        </m.span>
+        <input
+          ref={seekInputRef}
+          type="range"
+          className="mp-seek"
+          min={0}
+          max={100}
+          step={0.1}
+          defaultValue={0}
+          style={
+            { '--progress': '0%' } as CSSProperties
+          }
+          aria-label="Перемотка"
+          onChange={(e) =>
+            seek(Number(e.currentTarget.value))
+          }
+        />
+      </div>
 
-        {/* Cover — scale pop on track change */}
+      <div
+        className="mp-zone"
+        {...barSwipe}
+      >
+        {/* Swipeable content: cover + info — slides horizontally on drag */}
         <div
-          className="mp-cover"
-          onClick={() => openCard()}
+          className="mp-swipe-content"
+          style={{
+            transform: `translateX(${
+              swipeDx * 0.45
+            }px)`,
+            transition:
+              swipeDx === 0
+                ? 'transform 220ms cubic-bezier(0.32,0,0.18,1)'
+                : 'none',
+            willChange:
+              swipeDx !== 0 ? 'transform' : 'auto',
+          }}
         >
-          <AnimatePresence initial={false} mode="wait">
-            <m.div
-              key={animKey}
-              className="mp-cover-frame"
-              initial={
-                reduce
-                  ? { opacity: 0 }
-                  : { opacity: 0, scale: 0.76 }
-              }
-              animate={{ opacity: 1, scale: 1 }}
-              exit={
-                reduce
-                  ? { opacity: 0 }
-                  : { opacity: 0, scale: 1.14 }
-              }
-              transition={COVER_SPRING}
+          {/* Cover — scale pop on track change */}
+          <div
+            className="mp-cover"
+            onClick={() => openCard()}
+          >
+            <AnimatePresence
+              initial={false}
+              mode="wait"
             >
-              {coverSrc ? (
-                <SharedCover
-                  trackId={track.id}
-                  src={coverSrc}
-                  alt=""
-                  className="mp-cover-img"
-                />
-              ) : (
-                <div className="mp-cover-empty">
-                  <Icon name="music" size={18} />
-                </div>
-              )}
-            </m.div>
-          </AnimatePresence>
+              <m.div
+                key={animKey}
+                className="mp-cover-frame"
+                initial={
+                  reduce
+                    ? { opacity: 0 }
+                    : { opacity: 0, scale: 0.76 }
+                }
+                animate={{ opacity: 1, scale: 1 }}
+                exit={
+                  reduce
+                    ? { opacity: 0 }
+                    : { opacity: 0, scale: 1.14 }
+                }
+                transition={COVER_SPRING}
+              >
+                {coverSrc ? (
+                  <SharedCover
+                    trackId={track.id}
+                    src={coverSrc}
+                    alt=""
+                    className="mp-cover-img"
+                  />
+                ) : (
+                  <div className="mp-cover-empty">
+                    <Icon name="music" size={18} />
+                  </div>
+                )}
+              </m.div>
+            </AnimatePresence>
+          </div>
+
+          {/* Track info — slide-up on track change */}
+          <div
+            className="mp-info"
+            onClick={() => openCard()}
+          >
+            <AnimatePresence
+              initial={false}
+              mode="wait"
+            >
+              <m.div
+                key={animKey}
+                className="mp-info-body"
+                initial={
+                  reduce
+                    ? { opacity: 0 }
+                    : { opacity: 0, y: 9 }
+                }
+                animate={{ opacity: 1, y: 0 }}
+                exit={
+                  reduce
+                    ? { opacity: 0 }
+                    : { opacity: 0, y: -6 }
+                }
+                transition={INFO_EASE}
+              >
+                <p className="mp-title">
+                  {track.title}
+                </p>
+                <p className="mp-artist">
+                  {track.artist ?? '—'}
+                </p>
+              </m.div>
+            </AnimatePresence>
+          </div>
         </div>
 
-        {/* Track info — slide-up on track change */}
-        <div
-          className="mp-info"
-          onClick={() => openCard()}
-        >
-          <AnimatePresence initial={false} mode="wait">
-            <m.div
-              key={animKey}
-              className="mp-info-body"
-              initial={
-                reduce
-                  ? { opacity: 0 }
-                  : { opacity: 0, y: 9 }
-              }
-              animate={{ opacity: 1, y: 0 }}
-              exit={
-                reduce
-                  ? { opacity: 0 }
-                  : { opacity: 0, y: -6 }
-              }
-              transition={INFO_EASE}
-            >
-              <p className="mp-title">{track.title}</p>
-              <p className="mp-artist">
-                {track.artist ?? '—'}
-              </p>
-            </m.div>
-          </AnimatePresence>
-        </div>
-
-        {/* Controls — pointer events isolated, no drag */}
+        {/* Controls — pointer isolated, no swipe from here */}
         <div
           className="mp-actions"
           onPointerDown={(e) => e.stopPropagation()}
@@ -309,7 +345,10 @@ export function MiniPlayerBar() {
               aria-expanded={overflowOpen}
               aria-haspopup="menu"
             >
-              <Icon name="more-horizontal" size={16} />
+              <Icon
+                name="more-horizontal"
+                size={16}
+              />
             </button>
 
             {overflowOpen && (
@@ -418,7 +457,7 @@ export function MiniPlayerBar() {
             )}
           </div>
         </div>
-      </m.div>
+      </div>
 
       {telegramUserId ? (
         <AddToPlaylistSheet

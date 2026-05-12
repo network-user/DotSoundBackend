@@ -30,6 +30,7 @@ import {
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { BeatPulse } from '@/components/ui/BeatPulse'
+import { SpectrumMicroBars } from '@/components/ui/SpectrumMicroBars'
 import { SharedCover } from '@/components/ui/SharedCover'
 import { useMatchMedia } from '@/hooks/useMatchMedia'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
@@ -75,6 +76,7 @@ export function PlayerBar() {
     toggleShuffle,
     clearHlsError,
     radioMode,
+    getAnalyser,
   } = usePlayerActions()
   const { isLiked, toggleLike } = useLikes()
   const showBarVolume = useMatchMedia('(min-width: 561px)')
@@ -342,14 +344,21 @@ export function PlayerBar() {
               title={t('redesign.playerBar.radioMode')}
               ariaLabel={t('redesign.playerBar.radioMode')}
             >
-              <span
-                className="player-radio-pill__waves"
-                aria-hidden="true"
-              >
-                <span />
-                <span />
-                <span />
-              </span>
+              {reduce ? (
+                <span
+                  className="player-radio-pill__waves"
+                  aria-hidden="true"
+                >
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              ) : (
+                <SpectrumMicroBars
+                  active={isPlaying}
+                  getAnalyser={getAnalyser}
+                />
+              )}
               <span className="player-radio-pill__label">
                 LIVE
               </span>

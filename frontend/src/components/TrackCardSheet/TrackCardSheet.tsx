@@ -317,6 +317,7 @@ export function TrackCardSheet({
   useEffect(() => {
     if (!isCardOpen || !track) {
       activeTrackRequestRef.current += 1
+      setLoading(false)
       setExtrasOpen(false)
       setCard(null)
       setShowLyrics(false)
@@ -1040,9 +1041,18 @@ export function TrackCardSheet({
     }
   }, [currentTime, getPreciseTime, isPlaying, track?.id])
 
+  const [swipeDx, setSwipeDx] = useState(0)
+  const swipeReleasingRef = useRef(false)
+
+  const handleSwipeProgress = useCallback((dx: number) => {
+    swipeReleasingRef.current = dx === 0
+    setSwipeDx(dx)
+  }, [])
+
   const tcsNavSwipe = useSwipeX({
     disabled: desktopFineNav,
     threshold: 56,
+    onProgress: handleSwipeProgress,
     onSwipeLeft: () => {
       haptic('light')
       playNext()
@@ -1055,7 +1065,7 @@ export function TrackCardSheet({
   const tcsNavSwipeTouchStyle = desktopFineNav
     ? undefined
     : ({
-        touchAction: 'pan-x pan-y',
+        touchAction: 'pan-y',
         userSelect: 'none',
       } as const)
 
@@ -1087,7 +1097,8 @@ export function TrackCardSheet({
     isCoarsePointer ||
     (typeof document !== 'undefined' &&
       document.body.classList.contains('ds-perf-lite'))
-  const useRichCoverVisuals = !perfLite && isPlaying
+  const useAmbientKenBurns = !perfLite && isPlaying
+  const showCoverWaves = isPlaying
 
   return (
     <div
@@ -1201,8 +1212,37 @@ export function TrackCardSheet({
           <div
             className="tcs-cover-wrap re-tcs-wrap"
             {...(desktopFineNav ? {} : tcsNavSwipe)}
-            style={tcsNavSwipeTouchStyle}
+            style={{
+              ...tcsNavSwipeTouchStyle,
+              ...(!desktopFineNav && {
+                transform: `translateX(${swipeDx * 0.28}px)`,
+                transition: swipeReleasingRef.current
+                  ? 'transform 220ms cubic-bezier(0.32,0,0.18,1)'
+                  : 'none',
+              }),
+            }}
           >
+            {!desktopFineNav && Math.abs(swipeDx) > 12 && (
+              <div
+                className="tcs-swipe-hint"
+                aria-hidden="true"
+                style={{
+                  opacity: Math.min(
+                    Math.abs(swipeDx) / 56,
+                    0.9,
+                  ),
+                }}
+              >
+                <Icon
+                  name={
+                    swipeDx < 0
+                      ? 'skip-forward'
+                      : 'skip-back'
+                  }
+                  size={30}
+                />
+              </div>
+            )}
             {coverBusy && (
               <div className="tcs-cover-loading">
                 <div className="loader" />
@@ -1222,7 +1262,7 @@ export function TrackCardSheet({
                   transition={slidePresence.transition}
                 >
                   <div className="re-tcs-cover-stack">
-                    {useRichCoverVisuals ? (
+                    {useAmbientKenBurns ? (
                       <AmbientStage
                         coverUrl={coverSrc}
                         className="re-tcs-ambient"
@@ -1261,7 +1301,7 @@ export function TrackCardSheet({
                 <Icon name="music" size={72} />
               </div>
             )}
-            {useRichCoverVisuals && (
+            {showCoverWaves && (
               <div className="tcs-cover-wave-area" aria-hidden>
                 <div className="tcs-cover-wave-gradient" />
                 <Waveform
@@ -1534,18 +1574,16 @@ export function TrackCardSheet({
             >
               <Icon name="rewind-5" size={22} />
             </MotionPress>
-            {desktopFineNav ? (
-              <MotionPress
-                type="button"
-                variant="icon"
-                className="ctrl-btn"
-                ariaLabel={t('redesign.player.prevAria')}
-                haptic="light"
-                onClick={playPrev}
-              >
-                <Icon name="skip-back" size={22} />
-              </MotionPress>
-            ) : null}
+            <MotionPress
+              type="button"
+              variant="icon"
+              className="ctrl-btn"
+              ariaLabel={t('redesign.player.prevAria')}
+              haptic="light"
+              onClick={playPrev}
+            >
+              <Icon name="skip-back" size={22} />
+            </MotionPress>
             <MotionPress
               type="button"
               variant="primary"
@@ -1566,18 +1604,18 @@ export function TrackCardSheet({
                 filled
               />
             </MotionPress>
-            {desktopFineNav ? (
-              <MotionPress
-                type="button"
-                variant="icon"
-                className="ctrl-btn"
-                ariaLabel={t('redesign.player.nextAria')}
-                haptic="light"
-                onClick={playNext}
-              >
-                <Icon name="skip-forward" size={22} />
-              </MotionPress>
-            ) : null}
+            <MotionPress
+              type="button"
+              variant="icon"
+              className="ctrl-btn"
+              ariaLabel={t('redesign.player.nextAria')}
+              haptic="light"
+              onClick={() => {
+                void playNext()
+              }}
+            >
+              <Icon name="skip-forward" size={22} />
+            </MotionPress>
             <MotionPress
               type="button"
               variant="icon"

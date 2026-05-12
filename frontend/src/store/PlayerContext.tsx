@@ -163,7 +163,9 @@ interface PlayerContextValue {
   skipBackward: (s?: number) => void
   setPlaybackRate: (rate: number) => void
   getPreciseTime: () => number
-  playNext: () => Promise<boolean>
+  playNext: (
+    opts?: { afterNaturalEnd?: boolean },
+  ) => Promise<boolean>
   playPrev: () => Promise<void>
   setEqBand: (idx: number, gain: number) => void
   setEqPreset: (preset: string | null) => void
@@ -239,7 +241,9 @@ interface PlayerActionsValue {
   skipBackward: (s?: number) => void
   setPlaybackRate: (rate: number) => void
   getPreciseTime: () => number
-  playNext: () => Promise<boolean>
+  playNext: (
+    opts?: { afterNaturalEnd?: boolean },
+  ) => Promise<boolean>
   playPrev: () => Promise<void>
   setVolume: (v: number) => void
   stop: () => void
@@ -849,16 +853,12 @@ export function PlayerProvider({
     const out = ctx.createGain()
     postEqGainRef.current = out
 
-    const analyser = perfLite
-      ? null
-      : ctx.createAnalyser()
-    if (analyser) {
-      analyser.fftSize = 256
-      analyser.smoothingTimeConstant = 0.86
-      analyserRef.current = analyser
-    } else {
-      analyserRef.current = null
-    }
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = perfLite ? 128 : 256
+    analyser.smoothingTimeConstant = perfLite
+      ? 0.88
+      : 0.86
+    analyserRef.current = analyser
 
     let prev: AudioNode = src
     for (const f of filters) {
@@ -867,9 +867,7 @@ export function PlayerProvider({
     }
     prev.connect(out)
     out.connect(ctx.destination)
-    if (analyser) {
-      out.connect(analyser)
-    }
+    out.connect(analyser)
     applyEqBands()
   }, [applyEqBands])
 
@@ -1425,7 +1423,7 @@ export function PlayerProvider({
         return
       }
       const doNext = () => {
-        playNext().then((played) => {
+        playNext({ afterNaturalEnd: true }).then((played) => {
           if (
             !played &&
             repeatModeRef.current === 'all' &&
@@ -1976,7 +1974,9 @@ export function PlayerProvider({
     setIsPlaying(false)
   }
 
-  const playNext = async (): Promise<boolean> => {
+  const playNext = async (
+    opts?: { afterNaturalEnd?: boolean },
+  ): Promise<boolean> => {
     if (!track) return false
     playTrackSlideInjectRef.current = 1
     try {
@@ -2067,7 +2067,10 @@ export function PlayerProvider({
       }
 
       const cache = prefetchCacheRef.current
+      const allowPrefetchAdvance =
+        !opts?.afterNaturalEnd || radioModeRef.current
       if (
+        allowPrefetchAdvance &&
         cache &&
         cache.forTrackId === track.id &&
         cache.tracks.length > 0

@@ -85,7 +85,26 @@
     "soundQuality": "Sound quality",
     "comingSoon": "soon",
     "aboutApp": "About the app",
-    "logOut": "Log out"
+    "logOut": "Log out",
+    "trashLink": "Track trash",
+    "profilePrivacy": "Profile visibility",
+    "profilePrivacyChoice": "Who can see your profile",
+    "profilePrivacyPickerDesc": "Choose who can see your profile, public tracks, and stats. You can change this anytime.",
+    "profilePrivacyPublic": "Public",
+    "profilePrivacyPublicSub": "Profile, tracks, stats, and follows are visible to anyone who opens your page.",
+    "profilePrivacyFollowers": "Followers only",
+    "profilePrivacyFollowersSub": "Full profile, tracks, and stats are visible only to people who follow you.",
+    "profilePrivacyHidden": "Hidden",
+    "profilePrivacyHiddenSub": "Rich profile and sharing are hidden from others; only a minimal public card remains.",
+    "resetRecs": {
+      "sectionTitle": "Recommendations",
+      "cta": "Reset recommendations",
+      "title": "Reset recommendations?",
+      "hint": "We will clear genre prefs, dislikes, and taste calibration. Your library and likes stay as they are.",
+      "confirm": "Reset",
+      "done": "Recommendations reset",
+      "fail": "Could not reset — please try again"
+    }
   },
   "pwa": {
     "installed": "App installed",

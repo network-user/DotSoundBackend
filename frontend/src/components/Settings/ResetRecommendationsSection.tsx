@@ -23,14 +23,12 @@ export function ResetRecommendationsSection({ onClose }: Props) {
         kind: 'toast',
         title: t(
           'settings.resetRecs.done',
-          'Готово. Запускаем онбординг заново.',
+          'Рекомендации сброшены',
         ),
         durationMs: 2400,
       })
       setConfirmOpen(false)
       onClose()
-      // Reload so App.tsx re-fetches onboarding status and
-      // routes the user back into the wizard.
       window.setTimeout(() => {
         try {
           window.location.reload()
@@ -57,7 +55,7 @@ export function ResetRecommendationsSection({ onClose }: Props) {
 
   return (
     <>
-      <div className="settings-hint">
+      <div className="settings-section-header">
         {t('settings.resetRecs.sectionTitle', 'Рекомендации')}
       </div>
       <MotionPress
@@ -71,13 +69,24 @@ export function ResetRecommendationsSection({ onClose }: Props) {
         <span>
           {t(
             'settings.resetRecs.cta',
-            'Сбросить рекомендации и пройти онбординг заново',
+            'Сбросить рекомендации',
           )}
         </span>
+        <Icon
+          name="chevron"
+          size={16}
+          className="settings-chevron"
+        />
       </MotionPress>
       {confirmOpen && (
-        <div className="modal" onClick={handleBackdrop}>
-          <div className="modal-content">
+        <div
+          className="modal settings-reset-modal"
+          onClick={handleBackdrop}
+        >
+          <div
+            className="modal-content settings-reset-modal__panel"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="modal-header">
               <h3>
                 {t(
@@ -97,13 +106,13 @@ export function ResetRecommendationsSection({ onClose }: Props) {
                 <Icon name="x" size={18} />
               </MotionPress>
             </div>
-            <p className="modal-hint">
+            <p className="modal-hint settings-reset-modal__hint">
               {t(
                 'settings.resetRecs.hint',
-                'Жанры, дизлайки и калибровка вкуса будут очищены. Библиотека и лайкнутые треки сохранятся. Сразу после — снова пройдёте короткий онбординг, чтобы подборки стали точнее.',
+                'Очистим жанровые предпочтения, дизлайки и калибровку вкуса. Библиотека и лайки останутся без изменений.',
               )}
             </p>
-            <div className="settings-danger-zone__actions">
+            <div className="settings-danger-zone__actions settings-reset-modal__actions">
               <MotionPress
                 type="button"
                 variant="primary"
@@ -116,7 +125,7 @@ export function ResetRecommendationsSection({ onClose }: Props) {
                   ? '…'
                   : t(
                       'settings.resetRecs.confirm',
-                      'Сбросить и пройти заново',
+                      'Сбросить',
                     )}
               </MotionPress>
               <MotionPress
