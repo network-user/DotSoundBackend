@@ -41,14 +41,21 @@ const SWIPE_COVER_THRESHOLD = 72
 
 const COVER_VARIANTS = {
   enter: (dir: 'left' | 'right' | null) => ({
-    x: dir === 'left' ? '28%' : dir === 'right' ? '-28%' : 0,
+    x: dir === 'left' ? '42%' : dir === 'right' ? '-42%' : 0,
     opacity: 0,
+    scale: dir ? 0.88 : 0.94,
   }),
-  center: { x: 0, opacity: 1 },
+  center: { x: 0, opacity: 1, scale: 1 },
   exit: (dir: 'left' | 'right' | null) => ({
-    x: dir === 'left' ? '-28%' : dir === 'right' ? '28%' : 0,
+    x: dir === 'left' ? '-42%' : dir === 'right' ? '42%' : 0,
     opacity: 0,
+    scale: dir ? 0.88 : 0.94,
   }),
+}
+
+const COVER_TRANSITION = {
+  duration: 0.22,
+  ease: [0.32, 0, 0.18, 1] as [number, number, number, number],
 }
 
 type Tab = 'now' | 'lyrics' | 'queue'
@@ -327,7 +334,10 @@ export function NowPlayingView() {
             style={
               desktopFineNav
                 ? undefined
-                : { touchAction: 'pan-y', userSelect: 'none' }
+                : {
+                    touchAction: 'pan-x pan-y',
+                    userSelect: 'none',
+                  }
             }
           >
             {!desktopFineNav && Math.abs(swipeDx) > 16 && (
@@ -375,10 +385,7 @@ export function NowPlayingView() {
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{
-                    duration: 0.13,
-                    ease: [0.4, 0, 0.2, 1],
-                  }}
+                  transition={COVER_TRANSITION}
                   onAnimationComplete={() => {
                     swipeDirRef.current = null
                   }}
@@ -687,7 +694,7 @@ export function NowPlayingView() {
           {...(!desktopFineNav ? tabSwipe : {})}
           style={
             !desktopFineNav
-              ? { touchAction: 'pan-y' }
+              ? { touchAction: 'pan-x pan-y' }
               : undefined
           }
         >

@@ -81,9 +81,6 @@ export function AccountDangerZone() {
   if (status?.pending && status.grace_until) {
     return (
       <div className="settings-danger-zone">
-        <div className="settings-hint">
-          {t('settings.dangerZoneTitle', 'Аккаунт')}
-        </div>
         <div className="settings-danger-zone__pending">
           <p className="twofa-hint">
             {t(
@@ -116,9 +113,6 @@ export function AccountDangerZone() {
 
   return (
     <div className="settings-danger-zone">
-      <div className="settings-hint">
-        {t('settings.dangerZoneTitle', 'Аккаунт')}
-      </div>
       {!open ? (
         <MotionPress
           type="button"

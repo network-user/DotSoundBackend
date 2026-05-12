@@ -14,6 +14,16 @@
 
 ---
 
+## Mini App mobile load (2026-05-12)
+
+- [x] **Чёрный экран / долгая «загрузка» в Telegram WebView**
+  — Убран warm-boot: мгновенное снятие HTML-лоадера при повторном открытии
+  в течение 30 мин отключало и fallback 8 с (`done` уже true), React при
+  `!isInitialized` возвращал `null` — оставался пустой `#root` на время
+  загрузки бандла/i18n. `frontend/index.html`: без раннего hide, fallback
+  120 с. `App.tsx`: splash при инициализации всегда. Скрипт Telegram
+  перенесён в конец head с `defer`. Сборка обновляет `app/static/mini_app/`.
+
 ## Profile / My Top polish (2026-05-12)
 
 - [x] **Профиль + «Ваш топ» + экран артиста: UI/UX доводка под монохром**
@@ -37,6 +47,20 @@
 - [x] **Фон мини-плеера без стекла**
   — `#player-bar` в `global.css`: непрозрачный тёмный фон, без
   `backdrop-filter`, лёгкая верхняя граница вместо глянца `::before`.
+
+- [x] **Mini App: свайп трека + мини-плеер**
+  — `touch-action: pan-y` и вертикальный `drag` Framer на всём баре
+  блокировали горизонтальный свайп в WebView: у обложки/NowPlaying/
+  TrackCard — `pan-x pan-y`; на touch-баре `drag` отключён, открытие
+  полного плеера — тап по «ручке» над скраббером.
+  — Убран `#player-bar::after` (подсветка снизу). Класс
+  `rp-player-bar--touch`: компактные отступы, обложка 44px, скрыта
+  ссылка на внешний источник в баре.
+
+- [x] **Анимация смены трека (слайд)**
+  — `PlayerContext`: `trackChangeSlide` + инжект направления в `playNext` /
+  `playPrev`; `PlayerBar` и `TrackCardSheet`: `AnimatePresence` + spring
+  по горизонтали при next/prev, иначе лёгкий fade.
 
 ## Playlist improvements (2026-05-12)
 

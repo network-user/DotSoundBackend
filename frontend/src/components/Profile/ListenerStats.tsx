@@ -17,11 +17,7 @@ interface ListenerStats {
   top_genres: { name: string; minutes: number; plays: number }[]
 }
 
-const PERIODS: { id: 7 | 30 | 365; key: string; defaultLabel: string }[] = [
-  { id: 7, key: 'profile.listenStats.period_7', defaultLabel: '7 дней' },
-  { id: 30, key: 'profile.listenStats.period_30', defaultLabel: '30 дней' },
-  { id: 365, key: 'profile.listenStats.period_365', defaultLabel: 'Год' },
-]
+const PROFILE_TODAY_PERIOD_DAYS = 1
 
 function formatMinutes(min: number): string {
   if (min < 60) return `${min} мин`
@@ -33,7 +29,6 @@ function formatMinutes(min: number): string {
 export function ListenerStats() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const [period, setPeriod] = useState<7 | 30 | 365>(30)
   const [data, setData] = useState<ListenerStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [trend, setTrend] = useState<SparklinePoint[]>([])
@@ -42,7 +37,7 @@ export function ListenerStats() {
     let cancelled = false
     setLoading(true)
     api
-      .getMyListeningStats(period)
+      .getMyListeningStats(PROFILE_TODAY_PERIOD_DAYS)
       .then((res) => {
         if (!cancelled) {
           setData(res as ListenerStats)
@@ -56,7 +51,7 @@ export function ListenerStats() {
         }
       })
     api
-      .getMyListeningByDay(period)
+      .getMyListeningByDay(PROFILE_TODAY_PERIOD_DAYS)
       .then((res) => {
         if (cancelled) return
         const pts: SparklinePoint[] = (res.buckets || []).map(
@@ -70,7 +65,7 @@ export function ListenerStats() {
     return () => {
       cancelled = true
     }
-  }, [period])
+  }, [])
 
   const minutes = data?.minutes_listened ?? 0
   const tracks = data?.tracks_listened ?? 0
@@ -88,31 +83,9 @@ export function ListenerStats() {
         <div className="listener-stats__title">
           {t('profile.listenStats.title', 'Ваше прослушивание')}
         </div>
-        <div
-          role="tablist"
-          className="listener-stats__periods"
-          aria-label={t(
-            'profile.listenStats.periodAria',
-            'Период статистики',
-          )}
-        >
-          {PERIODS.map((p) => (
-            <MotionPress
-              key={p.id}
-              type="button"
-              variant="ghost"
-              haptic="selection"
-              role="tab"
-              aria-selected={period === p.id}
-              className={`pb-extras-btn${
-                period === p.id ? ' active' : ''
-              }`}
-              onClick={() => setPeriod(p.id)}
-            >
-              {t(p.key, p.defaultLabel)}
-            </MotionPress>
-          ))}
-        </div>
+        <span className="settings-hint">
+          {t('profile.listenStats.today', 'Сегодня')}
+        </span>
       </div>
 
       {!loading && trendHasData && (

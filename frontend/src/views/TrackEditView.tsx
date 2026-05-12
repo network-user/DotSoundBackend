@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 import { MotionPress } from '@/components/ui/MotionPress'
+import { coverProxyUrl } from '@/lib/coverProxy'
 import { api } from '@/lib/api'
 
 type EditContext = Awaited<
@@ -122,11 +123,7 @@ export function TrackEditView() {
         setServerFields(base)
         setFields(draft ?? base)
         if (res.cover_key) {
-          setCoverPreview(
-            `/api/v1/files/cover?key=${encodeURIComponent(
-              res.cover_key,
-            )}`,
-          )
+          setCoverPreview(coverProxyUrl(res.cover_key))
         }
       } catch (err) {
         if (cancelled) return

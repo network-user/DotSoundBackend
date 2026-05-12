@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from httpx import AsyncClient
 
@@ -37,6 +39,27 @@ async def test_get_track_not_found(
         "/api/v1/tracks/99999"
     )
     assert response.status_code == 404
+
+
+async def test_cover_proxy_accepts_artist_avatars_prefix(
+    client: AsyncClient,
+) -> None:
+    webp = (
+        b"RIFF\x1e\x00\x00\x00WEBPVP8 "
+        + b"\x0a\x00\x00\x00\x10\x00\x00\x00\x00\x00"
+        + b"\x00\x00\x00\x00\x00"
+    )
+    with patch(
+        "app.api.v1.tracks.discovery.s3.download_object",
+        new_callable=AsyncMock,
+        return_value=webp,
+    ):
+        r = await client.get(
+            "/api/v1/tracks/cover_proxy",
+            params={"key": "artist-avatars/1/sample.webp"},
+        )
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"].startswith("image/")
 
 
 async def test_search_tracks_empty(

@@ -450,7 +450,8 @@
       "genreTabArtists": "Артисты",
       "genreTabSoon": "Скоро будет доступно",
       "badgeExternal": "Внешний источник",
-      "badgeLicensed": "Лицензировано"
+      "badgeLicensed": "Лицензировано",
+      "uploadTrack": "Загрузить трек"
     },
     "recap": {
       "profileEntry": "Итоги года",
@@ -734,6 +735,7 @@
       }
     },
     "playerBar": {
+      "openFullPlayer": "Полный экран плеера",
       "likeMenu": "Лайк",
       "unlikeMenu": "Убрать лайк",
       "addToPlaylistMenu": "В плейлист…",

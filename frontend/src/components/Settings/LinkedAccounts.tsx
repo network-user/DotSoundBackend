@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
+import { MotionPress } from '@/components/ui/MotionPress'
 
 type LinkStep =
   | 'idle'
@@ -208,63 +209,75 @@ export function LinkedAccounts() {
 
   return (
     <>
-      <div className="settings-item">
-        <Icon name="send" size={20} />
-        <span>
-          Telegram
-          {telegramLinked
-            ? tgUsername
-              ? ` (@${tgUsername})`
-              : ' (привязан)'
-            : ''}
-        </span>
+      <div className="linked-account-row">
+        <div className="linked-account-row__info">
+          <Icon name="send" size={18} />
+          <div className="linked-account-row__text">
+            <span className="linked-account-row__name">
+              Telegram
+            </span>
+            {telegramLinked && tgUsername && (
+              <span className="linked-account-row__sub">
+                @{tgUsername}
+              </span>
+            )}
+          </div>
+        </div>
         {telegramLinked ? (
-          <span className="settings-badge">
-            привязан
+          <span className="linked-account-row__status linked-account-row__status--ok">
+            <Icon name="check" size={14} />
+            Привязан
           </span>
         ) : (
-          <button
-            className="settings-badge"
-            onClick={handleLinkTelegram}
-            style={{
-              cursor: 'pointer',
-              background: 'var(--surface-2)',
-            }}
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="medium"
+            className="linked-account-row__btn"
+            disabled={loading}
+            onClick={() => void handleLinkTelegram()}
           >
-            привязать
-          </button>
+            {loading ? '…' : 'Привязать'}
+          </MotionPress>
         )}
       </div>
 
-      <div className="settings-item">
-        <Icon name="link" size={20} />
-        <span>
-          Email
-          {emailLinked && email
-            ? ` (${email})`
-            : ''}
-        </span>
+      <div className="linked-account-row">
+        <div className="linked-account-row__info">
+          <Icon name="link" size={18} />
+          <div className="linked-account-row__text">
+            <span className="linked-account-row__name">
+              Email
+            </span>
+            {emailLinked && email && (
+              <span className="linked-account-row__sub">
+                {email}
+              </span>
+            )}
+          </div>
+        </div>
         {emailLinked ? (
-          <span className="settings-badge">
-            привязан
+          <span className="linked-account-row__status linked-account-row__status--ok">
+            <Icon name="check" size={14} />
+            Привязан
           </span>
         ) : (
-          <button
-            className="settings-badge"
-            onClick={() =>
-              setStep('email_input')
-            }
-            style={{
-              cursor: 'pointer',
-              background: 'var(--surface-2)',
-            }}
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="medium"
+            className="linked-account-row__btn"
+            onClick={() => setStep('email_input')}
           >
-            привязать
-          </button>
+            Привязать
+          </MotionPress>
         )}
       </div>
+
       {error && (
-        <div className="form-error">{error}</div>
+        <div className="form-error linked-account-error">
+          {error}
+        </div>
       )}
     </>
   )

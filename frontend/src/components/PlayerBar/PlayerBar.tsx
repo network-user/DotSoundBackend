@@ -11,7 +11,7 @@ import {
 } from './PlayerBarProgress'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { type PanInfo } from 'framer-motion'
+import { AnimatePresence, type PanInfo } from 'framer-motion'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
 import {
@@ -35,6 +35,7 @@ import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet/AddToPlaylistSheet'
 import { useSwipeX } from '@/hooks/useSwipeX'
+import { useTrackSlidePresence } from '@/hooks/useTrackSlidePresence'
 
 const PLATFORM_LABELS: Record<string, string> = {
   youtube: 'YouTube',
@@ -57,6 +58,7 @@ export function PlayerBar() {
     shuffleOn,
     hlsError,
     isPlayingFromCache,
+    trackChangeSlide,
   } = usePlayerMeta()
   const {
     togglePlay,
@@ -78,6 +80,7 @@ export function PlayerBar() {
   const showBarVolume = useMatchMedia('(min-width: 561px)')
   const desktopFineNav = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
+  const slidePresence = useTrackSlidePresence()
   const [likeBurst, setLikeBurst] = useState(false)
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [addToPlOpen, setAddToPlOpen] = useState(false)
@@ -192,18 +195,6 @@ export function PlayerBar() {
     togglePlay()
   }
 
-  const handleNext = (e: MouseEvent) => {
-    e.stopPropagation()
-    haptic('light')
-    playNext()
-  }
-
-  const handlePrev = (e: MouseEvent) => {
-    e.stopPropagation()
-    haptic('light')
-    playPrev()
-  }
-
   const handleDragEnd = (
     _: unknown,
     info: PanInfo,
@@ -251,18 +242,45 @@ export function PlayerBar() {
     <m.div
       ref={playerBarRef}
       id="player-bar"
-      className="rp-player-bar"
-      drag={reduce ? false : 'y'}
+      className={
+        desktopFineNav
+          ? 'rp-player-bar'
+          : 'rp-player-bar rp-player-bar--touch'
+      }
+      drag={
+        reduce || !desktopFineNav ? false : 'y'
+      }
       dragConstraints={{ top: -8, bottom: 0 }}
       dragElastic={0.25}
       dragMomentum={false}
       onDragEnd={handleDragEnd}
       transition={SPRING_GENTLE}
     >
-      <span
-        className="rp-player-bar__hint"
-        aria-hidden="true"
-      />
+      {desktopFineNav ? (
+        <span
+          className="rp-player-bar__hint"
+          aria-hidden="true"
+        />
+      ) : (
+        <MotionPress
+          type="button"
+          variant="ghost"
+          className="rp-player-bar__hint rp-player-bar__hint--tap"
+          ariaLabel={t(
+            'redesign.playerBar.openFullPlayer',
+          )}
+          haptic={null}
+          onClick={() => {
+            haptic('medium')
+            navigate('/now-playing')
+          }}
+        >
+          <span
+            className="rp-player-bar__hint-pill"
+            aria-hidden="true"
+          />
+        </MotionPress>
+      )}
       <PlayerBarSeek
         duration={duration}
         trackId={track.id}
@@ -280,20 +298,37 @@ export function PlayerBar() {
           style={
             desktopFineNav
               ? undefined
-              : { touchAction: 'pan-y' }
+              : {
+                  touchAction: 'pan-x pan-y',
+                  userSelect: 'none',
+                }
           }
         >
           <div className="pb-cover-inner">
-            {coverSrc ? (
-              <SharedCover
-                trackId={track.id}
-                src={coverSrc}
-                alt=""
-                className="pb-cover-vt"
-              />
-            ) : (
-              <Icon name="music" size={20} />
-            )}
+            <AnimatePresence
+              initial={false}
+              mode="wait"
+            >
+              <m.div
+                key={`${track.id}-${trackChangeSlide.bump}`}
+                className="pb-cover-slide"
+                initial={slidePresence.initial}
+                animate={slidePresence.animate}
+                exit={slidePresence.exit}
+                transition={slidePresence.transition}
+              >
+                {coverSrc ? (
+                  <SharedCover
+                    trackId={track.id}
+                    src={coverSrc}
+                    alt=""
+                    className="pb-cover-vt"
+                  />
+                ) : (
+                  <Icon name="music" size={20} />
+                )}
+              </m.div>
+            </AnimatePresence>
           </div>
         </div>
 
@@ -442,17 +477,6 @@ export function PlayerBar() {
         </div>
 
         <div id="pb-controls" className="pb-ctl-v2">
-          {desktopFineNav ? (
-            <MotionPress
-              variant="icon"
-              className="ctrl-btn pb-prev"
-              onClick={handlePrev}
-              ariaLabel="Предыдущий"
-              haptic="light"
-            >
-              <Icon name="skip-back" size={18} />
-            </MotionPress>
-          ) : null}
           <MotionPress
             ref={playRef}
             variant="icon"
@@ -476,17 +500,6 @@ export function PlayerBar() {
               />
             </BeatPulse>
           </MotionPress>
-          {desktopFineNav ? (
-            <MotionPress
-              variant="icon"
-              className="ctrl-btn"
-              onClick={handleNext}
-              ariaLabel="Следующий"
-              haptic="light"
-            >
-              <Icon name="skip-forward" size={18} />
-            </MotionPress>
-          ) : null}
           {showBarVolume ? (
             <div
               className="pb-volume-wrap"
@@ -706,12 +719,14 @@ export function PlayerBar() {
         </div>
       </div>
 
-      <PlayerBarTime
-        duration={duration}
-        trackId={track.id}
-        isPlaying={isPlaying}
-        getPreciseTime={getPreciseTime}
-      />
+      {desktopFineNav && (
+        <PlayerBarTime
+          duration={duration}
+          trackId={track.id}
+          isPlaying={isPlaying}
+          getPreciseTime={getPreciseTime}
+        />
+      )}
 
       {hlsError && (
         <div

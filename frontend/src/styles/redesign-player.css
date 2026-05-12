@@ -6,7 +6,7 @@
 
 /* PlayerBar overrides — apply on top of legacy #player-bar */
 .rp-player-bar {
-  touch-action: pan-y;
+  touch-action: auto;
 }
 
 .rp-player-bar:active {
@@ -38,8 +38,139 @@
   width: 36px;
 }
 
+.rp-player-bar__hint--tap {
+  position: absolute;
+  left: 50%;
+  margin-left: -50px;
+  width: 100px;
+  pointer-events: auto;
+  top: -14px;
+  height: 44px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  z-index: 4;
+}
+
+.rp-player-bar__hint--tap.mp-press {
+  min-width: 0;
+  min-height: 0;
+}
+
+.rp-player-bar__hint-pill {
+  display: block;
+  width: 28px;
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  flex-shrink: 0;
+  transition:
+    width var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.rp-player-bar__hint--tap:active .rp-player-bar__hint-pill,
+.rp-player-bar__hint--tap:focus-visible .rp-player-bar__hint-pill {
+  background: rgba(255, 255, 255, 0.38);
+  width: 36px;
+}
+
+.rp-player-bar--touch {
+  --player-h: 68px;
+}
+
+.rp-player-bar--touch #pb-row.pb-row-v2 {
+  gap: 10px;
+  padding: 0 12px 0 10px;
+  align-items: center;
+  height: 68px;
+}
+
+.rp-player-bar--touch .pb-cover-img {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.rp-player-bar--touch .pb-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.rp-player-bar--touch .pb-artist {
+  font-size: 12px;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.rp-player-bar--touch .pb-source-link {
+  display: none;
+}
+
+.rp-player-bar--touch #pb-time {
+  display: none;
+}
+
+.rp-player-bar--touch .pb-ctl-v2 {
+  gap: 2px;
+  align-items: center;
+}
+
+/* Play button: slightly inset from the edge to feel "slightly left" */
+.rp-player-bar--touch .pb-ctl-v2 .play-btn {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+}
+
+.rp-player-bar--touch .pb-ctl-v2 .icon-btn,
+.rp-player-bar--touch .pb-ctl-v2 .ctrl-btn {
+  min-width: 38px;
+  min-height: 38px;
+}
+
+/* Seek bar thinner on touch — progress only, no scrub */
+.rp-player-bar--touch #pb-seek-wrap {
+  height: 2px;
+}
+
+.rp-player-bar--touch #pb-seek {
+  height: 2px;
+  pointer-events: none;
+}
+
+.rp-player-bar--touch #pb-seek::-webkit-slider-runnable-track {
+  height: 2px;
+}
+
+.rp-player-bar--touch #pb-seek::-moz-range-track,
+.rp-player-bar--touch #pb-seek::-moz-range-progress {
+  height: 2px;
+}
+
+.rp-player-bar--touch #pb-seek::-webkit-slider-thumb {
+  display: none;
+}
+
+.rp-player-bar--touch #pb-seek::-moz-range-thumb {
+  display: none;
+}
+
 @media (orientation: landscape) and (max-height: 500px) {
   .rp-player-bar__hint {
+    display: none;
+  }
+
+  .rp-player-bar__hint--tap {
     display: none;
   }
 }

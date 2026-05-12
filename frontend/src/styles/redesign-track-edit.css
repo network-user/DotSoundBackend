@@ -537,6 +537,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+.ae-hero-upload {
+  margin-top: 10px;
+}
+
+.ae-hero-upload .mp-press {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding-inline: 12px 14px;
+}
+
 .ae-avatar-actions {
   display: flex;
   justify-content: flex-end;
@@ -579,6 +591,42 @@
 
 .ae-finish__actions .mp-press {
   min-height: 44px;
+}
+
+.ae-state-shell {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 220px;
+}
+
+.ae-state-spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--text);
+  animation: ae-spin 0.9s linear infinite;
+}
+
+.ae-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.ae-state-actions .mp-press {
+  min-height: 44px;
+}
+
+@keyframes ae-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ---- Profile artist card (entry in /profile) ----- */

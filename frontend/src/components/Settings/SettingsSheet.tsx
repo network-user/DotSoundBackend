@@ -8,7 +8,6 @@ import {
   getInternalUserId,
   haptic,
   hapticSelection,
-  hapticNotification,
   hapticTick,
   setBackButton,
 } from '@/lib/telegram'
@@ -40,12 +39,27 @@ import { SettingsLegalSection } from './SettingsLegalSection'
 import { LinkedAccounts } from './LinkedAccounts'
 import { OAuthImportAccounts } from './OAuthImportAccounts'
 import { TwoFASettings } from './TwoFASettings'
+import { SettingsPickerModal } from './SettingsPickerModal'
 
 interface Props {
   open: boolean
   onClose: () => void
   onLogout: () => void
 }
+
+const CACHE_LIMIT_OPTIONS = [
+  { value: 'none', label: 'Без лимита', sublabel: 'Всё доступное место' },
+  { value: '1gb', label: '1 ГБ', sublabel: '~200–300 треков' },
+  { value: '5gb', label: '5 ГБ', sublabel: '~1000–1500 треков' },
+  { value: '20gb', label: '20 ГБ', sublabel: '~4000–6000 треков' },
+]
+
+const TTL_OPTIONS = [
+  { value: '1', label: '1 день', sublabel: 'Очень быстрая ротация' },
+  { value: '3', label: '3 дня', sublabel: 'Рекомендуется' },
+  { value: '7', label: '7 дней', sublabel: 'Неделя' },
+  { value: '14', label: '14 дней', sublabel: 'Две недели' },
+]
 
 export function SettingsSheet({
   open,
@@ -97,6 +111,11 @@ export function SettingsSheet({
   const [ttlDays, setTtlDays] = useState<number>(() =>
     getUnpinnedTtlDays(),
   )
+  const [cacheLimitModalOpen, setCacheLimitModalOpen] =
+    useState(false)
+  const [ttlModalOpen, setTtlModalOpen] = useState(false)
+  const [accountExpanded, setAccountExpanded] =
+    useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -191,10 +210,10 @@ export function SettingsSheet({
   }
 
   const handleCacheLimitChange = (
-    value: CacheLimitChoice,
+    value: string,
   ) => {
-    setCacheLimit(value)
-    setCacheLimitChoice(value)
+    setCacheLimit(value as CacheLimitChoice)
+    setCacheLimitChoice(value as CacheLimitChoice)
     hapticSelection()
   }
 
@@ -229,10 +248,11 @@ export function SettingsSheet({
   }
 
   const handleTtlChange = (
-    value: number,
+    value: string,
   ) => {
-    setTtlDays(value)
-    setUnpinnedTtlDays(value)
+    const days = Number.parseInt(value, 10)
+    setTtlDays(days)
+    setUnpinnedTtlDays(days)
     hapticSelection()
     void runCacheGC({ force: true }).then(async () => {
       setStorage(await getStorageInfo())
@@ -293,394 +313,376 @@ export function SettingsSheet({
     hapticTick()
   }
 
-  const handleTestSound = () => {
-    feedbackTap()
-    sound.playTest('tapSoft')
-    showIsland({
-      kind: 'toast',
-      title: t('settings.testSoundFired', {
-        defaultValue: 'Тест звука отправлен',
-      }),
-      durationMs: 1200,
-    })
-  }
+  const currentLang = i18n.language?.startsWith('ru')
+    ? 'ru'
+    : 'en'
 
-  const handleTestHaptic = () => {
-    haptic('light')
-    hapticNotification('success')
-    showIsland({
-      kind: 'toast',
-      title: t('settings.testHapticFired', {
-        defaultValue: 'Тест вибрации отправлен',
-      }),
-      durationMs: 1200,
-    })
-  }
+  const cacheLimitLabel =
+    CACHE_LIMIT_OPTIONS.find(
+      (o) => o.value === cacheLimit,
+    )?.label ?? '—'
+
+  const ttlLabel =
+    TTL_OPTIONS.find(
+      (o) => o.value === String(ttlDays),
+    )?.label ?? `${ttlDays} дн.`
 
   return (
-    <div
-      className={`settings-backdrop${exit.cls}`}
-      onClick={(e) => {
-        if (e.target === e.currentTarget)
-          onClose()
-      }}
-    >
-      <div className={`settings-sheet${exit.cls}`}>
-        <div className="settings-handle" />
-        <div className="settings-header">
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="light"
-            className="settings-back"
-            ariaLabel={t('common.back')}
-            onClick={onClose}
-          >
-            <Icon
-              name="chevron"
-              size={20}
-              className="back-chevron"
-            />
-            <span className="settings-back-label">
-              {t('common.back')}
+    <>
+      <div
+        className={`settings-backdrop${exit.cls}`}
+        onClick={(e) => {
+          if (e.target === e.currentTarget)
+            onClose()
+        }}
+      >
+        <div className={`settings-sheet${exit.cls}`}>
+          <div className="settings-handle" />
+          <div className="settings-header">
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="settings-back"
+              ariaLabel={t('common.back')}
+              onClick={onClose}
+            >
+              <Icon
+                name="chevron"
+                size={20}
+                className="back-chevron"
+              />
+              <span className="settings-back-label">
+                {t('common.back')}
+              </span>
+            </MotionPress>
+            <span className="settings-title">
+              {t('settings.title')}
             </span>
-          </MotionPress>
-          <span className="settings-title">
-            {t('settings.title')}
-          </span>
-          <MotionPress
-            type="button"
-            variant="icon"
-            haptic="light"
-            className="icon-btn settings-close"
-            ariaLabel={t('common.close')}
-            onClick={onClose}
-          >
-            <Icon name="x" size={18} />
-          </MotionPress>
-        </div>
-
-        <div className="settings-list">
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="light"
-            className="settings-item"
-            onClick={handleEq}
-          >
-            <Icon name="eq" size={20} />
-            <span>{t('settings.eq')}</span>
-            <Icon
-              name="chevron"
-              size={16}
-              className="settings-chevron"
-            />
-          </MotionPress>
-
-          <div
-            className="settings-item"
-            onClick={handleVideoToggle}
-          >
-            <Icon name="video" size={20} />
-            <span>{t('settings.video')}</span>
-            <div
-              className={`settings-toggle${videoEnabled ? ' on' : ''}`}
+            <MotionPress
+              type="button"
+              variant="icon"
+              haptic="light"
+              className="icon-btn settings-close"
+              ariaLabel={t('common.close')}
+              onClick={onClose}
             >
-              <div className="settings-toggle-dot" />
-            </div>
+              <Icon name="x" size={18} />
+            </MotionPress>
           </div>
 
-          <div
-            className="settings-item"
-            onClick={handleMonoToggle}
-          >
-            <Icon name="moon" size={20} />
-            <span>{t('settings.monochrome')}</span>
-            <div
-              className={`settings-toggle${monoEnabled ? ' on' : ''}`}
-            >
-              <div className="settings-toggle-dot" />
-            </div>
-          </div>
+          <div className="settings-list">
 
-          <div
-            className="settings-item"
-            onClick={handleSmartBufferingToggle}
-          >
-            <Icon name="download" size={20} />
-            <span>
-              {t('settings.smartBuffering', {
-                defaultValue: 'Умная буферизация',
+            {/* ── Звук ─────────────────────────────────── */}
+            <div className="settings-section-header">
+              {t('settings.sectionSound', {
+                defaultValue: 'Звук',
               })}
-            </span>
-            <div
-              className={`settings-toggle${smartBufferingEnabled ? ' on' : ''}`}
-            >
-              <div className="settings-toggle-dot" />
             </div>
-          </div>
 
-          {isOfflineCacheSupported() && (
-            <>
-              <div
-                className="settings-item"
-                onClick={handleAutoCacheToggle}
-              >
-                <Icon name="cloud-download" size={20} />
-                <span>
-                  {t('settings.offlineAutoCache', {
-                    defaultValue:
-                      'Авто-сохранение лайкнутых треков',
-                  })}
-                </span>
-                <div
-                  className={`settings-toggle${autoCacheEnabled ? ' on' : ''}`}
-                >
-                  <div className="settings-toggle-dot" />
-                </div>
-              </div>
-
-              {autoCacheEnabled && (
-                <div className="settings-item">
-                  <Icon name="layers" size={20} />
-                  <span>
-                    {t('settings.offlineLimit', {
-                      defaultValue: 'Лимит оффлайн-кеша',
-                    })}
-                  </span>
-                  <select
-                    className="settings-select"
-                    value={cacheLimit}
-                    onChange={(e) =>
-                      handleCacheLimitChange(
-                        e.target
-                          .value as CacheLimitChoice,
-                      )
-                    }
-                  >
-                    <option value="none">
-                      {t('settings.offlineLimitNone', {
-                        defaultValue: 'Без лимита',
-                      })}
-                    </option>
-                    <option value="1gb">1 ГБ</option>
-                    <option value="5gb">5 ГБ</option>
-                    <option value="20gb">20 ГБ</option>
-                  </select>
-                </div>
-              )}
-
-              {autoCacheEnabled && (
-                <div className="settings-item settings-item--feedback">
-                  <Icon name="info" size={20} />
-                  <span>
-                    {t('settings.offlineUsage', {
-                      used: formatBytes(storage.used),
-                      quota: formatBytes(storage.quota),
-                      defaultValue:
-                        'Используется {{used}} из {{quota}}',
-                    })}
-                  </span>
-                  <MotionPress
-                    type="button"
-                    variant="ghost"
-                    haptic="medium"
-                    className="settings-mini-btn"
-                    onClick={handleClearOffline}
-                  >
-                    {t('settings.offlineClear', {
-                      defaultValue: 'Очистить',
-                    })}
-                  </MotionPress>
-                </div>
-              )}
-
-              {autoCacheEnabled && breakdown && breakdown.count > 0 && (
-                <div className="settings-item settings-item--feedback">
-                  <Icon name="info" size={20} />
-                  <span>
-                    {t('settings.offlineBreakdown', {
-                      pinned: formatBytes(
-                        breakdown.byPinned.pinned,
-                      ),
-                      unpinned: formatBytes(
-                        breakdown.byPinned.unpinned,
-                      ),
-                      defaultValue:
-                        'Сохранено: {{pinned}} · Прогрев: {{unpinned}}',
-                    })}
-                  </span>
-                  {breakdown.byPinned.unpinned > 0 && (
-                    <MotionPress
-                      type="button"
-                      variant="ghost"
-                      haptic="medium"
-                      className="settings-mini-btn"
-                      onClick={handleClearAutoCache}
-                    >
-                      {t('settings.offlineClearAuto', {
-                        defaultValue: 'Очистить прогрев',
-                      })}
-                    </MotionPress>
-                  )}
-                </div>
-              )}
-
-              {autoCacheEnabled && (
-                <div className="settings-item">
-                  <Icon name="clock" size={20} />
-                  <span>
-                    {t('settings.offlineUnpinnedTtl', {
-                      days: ttlDays,
-                      defaultValue:
-                        'Хранить прогрев: {{days}} дн.',
-                    })}
-                  </span>
-                  <select
-                    className="settings-select"
-                    value={String(ttlDays)}
-                    onChange={(e) =>
-                      handleTtlChange(
-                        Number.parseInt(
-                          e.currentTarget.value,
-                          10,
-                        ),
-                      )
-                    }
-                  >
-                    <option value="1">1</option>
-                    <option value="3">3</option>
-                    <option value="7">7</option>
-                    <option value="14">14</option>
-                  </select>
-                </div>
-              )}
-            </>
-          )}
-
-          <div
-            className="settings-item"
-            onClick={handleSoundToggle}
-          >
-            <Icon
-              name="volume-high"
-              size={20}
-            />
-            <span>
-              {t('settings.interfaceSounds', {
-                defaultValue: 'Звуки интерфейса',
-              })}
-            </span>
-            <div
-              className={`settings-toggle${soundEnabled ? ' on' : ''}`}
-            >
-              <div className="settings-toggle-dot" />
-            </div>
-          </div>
-
-          <div className="settings-item">
-            <Icon name="slider" size={20} />
-            <span>
-              {t('settings.interfaceSoundLevel', {
-                defaultValue: 'Громкость UI',
-              })}
-            </span>
-            <input
-              className="settings-range"
-              type="range"
-              min={0}
-              max={100}
-              step={10}
-              value={Math.round(soundVolume * 100)}
-              onChange={(e) =>
-                handleSoundVolumeChange(
-                  Number(e.target.value) / 100,
-                )
-              }
-            />
-          </div>
-
-          <div className="settings-item settings-item--feedback">
-            <Icon name="sparkle" size={20} />
-            <span>
-              {t('settings.interfaceFeedbackTest', {
-                defaultValue: 'Проверка отклика',
-              })}
-            </span>
-            <div className="settings-inline-actions">
-              <MotionPress
-                type="button"
-                variant="ghost"
-                haptic="selection"
-                className="settings-mini-btn"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleTestSound()
-                }}
-              >
-                {t('settings.testSound', {
-                  defaultValue: 'Звук',
-                })}
-              </MotionPress>
-              <MotionPress
-                type="button"
-                variant="ghost"
-                haptic="selection"
-                className="settings-mini-btn"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleTestHaptic()
-                }}
-              >
-                {t('settings.testHaptic', {
-                  defaultValue: 'Вибро',
-                })}
-              </MotionPress>
-            </div>
-          </div>
-
-          <div className="settings-item">
-            <Icon name="globe" size={20} />
-            <span>{t('settings.language')}</span>
-            <select
-              className="settings-select"
-              value={i18n.language?.startsWith('ru') ? 'ru' : 'en'}
-              onChange={(e) => handleLanguageChange(e.target.value)}
-            >
-              <option value="ru">{t('settings.languageRu')}</option>
-              <option value="en">{t('settings.languageEn')}</option>
-            </select>
-          </div>
-
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="light"
-            className="settings-item"
-            onClick={handleOpenBrowser}
-          >
-            <Icon name="maximize" size={20} />
-            <span>
-              {t('settings.openInBrowser')}
-            </span>
-            <Icon
-              name="chevron"
-              size={16}
-              className="settings-chevron"
-            />
-          </MotionPress>
-
-          {installable && (
             <MotionPress
               type="button"
               variant="ghost"
               haptic="light"
               className="settings-item"
-              onClick={handleInstallHint}
+              onClick={handleEq}
             >
-              <Icon name="install" size={20} />
+              <Icon name="eq" size={20} />
+              <span>{t('settings.eq')}</span>
+              <Icon
+                name="chevron"
+                size={16}
+                className="settings-chevron"
+              />
+            </MotionPress>
+
+            <div
+              className="settings-item"
+              onClick={handleVideoToggle}
+            >
+              <Icon name="video" size={20} />
+              <span>{t('settings.video')}</span>
+              <div
+                className={`settings-toggle${videoEnabled ? ' on' : ''}`}
+              >
+                <div className="settings-toggle-dot" />
+              </div>
+            </div>
+
+            <div
+              className="settings-item"
+              onClick={handleSoundToggle}
+            >
+              <Icon
+                name="volume-high"
+                size={20}
+              />
               <span>
-                {t('settings.installAsApp')}
+                {t('settings.interfaceSounds', {
+                  defaultValue: 'Звуки интерфейса',
+                })}
+              </span>
+              <div
+                className={`settings-toggle${soundEnabled ? ' on' : ''}`}
+              >
+                <div className="settings-toggle-dot" />
+              </div>
+            </div>
+
+            <div className="settings-item settings-item--volume">
+              <div className="settings-volume-label">
+                <Icon name="slider" size={20} />
+                <span>
+                  {t('settings.interfaceSoundLevel', {
+                    defaultValue: 'Громкость UI',
+                  })}
+                </span>
+                <span className="settings-volume-pct">
+                  {Math.round(soundVolume * 100)}%
+                </span>
+              </div>
+              <input
+                className="settings-range settings-range--full"
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={Math.round(soundVolume * 100)}
+                onChange={(e) =>
+                  handleSoundVolumeChange(
+                    Number(e.target.value) / 100,
+                  )
+                }
+              />
+            </div>
+
+            <div
+              className="settings-item"
+              onClick={handleMonoToggle}
+            >
+              <Icon name="moon" size={20} />
+              <span>{t('settings.monochrome')}</span>
+              <div
+                className={`settings-toggle${monoEnabled ? ' on' : ''}`}
+              >
+                <div className="settings-toggle-dot" />
+              </div>
+            </div>
+
+            {/* ── Оффлайн ──────────────────────────────── */}
+            <div className="settings-section-header">
+              {t('settings.sectionOffline', {
+                defaultValue: 'Оффлайн',
+              })}
+            </div>
+
+            <div
+              className="settings-item"
+              onClick={handleSmartBufferingToggle}
+            >
+              <Icon name="download" size={20} />
+              <span>
+                {t('settings.smartBuffering', {
+                  defaultValue: 'Умная буферизация',
+                })}
+              </span>
+              <div
+                className={`settings-toggle${smartBufferingEnabled ? ' on' : ''}`}
+              >
+                <div className="settings-toggle-dot" />
+              </div>
+            </div>
+
+            {isOfflineCacheSupported() && (
+              <>
+                <div
+                  className="settings-item"
+                  onClick={handleAutoCacheToggle}
+                >
+                  <Icon name="cloud-download" size={20} />
+                  <span>
+                    {t('settings.offlineAutoCache', {
+                      defaultValue:
+                        'Авто-сохранение лайков',
+                    })}
+                  </span>
+                  <div
+                    className={`settings-toggle${autoCacheEnabled ? ' on' : ''}`}
+                  >
+                    <div className="settings-toggle-dot" />
+                  </div>
+                </div>
+
+                {autoCacheEnabled && (
+                  <>
+                    <MotionPress
+                      type="button"
+                      variant="ghost"
+                      haptic="light"
+                      className="settings-item settings-item--nav"
+                      onClick={() => {
+                        feedbackTap()
+                        setCacheLimitModalOpen(true)
+                      }}
+                    >
+                      <Icon name="layers" size={20} />
+                      <span>
+                        {t('settings.offlineLimit', {
+                          defaultValue:
+                            'Лимит оффлайн-кеша',
+                        })}
+                      </span>
+                      <span className="settings-item-value">
+                        {cacheLimitLabel}
+                      </span>
+                      <Icon
+                        name="chevron"
+                        size={16}
+                        className="settings-chevron"
+                      />
+                    </MotionPress>
+
+                    <MotionPress
+                      type="button"
+                      variant="ghost"
+                      haptic="light"
+                      className="settings-item settings-item--nav"
+                      onClick={() => {
+                        feedbackTap()
+                        setTtlModalOpen(true)
+                      }}
+                    >
+                      <Icon name="clock" size={20} />
+                      <span>
+                        {t('settings.offlineUnpinnedTtl', {
+                          days: ttlDays,
+                          defaultValue:
+                            'Хранить прогрев',
+                        })}
+                      </span>
+                      <span className="settings-item-value">
+                        {ttlLabel}
+                      </span>
+                      <Icon
+                        name="chevron"
+                        size={16}
+                        className="settings-chevron"
+                      />
+                    </MotionPress>
+
+                    <div className="settings-item settings-item--feedback">
+                      <Icon name="info" size={20} />
+                      <span>
+                        {t('settings.offlineUsage', {
+                          used: formatBytes(storage.used),
+                          quota: formatBytes(
+                            storage.quota,
+                          ),
+                          defaultValue:
+                            'Использовано {{used}} из {{quota}}',
+                        })}
+                      </span>
+                      <MotionPress
+                        type="button"
+                        variant="ghost"
+                        haptic="medium"
+                        className="settings-mini-btn"
+                        onClick={handleClearOffline}
+                      >
+                        {t('settings.offlineClear', {
+                          defaultValue: 'Очистить',
+                        })}
+                      </MotionPress>
+                    </div>
+
+                    {breakdown &&
+                      breakdown.count > 0 &&
+                      breakdown.byPinned.unpinned > 0 && (
+                        <div className="settings-item settings-item--feedback">
+                          <Icon name="info" size={20} />
+                          <span>
+                            {t(
+                              'settings.offlineBreakdown',
+                              {
+                                pinned: formatBytes(
+                                  breakdown.byPinned
+                                    .pinned,
+                                ),
+                                unpinned: formatBytes(
+                                  breakdown.byPinned
+                                    .unpinned,
+                                ),
+                                defaultValue:
+                                  'Сохранено: {{pinned}} · Прогрев: {{unpinned}}',
+                              },
+                            )}
+                          </span>
+                          <MotionPress
+                            type="button"
+                            variant="ghost"
+                            haptic="medium"
+                            className="settings-mini-btn"
+                            onClick={handleClearAutoCache}
+                          >
+                            {t(
+                              'settings.offlineClearAuto',
+                              {
+                                defaultValue:
+                                  'Очистить прогрев',
+                              },
+                            )}
+                          </MotionPress>
+                        </div>
+                      )}
+                  </>
+                )}
+              </>
+            )}
+
+            {/* ── Интерфейс ────────────────────────────── */}
+            <div className="settings-section-header">
+              {t('settings.sectionInterface', {
+                defaultValue: 'Интерфейс',
+              })}
+            </div>
+
+            <div className="settings-item settings-item--lang">
+              <Icon name="globe" size={20} />
+              <span>{t('settings.language')}</span>
+              <div className="settings-lang-pills">
+                <button
+                  type="button"
+                  className={`settings-lang-pill${currentLang === 'ru' ? ' settings-lang-pill--active' : ''}`}
+                  onClick={() =>
+                    handleLanguageChange('ru')
+                  }
+                >
+                  RU
+                </button>
+                <button
+                  type="button"
+                  className={`settings-lang-pill${currentLang === 'en' ? ' settings-lang-pill--active' : ''}`}
+                  onClick={() =>
+                    handleLanguageChange('en')
+                  }
+                >
+                  EN
+                </button>
+              </div>
+            </div>
+
+            <div className="settings-section-gap" />
+
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="settings-item"
+              onClick={handleOpenBrowser}
+            >
+              <Icon name="maximize" size={20} />
+              <span>
+                {t('settings.openInBrowser')}
               </span>
               <Icon
                 name="chevron"
@@ -688,83 +690,183 @@ export function SettingsSheet({
                 className="settings-chevron"
               />
             </MotionPress>
-          )}
 
-          <div className="settings-hint">
-            {t('settings.lockScreenHint')}
+            {installable && (
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
+                className="settings-item"
+                onClick={handleInstallHint}
+              >
+                <Icon name="install" size={20} />
+                <span>
+                  {t('settings.installAsApp')}
+                </span>
+                <Icon
+                  name="chevron"
+                  size={16}
+                  className="settings-chevron"
+                />
+              </MotionPress>
+            )}
+
+            {/* ── Аккаунт ──────────────────────────────── */}
+            <div className="settings-section-header">
+              {t('settings.sectionAccount', {
+                defaultValue: 'Аккаунт',
+              })}
+            </div>
+
+            <LinkedAccounts />
+
+            <OAuthImportAccounts />
+
+            <TwoFASettings
+              enabled={twoFAEnabled}
+              onToggle={setTwoFAEnabled}
+            />
+
+            <button
+              type="button"
+              className="settings-item disabled"
+              disabled
+            >
+              <Icon
+                name="volume-high"
+                size={20}
+              />
+              <span>{t('settings.soundQuality')}</span>
+              <span className="settings-badge">
+                {t('settings.comingSoon')}
+              </span>
+            </button>
+
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="settings-item"
+            >
+              <Icon name="info" size={20} />
+              <span>
+                {t('settings.aboutApp')}
+              </span>
+              <span className="settings-version">
+                v0.1.0
+              </span>
+            </MotionPress>
+
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="light"
+              className="settings-item"
+              onClick={() => {
+                onClose()
+                navigate('/trash')
+              }}
+            >
+              <Icon name="trash" size={20} />
+              <span>
+                {t('settings.trashLink', 'Корзина треков')}
+              </span>
+              <Icon
+                name="chevron"
+                size={16}
+                className="settings-chevron"
+              />
+            </MotionPress>
+
+            <div className="settings-section-gap--lg" />
+
+            <ResetRecommendationsSection onClose={onClose} />
+            <SettingsLegalSection />
+
+            <div className="settings-section-gap--lg" />
+
+            <div className="settings-account-expand">
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
+                className="settings-account-expand__trigger"
+                onClick={() => {
+                  haptic('light')
+                  setAccountExpanded((v) => !v)
+                }}
+              >
+                <Icon name="trash" size={18} />
+                <span>
+                  {t(
+                    'settings.dangerSection',
+                    'Управление аккаунтом',
+                  )}
+                </span>
+                <Icon
+                  name="chevron"
+                  size={16}
+                  className={`settings-chevron settings-expand-chevron${accountExpanded ? ' rotated' : ''}`}
+                />
+              </MotionPress>
+              {accountExpanded && (
+                <div className="settings-account-expand__body">
+                  <AccountDangerZone />
+                </div>
+              )}
+            </div>
           </div>
 
-          <LinkedAccounts />
-
-          <OAuthImportAccounts />
-
-          <TwoFASettings
-            enabled={twoFAEnabled}
-            onToggle={setTwoFAEnabled}
-          />
-
-          <button
-            type="button"
-            className="settings-item disabled"
-            disabled
-          >
-            <Icon
-              name="volume-high"
-              size={20}
-            />
-            <span>{t('settings.soundQuality')}</span>
-            <span className="settings-badge">
-              {t('settings.comingSoon')}
-            </span>
-          </button>
-
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="light"
-            className="settings-item"
-          >
-            <Icon name="info" size={20} />
-            <span>
-              {t('settings.aboutApp')}
-            </span>
-            <span className="settings-version">
-              v0.1.0
-            </span>
-          </MotionPress>
-
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="light"
-            className="settings-item"
-            onClick={() => {
-              onClose()
-              navigate('/trash')
-            }}
-          >
-            <Icon name="trash" size={20} />
-            <span>{t('settings.trashLink', 'Корзина треков')}</span>
-          </MotionPress>
-
-          <ResetRecommendationsSection onClose={onClose} />
-          <SettingsLegalSection />
-          <AccountDangerZone />
-        </div>
-
-        <div className="settings-footer">
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="medium"
-            className="settings-logout"
-            onClick={onLogout}
-          >
-            <Icon name="log-out" size={18} />
-            {t('settings.logOut')}
-          </MotionPress>
+          <div className="settings-footer">
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="medium"
+              className="settings-logout"
+              onClick={onLogout}
+            >
+              <Icon name="log-out" size={18} />
+              {t('settings.logOut')}
+            </MotionPress>
+          </div>
         </div>
       </div>
-    </div>
+
+      <SettingsPickerModal
+        open={cacheLimitModalOpen}
+        onClose={() => setCacheLimitModalOpen(false)}
+        title={t('settings.offlineLimit', {
+          defaultValue: 'Лимит оффлайн-кеша',
+        })}
+        description={t(
+          'settings.offlineLimitDesc',
+          {
+            defaultValue:
+              'Максимальный объём хранилища для автоматически кешированных треков. При достижении лимита старые непрослушанные треки будут удаляться.',
+          },
+        )}
+        options={CACHE_LIMIT_OPTIONS}
+        value={cacheLimit}
+        onChange={handleCacheLimitChange}
+      />
+
+      <SettingsPickerModal
+        open={ttlModalOpen}
+        onClose={() => setTtlModalOpen(false)}
+        title={t('settings.offlineUnpinnedTtlTitle', {
+          defaultValue: 'Хранить прогрев',
+        })}
+        description={t(
+          'settings.offlineTtlDesc',
+          {
+            defaultValue:
+              'Прогрев — треки, предзагруженные автоматически, но не добавленные в избранное. Эта настройка определяет, сколько дней они хранятся на устройстве перед удалением.',
+          },
+        )}
+        options={TTL_OPTIONS}
+        value={String(ttlDays)}
+        onChange={handleTtlChange}
+      />
+    </>
   )
 }

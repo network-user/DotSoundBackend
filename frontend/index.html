@@ -16,7 +16,6 @@
   <link rel="icon" type="image/png" sizes="512x512" href="/mini_app/icon-512.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="/mini_app/icon-180.png" />
   <title>&#46;&#1079;&#1074;&#1091;&#1082;</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     /* Fixed .sound loader */
     body, html {
@@ -73,6 +72,7 @@
       pointer-events: none;
     }
   </style>
+  <script defer src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
   <div id="ds-loader">
@@ -127,18 +127,6 @@
       var loaderMark = loader && loader.querySelector('.loader-mark');
       var loaderText = loader && loader.querySelector('.loader-text');
       var warmBootCacheKey = 'ds:last-ready-at';
-      var warmBootWindowMs = 30 * 60 * 1000;
-      var nowTs = Date.now();
-      var warmBoot = false;
-      try {
-        var rawBootTs = sessionStorage.getItem(warmBootCacheKey);
-        var parsedBootTs = rawBootTs ? Number(rawBootTs) : NaN;
-        warmBoot =
-          Number.isFinite(parsedBootTs) &&
-          nowTs - parsedBootTs <= warmBootWindowMs;
-      } catch (_warmErr) {
-        warmBoot = false;
-      }
       if (loaderMark) {
         loaderMark.setAttribute('aria-label', brandLabel);
       }
@@ -148,7 +136,7 @@
       var done = false;
       var shownAt = Date.now();
       var minVisibleMs = 520;
-      var fallbackMs = 8000;
+      var fallbackMs = 120000;
       function hide() {
         if (done || !loader) return;
         var elapsed = Date.now() - shownAt;
@@ -181,9 +169,6 @@
         } catch (_storeErr) {
           /* ignore */
         }
-      }
-      if (warmBoot) {
-        hideImmediately();
       }
       window.addEventListener('app-ready', hide);
       window.addEventListener('app-ready', rememberWarmBoot);

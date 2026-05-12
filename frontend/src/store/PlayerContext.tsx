@@ -203,6 +203,10 @@ interface PlayerContextValue {
   setSleepTimerEndOfTrack: () => void
   cancelSleepTimer: () => void
   isPlayingFromCache: boolean
+  trackChangeSlide: {
+    bump: number
+    dir: 0 | 1 | -1
+  }
 }
 
 interface PlayerStateValue {
@@ -303,6 +307,10 @@ interface PlayerMetaValue {
     commentId: number
   } | null
   isPlayingFromCache: boolean
+  trackChangeSlide: {
+    bump: number
+    dir: 0 | 1 | -1
+  }
 }
 
 const PlayerStateCtx = createContext<PlayerStateValue | null>(null)
@@ -709,6 +717,11 @@ export function PlayerProvider({
   const radioModeRef = useRef(false)
   const radioSeedTrackIdRef = useRef<number | null>(null)
   const radioPlayedIdsRef = useRef<Set<number>>(new Set())
+  const playTrackSlideInjectRef = useRef<1 | -1 | null>(null)
+  const [trackChangeSlide, setTrackChangeSlide] = useState<{
+    bump: number
+    dir: 0 | 1 | -1
+  }>({ bump: 0, dir: 0 })
   const repeatModeRef = useRef<'none' | 'one' | 'all'>(
     (localStorage.getItem('player-repeat') as 'none' | 'one' | 'all') ?? 'none',
   )
@@ -1649,8 +1662,13 @@ export function PlayerProvider({
     const session = ++playSessionRef.current
     const bail = () => session !== playSessionRef.current
     const audio = audioRef.current
-    if (!audio) return
+    if (!audio) {
+      playTrackSlideInjectRef.current = null
+      return
+    }
+    let prevForSlide: number | null = null
     setTrack((prev) => {
+      prevForSlide = prev?.id ?? null
       if (prev && prev.id !== newTrack.id) {
         const h = historyRef.current
         if (
@@ -1664,6 +1682,21 @@ export function PlayerProvider({
       }
       return newTrack
     })
+    const injected = playTrackSlideInjectRef.current
+    playTrackSlideInjectRef.current = null
+    if (
+      prevForSlide !== null &&
+      prevForSlide !== newTrack.id
+    ) {
+      const dir: 0 | 1 | -1 =
+        injected === 1 || injected === -1
+          ? injected
+          : 0
+      setTrackChangeSlide((c) => ({
+        bump: c.bump + 1,
+        dir,
+      }))
+    }
     streamExpiresAtRef.current = null
     lastStreamUrlRef.current = null
     lastTrackIdRef.current = newTrack.id
@@ -1939,6 +1972,8 @@ export function PlayerProvider({
 
   const playNext = async (): Promise<boolean> => {
     if (!track) return false
+    playTrackSlideInjectRef.current = 1
+    try {
     const isOffline =
       typeof navigator !== 'undefined' &&
       navigator.onLine === false
@@ -2061,6 +2096,9 @@ export function PlayerProvider({
       return await _fallbackToCachedTrack(track.id)
     } catch {
       return await _fallbackToCachedTrack(track.id)
+    }
+    } finally {
+      playTrackSlideInjectRef.current = null
     }
   }
 
@@ -2215,6 +2253,8 @@ export function PlayerProvider({
       a.currentTime = 0
       return
     }
+    playTrackSlideInjectRef.current = -1
+    try {
     const prev = historyRef.current.pop()
     if (prev) {
       await playTrack(prev)
@@ -2229,6 +2269,9 @@ export function PlayerProvider({
         await playTrack(t)
       }
     } catch {}
+    } finally {
+      playTrackSlideInjectRef.current = null
+    }
   }
 
   const togglePlay = () => {
@@ -2294,6 +2337,7 @@ export function PlayerProvider({
       navigator.mediaSession.playbackState = 'none'
     }
     setTrack(null)
+    setTrackChangeSlide({ bump: 0, dir: 0 })
     setIsPlaying(false)
     setCurrentTime(0)
     setDuration(0)
@@ -2624,6 +2668,7 @@ export function PlayerProvider({
       abLoop,
       pendingCommentFocus,
       isPlayingFromCache,
+      trackChangeSlide,
     }),
     [
       track, volume,
@@ -2635,6 +2680,7 @@ export function PlayerProvider({
       abLoop,
       pendingCommentFocus,
       isPlayingFromCache,
+      trackChangeSlide,
     ],
   )
 

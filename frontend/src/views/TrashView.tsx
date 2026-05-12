@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { Icon } from '@/components/Icon/Icon'
 import { api } from '@/lib/api'
 import type { Track } from '@/types/api'
 
@@ -8,6 +10,7 @@ const PAGE_SIZE = 50
 
 export function TrashView() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [tracks, setTracks] = useState<Track[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [busyId, setBusyId] = useState<number | null>(null)
@@ -44,20 +47,37 @@ export function TrashView() {
 
   return (
     <div className="trash-view">
-      <header className="page-header">
-        <h1>{t('trash.title', 'Удалённые треки')}</h1>
-        <p className="settings-hint">
-          {t(
-            'trash.hint',
-            'Треки можно восстановить в течение grace-периода, ' +
-              'после чего они будут удалены безвозвратно.',
-          )}
-        </p>
-      </header>
+      <div className="trash-view__header">
+        <MotionPress
+          type="button"
+          variant="ghost"
+          haptic="light"
+          className="trash-view__back"
+          ariaLabel={t('common.back')}
+          onClick={() => navigate(-1)}
+        >
+          <Icon name="chevron" size={20} className="back-chevron" />
+          <span>{t('common.back')}</span>
+        </MotionPress>
+        <h1 className="trash-view__title">
+          {t('trash.title', 'Удалённые треки')}
+        </h1>
+      </div>
+
+      <p className="trash-view__hint">
+        {t(
+          'trash.hint',
+          'Треки можно восстановить в течение grace-периода, ' +
+            'после чего они будут удалены безвозвратно.',
+        )}
+      </p>
+
       {loading && tracks === null ? (
-        <div className="page-loading">{t('common.loading', 'Загрузка…')}</div>
+        <div className="trash-view__loading">
+          {t('common.loading', 'Загрузка…')}
+        </div>
       ) : (tracks?.length ?? 0) === 0 ? (
-        <div className="page-empty">
+        <div className="trash-view__empty">
           {t('trash.empty', 'Корзина пуста.')}
         </div>
       ) : (

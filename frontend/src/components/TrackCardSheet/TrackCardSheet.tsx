@@ -57,11 +57,12 @@ import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { m, useReducedMotion } from '@/lib/motion'
-import { type PanInfo } from 'framer-motion'
+import { AnimatePresence, type PanInfo } from 'framer-motion'
 import { LyricsPanel } from './LyricsPanel'
 import { buildTrackCardSummaryLine } from '@/lib/trackCardFormat'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useSwipeX } from '@/hooks/useSwipeX'
+import { useTrackSlidePresence } from '@/hooks/useTrackSlidePresence'
 
 const TCS_DRAG_CLOSE_THRESHOLD = 100
 
@@ -139,6 +140,7 @@ export function TrackCardSheet({
     volume,
     playbackRate,
     abLoop,
+    trackChangeSlide,
   } = usePlayerMeta()
   const {
     closeCard,
@@ -169,6 +171,7 @@ export function TrackCardSheet({
   const { t } = useTranslation()
   const reduce = useReducedMotion()
   const desktopFineNav = useDesktopFinePointer()
+  const slidePresence = useTrackSlidePresence()
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
   const sound = useSound()
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -1039,7 +1042,7 @@ export function TrackCardSheet({
   const tcsNavSwipeTouchStyle = desktopFineNav
     ? undefined
     : ({
-        touchAction: 'pan-y',
+        touchAction: 'pan-x pan-y',
         userSelect: 'none',
       } as const)
 
@@ -1193,39 +1196,53 @@ export function TrackCardSheet({
               </div>
             )}
             {coverSrc && !coverFailed ? (
-              <div className="re-tcs-cover-stack">
-                {useRichCoverVisuals ? (
-                  <AmbientStage
-                    coverUrl={coverSrc}
-                    className="re-tcs-ambient"
-                  >
-                    <KenBurnsCover
+              <AnimatePresence
+                initial={false}
+                mode="popLayout"
+              >
+                <m.div
+                  key={`${track.id}-${trackChangeSlide.bump}`}
+                  className="re-tcs-cover-slide"
+                  initial={slidePresence.initial}
+                  animate={slidePresence.animate}
+                  exit={slidePresence.exit}
+                  transition={slidePresence.transition}
+                >
+                  <div className="re-tcs-cover-stack">
+                    {useRichCoverVisuals ? (
+                      <AmbientStage
+                        coverUrl={coverSrc}
+                        className="re-tcs-ambient"
+                      >
+                        <KenBurnsCover
+                          src={coverSrc}
+                          srcSet={coverSrcSetAttr}
+                          alt=""
+                          duration={20}
+                          className="re-tcs-kb"
+                        />
+                      </AmbientStage>
+                    ) : (
+                      <img
+                        src={coverSrc}
+                        srcSet={coverSrcSetAttr}
+                        sizes="min(92vw, 480px)"
+                        alt=""
+                        className="re-tcs-cover-probe"
+                        loading="eager"
+                        fetchPriority="high"
+                      />
+                    )}
+                    <img
                       src={coverSrc}
-                      srcSet={coverSrcSetAttr}
                       alt=""
-                      duration={20}
-                      className="re-tcs-kb"
+                      className="re-tcs-cover-probe"
+                      onError={() => setCoverFailed(true)}
+                      aria-hidden
                     />
-                  </AmbientStage>
-                ) : (
-                  <img
-                    src={coverSrc}
-                    srcSet={coverSrcSetAttr}
-                    sizes="min(92vw, 480px)"
-                    alt=""
-                    className="re-tcs-cover-probe"
-                    loading="eager"
-                    fetchPriority="high"
-                  />
-                )}
-                <img
-                  src={coverSrc}
-                  alt=""
-                  className="re-tcs-cover-probe"
-                  onError={() => setCoverFailed(true)}
-                  aria-hidden
-                />
-              </div>
+                  </div>
+                </m.div>
+              </AnimatePresence>
             ) : (
               <div className="tcs-cover-placeholder">
                 <Icon name="music" size={72} />

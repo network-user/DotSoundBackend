@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 
 import { MotionPress } from '@/components/ui/MotionPress'
 import { Icon } from '@/components/Icon/Icon'
+import { coverProxyUrl } from '@/lib/coverProxy'
 import { api } from '@/lib/api'
 
 type StatusResponse = Awaited<ReturnType<typeof api.getMyArtist>>
@@ -132,6 +133,8 @@ export function ArtistProfileEditView() {
   const { t } = useTranslation()
 
   const [status, setStatus] = useState<StatusResponse | null>(null)
+  const [initialLoading, setInitialLoading] = useState(true)
+  const [initialError, setInitialError] = useState<string | null>(null)
   const [fields, setFields] = useState<DraftFields | null>(null)
   const [serverFields, setServerFields] =
     useState<DraftFields | null>(null)
@@ -151,9 +154,7 @@ export function ArtistProfileEditView() {
     const draft = loadDraft()
     setFields(draft ?? base)
     if (res.artist?.image_key) {
-      setAvatarPreview(
-        `/api/v1/files/cover?key=${encodeURIComponent(res.artist.image_key)}`,
-      )
+      setAvatarPreview(coverProxyUrl(res.artist.image_key))
     } else {
       setAvatarPreview(null)
     }
@@ -161,34 +162,45 @@ export function ArtistProfileEditView() {
 
   useEffect(() => {
     let cancelled = false
+    setInitialLoading(true)
+    setInitialError(null)
     ;(async () => {
       try {
-        const res = await api.getMyArtist()
-        if (cancelled) return
-        setStatus(res)
-        const base = artistToFields(res.artist)
-        setServerFields(base)
-        const draft = loadDraft()
-        setFields(draft ?? base)
-        if (res.artist?.image_key) {
-          setAvatarPreview(
-            `/api/v1/files/cover?key=${encodeURIComponent(res.artist.image_key)}`,
-          )
-        }
+        await refresh()
       } catch (err) {
         if (!cancelled) {
-          setError(
+          setInitialError(
             err instanceof Error
               ? err.message
               : 'Не удалось загрузить профиль артиста',
           )
+        }
+      } finally {
+        if (!cancelled) {
+          setInitialLoading(false)
         }
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [refresh])
+
+  const retryInitialLoad = useCallback(async () => {
+    setInitialLoading(true)
+    setInitialError(null)
+    try {
+      await refresh()
+    } catch (err) {
+      setInitialError(
+        err instanceof Error
+          ? err.message
+          : 'Не удалось загрузить профиль артиста',
+      )
+    } finally {
+      setInitialLoading(false)
+    }
+  }, [refresh])
 
   const dirtyPatch = useMemo(() => {
     if (!fields || !serverFields) return null
@@ -260,8 +272,11 @@ export function ArtistProfileEditView() {
     setEnsuring(true)
     setError(null)
     try {
-      await api.ensureMyArtist()
+      const ensured = await api.ensureMyArtist()
       await refresh()
+      if (ensured.artist?.id) {
+        navigate(`/artist/${ensured.artist.id}`)
+      }
     } catch (err) {
       setError(formatEnsureError(err))
     } finally {
@@ -271,28 +286,107 @@ export function ArtistProfileEditView() {
 
   const handleAvatarPick = async (file: File) => {
     if (!file) return
+    const priorKey = status?.artist?.image_key ?? null
     const localUrl = URL.createObjectURL(file)
     setAvatarPreview(localUrl)
     setBusy(true)
     try {
       const form = new FormData()
       form.append('avatar', file)
-      await api.uploadMyArtistAvatar(form)
+      const updated = await api.uploadMyArtistAvatar(form)
+      setStatus((prev) => {
+        if (!prev?.artist) return prev
+        return {
+          ...prev,
+          artist: { ...prev.artist, ...updated },
+        }
+      })
+      setAvatarPreview(
+        updated.image_key
+          ? coverProxyUrl(updated.image_key)
+          : null,
+      )
     } catch (err) {
+      setAvatarPreview(
+        priorKey ? coverProxyUrl(priorKey) : null,
+      )
       setError(
         err instanceof Error
           ? err.message
           : 'Не удалось загрузить аватар',
       )
     } finally {
+      URL.revokeObjectURL(localUrl)
       setBusy(false)
     }
   }
 
+  if (initialLoading) {
+    return (
+      <div className="artist-edit-view">
+        <section className="te-section ae-state-shell">
+          <div className="ae-state-spinner" aria-hidden />
+          <h2>
+            {t(
+              'artistEdit.loadingTitle',
+              'Загружаем профиль артиста',
+            )}
+          </h2>
+          <p className="te-hint">
+            {t(
+              'artistEdit.loadingHint',
+              'Проверяем текущие данные и подготавливаем экран.',
+            )}
+          </p>
+        </section>
+      </div>
+    )
+  }
+
+  if (initialError) {
+    return (
+      <div className="artist-edit-view">
+        <section className="te-section ae-state-shell">
+          <h2>
+            {t(
+              'artistEdit.loadingErrorTitle',
+              'Не удалось загрузить профиль артиста',
+            )}
+          </h2>
+          <p className="te-hint">{initialError}</p>
+          <div className="ae-state-actions">
+            <MotionPress
+              type="button"
+              variant="primary"
+              onClick={() => void retryInitialLoad()}
+            >
+              {t('common.retry', 'Повторить')}
+            </MotionPress>
+            <MotionPress
+              type="button"
+              variant="ghost"
+              onClick={() => navigate('/profile')}
+            >
+              {t('profile.backToProfile', 'Назад в профиль')}
+            </MotionPress>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
   if (!status) {
     return (
-      <div className="page-loading">
-        {error ? error : t('common.loading', 'Загрузка…')}
+      <div className="artist-edit-view">
+        <section className="te-section ae-state-shell">
+          <div className="ae-state-spinner" aria-hidden />
+          <h2>
+            {t(
+              'artistEdit.loadingTitle',
+              'Загружаем профиль артиста',
+            )}
+          </h2>
+        </section>
       </div>
     )
   }
@@ -381,7 +475,7 @@ export function ArtistProfileEditView() {
   const bioOver = bioLen > 2000
   const profileCompletion = completionPercent(
     fields,
-    Boolean(avatarPreview),
+    Boolean(a?.image_key),
   )
 
   return (
@@ -471,6 +565,22 @@ export function ArtistProfileEditView() {
                 })}
               </span>
             </div>
+            <div className="ae-hero-upload">
+              <MotionPress
+                type="button"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => navigate('/upload')}
+              >
+                <Icon name="upload" size={18} />
+                <span>
+                  {t(
+                    'artistEdit.heroUploadTrack',
+                    'Загрузить трек',
+                  )}
+                </span>
+              </MotionPress>
+            </div>
           </div>
         </div>
         {avatarPreview ? (
@@ -482,7 +592,14 @@ export function ArtistProfileEditView() {
               onClick={async () => {
                 setBusy(true)
                 try {
-                  await api.removeMyArtistAvatar()
+                  const cleared = await api.removeMyArtistAvatar()
+                  setStatus((prev) => {
+                    if (!prev?.artist) return prev
+                    return {
+                      ...prev,
+                      artist: { ...prev.artist, ...cleared },
+                    }
+                  })
                   setAvatarPreview(null)
                 } catch (err) {
                   setError(
@@ -610,28 +727,44 @@ export function ArtistProfileEditView() {
       ) : null}
       <section className="te-section ae-finish">
         <h2>
-          {t('artistEdit.finishTitle', 'Профиль готов?')}
+          {t(
+            'artistEdit.finishTitle',
+            'Страница артиста',
+          )}
         </h2>
         <p className="te-hint">
           {t(
             'artistEdit.finishHint',
-            'Когда закончите редактирование, вернитесь в профиль или сразу загрузите новый трек.',
+            'Когда закончите заполнение, откройте публичную страницу — её можно открыть в любой момент из профиля.',
           )}
         </p>
         <div className="ae-finish__actions">
           <MotionPress
             type="button"
             variant="primary"
-            onClick={() => navigate('/profile')}
+            onClick={() => {
+              const artistId = status.artist?.id
+              if (artistId) {
+                navigate(`/artist/${artistId}`)
+              } else {
+                navigate('/profile')
+              }
+            }}
           >
-            {t('artistEdit.finishAction', 'Готово')}
+            {t(
+              'artistEdit.finishAction',
+              'Открыть страницу артиста',
+            )}
           </MotionPress>
           <MotionPress
             type="button"
             variant="ghost"
             onClick={() => navigate('/upload')}
           >
-            {t('artistEdit.finishUpload', 'Загрузить трек')}
+            {t(
+              'artistEdit.finishUploadTrack',
+              'Загрузить трек',
+            )}
           </MotionPress>
         </div>
       </section>

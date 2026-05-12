@@ -138,6 +138,7 @@ export function ArtistView() {
     useState(false)
   const [catalogEditorMounted, setCatalogEditorMounted] =
     useState(false)
+  const [myArtistId, setMyArtistId] = useState<number | null>(null)
 
   const goBack = useCallback(() => {
     if (window.history.length > 1) {
@@ -195,6 +196,17 @@ export function ArtistView() {
       .catch((e) => {
         if (cancelled) return
         setError(getApiErrorMessage(e, t('redesign.artist.loadError')))
+      })
+
+    api
+      .getMyArtist()
+      .then((owned) => {
+        if (cancelled) return
+        setMyArtistId(owned.artist?.id ?? null)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setMyArtistId(null)
       })
 
     api
@@ -329,6 +341,7 @@ export function ArtistView() {
   const handleOpenStats = useCallback(() => {
     navigate(`/artist/${artistId}/stats`)
   }, [navigate, artistId])
+  const isOwnArtist = myArtistId === artistId
 
   const discography: DiscographyItem[] = useMemo(() => {
     const raw = detail?.discography
@@ -509,6 +522,38 @@ export function ArtistView() {
                   : t('redesign.artist.follow')}
               </span>
             </MotionPress>
+            {isOwnArtist && (
+              <>
+                <MotionPress
+                  variant="ghost"
+                  haptic="light"
+                  onClick={() => navigate('/upload')}
+                  className="rf-artist__follow-btn"
+                >
+                  <Icon name="upload" size={16} />
+                  <span>
+                    {t(
+                      'redesign.artist.uploadTrack',
+                      'Загрузить трек',
+                    )}
+                  </span>
+                </MotionPress>
+                <MotionPress
+                  variant="ghost"
+                  haptic="light"
+                  onClick={() => navigate('/profile/artist')}
+                  className="rf-artist__follow-btn"
+                >
+                  <Icon name="edit" size={16} />
+                  <span>
+                    {t(
+                      'artistEdit.title',
+                      'Профиль артиста',
+                    )}
+                  </span>
+                </MotionPress>
+              </>
+            )}
           </div>
         </div>
       </AmbientStage>

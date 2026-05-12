@@ -444,7 +444,8 @@
       "genreTabArtists": "Artists",
       "genreTabSoon": "Coming soon",
       "badgeExternal": "External source",
-      "badgeLicensed": "Licensed"
+      "badgeLicensed": "Licensed",
+      "uploadTrack": "Upload track"
     },
     "recap": {
       "profileEntry": "Year in review",
@@ -728,6 +729,7 @@
       }
     },
     "playerBar": {
+      "openFullPlayer": "Full player",
       "likeMenu": "Like",
       "unlikeMenu": "Unlike",
       "addToPlaylistMenu": "Add to playlist…",

@@ -106,6 +106,7 @@ async def cover_proxy(
         "image-blobs/",
         "playlist-covers/",
         "avatars/",
+        "artist-avatars/",
         "artists/",
         "chat_photos/",
         "voice/",

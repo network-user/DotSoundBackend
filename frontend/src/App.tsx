@@ -181,27 +181,6 @@ const AdminApp = lazyWithRetry(() =>
   })),
 )
 
-const WARM_BOOT_CACHE_KEY = 'ds:last-ready-at'
-const WARM_BOOT_WINDOW_MS = 30 * 60 * 1000
-
-function hasRecentWarmBoot(): boolean {
-  try {
-    const raw = sessionStorage.getItem(
-      WARM_BOOT_CACHE_KEY,
-    )
-    if (!raw) {
-      return false
-    }
-    const lastReadyAt = Number(raw)
-    if (!Number.isFinite(lastReadyAt)) {
-      return false
-    }
-    return Date.now() - lastReadyAt <= WARM_BOOT_WINDOW_MS
-  } catch {
-    return false
-  }
-}
-
 function TrackDeepLinkRoute() {
   useTrackDeepLink()
   return null
@@ -248,7 +227,6 @@ export function App() {
   const navigate = useNavigate()
   const location = useLocation()
   const prefetch = useOptionalPrefetch()
-  const warmBoot = useRef(hasRecentWarmBoot())
   const [authorId, setAuthorId] = useState<
     number | null
   >(null)
@@ -635,9 +613,6 @@ export function App() {
   }
 
   if (!isInitialized) {
-    if (warmBoot.current) {
-      return null
-    }
     return (
       <div className="splash-screen">
         <div className="splash-logo">{brandLabel}</div>

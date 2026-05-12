@@ -82,7 +82,12 @@
     "websiteLabel": "Website",
     "completion": "{{pct}}% complete",
     "completionLabel": "Profile completion",
-    "removeAvatar": "Remove avatar"
+    "removeAvatar": "Remove avatar",
+    "finishTitle": "Artist page",
+    "finishHint": "When you are done filling in details, open your public page — you can open it anytime from your profile.",
+    "finishAction": "Open artist page",
+    "finishUploadTrack": "Upload track",
+    "heroUploadTrack": "Upload track"
   },
   "profileCard": {
     "artistTitle": "Your artist profile",

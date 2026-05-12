@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
+import { coverProxyUrl } from '@/lib/coverProxy'
 import { api } from '@/lib/api'
 
 type Status = Awaited<ReturnType<typeof api.getMyArtist>>
@@ -30,7 +31,7 @@ export function ProfileArtistPreview() {
 
   const a = status.artist
   const avatarUrl = a?.image_key
-    ? `/api/v1/files/cover?key=${encodeURIComponent(a.image_key)}`
+    ? coverProxyUrl(a.image_key)
     : null
 
   return (

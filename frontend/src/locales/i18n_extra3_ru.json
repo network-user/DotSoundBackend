@@ -82,7 +82,12 @@
     "websiteLabel": "Сайт",
     "completion": "Заполнено {{pct}}%",
     "completionLabel": "Заполненность профиля",
-    "removeAvatar": "Убрать аватар"
+    "removeAvatar": "Убрать аватар",
+    "finishTitle": "Страница артиста",
+    "finishHint": "Когда закончите заполнение, откройте публичную страницу — её можно открыть в любой момент из профиля.",
+    "finishAction": "Открыть страницу артиста",
+    "finishUploadTrack": "Загрузить трек",
+    "heroUploadTrack": "Загрузить трек"
   },
   "profileCard": {
     "artistTitle": "Ваш профиль артиста",
