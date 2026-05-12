@@ -72,10 +72,11 @@ class AlbumRepository:
         is_public: bool | None = None,
         cover_key: str | None = None,
         owner_id: int | None = None,
+        clear_description: bool = False,
     ) -> Album:
         if title is not None:
             album.title = title
-        if description is not None:
+        if description is not None or clear_description:
             album.description = description
         if is_public is not None:
             album.is_public = is_public

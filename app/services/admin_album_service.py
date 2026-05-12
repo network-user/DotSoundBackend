@@ -46,6 +46,7 @@ class AdminAlbumService:
         description: str | None,
         is_public: bool | None,
         owner_id: int | None,
+        clear_description: bool = False,
     ) -> Album | None:
         album = await self._album_repo.get_by_id(album_id)
         if not album:
@@ -63,6 +64,7 @@ class AdminAlbumService:
             description=description,
             is_public=is_public,
             owner_id=owner_id,
+            clear_description=clear_description,
         )
         await self._session.commit()
         await self._session.refresh(album)

@@ -129,7 +129,7 @@ async def admin_patch_album(
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
 ) -> AlbumResponse:
-    fields = body.model_dump(exclude_none=True)
+    fields = body.model_dump(exclude_unset=True)
     if not fields:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -142,6 +142,9 @@ async def admin_patch_album(
         description=fields.get("description"),
         is_public=fields.get("is_public"),
         owner_id=fields.get("owner_id"),
+        clear_description=(
+            "description" in fields and fields["description"] is None
+        ),
     )
     if not album:
         raise HTTPException(

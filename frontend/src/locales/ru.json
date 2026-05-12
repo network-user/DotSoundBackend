@@ -274,6 +274,9 @@
       "charts": {
         "rps": "Нагрузка (RPS)",
         "latency": "Задержка p95"
+      },
+      "outbound": {
+        "title": "Сетевой исходящий трафик"
       }
     },
     "users": {
@@ -351,9 +354,14 @@
       "tracksTitle": "Треки (порядок)",
       "removeTrack": "Убрать",
       "saveOrder": "Сохранить порядок",
+      "editTrack": "Изменить",
+      "saveTrackMeta": "Сохранить трек",
+      "trackArtist": "Исполнитель",
+      "changeTrackCover": "Обложка трека…",
       "addTrack": "Добавить трек",
       "addTrackTitle": "Выберите трек",
-      "addTrackSearch": "Поиск по названию/исполнителю…"
+      "addTrackSearch": "Поиск по названию/исполнителю…",
+      "addTrackAllInAlbum": "Ничего не найдено или все треки уже в альбоме."
     },
     "playlists": {
       "title": "Плейлисты",
@@ -938,7 +946,9 @@
       "backupQueued": "Резервная копия поставлена в очередь: задача {{taskId}}",
       "newFlagPlaceholder": "имя нового feature-флага",
       "createFlag": "Создать",
-      "creatingFlag": "Создание…"
+      "creatingFlag": "Создание…",
+      "aiEnrichmentTitle": "Обогащение AI",
+      "backupsTitle": "Резервные копии"
     },
     "common": {
       "prev": "Назад",
@@ -959,6 +969,33 @@
       "warn": "предупреждение",
       "error": "ошибка",
       "unknown": "неизвестно"
+    },
+    "menu": {
+      "groups": {
+        "overview": "Обзор",
+        "catalog": "Каталог",
+        "audience": "Аудитория",
+        "ops": "Операции",
+        "trust": "Доверие и конфиг",
+        "other": "Прочее"
+      }
+    },
+    "cmdk": {
+      "title": "Командная палитра",
+      "placeholder": "Поиск разделов, переход на страницу…",
+      "empty": "Ничего не найдено",
+      "hintNav": "переход",
+      "hintGo": "открыть",
+      "hintClose": "закрыть",
+      "trigger": "Поиск",
+      "open": "Открыть командную палитру",
+      "groups": {
+        "nav": "Навигация"
+      }
+    },
+    "theme": {
+      "toLight": "Переключить на светлую тему",
+      "toDark": "Переключить на тёмную тему"
     }
   },
   "artist": {

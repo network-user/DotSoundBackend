@@ -274,6 +274,9 @@
       "charts": {
         "rps": "Traffic (RPS)",
         "latency": "Latency p95"
+      },
+      "outbound": {
+        "title": "Outbound network"
       }
     },
     "users": {
@@ -351,9 +354,14 @@
       "tracksTitle": "Tracks (order)",
       "removeTrack": "Remove",
       "saveOrder": "Save order",
+      "editTrack": "Edit",
+      "saveTrackMeta": "Save track",
+      "trackArtist": "Artist line",
+      "changeTrackCover": "Cover image…",
       "addTrack": "Add track",
       "addTrackTitle": "Pick a track",
-      "addTrackSearch": "Search by title or artist…"
+      "addTrackSearch": "Search by title or artist…",
+      "addTrackAllInAlbum": "No matching tracks, or every match is already in this album."
     },
     "playlists": {
       "title": "Playlists",
@@ -938,7 +946,9 @@
       "backupQueued": "Backup queued: task {{taskId}}",
       "newFlagPlaceholder": "new feature flag name",
       "createFlag": "Create",
-      "creatingFlag": "Creating…"
+      "creatingFlag": "Creating…",
+      "aiEnrichmentTitle": "AI enrichment",
+      "backupsTitle": "Backups"
     },
     "common": {
       "prev": "Prev",
@@ -959,6 +969,33 @@
       "warn": "warning",
       "error": "error",
       "unknown": "unknown"
+    },
+    "menu": {
+      "groups": {
+        "overview": "Overview",
+        "catalog": "Catalog",
+        "audience": "Audience",
+        "ops": "Operations",
+        "trust": "Trust & config",
+        "other": "Other"
+      }
+    },
+    "cmdk": {
+      "title": "Command palette",
+      "placeholder": "Search sections, jump to a page…",
+      "empty": "No matches",
+      "hintNav": "navigate",
+      "hintGo": "go",
+      "hintClose": "close",
+      "trigger": "Search",
+      "open": "Open command palette",
+      "groups": {
+        "nav": "Navigate"
+      }
+    },
+    "theme": {
+      "toLight": "Switch to light theme",
+      "toDark": "Switch to dark theme"
     }
   },
   "artist": {

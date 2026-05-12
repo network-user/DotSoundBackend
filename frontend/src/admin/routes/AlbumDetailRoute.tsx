@@ -16,6 +16,8 @@ interface DetailTrack {
   id: number
   title: string
   artist: string | null
+  description: string | null
+  cover_key: string | null
 }
 
 export function AlbumDetailRoute() {
@@ -32,8 +34,20 @@ export function AlbumDetailRoute() {
   const [orderedTrackIds, setOrderedTrackIds] = useState<number[]>([])
   const [addModal, setAddModal] = useState(false)
   const [addSearch, setAddSearch] = useState('')
-  const [addPage, setAddPage] = useState(1)
+  const [addResults, setAddResults] = useState<
+    Array<Record<string, unknown>>
+  >([])
+  const [addLoading, setAddLoading] = useState(false)
   const [busy, setBusy] = useState(false)
+
+  // per-track inline editing
+  const [editingTrackId, setEditingTrackId] = useState<number | null>(
+    null,
+  )
+  const [editTitle, setEditTitle] = useState('')
+  const [editArtist, setEditArtist] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const trackCoverRefs = useRef<Map<number, HTMLInputElement>>(new Map())
 
   const detailQuery = useQuery({
     queryKey: ['admin', 'album', albumId],
@@ -129,10 +143,7 @@ export function AlbumDetailRoute() {
   const handleSaveOrder = async () => {
     setBusy(true)
     try {
-      await adminApi.reorderAdminAlbumTracks(
-        albumId,
-        orderedTrackIds,
-      )
+      await adminApi.reorderAdminAlbumTracks(albumId, orderedTrackIds)
       refreshDetail()
     } catch (err) {
       await showAlert(
@@ -149,9 +160,8 @@ export function AlbumDetailRoute() {
     setBusy(true)
     try {
       await adminApi.removeAdminAlbumTrack(albumId, trackId)
-      setOrderedTrackIds((prev) =>
-        prev.filter((id) => id !== trackId),
-      )
+      setOrderedTrackIds((prev) => prev.filter((id) => id !== trackId))
+      if (editingTrackId === trackId) setEditingTrackId(null)
       refreshDetail()
       refreshList()
     } catch (err) {
@@ -183,16 +193,102 @@ export function AlbumDetailRoute() {
     }
   }
 
-  const addQuery = useQuery({
-    queryKey: ['admin', 'albums', 'pick-track', addPage, addSearch],
-    queryFn: () =>
-      adminApi.listTracks({
-        page: addPage,
-        size: 15,
-        search: addSearch || undefined,
+  // debounced track search for the add-modal
+  useEffect(() => {
+    if (!addModal) {
+      setAddResults([])
+      return
+    }
+    let cancelled = false
+    setAddLoading(true)
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await adminApi.listTracks({
+          search: addSearch.trim() || undefined,
+          size: 20,
+        })
+        if (cancelled) return
+        const inPl = new Set(orderedTrackIds)
+        setAddResults(
+          res.items.filter((it) => !inPl.has(it.id as number)),
+        )
+      } catch {
+        if (!cancelled) setAddResults([])
+      } finally {
+        if (!cancelled) setAddLoading(false)
+      }
+    }, 300)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [addModal, addSearch, orderedTrackIds])
+
+  const saveTrackMetaMut = useMutation({
+    mutationFn: (args: {
+      trackId: number
+      title: string
+      artist: string | null
+      description: string | null
+    }) =>
+      adminApi.updateTrackMetadata(args.trackId, {
+        title: args.title,
+        artist: args.artist,
+        description: args.description,
       }),
-    enabled: addModal,
+    onSuccess: () => {
+      setEditingTrackId(null)
+      refreshDetail()
+    },
   })
+
+  const uploadTrackCoverMut = useMutation({
+    mutationFn: (args: { trackId: number; file: File }) =>
+      adminApi.uploadTrackCover(args.trackId, args.file),
+    onSuccess: () => refreshDetail(),
+  })
+
+  const handleSaveTrackMeta = async (tid: number) => {
+    try {
+      await saveTrackMetaMut.mutateAsync({
+        trackId: tid,
+        title: editTitle.trim(),
+        artist: editArtist.trim() || null,
+        description: editDescription.trim() || null,
+      })
+    } catch (err) {
+      await showAlert(
+        t('admin.common.errorWithMessage', {
+          message: (err as Error).message,
+        }),
+      )
+    }
+  }
+
+  const handleTrackCoverChange = async (
+    tid: number,
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    try {
+      await uploadTrackCoverMut.mutateAsync({ trackId: tid, file: f })
+    } catch (err) {
+      await showAlert(
+        t('admin.common.errorWithMessage', {
+          message: (err as Error).message,
+        }),
+      )
+    }
+  }
+
+  const startEdit = (tr: DetailTrack) => {
+    setEditingTrackId(tr.id)
+    setEditTitle(tr.title ?? '')
+    setEditArtist(tr.artist ?? '')
+    setEditDescription(tr.description ?? '')
+  }
 
   const coverKey = detailQuery.data?.cover_key as
     | string
@@ -428,64 +524,280 @@ export function AlbumDetailRoute() {
       >
         {orderedTrackIds.map((tid, idx) => {
           const tr = trackById.get(tid)
+          const isEditing = editingTrackId === tid
+          const coverUrl = tr?.cover_key
+            ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(tr.cover_key)}`
+            : null
           return (
             <li
               key={tid}
               style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 8,
-                padding: '8px 10px',
                 borderRadius: 8,
                 border: '1px solid var(--border)',
                 background: 'var(--bg-elevated)',
+                overflow: 'hidden',
               }}
             >
-              <span
-                style={{
-                  fontSize: 14,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {tr?.title ?? `#${tid}`}
-                {tr?.artist ? ` — ${tr.artist}` : ''}
-              </span>
-              <span
+              {/* track row header */}
+              <div
                 style={{
                   display: 'flex',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
-                  gap: 4,
-                  flexShrink: 0,
+                  gap: 8,
+                  padding: '8px 10px',
                 }}
               >
-                <MotionPress
-                  variant="ghost"
-                  aria-label="up"
-                  disabled={busy || idx === 0}
-                  onClick={() => moveTrack(idx, -1)}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    overflow: 'hidden',
+                  }}
                 >
-                  <Icon name="chevron-up" size={18} />
-                </MotionPress>
-                <MotionPress
-                  variant="ghost"
-                  aria-label="down"
-                  disabled={
-                    busy || idx === orderedTrackIds.length - 1
-                  }
-                  onClick={() => moveTrack(idx, 1)}
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 6,
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      background: 'var(--surface)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {coverUrl ? (
+                      <img
+                        src={coverUrl}
+                        alt=""
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          display: 'block',
+                        }}
+                      />
+                    ) : (
+                      <Icon name="music" size={16} />
+                    )}
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 14,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {tr?.title ?? `#${tid}`}
+                    {tr?.artist ? ` — ${tr.artist}` : ''}
+                  </span>
+                </div>
+                <span
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    flexShrink: 0,
+                  }}
                 >
-                  <Icon name="chevron-down" size={18} />
-                </MotionPress>
-                <MotionPress
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => void handleRemoveTrack(tid)}
+                  <MotionPress
+                    variant="ghost"
+                    aria-label="up"
+                    disabled={busy || idx === 0}
+                    onClick={() => moveTrack(idx, -1)}
+                  >
+                    <Icon name="chevron-up" size={18} />
+                  </MotionPress>
+                  <MotionPress
+                    variant="ghost"
+                    aria-label="down"
+                    disabled={
+                      busy || idx === orderedTrackIds.length - 1
+                    }
+                    onClick={() => moveTrack(idx, 1)}
+                  >
+                    <Icon name="chevron-down" size={18} />
+                  </MotionPress>
+                  <MotionPress
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => {
+                      if (isEditing) {
+                        setEditingTrackId(null)
+                      } else if (tr) {
+                        startEdit(tr)
+                      }
+                    }}
+                  >
+                    {isEditing
+                      ? t('admin.common.cancel')
+                      : t('admin.albums.editTrack')}
+                  </MotionPress>
+                  <MotionPress
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => void handleRemoveTrack(tid)}
+                  >
+                    {t('admin.albums.removeTrack')}
+                  </MotionPress>
+                </span>
+              </div>
+
+              {/* inline edit panel */}
+              {isEditing && (
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    borderTop: '1px solid var(--border)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                  }}
                 >
-                  {t('admin.albums.removeTrack')}
-                </MotionPress>
-              </span>
+                  {/* cover upload row */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 8,
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        background: 'var(--surface)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: coverUrl
+                          ? 'none'
+                          : '1px dashed var(--border)',
+                      }}
+                    >
+                      {coverUrl ? (
+                        <img
+                          src={coverUrl}
+                          alt=""
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block',
+                          }}
+                        />
+                      ) : (
+                        <Icon name="music" size={20} />
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      style={{ display: 'none' }}
+                      ref={(el) => {
+                        if (el) trackCoverRefs.current.set(tid, el)
+                        else trackCoverRefs.current.delete(tid)
+                      }}
+                      onChange={(e) =>
+                        void handleTrackCoverChange(tid, e)
+                      }
+                    />
+                    <MotionPress
+                      variant="ghost"
+                      disabled={uploadTrackCoverMut.isPending}
+                      onClick={() =>
+                        trackCoverRefs.current.get(tid)?.click()
+                      }
+                    >
+                      {t('admin.albums.changeTrackCover')}
+                    </MotionPress>
+                  </div>
+
+                  <label
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 3,
+                      fontSize: 13,
+                    }}
+                  >
+                    {t('admin.albums.fieldTitle')}
+                    <input
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        color: 'var(--text)',
+                      }}
+                    />
+                  </label>
+                  <label
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 3,
+                      fontSize: 13,
+                    }}
+                  >
+                    {t('admin.albums.trackArtist')}
+                    <input
+                      value={editArtist}
+                      onChange={(e) => setEditArtist(e.target.value)}
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        color: 'var(--text)',
+                      }}
+                    />
+                  </label>
+                  <label
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 3,
+                      fontSize: 13,
+                    }}
+                  >
+                    {t('admin.albums.fieldDescription')}
+                    <textarea
+                      rows={2}
+                      value={editDescription}
+                      onChange={(e) =>
+                        setEditDescription(e.target.value)
+                      }
+                      style={{
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                        border: '1px solid var(--border)',
+                        background: 'var(--surface)',
+                        color: 'var(--text)',
+                        resize: 'vertical',
+                      }}
+                    />
+                  </label>
+                  <MotionPress
+                    variant="primary"
+                    disabled={
+                      saveTrackMetaMut.isPending || !editTitle.trim()
+                    }
+                    onClick={() => void handleSaveTrackMeta(tid)}
+                  >
+                    {t('admin.albums.saveTrackMeta')}
+                  </MotionPress>
+                </div>
+              )}
             </li>
           )
         })}
@@ -510,7 +822,6 @@ export function AlbumDetailRoute() {
           disabled={busy}
           onClick={() => {
             setAddModal(true)
-            setAddPage(1)
             setAddSearch('')
           }}
         >
@@ -527,15 +838,16 @@ export function AlbumDetailRoute() {
         >
           <div className="admin-modal">
             <h3>{t('admin.albums.addTrackTitle')}</h3>
-            <div className="admin-toolbar" style={{ marginBottom: 12 }}>
+            <div
+              className="admin-toolbar"
+              style={{ marginBottom: 12 }}
+            >
               <input
                 type="search"
                 placeholder={t('admin.albums.addTrackSearch')}
                 value={addSearch}
-                onChange={(e) => {
-                  setAddSearch(e.target.value)
-                  setAddPage(1)
-                }}
+                autoFocus
+                onChange={(e) => setAddSearch(e.target.value)}
               />
             </div>
             <ul
@@ -543,62 +855,117 @@ export function AlbumDetailRoute() {
                 listStyle: 'none',
                 margin: 0,
                 padding: 0,
-                maxHeight: 320,
-                overflow: 'auto',
+                maxHeight: 360,
+                overflowY: 'auto',
               }}
             >
-              {(addQuery.data?.items ?? []).map(
-                (it: Record<string, unknown>) => {
-                  const id = it.id as number
-                  const ttl = String(it.title ?? '')
-                  const art = it.artist as string | null
-                  return (
-                    <li key={id} style={{ marginBottom: 6 }}>
-                      <MotionPress
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => void handleAddTrack(id)}
+              {addResults.map((it) => {
+                const id = it.id as number
+                const ttl = String(it.title ?? '')
+                const art = it.artist as string | null | undefined
+                const ck = it.cover_key as string | null | undefined
+                const itemCoverUrl = ck
+                  ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(ck)}`
+                  : null
+                return (
+                  <li
+                    key={id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '5px 2px',
+                      borderBottom: '1px solid var(--border)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 6,
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        background: 'var(--surface)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {itemCoverUrl ? (
+                        <img
+                          src={itemCoverUrl}
+                          alt=""
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block',
+                          }}
+                        />
+                      ) : (
+                        <Icon name="music" size={18} />
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        flex: 1,
+                        overflow: 'hidden',
+                        minWidth: 0,
+                      }}
+                    >
+                      <div
                         style={{
-                          width: '100%',
-                          justifyContent: 'flex-start',
+                          fontSize: 14,
+                          fontWeight: 500,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
                         }}
                       >
                         {ttl}
-                        {art ? ` — ${art}` : ''}{' '}
-                        <span
+                      </div>
+                      {art && (
+                        <div
                           style={{
+                            fontSize: 12,
                             color: 'var(--text-secondary)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          #{id}
-                        </span>
-                      </MotionPress>
-                    </li>
-                  )
-                },
-              )}
+                          {art}
+                        </div>
+                      )}
+                    </div>
+                    <MotionPress
+                      variant="ghost"
+                      disabled={busy}
+                      style={{ flexShrink: 0, fontSize: 13 }}
+                      onClick={() => void handleAddTrack(id)}
+                    >
+                      {t('admin.albums.addTrack')}
+                    </MotionPress>
+                  </li>
+                )
+              })}
             </ul>
-            <div className="admin-pagination">
-              <MotionPress
-                variant="ghost"
-                disabled={addPage <= 1}
-                onClick={() =>
-                  setAddPage((p) => Math.max(1, p - 1))
-                }
+            {addResults.length === 0 && !addLoading && (
+              <p
+                className="admin-card__sub"
+                style={{ margin: '12px 0 4px' }}
               >
-                {t('admin.common.prev')}
-              </MotionPress>
-              <MotionPress
-                variant="ghost"
-                disabled={
-                  !addQuery.data ||
-                  (addQuery.data.items?.length ?? 0) < 15
-                }
-                onClick={() => setAddPage((p) => p + 1)}
+                {t('admin.albums.addTrackAllInAlbum')}
+              </p>
+            )}
+            {addLoading && (
+              <p
+                className="admin-card__sub"
+                style={{ margin: '12px 0 4px' }}
               >
-                {t('admin.common.next')}
-              </MotionPress>
-            </div>
+                …
+              </p>
+            )}
           </div>
         </div>
       )}
