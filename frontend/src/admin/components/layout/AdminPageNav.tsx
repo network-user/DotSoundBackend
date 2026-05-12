@@ -8,9 +8,14 @@ interface NavItem {
 interface Props {
   items: NavItem[]
   rootMargin?: string
+  scrollRoot?: HTMLElement | null
 }
 
-export function AdminPageNav({ items, rootMargin }: Props) {
+export function AdminPageNav({
+  items,
+  rootMargin,
+  scrollRoot,
+}: Props) {
   const [active, setActive] = useState<string | null>(
     items[0]?.id ?? null,
   )
@@ -38,13 +43,14 @@ export function AdminPageNav({ items, rootMargin }: Props) {
         if (bestId) setActive(bestId)
       },
       {
+        root: scrollRoot ?? null,
         rootMargin: rootMargin ?? '-30% 0px -50% 0px',
         threshold: [0, 0.2, 0.6, 1],
       },
     )
     targets.forEach((t) => io.observe(t))
     return () => io.disconnect()
-  }, [items, rootMargin])
+  }, [items, rootMargin, scrollRoot])
 
   const onClick = useCallback((id: string) => {
     const el = document.getElementById(id)

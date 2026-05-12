@@ -11,6 +11,11 @@ import { getAdminPanelRoute } from '@/lib/adminPath'
 import { adminApi } from '../lib/adminApi'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
+import { ListPageTemplate } from '../components/layout/ListPageTemplate'
+import {
+  FilterGroup,
+  type FilterDef,
+} from '../components/widgets/FilterGroup'
 
 interface AlbumRow {
   id: number
@@ -27,16 +32,17 @@ export function AlbumsListRoute() {
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
 
-  const { data, isFetching } = useQuery({
-    queryKey: ['admin', 'albums', page, search],
-    queryFn: () =>
-      adminApi.listAdminAlbums({
-        page,
-        size: 25,
-        search: search || undefined,
-      }),
-    placeholderData: keepPreviousData,
-  })
+  const { data, isFetching, isLoading, error, refetch } =
+    useQuery({
+      queryKey: ['admin', 'albums', page, search],
+      queryFn: () =>
+        adminApi.listAdminAlbums({
+          page,
+          size: 25,
+          search: search || undefined,
+        }),
+      placeholderData: keepPreviousData,
+    })
 
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / 25))
@@ -95,50 +101,64 @@ export function AlbumsListRoute() {
     },
   ]
 
+  const filters: FilterDef[] = [
+    {
+      type: 'search',
+      key: 'q',
+      placeholder: t('admin.albums.searchPlaceholder'),
+      ariaLabel: t('admin.albums.searchPlaceholder'),
+    },
+  ]
+
   return (
-    <section className="admin-card">
-      <h1>{t('admin.albums.title')}</h1>
-      <p className="admin-card__sub">
-        {t('admin.albums.listHint')}
-      </p>
-      <div className="admin-toolbar">
-        <input
-          type="search"
-          placeholder={t('admin.albums.searchPlaceholder')}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value)
+    <ListPageTemplate
+      title={t('admin.albums.title')}
+      subtitle={t('admin.albums.listHint')}
+      filters={
+        <FilterGroup
+          filters={filters}
+          values={{ q: search || undefined }}
+          onChange={(_, v) => {
+            setSearch(v ?? '')
             setPage(1)
           }}
         />
-      </div>
+      }
+      toolbarHint={t('admin.common.total', { count: total })}
+      pagination={
+        <>
+          <MotionPress
+            variant="ghost"
+            disabled={page <= 1 || isFetching}
+            onClick={() =>
+              setPage((p) => Math.max(1, p - 1))
+            }
+          >
+            {t('admin.common.prev')}
+          </MotionPress>
+          <span>
+            {page} / {totalPages}
+          </span>
+          <MotionPress
+            variant="ghost"
+            disabled={page >= totalPages || isFetching}
+            onClick={() =>
+              setPage((p) => Math.min(totalPages, p + 1))
+            }
+          >
+            {t('admin.common.next')}
+          </MotionPress>
+        </>
+      }
+    >
       <DataTable
         columns={columns}
         rows={rows}
+        isLoading={isLoading}
+        error={error ? (error as Error).message : null}
+        onRetry={() => refetch()}
         emptyHint={t('admin.albums.empty')}
       />
-      <div className="admin-pagination">
-        <MotionPress
-          variant="ghost"
-          disabled={page <= 1 || isFetching}
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-        >
-          {t('admin.common.prev')}
-        </MotionPress>
-        <span>
-          {page} / {totalPages} ·{' '}
-          {t('admin.common.total', { count: total })}
-        </span>
-        <MotionPress
-          variant="ghost"
-          disabled={page >= totalPages || isFetching}
-          onClick={() =>
-            setPage((p) => Math.min(totalPages, p + 1))
-          }
-        >
-          {t('admin.common.next')}
-        </MotionPress>
-      </div>
-    </section>
+    </ListPageTemplate>
   )
 }

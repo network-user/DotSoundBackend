@@ -22,6 +22,11 @@ import { StatusPill } from '../components/widgets/StatusPill'
 import { KpiCard } from '../components/widgets/KpiCard'
 import { Sparkline } from '../components/charts/Sparkline'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
+import { ListPageTemplate } from '../components/layout/ListPageTemplate'
+import {
+  FilterGroup,
+  type FilterDef,
+} from '../components/widgets/FilterGroup'
 
 interface ComplaintRow {
   id: number
@@ -73,16 +78,17 @@ export function ComplaintsRoute() {
     unresolvedOnly,
   ] as const
 
-  const { data, isFetching } = useQuery({
-    queryKey,
-    queryFn: () =>
-      adminApi.listComplaints({
-        page,
-        size: 25,
-        unresolved_only: unresolvedOnly,
-      }),
-    placeholderData: keepPreviousData,
-  })
+  const { data, isFetching, isLoading, error, refetch } =
+    useQuery({
+      queryKey,
+      queryFn: () =>
+        adminApi.listComplaints({
+          page,
+          size: 25,
+          unresolved_only: unresolvedOnly,
+        }),
+      placeholderData: keepPreviousData,
+    })
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey })
@@ -355,75 +361,88 @@ export function ComplaintsRoute() {
         </AnimatePresence>
       </section>
 
-      <section className="kpi-grid adm-r-kpi-stagger">
-        <KpiCard
-          label={t('admin.complaints.title')}
-          value={total}
-          hint={t('admin.common.total', { count: total })}
-        />
-        <KpiCard
-          label={t('redesign.admin.complaintKpiOpen')}
-          value={openCount}
-          accent={openCount > 0 ? 'warn' : 'default'}
-        />
-        <KpiCard
-          label={t('redesign.admin.complaintKpiResolved')}
-          value={resolvedCount}
-          hint={
-            sparkline.length > 1 ? (
-              <Sparkline
-                data={sparkline}
-                ariaLabel={t(
-                  'redesign.admin.complaintSparklineAria',
-                )}
-              />
-            ) : undefined
-          }
-        />
-      </section>
-      <div className="admin-toolbar adm-r-toolbar-sticky">
-        <label className="admin-checkbox">
-          <input
-            type="checkbox"
-            checked={unresolvedOnly}
-            onChange={(e) => {
-              setUnresolvedOnly(
-                e.target.checked,
-              )
+      <ListPageTemplate
+        title={t('admin.complaints.title')}
+        kpis={
+          <>
+            <KpiCard
+              label={t('admin.complaints.title')}
+              value={total}
+              hint={t('admin.common.total', { count: total })}
+            />
+            <KpiCard
+              label={t('redesign.admin.complaintKpiOpen')}
+              value={openCount}
+              accent={openCount > 0 ? 'warn' : 'default'}
+            />
+            <KpiCard
+              label={t('redesign.admin.complaintKpiResolved')}
+              value={resolvedCount}
+              hint={
+                sparkline.length > 1 ? (
+                  <Sparkline
+                    data={sparkline}
+                    ariaLabel={t(
+                      'redesign.admin.complaintSparklineAria',
+                    )}
+                  />
+                ) : undefined
+              }
+            />
+          </>
+        }
+        filters={
+          <FilterGroup
+            filters={[
+              {
+                type: 'toggle',
+                key: 'unresolved',
+                label: t('admin.complaints.unresolvedOnly'),
+              },
+            ] as FilterDef[]}
+            values={{
+              unresolved: unresolvedOnly ? '1' : undefined,
+            }}
+            onChange={(_, v) => {
+              setUnresolvedOnly(Boolean(v))
               setPage(1)
             }}
           />
-          {t('admin.complaints.unresolvedOnly')}
-        </label>
-      </div>
-      <DataTable
-        columns={columns}
-        rows={rows}
-      />
-      <div className="admin-pagination">
-        <MotionPress
-          variant="ghost"
-          disabled={page <= 1 || isFetching}
-          onClick={() =>
-            setPage((p) => Math.max(1, p - 1))
-          }
-        >
-          {t('admin.common.prev')}
-        </MotionPress>
-        <span>
-          {page} / {totalPages} ·{' '}
-          {t('admin.common.total', { count: total })}
-        </span>
-        <MotionPress
-          variant="ghost"
-          disabled={
-            page >= totalPages || isFetching
-          }
-          onClick={() => setPage((p) => p + 1)}
-        >
-          {t('admin.common.next')}
-        </MotionPress>
-      </div>
+        }
+        toolbarHint={t('admin.common.total', { count: total })}
+        pagination={
+          <>
+            <MotionPress
+              variant="ghost"
+              disabled={page <= 1 || isFetching}
+              onClick={() =>
+                setPage((p) => Math.max(1, p - 1))
+              }
+            >
+              {t('admin.common.prev')}
+            </MotionPress>
+            <span>
+              {page} / {totalPages}
+            </span>
+            <MotionPress
+              variant="ghost"
+              disabled={page >= totalPages || isFetching}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              {t('admin.common.next')}
+            </MotionPress>
+          </>
+        }
+      >
+        <DataTable
+          columns={columns}
+          rows={rows}
+          isLoading={isLoading}
+          error={error ? (error as Error).message : null}
+          onRetry={() => refetch()}
+          emptyHint={t('redesign.admin.complaintQueueEmpty')}
+        />
+      </ListPageTemplate>
     </div>
   )
 }

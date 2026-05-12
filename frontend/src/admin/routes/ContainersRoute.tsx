@@ -1,9 +1,11 @@
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { Icon } from '@/components/Icon/Icon'
 import { adminApi } from '../lib/adminApi'
 import { StatusPill } from '../components/widgets/StatusPill'
 import { DataTable } from '../components/widgets/DataTable'
+import { ListPageTemplate } from '../components/layout/ListPageTemplate'
 import type { ColumnDef } from '@tanstack/react-table'
 
 interface ContainerRow {
@@ -101,52 +103,45 @@ const columns: ColumnDef<ContainerRow>[] = [
 
 export function ContainersRoute() {
   const { t } = useTranslation()
-  const { data, isLoading, error, refetch } =
+  const { data, isLoading, isFetching, error, refetch } =
     useQuery({
-      queryKey: [
-        'admin',
-        'containers',
-        'detail',
-      ],
+      queryKey: ['admin', 'containers', 'detail'],
       queryFn: () => adminApi.containers(),
       refetchInterval: 30_000,
       refetchIntervalInBackground: false,
     })
 
-  if (isLoading)
-    return <div>{t('admin.common.loading')}</div>
-  if (error)
-    return (
-      <div className="admin-error">
-        {(error as Error).message}
-      </div>
-    )
+  const total = data?.total || 0
 
   return (
-    <div>
-      <h1>{t('admin.containers.title')}</h1>
-      <p className="admin-card__sub">
-        {t(
-          'admin.dashboard.containers.tracked',
-          { count: data?.total || 0 },
-        )}{' '}
-        ·{' '}
+    <ListPageTemplate
+      title={t('admin.containers.title')}
+      subtitle={t(
+        'admin.dashboard.containers.tracked',
+        { count: total },
+      )}
+      actions={
         <MotionPress
           variant="ghost"
           haptic="selection"
-          className="admin-link"
           onClick={() => refetch()}
+          disabled={isFetching}
         >
-          {t('admin.logs.refresh')}
+          <Icon name="refresh" size={14} />
+          <span style={{ marginLeft: 6 }}>
+            {t('admin.logs.refresh')}
+          </span>
         </MotionPress>
-      </p>
+      }
+    >
       <DataTable
         columns={columns}
-        rows={
-          (data?.containers || []) as ContainerRow[]
-        }
+        rows={(data?.containers || []) as ContainerRow[]}
+        isLoading={isLoading}
+        error={error ? (error as Error).message : null}
+        onRetry={() => refetch()}
         emptyHint="—"
       />
-    </div>
+    </ListPageTemplate>
   )
 }

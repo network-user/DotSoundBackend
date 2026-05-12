@@ -1,4 +1,25 @@
-/* redesign-2026 / Stage-G admin overlays (.adm-r-*) */
+/* redesign-2026 / Stage-G admin overlays (.adm-r-*)
+ *
+ * STATUS: legacy overlay sheet kept for backwards-compatibility
+ * with components that still emit both `.admin-*` and `.adm-r-*`
+ * classes side-by-side (e.g. DataTable, AdminMenu, page-head).
+ *
+ * Going forward, ALL new admin styles MUST live in
+ * `frontend/src/admin/styles/admin.css` (single source of truth).
+ * Do not extend this file — instead, migrate the existing
+ * `.adm-r-*` rules to `admin.css` and drop the duplicate class
+ * from the corresponding JSX. When this file shrinks to zero
+ * non-trivial rules, remove the import from
+ * `frontend/src/admin/AdminApp.tsx` and delete the file.
+ *
+ * Tech debt tracker: ~80 selectors here vs 300+ in admin.css.
+ * Safe candidates for first removal (rules identical to admin.css):
+ *   - `.adm-r-table-wrap`, `.adm-r-table`           (data table base)
+ *   - `.adm-r-table__head`                          (sticky glass header)
+ *   - `.adm-r-table__cell` / `.adm-r-table__row`    (rows)
+ *   - `.adm-r-table__empty`                         (now superseded by
+ *                                                    `.admin-table__state`)
+ */
 
 .adm-r-auth-stage {
   min-height: 100vh;

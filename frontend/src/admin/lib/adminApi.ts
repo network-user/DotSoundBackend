@@ -1306,6 +1306,7 @@ export const adminApi = {
     name?: string
     queue?: string
     status?: string
+    scheduled_job_id?: string
     page?: number
     size?: number
   }) =>

@@ -23,6 +23,7 @@ import {
 import { MotionPress } from '@/components/ui/MotionPress'
 import { useAdminSectionLabel } from '../../hooks/useAdminSectionLabel'
 import { useIsNarrowLayout } from '../../hooks/useIsNarrowLayout'
+import { useAdminTheme } from '../../hooks/useAdminTheme'
 import { adminApi } from '../../lib/adminApi'
 import { useAdminAuth } from '../../store/adminAuthStore'
 import { decodeAdminJwtHint } from '../../lib/adminJwtHint'
@@ -75,6 +76,7 @@ export function AdminShell() {
   const narrow = useIsNarrowLayout()
   const [menuOpen, setMenuOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const { theme, toggle: toggleTheme } = useAdminTheme()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -123,6 +125,7 @@ export function AdminShell() {
           ? 'admin-shell admin-shell--compact'
           : 'admin-shell'
       }
+      data-admin-theme={theme}
     >
       {!narrow && (
         <aside className="admin-shell__sidebar">
@@ -203,6 +206,23 @@ export function AdminShell() {
               {t('admin.cmdk.trigger', 'Search')}
             </span>
             <kbd>⌘K</kbd>
+          </button>
+          <button
+            type="button"
+            className="admin-theme-toggle"
+            onClick={toggleTheme}
+            aria-label={
+              theme === 'dark'
+                ? t('admin.theme.toLight', 'Switch to light theme')
+                : t('admin.theme.toDark', 'Switch to dark theme')
+            }
+            title={
+              theme === 'dark'
+                ? t('admin.theme.toLight', 'Switch to light theme')
+                : t('admin.theme.toDark', 'Switch to dark theme')
+            }
+          >
+            <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={14} />
           </button>
           <Clock />
         </header>

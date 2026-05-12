@@ -6,6 +6,7 @@ import {
   usePlayerActions,
   usePlayerMeta,
   usePlayerPlayback,
+  usePlayer,
 } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
 import { SwipeRow } from '@/components/ui/SwipeRow'

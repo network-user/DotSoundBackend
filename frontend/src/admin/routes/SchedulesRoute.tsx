@@ -41,6 +41,45 @@ function statusKindFor(s: string | null): StatusKind {
   return 'warn'
 }
 
+function cronHint(expr: string): string {
+  const parts = expr.trim().split(/\s+/)
+  if (parts.length !== 5) return ''
+  const [min, hour, dom, , dow] = parts
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  const padT = (h: string, m: string) =>
+    h === '*' || m === '*'
+      ? ''
+      : ` at ${h.padStart(2, '0')}:${m.padStart(2, '0')}`
+  if (
+    min.startsWith('*/') &&
+    hour === '*' &&
+    dom === '*' &&
+    dow === '*'
+  )
+    return `Every ${min.slice(2)} min`
+  if (
+    min === '0' &&
+    hour.startsWith('*/') &&
+    dom === '*' &&
+    dow === '*'
+  )
+    return `Every ${hour.slice(2)} h`
+  if (dom === '*' && dow === '*')
+    return `Daily${padT(hour, min)}`
+  if (
+    dom === '*' &&
+    !dow.includes('/') &&
+    !dow.includes(',')
+  ) {
+    const n = parseInt(dow)
+    const name = Number.isNaN(n) ? dow : (days[n] ?? dow)
+    return `Every ${name}${padT(hour, min)}`
+  }
+  if (dom !== '*' && !dom.includes('/') && dow === '*')
+    return `Monthly on ${dom}th${padT(hour, min)}`
+  return ''
+}
+
 function fmtTime(iso: string | null): string {
   if (!iso) return '–'
   try {
@@ -239,11 +278,18 @@ export function SchedulesRoute() {
     {
       header: t('admin.schedules.cols.cron') as string,
       accessorKey: 'cron',
-      cell: (i) => (
-        <span className="admin-mono">
-          {i.getValue<string>()}
-        </span>
-      ),
+      cell: (i) => {
+        const expr = i.getValue<string>()
+        const hint = cronHint(expr)
+        return (
+          <div>
+            <span className="admin-mono">{expr}</span>
+            {hint && (
+              <div className="admin-cron-hint">{hint}</div>
+            )}
+          </div>
+        )
+      },
     },
     {
       header: t('admin.schedules.cols.queue') as string,
@@ -428,6 +474,11 @@ export function SchedulesRoute() {
                 }
                 placeholder="0 4 * * 1"
               />
+              {draft.cron && cronHint(draft.cron) && (
+                <span className="admin-cron-hint">
+                  {cronHint(draft.cron)}
+                </span>
+              )}
             </label>
             <label className="admin-field">
               <span>

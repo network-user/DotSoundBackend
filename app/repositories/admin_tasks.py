@@ -147,6 +147,7 @@ class AdminTasksRepository:
         name: str | None = None,
         queue: str | None = None,
         status: str | None = None,
+        scheduled_job_id: str | None = None,
         page: int = 1,
         size: int = 50,
     ) -> tuple[list[BackgroundJob], int]:
@@ -161,6 +162,13 @@ class AdminTasksRepository:
         if status:
             base = base.where(BackgroundJob.status == status)
             count_q = count_q.where(BackgroundJob.status == status)
+        if scheduled_job_id:
+            base = base.where(
+                BackgroundJob.scheduled_job_id == scheduled_job_id
+            )
+            count_q = count_q.where(
+                BackgroundJob.scheduled_job_id == scheduled_job_id
+            )
         rows_result = await self._session.execute(
             base.order_by(desc(BackgroundJob.created_at))
             .offset((page - 1) * size)

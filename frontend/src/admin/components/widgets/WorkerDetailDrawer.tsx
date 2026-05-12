@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   useMutation,
@@ -13,6 +13,7 @@ import {
 import { adminFetch } from '../../lib/adminApi'
 import { AdminWs } from '../../lib/adminWs'
 import { StatusPill } from './StatusPill'
+import { AdminPageNav } from '../layout/AdminPageNav'
 
 const WD = 'admin.audioCompute.workerDrawer' as const
 const AC = 'admin.audioCompute' as const
@@ -185,6 +186,7 @@ export function WorkerDetailDrawer({
     useState(false)
   const [pauseMinutes, setPauseMinutes] =
     useState(60)
+  const drawerRootRef = useRef<HTMLDivElement>(null)
 
   const events = useQuery({
     queryKey: [
@@ -432,6 +434,7 @@ WORKER_ASR_DEVICE=auto`,
 
   return (
     <div
+      ref={drawerRootRef}
       role="dialog"
       aria-label={t(`${WD}.aria`, {
         name: worker.name,
@@ -468,6 +471,16 @@ WORKER_ASR_DEVICE=auto`,
           {t(`${WD}.close`)}
         </MotionPress>
       </div>
+
+      <AdminPageNav
+        scrollRoot={drawerRootRef.current}
+        items={[
+          { id: 'wd-env', label: t(`${WD}.envTitle`) },
+          { id: 'wd-jobs', label: t(`${WD}.jobsTitle`) },
+          { id: 'wd-events', label: t(`${WD}.eventsTitle`) },
+          { id: 'wd-danger', label: t(`${WD}.danger`) },
+        ]}
+      />
 
       <p>
         <StatusPill
@@ -747,7 +760,7 @@ WORKER_ASR_DEVICE=auto`,
         </div>
       )}
 
-      <h3>{t(`${WD}.envTitle`)}</h3>
+      <h3 id="wd-env">{t(`${WD}.envTitle`)}</h3>
       <pre
         className="admin-mono"
         style={{
@@ -767,7 +780,7 @@ WORKER_ASR_DEVICE=auto`,
           : t(`${AC}.copy`)}
       </MotionPress>
 
-      <h3 style={{ marginTop: 20 }}>
+      <h3 id="wd-jobs" style={{ marginTop: 20 }}>
         {t(`${WD}.jobsTitle`)}
       </h3>
       <p className="admin-card__sub" style={{ margin: '0 0 8px' }}>
@@ -846,7 +859,7 @@ WORKER_ASR_DEVICE=auto`,
         </div>
       )}
 
-      <h3 style={{ marginTop: 8 }}>
+      <h3 id="wd-events" style={{ marginTop: 8 }}>
         {t(`${WD}.eventsTitle`)}
       </h3>
       <p
@@ -940,7 +953,7 @@ WORKER_ASR_DEVICE=auto`,
         </ul>
       )}
 
-      <h3 style={{ marginTop: 20 }}>
+      <h3 id="wd-danger" style={{ marginTop: 20 }}>
         {t(`${WD}.danger`)}
       </h3>
       <div style={{ display: 'flex', gap: 8 }}>

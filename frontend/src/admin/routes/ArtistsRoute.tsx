@@ -14,6 +14,11 @@ import { ArtistCatalogEditor } from '../components/ArtistCatalogEditor'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
+import { ListPageTemplate } from '../components/layout/ListPageTemplate'
+import {
+  FilterGroup,
+  type FilterDef,
+} from '../components/widgets/FilterGroup'
 
 interface ArtistRow {
   id: number
@@ -359,6 +364,15 @@ export function ArtistsRoute() {
     Math.ceil(total / 25),
   )
 
+  const filters: FilterDef[] = [
+    {
+      type: 'search',
+      key: 'q',
+      placeholder: t('admin.artists.searchPlaceholder'),
+      ariaLabel: t('admin.artists.searchPlaceholder'),
+    },
+  ]
+
   return (
     <div>
       {catalogFor && (
@@ -369,70 +383,74 @@ export function ArtistsRoute() {
           onClose={() => setCatalogFor(null)}
         />
       )}
-      <h1>{t('admin.artists.title')}</h1>
-      <div className="admin-toolbar">
-        <input
-          type="search"
-          placeholder={t(
-            'admin.artists.searchPlaceholder',
-          )}
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value)
-            setPage(1)
-          }}
+      <ListPageTemplate
+        title={t('admin.artists.title')}
+        filters={
+          <FilterGroup
+            filters={filters}
+            values={{ q: q || undefined }}
+            onChange={(_, v) => {
+              setQ(v ?? '')
+              setPage(1)
+            }}
+          />
+        }
+        actions={
+          <>
+            <MotionPress
+              variant="primary"
+              disabled={selectedIds.size === 0}
+              onClick={handleBatchPrompt}
+            >
+              Batch Prompt ({selectedIds.size})
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              onClick={() => {
+                setImportText('')
+                setImportResult(null)
+                setImportModal(true)
+              }}
+            >
+              Import AI
+            </MotionPress>
+          </>
+        }
+        toolbarHint={t('admin.common.total', { count: total })}
+        pagination={
+          <>
+            <MotionPress
+              variant="ghost"
+              disabled={page <= 1}
+              onClick={() =>
+                setPage((p) => Math.max(1, p - 1))
+              }
+            >
+              {t('admin.common.prev')}
+            </MotionPress>
+            <span>
+              {page} / {totalPages}
+            </span>
+            <MotionPress
+              variant="ghost"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              {t('admin.common.next')}
+            </MotionPress>
+          </>
+        }
+      >
+        <DataTable
+          columns={columns}
+          rows={rows}
+          isLoading={list.isLoading}
+          error={list.error ? (list.error as Error).message : null}
+          onRetry={() => list.refetch()}
+          emptyHint={t('admin.artists.empty')}
+          enableSorting
         />
-        <MotionPress
-          variant="ghost"
-          disabled={selectedIds.size === 0}
-          onClick={handleBatchPrompt}
-        >
-          Batch Prompt ({selectedIds.size})
-        </MotionPress>
-        <MotionPress
-          variant="ghost"
-          onClick={() => {
-            setImportText('')
-            setImportResult(null)
-            setImportModal(true)
-          }}
-        >
-          Импорт ответа AI (Artists)
-        </MotionPress>
-      </div>
-      {list.error && (
-        <div className="admin-error">
-          {(list.error as Error).message}
-        </div>
-      )}
-      <DataTable
-        columns={columns}
-        rows={rows}
-        emptyHint={t('admin.artists.empty')}
-        enableSorting
-      />
-      <div className="admin-pagination">
-        <MotionPress
-          variant="ghost"
-          disabled={page <= 1}
-          onClick={() =>
-            setPage((p) => Math.max(1, p - 1))
-          }
-        >
-          {t('admin.common.prev')}
-        </MotionPress>
-        <span>
-          {page} / {totalPages} ·{' '}
-          {t('admin.common.total', { count: total })}
-        </span>
-        <MotionPress
-          variant="ghost"
-          disabled={page >= totalPages}
-          onClick={() => setPage((p) => p + 1)}
-        >
-          {t('admin.common.next')}
-        </MotionPress>
-      </div>
+      </ListPageTemplate>
 
       {batchPromptModal && (
         <div

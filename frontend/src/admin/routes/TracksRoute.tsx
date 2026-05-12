@@ -17,6 +17,7 @@ import { KpiCard } from '../components/widgets/KpiCard'
 import { Sparkline } from '../components/charts/Sparkline'
 import { LineChart } from '../components/charts/LineChart'
 import { OverflowMenu } from '../components/widgets/OverflowMenu'
+import { FormModal } from '../components/widgets/FormModal'
 
 interface TrackRow {
   id: number
@@ -1012,256 +1013,229 @@ export function TracksRoute() {
         </MotionPress>
       </div>
 
-      {/* Prompt modal */}
-      {promptModal && (
-        <div
-          className="admin-modal-overlay"
-          onClick={() => setPromptModal(null)}
-        >
-          <div
-            className="admin-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 640 }}
-          >
-            <h3>
-              Промпт для нейросети&nbsp;
-              <span style={{ fontSize: 12, fontWeight: 400 }}>
-                [{promptModal.lang.toUpperCase()}]
-              </span>
-            </h3>
-            <textarea
-              readOnly
-              value={promptModal.prompt}
-              rows={18}
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 13,
-                resize: 'vertical',
-              }}
-            />
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <MotionPress
-                variant="primary"
-                onClick={() =>
-                  navigator.clipboard.writeText(promptModal.prompt)
-                }
-              >
-                Копировать
-              </MotionPress>
-              <MotionPress variant="ghost" onClick={() => setPromptModal(null)}>
-                Закрыть
-              </MotionPress>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Context edit modal */}
-      {contextModal && (
-        <div
-          className="admin-modal-overlay"
-          onClick={() => !busyContext && setContextModal(null)}
-        >
-          <div
-            className="admin-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 560 }}
-          >
-            <h3>Контекст — трек #{contextModal.trackId}</h3>
-            <p
-              style={{
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                margin: '0 0 8px',
-              }}
+      <FormModal
+        open={!!promptModal}
+        size="lg"
+        title={
+          <>
+            Промпт для нейросети{' '}
+            <span style={{ fontSize: 12, fontWeight: 400 }}>
+              [{promptModal?.lang.toUpperCase()}]
+            </span>
+          </>
+        }
+        onClose={() => setPromptModal(null)}
+        footer={
+          <>
+            <MotionPress
+              variant="ghost"
+              onClick={() => setPromptModal(null)}
             >
-              Статус: {contextModal.status}
-            </p>
-            <textarea
-              ref={contextTextareaRef}
-              value={contextEditValue}
-              onChange={(e) => setContextEditValue(e.target.value)}
-              rows={10}
-              maxLength={5000}
-              style={{ width: '100%', resize: 'vertical' }}
+              Закрыть
+            </MotionPress>
+            <MotionPress
+              variant="primary"
+              onClick={() =>
+                promptModal &&
+                navigator.clipboard.writeText(promptModal.prompt)
+              }
+            >
+              Копировать
+            </MotionPress>
+          </>
+        }
+      >
+        <textarea
+          readOnly
+          value={promptModal?.prompt ?? ''}
+          rows={18}
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 13,
+            resize: 'vertical',
+          }}
+        />
+      </FormModal>
+
+      <FormModal
+        open={!!contextModal}
+        size="md"
+        title={`Контекст — трек #${contextModal?.trackId ?? ''}`}
+        subtitle={
+          contextModal
+            ? `Статус: ${contextModal.status}`
+            : undefined
+        }
+        submitting={busyContext}
+        closeOnOverlayClick={!busyContext}
+        onClose={() => setContextModal(null)}
+        footer={
+          <>
+            <MotionPress
+              variant="ghost"
+              onClick={() => setContextModal(null)}
               disabled={busyContext}
-              placeholder="Введите описание трека (3–5 предложений)..."
-            />
-            <p
-              style={{
-                fontSize: 11,
-                color: 'var(--text-secondary)',
-                margin: '2px 0 8px',
-                textAlign: 'right',
-              }}
             >
-              {contextEditValue.length} / 5000
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <MotionPress
-                variant="primary"
-                onClick={handleSaveContext}
-                disabled={busyContext || !contextEditValue.trim()}
-              >
-                Сохранить
-              </MotionPress>
-              <MotionPress
-                variant="ghost"
-                onClick={handleClearContext}
-                disabled={busyContext}
-              >
-                Очистить
-              </MotionPress>
-              <MotionPress
-                variant="ghost"
-                onClick={() => setContextModal(null)}
-                disabled={busyContext}
-              >
-                Отмена
-              </MotionPress>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Batch prompt modal */}
-      {batchPromptModal && (
-        <div
-          className="admin-modal-overlay"
-          onClick={() => setBatchPromptModal(null)}
-        >
-          <div
-            className="admin-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 700 }}
-          >
-            <h3>Batch Prompt ({selectedIds.size} треков)</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-              Скопируйте и вставьте в нейросеть. Ответ вставьте через «Импорт ответа AI».
-            </p>
-            <textarea
-              readOnly
-              value={batchPromptModal}
-              rows={22}
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 12,
-                resize: 'vertical',
-              }}
-            />
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <MotionPress
-                variant="primary"
-                onClick={() =>
-                  navigator.clipboard.writeText(batchPromptModal)
-                }
-              >
-                Копировать
-              </MotionPress>
-              <MotionPress variant="ghost" onClick={() => setBatchPromptModal(null)}>
-                Закрыть
-              </MotionPress>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {batchGenreMoodPromptModal && (
-        <div
-          className="admin-modal-overlay"
-          onClick={() => setBatchGenreMoodPromptModal(null)}
-        >
-          <div
-            className="admin-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 760 }}
-          >
-            <h3>Genre / mood batch prompt</h3>
-            <p
-              style={{
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                margin: '0 0 8px',
-              }}
+              Отмена
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              onClick={handleClearContext}
+              disabled={busyContext}
             >
-              Промпт для нейросети; ответ импортируйте через «Импорт AI
-              (genre/mood)».
-            </p>
-            <textarea
-              readOnly
-              value={batchGenreMoodPromptModal}
-              rows={22}
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 12,
-                resize: 'vertical',
-              }}
-            />
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <MotionPress
-                variant="primary"
-                onClick={() =>
-                  navigator.clipboard.writeText(batchGenreMoodPromptModal)
-                }
-              >
-                Копировать
-              </MotionPress>
-              <MotionPress
-                variant="ghost"
-                onClick={() => setBatchGenreMoodPromptModal(null)}
-              >
-                Закрыть
-              </MotionPress>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Lyrics batch prompt modal */}
-      {batchLyricsPromptModal && (
-        <div
-          className="admin-modal-overlay"
-          onClick={() => setBatchLyricsPromptModal(null)}
+              Очистить
+            </MotionPress>
+            <MotionPress
+              variant="primary"
+              onClick={handleSaveContext}
+              disabled={busyContext || !contextEditValue.trim()}
+            >
+              Сохранить
+            </MotionPress>
+          </>
+        }
+      >
+        <textarea
+          ref={contextTextareaRef}
+          value={contextEditValue}
+          onChange={(e) => setContextEditValue(e.target.value)}
+          rows={10}
+          maxLength={5000}
+          style={{ width: '100%', resize: 'vertical' }}
+          disabled={busyContext}
+          placeholder="Введите описание трека (3–5 предложений)..."
+        />
+        <p
+          style={{
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            margin: 0,
+            textAlign: 'right',
+          }}
         >
-          <div
-            className="admin-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 760 }}
-          >
-            <h3>Lyrics Batch Prompt</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-              Вставьте этот промпт в нейросеть, затем импортируйте JSON-ответ.
-            </p>
-            <textarea
-              readOnly
-              value={batchLyricsPromptModal}
-              rows={22}
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 12,
-                resize: 'vertical',
-              }}
-            />
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <MotionPress
-                variant="primary"
-                onClick={() =>
-                  navigator.clipboard.writeText(batchLyricsPromptModal)
-                }
-              >
-                Копировать
-              </MotionPress>
-              <MotionPress variant="ghost" onClick={() => setBatchLyricsPromptModal(null)}>
-                Закрыть
-              </MotionPress>
-            </div>
-          </div>
-        </div>
-      )}
+          {contextEditValue.length} / 5000
+        </p>
+      </FormModal>
+
+      <FormModal
+        open={!!batchPromptModal}
+        size="lg"
+        title={`Batch Prompt (${selectedIds.size} треков)`}
+        subtitle="Скопируйте и вставьте в нейросеть. Ответ вставьте через «Импорт ответа AI»."
+        onClose={() => setBatchPromptModal(null)}
+        footer={
+          <>
+            <MotionPress
+              variant="ghost"
+              onClick={() => setBatchPromptModal(null)}
+            >
+              Закрыть
+            </MotionPress>
+            <MotionPress
+              variant="primary"
+              onClick={() =>
+                batchPromptModal &&
+                navigator.clipboard.writeText(batchPromptModal)
+              }
+            >
+              Копировать
+            </MotionPress>
+          </>
+        }
+      >
+        <textarea
+          readOnly
+          value={batchPromptModal ?? ''}
+          rows={22}
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 12,
+            resize: 'vertical',
+          }}
+        />
+      </FormModal>
+
+      <FormModal
+        open={!!batchGenreMoodPromptModal}
+        size="lg"
+        title="Genre / mood batch prompt"
+        subtitle="Промпт для нейросети; ответ импортируйте через «Импорт AI (genre/mood)»."
+        onClose={() => setBatchGenreMoodPromptModal(null)}
+        footer={
+          <>
+            <MotionPress
+              variant="ghost"
+              onClick={() => setBatchGenreMoodPromptModal(null)}
+            >
+              Закрыть
+            </MotionPress>
+            <MotionPress
+              variant="primary"
+              onClick={() =>
+                batchGenreMoodPromptModal &&
+                navigator.clipboard.writeText(
+                  batchGenreMoodPromptModal,
+                )
+              }
+            >
+              Копировать
+            </MotionPress>
+          </>
+        }
+      >
+        <textarea
+          readOnly
+          value={batchGenreMoodPromptModal ?? ''}
+          rows={22}
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 12,
+            resize: 'vertical',
+          }}
+        />
+      </FormModal>
+
+      <FormModal
+        open={!!batchLyricsPromptModal}
+        size="lg"
+        title="Lyrics Batch Prompt"
+        subtitle="Вставьте этот промпт в нейросеть, затем импортируйте JSON-ответ."
+        onClose={() => setBatchLyricsPromptModal(null)}
+        footer={
+          <>
+            <MotionPress
+              variant="ghost"
+              onClick={() => setBatchLyricsPromptModal(null)}
+            >
+              Закрыть
+            </MotionPress>
+            <MotionPress
+              variant="primary"
+              onClick={() =>
+                batchLyricsPromptModal &&
+                navigator.clipboard.writeText(batchLyricsPromptModal)
+              }
+            >
+              Копировать
+            </MotionPress>
+          </>
+        }
+      >
+        <textarea
+          readOnly
+          value={batchLyricsPromptModal ?? ''}
+          rows={22}
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 12,
+            resize: 'vertical',
+          }}
+        />
+      </FormModal>
 
       {sourceEditModal && (
         <div

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.artist import Artist
 from app.models.artist_monthly_stats import ArtistMonthlyStats
 from app.repositories.artist_stats import ArtistStatsRepository
+from app.services.artist_stats_service import ArtistStatsService
 
 pytestmark = pytest.mark.anyio
 
@@ -191,3 +193,51 @@ async def test_get_history_empty(session: AsyncSession) -> None:
     artist = await _make_artist(session)
     repo = ArtistStatsRepository(session)
     assert await repo.get_history(artist.id) == []
+
+
+# ---------------------------------------------------------------------------
+# ArtistStatsService.snapshot_all_artists
+# ---------------------------------------------------------------------------
+
+
+async def test_snapshot_all_artists_no_artists(
+    session: AsyncSession,
+) -> None:
+    svc = ArtistStatsService(session)
+    saved = await svc.snapshot_all_artists()
+    assert saved == 0
+
+
+async def test_snapshot_all_artists_creates_snapshots(
+    session: AsyncSession,
+) -> None:
+    a1 = await _make_artist(session, "Band A")
+    a2 = await _make_artist(session, "Band B")
+
+    svc = ArtistStatsService(session)
+    # Pin the "previous month" to 2025-04 so snapshots go there
+    with patch.object(
+        svc, "_prev_ym", return_value=(2025, 4)
+    ):
+        saved = await svc.snapshot_all_artists()
+
+    assert saved == 2
+    repo = ArtistStatsRepository(session)
+    assert await repo.has_snapshot(a1.id, 2025, 4)
+    assert await repo.has_snapshot(a2.id, 2025, 4)
+
+
+async def test_snapshot_all_artists_is_idempotent(
+    session: AsyncSession,
+) -> None:
+    artist = await _make_artist(session)
+    svc = ArtistStatsService(session)
+
+    with patch.object(svc, "_prev_ym", return_value=(2025, 3)):
+        await svc.snapshot_all_artists()
+        saved = await svc.snapshot_all_artists()
+
+    assert saved == 1
+    repo = ArtistStatsRepository(session)
+    history = await repo.get_history(artist.id)
+    assert len(history) == 1

@@ -220,6 +220,68 @@ services:
     networks:
       - dotsound
 
+  bot:
+    build:
+      context: ..
+      dockerfile: DotSoundBot/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../DotSoundBot/.env
+    environment:
+      REDIS_URL: redis://redis:6379/1
+      BACKEND_BASE_URL: http://backend:8000
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    logging: *default-logging
+    networks:
+      - dotsound
+
+  compute-worker-cpu:
+    build:
+      context: ..
+      dockerfile: DotSoundComputeWorker/docker/Dockerfile.cpu
+    restart: unless-stopped
+    env_file:
+      - ../DotSoundComputeWorker/.env
+    environment:
+      WORKER_BACKEND_BASE_URL: http://backend:8000
+    profiles:
+      - cpu
+    depends_on:
+      backend:
+        condition: service_started
+    logging: *default-logging
+    networks:
+      - dotsound
+
+  compute-worker-gpu:
+    build:
+      context: ..
+      dockerfile: DotSoundComputeWorker/docker/Dockerfile.gpu
+    restart: unless-stopped
+    env_file:
+      - ../DotSoundComputeWorker/.env
+    environment:
+      WORKER_BACKEND_BASE_URL: http://backend:8000
+    profiles:
+      - gpu
+    depends_on:
+      backend:
+        condition: service_started
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    logging: *default-logging
+    networks:
+      - dotsound
+
   backup:
     image: postgres:16-alpine
     restart: unless-stopped

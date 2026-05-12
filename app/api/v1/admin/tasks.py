@@ -47,6 +47,19 @@ ALLOWED_TASK_NAMES: frozenset[str] = frozenset(
 )
 
 
+@router.post("/artist-stats-snapshot")
+async def trigger_artist_stats_snapshot(
+    _admin: User = Depends(require_capability("tasks.run")),
+) -> dict[str, str]:
+    from app.services.artist_stats_worker import (
+        snapshot_monthly_artist_stats_task,
+    )
+
+    result = await snapshot_monthly_artist_stats_task.kiq()
+    task_id = getattr(result, "task_id", None)
+    return {"task_id": task_id}
+
+
 @router.post("/text-censor-backfill")
 async def trigger_text_censor_backfill(
     _admin: User = Depends(require_capability("tasks.run")),
@@ -487,6 +500,7 @@ async def list_background_jobs(
     name: str | None = Query(None, max_length=96),
     queue: str | None = Query(None, max_length=32),
     status: str | None = Query(None, max_length=24),
+    scheduled_job_id: str | None = Query(None, max_length=64),
     page: int = Query(1, ge=1),
     size: int = Query(50, ge=1, le=200),
     _admin: User = Depends(require_capability("tasks.manage")),
@@ -496,6 +510,7 @@ async def list_background_jobs(
         name=name,
         queue=queue,
         status=status,
+        scheduled_job_id=scheduled_job_id,
         page=page,
         size=size,
     )

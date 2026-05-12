@@ -451,7 +451,9 @@ export function TasksRoute() {
     name: string
     queue: string
     status: string
-  }>({ name: '', queue: '', status: '' })
+    scheduled_job_id: string
+  }>({ name: '', queue: '', status: '', scheduled_job_id: '' })
+  const [bgPage, setBgPage] = useState(1)
   const [bgDetailId, setBgDetailId] = useState<
     string | null
   >(null)
@@ -468,14 +470,16 @@ export function TasksRoute() {
       'tasks',
       'background-jobs',
       bgFilter,
+      bgPage,
     ],
     queryFn: () =>
       adminApi.listBackgroundJobs({
-        page: 1,
+        page: bgPage,
         size: 50,
         name: bgFilter.name || undefined,
         queue: bgFilter.queue || undefined,
         status: bgFilter.status || undefined,
+        scheduled_job_id: bgFilter.scheduled_job_id || undefined,
       }),
     refetchInterval: bgDetailId ? false : 10_000,
     refetchIntervalInBackground: false,
@@ -624,6 +628,7 @@ export function TasksRoute() {
   const upcomingSchedules =
     (overview.data?.upcoming_schedules as
       | Array<{
+          id: string
           name: string
           task_name: string
           cron: string
@@ -828,9 +833,23 @@ export function TasksRoute() {
                 .slice(0, 5)
                 .map((s) => (
                   <li key={s.name}>
-                    <span className="admin-mono">
+                    <MotionPress
+                      variant="ghost"
+                      haptic="selection"
+                      className="admin-link admin-mono"
+                      title={t('admin.tasks.bg.filterBySchedule') as string}
+                      onClick={() =>
+                        setBgFilter((f) => ({
+                          ...f,
+                          scheduled_job_id:
+                            f.scheduled_job_id === s.id
+                              ? ''
+                              : s.id,
+                        }))
+                      }
+                    >
                       {s.name}
-                    </span>{' '}
+                    </MotionPress>{' '}
                     →{' '}
                     <span className="admin-mono">
                       {s.task_name}
@@ -858,12 +877,13 @@ export function TasksRoute() {
               t('admin.tasks.bg.filterName') as string
             }
             value={bgFilter.name}
-            onChange={(e) =>
+            onChange={(e) => {
+              setBgPage(1)
               setBgFilter((f) => ({
                 ...f,
                 name: e.target.value,
               }))
-            }
+            }}
           />
           <input
             type="text"
@@ -872,6 +892,7 @@ export function TasksRoute() {
             }
             value={bgFilter.queue}
             onChange={(e) =>
+              setBgPage(1)
               setBgFilter((f) => ({
                 ...f,
                 queue: e.target.value,
@@ -885,12 +906,30 @@ export function TasksRoute() {
             }
             value={bgFilter.status}
             onChange={(e) =>
+              setBgPage(1)
               setBgFilter((f) => ({
                 ...f,
                 status: e.target.value,
               }))
             }
           />
+          {bgFilter.scheduled_job_id && (
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
+              className="admin-filter-chip"
+              onClick={() =>
+                setBgFilter((f) => ({
+                  ...f,
+                  scheduled_job_id: '',
+                }))
+              }
+              title={t('admin.tasks.bg.clearScheduleFilter') as string}
+            >
+              schedule:{bgFilter.scheduled_job_id.slice(0, 16)}
+              {bgFilter.scheduled_job_id.length > 16 ? '…' : ''}{' '}×
+            </MotionPress>
+          )}
         </div>
         <p className="admin-card__sub">
           {t('admin.tasks.bg.hint', { total: bgTotal })}
@@ -906,6 +945,34 @@ export function TasksRoute() {
           enableSorting
           emptyHint={t('admin.tasks.bg.empty') as string}
         />
+        {bgTotal > 50 && (
+          <div className="admin-pagination">
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
+              className="admin-link"
+              disabled={bgPage === 1}
+              onClick={() => setBgPage((p) => Math.max(1, p - 1))}
+            >
+              ‹ {t('admin.tasks.bg.prev')}
+            </MotionPress>
+            <span>
+              {t('admin.tasks.bg.pageOf', {
+                page: bgPage,
+                total: Math.ceil(bgTotal / 50),
+              })}
+            </span>
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
+              className="admin-link"
+              disabled={bgPage * 50 >= bgTotal}
+              onClick={() => setBgPage((p) => p + 1)}
+            >
+              {t('admin.tasks.bg.next')} ›
+            </MotionPress>
+          </div>
+        )}
         {bgDetailId && (
           <div className="admin-detail-panel">
             <div className="admin-toolbar">

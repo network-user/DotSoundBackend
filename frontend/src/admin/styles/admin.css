@@ -2380,6 +2380,60 @@
   }
 }
 
+/* ── Light theme (admin-scoped, monochrome) ── */
+.admin-shell[data-admin-theme='light'] {
+  --bg: #ffffff;
+  --bg-elevated: #f5f5f7;
+  --bg-card: rgba(0, 0, 0, 0.04);
+  --bg-card-hover: rgba(0, 0, 0, 0.07);
+  --surface: #f1f1f3;
+  --surface-2: #e6e6ea;
+  --text: #0a0a0a;
+  --text-secondary: #555;
+  --text-muted: #8a8a8a;
+  --border: rgba(0, 0, 0, 0.12);
+  --border-hover: rgba(0, 0, 0, 0.2);
+  --accent: #0a0a0a;
+  --accent-hover: #222;
+  --accent-dim: rgba(0, 0, 0, 0.08);
+  --bg-sidebar: #f5f5f7;
+  --ring-focus: rgba(0, 0, 0, 0.55);
+  --admin-tooltip-bg: #ffffff;
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.admin-shell[data-admin-theme='light'] .admin-shell__topbar {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.admin-shell[data-admin-theme='light'] .admin-page-nav {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.admin-shell[data-admin-theme='light'] .adm-r-table__head {
+  background: rgba(245, 245, 247, 0.85);
+}
+
+.admin-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.admin-theme-toggle:hover {
+  background: var(--bg-card-hover);
+  color: var(--text);
+  border-color: var(--border-hover);
+}
+
 /* ── Phase 5: единый focus-ring для всех интерактивных в admin ── */
 .admin-shell a:focus-visible,
 .admin-shell button:focus-visible,
@@ -3314,4 +3368,31 @@
 
 .admin-filter-group__toggle input {
   accent-color: var(--accent);
+}
+
+.admin-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-3);
+  border: 1px solid var(--border-hover);
+  border-radius: 100px;
+  background: var(--bg-card-hover);
+  font-size: var(--fs-12);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.admin-filter-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.admin-cron-hint {
+  font-size: var(--fs-11);
+  color: var(--text-muted);
+  margin-top: 2px;
+  font-family: inherit;
 }
