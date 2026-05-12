@@ -23,6 +23,7 @@ from app.schemas.playlist import (
     PlaylistWithTracksResponse,
 )
 from app.schemas.playlist_collab import (
+    PlaylistCollaboratorItem,
     PlaylistInviteAccept,
     PlaylistInviteOut,
 )
@@ -81,6 +82,7 @@ async def create_playlist(
         name=data.name,
         owner_id=current_user.id,
         is_public=data.is_public,
+        description=data.description,
     )
     logger.info("playlist_created_endpoint", playlist_id=playlist.id)
     return PlaylistResponse.model_validate(playlist)
@@ -103,6 +105,28 @@ async def list_playlists(
     service = PlaylistService(session)
     playlists, _ = await service.list_by_owner(
         owner_id=current_user.id, page=page, size=size
+    )
+    return [PlaylistResponse.model_validate(p) for p in playlists]
+
+
+@router.get(
+    "/search",
+    response_model=list[PlaylistResponse],
+    summary="Search public playlists by name",
+)
+@limiter.limit("60/minute")
+async def search_playlists(
+    request: Request,
+    q: str = Query("", max_length=256),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    session: AsyncSession = Depends(get_db),
+) -> list[PlaylistResponse]:
+    if not q.strip():
+        return []
+    service = PlaylistService(session)
+    playlists, _ = await service.search_public(
+        query=q.strip(), page=page, size=size
     )
     return [PlaylistResponse.model_validate(p) for p in playlists]
 
@@ -162,6 +186,7 @@ async def update_playlist(
         requester_id=current_user.id,
         name=data.name,
         is_public=data.is_public,
+        description=data.description,
         allow_admin=current_user.is_admin,
     )
     return PlaylistResponse.model_validate(playlist)
@@ -334,6 +359,57 @@ async def set_playlist_track_order(
     await service.reorder_tracks(
         playlist_id=playlist_id,
         ordered_track_ids=body.track_ids,
+        requester_id=current_user.id,
+        allow_admin=current_user.is_admin,
+    )
+
+
+@router.get(
+    "/{playlist_id}/collaborators",
+    response_model=list[PlaylistCollaboratorItem],
+    summary="List collaborators of a playlist (owner/admin only)",
+)
+@limiter.limit("60/minute")
+async def list_playlist_collaborators(
+    request: Request,
+    playlist_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[PlaylistCollaboratorItem]:
+    structlog.contextvars.bind_contextvars(
+        playlist_id=playlist_id, requester_id=current_user.id
+    )
+    service = PlaylistService(session)
+    rows = await service.get_collaborators(
+        playlist_id=playlist_id,
+        requester_id=current_user.id,
+        allow_admin=current_user.is_admin,
+    )
+    return [PlaylistCollaboratorItem(**r) for r in rows]
+
+
+@router.delete(
+    "/{playlist_id}/collaborators/{target_user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove a collaborator from a playlist (owner/admin only)",
+)
+@limiter.limit("30/minute")
+async def remove_playlist_collaborator(
+    request: Request,
+    playlist_id: int,
+    target_user_id: int,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    structlog.contextvars.bind_contextvars(
+        playlist_id=playlist_id,
+        target_user_id=target_user_id,
+        requester_id=current_user.id,
+    )
+    service = PlaylistService(session)
+    await service.remove_collaborator(
+        playlist_id=playlist_id,
+        target_user_id=target_user_id,
         requester_id=current_user.id,
         allow_admin=current_user.is_admin,
     )

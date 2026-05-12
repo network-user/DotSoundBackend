@@ -891,13 +891,13 @@ export function TasksRoute() {
               t('admin.tasks.bg.filterQueue') as string
             }
             value={bgFilter.queue}
-            onChange={(e) =>
+            onChange={(e) => {
               setBgPage(1)
               setBgFilter((f) => ({
                 ...f,
                 queue: e.target.value,
               }))
-            }
+            }}
           />
           <input
             type="text"
@@ -905,13 +905,13 @@ export function TasksRoute() {
               t('admin.tasks.bg.filterStatus') as string
             }
             value={bgFilter.status}
-            onChange={(e) =>
+            onChange={(e) => {
               setBgPage(1)
               setBgFilter((f) => ({
                 ...f,
                 status: e.target.value,
               }))
-            }
+            }}
           />
           {bgFilter.scheduled_job_id && (
             <MotionPress

@@ -255,6 +255,55 @@ class ChunkedUploadService:
                 },
             )
 
+        from app.services.scan_service import (
+            ScanVerdict,
+            scan_s3_key,
+        )
+
+        scan_result = await scan_s3_key(
+            record.s3_key, record.filename
+        )
+        if scan_result.verdict not in (
+            ScanVerdict.CLEAN,
+            ScanVerdict.SKIPPED,
+        ):
+            should_block = (
+                scan_result.verdict == ScanVerdict.INFECTED
+            )
+            if scan_result.verdict == ScanVerdict.ERROR:
+                from dotsound_private_core.services.upload_policy import (
+                    should_reject_on_av_error,
+                )
+
+                should_block = should_reject_on_av_error()
+            if should_block:
+                try:
+                    await s3.delete_object(record.s3_key)
+                except Exception:  # noqa: BLE001
+                    logger.warning(
+                        "scan_s3_cleanup_failed",
+                        upload_id=upload_id,
+                        s3_key=record.s3_key,
+                    )
+                await self._session.execute(
+                    update(UploadSession)
+                    .where(UploadSession.id == record.id)
+                    .values(
+                        status="cancelled",
+                        updated_at=datetime.now(UTC),
+                    )
+                )
+                await self._session.flush()
+                if scan_result.verdict == ScanVerdict.INFECTED:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="Malware detected in uploaded file",
+                    )
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Security scan unavailable",
+                )
+
         try:
             source_sha256 = await s3.compute_sha256_streaming(
                 record.s3_key

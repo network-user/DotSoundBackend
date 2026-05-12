@@ -10,6 +10,7 @@ from app.models.playlist_collab import (
     PlaylistCollaborator,
     PlaylistInviteToken,
 )
+from app.models.user import User
 from app.repositories.base import BaseRepository
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
@@ -55,6 +56,36 @@ class PlaylistCollabRepository(
             .where(PlaylistCollaborator.playlist_id == playlist_id)
         )
         return [int(x) for x in r.scalars().all()]
+
+    async def list_with_users(
+        self, playlist_id: int
+    ) -> list[tuple[PlaylistCollaborator, User]]:
+        r = await self._session.execute(
+            select(PlaylistCollaborator, User)
+            .join(
+                User,
+                User.id == PlaylistCollaborator.user_id,
+            )
+            .where(
+                PlaylistCollaborator.playlist_id == playlist_id
+            )
+            .order_by(PlaylistCollaborator.created_at.asc())
+        )
+        return list(r.all())
+
+    async def remove(
+        self, playlist_id: int, user_id: int
+    ) -> bool:
+        result = await self._session.execute(
+            delete(PlaylistCollaborator).where(
+                PlaylistCollaborator.playlist_id == playlist_id,
+                PlaylistCollaborator.user_id == user_id,
+            )
+        )
+        if result.rowcount > 0:
+            await self._session.flush()
+            return True
+        return False
 
 
 class InviteTokenRepository(

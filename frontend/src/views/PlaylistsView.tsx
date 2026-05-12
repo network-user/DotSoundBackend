@@ -24,6 +24,7 @@ import { usePrefetchTracks } from '@/store/PrefetchContext'
 import type {
   ChatListItem,
   Playlist,
+  PlaylistCollaboratorItem,
   PlaylistWithTracks,
 } from '@/types/api'
 
@@ -62,6 +63,15 @@ export function PlaylistsView({
   const [renameBusy, setRenameBusy] = useState(false)
   const [coverBusy, setCoverBusy] = useState(false)
   const coverFileRef = useRef<HTMLInputElement>(null)
+  const [newDesc, setNewDesc] = useState('')
+  const [editDesc, setEditDesc] = useState('')
+  const [collaborators, setCollaborators] = useState<
+    PlaylistCollaboratorItem[] | null
+  >(null)
+  const [collabBusy, setCollabBusy] = useState(false)
+  const [searchQ, setSearchQ] = useState('')
+  const [searchResults, setSearchResults] = useState<Playlist[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
   const uid = getUserId()
   const isAdmin = getIsAdmin()
   const canEditSelected = Boolean(
@@ -101,6 +111,7 @@ export function PlaylistsView({
     if (!selected) return
     setEditName(selected.name)
     setEditPublic(selected.is_public)
+    setEditDesc(selected.description ?? '')
   }, [selected?.id])
 
   useEffect(() => {

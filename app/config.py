@@ -57,6 +57,8 @@ class AppSettings(BaseSettings):
     voice_max_duration: int = 300
 
     upload_malware_scan_mode: Literal["none", "lightweight", "clamav"] = "none"
+    clamav_host: str = "clamav"
+    clamav_port: int = 3310
 
     artist_enrichment_timeout_seconds: float = 25.0
     artist_image_max_bytes: int = 5 * 1024 * 1024

@@ -721,6 +721,14 @@ export interface PlaylistInviteOut {
   expires_at: string
 }
 
+export interface PlaylistCollaboratorItem {
+  user_id: number
+  role: string
+  username: string | null
+  display_name: string | null
+  created_at: string
+}
+
 export interface AlbumRecord {
   id: number
   title: string

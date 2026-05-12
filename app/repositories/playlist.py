@@ -250,6 +250,30 @@ class PlaylistRepository:
             rows[tid].position = pos
         await self._session.flush()
 
+    async def search_public(
+        self,
+        query: str,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[Playlist], int]:
+        pattern = f"%{query}%"
+        cond = (
+            Playlist.is_public.is_(True)
+            & Playlist.name.ilike(pattern)
+        )
+        total_r = await self._session.execute(
+            select(func.count(Playlist.id)).where(cond)
+        )
+        total = int(total_r.scalar_one())
+        result = await self._session.execute(
+            select(Playlist)
+            .where(cond)
+            .order_by(Playlist.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(result.scalars().all()), total
+
     async def list_for_admin(
         self,
         *,

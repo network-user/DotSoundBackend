@@ -9,11 +9,13 @@ from app.schemas.track import TrackResponse
 class PlaylistCreate(BaseModel):
     name: str = Field(max_length=256)
     is_public: bool = True
+    description: str | None = Field(None, max_length=512)
 
 
 class PlaylistUpdate(BaseModel):
     name: str | None = Field(None, max_length=256)
     is_public: bool | None = None
+    description: str | None = Field(None, max_length=512)
 
 
 class PlaylistResponse(BaseModel):

@@ -187,6 +187,26 @@ services:
   # Периодически парсит актуальный client_id с SoundCloud и пишет в
   # .env (раз в неделю; см. scripts/sc_id_refresher.py). Профиль sc-refresh
   # не подключается при обычном `docker compose up` — контейнер включай явно.
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    environment:
+      CLAMD_CONF_MaxFileSize: "200M"
+      CLAMD_CONF_StreamMaxLength: "200M"
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "3"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    logging: *default-logging
+    networks:
+      - dotsound
+
   sc_id_refresher:
     build:
       context: ..
@@ -349,6 +369,7 @@ volumes:
   redis_data:
   elasticsearch_data:
   backup_data:
+  clamav_data:
 
 networks:
   dotsound:

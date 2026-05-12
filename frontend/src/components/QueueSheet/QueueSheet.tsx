@@ -6,7 +6,6 @@ import {
   usePlayerActions,
   usePlayerMeta,
   usePlayerPlayback,
-  usePlayer,
 } from '@/store/PlayerContext'
 import type { Track } from '@/types/api'
 import { SwipeRow } from '@/components/ui/SwipeRow'
@@ -28,6 +27,7 @@ export function QueuePanelContent({
     track,
     queue,
     history,
+    shuffleOn,
   } = usePlayerMeta()
   const { isPlaying } = usePlayerPlayback()
   const {
@@ -37,6 +37,7 @@ export function QueuePanelContent({
     clearQueue,
     reorderQueue,
     togglePlay,
+    toggleShuffle,
   } = usePlayerActions()
 
   const [dragIdx, setDragIdx] = useState<
@@ -126,14 +127,26 @@ export function QueuePanelContent({
                 'Up next',
               )}
             </span>
-            <MotionPress
-              variant="ghost"
-              haptic="selection"
-              className="queue-action-btn"
-              onClick={clearQueue}
-            >
-              {t('redesign.player.queueClear', 'Clear')}
-            </MotionPress>
+            <div className="queue-section-title-actions">
+              <MotionPress
+                variant="ghost"
+                haptic="selection"
+                className={`queue-action-btn queue-action-btn--icon${shuffleOn ? ' queue-action-btn--active' : ''}`}
+                onClick={toggleShuffle}
+                aria-label={t('redesign.player.shuffleToggle', 'Shuffle')}
+                aria-pressed={shuffleOn}
+              >
+                <Icon name="shuffle" size={14} />
+              </MotionPress>
+              <MotionPress
+                variant="ghost"
+                haptic="selection"
+                className="queue-action-btn"
+                onClick={clearQueue}
+              >
+                {t('redesign.player.queueClear', 'Clear')}
+              </MotionPress>
+            </div>
           </div>
           {queue.map((tr, idx) => (
             <div

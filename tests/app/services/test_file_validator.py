@@ -1,15 +1,20 @@
 import sys
 import types
 from collections.abc import Generator
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 from app.services.file_validator import (
+    scan_for_malware,
     validate_audio,
     validate_image,
     validate_video,
 )
+from app.services.scan_service import ScanResult, ScanVerdict
+
+pytestmark = pytest.mark.anyio
 
 
 def _mock_from_buffer(data: bytes, mime: bool = True) -> str:
@@ -153,3 +158,79 @@ class TestValidateVideo:
         with pytest.raises(HTTPException) as exc:
             validate_video(_MP4_HEADER, "vid.mp4.bat")
         assert exc.value.status_code == 415
+
+
+_SCAN_MOD = "app.services.scan_service"
+
+
+class TestScanForMalware:
+    async def test_clean_passes_through(self) -> None:
+        clean = ScanResult(verdict=ScanVerdict.CLEAN)
+        with patch(
+            f"{_SCAN_MOD}.scan_bytes",
+            new_callable=AsyncMock,
+            return_value=clean,
+        ):
+            await scan_for_malware(b"safe", "track.mp3")
+
+    async def test_skipped_passes_through(self) -> None:
+        skipped = ScanResult(verdict=ScanVerdict.SKIPPED)
+        with patch(
+            f"{_SCAN_MOD}.scan_bytes",
+            new_callable=AsyncMock,
+            return_value=skipped,
+        ):
+            await scan_for_malware(b"data", "track.mp3")
+
+    async def test_infected_raises_422(self) -> None:
+        infected = ScanResult(
+            verdict=ScanVerdict.INFECTED, detail="Eicar-Test"
+        )
+        with (
+            patch(
+                f"{_SCAN_MOD}.scan_bytes",
+                new_callable=AsyncMock,
+                return_value=infected,
+            ),
+            pytest.raises(HTTPException) as exc,
+        ):
+            await scan_for_malware(b"bad", "malware.mp3")
+        assert exc.value.status_code == 422
+
+    async def test_error_fail_closed_raises_503(self) -> None:
+        error = ScanResult(
+            verdict=ScanVerdict.ERROR, detail="clamd down"
+        )
+        with (
+            patch(
+                f"{_SCAN_MOD}.scan_bytes",
+                new_callable=AsyncMock,
+                return_value=error,
+            ),
+            patch(
+                "dotsound_private_core.services.upload_policy"
+                ".should_reject_on_av_error",
+                return_value=True,
+            ),
+            pytest.raises(HTTPException) as exc,
+        ):
+            await scan_for_malware(b"data", "track.mp3")
+        assert exc.value.status_code == 503
+
+    async def test_error_fail_open_passes(self) -> None:
+        error = ScanResult(
+            verdict=ScanVerdict.ERROR, detail="clamd down"
+        )
+        with (
+            patch(
+                f"{_SCAN_MOD}.scan_bytes",
+                new_callable=AsyncMock,
+                return_value=error,
+            ),
+            patch(
+                "dotsound_private_core.services.upload_policy"
+                ".should_reject_on_av_error",
+                return_value=False,
+            ),
+        ):
+            await scan_for_malware(b"data", "track.mp3")

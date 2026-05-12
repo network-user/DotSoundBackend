@@ -76,6 +76,40 @@ def validate_image(
     return detected
 
 
+async def scan_for_malware(
+    data: bytes,
+    filename: str | None = None,
+) -> None:
+    from app.services.scan_service import ScanVerdict, scan_bytes
+
+    result = await scan_bytes(data, filename or "")
+    if result.verdict == ScanVerdict.INFECTED:
+        logger.warning(
+            "upload_malware_detected",
+            filename=filename,
+            detail=result.detail,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Malware detected in uploaded file",
+        )
+    if result.verdict == ScanVerdict.ERROR:
+        from dotsound_private_core.services.upload_policy import (
+            should_reject_on_av_error,
+        )
+
+        if should_reject_on_av_error():
+            logger.warning(
+                "upload_scan_error_fail_closed",
+                filename=filename,
+                detail=result.detail,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Security scan unavailable",
+            )
+
+
 def validate_video(
     data: bytes,
     filename: str | None = None,

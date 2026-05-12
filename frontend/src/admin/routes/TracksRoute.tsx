@@ -1237,275 +1237,197 @@ export function TracksRoute() {
         />
       </FormModal>
 
-      {sourceEditModal && (
-        <div
-          className="admin-modal-overlay"
-          onClick={() => {
-            if (!sourceBusy) setSourceEditModal(null)
+      <FormModal
+        open={!!sourceEditModal}
+        size="md"
+        title={`Источники воспроизведения · #${sourceEditModal?.id ?? ''}`}
+        subtitle={
+          sourceEditModal
+            ? `${sourceEditModal.title} · ${
+                sourceEditModal.access_mode ?? '—'
+              }${
+                sourceEditModal.source_platform
+                  ? ` · ${sourceEditModal.source_platform}`
+                  : ''
+              }`
+            : undefined
+        }
+        submitting={sourceBusy}
+        submitText="Сохранить"
+        cancelText="Отмена"
+        closeOnOverlayClick={!sourceBusy}
+        onClose={() => setSourceEditModal(null)}
+        onSubmit={() => handleSavePlaybackSources()}
+      >
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
+          SoundCloud URL (sc_url)
+        </label>
+        <textarea
+          value={sourceForm.sc}
+          onChange={(e) =>
+            setSourceForm((p) => ({ ...p, sc: e.target.value }))
+          }
+          rows={3}
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 12,
+          }}
+          disabled={sourceBusy}
+        />
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
+          YouTube / Bandcamp (source_url)
+        </label>
+        <textarea
+          value={sourceForm.src}
+          onChange={(e) =>
+            setSourceForm((p) => ({ ...p, src: e.target.value }))
+          }
+          rows={3}
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 12,
+          }}
+          disabled={sourceBusy}
+        />
+        <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
+          Канонический URL (canonical_source_url)
+        </label>
+        <textarea
+          value={sourceForm.can}
+          onChange={(e) =>
+            setSourceForm((p) => ({ ...p, can: e.target.value }))
+          }
+          rows={2}
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 12,
+          }}
+          disabled={sourceBusy}
+        />
+        <p
+          style={{
+            fontSize: 11,
+            color: 'var(--text-secondary)',
+            margin: 0,
           }}
         >
-          <div
-            className="admin-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 560 }}
-          >
-            <h3 style={{ marginTop: 0 }}>
-              Источники воспроизведения · #{sourceEditModal.id}
-            </h3>
-            <p
-              style={{
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                margin: '0 0 12px',
-              }}
-            >
-              {sourceEditModal.title}
-              {' · '}
-              {sourceEditModal.access_mode ?? '—'}
-              {sourceEditModal.source_platform
-                ? ` · ${sourceEditModal.source_platform}`
-                : ''}
-            </p>
-            <label
-              style={{ display: 'block', fontSize: 12, marginBottom: 4 }}
-            >
-              SoundCloud URL (sc_url)
-            </label>
-            <textarea
-              value={sourceForm.sc}
-              onChange={(e) =>
-                setSourceForm((p) => ({ ...p, sc: e.target.value }))
-              }
-              rows={3}
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 12,
-                marginBottom: 10,
-              }}
-              disabled={sourceBusy}
-            />
-            <label
-              style={{ display: 'block', fontSize: 12, marginBottom: 4 }}
-            >
-              YouTube / Bandcamp (source_url)
-            </label>
-            <textarea
-              value={sourceForm.src}
-              onChange={(e) =>
-                setSourceForm((p) => ({ ...p, src: e.target.value }))
-              }
-              rows={3}
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 12,
-                marginBottom: 10,
-              }}
-              disabled={sourceBusy}
-            />
-            <label
-              style={{ display: 'block', fontSize: 12, marginBottom: 4 }}
-            >
-              Канонический URL (canonical_source_url)
-            </label>
-            <textarea
-              value={sourceForm.can}
-              onChange={(e) =>
-                setSourceForm((p) => ({ ...p, can: e.target.value }))
-              }
-              rows={2}
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 12,
-                marginBottom: 10,
-              }}
-              disabled={sourceBusy}
-            />
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <MotionPress
-                variant="primary"
-                onClick={() => handleSavePlaybackSources()}
-                disabled={sourceBusy}
-              >
-                Сохранить
-              </MotionPress>
-              <MotionPress
-                variant="ghost"
-                onClick={() => setSourceEditModal(null)}
-                disabled={sourceBusy}
-              >
-                Отмена
-              </MotionPress>
-            </div>
-            <p
-              style={{
-                fontSize: 11,
-                color: 'var(--text-secondary)',
-                margin: '10px 0 0',
-              }}
-            >
-              Пустое поле очищает соответствующий URL в базе (null).
-            </p>
-          </div>
-        </div>
-      )}
+          Пустое поле очищает соответствующий URL в базе (null).
+        </p>
+      </FormModal>
 
-      {/* Import modal */}
-      {importModal && (
-        <div
-          className="admin-modal-overlay"
-          onClick={() => setImportModal(false)}
-        >
-          <div
-            className="admin-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 640 }}
-          >
-            <h3>Импорт ответа AI (Lyrics)</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-              Вставьте JSON-ответ нейросети в формате tracks[].id + tracks[].lyrics.
-              Импорт пропускает треки, где текст уже существует.
+      <FormModal
+        open={importModal}
+        size="md"
+        title="Импорт ответа AI (Lyrics)"
+        subtitle="Вставьте JSON-ответ нейросети в формате tracks[].id + tracks[].lyrics. Импорт пропускает треки, где текст уже существует."
+        submitText="Импортировать"
+        cancelText="Закрыть"
+        submitDisabled={!importText.trim()}
+        onClose={() => setImportModal(false)}
+        onSubmit={() => handleLyricsImport()}
+      >
+        <textarea
+          value={importText}
+          onChange={(e) => setImportText(e.target.value)}
+          rows={14}
+          placeholder={
+            '{"tracks":[{"id":1,"lyrics":"line 1\\nline 2"},{"id":2,"lyrics":"..."}]}'
+          }
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 12,
+            resize: 'vertical',
+          }}
+        />
+        {importResult && (
+          <div>
+            <p style={{ fontWeight: 600, margin: 0 }}>
+              Импортировано: {importResult.imported}
             </p>
-            <textarea
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-              rows={14}
-              placeholder={
-                '{"tracks":[{"id":1,"lyrics":"line 1\\nline 2"},{"id":2,"lyrics":"..."}]}'
-              }
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 12,
-                resize: 'vertical',
-              }}
-            />
-            {importResult && (
-              <div style={{ marginTop: 8 }}>
-                <p style={{ fontWeight: 600 }}>
-                  Импортировано: {importResult.imported}
-                </p>
-                {importResult.errors.length > 0 && (
-                  <ul
-                    style={{
-                      fontSize: 12,
-                      color: 'var(--color-danger, #c00)',
-                      paddingLeft: 16,
-                      margin: '4px 0 0',
-                    }}
-                  >
-                    {importResult.errors.map((e, idx) => (
-                      <li key={idx}>{e}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <MotionPress
-                variant="primary"
-                onClick={handleLyricsImport}
-                disabled={!importText.trim()}
+            {importResult.errors.length > 0 && (
+              <ul
+                style={{
+                  fontSize: 12,
+                  color: 'var(--state-error)',
+                  paddingLeft: 16,
+                  margin: '4px 0 0',
+                }}
               >
-                Импортировать
-              </MotionPress>
-              <MotionPress variant="ghost" onClick={() => setImportModal(false)}>
-                Закрыть
-              </MotionPress>
-            </div>
+                {importResult.errors.map((e, idx) => (
+                  <li key={idx}>{e}</li>
+                ))}
+              </ul>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </FormModal>
 
-      {gmImportModal && (
-        <div
-          className="admin-modal-overlay"
-          onClick={() => setGmImportModal(false)}
+      <FormModal
+        open={gmImportModal}
+        size="md"
+        title="Импорт ответа AI (genre / mood)"
+        subtitle="JSON: tracks[].id, genre (строка), moods (массив тегов). Пустой genre не меняет поле. Новые mood добавляются к существующим."
+        submitText="Импортировать"
+        cancelText="Закрыть"
+        submitDisabled={!gmImportText.trim()}
+        onClose={() => setGmImportModal(false)}
+        onSubmit={() => handleGenreMoodImport()}
+      >
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 13,
+          }}
         >
-          <div
-            className="admin-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 640 }}
-          >
-            <h3>Импорт ответа AI (genre / mood)</h3>
-            <p
-              style={{
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                margin: '0 0 8px',
-              }}
-            >
-              JSON: tracks[].id, genre (строка), moods (массив тегов). Пустой
-              genre не меняет поле. Новые mood добавляются к существующим.
+          <input
+            type="checkbox"
+            checked={gmOverwriteGenre}
+            onChange={(e) => setGmOverwriteGenre(e.target.checked)}
+          />
+          Перезаписать жанр, если уже заполнен
+        </label>
+        <textarea
+          value={gmImportText}
+          onChange={(e) => setGmImportText(e.target.value)}
+          rows={14}
+          placeholder={
+            '{"tracks":[{"id":1,"genre":"Pop","moods":["bright"]}]}'
+          }
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 12,
+            resize: 'vertical',
+          }}
+        />
+        {gmImportResult && (
+          <div>
+            <p style={{ fontWeight: 600, margin: 0 }}>
+              Импортировано: {gmImportResult.imported}
             </p>
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                fontSize: 13,
-                marginBottom: 8,
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={gmOverwriteGenre}
-                onChange={(e) => setGmOverwriteGenre(e.target.checked)}
-              />
-              Перезаписать жанр, если уже заполнен
-            </label>
-            <textarea
-              value={gmImportText}
-              onChange={(e) => setGmImportText(e.target.value)}
-              rows={14}
-              placeholder={
-                '{"tracks":[{"id":1,"genre":"Pop","moods":["bright"]}]}'
-              }
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 12,
-                resize: 'vertical',
-              }}
-            />
-            {gmImportResult && (
-              <div style={{ marginTop: 8 }}>
-                <p style={{ fontWeight: 600 }}>
-                  Импортировано: {gmImportResult.imported}
-                </p>
-                {gmImportResult.errors.length > 0 && (
-                  <ul
-                    style={{
-                      fontSize: 12,
-                      color: 'var(--color-danger, #c00)',
-                      paddingLeft: 16,
-                      margin: '4px 0 0',
-                    }}
-                  >
-                    {gmImportResult.errors.map((e, idx) => (
-                      <li key={idx}>{e}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <MotionPress
-                variant="primary"
-                onClick={handleGenreMoodImport}
-                disabled={!gmImportText.trim()}
+            {gmImportResult.errors.length > 0 && (
+              <ul
+                style={{
+                  fontSize: 12,
+                  color: 'var(--state-error)',
+                  paddingLeft: 16,
+                  margin: '4px 0 0',
+                }}
               >
-                Импортировать
-              </MotionPress>
-              <MotionPress variant="ghost" onClick={() => setGmImportModal(false)}>
-                Закрыть
-              </MotionPress>
-            </div>
+                {gmImportResult.errors.map((e, idx) => (
+                  <li key={idx}>{e}</li>
+                ))}
+              </ul>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </FormModal>
     </div>
   )
 }

@@ -18,6 +18,7 @@ from app.models.playlist_collab import PlaylistCollaborator
 from app.models.track import Track
 from app.models.user import User
 from app.repositories.playlist import PlaylistRepository
+from app.repositories.playlist_collab import PlaylistCollabRepository
 from app.repositories.user import UserRepository
 from app.services.playlist_cover_collage import (
     build_playlist_cover_collage_webp,
@@ -33,6 +34,7 @@ class PlaylistService:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
         self._repo = PlaylistRepository(session)
+        self._cr = PlaylistCollabRepository(session)
         self._user_repo = UserRepository(session)
 
     async def create(
@@ -40,10 +42,14 @@ class PlaylistService:
         name: str,
         owner_id: int,
         is_public: bool = True,
+        description: str | None = None,
     ) -> Playlist:
         user = await self._resolve_user(owner_id)
         playlist = await self._repo.create(
-            name=name, owner_id=user.id, is_public=is_public
+            name=name,
+            owner_id=user.id,
+            is_public=is_public,
+            description=description,
         )
         logger.info(
             "playlist_created",
@@ -73,6 +79,7 @@ class PlaylistService:
         requester_id: int,
         name: str | None,
         is_public: bool | None,
+        description: str | None = None,
         *,
         allow_admin: bool = False,
     ) -> Playlist:
@@ -82,7 +89,10 @@ class PlaylistService:
             allow_admin=allow_admin,
         )
         return await self._repo.update(
-            playlist, name=name, is_public=is_public
+            playlist,
+            name=name,
+            is_public=is_public,
+            description=description,
         )
 
     async def delete(
@@ -194,6 +204,68 @@ class PlaylistService:
             [p.id for p in playlists]
         )
         return [(p, tracks_by_id.get(p.id, [])) for p in playlists]
+
+    async def search_public(
+        self,
+        query: str,
+        page: int = 1,
+        size: int = 20,
+    ) -> tuple[list[Playlist], int]:
+        offset = (page - 1) * size
+        return await self._repo.search_public(
+            query=query, offset=offset, limit=size
+        )
+
+    async def get_collaborators(
+        self,
+        playlist_id: int,
+        requester_id: int,
+        *,
+        allow_admin: bool = False,
+    ) -> list[dict]:
+        await self._get_can_manage(
+            playlist_id,
+            requester_id,
+            allow_admin=allow_admin,
+        )
+        rows = await self._cr.list_with_users(playlist_id)
+        return [
+            {
+                "user_id": collab.user_id,
+                "role": collab.role,
+                "username": user.username,
+                "display_name": user.display_name
+                or user.first_name,
+                "created_at": collab.created_at,
+            }
+            for collab, user in rows
+        ]
+
+    async def remove_collaborator(
+        self,
+        playlist_id: int,
+        target_user_id: int,
+        requester_id: int,
+        *,
+        allow_admin: bool = False,
+    ) -> None:
+        await self._get_can_manage(
+            playlist_id,
+            requester_id,
+            allow_admin=allow_admin,
+        )
+        removed = await self._cr.remove(playlist_id, target_user_id)
+        if not removed:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Collaborator not found",
+            )
+        await self._session.commit()
+        logger.info(
+            "playlist_collaborator_removed",
+            playlist_id=playlist_id,
+            target_user_id=target_user_id,
+        )
 
     async def upload_owner_cover(
         self,

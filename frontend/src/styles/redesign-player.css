@@ -649,3 +649,23 @@
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.7));
   transition: opacity var(--dur-fast) var(--ease-out);
 }
+
+/* Shuffle / Repeat active state */
+.rp-now__ctl-active {
+  color: var(--accent, #fff);
+  opacity: 1;
+}
+
+/* Artist avatar next to name */
+.rp-now__meta-artist {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.rp-now__artist-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}

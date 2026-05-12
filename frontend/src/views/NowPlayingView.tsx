@@ -66,7 +66,7 @@ export function NowPlayingView() {
   const navigate = useNavigate()
   const { t } = useTranslation()
   const reduce = useReducedMotion()
-  const { track } = usePlayerMeta()
+  const { track, shuffleOn, repeatMode } = usePlayerMeta()
   const {
     currentTime,
     duration,
@@ -80,6 +80,8 @@ export function NowPlayingView() {
     openLyrics,
     openQueue,
     openCard,
+    toggleShuffle,
+    toggleRepeat,
   } = usePlayerActions()
   const desktopFineNav = useDesktopFinePointer()
   const goArtistByName = useNavigateToArtistByName()
@@ -475,6 +477,14 @@ export function NowPlayingView() {
                 : undefined
             }
           >
+            {track.track_artists?.[0]?.image_url && (
+              <img
+                className="rp-now__artist-avatar"
+                src={track.track_artists[0].image_url}
+                alt=""
+                aria-hidden="true"
+              />
+            )}
             {track.artist ?? '—'}
           </p>
         </div>
@@ -507,6 +517,16 @@ export function NowPlayingView() {
         </div>
 
         <div className="rp-now__controls">
+          <MotionPress
+            variant="icon"
+            ariaLabel={t('redesign.player.shuffleAria', 'Shuffle')}
+            haptic="selection"
+            aria-pressed={shuffleOn}
+            className={shuffleOn ? 'rp-now__ctl-active' : ''}
+            onClick={toggleShuffle}
+          >
+            <Icon name="shuffle" size={20} />
+          </MotionPress>
           <MotionPress
             variant="icon"
             ariaLabel={t(
@@ -548,6 +568,19 @@ export function NowPlayingView() {
             onClick={() => playNext()}
           >
             <Icon name="skip-forward" size={28} />
+          </MotionPress>
+          <MotionPress
+            variant="icon"
+            ariaLabel={t('redesign.player.repeatAria', 'Repeat')}
+            haptic="selection"
+            aria-pressed={repeatMode !== 'none'}
+            className={repeatMode !== 'none' ? 'rp-now__ctl-active' : ''}
+            onClick={toggleRepeat}
+          >
+            <Icon
+              name={repeatMode === 'one' ? 'repeat-one' : 'repeat'}
+              size={20}
+            />
           </MotionPress>
         </div>
 

@@ -722,11 +722,19 @@ export const api = {
     return request(`/api/v1/playlists/${id}`)
   },
 
-  createPlaylist(name: string, isPublic = false): Promise<Playlist> {
+  createPlaylist(
+    name: string,
+    isPublic = false,
+    description?: string | null,
+  ): Promise<Playlist> {
     return request('/api/v1/playlists', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, is_public: isPublic }),
+      body: JSON.stringify({
+        name,
+        is_public: isPublic,
+        description: description ?? null,
+      }),
     })
   },
 
@@ -746,13 +754,42 @@ export const api = {
 
   updatePlaylist(
     playlistId: number,
-    body: { name?: string; is_public?: boolean },
+    body: {
+      name?: string
+      is_public?: boolean
+      description?: string | null
+    },
   ): Promise<Playlist> {
     return request(`/api/v1/playlists/${playlistId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
+  },
+
+  searchPlaylists(
+    q: string,
+    page = 1,
+    size = 20,
+  ): Promise<Playlist[]> {
+    const sp = new URLSearchParams({ q, page: String(page), size: String(size) })
+    return request(`/api/v1/playlists/search?${sp}`)
+  },
+
+  getPlaylistCollaborators(
+    playlistId: number,
+  ): Promise<import('@/types/api').PlaylistCollaboratorItem[]> {
+    return request(`/api/v1/playlists/${playlistId}/collaborators`)
+  },
+
+  removePlaylistCollaborator(
+    playlistId: number,
+    userId: number,
+  ): Promise<void> {
+    return request(
+      `/api/v1/playlists/${playlistId}/collaborators/${userId}`,
+      { method: 'DELETE' },
+    )
   },
 
   uploadPlaylistCover(playlistId: number, file: File): Promise<Playlist> {

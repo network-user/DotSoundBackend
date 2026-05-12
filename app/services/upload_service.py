@@ -96,9 +96,13 @@ class UploadService:
                 detail="Audio file exceeds 100 MB limit",
             )
 
-        from app.services.file_validator import validate_audio
+        from app.services.file_validator import (
+            scan_for_malware,
+            validate_audio,
+        )
 
         validate_audio(data, file.filename)
+        await scan_for_malware(data, file.filename)
 
         if uploader_id is not None:
             used_bytes = await self._repo.get_total_uploaded_bytes(uploader_id)

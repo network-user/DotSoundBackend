@@ -1165,6 +1165,20 @@ body.ds-perf-lite .glass__noise {
 .queue-action-btn:hover {
   color: var(--text);
 }
+.queue-action-btn--icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+.queue-action-btn--active {
+  color: var(--accent, var(--text));
+}
+.queue-section-title-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
 
 .queue-row-wrap {
   display: flex;
