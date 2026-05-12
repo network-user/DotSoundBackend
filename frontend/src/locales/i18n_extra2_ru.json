@@ -284,7 +284,19 @@
       "shareSending": "Отправка…",
       "shareSend": "Отправить",
       "shareTitlePlaylist": "Поделиться плейлистом",
-      "shareTitleMix": "Поделиться миксом"
+      "shareTitleMix": "Поделиться миксом",
+      "trackPickerTitle": "Добавить треки",
+      "trackPickerButton": "Добавить треки",
+      "trackPickerPlaceholder": "Поиск треков на платформе…",
+      "trackPickerLikedSection": "Из понравившихся",
+      "trackPickerLoading": "Поиск…",
+      "trackPickerEmpty": "Ничего не найдено",
+      "trackPickerEmptyLiked": "Нет понравившихся треков",
+      "trackPickerError": "Ошибка поиска",
+      "trackPickerAdd": "Добавить",
+      "shortcutWeeklyTop": "Топ недели",
+      "shortcutRadio": "Радио",
+      "shortcutMyTop": "Мой топ"
     },
     "tracks": {
       "like": "В избранное",
@@ -396,6 +408,7 @@
       "report": "Пожаловаться",
       "reportSoon": "Жалоба скоро будет доступна",
       "openExternal": "Открыть в источнике",
+      "editCatalog": "Редактировать каталог",
       "stopPreview": "Остановить превью",
       "listenSnippets": "Слушать их песни",
       "sourcePlatform": "Платформа",

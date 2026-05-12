@@ -92,6 +92,27 @@
     `internal_api_allowlist.py`, `track.py`, `recommendation.py`,
     `recommendations.py`.
 
+## UI Редизайн (2026-05-12)
+
+- [x] **Медиатека: заголовок + быстрый доступ.** `LibraryView`
+  получил заголовок «Медиатека» и 4 карточки быстрого доступа
+  (Daily Mix, Топ недели, Радио, Мой топ) вместо одиночного Daily Mix.
+  CSS-класс `rd-lib-shortcuts` (сетка 2×2).
+
+- [x] **Поиск треков в плейлист: новый `TrackPickerSheet`.**
+  Заменил инлайн-пикер в `PlaylistsView` (старый: пагинация из
+  `api.getTracks` + `api.getMyLibrary`, без обложек, путаная UX) на
+  `TrackPickerSheet` — полноценный Sheet с `searchSuggest`-поиском,
+  обложками 40×40, секцией «Из понравившихся» по умолчанию.
+  Убраны ~100 строк состояния/логики из PlaylistsView.
+
+- [x] **Свайп трека на мобиле: `useSwipeX`.** Новый хук
+  `hooks/useSwipeX.ts` детектирует горизонтальный свайп через
+  pointer-events (threshold 60px, ratio 1.5×). Применён к обложке
+  в `NowPlayingView` (порог 72px) и к обложке в `PlayerBar` (56px).
+  Только на мобильных (!desktopFinePointer). Свайп влево → playNext,
+  вправо → playPrev. Haptic feedback.
+
 ### Follow-up (вынести отдельным PR)
 
 - [x] **Admin ORM cleanup B-3-tail:** `app/api/v1/admin/tasks.py`

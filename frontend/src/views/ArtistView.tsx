@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate, useParams } from 'react-router-dom'
 
@@ -34,6 +42,13 @@ import type {
   DiscographyItem,
   Track,
 } from '@/types/api'
+
+const ArtistCatalogEditorPortal = lazy(
+  () =>
+    import(
+      '@/admin/components/ArtistCatalogEditorPortal'
+    ),
+)
 
 function fmtCount(n: number | undefined | null): string {
   const v = Number(n ?? 0)
@@ -119,6 +134,10 @@ export function ArtistView() {
     number | null
   >(null)
   const isAdmin = getIsAdmin()
+  const [catalogEditorOpen, setCatalogEditorOpen] =
+    useState(false)
+  const [catalogEditorMounted, setCatalogEditorMounted] =
+    useState(false)
 
   const goBack = useCallback(() => {
     if (window.history.length > 1) {
@@ -163,6 +182,8 @@ export function ArtistView() {
     setTracksTotal(null)
     setSimilar([])
     setError(null)
+    setCatalogEditorOpen(false)
+    setCatalogEditorMounted(false)
 
     api
       .getArtist(artistId)
@@ -636,8 +657,34 @@ export function ArtistView() {
             <Icon name="flag" size={14} />
             <span>{t('redesign.artist.report')}</span>
           </MotionPress>
+          {isAdmin && (
+            <MotionPress
+              variant="ghost"
+              haptic="light"
+              onClick={() => {
+                setCatalogEditorMounted(true)
+                setCatalogEditorOpen(true)
+              }}
+              className="rf-artist__footer-btn"
+            >
+              <Icon name="edit" size={14} />
+              <span>
+                {t('redesign.artist.editCatalog')}
+              </span>
+            </MotionPress>
+          )}
         </section>
       </m.div>
+      {isAdmin && catalogEditorMounted && (
+        <Suspense fallback={null}>
+          <ArtistCatalogEditorPortal
+            artistId={artistId}
+            artistName={detail?.name ?? ''}
+            open={catalogEditorOpen}
+            onClose={() => setCatalogEditorOpen(false)}
+          />
+        </Suspense>
+      )}
     </section>
   )
 }

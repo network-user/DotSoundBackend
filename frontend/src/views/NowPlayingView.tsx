@@ -36,7 +36,7 @@ import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import { useSwipeX } from '@/hooks/useSwipeX'
 
 const SWIPE_DOWN_THRESHOLD = 120
-const SWIPE_TRACK_THRESHOLD = 72
+const SWIPE_COVER_THRESHOLD = 72
 
 type Tab = 'now' | 'lyrics' | 'queue'
 
@@ -126,24 +126,14 @@ export function NowPlayingView() {
     _: unknown,
     info: PanInfo,
   ) => {
-    const { x, y } = info.offset
-    const absX = Math.abs(x)
-    const absY = Math.abs(y)
-    if (absY > SWIPE_DOWN_THRESHOLD && absY > absX) {
+    if (info.offset.y > SWIPE_DOWN_THRESHOLD) {
       handleClose()
-    } else if (
-      !desktopFineNav &&
-      absX > SWIPE_TRACK_THRESHOLD &&
-      absX > absY
-    ) {
-      if (x < 0) playNext()
-      else playPrev()
     }
   }
 
   const coverSwipe = useSwipeX({
     disabled: desktopFineNav,
-    threshold: SWIPE_TRACK_THRESHOLD,
+    threshold: SWIPE_COVER_THRESHOLD,
     onSwipeLeft: () => {
       haptic('light')
       playNext()

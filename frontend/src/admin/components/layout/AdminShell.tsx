@@ -28,6 +28,8 @@ import { useAdminAuth } from '../../store/adminAuthStore'
 import { decodeAdminJwtHint } from '../../lib/adminJwtHint'
 import { AdminMenu } from './AdminMenu'
 import { AdminNavDrawer } from './AdminNavDrawer'
+import { AdminBreadcrumb } from './AdminBreadcrumb'
+import { CommandPalette } from '../widgets/CommandPalette'
 
 function Clock() {
   const [now, setNow] = useState(() => Date.now())
@@ -72,6 +74,20 @@ export function AdminShell() {
   const sectionLabel = useAdminSectionLabel()
   const narrow = useIsNarrowLayout()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isCmdK =
+        (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k'
+      if (isCmdK) {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const jwtHint = useMemo(
     () => decodeAdminJwtHint(accessToken),
@@ -166,12 +182,28 @@ export function AdminShell() {
               />
             </MotionPress>
           )}
-          <span
-            className="admin-shell__topbar-title"
-            title={t('admin.shell.title')}
+          {narrow ? (
+            <span
+              className="admin-shell__topbar-title"
+              title={t('admin.shell.title')}
+            >
+              {sectionLabel}
+            </span>
+          ) : (
+            <AdminBreadcrumb />
+          )}
+          <button
+            type="button"
+            className="admin-shell__cmdk-btn"
+            onClick={() => setPaletteOpen(true)}
+            aria-label={t('admin.cmdk.open', 'Open command palette')}
           >
-            {sectionLabel}
-          </span>
+            <Icon name="search" size={12} />
+            <span>
+              {t('admin.cmdk.trigger', 'Search')}
+            </span>
+            <kbd>⌘K</kbd>
+          </button>
           <Clock />
         </header>
         {!narrow && (
@@ -200,6 +232,10 @@ export function AdminShell() {
           </AnimatePresence>
         </main>
       </div>
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+      />
     </div>
   )
 }

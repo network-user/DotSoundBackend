@@ -10,9 +10,17 @@ import {
 vi.mock('./storage', () => ({
   getStorageQuota: vi.fn(async () => ({ quota: null, usage: null })),
   persistWarmRecord: vi.fn(async () => undefined),
+  persistWarmRecords: vi.fn(async () => undefined),
   listWarmRecords: vi.fn(async () => []),
   dropWarmRecord: vi.fn(async () => undefined),
   clearWarmIndex: vi.fn(async () => undefined),
+}))
+
+vi.mock('@/lib/offlineCache', () => ({
+  getAutoCacheEnabled: vi.fn(() => false),
+  getCachedIdsSync: vi.fn(() => new Set<number>()),
+  isCachedSync: vi.fn(() => false),
+  queueAutoCache: vi.fn(),
 }))
 
 vi.mock('./network', () => ({

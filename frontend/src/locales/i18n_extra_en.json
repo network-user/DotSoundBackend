@@ -229,6 +229,23 @@
       "def": "Error. Check the link."
     }
   },
+  "onboarding": {
+    "artists": {
+      "title": "Choose your artists",
+      "subtitle": "Optional — you can always follow more later",
+      "cta": "Continue"
+    }
+  },
+  "artistStats": {
+    "historyTable": "Monthly breakdown",
+    "col": {
+      "month": "Month",
+      "listeners": "Listeners",
+      "plays": "Plays",
+      "likes": "Likes",
+      "followers": "Followers"
+    }
+  },
   "lyrics": {
     "editor": {
       "enterText": "Enter text",

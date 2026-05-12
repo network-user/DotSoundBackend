@@ -31,6 +31,7 @@ import { AvatarBuilder } from '@/components/Onboarding/AvatarBuilder'
 import { GenreBubble } from '@/components/Onboarding/GenreBubble'
 import { LEGAL_VERSION } from '@/views/legalContent'
 import type {
+  OnboardingArtistItem,
   OnboardingBootstrap,
   OnboardingTasteDecision,
   OnboardingGenrePreviewResponse,
@@ -45,6 +46,7 @@ type Step =
   | 'welcome'
   | 'profile'
   | 'genres'
+  | 'artists'
   | 'swipe'
   | 'complete'
 
@@ -59,6 +61,7 @@ const STEP_ORDER: Step[] = [
   'welcome',
   'profile',
   'genres',
+  'artists',
   'swipe',
   'complete',
 ]
@@ -66,6 +69,7 @@ const STEP_ORDER: Step[] = [
 const PROGRESS_STEPS: Step[] = [
   'profile',
   'genres',
+  'artists',
   'swipe',
 ]
 
@@ -91,6 +95,14 @@ export function OnboardingV2({ onComplete }: Props) {
   const [selectedGenres, setSelectedGenres] = useState<
     string[]
   >([])
+
+  const [selectedArtistIds, setSelectedArtistIds] = useState<
+    number[]
+  >([])
+  const [onboardingArtists, setOnboardingArtists] = useState<
+    OnboardingArtistItem[]
+  >([])
+  const [artistsLoading, setArtistsLoading] = useState(false)
 
   const [tasteTracks, setTasteTracks] = useState<
     Track[]
@@ -135,6 +147,25 @@ export function OnboardingV2({ onComplete }: Props) {
       meta: { step },
     })
   }, [step])
+
+  useEffect(() => {
+    if (step !== 'artists') return
+    let cancelled = false
+    setArtistsLoading(true)
+    api
+      .getOnboardingArtists(selectedGenres)
+      .then((artists) => {
+        if (cancelled) return
+        setOnboardingArtists(artists)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setArtistsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [step, selectedGenres])
 
   useEffect(() => {
     if (step !== 'swipe' || tasteTracks.length > 0) {
@@ -241,25 +272,35 @@ export function OnboardingV2({ onComplete }: Props) {
     )
   }
 
-  const handleGenresSubmit = async () => {
-    if (
-      saving ||
-      selectedGenres.length < MIN_GENRES
-    ) {
-      return
-    }
+  const handleGenresSubmit = () => {
+    if (saving || selectedGenres.length < MIN_GENRES) return
     audio.prime()
+    hapticSelection()
+    goNext('genres')
+  }
+
+  const toggleArtist = (id: number) => {
+    hapticSelection()
+    setSelectedArtistIds((prev) =>
+      prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : [...prev, id],
+    )
+  }
+
+  const handleArtistsSubmit = async () => {
+    if (saving) return
     setSaving(true)
     try {
       await api.saveOnboardingPreferences({
         genres: selectedGenres,
-        artist_ids: [],
+        artist_ids: selectedArtistIds,
         moods: [],
       })
       trackActivationEvent('onboarding_step_complete', {
         meta: {
-          step: 'genres',
-          count: selectedGenres.length,
+          step: 'artists',
+          count: selectedArtistIds.length,
         },
       })
       showIsland({
@@ -270,7 +311,7 @@ export function OnboardingV2({ onComplete }: Props) {
         ),
         durationMs: 2400,
       })
-      goNext('genres')
+      goNext('artists')
     } catch {
       showIsland({
         kind: 'error',
@@ -514,6 +555,24 @@ export function OnboardingV2({ onComplete }: Props) {
             </m.div>
           )}
 
+          {step === 'artists' && (
+            <m.div
+              key="artists"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={TWEEN_FAST}
+              className="onb-v2-step"
+            >
+              <ArtistsStep
+                artists={onboardingArtists}
+                selected={selectedArtistIds}
+                onToggle={toggleArtist}
+                loading={artistsLoading}
+              />
+            </m.div>
+          )}
+
           {step === 'swipe' && (
             <m.div
               key="swipe"
@@ -653,6 +712,19 @@ export function OnboardingV2({ onComplete }: Props) {
                   </p>
                 )}
               </>
+            )}
+            {step === 'artists' && (
+              <MotionPress
+                variant="primary"
+                haptic="medium"
+                className="onb-v2-float-cta"
+                onClick={handleArtistsSubmit}
+                disabled={saving}
+              >
+                {saving
+                  ? t('redesign.onboardingV2.saving')
+                  : t('onboarding.artists.cta')}
+              </MotionPress>
             )}
             {step === 'swipe' && canFinish && (
               <MotionPress
@@ -1703,5 +1775,61 @@ function CompleteStep({
         </p>
       </div>
     </div>
+  )
+}
+
+interface ArtistsStepProps {
+  artists: OnboardingArtistItem[]
+  selected: number[]
+  onToggle: (id: number) => void
+  loading: boolean
+}
+
+function ArtistsStep({
+  artists,
+  selected,
+  onToggle,
+  loading,
+}: ArtistsStepProps) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <div className="onb-v2-step__hero">
+        <h1 className="onb-v2-step__title">
+          {t('onboarding.artists.title')}
+        </h1>
+        <p className="onb-v2-step__subtitle">
+          {t('onboarding.artists.subtitle')}
+        </p>
+      </div>
+      <div className="onb-v2-step__body">
+        {loading ? (
+          <div className="onb-v2-artists-loading" />
+        ) : (
+          <div className="onboarding-artists-grid">
+            {artists.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                className={
+                  selected.includes(a.id)
+                    ? 'onboarding-artist-card selected'
+                    : 'onboarding-artist-card'
+                }
+                onClick={() => onToggle(a.id)}
+              >
+                <CoverImage
+                  coverKey={a.image_key}
+                  className="cover-image"
+                />
+                <span className="onboarding-artist-name">
+                  {a.name}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   )
 }

@@ -931,3 +931,247 @@
   height: 20px;
   margin: 0 auto;
 }
+
+/* ─── Library header ──────────────────────────────── */
+
+.rd-lib-header {
+  display: flex;
+  align-items: center;
+  padding: var(--space-5) var(--space-4) var(--space-2);
+}
+
+.rd-lib-header__title {
+  font-size: var(--fs-28);
+  font-weight: 700;
+  letter-spacing: var(--ls-tight);
+  color: var(--text);
+  margin: 0;
+  line-height: var(--lh-tight);
+}
+
+/* ─── Library quick-access shortcuts ─────────────── */
+
+.rd-lib-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4) var(--space-1);
+}
+
+.rd-lib-shortcut {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3);
+  border-radius: var(--r-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-glass, rgba(255, 255, 255, 0.05));
+  text-align: left;
+  min-height: 52px;
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    border-color var(--dur-fast) var(--ease-out);
+}
+
+.rd-lib-shortcut__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent, var(--text));
+  flex-shrink: 0;
+}
+
+.rd-lib-shortcut__label {
+  font-size: var(--fs-13);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: var(--ls-snug);
+  line-height: var(--lh-tight);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rd-lib-shortcut:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+}
+
+/* ─── Add-track trigger button ────────────────────── */
+
+.rd-pl-add-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  justify-content: center;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--r-lg);
+  border: 1px dashed var(--border-subtle);
+}
+
+/* ─── TrackPickerSheet ────────────────────────────── */
+
+.tp-sheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.tp-sheet__title {
+  font-size: var(--fs-16);
+  font-weight: 700;
+  letter-spacing: var(--ls-snug);
+  color: var(--text);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-4) var(--space-4) 0;
+  flex-shrink: 0;
+}
+
+.tp-sheet__search-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 var(--space-4) var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.tp-sheet__search-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.tp-sheet__search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--fs-15);
+  color: var(--text);
+  outline: none;
+}
+
+.tp-sheet__search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.tp-sheet__clear {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.tp-sheet__section-label {
+  font-size: var(--fs-12);
+  font-weight: 600;
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 0 var(--space-4) var(--space-2);
+  flex-shrink: 0;
+}
+
+.tp-sheet__list {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: var(--space-4);
+}
+
+.tp-sheet__hint {
+  padding: var(--space-4) var(--space-4);
+  font-size: var(--fs-14);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.tp-sheet__hint--error {
+  color: var(--color-error, #e53e3e);
+}
+
+.tp-sheet__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  min-height: 56px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.tp-sheet__row:last-child {
+  border-bottom: none;
+}
+
+.tp-sheet__row-cover {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tp-sheet__row-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tp-sheet__row-cover-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.tp-sheet__row-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tp-sheet__row-title {
+  font-size: var(--fs-14);
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tp-sheet__row-artist {
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tp-sheet__row-add {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.tp-sheet__row-add:not(:disabled):hover {
+  color: var(--text);
+}
+
+.tp-sheet__row-adding {
+  font-size: var(--fs-16);
+  color: var(--text-secondary);
+}

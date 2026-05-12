@@ -54,7 +54,9 @@ export function PlaylistDetailRoute() {
   const refreshList = () =>
     qc.invalidateQueries({ queryKey: ['admin', 'playlists'] })
   const refreshDetail = () => {
-    qc.invalidateQueries({ queryKey: ['admin', 'playlist'] })
+    qc.invalidateQueries({
+      queryKey: ['admin', 'playlist', playlistId],
+    })
   }
 
   const saveMetaMutation = useMutation({

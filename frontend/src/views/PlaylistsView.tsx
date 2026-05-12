@@ -11,6 +11,7 @@ import { Icon } from '@/components/Icon/Icon'
 import { LongPressMenu } from '@/components/ui/LongPressMenu'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { TrackList } from '@/components/TrackList/TrackList'
+import { TrackPickerSheet } from '@/components/TrackPickerSheet/TrackPickerSheet'
 import { useSound } from '@/store/SoundContext'
 import { api } from '@/lib/api'
 import {
@@ -24,7 +25,6 @@ import type {
   ChatListItem,
   Playlist,
   PlaylistWithTracks,
-  Track,
 } from '@/types/api'
 
 interface PlaylistsViewProps {
@@ -33,10 +33,6 @@ interface PlaylistsViewProps {
 
 type Screen = 'list' | 'detail'
 
-const ADD_PICK_LIBRARY_STEP = 12
-const ADD_PICK_CATALOG_SIZE = 12
-const ADD_PICK_MIN_CATALOG_CHARS = 2
-const ADD_PICK_DEBOUNCE_MS = 380
 
 export function PlaylistsView({
   embedded = false,
@@ -58,18 +54,9 @@ export function PlaylistsView({
   const [editName, setEditName] = useState('')
   const [editPublic, setEditPublic] = useState(false)
   const [editBusy, setEditBusy] = useState(false)
-  const [myTracks, setMyTracks] = useState<Track[]>([])
   const [addingTrackId, setAddingTrackId] = useState<number | null>(null)
-  const [trackSearch, setTrackSearch] = useState('')
   const [trackOrderFilter, setTrackOrderFilter] = useState('')
-  const [libraryVisibleCount, setLibraryVisibleCount] = useState(
-    ADD_PICK_LIBRARY_STEP,
-  )
-  const [catalogTracks, setCatalogTracks] = useState<Track[]>([])
-  const [catalogPage, setCatalogPage] = useState(0)
-  const [catalogTotal, setCatalogTotal] = useState(0)
-  const [catalogLoading, setCatalogLoading] = useState(false)
-  const [catalogLoadingMore, setCatalogLoadingMore] = useState(false)
+  const [addTrackSheetOpen, setAddTrackSheetOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState<Playlist | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renameBusy, setRenameBusy] = useState(false)
@@ -114,115 +101,13 @@ export function PlaylistsView({
     if (!selected) return
     setEditName(selected.name)
     setEditPublic(selected.is_public)
-    if (canEditSelected) {
-      api.getMyLibrary(1, 100, true).then((res) => {
-        setMyTracks(res.items)
-      }).catch(() => setMyTracks([]))
-    }
-  }, [selected?.id, canEditSelected])
-
-  useEffect(() => {
-    setTrackOrderFilter('')
   }, [selected?.id])
 
   useEffect(() => {
-    if (!selected || !canEditSelected) return
-    setLibraryVisibleCount(ADD_PICK_LIBRARY_STEP)
-    const q = trackSearch.trim()
-    let cancelled = false
-    if (q.length === 1) {
-      setCatalogTracks([])
-      setCatalogPage(0)
-      setCatalogTotal(0)
-      setCatalogLoading(false)
-      return
-    }
-    setCatalogTracks([])
-    setCatalogPage(0)
-    setCatalogTotal(0)
-    const timer = window.setTimeout(() => {
-      setCatalogLoading(true)
-      const load = q.length >= ADD_PICK_MIN_CATALOG_CHARS
-        ? api.getTracks({
-            q,
-            size: ADD_PICK_CATALOG_SIZE,
-            page: 1,
-            playable: true,
-          })
-        : api.getTracks({
-            size: ADD_PICK_CATALOG_SIZE,
-            page: 1,
-            playable: true,
-          })
-      load
-        .then((res) => {
-          if (cancelled) return
-          setCatalogTracks(res.items)
-          setCatalogPage(1)
-          setCatalogTotal(res.total)
-        })
-        .catch(() => {
-          if (cancelled) return
-          setCatalogTracks([])
-          setCatalogPage(0)
-          setCatalogTotal(0)
-        })
-        .finally(() => {
-          if (!cancelled) setCatalogLoading(false)
-        })
-    }, ADD_PICK_DEBOUNCE_MS)
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-    }
-  }, [selected?.id, canEditSelected, trackSearch])
+    setTrackOrderFilter('')
+    setAddTrackSheetOpen(false)
+  }, [selected?.id])
 
-  const loadMoreCatalog = useCallback(async () => {
-    if (!selected || !canEditSelected || catalogLoadingMore) return
-    const q = trackSearch.trim()
-    if (q.length === 1) return
-    if (
-      catalogPage < 1 ||
-      catalogPage * ADD_PICK_CATALOG_SIZE >= catalogTotal
-    ) {
-      return
-    }
-    setCatalogLoadingMore(true)
-    const nextPage = catalogPage + 1
-    try {
-      const res =
-        q.length >= ADD_PICK_MIN_CATALOG_CHARS
-          ? await api.getTracks({
-              q,
-              size: ADD_PICK_CATALOG_SIZE,
-              page: nextPage,
-              playable: true,
-            })
-          : await api.getTracks({
-              size: ADD_PICK_CATALOG_SIZE,
-              page: nextPage,
-              playable: true,
-            })
-      setCatalogTracks((prev) => {
-        const seen = new Set(prev.map((t) => t.id))
-        const add = res.items.filter((t) => !seen.has(t.id))
-        return [...prev, ...add]
-      })
-      setCatalogPage(nextPage)
-      setCatalogTotal(res.total)
-    } catch {
-      /* keep list */
-    } finally {
-      setCatalogLoadingMore(false)
-    }
-  }, [
-    selected,
-    canEditSelected,
-    catalogLoadingMore,
-    catalogPage,
-    catalogTotal,
-    trackSearch,
-  ])
 
   const openPlaylist = useCallback(
     async (p: Playlist) => {
@@ -421,69 +306,11 @@ export function PlaylistsView({
     [loadPlaylists, t],
   )
 
-  const pickerQueryTrim = trackSearch.trim()
-  const pickerQueryNorm = pickerQueryTrim.toLowerCase()
-
   const inPlaylistIds = useMemo(
     () =>
       new Set(selected?.tracks.map((t) => t.id) ?? []),
     [selected],
   )
-
-  const libraryCandidatesAll = useMemo(() => {
-    if (!selected) return []
-    let rows = myTracks.filter((t) => !inPlaylistIds.has(t.id))
-    if (pickerQueryNorm) {
-      rows = rows.filter((t) => {
-        const hay =
-          `${t.title} ${t.artist ?? ''}`.toLowerCase()
-        return hay.includes(pickerQueryNorm)
-      })
-    }
-    return rows
-  }, [selected, myTracks, inPlaylistIds, pickerQueryNorm])
-
-  const libraryCandidatesIdSet = useMemo(
-    () =>
-      new Set(libraryCandidatesAll.map((t) => t.id)),
-    [libraryCandidatesAll],
-  )
-
-  const libraryVisible = useMemo(
-    () =>
-      libraryCandidatesAll.slice(0, libraryVisibleCount),
-    [libraryCandidatesAll, libraryVisibleCount],
-  )
-
-  const catalogVisible = useMemo(
-    () =>
-      catalogTracks.filter(
-        (t) =>
-          !inPlaylistIds.has(t.id) &&
-          !libraryCandidatesIdSet.has(t.id),
-      ),
-    [catalogTracks, inPlaylistIds, libraryCandidatesIdSet],
-  )
-
-  const addPickerRows = useMemo(
-    () => [...libraryVisible, ...catalogVisible],
-    [libraryVisible, catalogVisible],
-  )
-
-  const hasMoreLibrary =
-    libraryCandidatesAll.length > libraryVisibleCount
-  const hasMoreCatalog =
-    pickerQueryTrim.length !== 1 &&
-    catalogPage > 0 &&
-    catalogPage * ADD_PICK_CATALOG_SIZE < catalogTotal
-
-  const addPickerShowsShortQueryTip =
-    pickerQueryTrim.length === 1
-
-  const addPickerEmpty =
-    !catalogLoading &&
-    !catalogLoadingMore &&
-    addPickerRows.length === 0
 
   const orderFilterQ = trackOrderFilter.trim().toLowerCase()
   const filteredOrderIndices = useMemo(() => {
@@ -801,131 +628,24 @@ export function PlaylistsView({
                 : t('redesign.library.playlistSave')}
             </MotionPress>
             <div className="rd-pl-add-block">
-              <input
-                className="form-input rd-pl-add-search"
-                placeholder={t(
-                  'redesign.library.playlistSearchPlaceholder',
-                )}
-                value={trackSearch}
-                onChange={(e) => setTrackSearch(e.target.value)}
-              />
-              <p className="hint rd-pl-add-hint">
-                {addPickerShowsShortQueryTip
-                  ? t(
-                      'redesign.library.playlistSearchMinCharsHint',
-                    )
-                  : t('redesign.library.playlistPickerHint')}
-              </p>
-              <div
-                className="rd-pl-add-list"
-                role="list"
-                aria-label={t('redesign.library.playlistAddOption')}
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
+                className="btn-secondary rd-pl-add-trigger-btn"
+                onClick={() => setAddTrackSheetOpen(true)}
               >
-                {catalogLoading && addPickerRows.length === 0 ? (
-                  <p className="hint rd-pl-add-empty">
-                    {t('redesign.library.playlistSearching')}
-                  </p>
-                ) : null}
-                {addPickerRows.map((tr) => {
-                  const busy = addingTrackId === tr.id
-                  return (
-                    <button
-                      key={tr.id}
-                      type="button"
-                      role="listitem"
-                      className={
-                        'rd-pl-add-option' +
-                        (busy ? ' rd-pl-add-option--busy' : '')
-                      }
-                      disabled={busy || addingTrackId !== null}
-                      onClick={() =>
-                        void handleAddSingleTrack(tr.id)
-                      }
-                    >
-                      <span className="rd-pl-add-option-meta">
-                        <span className="rd-pl-add-option-title">
-                          {tr.title}
-                        </span>
-                        {tr.artist ? (
-                          <span className="rd-pl-add-option-artist">
-                            {tr.artist}
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="rd-pl-add-option-action">
-                        {busy ? (
-                          <span className="rd-pl-add-option-busy-label">
-                            {t(
-                              'redesign.library.playlistAddingTrack',
-                            )}
-                          </span>
-                        ) : (
-                          <Icon name="plus" size={18} />
-                        )}
-                      </span>
-                    </button>
-                  )
-                })}
-                {hasMoreLibrary ? (
-                  <div className="rd-pl-add-more-foot">
-                    <MotionPress
-                      type="button"
-                      variant="ghost"
-                      haptic="selection"
-                      className="btn-secondary rd-pl-add-more"
-                      disabled={addingTrackId !== null}
-                      onClick={() =>
-                        setLibraryVisibleCount((n) => {
-                          return n + ADD_PICK_LIBRARY_STEP
-                        })
-                      }
-                    >
-                      {t(
-                        'redesign.library.playlistLoadMoreLibrary',
-                      )}
-                    </MotionPress>
-                  </div>
-                ) : null}
-                {hasMoreCatalog ? (
-                  <div className="rd-pl-add-more-foot">
-                    <MotionPress
-                      type="button"
-                      variant="ghost"
-                      haptic="selection"
-                      className="btn-secondary rd-pl-add-more"
-                      disabled={
-                        catalogLoadingMore ||
-                        addingTrackId !== null
-                      }
-                      onClick={() => void loadMoreCatalog()}
-                    >
-                      {catalogLoadingMore
-                        ? t('redesign.library.playlistSearching')
-                        : t(
-                            'redesign.library.playlistLoadMoreCatalog',
-                          )}
-                    </MotionPress>
-                  </div>
-                ) : null}
-                {addPickerEmpty ? (
-                  <p className="hint rd-pl-add-empty">
-                    {addPickerShowsShortQueryTip
-                      ? t(
-                          'redesign.library.playlistAddPickerNoLibraryMatch',
-                        )
-                      : t(
-                          'redesign.library.playlistPickerEmpty',
-                        )}
-                  </p>
-                ) : null}
-              </div>
+                <Icon name="plus" size={16} />
+                {t('redesign.library.trackPickerButton')}
+              </MotionPress>
             </div>
-            {(catalogLoading || catalogLoadingMore) &&
-            addPickerRows.length > 0 ? (
-              <p className="hint rd-pl-search-hint">
-                {t('redesign.library.playlistSearching')}
-              </p>
-            ) : null}
+            <TrackPickerSheet
+              open={addTrackSheetOpen}
+              onClose={() => setAddTrackSheetOpen(false)}
+              onAdd={handleAddSingleTrack}
+              excludeIds={inPlaylistIds}
+              addingId={addingTrackId}
+            />
           </div>
         )}
 

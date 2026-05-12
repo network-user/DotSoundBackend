@@ -205,6 +205,8 @@ export class PrefetchManager {
     overBudget: 0,
     bytesUsed: 0,
   }
+  private pendingWarmRecords: WarmRecord[] = []
+  private flushScheduled = false
 
   configurePolicyFetcher(
     fetcher: (
@@ -255,6 +257,10 @@ export class PrefetchManager {
       this.boundNetworkListener = null
     }
     this.cancelAll()
+    const pending = this.pendingWarmRecords.splice(0)
+    if (pending.length > 0) {
+      void persistWarmRecords(pending)
+    }
   }
 
   getPolicy(): PrefetchPolicySnapshot {
@@ -511,7 +517,7 @@ export class PrefetchManager {
         this.warmBytesByTrack.set(task.trackId, bytes)
         this.bytesUsed += bytes
         this.stats.warmed += 1
-        await persistWarmRecord({
+        this._enqueueWarmRecord({
           trackId: task.trackId,
           warmedAt: Date.now(),
           context: task.context,
@@ -549,7 +555,7 @@ export class PrefetchManager {
       await api.warmTrackStreamCache([task.trackId])
       this.warmTrackIds.add(task.trackId)
       this._touchHot(task.trackId)
-      await persistWarmRecord({
+      this._enqueueWarmRecord({
         trackId: task.trackId,
         warmedAt: Date.now(),
         context: task.context,
@@ -616,6 +622,24 @@ export class PrefetchManager {
       }
     }
     return bytes
+  }
+
+  private _enqueueWarmRecord(record: WarmRecord): void {
+    this.pendingWarmRecords.push(record)
+    if (this.flushScheduled) return
+    this.flushScheduled = true
+    const flush = () => {
+      this.flushScheduled = false
+      const batch = this.pendingWarmRecords.splice(0)
+      if (batch.length > 0) {
+        void persistWarmRecords(batch)
+      }
+    }
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(flush, { timeout: 2000 })
+    } else {
+      setTimeout(flush, 200)
+    }
   }
 
   private _shouldPreferHiVariant(): boolean {

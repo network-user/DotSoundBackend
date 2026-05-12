@@ -41,6 +41,7 @@ class ArtistResponse(BaseModel):
     enriched_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None
+    monthly_listeners: int = 0
 
 
 class ArtistListResponse(BaseModel):
@@ -57,7 +58,6 @@ class ArtistDetailResponse(ArtistResponse):
     ) = None
     primary_source_id: str | None = None
     follower_count: int = 0
-    monthly_listeners: int = 0
 
 
 class ArtistResolveResponse(BaseModel):

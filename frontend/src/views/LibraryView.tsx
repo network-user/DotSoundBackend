@@ -8,6 +8,33 @@ import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { hapticSelection } from '@/lib/telegram'
 
+const SHORTCUTS = [
+  {
+    id: 'daily',
+    icon: 'calendar',
+    labelKey: 'home.dayPlaylistTitle',
+    route: '/daily-mix',
+  },
+  {
+    id: 'weekly-top',
+    icon: 'sparkle',
+    labelKey: 'redesign.library.shortcutWeeklyTop',
+    route: '/weekly-top',
+  },
+  {
+    id: 'radio',
+    icon: 'radio',
+    labelKey: 'redesign.library.shortcutRadio',
+    route: '/radio',
+  },
+  {
+    id: 'my-top',
+    icon: 'chart-bar',
+    labelKey: 'redesign.library.shortcutMyTop',
+    route: '/my-top',
+  },
+] as const
+
 type Tab = 'liked' | 'playlists' | 'history'
 
 const STORAGE_KEY = 'library-tab'
@@ -87,26 +114,29 @@ export function LibraryView() {
       id="view-library"
       className="view active"
     >
-      <div className="rd-lib-top">
-        <MotionPress
-          variant="subtle"
-          haptic="selection"
-          className="rd-lib-daily playlist-card"
-          onClick={() => navigate('/daily-mix')}
-        >
-          <div className="playlist-cover" aria-hidden>
-            <Icon name="calendar" size={26} />
-          </div>
-          <div className="rd-lib-daily__meta">
-            <div className="rd-lib-daily__title">
-              {t('home.dayPlaylistTitle')}
+      <div className="rd-lib-header">
+        <h1 className="rd-lib-header__title">
+          {t('nav.library')}
+        </h1>
+      </div>
+
+      <div className="rd-lib-shortcuts">
+        {SHORTCUTS.map((s) => (
+          <MotionPress
+            key={s.id}
+            variant="subtle"
+            haptic="selection"
+            className="rd-lib-shortcut"
+            onClick={() => navigate(s.route)}
+          >
+            <div className="rd-lib-shortcut__icon" aria-hidden>
+              <Icon name={s.icon} size={20} />
             </div>
-            <div className="rd-lib-daily__hint hint">
-              {t('home.dayPlaylistHint')}
-            </div>
-          </div>
-          <Icon name="chevron" size={18} />
-        </MotionPress>
+            <span className="rd-lib-shortcut__label">
+              {t(s.labelKey)}
+            </span>
+          </MotionPress>
+        ))}
       </div>
 
       <div className="library-tabs rd-lib-tabs">

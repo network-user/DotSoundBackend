@@ -118,10 +118,6 @@ export function DashboardRoute() {
     },
     { value: 'skips', label: t('admin.dashboard.stats.skips') },
   ]
-  const metricIndex = Math.max(
-    0,
-    metricOptions.findIndex((opt) => opt.value === statsMetric),
-  )
   const [topSortBy, setTopSortBy] = useState<
     'plays' | 'unique_listeners'
   >('plays')
@@ -312,73 +308,93 @@ export function DashboardRoute() {
             {t('admin.dashboard.onlineHistory.subtitle')}
           </p>
         </div>
-        <div className="admin-range-switch adm-r-range" role="tablist">
-          {[15, 60, 360, 1440].map((value) => (
+        <div className="admin-dashboard__hero-controls">
+          <AdminRangeSwitch<string>
+            groupId="dash-online-range"
+            value={
+              onlineRangeMode === 'all' ? 'all' : String(minutes)
+            }
+            onChange={(v) => {
+              if (v === 'all') {
+                setOnlineRangeMode('all')
+              } else {
+                setOnlineRangeMode('range')
+                setMinutes(Number(v))
+              }
+            }}
+            options={[
+              {
+                value: '15',
+                label: t('redesign.admin.dashboard.rangeMinutes', {
+                  n: 15,
+                }),
+              },
+              {
+                value: '60',
+                label: t('redesign.admin.dashboard.rangeHours', {
+                  n: 1,
+                }),
+              },
+              {
+                value: '360',
+                label: t('redesign.admin.dashboard.rangeHours', {
+                  n: 6,
+                }),
+              },
+              {
+                value: '1440',
+                label: t('redesign.admin.dashboard.rangeDay'),
+              },
+              {
+                value: 'all',
+                label: t('redesign.admin.dashboard.rangeAllTime'),
+              },
+            ]}
+          />
+          <div className="admin-dashboard__hero-toggles">
             <MotionPress
-              key={value}
               type="button"
               variant="ghost"
               haptic="selection"
-              className={`admin-range-switch__btn adm-r-range__btn${
-                value === minutes ? ' is-active' : ''
-              }`}
-              onClick={() => setMinutes(value)}
+              className="admin-dashboard__hero-toggle"
+              onClick={() =>
+                setOnlineSortDir((v) =>
+                  v === 'asc' ? 'desc' : 'asc',
+                )
+              }
+              aria-label={
+                onlineSortDir === 'asc'
+                  ? t('redesign.admin.dashboard.orderOldest')
+                  : t('redesign.admin.dashboard.orderNewest')
+              }
             >
-              {value < 60
-                ? t('redesign.admin.dashboard.rangeMinutes', { n: value })
-                : value < 1440
-                  ? t('redesign.admin.dashboard.rangeHours', {
-                      n: Math.floor(value / 60),
-                    })
-                  : t('redesign.admin.dashboard.rangeDay')}
+              {onlineSortDir === 'asc'
+                ? t('redesign.admin.dashboard.orderOldest')
+                : t('redesign.admin.dashboard.orderNewest')}
             </MotionPress>
-          ))}
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="selection"
-            className={`admin-range-switch__btn adm-r-range__btn${
-              onlineRangeMode === 'all' ? ' is-active' : ''
-            }`}
-            onClick={() => setOnlineRangeMode('all')}
-          >
-            {t('redesign.admin.dashboard.rangeAllTime')}
-          </MotionPress>
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="selection"
-            className={`admin-range-switch__btn adm-r-range__btn${
-              onlineRangeMode === 'range' ? ' is-active' : ''
-            }`}
-            onClick={() => setOnlineRangeMode('range')}
-          >
-            {t('redesign.admin.dashboard.rangeInterval')}
-          </MotionPress>
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="selection"
-            className="admin-range-switch__btn adm-r-range__btn"
-            onClick={() =>
-              setOnlineSortDir((v) => (v === 'asc' ? 'desc' : 'asc'))
-            }
-          >
-            {onlineSortDir === 'asc'
-              ? t('redesign.admin.dashboard.orderOldest')
-              : t('redesign.admin.dashboard.orderNewest')}
-          </MotionPress>
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="selection"
-            className={`admin-range-switch__btn adm-r-range__btn${
-              live ? ' is-active' : ''
-            }`}
-            onClick={() => setLive((v) => !v)}
-          >
-            {t('redesign.admin.dashboard.live')}
-          </MotionPress>
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="selection"
+              className={
+                live
+                  ? 'admin-dashboard__hero-toggle is-active'
+                  : 'admin-dashboard__hero-toggle'
+              }
+              aria-pressed={live}
+              onClick={() => setLive((v) => !v)}
+            >
+              <span
+                className={
+                  live
+                    ? 'admin-dashboard__live-dot is-on'
+                    : 'admin-dashboard__live-dot'
+                }
+                aria-hidden
+              />
+              {t('redesign.admin.dashboard.live')}
+            </MotionPress>
+          </div>
         </div>
       </section>
 
@@ -444,39 +460,18 @@ export function DashboardRoute() {
           <div className="admin-skeleton admin-skeleton--card" />
         ) : (
           <>
-            <div className="admin-metric-slider">
-              <div className="admin-metric-slider__label">
-                {metricOptions[metricIndex]?.label}
-              </div>
-              <input
-                className="admin-metric-slider__input"
-                type="range"
-                min={0}
-                max={metricOptions.length - 1}
-                step={1}
-                value={metricIndex}
-                onChange={(e) => {
-                  const idx = Number(e.target.value)
-                  const option = metricOptions[idx]
-                  if (option) setStatsMetric(option.value)
-                }}
-                aria-label="Select statistics metric"
+            <div className="admin-dashboard__metric-switch">
+              <AdminRangeSwitch
+                groupId="dash-stats-metric"
+                value={statsMetric}
+                onChange={(v) =>
+                  setStatsMetric(
+                    v as typeof statsMetric,
+                  )
+                }
+                options={metricOptions}
+                ariaLabel={t('admin.dashboard.stats.title')}
               />
-              <div className="admin-metric-slider__ticks">
-                {metricOptions.map((opt, idx) => (
-                  <MotionPress
-                    key={opt.value}
-                    type="button"
-                    variant="icon"
-                    haptic="selection"
-                    className={`admin-metric-slider__tick${
-                      idx === metricIndex ? ' is-active' : ''
-                    }`}
-                    onClick={() => setStatsMetric(opt.value)}
-                    ariaLabel={opt.label}
-                  />
-                ))}
-              </div>
             </div>
             {statsMetric === 'all' && (
               <section className="kpi-grid">
@@ -836,7 +831,23 @@ export function DashboardRoute() {
           />
         </article>
       </section>
-      <OutboundStatusPanel />
+      <details className="admin-dashboard__collapse">
+        <summary className="admin-dashboard__collapse-summary">
+          <span className="admin-dashboard__collapse-title">
+            {t(
+              'admin.dashboard.outbound.title',
+              'Outbound network',
+            )}
+          </span>
+          <span
+            className="admin-dashboard__collapse-chev"
+            aria-hidden
+          >
+            ▾
+          </span>
+        </summary>
+        <OutboundStatusPanel />
+      </details>
 
       <section className="admin-card">
         <h2>{t('admin.dashboard.containers.title')}</h2>

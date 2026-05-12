@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db, get_optional_user
 from app.models.user import User
 from app.repositories.artist import ArtistRepository
+from app.repositories.artist_stats import ArtistStatsRepository
 from app.repositories.recommendation import (
     RecommendationRepository,
 )
@@ -428,7 +429,20 @@ async def get_discover(
     trending_out = await dedupe_and_build_track_list(db, trending_raw)
 
     artists_raw = await artist_repo.list_popular(limit=artist_limit)
-    artists_out = [ArtistResponse.model_validate(a) for a in artists_raw]
+    if artists_raw:
+        stats_repo = ArtistStatsRepository(db)
+        listeners_map = await stats_repo.get_latest_listeners_batch(
+            [a.id for a in artists_raw]
+        )
+    else:
+        listeners_map: dict[int, int] = {}
+    artists_out = [
+        ArtistResponse.model_validate(
+            a,
+            update={"monthly_listeners": listeners_map.get(a.id, 0)},
+        )
+        for a in artists_raw
+    ]
 
     genre_cards = [
         DiscoverGenreCard(

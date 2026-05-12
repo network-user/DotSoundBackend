@@ -46,6 +46,13 @@ type SearchTab =
 const SEARCH_DEBOUNCE_MS = 300
 const GENRES_PAGE_SIZE = 24
 
+function fmtCount(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return '0'
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return String(Math.round(n))
+}
+
 function normalizeGenre(value: string): string {
   return value
     .toLowerCase()
@@ -1017,6 +1024,11 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
                         <span className="search-artist-pill__name">
                           {a.name}
                         </span>
+                        {(a.monthly_listeners ?? 0) > 0 && (
+                          <span className="search-artist-pill__listeners">
+                            {fmtCount(a.monthly_listeners!)}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>

@@ -282,7 +282,19 @@
       "shareSending": "Sending…",
       "shareSend": "Send",
       "shareTitlePlaylist": "Share playlist",
-      "shareTitleMix": "Share mix"
+      "shareTitleMix": "Share mix",
+      "trackPickerTitle": "Add tracks",
+      "trackPickerButton": "Add tracks",
+      "trackPickerPlaceholder": "Search tracks on the platform…",
+      "trackPickerLikedSection": "From liked tracks",
+      "trackPickerLoading": "Searching…",
+      "trackPickerEmpty": "Nothing found",
+      "trackPickerEmptyLiked": "No liked tracks",
+      "trackPickerError": "Search failed",
+      "trackPickerAdd": "Add",
+      "shortcutWeeklyTop": "Weekly top",
+      "shortcutRadio": "Radio",
+      "shortcutMyTop": "My top"
     },
     "tracks": {
       "like": "Like",
@@ -394,6 +406,7 @@
       "report": "Report",
       "reportSoon": "Report flow coming soon",
       "openExternal": "Open at source",
+      "editCatalog": "Edit catalog",
       "stopPreview": "Stop preview",
       "listenSnippets": "Listen to their songs",
       "sourcePlatform": "Platform",

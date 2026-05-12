@@ -184,6 +184,29 @@ class ArtistStatsRepository:
         )
         return result.scalar_one_or_none() is not None
 
+    async def get_latest_listeners_batch(
+        self, artist_ids: list[int]
+    ) -> dict[int, int]:
+        if not artist_ids:
+            return {}
+        result = await self._session.execute(
+            select(ArtistMonthlyStats)
+            .where(
+                ArtistMonthlyStats.artist_id.in_(artist_ids)
+            )
+            .order_by(
+                ArtistMonthlyStats.artist_id,
+                ArtistMonthlyStats.year.desc(),
+                ArtistMonthlyStats.month.desc(),
+            )
+        )
+        rows = result.scalars().all()
+        out: dict[int, int] = {}
+        for row in rows:
+            if row.artist_id not in out:
+                out[row.artist_id] = row.unique_listeners
+        return out
+
     async def list_all_artist_ids(self) -> list[int]:
         from app.models.artist import Artist
 

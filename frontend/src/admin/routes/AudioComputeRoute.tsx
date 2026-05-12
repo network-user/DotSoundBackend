@@ -19,6 +19,7 @@ import { StatusPill } from '../components/widgets/StatusPill'
 import { WorkerDetailDrawer } from '../components/widgets/WorkerDetailDrawer'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { WorkerOnboarding } from '../components/widgets/WorkerOnboarding'
+import { AdminPageNav } from '../components/layout/AdminPageNav'
 
 interface WorkerRow {
   id: string
@@ -1390,7 +1391,18 @@ export function AudioComputeRoute() {
         hasWorkers={workersList.length > 0}
       />
 
-      <section className="admin-card">
+      <AdminPageNav
+        items={[
+          { id: 'ac-routing', label: t('admin.audioCompute.routing.title') },
+          { id: 'ac-cascade', label: t('admin.audioCompute.cascade.title') },
+          { id: 'ac-speechkit', label: t('admin.audioCompute.speechkit.title') },
+          { id: 'ac-workers', label: t('admin.audioCompute.workers') },
+          { id: 'ac-generic-jobs', label: t('admin.audioCompute.genericJobs.title') },
+          { id: 'ac-audit', label: t('admin.audioCompute.auditSection.title') },
+        ]}
+      />
+
+      <section id="ac-routing" className="admin-card">
         <h2>
           {t('admin.audioCompute.routing.title')}
         </h2>
@@ -1417,7 +1429,7 @@ export function AudioComputeRoute() {
         </div>
       </section>
 
-      <section className="admin-card">
+      <section id="ac-cascade" className="admin-card">
         <h2>
           {t('admin.audioCompute.cascade.title')}
         </h2>
@@ -1495,7 +1507,7 @@ export function AudioComputeRoute() {
         </div>
       </section>
 
-      <section className="admin-card">
+      <section id="ac-speechkit" className="admin-card">
         <h2>
           {t('admin.audioCompute.speechkit.title')}
         </h2>
@@ -1580,7 +1592,7 @@ export function AudioComputeRoute() {
         )}
       </section>
 
-      <section className="admin-card">
+      <section id="ac-workers" className="admin-card">
         <h2>
           {t('admin.audioCompute.workers')}
         </h2>
@@ -2009,7 +2021,7 @@ export function AudioComputeRoute() {
         />
       </section>
 
-      <section className="admin-card">
+      <section id="ac-generic-jobs" className="admin-card">
         <h2>
           {t('admin.audioCompute.genericJobs.title')}
         </h2>
@@ -2205,7 +2217,7 @@ export function AudioComputeRoute() {
         </section>
       )}
 
-      <section className="admin-card">
+      <section id="ac-audit" className="admin-card">
         <h2>
           {t('admin.audioCompute.auditSection.title')}
         </h2>

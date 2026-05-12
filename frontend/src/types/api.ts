@@ -912,6 +912,7 @@ export interface ArtistInfo {
   bio: string | null
   created_at: string
   track_count?: number
+  monthly_listeners?: number
 }
 
 export type ArtistEnrichmentStatus =

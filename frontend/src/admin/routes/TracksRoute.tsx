@@ -16,6 +16,7 @@ import { StatusPill } from '../components/widgets/StatusPill'
 import { KpiCard } from '../components/widgets/KpiCard'
 import { Sparkline } from '../components/charts/Sparkline'
 import { LineChart } from '../components/charts/LineChart'
+import { OverflowMenu } from '../components/widgets/OverflowMenu'
 
 interface TrackRow {
   id: number
@@ -923,24 +924,11 @@ export function TracksRoute() {
           Без текста
         </label>
         <MotionPress
-          variant="ghost"
+          variant="primary"
           disabled={selectedIds.size === 0}
           onClick={handleBatchPrompt}
         >
           Batch Prompt ({selectedIds.size})
-        </MotionPress>
-        <MotionPress
-          variant="ghost"
-          disabled={selectedIds.size === 0}
-          onClick={handleBatchLyricsPromptSelected}
-        >
-          Lyrics Prompt ({selectedIds.size})
-        </MotionPress>
-        <MotionPress
-          variant="ghost"
-          onClick={handleBatchLyricsPromptFiltered}
-        >
-          Lyrics Prompt (filtered)
         </MotionPress>
         <MotionPress
           variant="ghost"
@@ -950,29 +938,53 @@ export function TracksRoute() {
             setImportModal(true)
           }}
         >
-          Импорт ответа AI (Lyrics)
+          Import AI · Lyrics
         </MotionPress>
-        <MotionPress
-          variant="ghost"
-          disabled={selectedIds.size === 0}
-          onClick={handleBatchGenreMoodPromptSelected}
-        >
-          Genre/Mood prompt ({selectedIds.size})
-        </MotionPress>
-        <MotionPress variant="ghost" onClick={handleBatchGenreMoodPromptFiltered}>
-          Genre/Mood prompt (filtered)
-        </MotionPress>
-        <MotionPress
-          variant="ghost"
-          onClick={() => {
-            setGmImportText('')
-            setGmImportResult(null)
-            setGmOverwriteGenre(false)
-            setGmImportModal(true)
-          }}
-        >
-          Импорт AI (genre/mood)
-        </MotionPress>
+        <OverflowMenu
+          label="More batch actions"
+          items={[
+            {
+              id: 'lyrics-prompt-sel',
+              label: 'Lyrics Prompt (selected)',
+              hint:
+                selectedIds.size > 0
+                  ? `× ${selectedIds.size}`
+                  : undefined,
+              disabled: selectedIds.size === 0,
+              onSelect: handleBatchLyricsPromptSelected,
+            },
+            {
+              id: 'lyrics-prompt-filt',
+              label: 'Lyrics Prompt (filtered)',
+              onSelect: handleBatchLyricsPromptFiltered,
+            },
+            {
+              id: 'gm-prompt-sel',
+              label: 'Genre/Mood prompt (selected)',
+              hint:
+                selectedIds.size > 0
+                  ? `× ${selectedIds.size}`
+                  : undefined,
+              disabled: selectedIds.size === 0,
+              onSelect: handleBatchGenreMoodPromptSelected,
+            },
+            {
+              id: 'gm-prompt-filt',
+              label: 'Genre/Mood prompt (filtered)',
+              onSelect: handleBatchGenreMoodPromptFiltered,
+            },
+            {
+              id: 'gm-import',
+              label: 'Import AI · Genre/Mood',
+              onSelect: () => {
+                setGmImportText('')
+                setGmImportResult(null)
+                setGmOverwriteGenre(false)
+                setGmImportModal(true)
+              },
+            },
+          ]}
+        />
       </div>
       <DataTable
         columns={columns}

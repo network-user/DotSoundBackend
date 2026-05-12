@@ -55,7 +55,9 @@ export function AlbumDetailRoute() {
   const refreshList = () =>
     qc.invalidateQueries({ queryKey: ['admin', 'albums'] })
   const refreshDetail = () => {
-    qc.invalidateQueries({ queryKey: ['admin', 'album'] })
+    qc.invalidateQueries({
+      queryKey: ['admin', 'album', albumId],
+    })
   }
 
   const saveMetaMutation = useMutation({

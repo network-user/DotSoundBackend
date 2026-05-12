@@ -492,6 +492,56 @@ export function ArtistStatsView() {
                 t={t}
                 accentClass="stats-chart-card--muted"
               />
+
+              <section
+                className="stats-history-table-section"
+                aria-label={t('artistStats.historyTable')}
+              >
+                <h3 className="stats-history-table-title">
+                  {t('artistStats.historyTable')}
+                </h3>
+                <div className="stats-history-table-wrap">
+                  <table className="stats-history-table">
+                    <thead>
+                      <tr>
+                        <th>{t('artistStats.col.month')}</th>
+                        <th>{t('artistStats.col.listeners')}</th>
+                        <th>{t('artistStats.col.plays')}</th>
+                        <th>{t('artistStats.col.likes')}</th>
+                        <th>{t('artistStats.col.followers')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...sortedHistory]
+                        .reverse()
+                        .map((r) => (
+                          <tr
+                            key={`${r.year}-${r.month}`}
+                          >
+                            <td>
+                              {monthFmt.long(
+                                r.year,
+                                r.month,
+                              )}
+                            </td>
+                            <td>
+                              {fmtCount(r.unique_listeners)}
+                            </td>
+                            <td>
+                              {fmtCount(r.total_plays)}
+                            </td>
+                            <td>
+                              {fmtCount(r.total_likes)}
+                            </td>
+                            <td>
+                              {fmtCount(r.total_followers)}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             </>
           )}
         </div>
@@ -787,6 +837,58 @@ function ArtistStatsStyles() {
       @keyframes stats-skeleton-shimmer {
         0% { background-position: 200% 0; }
         100% { background-position: -200% 0; }
+      }
+      .stats-history-table-section {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 14px;
+        box-shadow:
+          0 10px 22px rgba(0, 0, 0, 0.16),
+          inset 0 1px 0 rgba(255, 255, 255, 0.06);
+      }
+      .stats-history-table-title {
+        margin: 0 0 12px 0;
+        font-size: 0.95rem;
+        color: var(--text);
+        font-weight: 600;
+      }
+      .stats-history-table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .stats-history-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+        font-variant-numeric: tabular-nums;
+      }
+      .stats-history-table th {
+        text-align: right;
+        padding: 6px 10px;
+        color: var(--text-secondary);
+        font-weight: 500;
+        font-size: 0.78rem;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+      .stats-history-table th:first-child {
+        text-align: left;
+      }
+      .stats-history-table td {
+        text-align: right;
+        padding: 7px 10px;
+        color: var(--text);
+        border-bottom: 1px solid
+          color-mix(in srgb, var(--border) 50%, transparent);
+      }
+      .stats-history-table td:first-child {
+        text-align: left;
+        color: var(--text-secondary);
+        white-space: nowrap;
+      }
+      .stats-history-table tr:last-child td {
+        border-bottom: none;
       }
     `}</style>
   )

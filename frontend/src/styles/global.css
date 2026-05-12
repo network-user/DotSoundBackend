@@ -5010,6 +5010,22 @@ html.le-lyrics-sync-open body {
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
+.onb-v2-artists-loading {
+  height: 120px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-card) 0%,
+    var(--bg-card-hover) 50%,
+    var(--bg-card) 100%
+  );
+  background-size: 200% 100%;
+  border-radius: var(--radius);
+  animation: onb-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes onb-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 .onboarding-artist-card {
   display: flex;
@@ -9694,6 +9710,12 @@ html.ds-low-glass .tcs-sheet {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.search-artist-pill__listeners {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Artist list (search results) */
