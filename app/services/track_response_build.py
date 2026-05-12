@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.track import Track
 from app.repositories.artist import ArtistRepository
 from app.repositories.lyrics import LyricsRepository
+from app.repositories.signal import ListenEventRepository
 from app.repositories.track import TrackRepository
 from app.schemas.track import (
     TrackArtistBrief,
@@ -36,13 +37,29 @@ def _artist_briefs(
     ]
 
 
+async def _apply_resume_position(
+    session: AsyncSession,
+    resp: TrackResponse,
+    viewer_id: int,
+) -> TrackResponse:
+    positions = await ListenEventRepository(session).latest_resume_position(
+        viewer_id, [int(resp.id)]
+    )
+    pos = positions.get(int(resp.id))
+    if not pos:
+        return resp
+    return resp.model_copy(update={"resume_position_seconds": pos})
+
+
 async def dedupe_and_build_track_list(
     session: AsyncSession,
     tracks: list[Track],
+    *,
+    viewer_id: int | None = None,
 ) -> list[TrackResponse]:
     pvs = PlaybackVariantService(session)
     deduped = await pvs.dedupe_track_rows_for_display(tracks)
-    return await build_track_responses(session, deduped)
+    return await build_track_responses(session, deduped, viewer_id=viewer_id)
 
 
 async def build_track_response(
@@ -51,6 +68,7 @@ async def build_track_response(
     *,
     include_has_lyrics: bool = True,
     preloaded_artists: list[tuple] | None = None,
+    viewer_id: int | None = None,
 ) -> TrackResponse:
     base = TrackResponse.model_validate(track)
     pvs = PlaybackVariantService(session)
@@ -101,21 +119,31 @@ async def build_track_response(
     )
 
     if not include_has_lyrics:
+        if viewer_id is not None:
+            enriched = await _apply_resume_position(
+                session, enriched, viewer_id
+            )
         return enriched
     has_l = await LyricsRepository(
         session,
     ).has_nonempty_plain_text(int(enriched.id))
-    return enriched.model_copy(update={"has_lyrics": has_l})
+    result = enriched.model_copy(update={"has_lyrics": has_l})
+    if viewer_id is not None:
+        result = await _apply_resume_position(
+            session, result, viewer_id
+        )
+    return result
 
 
 async def build_track_responses(
     session: AsyncSession,
     tracks: list[Track],
+    *,
+    viewer_id: int | None = None,
 ) -> list[TrackResponse]:
     if not tracks:
         return []
 
-    # Batch-load all track-artist links in one query
     track_ids = [t.id for t in tracks]
     artists_by_track = await ArtistRepository(session).get_tracks_artists_with_roles_batch(
         track_ids
@@ -134,10 +162,27 @@ async def build_track_responses(
     )
     lyr = LyricsRepository(session)
     present = await lyr.nonempty_plain_track_ids([int(r.id) for r in results])
-    return [
+    final: list[TrackResponse] = [
         r.model_copy(update={"has_lyrics": (int(r.id) in present)})
         for r in results
     ]
+
+    if viewer_id is not None and final:
+        resp_ids = [int(r.id) for r in final]
+        positions = await ListenEventRepository(session).latest_resume_position(
+            viewer_id, resp_ids
+        )
+        if positions:
+            final = [
+                r.model_copy(
+                    update={"resume_position_seconds": positions[int(r.id)]}
+                )
+                if positions.get(int(r.id))
+                else r
+                for r in final
+            ]
+
+    return final
 
 
 def merge_recent_listen_meta_into_responses(

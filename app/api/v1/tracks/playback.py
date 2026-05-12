@@ -1089,4 +1089,8 @@ async def get_track(
             detail="Track not found",
         )
     _check_access(track, current_user)
-    return await build_track_response(session, track)
+    return await build_track_response(
+        session,
+        track,
+        viewer_id=current_user.id if current_user else None,
+    )

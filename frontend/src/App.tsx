@@ -23,7 +23,8 @@ class ErrorBoundary extends Component<
     return { hasError: true }
   }
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[ErrorBoundary]', error, info)
+    console.error('[ErrorBoundary]', error)
+    console.error('[ErrorBoundary] component stack:', info.componentStack)
   }
   render() {
     if (this.state.hasError) {
@@ -66,7 +67,10 @@ function RouteFallback({
     return (
       <AppErrorFallback
         variant="section"
-        onPrimary={() => window.location.reload()}
+        // Reset the timer so the chunk gets more time — avoids a hard reload
+        // that would kill playback. If chunks are truly stale, vite:preloadError
+        // fires first and reloads the page automatically.
+        onPrimary={() => setStuck(false)}
       />
     )
   }

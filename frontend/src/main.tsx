@@ -44,6 +44,11 @@ window.addEventListener('unhandledrejection', (event) => {
 window.addEventListener('error', (event) => {
   if (event.error) console.error('[globalError]', event.error)
 })
+// When Vite's module preloads 404 (stale chunks after a new deployment),
+// a hard reload is the only reliable recovery.
+window.addEventListener('vite:preloadError', () => {
+  window.location.reload()
+})
 
 api.restoreSession()
 

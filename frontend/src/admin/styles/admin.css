@@ -2380,6 +2380,31 @@
   }
 }
 
+/* ── Phase 5: единый focus-ring для всех интерактивных в admin ── */
+.admin-shell a:focus-visible,
+.admin-shell button:focus-visible,
+.admin-shell [role="button"]:focus-visible,
+.admin-shell [role="menuitem"]:focus-visible,
+.admin-shell input:focus-visible,
+.admin-shell textarea:focus-visible,
+.admin-shell select:focus-visible,
+.admin-shell summary:focus-visible,
+.admin-shell [tabindex="0"]:focus-visible,
+.admin-modal-overlay button:focus-visible,
+.admin-modal-overlay input:focus-visible,
+.admin-modal-overlay textarea:focus-visible,
+.admin-modal-overlay select:focus-visible {
+  outline: 2px solid var(--ring-focus);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+.admin-shell input:focus-visible,
+.admin-shell textarea:focus-visible,
+.admin-shell select:focus-visible {
+  outline-offset: 0;
+}
+
 /* ── Collapsible card: универсальный <details> для редких секций ── */
 .admin-collapse-card {
   border: 1px solid var(--border);

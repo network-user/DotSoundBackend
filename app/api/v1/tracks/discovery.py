@@ -16,7 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
 from app.core.rate_limit import limiter
-from app.dependencies import get_db
+from app.dependencies import get_db, get_optional_user
+from app.models.user import User
 from app.schemas.track import TrackListResponse
 from app.services.track_response_build import dedupe_and_build_track_list
 from app.services.track_service import TrackService
@@ -41,6 +42,7 @@ async def list_tracks(
     genre: str | None = Query(None),
     playable: bool = Query(False),
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> TrackListResponse:
     service = TrackService(session)
     if q or genre:
@@ -59,7 +61,10 @@ async def list_tracks(
             size=size,
             playable_only=playable,
         )
-    items = await dedupe_and_build_track_list(session, tracks)
+    viewer_id = current_user.id if current_user else None
+    items = await dedupe_and_build_track_list(
+        session, tracks, viewer_id=viewer_id
+    )
     return TrackListResponse(
         items=items,
         total=total,

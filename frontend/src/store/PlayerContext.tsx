@@ -1067,6 +1067,20 @@ export function PlayerProvider({
     return () => window.clearTimeout(handle)
   }, [track, queue])
 
+  useEffect(() => {
+    if (!track) return
+    const onBeforeUnload = () => {
+      const a = audioRef.current
+      _saveState(
+        track,
+        a?.currentTime ?? 0,
+        manualQueueRef.current,
+      )
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+  }, [track])
+
   const toggleRepeat = useCallback(() => {
     setRepeatMode((prev) => {
       const next = prev === 'none' ? 'one' : prev === 'one' ? 'all' : 'none'
@@ -1364,6 +1378,7 @@ export function PlayerProvider({
           )
         }
       }
+      listenSignalSentRef.current = false
       listenStartTimeRef.current =
         audio.currentTime
     }
@@ -1662,7 +1677,6 @@ export function PlayerProvider({
     }
     playCountSentRef.current = false
     listenSignalSentRef.current = false
-    listenStartTimeRef.current = 0
     if (!audio.paused) {
       audio.pause()
     }

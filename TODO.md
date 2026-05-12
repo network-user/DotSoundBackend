@@ -14,6 +14,35 @@
 
 ---
 
+## Playback state persistence (2026-05-12)
+
+- [x] **Fix: listen signal sent for second+ tracks in session**
+  — `PlayerContext.tsx`: `listenSignalSentRef.current = false` перемещён в
+  `onPlay`, что исправляет баг когда listen-событие для нового трека
+  никогда не отправлялось (оно блокировалось `true` оставшимся от
+  `sendListenSignal` предыдущего трека).
+
+- [x] **Fix: неверный `duration_listened` при смене трека**
+  — `PlayerContext.tsx`: удалён `listenStartTimeRef.current = 0` из
+  `playTrack` перед `audio.pause()`. Теперь `duration_listened` считается
+  корректно как `currentTime - startTimeRef`, а не `currentTime - 0`.
+
+- [x] **Feat: сохранение позиции при закрытии вкладки**
+  — `PlayerContext.tsx`: добавлен `beforeunload` handler — сохраняет
+  снапшот в localStorage синхронно перед закрытием вкладки/браузера.
+
+- [x] **Feat: `resume_position_seconds` в ответах API**
+  — `app/services/track_response_build.py`: `build_track_response`,
+  `build_track_responses`, `dedupe_and_build_track_list` принимают
+  `viewer_id: int | None`. При наличии — batch-запрос
+  `latest_resume_position` и заполнение поля.
+  `app/api/v1/tracks/playback.py` (`GET /tracks/{id}`) и
+  `app/api/v1/tracks/discovery.py` (`GET /tracks/`) передают `viewer_id`.
+  Результат: поле `resume_position_seconds` теперь приходит при
+  одиночном запросе трека и в результатах поиска для авторизованных.
+
+---
+
 ## Artist Follows UX (2026-05-12)
 
 - [x] **Онбординг: шаг выбора артистов**
@@ -36,6 +65,19 @@
   `search-artist-pill__listeners` в `global.css`; значение
   отображается под именем артиста в поиске.
 
+- [x] **Cron для снапшотов статистики артистов**
+  — Миграция `0099_seed_artist_stats_snapshot_job.py`: вставляет запись
+  `monthly-artist-stats-snapshot` в `scheduled_jobs` с cron `0 2 1 * *`
+  (1-е число каждого месяца 02:00 UTC). Задача:
+  `app.services.artist_stats_worker:snapshot_monthly_artist_stats_task`.
+  Подхватывается `scheduler_service.py` автоматически.
+
+- [x] **Поиск в шаге артистов онбординга**
+  — `ArtistsStep` в `OnboardingV2.tsx`: добавлен `searchQuery` state и
+  `filteredArtists = useMemo(...)`. UI-инпут реиспользует существующие
+  классы `.onb-v2-genre-search` / `.onb-v2-genre-search__input`.
+  Показывает `.onb-v2-artists-empty` если совпадений нет.
+
 - [x] **Таблица по месяцам в ArtistStatsView**
   — `frontend/src/views/ArtistStatsView.tsx`: секция
   `.stats-history-table-section` с таблицей (Месяц / Слушатели /
@@ -50,14 +92,15 @@
 
 - [x] **Глобальная цензура запрещённых слов (RF)**
   — PrivateCore: `services/text_censorship.py` (`censor_text`,
-  `contains_banned_content`, `censor_synced_lines`); список слов —
-  `_BANNED_KEYWORDS` в том же файле (заполняет владелец).
-  Backend on-write: `LyricsService.create_or_update`,
-  `update_sync`, `upsert_translation`; `TrackService.update_track`
-  и `admin_update_track` (поле description).
+  `contains_banned_content`, `censor_synced_lines`);
+  `_BANNED_KEYWORDS` заполнен (~110 форм 4 корневых слов + произв.).
+  Backend on-write: `LyricsRepository.create_or_update`,
+  `update_sync` (покрывает lyrics_worker); `LyricsService.upsert_translation`;
+  `TrackService.update_track`/`admin_update_track` (description);
+  `soundcloud_service.py` (description при SC-импорте).
   Backfill: `app/tasks/text_censor_backfill.py` +
   `POST /api/v1/admin/tasks/text-censor-backfill`.
-  **Действие:** наполнить `_BANNED_KEYWORDS` и запустить бэкфилл.
+  **Действие:** запустить бэкфилл.
 
 ---
 

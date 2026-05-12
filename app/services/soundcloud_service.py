@@ -11,6 +11,8 @@ from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dotsound_private_core import censor_text
+
 from app.config import settings
 from app.core import s3
 from app.models.track import Track
@@ -1412,7 +1414,10 @@ class SoundCloudService:
             "artist": artist,
             "duration_seconds": duration_sec,
             "genre": sc_data.get("genre") or None,
-            "description": sc_data.get("description") or None,
+            "description": censor_text(
+                sc_data.get("description") or ""
+            )
+            or None,
             "external_id": str(sc_id) if sc_id else None,
             "imported_from": "soundcloud",
             "source": "soundcloud",
