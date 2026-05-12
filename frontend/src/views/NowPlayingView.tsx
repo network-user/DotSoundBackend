@@ -1,11 +1,12 @@
 import {
   type ReactNode,
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { type PanInfo } from 'framer-motion'
+import { AnimatePresence, type PanInfo } from 'framer-motion'
 import {
   m,
   SPRING_GENTLE,
@@ -37,6 +38,18 @@ import { useSwipeX } from '@/hooks/useSwipeX'
 
 const SWIPE_DOWN_THRESHOLD = 120
 const SWIPE_COVER_THRESHOLD = 72
+
+const COVER_VARIANTS = {
+  enter: (dir: 'left' | 'right' | null) => ({
+    x: dir === 'left' ? '28%' : dir === 'right' ? '-28%' : 0,
+    opacity: 0,
+  }),
+  center: { x: 0, opacity: 1 },
+  exit: (dir: 'left' | 'right' | null) => ({
+    x: dir === 'left' ? '-28%' : dir === 'right' ? '28%' : 0,
+    opacity: 0,
+  }),
+}
 
 type Tab = 'now' | 'lyrics' | 'queue'
 
@@ -80,6 +93,8 @@ export function NowPlayingView() {
 
   const [tab, setTab] = useState<Tab>('now')
   const [likeBurst, setLikeBurst] = useState(false)
+  const [swipeDx, setSwipeDx] = useState(0)
+  const swipeDirRef = useRef<'left' | 'right' | null>(null)
 
   useEffect(() => {
     if (!track) {
@@ -134,12 +149,15 @@ export function NowPlayingView() {
   const coverSwipe = useSwipeX({
     disabled: desktopFineNav,
     threshold: SWIPE_COVER_THRESHOLD,
+    onProgress: setSwipeDx,
     onSwipeLeft: () => {
       haptic('light')
+      swipeDirRef.current = 'left'
       playNext()
     },
     onSwipeRight: () => {
       haptic('light')
+      swipeDirRef.current = 'right'
       playPrev()
     },
   })
@@ -205,6 +223,25 @@ export function NowPlayingView() {
     haptic('light')
     setTab(next)
   }
+
+  const tabSwipe = useSwipeX({
+    disabled: desktopFineNav,
+    threshold: 52,
+    onSwipeLeft: () => {
+      const idx = tabs.findIndex((t) => t.id === tab)
+      if (idx < tabs.length - 1) {
+        haptic('light')
+        handleTab(tabs[idx + 1].id)
+      }
+    },
+    onSwipeRight: () => {
+      const idx = tabs.findIndex((t) => t.id === tab)
+      if (idx > 0) {
+        haptic('light')
+        handleTab(tabs[idx - 1].id)
+      }
+    },
+  })
 
   useEffect(() => {
     if (tab === 'lyrics' && !canLyricsChrome) {
@@ -291,19 +328,73 @@ export function NowPlayingView() {
                 : { touchAction: 'pan-y', userSelect: 'none' }
             }
           >
-            <div className="rp-now__cover">
-              {coverSrc ? (
-                <SharedCover
-                  trackId={track.id}
-                  src={coverSrc}
-                  alt={track.title}
+            {!desktopFineNav && Math.abs(swipeDx) > 16 && (
+              <div
+                className="rp-now__swipe-hint"
+                aria-hidden="true"
+                style={{
+                  opacity: Math.min(
+                    Math.abs(swipeDx) / SWIPE_COVER_THRESHOLD,
+                    0.88,
+                  ),
+                }}
+              >
+                <Icon
+                  name={swipeDx < 0 ? 'skip-forward' : 'skip-back'}
+                  size={30}
                 />
-              ) : (
-                <div className="rp-now__cover-fallback">
-                  <Icon name="music" size={48} />
-                </div>
-              )}
-            </div>
+              </div>
+            )}
+            {reduce ? (
+              <div className="rp-now__cover">
+                {coverSrc ? (
+                  <SharedCover
+                    trackId={track.id}
+                    src={coverSrc}
+                    alt={track.title}
+                  />
+                ) : (
+                  <div className="rp-now__cover-fallback">
+                    <Icon name="music" size={48} />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <AnimatePresence
+                mode="wait"
+                initial={false}
+                custom={swipeDirRef.current}
+              >
+                <m.div
+                  key={track.id}
+                  className="rp-now__cover"
+                  custom={swipeDirRef.current}
+                  variants={COVER_VARIANTS}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  transition={{
+                    duration: 0.13,
+                    ease: [0.4, 0, 0.2, 1],
+                  }}
+                  onAnimationComplete={() => {
+                    swipeDirRef.current = null
+                  }}
+                >
+                  {coverSrc ? (
+                    <SharedCover
+                      trackId={track.id}
+                      src={coverSrc}
+                      alt={track.title}
+                    />
+                  ) : (
+                    <div className="rp-now__cover-fallback">
+                      <Icon name="music" size={48} />
+                    </div>
+                  )}
+                </m.div>
+              </AnimatePresence>
+            )}
           </div>
 
           <div className="rp-now__split-right">
@@ -557,7 +648,16 @@ export function NowPlayingView() {
           ))}
         </div>
 
-        <div className="rp-now__panel" role="tabpanel">
+        <div
+          className="rp-now__panel"
+          role="tabpanel"
+          {...(!desktopFineNav ? tabSwipe : {})}
+          style={
+            !desktopFineNav
+              ? { touchAction: 'pan-y' }
+              : undefined
+          }
+        >
           {tab === 'now' && (
             <NowPanel
               description={track.description}

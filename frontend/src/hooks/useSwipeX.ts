@@ -4,6 +4,7 @@ import type { PointerEvent } from 'react'
 interface Options {
   onSwipeLeft?: () => void
   onSwipeRight?: () => void
+  onProgress?: (dx: number) => void
   threshold?: number
   disabled?: boolean
 }
@@ -11,6 +12,7 @@ interface Options {
 export function useSwipeX({
   onSwipeLeft,
   onSwipeRight,
+  onProgress,
   threshold = 60,
   disabled = false,
 }: Options) {
@@ -26,12 +28,26 @@ export function useSwipeX({
     [disabled],
   )
 
+  const onPointerMove = useCallback(
+    (e: PointerEvent) => {
+      if (disabled || !startRef.current || !onProgress)
+        return
+      const dx = e.clientX - startRef.current.x
+      const dy = e.clientY - startRef.current.y
+      if (Math.abs(dx) > Math.abs(dy) * 0.7) {
+        onProgress(dx)
+      }
+    },
+    [disabled, onProgress],
+  )
+
   const onPointerUp = useCallback(
     (e: PointerEvent) => {
       if (disabled || !startRef.current) return
       const dx = e.clientX - startRef.current.x
       const dy = e.clientY - startRef.current.y
       startRef.current = null
+      onProgress?.(0)
       const absDx = Math.abs(dx)
       const absDy = Math.abs(dy)
       if (absDx > threshold && absDx > absDy * 1.5) {
@@ -41,12 +57,18 @@ export function useSwipeX({
         else onSwipeRight?.()
       }
     },
-    [disabled, threshold, onSwipeLeft, onSwipeRight],
+    [disabled, threshold, onSwipeLeft, onSwipeRight, onProgress],
   )
 
   const onPointerCancel = useCallback(() => {
     startRef.current = null
-  }, [])
+    onProgress?.(0)
+  }, [onProgress])
 
-  return { onPointerDown, onPointerUp, onPointerCancel }
+  return {
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerCancel,
+  }
 }
