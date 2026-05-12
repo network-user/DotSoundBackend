@@ -33,8 +33,10 @@ import { haptic } from '@/lib/telegram'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
+import { useSwipeX } from '@/hooks/useSwipeX'
 
 const SWIPE_DOWN_THRESHOLD = 120
+const SWIPE_TRACK_THRESHOLD = 72
 
 type Tab = 'now' | 'lyrics' | 'queue'
 
@@ -124,10 +126,33 @@ export function NowPlayingView() {
     _: unknown,
     info: PanInfo,
   ) => {
-    if (info.offset.y > SWIPE_DOWN_THRESHOLD) {
+    const { x, y } = info.offset
+    const absX = Math.abs(x)
+    const absY = Math.abs(y)
+    if (absY > SWIPE_DOWN_THRESHOLD && absY > absX) {
       handleClose()
+    } else if (
+      !desktopFineNav &&
+      absX > SWIPE_TRACK_THRESHOLD &&
+      absX > absY
+    ) {
+      if (x < 0) playNext()
+      else playPrev()
     }
   }
+
+  const coverSwipe = useSwipeX({
+    disabled: desktopFineNav,
+    threshold: SWIPE_TRACK_THRESHOLD,
+    onSwipeLeft: () => {
+      haptic('light')
+      playNext()
+    },
+    onSwipeRight: () => {
+      haptic('light')
+      playPrev()
+    },
+  })
 
   const handleLike = async () => {
     if (!liked) {
@@ -267,7 +292,15 @@ export function NowPlayingView() {
         <div className="rp-now__handle" aria-hidden="true" />
 
         <div className="rp-now__split">
-          <div className="rp-now__hero">
+          <div
+            className="rp-now__hero"
+            {...(desktopFineNav ? {} : coverSwipe)}
+            style={
+              desktopFineNav
+                ? undefined
+                : { touchAction: 'pan-y', userSelect: 'none' }
+            }
+          >
             <div className="rp-now__cover">
               {coverSrc ? (
                 <SharedCover

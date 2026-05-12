@@ -6,6 +6,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from dotsound_private_core import censor_synced_lines, censor_text
+
 from app.models.lyrics import TrackLyrics
 from app.models.lyrics_translation import (
     TrackLyricsTranslation,
@@ -64,6 +66,9 @@ class LyricsRepository:
     ) -> TrackLyrics:
         from datetime import datetime
 
+        plain_text = censor_text(plain_text)
+        if synced_lines is not None:
+            synced_lines = censor_synced_lines(synced_lines)
         now = datetime.now(UTC)
         update_values: dict = {
             "plain_text": plain_text,
@@ -141,7 +146,7 @@ class LyricsRepository:
         existing = await self.get_by_track_id(track_id)
         if not existing:
             return None
-        existing.synced_lines = synced_lines
+        existing.synced_lines = censor_synced_lines(synced_lines)
         await self._session.flush()
         await self._session.refresh(
             existing, attribute_names=["translations"]

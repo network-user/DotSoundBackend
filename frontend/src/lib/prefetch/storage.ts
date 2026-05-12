@@ -68,15 +68,30 @@ export async function getStorageQuota(): Promise<{
 export async function persistWarmRecord(
   record: WarmRecord,
 ): Promise<void> {
+  return persistWarmRecords([record])
+}
+
+export async function persistWarmRecords(
+  records: WarmRecord[],
+): Promise<void> {
+  if (records.length === 0) return
   const db = await _openDb()
   if (!db) return
   await new Promise<void>((resolve) => {
     try {
       const tx = db.transaction(STORE, 'readwrite')
       const store = tx.objectStore(STORE)
-      const req = store.put(record)
-      req.onsuccess = () => resolve()
-      req.onerror = () => resolve()
+      let pending = records.length
+      const done = () => {
+        pending -= 1
+        if (pending === 0) resolve()
+      }
+      for (const record of records) {
+        const req = store.put(record)
+        req.onsuccess = done
+        req.onerror = done
+      }
+      tx.onerror = () => resolve()
     } catch {
       resolve()
     }

@@ -70,11 +70,7 @@ export function LyricsEditor({
   const { currentTime, duration, isPlaying } =
     usePlayerState()
   const { track } = usePlayerMeta()
-  const {
-    playTrack,
-    togglePlay,
-    seek,
-  } = usePlayerActions()
+  const { playTrack, togglePlay, seek } = usePlayerActions()
 
   const [step, setStep] = useState<Step>('text')
   const [plainText, setPlainText] = useState(
@@ -97,11 +93,15 @@ export function LyricsEditor({
   >(null)
   const [draftBanner, setDraftBanner] =
     useState<LyricsDraft | null>(null)
+  const [draftSaved, setDraftSaved] = useState(false)
 
   const listRef = useRef<HTMLDivElement>(null)
   const activeRef = useRef<HTMLDivElement>(null)
   const lrcInputRef = useRef<HTMLInputElement>(null)
   const autosaveTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null)
+  const draftSavedTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null)
   const hasUserEdited = useRef(false)
@@ -116,6 +116,26 @@ export function LyricsEditor({
     }
   }, [])
 
+  useEffect(
+    () => () => {
+      if (autosaveTimerRef.current)
+        clearTimeout(autosaveTimerRef.current)
+      if (draftSavedTimerRef.current)
+        clearTimeout(draftSavedTimerRef.current)
+    },
+    [],
+  )
+
+  const showSavedIndicator = () => {
+    setDraftSaved(true)
+    if (draftSavedTimerRef.current)
+      clearTimeout(draftSavedTimerRef.current)
+    draftSavedTimerRef.current = setTimeout(
+      () => setDraftSaved(false),
+      2000,
+    )
+  }
+
   const scheduleAutosave = (
     text: string,
     synced: SyncedLine[] | null,
@@ -125,16 +145,9 @@ export function LyricsEditor({
       clearTimeout(autosaveTimerRef.current)
     autosaveTimerRef.current = setTimeout(() => {
       saveLyricsDraft(trackId, text, synced)
+      showSavedIndicator()
     }, 800)
   }
-
-  useEffect(
-    () => () => {
-      if (autosaveTimerRef.current)
-        clearTimeout(autosaveTimerRef.current)
-    },
-    [],
-  )
 
   const handleTextChange = (
     e: ChangeEvent<HTMLTextAreaElement>,
@@ -149,7 +162,25 @@ export function LyricsEditor({
     hasUserEdited.current = true
     setPlainText(draft.plainText)
     setDraftBanner(null)
-    if (trackId) saveLyricsDraft(trackId, draft.plainText, draft.syncedLines)
+    if (trackId)
+      saveLyricsDraft(
+        trackId,
+        draft.plainText,
+        draft.syncedLines,
+      )
+
+    if (draft.syncedLines && draft.syncedLines.length > 0) {
+      const split = draft.plainText
+        .split('\n')
+        .filter((l) => l.trim())
+      setLines(split)
+      setTimecodes(
+        split.map((_, i) => draft.syncedLines![i]?.time_ms ?? null),
+      )
+      setCurrentLine(0)
+      setHistory([])
+      setStep('sync')
+    }
   }
 
   const discardDraft = () => {
@@ -465,16 +496,23 @@ export function LyricsEditor({
               ? t('lyrics.editor.titleEdit')
               : t('lyrics.editor.titleAdd')}
           </span>
-          <MotionPress
-            type="button"
-            variant="icon"
-            haptic="light"
-            className="icon-btn"
-            ariaLabel={t('common.close', 'Закрыть')}
-            onClick={onCancel}
-          >
-            <Icon name="x" size={16} />
-          </MotionPress>
+          <div className="le-header-right">
+            {draftSaved && (
+              <span className="le-draft-saved-indicator">
+                {t('lyrics.editor.draftAutoSaved')}
+              </span>
+            )}
+            <MotionPress
+              type="button"
+              variant="icon"
+              haptic="light"
+              className="icon-btn"
+              ariaLabel={t('common.close', 'Закрыть')}
+              onClick={onCancel}
+            >
+              <Icon name="x" size={16} />
+            </MotionPress>
+          </div>
         </div>
 
         {draftBanner && (
@@ -606,7 +644,9 @@ export function LyricsEditor({
           <Icon name="undo" size={18} />
         </MotionPress>
         <span className="le-fs-time">
-          {msToDisplay(Math.round(currentTime * 1000))}
+          {draftSaved
+            ? t('lyrics.editor.draftAutoSaved')
+            : msToDisplay(Math.round(currentTime * 1000))}
         </span>
         <MotionPress
           type="button"
@@ -736,9 +776,7 @@ export function LyricsEditor({
         ))}
       </div>
 
-      {error && (
-        <div className="form-error">{error}</div>
-      )}
+      {error && <div className="form-error">{error}</div>}
 
       <div className="le-fs-save">
         <MotionPress

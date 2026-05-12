@@ -1,6 +1,8 @@
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dotsound_private_core import censor_text
+
 from app.models.track import Track
 from app.models.user import User
 from app.repositories.track import TrackRepository
@@ -272,6 +274,10 @@ class TrackService:
         user_id: int,
         **fields: object,
     ) -> Track | None:
+        if isinstance(fields.get("description"), str):
+            fields["description"] = censor_text(
+                fields["description"]
+            )
         out = await self._repo.update_track(
             track_id=track_id,
             user_id=user_id,
@@ -290,6 +296,10 @@ class TrackService:
         track_id: int,
         **fields: object,
     ) -> Track | None:
+        if isinstance(fields.get("description"), str):
+            fields["description"] = censor_text(
+                fields["description"]
+            )
         out = await self._repo.admin_update_track(
             track_id=track_id,
             **fields,

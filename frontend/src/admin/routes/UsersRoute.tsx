@@ -15,6 +15,11 @@ import { StatusPill } from '../components/widgets/StatusPill'
 import { KpiCard } from '../components/widgets/KpiCard'
 import { Sparkline } from '../components/charts/Sparkline'
 import { LineChart } from '../components/charts/LineChart'
+import { ListPageTemplate } from '../components/layout/ListPageTemplate'
+import {
+  FilterGroup,
+  type FilterDef,
+} from '../components/widgets/FilterGroup'
 
 interface UserRow {
   id: number
@@ -51,7 +56,7 @@ export function UsersRoute() {
   >('7d')
   const [messageTarget, setMessageTarget] = useState<UserRow | null>(null)
   const [messageText, setMessageText] = useState('')
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, isLoading, error, refetch } = useQuery({
     queryKey: [
       'admin',
       'users',
@@ -378,33 +383,73 @@ export function UsersRoute() {
     },
   ]
 
+  const filterValues: Record<string, string | undefined> = {
+    q: search || undefined,
+    scope: listView,
+    status:
+      activeOnly === undefined
+        ? 'all'
+        : activeOnly
+          ? 'active'
+          : 'banned',
+  }
+
+  const filters: FilterDef[] = [
+    {
+      type: 'search',
+      key: 'q',
+      placeholder: t('admin.users.searchPlaceholder'),
+      ariaLabel: t('admin.users.searchPlaceholder'),
+    },
+    {
+      type: 'tabs',
+      key: 'scope',
+      groupId: 'admin-users-list-scope',
+      options: [
+        { value: 'all', label: 'All' },
+        { value: 'deleted', label: 'Deleted' },
+      ],
+    },
+  ]
+  if (listView === 'all') {
+    filters.push({
+      type: 'select',
+      key: 'status',
+      ariaLabel: t('admin.users.filterAll'),
+      options: [
+        { value: 'all', label: t('admin.users.filterAll') },
+        { value: 'active', label: t('admin.users.filterActive') },
+        { value: 'banned', label: t('admin.users.filterBanned') },
+      ],
+    })
+  }
+
+  const handleFilterChange = (
+    key: string,
+    value: string | undefined,
+  ) => {
+    if (key === 'q') {
+      setSearch(value ?? '')
+      setPage(1)
+      return
+    }
+    if (key === 'scope') {
+      setListView((value as 'all' | 'deleted') ?? 'all')
+      setPage(1)
+      return
+    }
+    if (key === 'status') {
+      setActiveOnly(
+        value === 'all' || value === undefined
+          ? undefined
+          : value === 'active',
+      )
+      setPage(1)
+    }
+  }
+
   return (
     <div>
-      <h1>{t('admin.users.title')}</h1>
-      <section className="kpi-grid">
-        <KpiCard
-          label={t('admin.users.title')}
-          value={total}
-          hint={t('admin.common.total', { count: total })}
-        />
-        <KpiCard
-          label={t('admin.users.filterActive')}
-          value={activeCount}
-          hint={t('admin.users.filterBanned')}
-        />
-        <KpiCard
-          label={t('admin.users.colAdmin')}
-          value={adminCount}
-          hint={
-            sparkline.length > 1 ? (
-              <Sparkline
-                data={sparkline}
-                ariaLabel="Users growth sparkline"
-              />
-            ) : undefined
-          }
-        />
-      </section>
       <section className="admin-card">
         <div className="admin-dashboard__toplist-head">
           <h2>{t('admin.users.activityTitle', 'Admin activity')}</h2>
@@ -474,90 +519,82 @@ export function UsersRoute() {
           </>
         )}
       </section>
-      <div className="admin-toolbar">
-        <input
-          type="search"
-          placeholder={t(
-            'admin.users.searchPlaceholder',
-          )}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value)
-            setPage(1)
-          }}
+
+      <ListPageTemplate
+        title={t('admin.users.title')}
+        kpis={
+          <>
+            <KpiCard
+              label={t('admin.users.title')}
+              value={total}
+              hint={t('admin.common.total', { count: total })}
+            />
+            <KpiCard
+              label={t('admin.users.filterActive')}
+              value={activeCount}
+              hint={t('admin.users.filterBanned')}
+            />
+            <KpiCard
+              label={t('admin.users.colAdmin')}
+              value={adminCount}
+              hint={
+                sparkline.length > 1 ? (
+                  <Sparkline
+                    data={sparkline}
+                    ariaLabel="Users growth sparkline"
+                  />
+                ) : undefined
+              }
+            />
+          </>
+        }
+        filters={
+          <FilterGroup
+            filters={filters}
+            values={filterValues}
+            onChange={handleFilterChange}
+            ariaLabel={t('admin.users.title')}
+          />
+        }
+        toolbarHint={t('admin.common.total', { count: total })}
+        pagination={
+          <>
+            <MotionPress
+              variant="ghost"
+              disabled={page <= 1 || isFetching}
+              onClick={() =>
+                setPage((p) => Math.max(1, p - 1))
+              }
+            >
+              {t('admin.common.prev')}
+            </MotionPress>
+            <span>
+              {page} / {totalPages}
+            </span>
+            <MotionPress
+              variant="ghost"
+              disabled={
+                page >= totalPages || isFetching
+              }
+              onClick={() => setPage((p) => p + 1)}
+            >
+              {t('admin.common.next')}
+            </MotionPress>
+          </>
+        }
+      >
+        <DataTable
+          columns={columns}
+          rows={rows}
+          enableSorting
+          isLoading={isLoading}
+          error={error ? (error as Error).message : null}
+          onRetry={() => refetch()}
+          emptyTitle={t('admin.users.title')}
+          emptyHint={t('admin.common.total', { count: 0 })}
         />
-        <AdminRangeSwitch
-          groupId="admin-users-list-scope"
-          value={listView}
-          onChange={(v) => {
-            setListView(v as 'all' | 'deleted')
-            setPage(1)
-          }}
-          options={[
-            { value: 'all', label: 'All' },
-            { value: 'deleted', label: 'Deleted' },
-          ]}
-        />
-        {listView === 'all' && (
-          <select
-            value={
-              activeOnly === undefined
-                ? 'all'
-                : activeOnly
-                  ? 'active'
-                  : 'banned'
-            }
-            onChange={(e) => {
-              const v = e.target.value
-              setActiveOnly(
-                v === 'all'
-                  ? undefined
-                  : v === 'active',
-              )
-              setPage(1)
-            }}
-          >
-            <option value="all">
-              {t('admin.users.filterAll')}
-            </option>
-            <option value="active">
-              {t('admin.users.filterActive')}
-            </option>
-            <option value="banned">
-              {t('admin.users.filterBanned')}
-            </option>
-          </select>
-        )}
-      </div>
-      <DataTable
-        columns={columns}
-        rows={rows}
-        enableSorting
-      />
-      <div className="admin-pagination">
-        <MotionPress
-          variant="ghost"
-          disabled={page <= 1 || isFetching}
-          onClick={() =>
-            setPage((p) => Math.max(1, p - 1))
-          }
-        >
-          {t('admin.common.prev')}
-        </MotionPress>
-        <span>
-          {page} / {totalPages} ·{' '}
-          {t('admin.common.total', { count: total })}
-        </span>
-        <MotionPress
-          variant="ghost"
-          disabled={
-            page >= totalPages || isFetching
-          }
-          onClick={() => setPage((p) => p + 1)}
-        >
-          {t('admin.common.next')}
-        </MotionPress>
-      </div>
+      </ListPageTemplate>
+
       {messageTarget && (
         <div
           className="admin-modal-overlay"

@@ -5,6 +5,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dotsound_private_core import censor_text
+
 from app.models.lyrics import TrackLyrics
 from app.models.lyrics_translation import (
     TrackLyricsTranslation,
@@ -160,7 +162,7 @@ class LyricsService:
         translation = await self._repo.upsert_translation(
             track_lyrics_id=lyrics.id,
             language_code=language_code,
-            translated_text=translated_text,
+            translated_text=censor_text(translated_text),
         )
         await self._session.commit()
         return translation

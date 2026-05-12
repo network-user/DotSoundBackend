@@ -14,6 +14,35 @@
 
 ---
 
+## Цензура текстов (2026-05-12)
+
+- [x] **Глобальная цензура запрещённых слов (RF)**
+  — PrivateCore: `services/text_censorship.py` (`censor_text`,
+  `contains_banned_content`, `censor_synced_lines`); список слов —
+  `_BANNED_KEYWORDS` в том же файле (заполняет владелец).
+  Backend on-write: `LyricsService.create_or_update`,
+  `update_sync`, `upsert_translation`; `TrackService.update_track`
+  и `admin_update_track` (поле description).
+  Backfill: `app/tasks/text_censor_backfill.py` +
+  `POST /api/v1/admin/tasks/text-censor-backfill`.
+  **Действие:** наполнить `_BANNED_KEYWORDS` и запустить бэкфилл.
+
+---
+
+## Черновик редактора текстов (2026-05-12)
+
+- [x] **Lyrics editor draft (localStorage autosave)**
+  — `frontend/src/lib/lyricsDraft.ts`: per-track ключ
+  `dotsound:lyrics-draft:v1:{trackId}`, TTL 24h, три функции
+  (save/load/clear). `LyricsEditor.tsx`: флаг `hasUserEdited`,
+  дебаунс 800 мс на изменение текста и тайм-кодов, баннер
+  восстановления при открытии если черновик отличается от
+  сохранённого, очистка черновика после успешного сохранения.
+  CSS `.le-draft-banner*` в `global.css`. i18n ключи в
+  `i18n_extra_ru.json` / `i18n_extra_en.json`.
+
+---
+
 ## Аудит + фиксы (2026-05-11)
 
 - [x] **Security + boundary + logic + perf + frontend pass (1 PR vector)**

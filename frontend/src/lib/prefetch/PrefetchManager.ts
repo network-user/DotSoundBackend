@@ -41,10 +41,12 @@ import {
   dropWarmRecord,
   getStorageQuota,
   listWarmRecords,
-  persistWarmRecord,
+  persistWarmRecords,
+  type WarmRecord,
 } from './storage'
 import {
   getAutoCacheEnabled,
+  getCachedIdsSync,
   isCachedSync,
   queueAutoCache,
 } from '@/lib/offlineCache'
@@ -735,6 +737,10 @@ export class PrefetchManager {
     this.bytesUsed = total
     if (drops.length > 0) {
       await Promise.all(drops)
+    }
+
+    for (const id of getCachedIdsSync()) {
+      this.warmTrackIds.add(id)
     }
   }
 }

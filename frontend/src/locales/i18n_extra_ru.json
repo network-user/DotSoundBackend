@@ -256,7 +256,8 @@
       "draftMinAgo": "{{count}} мин. назад",
       "draftHourAgo": "{{count}} ч. назад",
       "draftRestore": "Восстановить",
-      "draftDiscard": "Удалить"
+      "draftDiscard": "Удалить",
+      "draftAutoSaved": "Черновик сохранён"
     }
   }
 }

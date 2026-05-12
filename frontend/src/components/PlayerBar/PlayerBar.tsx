@@ -34,6 +34,7 @@ import { useMatchMedia } from '@/hooks/useMatchMedia'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useNavigateToArtistByName } from '@/hooks/useNavigateToArtistByName'
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet/AddToPlaylistSheet'
+import { useSwipeX } from '@/hooks/useSwipeX'
 
 const PLATFORM_LABELS: Record<string, string> = {
   youtube: 'YouTube',
@@ -213,6 +214,19 @@ export function PlayerBar() {
     }
   }
 
+  const coverSwipe = useSwipeX({
+    disabled: desktopFineNav,
+    threshold: 56,
+    onSwipeLeft: () => {
+      haptic('light')
+      playNext()
+    },
+    onSwipeRight: () => {
+      haptic('light')
+      playPrev()
+    },
+  })
+
   const repeatTitle =
     repeatMode === 'none'
       ? 'Повтор выкл.'
@@ -262,6 +276,12 @@ export function PlayerBar() {
         <div
           className="pb-cover-img pb-clickable pb-cover-with-viz rp-player-cover"
           onClick={handleOpenCard}
+          {...(desktopFineNav ? {} : coverSwipe)}
+          style={
+            desktopFineNav
+              ? undefined
+              : { touchAction: 'pan-y' }
+          }
         >
           <div className="pb-cover-inner">
             {coverSrc ? (

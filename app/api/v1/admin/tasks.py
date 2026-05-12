@@ -47,6 +47,19 @@ ALLOWED_TASK_NAMES: frozenset[str] = frozenset(
 )
 
 
+@router.post("/text-censor-backfill")
+async def trigger_text_censor_backfill(
+    _admin: User = Depends(require_capability("tasks.run")),
+) -> dict[str, str]:
+    from app.tasks.text_censor_backfill import (
+        text_censor_backfill_task,
+    )
+
+    result = await text_censor_backfill_task.kiq()
+    task_id = getattr(result, "task_id", None)
+    return {"task_id": task_id}
+
+
 @router.post("/normalize-track-titles")
 async def trigger_title_normalization(
     offset: int = Query(0, ge=0),

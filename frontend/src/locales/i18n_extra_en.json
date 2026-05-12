@@ -256,7 +256,8 @@
       "draftMinAgo": "{{count}} min ago",
       "draftHourAgo": "{{count}} h ago",
       "draftRestore": "Restore",
-      "draftDiscard": "Discard"
+      "draftDiscard": "Discard",
+      "draftAutoSaved": "Draft saved"
     }
   }
 }
