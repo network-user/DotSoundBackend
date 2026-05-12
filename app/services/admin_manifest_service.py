@@ -55,6 +55,7 @@ KNOWN_CAPABILITIES: frozenset[str] = frozenset(
         "audit.view",
         "audit.export",
         "recsys.manage",
+        "antivirus.view",
     }
 )
 
@@ -77,6 +78,7 @@ _LABELS_RU: dict[str, str] = {
     "menu.security": "Безопасность",
     "menu.settings": "Настройки",
     "menu.recsys": "Рекомендации",
+    "menu.antivirus": "Антивирус",
     "slot.tracks.hide": "Скрыть",
     "slot.tracks.delete": "Удалить",
     "slot.artists.enrich": "Обогатить",
@@ -100,6 +102,7 @@ _LABELS_EN: dict[str, str] = {
     "menu.security": "Security",
     "menu.settings": "Settings",
     "menu.recsys": "Recsys",
+    "menu.antivirus": "Antivirus",
     "slot.tracks.hide": "Hide",
     "slot.tracks.delete": "Delete",
     "slot.artists.enrich": "Enrich",
@@ -250,6 +253,13 @@ def _filter_menu(caps: set[str], locale: str) -> list[dict]:
             "route": f"{base}/recsys",
             "capability": "recsys.manage",
             "icon": "sparkle",
+        },
+        {
+            "id": "antivirus",
+            "label": labels["menu.antivirus"],
+            "route": f"{base}/antivirus",
+            "capability": "antivirus.view",
+            "icon": "shield",
         },
     ]
     return [

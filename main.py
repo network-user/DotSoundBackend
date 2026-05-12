@@ -41,12 +41,21 @@ if __name__ == "__main__":
     )
 
     try:
-        uvicorn.run(
-            "app.main:app",
-            host="0.0.0.0",
-            port=8000,
-            reload=True,
-        )
+        if sys.platform == "win32":
+            uvicorn.run(
+                "app.main:app",
+                host="0.0.0.0",
+                port=8000,
+                reload=True,
+                loop="none",
+            )
+        else:
+            uvicorn.run(
+                "app.main:app",
+                host="0.0.0.0",
+                port=8000,
+                reload=True,
+            )
     finally:
         worker_proc.terminate()
         worker_proc.wait(timeout=5)

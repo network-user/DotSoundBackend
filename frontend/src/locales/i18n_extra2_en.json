@@ -558,6 +558,13 @@
         "continue": "Continue",
         "discard": "Discard"
       },
+      "draftCard": {
+        "heading": "Draft restored",
+        "file": "{{name}}",
+        "noFile": "Re-select audio file",
+        "hint": "Title, artist and genre are saved. Re-select the audio file to continue.",
+        "discard": "Discard"
+      },
       "progress": {
         "titleRunning": "Processing your track",
         "titleReady": "Track is ready",
@@ -880,7 +887,7 @@
     },
     "telegramBrowserHint": {
       "title": "Better in a browser",
-      "body": "In your system browser you can install the app, use the notification player, and keep music playing with the screen locked. We show this reminder once after you have had time to explore.",
+      "body": "In your system browser you can install the app, use the notification player, and keep music playing with the screen locked.",
       "open": "Open in browser",
       "copy": "Copy link",
       "copied": "Link copied",

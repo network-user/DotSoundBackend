@@ -8770,6 +8770,20 @@ html.ds-low-glass .tcs-sheet {
   gap: 8px;
 }
 
+.profile-hero .profile-edit-controls--pair {
+  flex-direction: row;
+  flex-wrap: nowrap;
+  max-width: 100%;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+.profile-hero .profile-edit-controls--pair .profile-edit-btn {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
 .profile-hero .profile-edit-btn {
   width: 100%;
   min-height: 44px;

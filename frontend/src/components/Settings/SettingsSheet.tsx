@@ -10,8 +10,11 @@ import {
   hapticSelection,
   hapticTick,
   hapticNotification,
+  isTelegram,
   setBackButton,
+  tg,
 } from '@/lib/telegram'
+import { buildMiniAppAbsoluteUrl } from '@/lib/telegramBrowserHint'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { useExitTransition } from '@/hooks/useExitTransition'
@@ -314,10 +317,18 @@ export function SettingsSheet({
 
   const handleOpenBrowser = () => {
     feedbackTap()
-    window.open(
-      window.location.href,
-      '_blank',
-    )
+    if (isTelegram()) {
+      try {
+        const wa = tg as {
+          openLink?: (u: string) => void
+        }
+        wa.openLink?.(buildMiniAppAbsoluteUrl())
+      } catch {
+        /* ignore */
+      }
+      return
+    }
+    window.open(window.location.href, '_blank')
   }
 
   const handleInstallHint = () => {
@@ -325,7 +336,8 @@ export function SettingsSheet({
     showIsland({
       kind: 'toast',
       title: t('settings.pwaInstallHint'),
-      durationMs: 7000,
+      hint: t('settings.pwaInstallHintHint'),
+      durationMs: 8800,
     })
   }
 

@@ -823,3 +823,312 @@
   object-fit: cover;
   flex-shrink: 0;
 }
+
+/* ============================================================
+ * MiniPlayerBar — full-swipe touch redesign
+ * .mp-zone is the draggable row that replaces pb-swipe-track
+ * ============================================================ */
+
+/* Restore original touch seek strip (3px, progress-only) */
+.rp-player-bar--touch #pb-seek-wrap {
+  height: 3px;
+  max-height: 3px;
+  min-height: 0;
+  overflow: hidden;
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+.rp-player-bar--touch #pb-seek {
+  height: 3px;
+  max-height: 3px;
+  margin: 0;
+  padding: 0;
+  vertical-align: top;
+  pointer-events: none;
+}
+
+.rp-player-bar--touch #pb-seek::-webkit-slider-runnable-track {
+  height: 3px;
+}
+
+.rp-player-bar--touch #pb-seek::-moz-range-track,
+.rp-player-bar--touch #pb-seek::-moz-range-progress {
+  height: 3px;
+}
+
+.rp-player-bar--touch #pb-seek::-webkit-slider-thumb {
+  display: none;
+}
+
+.rp-player-bar--touch #pb-seek::-moz-range-thumb {
+  display: none;
+}
+
+/* Touch player height — slightly taller than before */
+.rp-player-bar--touch {
+  --player-h: 80px;
+}
+
+.mp-zone {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 0 10px;
+  /* subtract the 3px seek strip so mp-zone fills the rest */
+  height: calc(var(--player-h) - 3px);
+  overflow: hidden;
+  cursor: grab;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.mp-zone:active {
+  cursor: grabbing;
+}
+
+/* Swipe direction arrows */
+.mp-dir {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  z-index: 2;
+}
+
+.mp-dir--prev {
+  left: 6px;
+}
+
+.mp-dir--next {
+  right: 6px;
+}
+
+/* Album cover */
+.mp-cover {
+  position: relative;
+  width: 50px;
+  height: 50px;
+  border-radius: var(--r-md);
+  flex-shrink: 0;
+  overflow: hidden;
+  background: var(--surface-2, #1e1e1e);
+  cursor: pointer;
+  contain: paint;
+}
+
+.mp-cover-frame {
+  position: absolute;
+  inset: 0;
+}
+
+.mp-cover-img,
+.mp-cover .shared-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--r-md);
+  display: block;
+}
+
+.mp-cover-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+/* Track info */
+.mp-info {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.mp-info-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mp-title {
+  font-size: var(--fs-14);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+  letter-spacing: var(--ls-snug);
+}
+
+.mp-artist {
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 2px 0 0;
+}
+
+/* Controls */
+.mp-actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.mp-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.mp-btn:active {
+  opacity: 0.55;
+}
+
+.mp-btn--skip {
+  color: var(--text-secondary);
+}
+
+.mp-btn--skip:active {
+  color: var(--text);
+  opacity: 1;
+}
+
+.mp-btn--liked {
+  color: var(--accent, #fff);
+}
+
+.mp-btn--burst {
+  animation: like-flash var(--dur-fast) var(--ease-soft) both;
+}
+
+.mp-btn--play {
+  width: 42px;
+  height: 42px;
+  background: #ffffff;
+  color: #0f1115;
+  border-radius: var(--r-pill);
+  flex-shrink: 0;
+}
+
+.mp-btn--play svg {
+  fill: currentColor !important;
+  stroke: none !important;
+}
+
+.mp-btn--play:active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+/* Overflow menu */
+.mp-overflow-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.mp-overflow-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 196px;
+  padding: 4px 0;
+  border-radius: var(--r-md);
+  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
+  background: var(--glass-bg, rgba(16, 16, 16, 0.92));
+  backdrop-filter: var(--glass-blur, blur(20px)) saturate(160%);
+  -webkit-backdrop-filter: var(--glass-blur, blur(20px)) saturate(160%);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  z-index: 20;
+}
+
+.mp-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-14);
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+
+.mp-menu-item:active {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.mp-menu-item--active {
+  color: var(--accent, #fff);
+}
+
+.mp-menu-item--danger {
+  color: var(--error, #ff5f57);
+}
+
+@media (max-width: 360px) {
+  .rp-player-bar--touch {
+    --player-h: 74px;
+  }
+
+  .mp-cover {
+    width: 44px;
+    height: 44px;
+  }
+
+  .mp-btn {
+    width: 32px;
+  }
+
+  .mp-btn--play {
+    width: 38px;
+    height: 38px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .rp-player-bar--touch {
+    --player-h: 58px;
+  }
+
+  .mp-cover {
+    width: 38px;
+    height: 38px;
+  }
+
+  .mp-btn--play {
+    width: 36px;
+    height: 36px;
+  }
+}

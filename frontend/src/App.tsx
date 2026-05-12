@@ -286,7 +286,9 @@ export function App() {
     let initSettled = false
     const initWatchdogId = window.setTimeout(() => {
       if (initSettled) return
-      setNeedsAuth(true)
+      if (!api.hasSession()) {
+        setNeedsAuth(true)
+      }
       setIsInitialized(true)
     }, 25000)
 
@@ -494,6 +496,9 @@ export function App() {
       } finally {
         initSettled = true
         window.clearTimeout(initWatchdogId)
+        if (api.hasSession()) {
+          setNeedsAuth(false)
+        }
         setIsInitialized(true)
       }
     }
@@ -508,7 +513,9 @@ export function App() {
     if (isInitialized) return
     const id = window.setTimeout(() => {
       setForceUnblockInit(true)
-      setNeedsAuth(true)
+      if (!api.hasSession()) {
+        setNeedsAuth(true)
+      }
       setIsInitialized(true)
     }, 12000)
     return () => {

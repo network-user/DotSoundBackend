@@ -71,50 +71,52 @@ export function TelegramBrowserHint() {
   }
 
   return (
-    <m.aside
-      className="telegram-browser-hint rb-install glass--medium"
-      role="region"
-      aria-label={t('redesign.telegramBrowserHint.title')}
-      initial="hidden"
-      animate="visible"
-      variants={VARIANTS_FADE_UP}
-    >
-      <div className="telegram-browser-hint__icon" aria-hidden>
-        <Icon name="maximize" size={22} />
-      </div>
-      <div className="telegram-browser-hint__body">
-        <div className="telegram-browser-hint__title">
-          {t('redesign.telegramBrowserHint.title')}
+    <div className="telegram-browser-hint-portal">
+      <m.aside
+        className="telegram-browser-hint rb-install glass--medium"
+        role="region"
+        aria-label={t('redesign.telegramBrowserHint.title')}
+        initial="hidden"
+        animate="visible"
+        variants={VARIANTS_FADE_UP}
+      >
+        <div className="telegram-browser-hint__icon" aria-hidden>
+          <Icon name="maximize" size={22} />
         </div>
-        <p className="telegram-browser-hint__text">
-          {t('redesign.telegramBrowserHint.body')}
-        </p>
-        <button
-          type="button"
-          className="telegram-browser-hint__copy"
-          onClick={() => void onCopy()}
-        >
-          {t('redesign.telegramBrowserHint.copy')}
-        </button>
-      </div>
-      <div className="telegram-browser-hint__actions">
-        <MotionPress
-          variant="primary"
-          className="telegram-browser-hint__btn telegram-browser-hint__btn--primary"
-          haptic="medium"
-          onClick={openExternal}
-        >
-          {t('redesign.telegramBrowserHint.open')}
-        </MotionPress>
-        <MotionPress
-          variant="ghost"
-          className="telegram-browser-hint__btn telegram-browser-hint__btn--ghost"
-          haptic="light"
-          onClick={onDismiss}
-        >
-          {t('redesign.telegramBrowserHint.dismiss')}
-        </MotionPress>
-      </div>
-    </m.aside>
+        <div className="telegram-browser-hint__body">
+          <div className="telegram-browser-hint__title">
+            {t('redesign.telegramBrowserHint.title')}
+          </div>
+          <p className="telegram-browser-hint__text">
+            {t('redesign.telegramBrowserHint.body')}
+          </p>
+          <button
+            type="button"
+            className="telegram-browser-hint__copy"
+            onClick={() => void onCopy()}
+          >
+            {t('redesign.telegramBrowserHint.copy')}
+          </button>
+        </div>
+        <div className="telegram-browser-hint__actions">
+          <MotionPress
+            variant="primary"
+            className="telegram-browser-hint__btn telegram-browser-hint__btn--primary"
+            haptic="medium"
+            onClick={openExternal}
+          >
+            {t('redesign.telegramBrowserHint.open')}
+          </MotionPress>
+          <MotionPress
+            variant="ghost"
+            className="telegram-browser-hint__btn telegram-browser-hint__btn--ghost"
+            haptic="light"
+            onClick={onDismiss}
+          >
+            {t('redesign.telegramBrowserHint.dismiss')}
+          </MotionPress>
+        </div>
+      </m.aside>
+    </div>
   )
 }

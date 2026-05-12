@@ -2009,21 +2009,43 @@ body.ds-perf-lite .queue-eq-bars span {
   background: var(--accent-hover);
 }
 
-.telegram-browser-hint {
+.telegram-browser-hint-portal {
   position: fixed;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: calc(
     var(--nav-h, 60px) + var(--player-h, 80px) +
-      var(--safe-bottom) + var(--space-3)
+      var(--safe-bottom, 0px) + var(--space-3)
   );
-  transform: translateX(-50%);
   z-index: var(--z-install);
-  width: min(94vw, 440px);
   display: flex;
+  justify-content: center;
+  padding: 0 max(10px, env(safe-area-inset-left, 0px)) 0
+    max(10px, env(safe-area-inset-right, 0px));
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.telegram-browser-hint {
+  position: relative;
+  pointer-events: auto;
+  width: min(92vw, 360px);
+  max-width: 100%;
+  max-height: min(
+    260px,
+    calc(
+      100svh - var(--nav-h, 60px) - var(--player-h, 80px) -
+        var(--safe-bottom, 0px) - var(--space-3) - 16px
+    )
+  );
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
+  align-content: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   background: var(--glass-tint-3);
   -webkit-backdrop-filter: var(--glass-blur-strong)
     var(--glass-saturate);
@@ -2034,37 +2056,43 @@ body.ds-perf-lite .queue-eq-bars span {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   animation: toast-enter var(--dur-fast)
     var(--ease-standard);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .telegram-browser-hint__icon {
-  width: 44px;
-  height: 44px;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, 0.08);
   border-radius: var(--r-md);
-  flex-shrink: 0;
   color: var(--text-secondary);
 }
 
 .telegram-browser-hint__body {
-  flex: 1;
-  min-width: min(100%, 200px);
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 
 .telegram-browser-hint__title {
   font-weight: 700;
-  font-size: var(--fs-15);
-  margin-bottom: 4px;
+  font-size: var(--fs-14);
+  margin-bottom: 2px;
   line-height: var(--lh-tight);
 }
 
 .telegram-browser-hint__text {
-  margin: 0 0 var(--space-2);
+  margin: 0 0 var(--space-1);
   font-size: var(--fs-12);
   color: var(--text-secondary);
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .telegram-browser-hint__copy {
@@ -2086,47 +2114,68 @@ body.ds-perf-lite .queue-eq-bars span {
 }
 
 .telegram-browser-hint__actions {
+  flex: 0 0 100%;
   width: 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: stretch;
   gap: var(--space-2);
   margin-top: var(--space-1);
 }
 
 .telegram-browser-hint__btn {
-  min-height: 38px;
-  padding: 0 var(--space-3);
+  min-height: 36px;
+  padding: 0 var(--space-2);
   border-radius: var(--r-sm);
-  font-size: var(--fs-13);
+  font-size: var(--fs-12);
   font-weight: 600;
 }
 
 .telegram-browser-hint__btn--primary {
-  flex: 1 1 auto;
-  min-width: 140px;
+  flex: 1 1 120px;
+  min-width: 0;
 }
 
 .telegram-browser-hint__btn--ghost {
-  flex: 0 0 auto;
+  flex: 1 1 100px;
+  min-width: 0;
 }
 
-@media (max-width: 400px) {
+@media (max-width: 480px) {
   .telegram-browser-hint {
-    flex-direction: column;
-    align-items: stretch;
+    width: min(94vw, 360px);
+    max-height: min(
+      240px,
+      calc(
+        100svh - var(--nav-h, 60px) - var(--player-h, 80px) -
+          var(--safe-bottom, 0px) - var(--space-2) - 12px
+      )
+    );
+    padding: 8px 10px;
+    gap: 8px;
   }
   .telegram-browser-hint__icon {
     display: none;
+  }
+  .telegram-browser-hint__title {
+    font-size: var(--fs-13);
+  }
+  .telegram-browser-hint__text {
+    font-size: 11px;
+    line-height: 1.35;
   }
   .telegram-browser-hint__actions {
     flex-direction: column;
     align-items: stretch;
   }
+  .telegram-browser-hint__btn {
+    min-height: 40px;
+    width: 100%;
+    flex: 1 1 auto;
+  }
   .telegram-browser-hint__btn--primary,
   .telegram-browser-hint__btn--ghost {
-    width: 100%;
     justify-content: center;
   }
 }
@@ -2829,6 +2878,7 @@ body.ds-perf-lite .queue-eq-bars span {
   .pwa-onb-overlay,
   .ig-overlay,
   .install-prompt,
+  .telegram-browser-hint-portal,
   .telegram-browser-hint {
     display: none !important;
   }

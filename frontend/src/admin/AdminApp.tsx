@@ -15,6 +15,7 @@ import { AdminShell } from './components/layout/AdminShell'
 import { adminApi } from './lib/adminApi'
 import { setUserTokenProvider } from './lib/adminApi'
 import { useAdminAuth } from './store/adminAuthStore'
+import { AntivirusRoute } from './routes/AntivirusRoute'
 import { ArtistsRoute } from './routes/ArtistsRoute'
 import { AuditRoute } from './routes/AuditRoute'
 import { AudioComputeRoute } from './routes/AudioComputeRoute'
@@ -254,6 +255,10 @@ export function AdminApp() {
                 <Route
                   path="recsys"
                   element={<RecsysRoute />}
+                />
+                <Route
+                  path="antivirus"
+                  element={<AntivirusRoute />}
                 />
                 <Route
                   path="profile"

@@ -9,6 +9,7 @@ import {
   PlayerBarSeek,
   PlayerBarTime,
 } from './PlayerBarProgress'
+import { MiniPlayerBar } from './MiniPlayerBar'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence, type PanInfo } from 'framer-motion'
@@ -44,7 +45,6 @@ const PLATFORM_LABELS: Record<string, string> = {
 }
 
 const SWIPE_UP_THRESHOLD = 80
-const TRACK_SWIPE_PX = 56
 
 export function PlayerBar() {
   const navigate = useNavigate()
@@ -217,20 +217,6 @@ export function PlayerBar() {
     }
   }
 
-  const handleTouchTrackSwipeEnd = (
-    _: unknown,
-    info: PanInfo,
-  ) => {
-    const ox = info.offset.x
-    if (ox <= -TRACK_SWIPE_PX) {
-      haptic('light')
-      void playNext()
-    } else if (ox >= TRACK_SWIPE_PX) {
-      haptic('light')
-      void playPrev()
-    }
-  }
-
   const repeatTitle =
     repeatMode === 'none'
       ? 'Повтор выкл.'
@@ -280,15 +266,6 @@ export function PlayerBar() {
     <div
       className="pb-cover-img pb-clickable pb-cover-with-viz rp-player-cover"
       onClick={handleOpenCard}
-    >
-      {coverInner}
-    </div>
-  )
-
-  const touchCover = (
-    <div
-      className="pb-cover-img pb-cover-with-viz rp-player-cover"
-      style={{ userSelect: 'none' }}
     >
       {coverInner}
     </div>
@@ -450,30 +427,11 @@ export function PlayerBar() {
       onDragEnd={handleBarSwipeDragEnd}
       transition={SPRING_GENTLE}
     >
-      {desktopFineNav ? (
+      {desktopFineNav && (
         <span
           className="rp-player-bar__hint"
           aria-hidden="true"
         />
-      ) : (
-        <MotionPress
-          type="button"
-          variant="ghost"
-          className="rp-player-bar__hint rp-player-bar__hint--tap"
-          ariaLabel={t(
-            'redesign.playerBar.openFullPlayer',
-          )}
-          haptic={null}
-          onClick={() => {
-            haptic('medium')
-            navigate('/now-playing')
-          }}
-        >
-          <span
-            className="rp-player-bar__hint-pill"
-            aria-hidden="true"
-          />
-        </MotionPress>
       )}
       <PlayerBarSeek
         duration={duration}
@@ -484,35 +442,12 @@ export function PlayerBar() {
         parentRef={playerBarRef}
       />
 
-      <div id="pb-row" className="pb-row-v2">
-        {desktopFineNav ? (
-          <>
-            {desktopCover}
-            {renderTrackInfo()}
-          </>
-        ) : (
-          <m.div
-            className="pb-swipe-track"
-            drag={reduce ? false : 'x'}
-            dragConstraints={{ left: -92, right: 92 }}
-            dragElastic={0.22}
-            dragMomentum={false}
-            dragTransition={{
-              bounceStiffness: 440,
-              bounceDamping: 30,
-            }}
-            onDragEnd={handleTouchTrackSwipeEnd}
-            onTap={() => {
-              openCard()
-            }}
-          >
-            {touchCover}
-            {renderTrackInfo()}
-          </m.div>
-        )}
+      {desktopFineNav ? (
+        <div id="pb-row" className="pb-row-v2">
+          {desktopCover}
+          {renderTrackInfo()}
 
-        <div id="pb-controls" className="pb-ctl-v2">
-          {desktopFineNav ? (
+          <div id="pb-controls" className="pb-ctl-v2">
             <MotionPress
               variant="icon"
               className="ctrl-btn pb-prev"
@@ -522,31 +457,29 @@ export function PlayerBar() {
             >
               <Icon name="skip-back" size={18} />
             </MotionPress>
-          ) : null}
-          <MotionPress
-            ref={playRef}
-            variant="icon"
-            className={`play-btn${
-              isPlaying ? ' play-btn--playing' : ''
-            }`}
-            onClick={handlePlay}
-            ariaLabel={
-              isPlaying ? 'Пауза' : 'Воспроизвести'
-            }
-            haptic="light"
-          >
-            <BeatPulse
-              bpm={tapBpm}
-              active={isPlaying}
+            <MotionPress
+              ref={playRef}
+              variant="icon"
+              className={`play-btn${
+                isPlaying ? ' play-btn--playing' : ''
+              }`}
+              onClick={handlePlay}
+              ariaLabel={
+                isPlaying ? 'Пауза' : 'Воспроизвести'
+              }
+              haptic="light"
             >
-              <MorphIcon
-                name={isPlaying ? 'pause' : 'play'}
-                filled
-                size={18}
-              />
-            </BeatPulse>
-          </MotionPress>
-          {desktopFineNav ? (
+              <BeatPulse
+                bpm={tapBpm}
+                active={isPlaying}
+              >
+                <MorphIcon
+                  name={isPlaying ? 'pause' : 'play'}
+                  filled
+                  size={18}
+                />
+              </BeatPulse>
+            </MotionPress>
             <MotionPress
               variant="icon"
               className="ctrl-btn"
@@ -556,146 +489,135 @@ export function PlayerBar() {
             >
               <Icon name="skip-forward" size={18} />
             </MotionPress>
-          ) : null}
-          {showBarVolume ? (
-            <div
-              className="pb-volume-wrap"
-              ref={volumeRef}
-              onMouseEnter={() => {
-                clearVolumeCloseTimer()
-                setVolumeHover(true)
-              }}
-              onMouseLeave={() => {
-                if (!volumePinned) {
-                  scheduleVolumeClose()
-                }
-              }}
-              onFocusCapture={() => {
-                clearVolumeCloseTimer()
-                setVolumeHover(true)
-              }}
-              onBlurCapture={(e) => {
-                if (
-                  !e.currentTarget.contains(
-                    e.relatedTarget as Node | null,
-                  )
-                ) {
+            {showBarVolume ? (
+              <div
+                className="pb-volume-wrap"
+                ref={volumeRef}
+                onMouseEnter={() => {
+                  clearVolumeCloseTimer()
+                  setVolumeHover(true)
+                }}
+                onMouseLeave={() => {
                   if (!volumePinned) {
                     scheduleVolumeClose()
                   }
-                }
-              }}
-            >
-              <MotionPress
-                variant="icon"
-                className="ctrl-btn pb-volume-btn"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  clearVolumeCloseTimer()
-                  setVolumePinned((v) => !v)
-                  setOverflowOpen(false)
                 }}
-                ariaLabel="Громкость"
-                aria-expanded={volumeOpen}
-                aria-haspopup="dialog"
+                onFocusCapture={() => {
+                  clearVolumeCloseTimer()
+                  setVolumeHover(true)
+                }}
+                onBlurCapture={(e) => {
+                  if (
+                    !e.currentTarget.contains(
+                      e.relatedTarget as Node | null,
+                    )
+                  ) {
+                    if (!volumePinned) {
+                      scheduleVolumeClose()
+                    }
+                  }
+                }}
               >
-                <Icon
-                  name={volumeIcon}
-                  size={18}
-                />
-              </MotionPress>
-              {volumeOpen && (
-                <div
-                  className="pb-volume-pop"
-                  role="dialog"
-                  aria-label="Регулировка громкости"
-                  onClick={(e) => e.stopPropagation()}
+                <MotionPress
+                  variant="icon"
+                  className="ctrl-btn pb-volume-btn"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    clearVolumeCloseTimer()
+                    setVolumePinned((v) => !v)
+                    setOverflowOpen(false)
+                  }}
+                  ariaLabel="Громкость"
+                  aria-expanded={volumeOpen}
+                  aria-haspopup="dialog"
                 >
-                  <div className="pb-volume-slider-wrap">
-                    <input
-                      type="range"
-                      className="pb-volume-slider"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={volumePct}
-                      style={
-                        {
-                          '--progress': `${volumePct}%`,
-                        } as CSSProperties
-                      }
-                      onChange={(e) =>
-                        setVolume(
-                          Number(e.currentTarget.value) / 100,
-                        )
-                      }
-                      aria-label="Громкость плеера"
-                    />
+                  <Icon
+                    name={volumeIcon}
+                    size={18}
+                  />
+                </MotionPress>
+                {volumeOpen && (
+                  <div
+                    className="pb-volume-pop"
+                    role="dialog"
+                    aria-label="Регулировка громкости"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="pb-volume-slider-wrap">
+                      <input
+                        type="range"
+                        className="pb-volume-slider"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={volumePct}
+                        style={
+                          {
+                            '--progress': `${volumePct}%`,
+                          } as CSSProperties
+                        }
+                        onChange={(e) =>
+                          setVolume(
+                            Number(e.currentTarget.value) /
+                              100,
+                          )
+                        }
+                        aria-label="Громкость плеера"
+                      />
+                    </div>
+                    <div className="pb-volume-value">
+                      {volumePct}%
+                    </div>
                   </div>
-                  <div className="pb-volume-value">
-                    {volumePct}%
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : null}
-          <MotionPress
-            variant="icon"
-            className={`icon-btn pb-like${liked ? ' liked' : ''}${
-              likeBurst ? ' pb-like-burst' : ''
-            }`}
-            onClick={handleLike}
-            ariaLabel={
-              liked ? 'Убрать лайк' : 'Лайк'
-            }
-            aria-pressed={liked}
-            haptic={liked ? 'light' : 'medium'}
-          >
-            <MorphIcon
-              name="heart"
-              filled={liked}
-              size={18}
-            />
-          </MotionPress>
-          <div className="pb-overflow-wrap" ref={overflowRef}>
+                )}
+              </div>
+            ) : null}
             <MotionPress
               variant="icon"
-              className="ctrl-btn pb-overflow-btn"
-              onClick={(e) => {
-                e.stopPropagation()
-                setOverflowOpen((v) => !v)
-                clearVolumeCloseTimer()
-                setVolumePinned(false)
-                setVolumeHover(false)
-              }}
-              ariaLabel="Дополнительно"
-              aria-expanded={overflowOpen}
-              aria-haspopup="menu"
+              className={`icon-btn pb-like${liked ? ' liked' : ''}${
+                likeBurst ? ' pb-like-burst' : ''
+              }`}
+              onClick={handleLike}
+              ariaLabel={
+                liked ? 'Убрать лайк' : 'Лайк'
+              }
+              aria-pressed={liked}
+              haptic={liked ? 'light' : 'medium'}
             >
-              <Icon
-                name="more-horizontal"
+              <MorphIcon
+                name="heart"
+                filled={liked}
                 size={18}
               />
             </MotionPress>
-            {overflowOpen && (
-              <div
-                className="pb-overflow-menu"
-                role="menu"
+            <div
+              className="pb-overflow-wrap"
+              ref={overflowRef}
+            >
+              <MotionPress
+                variant="icon"
+                className="ctrl-btn pb-overflow-btn"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setOverflowOpen((v) => !v)
+                  clearVolumeCloseTimer()
+                  setVolumePinned(false)
+                  setVolumeHover(false)
+                }}
+                ariaLabel="Дополнительно"
+                aria-expanded={overflowOpen}
+                aria-haspopup="menu"
               >
-                <MotionPress
-                  role="menuitem"
-                  variant="ghost"
-                  haptic="selection"
-                  className="pb-menu-item"
-                  onClick={() => {
-                    setOverflowOpen(false)
-                    openQueue()
-                  }}
+                <Icon
+                  name="more-horizontal"
+                  size={18}
+                />
+              </MotionPress>
+              {overflowOpen && (
+                <div
+                  className="pb-overflow-menu"
+                  role="menu"
                 >
-                  <Icon name="queue" size={16} />
-                  {t('redesign.playerBar.queueMenu')}
-                </MotionPress>
-                {telegramUserId ? (
                   <MotionPress
                     role="menuitem"
                     variant="ghost"
@@ -703,78 +625,97 @@ export function PlayerBar() {
                     className="pb-menu-item"
                     onClick={() => {
                       setOverflowOpen(false)
-                      setAddToPlOpen(true)
+                      openQueue()
                     }}
                   >
-                    <Icon name="list" size={16} />
-                    {t('redesign.playerBar.addToPlaylistMenu')}
+                    <Icon name="queue" size={16} />
+                    {t('redesign.playerBar.queueMenu')}
                   </MotionPress>
-                ) : null}
-                <MotionPress
-                  role="menuitem"
-                  variant="ghost"
-                  haptic="selection"
-                  className="pb-menu-item"
-                  onClick={() => {
-                    setOverflowOpen(false)
-                    openEq()
-                  }}
-                >
-                  <Icon name="eq" size={16} />
-                  {t('redesign.playerBar.eqMenu')}
-                </MotionPress>
-                <MotionPress
-                  role="menuitem"
-                  variant="ghost"
-                  haptic="selection"
-                  className={`pb-menu-item ${shuffleOn ? 'active' : ''}`}
-                  onClick={() => {
-                    toggleShuffle()
-                    setOverflowOpen(false)
-                  }}
-                >
-                  <Icon name="shuffle" size={16} />
-                  {t('redesign.playerBar.shuffleMenu')}
-                </MotionPress>
-                <MotionPress
-                  role="menuitem"
-                  variant="ghost"
-                  haptic="selection"
-                  className={`pb-menu-item ${repeatMode !== 'none' ? 'active' : ''}`}
-                  onClick={() => {
-                    toggleRepeat()
-                    setOverflowOpen(false)
-                  }}
-                  title={repeatTitle}
-                >
-                  <Icon
-                    name={
-                      repeatMode === 'one'
-                        ? 'repeat-one'
-                        : 'repeat'
-                    }
-                    size={16}
-                  />
-                  {repeatTitle}
-                </MotionPress>
-                <MotionPress
-                  role="menuitem"
-                  variant="ghost"
-                  haptic="selection"
-                  className="pb-menu-item pb-menu-item-danger"
-                  onClick={() => {
-                    setOverflowOpen(false)
-                    stop()
-                  }}
-                >
-                  <Icon name="x" size={16} />
-                  {t('redesign.playerBar.stopMenu')}
-                </MotionPress>
-              </div>
-            )}
+                  {telegramUserId ? (
+                    <MotionPress
+                      role="menuitem"
+                      variant="ghost"
+                      haptic="selection"
+                      className="pb-menu-item"
+                      onClick={() => {
+                        setOverflowOpen(false)
+                        setAddToPlOpen(true)
+                      }}
+                    >
+                      <Icon name="list" size={16} />
+                      {t(
+                        'redesign.playerBar.addToPlaylistMenu',
+                      )}
+                    </MotionPress>
+                  ) : null}
+                  <MotionPress
+                    role="menuitem"
+                    variant="ghost"
+                    haptic="selection"
+                    className="pb-menu-item"
+                    onClick={() => {
+                      setOverflowOpen(false)
+                      openEq()
+                    }}
+                  >
+                    <Icon name="eq" size={16} />
+                    {t('redesign.playerBar.eqMenu')}
+                  </MotionPress>
+                  <MotionPress
+                    role="menuitem"
+                    variant="ghost"
+                    haptic="selection"
+                    className={`pb-menu-item ${shuffleOn ? 'active' : ''}`}
+                    onClick={() => {
+                      toggleShuffle()
+                      setOverflowOpen(false)
+                    }}
+                  >
+                    <Icon name="shuffle" size={16} />
+                    {t('redesign.playerBar.shuffleMenu')}
+                  </MotionPress>
+                  <MotionPress
+                    role="menuitem"
+                    variant="ghost"
+                    haptic="selection"
+                    className={`pb-menu-item ${repeatMode !== 'none' ? 'active' : ''}`}
+                    onClick={() => {
+                      toggleRepeat()
+                      setOverflowOpen(false)
+                    }}
+                    title={repeatTitle}
+                  >
+                    <Icon
+                      name={
+                        repeatMode === 'one'
+                          ? 'repeat-one'
+                          : 'repeat'
+                      }
+                      size={16}
+                    />
+                    {repeatTitle}
+                  </MotionPress>
+                  <MotionPress
+                    role="menuitem"
+                    variant="ghost"
+                    haptic="selection"
+                    className="pb-menu-item pb-menu-item-danger"
+                    onClick={() => {
+                      setOverflowOpen(false)
+                      stop()
+                    }}
+                  >
+                    <Icon name="x" size={16} />
+                    {t('redesign.playerBar.stopMenu')}
+                  </MotionPress>
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <MiniPlayerBar />
+      )}
 
       {desktopFineNav && (
         <PlayerBarTime

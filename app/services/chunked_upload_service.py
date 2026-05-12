@@ -257,11 +257,18 @@ class ChunkedUploadService:
 
         from app.services.scan_service import (
             ScanVerdict,
+            log_scan_result,
             scan_s3_key,
         )
 
         scan_result = await scan_s3_key(
             record.s3_key, record.filename
+        )
+        await log_scan_result(
+            self._session,
+            filename=record.filename,
+            file_size=record.total_size,
+            result=scan_result,
         )
         if scan_result.verdict not in (
             ScanVerdict.CLEAN,

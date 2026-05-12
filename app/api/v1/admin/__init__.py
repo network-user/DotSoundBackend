@@ -8,6 +8,7 @@ from . import (
     albums as admin_albums,
 )
 from . import (
+    antivirus,
     artist_catalog,
     artist_discography,
     audio_compute,
@@ -58,4 +59,5 @@ router.include_router(metrics.router)
 router.include_router(tasks.router)
 router.include_router(audit.router)
 router.include_router(security.router)
+router.include_router(antivirus.router)
 router.include_router(ws.router)

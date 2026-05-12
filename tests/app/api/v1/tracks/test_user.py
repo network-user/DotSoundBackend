@@ -118,6 +118,30 @@ async def test_upload_requires_terms_acceptance(
     )
 
 
+async def test_chunked_upload_init_requires_terms_acceptance(
+    client: AsyncClient,
+) -> None:
+    user = await create_test_user(client, 60051)
+    headers = await auth_headers(
+        client, user["id"]
+    )
+    response = await client.post(
+        "/api/v1/tracks/upload/init",
+        json={
+            "filename": "track.mp3",
+            "mime": "audio/mpeg",
+            "total_size": 1024,
+            "title": "No Terms",
+            "upload_terms_accepted": False,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "Upload terms must be accepted"
+    )
+
+
 async def test_upload_stores_terms_acceptance(
     client: AsyncClient,
     db_session: AsyncSession,

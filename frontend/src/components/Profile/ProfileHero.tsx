@@ -53,6 +53,7 @@ interface Props {
   onAvatarRejected: (
     reason: 'type' | 'size',
   ) => void
+  onShare?: () => void
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -84,6 +85,7 @@ export function ProfileHero({
   onDisplayNameChange,
   onAvatarFileSelected,
   onAvatarRejected,
+  onShare,
 }: Props) {
   const { t } = useTranslation()
   const sound = useSound()
@@ -208,26 +210,55 @@ export function ProfileHero({
         </div>
       )}
 
-      <div className="profile-edit-controls">
+      <div
+        className={
+          'profile-edit-controls' +
+          (!editMode && onShare
+            ? ' profile-edit-controls--pair'
+            : '')
+        }
+      >
         {!editMode ? (
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="selection"
-            className="profile-edit-btn"
-            onClick={() => {
-              tap()
-              onEditStart()
-            }}
-          >
-            <Icon name="edit" size={16} />
-            <span>
-              {t(
-                'profile.editProfile',
-                'Изменить профиль',
-              )}
-            </span>
-          </MotionPress>
+          <>
+            <MotionPress
+              type="button"
+              variant="ghost"
+              haptic="selection"
+              className="profile-edit-btn"
+              onClick={() => {
+                tap()
+                onEditStart()
+              }}
+            >
+              <Icon name="edit" size={16} />
+              <span>
+                {t(
+                  'profile.editProfile',
+                  'Изменить профиль',
+                )}
+              </span>
+            </MotionPress>
+            {onShare ? (
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="selection"
+                className="profile-edit-btn"
+                onClick={() => {
+                  tap()
+                  onShare()
+                }}
+              >
+                <Icon name="share-arrow" size={16} />
+                <span>
+                  {t(
+                    'profile.share.shareNative',
+                    'Поделиться',
+                  )}
+                </span>
+              </MotionPress>
+            ) : null}
+          </>
         ) : (
           <>
             <MotionPress

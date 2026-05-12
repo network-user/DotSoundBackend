@@ -65,10 +65,12 @@ export interface UploadOptions {
 const DEFAULT_PARALLEL = 2
 const DEFAULT_RETRIES = 4
 
+const AUTH_TOKEN_LS_KEY = 'auth-token'
+
 function authHeaders(): HeadersInit {
   const token =
     typeof window !== 'undefined'
-      ? window.localStorage.getItem('dotsound:token')
+      ? window.localStorage.getItem(AUTH_TOKEN_LS_KEY)
       : null
   return token ? { Authorization: `Bearer ${token}` } : {}
 }

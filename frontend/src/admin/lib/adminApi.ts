@@ -1947,4 +1947,42 @@ export const adminApi = {
       `/recsys/embeddings/backfill?limit=${limit}`,
       { method: 'POST', body: {} },
     ),
+
+  antivirusStatus: () =>
+    adminFetch<{
+      reachable: boolean
+      mode: string
+      version: string | null
+      host?: string
+      port?: number
+      error?: string
+      note?: string
+    }>('/antivirus/status'),
+
+  antivirusStats: () =>
+    adminFetch<{
+      total: number
+      clean: number
+      infected: number
+      error: number
+      skipped: number
+    }>('/antivirus/stats'),
+
+  antivirusEvents: (params?: {
+    limit?: number
+    offset?: number
+    verdict?: string
+  }) =>
+    adminFetch<{
+      total: number
+      items: {
+        id: number
+        filename: string
+        file_size: number | null
+        verdict: string
+        threat_name: string | null
+        scan_mode: string
+        scanned_at: string
+      }[]
+    }>('/antivirus/events', { query: params }),
 }

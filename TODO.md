@@ -12,6 +12,30 @@
 - `[x]` - завершено
 - `[-]` - отменено / неактуально
 
+- [x] **Инициализация: таймауты 12s/25s не сбрасывают авторизацию при живой сессии**
+  — Watchdog не вызывает `setNeedsAuth(true)`, если `api.hasSession()`;
+  в `finally` инициализации при наличии сессии `setNeedsAuth(false)`
+  (гонка с медленным `fetchAndApplyAdminPath` / `syncSessionUserFlags`).
+  Chunked upload: `Authorization` из ключа `auth-token`, не `dotsound:token`.
+  `frontend/src/App.tsx`, `frontend/src/lib/chunkedUploader.ts`.
+
+---
+
+## Antivirus integration (2026-05-13)
+
+- [x] **Антивирус: ClamAV интеграция + вкладка в админ-панели**
+  — PrivateCore: `CLAMAV_SCAN_TIMEOUT_SECONDS`, `should_reject_on_av_error()` в
+    `upload_policy.py`. Backend: модель `ScanEvent`, репозиторий
+    `ScanEventRepository`, миграция `0101_scan_events`, расширен
+    `scan_service.py` (`log_scan_result`, `get_clamav_status`), DB-логирование
+    в `chunked_upload_service.complete()`. Admin API:
+    `/admin/antivirus/status`, `/admin/antivirus/stats`,
+    `/admin/antivirus/events` с пагинацией/фильтром по вердикту; capability
+    `antivirus.view` в manifest. Frontend: `AntivirusRoute.tsx` (статус ClamAV,
+    KPI карточки: total/clean/infected/errors/skipped, таблица событий),
+    методы `antivirusStatus/Stats/Events` в `adminApi.ts`, маршрут в
+    `AdminApp.tsx`, группа ops в `AdminMenu.tsx`.
+
 ---
 
 ## Mini App / ngrok console (2026-05-12)
@@ -36,11 +60,11 @@
   `ArtistService.list_artist_tracks` (как у `GET .../tracks`).
   `app/api/v1/artists.py`, тесты `test_artist_service.py`.
 
-- [x] **Экран загрузки трека: отступы и без вкладки YouTube**
-  — Больше вертикальных промежутков между шапкой, табами и контентом;
-  panel padding; мастер файла (`ru-up-file-wizard`) с равномерным `gap`;
-  вкладка YouTube скрыта до дальнейшего включения. `UploadView`,
-  `redesign-upload.css`, `global.css` (`#upload-form`), `UploadFileTab`.
+- [x] **Загрузка файла: галочка правил + API не обходится поддельным `true`**
+  — `initUpload` и `FormData` передают реальный `termsAccepted`; шаг 1:
+    без галочки нельзя «Дальше» и нельзя submit на превью; тест
+    `test_chunked_upload_init_requires_terms_acceptance`. Legacy `/upload`
+    и chunked `/upload/init` на бэкенде уже отклоняли `false`.
 
 - [x] **Профиль: блок загрузки; черновик; lyrics sync; успех после upload**
   — `ProfileUploadCallout` перед «Мои треки»; `hasMeaningfulDraft(step>0)`;
@@ -55,6 +79,14 @@
     + `hasMeaningfulDraft` (черновик только с выбранным файлом);
     немедленный `saveDraft` при выборе аудио; debounce 250 ms; событие
     `dotsound:upload-draft-changed` + focus/storage/route для каллута.
+
+- [x] **Upload: карточка восстановления черновика на шаге 0**
+  — `DraftRestoreCard` под зоной выбора файла (step 0) когда `initialDraft`
+    есть и файл ещё не выбран: показывает название/артист/жанр + имя файла
+    из `audioFileMeta.name` + подсказку «выберите аудиофайл».
+    Кнопка «Сбросить» вызывает `clearDraft` + `onDiscardDraft()` (→ parent
+    сбрасывает `appliedDraft`, форма монтируется заново чистой).
+    CSS `.ru-up-draft-card`. i18n `redesign.upload.draftCard.*` en/ru.
 
 - [x] **`/admin/manifest` — лавина запросов при 500**
   — `AdminContext`: один `useEffect` с отменой in-flight, без цикла

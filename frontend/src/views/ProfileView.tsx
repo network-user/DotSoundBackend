@@ -497,6 +497,11 @@ export function ProfileView({
               onAvatarRejected={
                 handleAvatarRejected
               }
+              onShare={
+                getInternalUserId()
+                  ? () => setShareOpen(true)
+                  : undefined
+              }
             />
             <ProfileStats stats={stats} />
             <ListenerStats />

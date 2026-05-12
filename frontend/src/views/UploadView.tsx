@@ -178,6 +178,7 @@ export function UploadView() {
                 }
                 onSuccess={handleSuccess}
                 initialDraft={appliedDraft}
+                onDiscardDraft={handleDiscardDraft}
               />
             )}
             {tab === 'soundcloud' && (

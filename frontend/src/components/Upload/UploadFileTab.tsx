@@ -54,6 +54,7 @@ interface AutoFilledFlags {
 interface Props {
   onSuccess: (track: Track) => void
   initialDraft?: UploadDraft | null
+  onDiscardDraft?: () => void
 }
 
 const WIZARD_HINTS = [
@@ -65,7 +66,11 @@ const WIZARD_HINTS = [
 
 const SEARCH_DEBOUNCE_MS = 220
 
-export function UploadFileTab({ onSuccess, initialDraft }: Props) {
+export function UploadFileTab({
+  onSuccess,
+  initialDraft,
+  onDiscardDraft,
+}: Props) {
   const { t } = useTranslation()
   const reduce = useReducedMotion()
   const transition = reduce ? TWEEN_FAST : SPRING_GENTLE
@@ -567,6 +572,10 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
         setError(t('redesign.upload.file.errorArtistProfile'))
         return
       }
+      if (!termsAccepted) {
+        setError(t('redesign.upload.file.errorTermsRequired'))
+        return
+      }
       persistDraftAtStep(2)
       setWizardStep(2)
       return
@@ -650,7 +659,7 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
           use_profile_artist: artistMode === 'profile',
           genre: genre.trim() || null,
           is_public: isPublic,
-          upload_terms_accepted: true,
+          upload_terms_accepted: termsAccepted,
         })
         setV2Progress({ pct: 0, abort, uploadId: plan.upload_id })
         const result = await uploadFile(plan, audioFile, {
@@ -679,7 +688,10 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
         if (genre.trim()) fd.append('genre', genre.trim())
         if (coverFile) fd.append('cover', coverFile)
         fd.append('is_public', String(isPublic))
-        fd.append('upload_terms_accepted', 'true')
+        fd.append(
+          'upload_terms_accepted',
+          termsAccepted ? 'true' : 'false',
+        )
         uploaded = await api.uploadTrack(fd)
       }
 
@@ -842,13 +854,24 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
           transition={transition}
         >
           {wizardStep === 0 && (
-            <UploadStepAudio
-              audioFile={audioFile}
-              audioDuration={audioDuration}
-              audioDragging={audioDragging}
-              onAudioFile={applyAudioFile}
-              onDragChange={setAudioDragging}
-            />
+            <>
+              <UploadStepAudio
+                audioFile={audioFile}
+                audioDuration={audioDuration}
+                audioDragging={audioDragging}
+                onAudioFile={applyAudioFile}
+                onDragChange={setAudioDragging}
+              />
+              {initialDraft && !audioFile && (
+                <DraftRestoreCard
+                  draft={initialDraft}
+                  onDiscard={() => {
+                    clearDraft()
+                    onDiscardDraft?.()
+                  }}
+                />
+              )}
+            </>
           )}
           {wizardStep === 1 && (
             <UploadStepDetails
@@ -945,7 +968,11 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
             <MotionPress
               type="button"
               variant="primary"
-              disabled={uploading}
+              disabled={
+                uploading ||
+                (wizardStep === 0 && !audioFile) ||
+                (wizardStep === 1 && !termsAccepted)
+              }
               onClick={handleWizardNext}
             >
               {t('redesign.upload.wizardNext')}
@@ -954,7 +981,7 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
             <MotionPress
               type="submit"
               variant="primary"
-              disabled={uploading}
+              disabled={uploading || !termsAccepted}
             >
               {t('redesign.upload.wizardSubmit')}
             </MotionPress>
@@ -1004,5 +1031,56 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
       )}
     </form>
     </>
+  )
+}
+
+interface DraftRestoreCardProps {
+  draft: UploadDraft
+  onDiscard: () => void
+}
+
+function DraftRestoreCard({ draft, onDiscard }: DraftRestoreCardProps) {
+  const { t } = useTranslation()
+
+  const summaryParts: string[] = []
+  if (draft.title.trim()) summaryParts.push(draft.title.trim())
+  if (draft.artistName.trim()) summaryParts.push(draft.artistName.trim())
+  if (draft.genre.trim()) summaryParts.push(draft.genre.trim())
+
+  const fileName = draft.audioFileMeta?.name
+    ? t(
+        'redesign.upload.draftCard.file',
+        { name: draft.audioFileMeta.name },
+      )
+    : t('redesign.upload.draftCard.noFile')
+
+  return (
+    <div className="ru-up-draft-card">
+      <div className="ru-up-draft-card__body">
+        <span className="ru-up-draft-card__heading">
+          {t('redesign.upload.draftCard.heading')}
+        </span>
+        <span className="ru-up-draft-card__summary">
+          {summaryParts.length > 0
+            ? summaryParts.join(' · ')
+            : fileName}
+        </span>
+        {summaryParts.length > 0 && (
+          <span className="ru-up-draft-card__summary" style={{ opacity: 0.6 }}>
+            {fileName}
+          </span>
+        )}
+        <p className="ru-up-draft-card__hint">
+          {t('redesign.upload.draftCard.hint')}
+        </p>
+      </div>
+      <button
+        type="button"
+        className="ru-up-draft-card__discard"
+        onClick={onDiscard}
+      >
+        {t('redesign.upload.draftCard.discard')}
+      </button>
+    </div>
   )
 }
