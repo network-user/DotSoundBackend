@@ -4,13 +4,15 @@ The columns below are filtered on in list/search queries but had no
 btree index, forcing sequential scans as row counts grow:
 
 * ``tracks.album_id`` — ``list_by_album``, ``album_position`` sort.
-* ``playlists.owner_id`` — ``list_by_owner`` paginated.
 * ``albums.owner_id`` — ``list_by_owner`` paginated.
 * ``conversations.created_by_id`` — admin/owner queries.
 * ``messages.sender_id`` — user-sent-messages history.
 
-All indexes are created with ``IF NOT EXISTS`` semantics via
-``op.create_index`` so re-running on a hand-patched DB does not fail.
+``playlists.owner_id`` already has ``ix_playlists_owner_id`` from the
+initial migration; it is not repeated here.
+
+Indexes below use ``if_not_exists=True`` so a hand-patched DB does not
+fail on upgrade.
 
 Revision ID: 0096
 Revises: 0095
@@ -29,7 +31,6 @@ depends_on = None
 
 _INDEXES: tuple[tuple[str, str, str], ...] = (
     ("ix_tracks_album_id", "tracks", "album_id"),
-    ("ix_playlists_owner_id", "playlists", "owner_id"),
     ("ix_albums_owner_id", "albums", "owner_id"),
     (
         "ix_conversations_created_by_id",
@@ -42,9 +43,9 @@ _INDEXES: tuple[tuple[str, str, str], ...] = (
 
 def upgrade() -> None:
     for name, table, column in _INDEXES:
-        op.create_index(name, table, [column])
+        op.create_index(name, table, [column], if_not_exists=True)
 
 
 def downgrade() -> None:
-    for name, _table, _column in _INDEXES:
-        op.drop_index(name)
+    for name, table, _column in _INDEXES:
+        op.drop_index(name, table_name=table, if_exists=True)

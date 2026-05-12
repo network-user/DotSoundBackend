@@ -442,15 +442,17 @@ export function PlayerBar() {
         </div>
 
         <div id="pb-controls" className="pb-ctl-v2">
-          <MotionPress
-            variant="icon"
-            className="ctrl-btn pb-prev"
-            onClick={handlePrev}
-            ariaLabel="Предыдущий"
-            haptic="light"
-          >
-            <Icon name="skip-back" size={18} />
-          </MotionPress>
+          {desktopFineNav ? (
+            <MotionPress
+              variant="icon"
+              className="ctrl-btn pb-prev"
+              onClick={handlePrev}
+              ariaLabel="Предыдущий"
+              haptic="light"
+            >
+              <Icon name="skip-back" size={18} />
+            </MotionPress>
+          ) : null}
           <MotionPress
             ref={playRef}
             variant="icon"
@@ -474,15 +476,17 @@ export function PlayerBar() {
               />
             </BeatPulse>
           </MotionPress>
-          <MotionPress
-            variant="icon"
-            className="ctrl-btn"
-            onClick={handleNext}
-            ariaLabel="Следующий"
-            haptic="light"
-          >
-            <Icon name="skip-forward" size={18} />
-          </MotionPress>
+          {desktopFineNav ? (
+            <MotionPress
+              variant="icon"
+              className="ctrl-btn"
+              onClick={handleNext}
+              ariaLabel="Следующий"
+              haptic="light"
+            >
+              <Icon name="skip-forward" size={18} />
+            </MotionPress>
+          ) : null}
           {showBarVolume ? (
             <div
               className="pb-volume-wrap"

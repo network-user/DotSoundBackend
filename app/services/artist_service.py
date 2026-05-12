@@ -140,20 +140,29 @@ class ArtistService:
         if user_conflict and user_conflict.id != user_id:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Artist name conflicts with another user",
+                detail=(
+                    "Artist name is already taken. "
+                    "Change display name in profile."
+                ),
             )
         owned = await self._repo.find_by_owner_user_id(user_id)
         by_name = await self._repo.find_by_normalized_name(normalized)
         if by_name and by_name.owner_user_id not in (None, user_id):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Artist name is already taken",
+                detail=(
+                    "Artist name is already taken. "
+                    "Change display name in profile."
+                ),
             )
         if owned:
             if by_name and by_name.id != owned.id:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail="Artist name is already taken",
+                    detail=(
+                        "Artist name is already taken. "
+                        "Change display name in profile."
+                    ),
                 )
             if owned.name != canonical or owned.name_normalized != normalized:
                 owned.name = canonical
@@ -163,7 +172,10 @@ class ArtistService:
         if by_name and by_name.owner_user_id is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Artist name is already taken",
+                detail=(
+                    "Artist name is already taken. "
+                    "Change display name in profile."
+                ),
             )
         artist = await self._repo.create(
             name=canonical,

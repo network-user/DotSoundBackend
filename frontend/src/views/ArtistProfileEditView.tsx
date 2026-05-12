@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 
 import { MotionPress } from '@/components/ui/MotionPress'
+import { Icon } from '@/components/Icon/Icon'
 import { api } from '@/lib/api'
 
 type StatusResponse = Awaited<ReturnType<typeof api.getMyArtist>>
@@ -108,6 +109,22 @@ function fieldsToPatch(
     }
   })
   return patch
+}
+
+function formatEnsureError(err: unknown): string {
+  const fallback = 'Не удалось создать артиста'
+  if (!(err instanceof Error)) return fallback
+  const msg = err.message.toLowerCase()
+  if (
+    msg.includes('already taken')
+    || msg.includes('conflicts with')
+  ) {
+    return (
+      'Это имя артиста уже занято. '
+      + 'Измени имя в профиле и попробуй снова.'
+    )
+  }
+  return err.message || fallback
 }
 
 export function ArtistProfileEditView() {
@@ -246,11 +263,7 @@ export function ArtistProfileEditView() {
       await api.ensureMyArtist()
       await refresh()
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Не удалось создать артиста',
-      )
+      setError(formatEnsureError(err))
     } finally {
       setEnsuring(false)
     }
@@ -292,9 +305,11 @@ export function ArtistProfileEditView() {
           <MotionPress
             type="button"
             variant="ghost"
-            onClick={() => navigate(-1)}
+            className="artist-edit-back"
+            onClick={() => navigate('/profile')}
           >
-            ←
+            <Icon name="chevron-left" size={20} />
+            <span>{t('profile.backToProfile', 'Назад в профиль')}</span>
           </MotionPress>
           <h1 className="te-title">
             {t('artistEdit.title', 'Профиль артиста')}
@@ -364,6 +379,10 @@ export function ArtistProfileEditView() {
   const bioLen = fields.bio.length
   const bioNear = bioLen > 2000 - 80
   const bioOver = bioLen > 2000
+  const profileCompletion = completionPercent(
+    fields,
+    Boolean(avatarPreview),
+  )
 
   return (
     <div className="artist-edit-view">
@@ -371,9 +390,11 @@ export function ArtistProfileEditView() {
         <MotionPress
           type="button"
           variant="ghost"
-          onClick={() => navigate(-1)}
+          className="artist-edit-back"
+          onClick={() => navigate('/profile')}
         >
-          ←
+          <Icon name="chevron-left" size={20} />
+          <span>{t('profile.backToProfile', 'Назад в профиль')}</span>
         </MotionPress>
         <h1 className="te-title">
           {t('artistEdit.title', 'Профиль артиста')}
@@ -432,10 +453,7 @@ export function ArtistProfileEditView() {
                 'artistEdit.completionLabel',
                 'Заполненность профиля',
               )}
-              aria-valuenow={completionPercent(
-                fields,
-                Boolean(avatarPreview),
-              )}
+              aria-valuenow={profileCompletion}
               aria-valuemin={0}
               aria-valuemax={100}
             >
@@ -443,16 +461,13 @@ export function ArtistProfileEditView() {
                 <div
                   className="ae-progress__fill"
                   style={{
-                    width: `${completionPercent(fields, Boolean(avatarPreview))}%`,
+                    width: `${profileCompletion}%`,
                   }}
                 />
               </div>
               <span className="ae-progress__label">
                 {t('artistEdit.completion', 'Заполнено {{pct}}%', {
-                  pct: completionPercent(
-                    fields,
-                    Boolean(avatarPreview),
-                  ),
+                  pct: profileCompletion,
                 })}
               </span>
             </div>
@@ -505,7 +520,7 @@ export function ArtistProfileEditView() {
           </span>
           <textarea
             value={fields.bio}
-            maxLength={2200}
+            maxLength={2000}
             rows={5}
             placeholder={t(
               'artistEdit.bioPlaceholder',
@@ -593,6 +608,33 @@ export function ArtistProfileEditView() {
       {error ? (
         <div className="te-banner te-banner--error">{error}</div>
       ) : null}
+      <section className="te-section ae-finish">
+        <h2>
+          {t('artistEdit.finishTitle', 'Профиль готов?')}
+        </h2>
+        <p className="te-hint">
+          {t(
+            'artistEdit.finishHint',
+            'Когда закончите редактирование, вернитесь в профиль или сразу загрузите новый трек.',
+          )}
+        </p>
+        <div className="ae-finish__actions">
+          <MotionPress
+            type="button"
+            variant="primary"
+            onClick={() => navigate('/profile')}
+          >
+            {t('artistEdit.finishAction', 'Готово')}
+          </MotionPress>
+          <MotionPress
+            type="button"
+            variant="ghost"
+            onClick={() => navigate('/upload')}
+          >
+            {t('artistEdit.finishUpload', 'Загрузить трек')}
+          </MotionPress>
+        </div>
+      </section>
     </div>
   )
 }

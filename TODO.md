@@ -14,6 +14,30 @@
 
 ---
 
+## Profile / My Top polish (2026-05-12)
+
+- [x] **Профиль + «Ваш топ» + экран артиста: UI/UX доводка под монохром**
+  — `MyTopView`: добавлена кнопка «назад в профиль», увеличены отступы
+  и контейнеризация секций. `ProfileView/global.css`: увеличены отступы
+  контента профиля. `ProfileActions` + `redesign-profile.css`: убраны
+  цветные иконки, переведено в монохром. `ArtistProfileEditView` +
+  `redesign-track-edit.css`: крупная back-кнопка, выровнен CTA, добавлен
+  финальный блок действий («Готово» / «Загрузить трек»), прогресс/статусы
+  приведены к нейтральной палитре. Backend `artist_service.py`:
+  улучшен текст 409-конфликта имени артиста. Тесты:
+  `tests/app/api/v1/test_artists_me.py` (новый кейс 409 при занятом имени).
+
+## Mobile player UX (2026-05-12)
+
+- [x] **Свайп трека в карточке + мини-плеер без prev/next на touch**
+  — `TrackCardSheet.tsx`: `useSwipeX` на обложке / lyrics / video-spacer;
+  кнопки skip-back/skip-forward скрыты при `!desktopFineNav`.
+  — `PlayerBar.tsx`: prev/next только при `desktopFineNav`.
+
+- [x] **Фон мини-плеера без стекла**
+  — `#player-bar` в `global.css`: непрозрачный тёмный фон, без
+  `backdrop-filter`, лёгкая верхняя граница вместо глянца `::before`.
+
 ## Playlist improvements (2026-05-12)
 
 - [x] **description в создании/редактировании плейлиста**

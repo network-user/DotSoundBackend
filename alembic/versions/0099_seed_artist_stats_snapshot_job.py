@@ -1,9 +1,9 @@
 """Seed monthly artist stats snapshot cron job.
 
 Registers ``monthly-artist-stats-snapshot`` in ``scheduled_jobs``.
-The task runs at ``0 2 1 * *`` UTC (02:00 on the 1st of each month)
-and snapshots the previous month's unique listeners, plays, likes,
-and follower counts for all artists into ``artist_monthly_stats``.
+The same row is first inserted in revision 0069; this revision
+upserts idempotently so upgrades do not fail on duplicate primary
+key and align the display name with current copy.
 
 Revision ID: 0099
 Revises: 0098
@@ -11,6 +11,8 @@ Create Date: 2026-05-12
 """
 
 from __future__ import annotations
+
+import json
 
 import sqlalchemy as sa
 
@@ -22,44 +24,73 @@ branch_labels = None
 depends_on = None
 
 _JOB_ID = "monthly-artist-stats-snapshot"
+_TASK_NAME = (
+    "app.services.artist_stats_worker:" "snapshot_monthly_artist_stats_task"
+)
+_CRON = "0 2 1 * *"
+_QUEUE = "default"
+_PAYLOAD = json.dumps({})
+_NAME_UPGRADE = "Monthly artist stats snapshot"
+_NAME_DOWNGRADE = "Snapshot artist monthly stats"
 
 
 def upgrade() -> None:
-    jobs_table = sa.table(
-        "scheduled_jobs",
-        sa.column("id", sa.String),
-        sa.column("name", sa.String),
-        sa.column("task_name", sa.String),
-        sa.column("cron", sa.String),
-        sa.column("queue", sa.String),
-        sa.column("payload", sa.JSON),
-        sa.column("enabled", sa.Boolean),
-    )
-    op.bulk_insert(
-        jobs_table,
-        [
-            {
-                "id": _JOB_ID,
-                "name": (
-                    "Monthly artist stats snapshot"
-                ),
-                "task_name": (
-                    "app.services."
-                    "artist_stats_worker:"
-                    "snapshot_monthly_artist_stats_task"
-                ),
-                "cron": "0 2 1 * *",
-                "queue": "default",
-                "payload": {},
-                "enabled": True,
-            }
-        ],
+    op.execute(
+        sa.text(
+            """
+            INSERT INTO scheduled_jobs
+                (id, name, task_name, cron, queue, payload, enabled)
+            VALUES
+                (
+                    :id,
+                    :name,
+                    :task_name,
+                    :cron,
+                    :queue,
+                    CAST(:payload AS json),
+                    :enabled
+                )
+            ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
+                task_name = EXCLUDED.task_name,
+                cron = EXCLUDED.cron,
+                queue = EXCLUDED.queue,
+                payload = EXCLUDED.payload,
+                enabled = EXCLUDED.enabled
+            """
+        ).bindparams(
+            id=_JOB_ID,
+            name=_NAME_UPGRADE,
+            task_name=_TASK_NAME,
+            cron=_CRON,
+            queue=_QUEUE,
+            payload=_PAYLOAD,
+            enabled=True,
+        )
     )
 
 
 def downgrade() -> None:
     op.execute(
         sa.text(
-            "DELETE FROM scheduled_jobs WHERE id = :sid"
-        ).bindparams(sid=_JOB_ID)
+            """
+            UPDATE scheduled_jobs
+            SET
+                name = :name,
+                task_name = :task_name,
+                cron = :cron,
+                queue = :queue,
+                payload = CAST(:payload AS json),
+                enabled = :enabled
+            WHERE id = :id
+            """
+        ).bindparams(
+            id=_JOB_ID,
+            name=_NAME_DOWNGRADE,
+            task_name=_TASK_NAME,
+            cron=_CRON,
+            queue=_QUEUE,
+            payload=_PAYLOAD,
+            enabled=True,
+        )
     )

@@ -19,7 +19,7 @@
   position: sticky;
   top: 0;
   z-index: 4;
-  padding: 12px 4px;
+  padding: 12px 2px;
   background: linear-gradient(
     to bottom,
     var(--bg) 0%,
@@ -28,6 +28,18 @@
   );
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+}
+
+.artist-edit-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px 0 8px;
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: var(--fs-13);
+  font-weight: 600;
 }
 
 .te-title {
@@ -51,11 +63,11 @@
 }
 
 .te-save--saved {
-  color: var(--success, #2bb673);
+  color: var(--text);
 }
 
 .te-save--error {
-  color: var(--danger, #e84a4a);
+  color: var(--text-secondary);
 }
 
 .te-section {
@@ -384,7 +396,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  padding: 16px;
+  padding: 18px 20px 24px;
   max-width: 720px;
   margin: 0 auto;
 }
@@ -479,8 +491,19 @@
 
 .ae-cta-row {
   display: flex;
+  width: 100%;
   gap: var(--space-3);
   margin-top: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.ae-cta-row .mp-press {
+  min-height: 44px;
+  padding-inline: 18px;
+}
+
+.ae-cta-row .mp-press--primary {
+  width: 100%;
 }
 
 .ae-progress {
@@ -503,7 +526,7 @@
 .ae-progress__fill {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, var(--accent), #7d7dff);
+  background: color-mix(in srgb, var(--text) 78%, var(--bg-card));
   border-radius: 999px;
   transition: width 320ms ease;
 }
@@ -539,9 +562,23 @@
 
 .profile-artist-card__progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent), #7d7dff);
+  background: color-mix(in srgb, var(--text) 78%, var(--bg-card));
   border-radius: 999px;
   transition: width 320ms ease;
+}
+
+.ae-finish {
+  gap: var(--space-2);
+}
+
+.ae-finish__actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.ae-finish__actions .mp-press {
+  min-height: 44px;
 }
 
 /* ---- Profile artist card (entry in /profile) ----- */
@@ -551,7 +588,8 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  width: 100%;
+  width: auto;
+  margin: 18px 20px 0;
   padding: 14px;
   border-radius: var(--r-lg, 14px);
   background: var(--surface);

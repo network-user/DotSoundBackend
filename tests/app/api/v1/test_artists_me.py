@@ -4,8 +4,10 @@ from io import BytesIO
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from dotsound_private_core.services.artist_normalizer import normalize_name
 from httpx import AsyncClient
 
+from app.models.artist import Artist
 from tests.conftest import auth_headers, create_test_user
 
 pytestmark = pytest.mark.anyio
@@ -69,6 +71,27 @@ async def test_ensure_400_when_display_empty(
         "/api/v1/artists/me/ensure", headers=headers
     )
     assert r.status_code == 400
+
+
+async def test_ensure_409_when_name_already_taken(
+    client: AsyncClient,
+    db_session,
+) -> None:
+    headers = await _user_with_name(client, 10012, "Taken Name")
+    db_session.add(
+        Artist(
+            name="Taken Name",
+            name_normalized=normalize_name("Taken Name"),
+            source="internal",
+            owner_user_id=None,
+        )
+    )
+    await db_session.commit()
+    conflict = await client.post(
+        "/api/v1/artists/me/ensure", headers=headers
+    )
+    assert conflict.status_code == 409, conflict.text
+    assert "already taken" in conflict.text
 
 
 async def test_patch_updates_fields(

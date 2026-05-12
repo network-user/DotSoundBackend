@@ -4,7 +4,9 @@ import {
   useMemo,
   useState,
 } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
@@ -74,6 +76,7 @@ function ListeningHoursChart({
 
 export function MyTopView() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const [windowKey, setWindowKey] = useState<
     '7d' | '30d' | '90d' | 'all'
   >('30d')
@@ -119,7 +122,17 @@ export function MyTopView() {
 
   return (
     <div className="my-top-view">
-      <header className="page-header">
+      <header className="my-top-header">
+        <MotionPress
+          type="button"
+          variant="ghost"
+          haptic="selection"
+          className="my-top-back"
+          onClick={() => navigate('/profile')}
+        >
+          <Icon name="chevron-left" size={18} />
+          <span>{t('profile.backToProfile', 'Вернуться в профиль')}</span>
+        </MotionPress>
         <h1>{t('myTop.title', 'Ваш топ')}</h1>
         <p className="settings-hint">
           {t(
@@ -159,7 +172,7 @@ export function MyTopView() {
       ) : (
         <>
           {buckets.length > 0 ? (
-            <section className="my-top-hours">
+            <section className="my-top-section my-top-hours">
               <h2>
                 {t(
                   'myTop.hoursByDay',
@@ -178,7 +191,7 @@ export function MyTopView() {
             </section>
           ) : null}
           {genres.length > 0 ? (
-            <section className="my-top-genres">
+            <section className="my-top-section my-top-genres">
               <h2>{t('myTop.topGenres', 'Топ жанров')}</h2>
               <ul className="my-top-genres__list">
                 {genres.map((g) => (
@@ -196,7 +209,7 @@ export function MyTopView() {
             </section>
           ) : null}
           {trackList.length > 0 ? (
-            <section>
+            <section className="my-top-section">
               <h2>{t('myTop.topTracks', 'Топ треков')}</h2>
               <TrackList tracks={trackList} />
             </section>
