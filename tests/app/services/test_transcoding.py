@@ -302,6 +302,46 @@ async def test_transcode_success(
     mock_waveform_kiq.assert_awaited_once_with(track.id)
 
 
+def test_loudnorm_filter_in_ffmpeg_args() -> None:
+    """_LOUDNORM_FILTER appears in every ffmpeg invocation."""
+    import inspect
+
+    from app.services import transcoding as mod
+
+    src = inspect.getsource(mod.transcode_and_upload)
+    assert mod._LOUDNORM_FILTER in src
+    src_hls = inspect.getsource(mod.transcode_hls_only)
+    assert mod._LOUDNORM_FILTER in src_hls
+
+
+def test_parse_loudnorm_stats_valid() -> None:
+    from app.services.transcoding import _parse_loudnorm_stats
+
+    stderr = b"""
+[Parsed_loudnorm_0 @ 0xdeadbeef] {
+\t"input_i" : "-23.4",
+\t"input_tp" : "-2.1",
+\t"input_lra" : "9.2",
+\t"input_thresh" : "-33.5",
+\t"output_i" : "-14.0",
+\t"output_tp" : "-1.0",
+\t"output_lra" : "8.1",
+\t"output_thresh" : "-24.1",
+\t"normalization_type" : "dynamic",
+\t"target_offset" : "0.0"
+}"""
+    stats = _parse_loudnorm_stats(stderr)
+    assert stats is not None
+    assert stats["input_i"] == "-23.4"
+    assert stats["output_i"] == "-14.0"
+
+
+def test_parse_loudnorm_stats_no_json() -> None:
+    from app.services.transcoding import _parse_loudnorm_stats
+
+    assert _parse_loudnorm_stats(b"no json here") is None
+
+
 @patch(
     f"{_MOD}._update_track_status",
     new_callable=AsyncMock,

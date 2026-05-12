@@ -35,7 +35,6 @@ import { PlaylistsListRoute } from './routes/PlaylistsListRoute'
 import { AdminProfileRoute } from './routes/AdminProfileRoute'
 import { TracksRoute } from './routes/TracksRoute'
 import { UsersRoute } from './routes/UsersRoute'
-import '@/styles/admin/redesign-admin.css'
 import './styles/admin.css'
 
 const queryClient = new QueryClient({

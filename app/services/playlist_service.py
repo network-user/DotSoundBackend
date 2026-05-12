@@ -1,5 +1,6 @@
 import asyncio
 import secrets
+from typing import Final
 
 import structlog
 from dotsound_private_core.services.playlist_cover_policy import (
@@ -28,6 +29,8 @@ from app.services.playlist_track_eligibility import (
 )
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+_UNSET: Final[object] = object()
 
 
 class PlaylistService:
@@ -66,7 +69,7 @@ class PlaylistService:
         owner_id: int,
         page: int = 1,
         size: int = 20,
-    ) -> tuple[list[Playlist], int]:
+    ) -> tuple[list[tuple[Playlist, int]], int]:
         user = await self._resolve_user(owner_id)
         offset = (page - 1) * size
         return await self._repo.list_by_owner(
@@ -79,7 +82,7 @@ class PlaylistService:
         requester_id: int,
         name: str | None,
         is_public: bool | None,
-        description: str | None = None,
+        description: object = _UNSET,
         *,
         allow_admin: bool = False,
     ) -> Playlist:
@@ -210,10 +213,14 @@ class PlaylistService:
         query: str,
         page: int = 1,
         size: int = 20,
+        exclude_owner_id: int | None = None,
     ) -> tuple[list[Playlist], int]:
         offset = (page - 1) * size
         return await self._repo.search_public(
-            query=query, offset=offset, limit=size
+            query=query,
+            offset=offset,
+            limit=size,
+            exclude_owner_id=exclude_owner_id,
         )
 
     async def get_collaborators(

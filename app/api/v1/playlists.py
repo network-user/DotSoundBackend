@@ -30,7 +30,7 @@ from app.schemas.playlist_collab import (
 from app.services.playlist_collab_service import (
     PlaylistCollabService,
 )
-from app.services.playlist_service import PlaylistService
+from app.services.playlist_service import _UNSET, PlaylistService
 from app.services.track_response_build import dedupe_and_build_track_list
 
 router = APIRouter(prefix="/playlists", tags=["playlists"])
@@ -103,10 +103,15 @@ async def list_playlists(
 ) -> list[PlaylistResponse]:
     structlog.contextvars.bind_contextvars(owner_id=current_user.id)
     service = PlaylistService(session)
-    playlists, _ = await service.list_by_owner(
+    rows, _ = await service.list_by_owner(
         owner_id=current_user.id, page=page, size=size
     )
-    return [PlaylistResponse.model_validate(p) for p in playlists]
+    result = []
+    for playlist, count in rows:
+        r = PlaylistResponse.model_validate(playlist)
+        r.track_count = count
+        result.append(r)
+    return result
 
 
 @router.get(
@@ -121,12 +126,16 @@ async def search_playlists(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     session: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
 ) -> list[PlaylistResponse]:
     if not q.strip():
         return []
     service = PlaylistService(session)
     playlists, _ = await service.search_public(
-        query=q.strip(), page=page, size=size
+        query=q.strip(),
+        page=page,
+        size=size,
+        exclude_owner_id=current_user.id if current_user else None,
     )
     return [PlaylistResponse.model_validate(p) for p in playlists]
 
@@ -181,12 +190,17 @@ async def update_playlist(
         playlist_id=playlist_id, requester_id=current_user.id
     )
     service = PlaylistService(session)
+    desc: object = (
+        data.description
+        if "description" in data.model_fields_set
+        else _UNSET
+    )
     playlist = await service.update(
         playlist_id=playlist_id,
         requester_id=current_user.id,
         name=data.name,
         is_public=data.is_public,
-        description=data.description,
+        description=desc,
         allow_admin=current_user.is_admin,
     )
     return PlaylistResponse.model_validate(playlist)

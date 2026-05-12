@@ -19,6 +19,7 @@ import {
   FilterGroup,
   type FilterDef,
 } from '../components/widgets/FilterGroup'
+import { FormModal } from '../components/widgets/FormModal'
 
 interface ArtistRow {
   id: number
@@ -452,105 +453,89 @@ export function ArtistsRoute() {
         />
       </ListPageTemplate>
 
-      {batchPromptModal && (
-        <div
-          className="admin-modal-overlay"
-          onClick={() => setBatchPromptModal(null)}
-        >
-          <div
-            className="admin-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 760 }}
-          >
-            <h3>Artist Batch Prompt</h3>
-            <textarea
-              readOnly
-              value={batchPromptModal}
-              rows={22}
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 12,
-                resize: 'vertical',
-              }}
-            />
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <MotionPress
-                variant="primary"
-                onClick={() => navigator.clipboard.writeText(batchPromptModal)}
-              >
-                Копировать
-              </MotionPress>
-              <MotionPress variant="ghost" onClick={() => setBatchPromptModal(null)}>
-                Закрыть
-              </MotionPress>
-            </div>
-          </div>
-        </div>
-      )}
+      <FormModal
+        open={!!batchPromptModal}
+        size="lg"
+        title="Artist Batch Prompt"
+        onClose={() => setBatchPromptModal(null)}
+        footer={
+          <>
+            <MotionPress
+              variant="ghost"
+              onClick={() => setBatchPromptModal(null)}
+            >
+              Закрыть
+            </MotionPress>
+            <MotionPress
+              variant="primary"
+              onClick={() =>
+                batchPromptModal &&
+                navigator.clipboard.writeText(batchPromptModal)
+              }
+            >
+              Копировать
+            </MotionPress>
+          </>
+        }
+      >
+        <textarea
+          readOnly
+          value={batchPromptModal ?? ''}
+          rows={22}
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 12,
+            resize: 'vertical',
+          }}
+        />
+      </FormModal>
 
-      {importModal && (
-        <div
-          className="admin-modal-overlay"
-          onClick={() => setImportModal(false)}
-        >
-          <div
-            className="admin-modal"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 640 }}
-          >
-            <h3>Импорт ответа AI (Artists)</h3>
-            <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>
-              Вставьте JSON-ответ в формате artists[].id + artists[].content.
+      <FormModal
+        open={importModal}
+        size="md"
+        title="Импорт ответа AI (Artists)"
+        subtitle="Вставьте JSON-ответ в формате artists[].id + artists[].content."
+        submitText="Импортировать"
+        cancelText="Закрыть"
+        submitDisabled={!importText.trim()}
+        onClose={() => setImportModal(false)}
+        onSubmit={() => handleBatchImport()}
+      >
+        <textarea
+          value={importText}
+          onChange={(e) => setImportText(e.target.value)}
+          rows={14}
+          placeholder='{"artists":[{"id":1,"content":"..."}]}'
+          style={{
+            width: '100%',
+            fontFamily: 'monospace',
+            fontSize: 12,
+            resize: 'vertical',
+          }}
+        />
+        {importResult && (
+          <div>
+            <p style={{ fontWeight: 600, margin: 0 }}>
+              Импортировано: {importResult.imported}
             </p>
-            <textarea
-              value={importText}
-              onChange={(e) => setImportText(e.target.value)}
-              rows={14}
-              placeholder='{"artists":[{"id":1,"content":"..."}]}'
-              style={{
-                width: '100%',
-                fontFamily: 'monospace',
-                fontSize: 12,
-                resize: 'vertical',
-              }}
-            />
-            {importResult && (
-              <div style={{ marginTop: 8 }}>
-                <p style={{ fontWeight: 600 }}>
-                  Импортировано: {importResult.imported}
-                </p>
-                {importResult.errors.length > 0 && (
-                  <ul
-                    style={{
-                      fontSize: 12,
-                      color: 'var(--color-danger, #c00)',
-                      paddingLeft: 16,
-                      margin: '4px 0 0',
-                    }}
-                  >
-                    {importResult.errors.map((e, idx) => (
-                      <li key={idx}>{e}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <MotionPress
-                variant="primary"
-                onClick={handleBatchImport}
-                disabled={!importText.trim()}
+            {importResult.errors.length > 0 && (
+              <ul
+                style={{
+                  fontSize: 12,
+                  color: 'var(--state-error)',
+                  paddingLeft: 16,
+                  margin: '4px 0 0',
+                }}
               >
-                Импортировать
-              </MotionPress>
-              <MotionPress variant="ghost" onClick={() => setImportModal(false)}>
-                Закрыть
-              </MotionPress>
-            </div>
+                {importResult.errors.map((e, idx) => (
+                  <li key={idx}>{e}</li>
+                ))}
+              </ul>
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </FormModal>
     </div>
   )
 }

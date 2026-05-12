@@ -310,7 +310,14 @@
       "playlistSearchPlaceholderGlobal": "Playlist name…",
       "playlistSearchEmpty": "No public playlists found",
       "playlistSearchResults": "Public playlists",
-      "playlistCollabRole": "{{role}}"
+      "playlistCollabRole": "{{role}}",
+      "playlistCollabAcceptBtn": "Accept invite",
+      "playlistCollabAcceptTitle": "Join playlist",
+      "playlistCollabAcceptHint": "Paste the token the playlist owner sent you",
+      "playlistCollabAcceptPlaceholder": "Invite token…",
+      "playlistCollabAcceptDo": "Accept",
+      "playlistCollabAcceptDone": "You joined \"{{name}}\"",
+      "playlistCollabAcceptFail": "Invalid or expired token"
     },
     "tracks": {
       "like": "Like",

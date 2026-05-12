@@ -208,6 +208,8 @@ const PATHS: Record<string, string> = {
     'M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8 M16 6l-4-4-4 4 M12 2v14',
   'airplay-like':
     'M5 17h-1a2 2 0 01-2-2V5a2 2 0 012-2h16a2 2 0 012 2v10a2 2 0 01-2 2h-1 M8 22l4-5 4 5z',
+  'user-plus':
+    'M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2 M9 7a4 4 0 100 8 4 4 0 000-8z M19 8v6 M22 11h-6',
 }
 
 const FILLED_ICONS = new Set([

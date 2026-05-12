@@ -72,6 +72,9 @@ export function PlaylistsView({
   const [searchQ, setSearchQ] = useState('')
   const [searchResults, setSearchResults] = useState<Playlist[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
+  const [inviteAcceptOpen, setInviteAcceptOpen] = useState(false)
+  const [inviteToken, setInviteToken] = useState('')
+  const [inviteAcceptBusy, setInviteAcceptBusy] = useState(false)
   const uid = getUserId()
   const isAdmin = getIsAdmin()
   const canEditSelected = Boolean(
@@ -117,8 +120,39 @@ export function PlaylistsView({
   useEffect(() => {
     setTrackOrderFilter('')
     setAddTrackSheetOpen(false)
+    setCollaborators(null)
   }, [selected?.id])
 
+  useEffect(() => {
+    if (!selected || !uid) return
+    const isOwner = selected.owner_id === uid
+    if (!isOwner && !isAdmin) return
+    api
+      .getPlaylistCollaborators(selected.id)
+      .then(setCollaborators)
+      .catch(() => setCollaborators([]))
+  }, [selected?.id, uid, isAdmin])
+
+
+  useEffect(() => {
+    const q = searchQ.trim()
+    if (!q) {
+      setSearchResults([])
+      return
+    }
+    setSearchLoading(true)
+    const timer = setTimeout(() => {
+      api
+        .searchPlaylists(q)
+        .then(setSearchResults)
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearchLoading(false))
+    }, 300)
+    return () => {
+      clearTimeout(timer)
+      setSearchLoading(false)
+    }
+  }, [searchQ])
 
   const openPlaylist = useCallback(
     async (p: Playlist) => {
@@ -141,14 +175,19 @@ export function PlaylistsView({
     if (!newName.trim() || !uid) return
     setLoading(true)
     try {
-      await api.createPlaylist(newName.trim())
+      await api.createPlaylist(
+        newName.trim(),
+        false,
+        newDesc.trim() || null,
+      )
       setNewName('')
+      setNewDesc('')
       setCreating(false)
       loadPlaylists()
     } finally {
       setLoading(false)
     }
-  }, [newName, uid, loadPlaylists])
+  }, [newName, newDesc, uid, loadPlaylists])
 
   const refreshSelected = useCallback(async () => {
     if (!selected) return
@@ -163,11 +202,65 @@ export function PlaylistsView({
       await api.updatePlaylist(selected.id, {
         name: editName.trim() || selected.name,
         is_public: editPublic,
+        description: editDesc.trim() || null,
       })
       await refreshSelected()
       loadPlaylists()
     } finally {
       setEditBusy(false)
+    }
+  }
+
+  const handleCollabInvite = async () => {
+    if (!selected) return
+    setCollabBusy(true)
+    try {
+      const { token } = await api.createPlaylistInvite(selected.id)
+      await navigator.clipboard.writeText(token)
+      sound.play('notificationInfo')
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.library.playlistCollabInviteCopied'),
+        durationMs: 2400,
+      })
+    } catch {
+      sound.play('notificationError')
+      showIsland({
+        kind: 'error',
+        title: t('redesign.library.playlistCollabInviteFail'),
+        durationMs: 3500,
+      })
+    } finally {
+      setCollabBusy(false)
+    }
+  }
+
+  const handleCollabRemove = async (
+    item: PlaylistCollaboratorItem,
+  ) => {
+    if (!selected) return
+    const name =
+      item.display_name || item.username || String(item.user_id)
+    const ok = window.confirm(
+      t('redesign.library.playlistCollabRemoveConfirm', { name }),
+    )
+    if (!ok) return
+    try {
+      await api.removePlaylistCollaborator(selected.id, item.user_id)
+      setCollaborators((prev) =>
+        (prev ?? []).filter((c) => c.user_id !== item.user_id),
+      )
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.library.playlistCollabRemoveDone'),
+        durationMs: 2000,
+      })
+    } catch {
+      showIsland({
+        kind: 'error',
+        title: t('redesign.library.playlistCollabRemoveFail'),
+        durationMs: 3500,
+      })
     }
   }
 
@@ -316,6 +409,35 @@ export function PlaylistsView({
     },
     [loadPlaylists, t],
   )
+
+  const handleAcceptInvite = async () => {
+    const tok = inviteToken.trim()
+    if (!tok) return
+    setInviteAcceptBusy(true)
+    try {
+      const playlist = await api.acceptPlaylistInvite(tok)
+      setInviteToken('')
+      setInviteAcceptOpen(false)
+      loadPlaylists()
+      sound.play('notificationInfo')
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.library.playlistCollabAcceptDone', {
+          name: playlist.name,
+        }),
+        durationMs: 2400,
+      })
+    } catch {
+      sound.play('notificationError')
+      showIsland({
+        kind: 'error',
+        title: t('redesign.library.playlistCollabAcceptFail'),
+        durationMs: 3500,
+      })
+    } finally {
+      setInviteAcceptBusy(false)
+    }
+  }
 
   const inPlaylistIds = useMemo(
     () =>
@@ -476,7 +598,7 @@ export function PlaylistsView({
 
   const handleCopyLink = async () => {
     if (!selected) return
-    const url = `${window.location.origin}${import.meta.env.BASE_URL}playlists`
+    const url = `${window.location.origin}${import.meta.env.BASE_URL}#playlist-${selected.id}`
     try {
       await navigator.clipboard.writeText(url)
       sound.play('notificationInfo')
@@ -624,6 +746,20 @@ export function PlaylistsView({
               />
               {t('redesign.library.playlistPublicLabel')}
             </label>
+            <div className="form-group">
+              <label className="form-label">
+                {t('redesign.library.playlistDescLabel')}
+              </label>
+              <textarea
+                className="form-input rd-pl-desc-textarea"
+                placeholder={t(
+                  'redesign.library.playlistDescPlaceholder',
+                )}
+                value={editDesc}
+                rows={3}
+                onChange={(e) => setEditDesc(e.target.value)}
+              />
+            </div>
             <MotionPress
               type="button"
               variant="primary"
@@ -657,6 +793,72 @@ export function PlaylistsView({
               excludeIds={inPlaylistIds}
               addingId={addingTrackId}
             />
+          </div>
+        )}
+
+        {canEditSelected && (
+          <div className="rd-pl-collab-section">
+            <div className="rd-pl-collab-header">
+              <span className="rd-pl-collab-title">
+                {t('redesign.library.playlistCollabTitle')}
+              </span>
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
+                className="btn-secondary rd-pl-collab-invite-btn"
+                disabled={collabBusy}
+                onClick={() => {
+                  void handleCollabInvite()
+                }}
+              >
+                <Icon name="user-plus" size={14} />
+                {t('redesign.library.playlistCollabInvite')}
+              </MotionPress>
+            </div>
+            {collaborators === null && (
+              <div className="rd-pl-collab-loading">
+                <div className="loader loader--sm" />
+              </div>
+            )}
+            {collaborators !== null && collaborators.length === 0 && (
+              <p className="hint rd-pl-collab-empty">
+                {t('redesign.library.playlistCollabNone')}
+              </p>
+            )}
+            {collaborators !== null && collaborators.length > 0 && (
+              <div className="rd-pl-collab-list">
+                {collaborators.map((c) => {
+                  const label =
+                    c.display_name ||
+                    (c.username ? `@${c.username}` : `#${c.user_id}`)
+                  return (
+                    <div key={c.user_id} className="rd-pl-collab-row">
+                      <span className="rd-pl-collab-name">
+                        {label}
+                      </span>
+                      <span className="rd-pl-collab-role hint">
+                        {c.role}
+                      </span>
+                      <MotionPress
+                        type="button"
+                        variant="icon"
+                        haptic="medium"
+                        className="icon-btn"
+                        ariaLabel={t(
+                          'redesign.library.playlistCollabRemove',
+                        )}
+                        onClick={() => {
+                          void handleCollabRemove(c)
+                        }}
+                      >
+                        <Icon name="x" size={14} />
+                      </MotionPress>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -849,16 +1051,28 @@ export function PlaylistsView({
         </div>
       )}
 
-      <MotionPress
-        type="button"
-        variant="ghost"
-        haptic="light"
-        className="create-playlist-btn rd-pl-create"
-        onClick={() => setCreating(true)}
-      >
-        <Icon name="plus" size={18} />
-        {t('redesign.library.playlistCreate')}
-      </MotionPress>
+      <div className="rd-pl-create-row">
+        <MotionPress
+          type="button"
+          variant="ghost"
+          haptic="light"
+          className="create-playlist-btn rd-pl-create"
+          onClick={() => setCreating(true)}
+        >
+          <Icon name="plus" size={18} />
+          {t('redesign.library.playlistCreate')}
+        </MotionPress>
+        <MotionPress
+          type="button"
+          variant="ghost"
+          haptic="light"
+          className="rd-pl-invite-accept-btn"
+          onClick={() => setInviteAcceptOpen(true)}
+        >
+          <Icon name="user-plus" size={16} />
+          {t('redesign.library.playlistCollabAcceptBtn')}
+        </MotionPress>
+      </div>
 
       {creating && (
         <div className="rd-pl-create-form">
@@ -874,6 +1088,20 @@ export function PlaylistsView({
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
               autoFocus
+            />
+          </div>
+          <div className="form-group">
+            <label className="form-label">
+              {t('redesign.library.playlistDescLabel')}
+            </label>
+            <textarea
+              className="form-input rd-pl-desc-textarea"
+              placeholder={t(
+                'redesign.library.playlistDescPlaceholder',
+              )}
+              value={newDesc}
+              rows={2}
+              onChange={(e) => setNewDesc(e.target.value)}
             />
           </div>
           <div className="rd-pl-create-actions">
@@ -1006,6 +1234,164 @@ export function PlaylistsView({
               </LongPressMenu>
             )
           })}
+        </div>
+      )}
+
+      <div className="rd-pl-search-section">
+        <div className="form-group">
+          <label className="form-label">
+            {t('redesign.library.playlistSearchLabel')}
+          </label>
+          <input
+            className="form-input"
+            placeholder={t(
+              'redesign.library.playlistSearchPlaceholderGlobal',
+            )}
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+          />
+        </div>
+        {searchLoading && (
+          <div className="rd-pl-search-loading">
+            <div className="loader loader--sm" />
+          </div>
+        )}
+        {!searchLoading &&
+          searchQ.trim() &&
+          searchResults.length === 0 && (
+            <p className="hint rd-pl-search-empty">
+              {t('redesign.library.playlistSearchEmpty')}
+            </p>
+          )}
+        {searchResults.length > 0 && (
+          <>
+            <p className="hint rd-pl-search-results-label">
+              {t('redesign.library.playlistSearchResults')}
+            </p>
+            <div className="playlist-list rd-playlist-grid">
+              {searchResults.map((p) => (
+                <div
+                  key={p.id}
+                  className="playlist-card rd-playlist-card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    void openPlaylist(p)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      void openPlaylist(p)
+                    }
+                  }}
+                >
+                  <div className="rd-pl-cover">
+                    {p.cover_url ? (
+                      <img
+                        src={p.cover_url}
+                        alt=""
+                        loading="lazy"
+                      />
+                    ) : (
+                      <Icon name="list" size={36} />
+                    )}
+                  </div>
+                  <div className="rd-pl-info">
+                    <div className="rd-pl-name">{p.name}</div>
+                    {p.description && (
+                      <div className="rd-pl-desc hint">
+                        {p.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {inviteAcceptOpen && (
+        <div
+          className="share-modal-overlay fade-in"
+          onClick={(e) => {
+            if (
+              e.target === e.currentTarget &&
+              !inviteAcceptBusy
+            ) {
+              setInviteAcceptOpen(false)
+            }
+          }}
+        >
+          <div className="share-modal scale-in">
+            <div className="share-modal-header">
+              <div className="share-modal-title-wrap">
+                <h3 className="share-modal-title">
+                  {t('redesign.library.playlistCollabAcceptTitle')}
+                </h3>
+                <p className="share-modal-subtitle">
+                  {t('redesign.library.playlistCollabAcceptHint')}
+                </p>
+              </div>
+              <MotionPress
+                type="button"
+                variant="icon"
+                haptic="light"
+                className="icon-btn"
+                ariaLabel={t('redesign.library.shareClose')}
+                disabled={inviteAcceptBusy}
+                onClick={() => setInviteAcceptOpen(false)}
+              >
+                <Icon name="x" size={18} />
+              </MotionPress>
+            </div>
+            <div className="rd-pl-invite-input-wrap">
+              <input
+                className="form-input"
+                placeholder={t(
+                  'redesign.library.playlistCollabAcceptPlaceholder',
+                )}
+                value={inviteToken}
+                autoFocus
+                onChange={(e) => setInviteToken(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !inviteAcceptBusy) {
+                    void handleAcceptInvite()
+                  }
+                }}
+              />
+              <div className="rd-pl-invite-actions">
+                <MotionPress
+                  type="button"
+                  variant="ghost"
+                  haptic="light"
+                  className="btn-secondary"
+                  disabled={inviteAcceptBusy}
+                  onClick={() => setInviteAcceptOpen(false)}
+                >
+                  {t('redesign.library.playlistCancel')}
+                </MotionPress>
+                <MotionPress
+                  type="button"
+                  variant="primary"
+                  haptic="medium"
+                  className="btn-primary"
+                  disabled={
+                    inviteAcceptBusy || !inviteToken.trim()
+                  }
+                  onClick={() => {
+                    void handleAcceptInvite()
+                  }}
+                >
+                  {inviteAcceptBusy ? (
+                    <span className="btn-spinner" />
+                  ) : (
+                    t('redesign.library.playlistCollabAcceptDo')
+                  )}
+                </MotionPress>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

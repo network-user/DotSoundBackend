@@ -14,6 +14,49 @@
 
 ---
 
+## Playlist improvements (2026-05-12)
+
+- [x] **description в создании/редактировании плейлиста**
+  — `PlaylistCreate` / `PlaylistUpdate` получили поле `description`.
+  Backend: `playlist_service.create()` / `update()` и `_repo.create()` / `update()`
+  передают значение. Frontend: textarea в форме создания и в detail-экране
+  `PlaylistsView.tsx`.
+
+- [x] **Поиск публичных плейлистов**
+  — `PlaylistRepository.search_public(query, offset, limit)` — WHERE is_public=True
+  AND name.ilike. `PlaylistService.search_public()`. Новый endpoint
+  `GET /api/v1/playlists/search?q=`. Frontend: debounced-поиск (300 ms)
+  в list-экране, показывает чужие публичные плейлисты.
+
+- [x] **UI соавторства плейлистов**
+  — Backend: `PlaylistCollabRepository.list_with_users()` + `remove()`.
+  `PlaylistService.get_collaborators()` + `remove_collaborator()`.
+  Новые endpoints: `GET /playlists/{id}/collaborators`,
+  `DELETE /playlists/{id}/collaborators/{user_id}`.
+  Frontend: секция соавторов в detail-экране с кнопкой «Пригласить» (копирует
+  invite-токен в буфер) и кнопкой удаления каждого соавтора.
+
+- [x] **Fix handleCopyLink**
+  — Теперь копирует `{origin}{BASE_URL}#playlist-{id}` вместо `/playlists`.
+
+- [x] **Иконка `user-plus`**
+  — Добавлена в `Icon.tsx` (stroke-based, 24×24 viewBox).
+
+- [x] **CSS для новых элементов плейлиста**
+  — `redesign-library.css`: стили для `.rd-pl-desc-textarea`,
+  `.rd-pl-collab-section/header/row/name/role/empty/loading`,
+  `.rd-pl-search-section/loading/empty/results-label`,
+  `.rd-pl-desc`, `.rd-pl-create-row`, `.rd-pl-invite-accept-btn`,
+  `.rd-pl-invite-input-wrap/actions`, `.loader--sm`.
+
+- [x] **UI принятия инвайта**
+  — Кнопка «Принять инвайт» в list-экране (`rd-pl-invite-accept-btn`).
+  Модал с инпутом токена → `api.acceptPlaylistInvite()` →
+  toast-уведомление и обновление списка плейлистов.
+  Ключи i18n: `playlistCollabAccept*` (ru + en).
+
+---
+
 ## Playback state persistence (2026-05-12)
 
 - [x] **Fix: listen signal sent for second+ tracks in session**

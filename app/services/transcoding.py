@@ -1,6 +1,8 @@
 import asyncio
 import contextlib
+import json
 import os
+import re
 import shutil
 import tempfile
 
@@ -19,6 +21,7 @@ _HI_BITRATE = "128k"
 _LO_BITRATE = "64k"
 _LOUDNORM_FILTER = "loudnorm=I=-14:TP=-1:LRA=11"
 _FFMPEG_TIMEOUT_SEC = 600
+_LOUDNORM_STATS_RE = re.compile(r'\{\s*"input_i".*?\}', re.DOTALL)
 
 _MASTER_PLAYLIST = (
     "#EXTM3U\n"
@@ -103,6 +106,10 @@ async def transcode_and_upload(
             )
             await _update_track_status(track_id, "error", None, None)
             return
+
+        stats = _parse_loudnorm_stats(stderr)
+        if stats:
+            logger.info("ffmpeg_loudnorm_stats", **stats)
 
         with open(temp_mp3_path, "rb") as f:
             mp3_data = f.read()
@@ -237,6 +244,10 @@ async def transcode_hls_only(
             )
             return
 
+        stats = _parse_loudnorm_stats(stderr)
+        if stats:
+            logger.info("ffmpeg_loudnorm_stats", **stats)
+
         manifest_key = await _upload_hls(track_id, hi_dir, lo_dir)
 
         async with AsyncSessionLocal() as session:
@@ -315,6 +326,16 @@ async def _upload_hls(
         content_type="application/vnd.apple.mpegurl",
     )
     return manifest_key
+
+
+def _parse_loudnorm_stats(stderr: bytes) -> dict | None:
+    m = _LOUDNORM_STATS_RE.search(stderr.decode(errors="replace"))
+    if not m:
+        return None
+    try:
+        return json.loads(m.group())
+    except json.JSONDecodeError:
+        return None
 
 
 async def _update_track_status(

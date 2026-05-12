@@ -33,6 +33,7 @@ class PlaylistResponse(BaseModel):
     collage_generated_at: datetime | None = None
     description: str | None = None
     created_at: datetime
+    track_count: int = 0
 
     @computed_field  # type: ignore[prop-decorator]
     @property

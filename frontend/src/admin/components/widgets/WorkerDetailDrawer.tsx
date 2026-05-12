@@ -13,7 +13,6 @@ import {
 import { adminFetch } from '../../lib/adminApi'
 import { AdminWs } from '../../lib/adminWs'
 import { StatusPill } from './StatusPill'
-import { AdminPageNav } from '../layout/AdminPageNav'
 
 const WD = 'admin.audioCompute.workerDrawer' as const
 const AC = 'admin.audioCompute' as const
@@ -186,6 +185,9 @@ export function WorkerDetailDrawer({
     useState(false)
   const [pauseMinutes, setPauseMinutes] =
     useState(60)
+  const [activeTab, setActiveTab] = useState<
+    'env' | 'jobs' | 'events' | 'danger'
+  >('env')
   const drawerRootRef = useRef<HTMLDivElement>(null)
 
   const events = useQuery({
@@ -472,15 +474,31 @@ WORKER_ASR_DEVICE=auto`,
         </MotionPress>
       </div>
 
-      <AdminPageNav
-        scrollRoot={drawerRootRef.current}
-        items={[
-          { id: 'wd-env', label: t(`${WD}.envTitle`) },
-          { id: 'wd-jobs', label: t(`${WD}.jobsTitle`) },
-          { id: 'wd-events', label: t(`${WD}.eventsTitle`) },
-          { id: 'wd-danger', label: t(`${WD}.danger`) },
-        ]}
-      />
+      <div className="admin-worker-tabs" role="tablist">
+        {(
+          [
+            ['env', t(`${WD}.envTitle`)],
+            ['jobs', t(`${WD}.jobsTitle`)],
+            ['events', t(`${WD}.eventsTitle`)],
+            ['danger', t(`${WD}.danger`)],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === key}
+            className={
+              activeTab === key
+                ? 'admin-page-nav__pill is-active'
+                : 'admin-page-nav__pill'
+            }
+            onClick={() => setActiveTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
       <p>
         <StatusPill
@@ -760,26 +778,32 @@ WORKER_ASR_DEVICE=auto`,
         </div>
       )}
 
-      <h3 id="wd-env">{t(`${WD}.envTitle`)}</h3>
-      <pre
-        className="admin-mono"
-        style={{
-          padding: 12,
-          borderRadius: 6,
-          background: 'var(--admin-bg-elev)',
-          border: '1px solid var(--admin-border)',
-          overflowX: 'auto',
-          fontSize: 12,
-        }}
-      >
-        {envSnippet}
-      </pre>
-      <MotionPress variant="ghost" onClick={copy}>
-        {copied
-          ? t(`${AC}.copied`)
-          : t(`${AC}.copy`)}
-      </MotionPress>
+      {activeTab === 'env' && (
+        <section className="admin-worker-tab-panel">
+          <h3 id="wd-env">{t(`${WD}.envTitle`)}</h3>
+          <pre
+            className="admin-mono"
+            style={{
+              padding: 12,
+              borderRadius: 6,
+              background: 'var(--admin-bg-elev)',
+              border: '1px solid var(--admin-border)',
+              overflowX: 'auto',
+              fontSize: 12,
+            }}
+          >
+            {envSnippet}
+          </pre>
+          <MotionPress variant="ghost" onClick={copy}>
+            {copied
+              ? t(`${AC}.copied`)
+              : t(`${AC}.copy`)}
+          </MotionPress>
+        </section>
+      )}
 
+      {activeTab === 'jobs' && (
+        <section className="admin-worker-tab-panel">
       <h3 id="wd-jobs" style={{ marginTop: 20 }}>
         {t(`${WD}.jobsTitle`)}
       </h3>
@@ -859,6 +883,11 @@ WORKER_ASR_DEVICE=auto`,
         </div>
       )}
 
+        </section>
+      )}
+
+      {activeTab === 'events' && (
+        <section className="admin-worker-tab-panel">
       <h3 id="wd-events" style={{ marginTop: 8 }}>
         {t(`${WD}.eventsTitle`)}
       </h3>
@@ -953,6 +982,11 @@ WORKER_ASR_DEVICE=auto`,
         </ul>
       )}
 
+        </section>
+      )}
+
+      {activeTab === 'danger' && (
+        <section className="admin-worker-tab-panel">
       <h3 id="wd-danger" style={{ marginTop: 20 }}>
         {t(`${WD}.danger`)}
       </h3>
@@ -1064,6 +1098,8 @@ WORKER_ASR_DEVICE=auto`,
             )}
           </div>
         </>
+      )}
+        </section>
       )}
     </div>
   )

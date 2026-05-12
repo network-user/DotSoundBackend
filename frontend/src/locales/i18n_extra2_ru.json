@@ -312,7 +312,14 @@
       "playlistSearchPlaceholderGlobal": "Название плейлиста…",
       "playlistSearchEmpty": "Публичных плейлистов не найдено",
       "playlistSearchResults": "Публичные плейлисты",
-      "playlistCollabRole": "{{role}}"
+      "playlistCollabRole": "{{role}}",
+      "playlistCollabAcceptBtn": "Принять инвайт",
+      "playlistCollabAcceptTitle": "Вступить в плейлист",
+      "playlistCollabAcceptHint": "Вставьте токен, который вам прислал владелец плейлиста",
+      "playlistCollabAcceptPlaceholder": "Токен приглашения…",
+      "playlistCollabAcceptDo": "Принять",
+      "playlistCollabAcceptDone": "Вы добавлены в «{{name}}»",
+      "playlistCollabAcceptFail": "Неверный или истёкший токен"
     },
     "tracks": {
       "like": "В избранное",

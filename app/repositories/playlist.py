@@ -6,6 +6,8 @@ from app.models.playlist import Playlist, PlaylistTrack
 from app.models.track import Track
 from app.repositories.track import TrackRepository
 
+_UNSET: object = object()
+
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
@@ -28,21 +30,28 @@ class PlaylistRepository:
         owner_id: int,
         offset: int = 0,
         limit: int = 20,
-    ) -> tuple[list[Playlist], int]:
+    ) -> tuple[list[tuple[Playlist, int]], int]:
         total = (
             await self._session.execute(
-                select(func.count()).where(Playlist.owner_id == owner_id)
+                select(func.count(Playlist.id)).where(
+                    Playlist.owner_id == owner_id
+                )
             )
         ).scalar_one()
 
+        tc = (
+            select(func.count(PlaylistTrack.track_id))
+            .where(PlaylistTrack.playlist_id == Playlist.id)
+            .scalar_subquery()
+        )
         result = await self._session.execute(
-            select(Playlist)
+            select(Playlist, tc)
             .where(Playlist.owner_id == owner_id)
             .order_by(Playlist.created_at.desc())
             .offset(offset)
             .limit(limit)
         )
-        return list(result.scalars().all()), total
+        return list(result.all()), int(total)
 
     async def create(
         self,
@@ -84,7 +93,7 @@ class PlaylistRepository:
         owner_id: int | None = None,
         is_featured: bool | None = None,
         cover_key: str | None = None,
-        description: str | None = None,
+        description: object = _UNSET,
     ) -> Playlist:
         if name is not None:
             playlist.name = name
@@ -96,8 +105,9 @@ class PlaylistRepository:
             playlist.is_featured = is_featured
         if cover_key is not None:
             playlist.cover_key = cover_key
-        if description is not None:
-            playlist.description = description
+        if description is not _UNSET:
+            raw = description if isinstance(description, str) else None
+            playlist.description = raw.strip() or None if raw else None
         await self._session.flush()
         return playlist
 
@@ -255,12 +265,15 @@ class PlaylistRepository:
         query: str,
         offset: int = 0,
         limit: int = 20,
+        exclude_owner_id: int | None = None,
     ) -> tuple[list[Playlist], int]:
         pattern = f"%{query}%"
         cond = (
             Playlist.is_public.is_(True)
             & Playlist.name.ilike(pattern)
         )
+        if exclude_owner_id is not None:
+            cond = cond & (Playlist.owner_id != exclude_owner_id)
         total_r = await self._session.execute(
             select(func.count(Playlist.id)).where(cond)
         )

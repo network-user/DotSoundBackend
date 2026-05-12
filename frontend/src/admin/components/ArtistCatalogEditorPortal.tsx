@@ -1,4 +1,3 @@
-import '@/styles/admin/redesign-admin.css'
 import '../styles/admin.css'
 import { StepUpProvider } from './auth/StepUpDialog'
 import { AdminPromptProvider } from './layout/AdminPromptContext'

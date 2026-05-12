@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   keepPreviousData,
@@ -51,6 +51,40 @@ interface PromptState {
   lang: string
 }
 
+interface ModalsState {
+  prompt: PromptState | null
+  context: ContextState | null
+  batchPrompt: string | null
+  batchLyrics: string | null
+  batchGenreMood: string | null
+  import: boolean
+  gmImport: boolean
+  sourceEdit: TrackRow | null
+}
+
+const initialModals: ModalsState = {
+  prompt: null,
+  context: null,
+  batchPrompt: null,
+  batchLyrics: null,
+  batchGenreMood: null,
+  import: false,
+  gmImport: false,
+  sourceEdit: null,
+}
+
+type ModalsAction =
+  | { type: 'set'; key: keyof ModalsState; value: ModalsState[keyof ModalsState] }
+  | { type: 'closeAll' }
+
+function modalsReducer(
+  state: ModalsState,
+  action: ModalsAction,
+): ModalsState {
+  if (action.type === 'closeAll') return initialModals
+  return { ...state, [action.key]: action.value }
+}
+
 export function TracksRoute() {
   const { t } = useTranslation()
   const { showConfirm, showAlert } = useAdminPrompt()
@@ -69,31 +103,71 @@ export function TracksRoute() {
 
   // context feature state
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-  const [promptModal, setPromptModal] = useState<PromptState | null>(null)
-  const [contextModal, setContextModal] = useState<ContextState | null>(null)
+  const [modals, modalsDispatch] = useReducer(
+    modalsReducer,
+    initialModals,
+  )
+  const promptModal = modals.prompt
+  const contextModal = modals.context
+  const batchPromptModal = modals.batchPrompt
+  const batchLyricsPromptModal = modals.batchLyrics
+  const batchGenreMoodPromptModal = modals.batchGenreMood
+  const importModal = modals.import
+  const gmImportModal = modals.gmImport
+  const sourceEditModal = modals.sourceEdit
+  const setPromptModal = useCallback(
+    (v: PromptState | null) =>
+      modalsDispatch({ type: 'set', key: 'prompt', value: v }),
+    [],
+  )
+  const setContextModal = useCallback(
+    (v: ContextState | null) =>
+      modalsDispatch({ type: 'set', key: 'context', value: v }),
+    [],
+  )
+  const setBatchPromptModal = useCallback(
+    (v: string | null) =>
+      modalsDispatch({ type: 'set', key: 'batchPrompt', value: v }),
+    [],
+  )
+  const setBatchLyricsPromptModal = useCallback(
+    (v: string | null) =>
+      modalsDispatch({ type: 'set', key: 'batchLyrics', value: v }),
+    [],
+  )
+  const setBatchGenreMoodPromptModal = useCallback(
+    (v: string | null) =>
+      modalsDispatch({ type: 'set', key: 'batchGenreMood', value: v }),
+    [],
+  )
+  const setImportModal = useCallback(
+    (v: boolean) =>
+      modalsDispatch({ type: 'set', key: 'import', value: v }),
+    [],
+  )
+  const setGmImportModal = useCallback(
+    (v: boolean) =>
+      modalsDispatch({ type: 'set', key: 'gmImport', value: v }),
+    [],
+  )
+  const setSourceEditModal = useCallback(
+    (v: TrackRow | null) =>
+      modalsDispatch({ type: 'set', key: 'sourceEdit', value: v }),
+    [],
+  )
   const [contextEditValue, setContextEditValue] = useState('')
   const [busyContext, setBusyContext] = useState(false)
-  const [batchPromptModal, setBatchPromptModal] = useState<string | null>(null)
-  const [batchLyricsPromptModal, setBatchLyricsPromptModal] = useState<string | null>(null)
-  const [batchGenreMoodPromptModal, setBatchGenreMoodPromptModal] = useState<
-    string | null
-  >(null)
-  const [importModal, setImportModal] = useState(false)
   const [importText, setImportText] = useState('')
   const [importResult, setImportResult] = useState<{
     imported: number
     errors: string[]
   } | null>(null)
-  const [gmImportModal, setGmImportModal] = useState(false)
   const [gmImportText, setGmImportText] = useState('')
   const [gmOverwriteGenre, setGmOverwriteGenre] = useState(false)
   const [gmImportResult, setGmImportResult] = useState<{
     imported: number
     errors: string[]
   } | null>(null)
-  const [sourceEditModal, setSourceEditModal] = useState<TrackRow | null>(
-    null,
-  )
   const [sourceForm, setSourceForm] = useState({
     sc: '',
     src: '',

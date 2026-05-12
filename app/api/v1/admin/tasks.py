@@ -43,6 +43,8 @@ ALLOWED_TASK_NAMES: frozenset[str] = frozenset(
         "generate_and_upload_cover",
         "admin.alert.send",
         "normalize_track_titles_batch",
+        "hls_renormalize_batch_task",
+        "renormalize_track_hls_task",
     }
 )
 
@@ -89,6 +91,26 @@ async def trigger_title_normalization(
     )
 
     result = await normalize_track_titles_batch.kiq(
+        offset=offset, batch_size=batch_size
+    )
+    task_id = getattr(result, "task_id", None)
+    return {"task_id": task_id, "offset": offset, "batch_size": batch_size}
+
+
+@router.post("/hls-renormalize")
+async def trigger_hls_renormalize_batch(
+    offset: int = Query(0, ge=0),
+    batch_size: int = Query(50, ge=1, le=500),
+    _admin: User = Depends(require_capability("tasks.run")),
+) -> dict[str, Any]:
+    """Dispatch a batch of HLS re-transcode jobs with loudness normalization.
+
+    Chain batches by incrementing ``offset`` by ``batch_size`` until
+    the response contains ``"done": true``.
+    """
+    from app.services.hls_renormalize_task import hls_renormalize_batch_task
+
+    result = await hls_renormalize_batch_task.kiq(
         offset=offset, batch_size=batch_size
     )
     task_id = getattr(result, "task_id", None)
