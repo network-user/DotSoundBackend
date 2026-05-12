@@ -47,9 +47,7 @@ export function AuthorView({ authorId, onClose }: Props) {
   const [followLoading, setFollowLoading] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
   const [shareOpen, setShareOpen] = useState(false)
-  const [shareInitialTab, setShareInitialTab] = useState<
-    'link' | 'qr' | 'card'
-  >('link')
+  const [shareInitialQr, setShareInitialQr] = useState(false)
 
   const internalId = getInternalUserId()
   const isOwnProfile = internalId !== null && author?.id === internalId
@@ -167,7 +165,7 @@ export function AuthorView({ authorId, onClose }: Props) {
   }
 
   const openShareQr = () => {
-    setShareInitialTab('qr')
+    setShareInitialQr(true)
     setShareOpen(true)
   }
 
@@ -352,8 +350,11 @@ export function AuthorView({ authorId, onClose }: Props) {
         <ProfileShareModal
           open={shareOpen}
           userId={authorId}
-          initialTab={shareInitialTab}
-          onClose={() => setShareOpen(false)}
+          initialShowQr={shareInitialQr}
+          onClose={() => {
+            setShareOpen(false)
+            setShareInitialQr(false)
+          }}
         />
       ) : null}
     </div>

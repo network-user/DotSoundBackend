@@ -547,6 +547,18 @@ export interface ProcessingSnapshot {
 
 // ── Share ───────────────────────────────────────────────────────────────────
 
+export interface ArtistShareCardResponse {
+  artist_id: number
+  display_name: string
+  image_url: string | null
+  profile_url: string
+  deep_link: string | null
+  total_tracks: number
+  followers_count: number
+  monthly_listeners: number
+  top_track_titles: string[]
+}
+
 export interface ShareResponse {
   track_id: number
   url: string

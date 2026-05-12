@@ -6,10 +6,10 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
-import QRCode from 'qrcode'
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
+import { renderRoundedQrDataUrl } from '@/lib/roundedQr'
 import {
   copyToClipboard,
   getShareCapabilities,
@@ -17,47 +17,67 @@ import {
 } from '@/lib/platform'
 import { showIsland } from '@/lib/island'
 import { formatPlays } from '@/lib/utils'
-import type { ShareCardResponse } from '@/types/api'
-
-type Tab = 'link' | 'qr' | 'card'
+import type {
+  ArtistShareCardResponse,
+  ShareCardResponse,
+} from '@/types/api'
 
 interface Props {
   open: boolean
-  userId: number
   onClose: () => void
-  initialTab?: Tab
+  userId?: number
+  artistId?: number
+  initialShowQr?: boolean
 }
+
+type LoadedUser = { kind: 'user'; data: ShareCardResponse }
+type LoadedArtist = { kind: 'artist'; data: ArtistShareCardResponse }
+type Loaded = LoadedUser | LoadedArtist
 
 export function ProfileShareModal({
   open,
-  userId,
   onClose,
-  initialTab = 'link',
+  userId,
+  artistId,
+  initialShowQr = false,
 }: Props) {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<Tab>(initialTab)
-
-  useEffect(() => {
-    if (open) setTab(initialTab)
-  }, [open, initialTab])
-  const [card, setCard] = useState<ShareCardResponse | null>(
-    null,
-  )
+  const [card, setCard] = useState<Loaded | null>(null)
   const [loading, setLoading] = useState(false)
-  const [qrSvg, setQrSvg] = useState<string>('')
+  const [showQr, setShowQr] = useState(false)
+  const [qrDataUrl, setQrDataUrl] = useState('')
   const previewRef = useRef<HTMLDivElement | null>(null)
 
   const caps = useMemo(() => getShareCapabilities(), [])
 
+  const isUserMode = Boolean(userId && !artistId)
+  const isArtistMode = Boolean(artistId && !userId)
+
+  useEffect(() => {
+    if (open) {
+      setShowQr(Boolean(initialShowQr))
+    }
+  }, [open, initialShowQr])
+
   useEffect(() => {
     if (!open) return
+    if (!isUserMode && !isArtistMode) return
     setLoading(true)
     let cancelled = false
-    api
-      .getProfileShareCard(userId)
-      .then((res) => {
-        if (!cancelled) setCard(res)
-      })
+    const p = isUserMode
+      ? api.getProfileShareCard(userId as number)
+      : api.getArtistShareCard(artistId as number)
+    p.then((res) => {
+      if (cancelled) return
+      if (isUserMode) {
+        setCard({ kind: 'user', data: res as ShareCardResponse })
+      } else {
+        setCard({
+          kind: 'artist',
+          data: res as ArtistShareCardResponse,
+        })
+      }
+    })
       .catch(() => {
         if (!cancelled) setCard(null)
       })
@@ -67,25 +87,29 @@ export function ProfileShareModal({
     return () => {
       cancelled = true
     }
-  }, [open, userId])
+  }, [open, userId, artistId, isUserMode, isArtistMode])
 
-  const shareUrl =
-    card?.deep_link || card?.profile_url || ''
+  const shareUrl = useMemo(() => {
+    if (!card) return ''
+    if (card.kind === 'user') {
+      return card.data.deep_link || card.data.profile_url || ''
+    }
+    return card.data.deep_link || card.data.profile_url || ''
+  }, [card])
 
   useEffect(() => {
-    if (!shareUrl) {
-      setQrSvg('')
+    if (!shareUrl || !showQr) {
+      setQrDataUrl('')
       return
     }
-    QRCode.toString(shareUrl, {
-      type: 'svg',
-      margin: 1,
-      errorCorrectionLevel: 'M',
-      color: { dark: '#0a0a0aff', light: '#00000000' },
+    let cancelled = false
+    void renderRoundedQrDataUrl(shareUrl, 272).then((url) => {
+      if (!cancelled && url) setQrDataUrl(url)
     })
-      .then((svg) => setQrSvg(svg))
-      .catch(() => setQrSvg(''))
-  }, [shareUrl])
+    return () => {
+      cancelled = true
+    }
+  }, [shareUrl, showQr])
 
   useEffect(() => {
     if (!open) return
@@ -98,6 +122,10 @@ export function ProfileShareModal({
   }, [open, onClose])
 
   if (!open) return null
+
+  const modalTitle = isArtistMode
+    ? t('artist.shareTitle', 'Поделиться артистом')
+    : t('profile.share.title', 'Поделиться профилем')
 
   const handleCopy = async () => {
     if (!shareUrl) return
@@ -114,12 +142,16 @@ export function ProfileShareModal({
 
   const handleShare = async () => {
     if (!shareUrl || !card) return
+    const title =
+      card.kind === 'user'
+        ? card.data.display_name
+        : card.data.display_name
     const ok = await shareNatively({
       url: shareUrl,
-      title: card.display_name,
+      title,
       text: t('profile.share.shareText', {
         defaultValue: '{{name}} в DotSound',
-        name: card.display_name,
+        name: title,
       }),
     })
     if (!ok) {
@@ -132,16 +164,14 @@ export function ProfileShareModal({
       className="rp-share-modal"
       role="dialog"
       aria-modal="true"
-      aria-label={t('profile.share.title', 'Поделиться профилем')}
+      aria-label={modalTitle}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}
     >
       <div className="rp-share-modal__panel">
         <div className="rp-share-modal__head">
-          <h2 className="rp-share-modal__title">
-            {t('profile.share.title', 'Поделиться профилем')}
-          </h2>
+          <h2 className="rp-share-modal__title">{modalTitle}</h2>
           <button
             type="button"
             className="rp-share-modal__close"
@@ -152,169 +182,143 @@ export function ProfileShareModal({
           </button>
         </div>
 
-        <div role="tablist" className="rp-share-tabs">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'link'}
-            className="rp-share-tab"
-            onClick={() => setTab('link')}
-          >
-            {t('profile.share.tabLink', 'Ссылка')}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'qr'}
-            className="rp-share-tab"
-            onClick={() => setTab('qr')}
-          >
-            {t('profile.share.tabQr', 'QR')}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'card'}
-            className="rp-share-tab"
-            onClick={() => setTab('card')}
-          >
-            {t('profile.share.tabCard', 'Карточка')}
-          </button>
-        </div>
-
         {loading && (
-          <div
-            style={{
-              padding: 24,
-              textAlign: 'center',
-              color: 'var(--text-muted)',
-              fontSize: 13,
-            }}
-          >
+          <div className="rp-share-loading">
             {t('profile.share.loading', 'Загрузка…')}
           </div>
         )}
 
-        {!loading && tab === 'link' && card && (
-          <div className="rp-share-link">
-            <span className="rp-share-link__url">
-              {shareUrl}
-            </span>
-            <button
-              type="button"
-              className="rp-share-link__copy"
-              onClick={handleCopy}
+        {!loading && card && (
+          <>
+            <div
+              ref={previewRef}
+              className="rp-share-preview"
             >
-              {t('profile.share.copy', 'Копировать')}
-            </button>
-          </div>
-        )}
-
-        {!loading && tab === 'qr' && (
-          <div className="rp-share-qr">
-            {qrSvg ? (
-              <div
-                className="rp-share-qr__frame"
-                aria-label="QR"
-                dangerouslySetInnerHTML={{ __html: qrSvg }}
-              />
-            ) : (
-              <span className="rp-share-qr__fail">
-                {t('profile.share.qrFail', 'QR недоступен')}
-              </span>
-            )}
-          </div>
-        )}
-
-        {!loading && tab === 'card' && card && (
-          <div
-            ref={previewRef}
-            className="rp-share-preview"
-          >
-            <div className="rp-share-preview__avatar">
-              {card.avatar_url ? (
-                <img
-                  src={card.avatar_url}
-                  alt=""
-                  crossOrigin="anonymous"
-                />
-              ) : (
-                <span>
-                  {card.display_name.charAt(0).toUpperCase()}
-                </span>
+              <div className="rp-share-preview__avatar">
+                {card.kind === 'user' && card.data.avatar_url ? (
+                  <img
+                    src={card.data.avatar_url}
+                    alt=""
+                    crossOrigin="anonymous"
+                  />
+                ) : card.kind === 'artist' && card.data.image_url ? (
+                  <img
+                    src={card.data.image_url}
+                    alt=""
+                    crossOrigin="anonymous"
+                  />
+                ) : (
+                  <span>
+                    {card.data.display_name
+                      .charAt(0)
+                      .toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="rp-share-preview__name">
+                {card.data.display_name}
+              </div>
+              {card.kind === 'user' && card.data.username && (
+                <div className="rp-share-preview__username">
+                  @{card.data.username}
+                </div>
               )}
+              <div className="rp-share-preview__stats">
+                <div>
+                  <div className="rp-share-preview__stat-value">
+                    {card.kind === 'user'
+                      ? card.data.total_tracks
+                      : card.data.total_tracks}
+                  </div>
+                  <div className="rp-share-preview__stat-label">
+                    {t('profile.share.tracks', 'Треков')}
+                  </div>
+                </div>
+                <div>
+                  <div className="rp-share-preview__stat-value">
+                    {card.kind === 'user'
+                      ? formatPlays(card.data.total_plays)
+                      : formatPlays(card.data.monthly_listeners)}
+                  </div>
+                  <div className="rp-share-preview__stat-label">
+                    {card.kind === 'user'
+                      ? t('profile.share.plays', 'Прослушив.')
+                      : t(
+                          'artist.shareMonthlyListeners',
+                          'Слушателей / мес.',
+                        )}
+                  </div>
+                </div>
+                <div>
+                  <div className="rp-share-preview__stat-value">
+                    {card.kind === 'user'
+                      ? card.data.followers_count
+                      : card.data.followers_count}
+                  </div>
+                  <div className="rp-share-preview__stat-label">
+                    {t('profile.share.followers', 'Подписч.')}
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="rp-share-preview__name">
-              {card.display_name}
-            </div>
-            {card.username && (
-              <div className="rp-share-preview__username">
-                @{card.username}
+
+            {showQr && (
+              <div className="rp-share-qr">
+                {qrDataUrl ? (
+                  <div className="rp-share-qr__shell">
+                    <img
+                      className="rp-share-qr__img"
+                      src={qrDataUrl}
+                      alt=""
+                      width={272}
+                      height={272}
+                    />
+                  </div>
+                ) : (
+                  <div className="rp-share-loading rp-share-loading--compact">
+                    {t('profile.share.loading', 'Загрузка…')}
+                  </div>
+                )}
               </div>
             )}
-            <div className="rp-share-preview__stats">
-              <div>
-                <div className="rp-share-preview__stat-value">
-                  {card.total_tracks}
-                </div>
-                <div className="rp-share-preview__stat-label">
-                  {t('profile.share.tracks', 'Треков')}
-                </div>
-              </div>
-              <div>
-                <div className="rp-share-preview__stat-value">
-                  {formatPlays(card.total_plays)}
-                </div>
-                <div className="rp-share-preview__stat-label">
-                  {t('profile.share.plays', 'Прослушив.')}
-                </div>
-              </div>
-              <div>
-                <div className="rp-share-preview__stat-value">
-                  {card.followers_count}
-                </div>
-                <div className="rp-share-preview__stat-label">
-                  {t('profile.share.followers', 'Подписч.')}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
-        <div className="rp-share-actions">
-          <MotionPress
-            type="button"
-            variant="ghost"
-            haptic="light"
-            className="rp-share-actions__btn"
-            onClick={handleCopy}
-            disabled={!shareUrl}
-          >
-            <Icon name="copy" size={14} />
-            <span>
-              {t('profile.share.copy', 'Копировать')}
-            </span>
-          </MotionPress>
-          <MotionPress
-            type="button"
-            variant="primary"
-            haptic="medium"
-            className="rp-share-actions__btn"
-            data-variant="primary"
-            onClick={handleShare}
-            disabled={!shareUrl}
-          >
-            <Icon
-              name={caps.telegram ? 'send' : 'share'}
-              size={14}
-            />
-            <span>
-              {caps.telegram
-                ? t('profile.share.shareTelegram', 'В Telegram')
-                : t('profile.share.shareNative', 'Поделиться')}
-            </span>
-          </MotionPress>
-        </div>
+            <div className="rp-share-inline">
+              <MotionPress
+                type="button"
+                variant="primary"
+                haptic="medium"
+                className="rp-share-inline__btn"
+                data-variant="primary"
+                onClick={() => void handleShare()}
+                disabled={!shareUrl}
+              >
+                <Icon
+                  name={caps.telegram ? 'send' : 'share'}
+                  size={16}
+                />
+                <span>
+                  {caps.telegram
+                    ? t('profile.share.shareTelegram', 'В Telegram')
+                    : t('profile.share.shareNative', 'Поделиться')}
+                </span>
+              </MotionPress>
+              <MotionPress
+                type="button"
+                variant={showQr ? 'primary' : 'ghost'}
+                haptic="light"
+                className="rp-share-inline__btn"
+                aria-pressed={showQr}
+                onClick={() => setShowQr((v) => !v)}
+                disabled={!shareUrl}
+              >
+                <Icon name="share-arrow" size={16} />
+                <span>
+                  {t('profile.share.tabQr', 'QR')}
+                </span>
+              </MotionPress>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

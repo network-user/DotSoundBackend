@@ -97,6 +97,7 @@ import { PlayerBar } from '@/components/PlayerBar/PlayerBar'
 import { OfflineBanner } from '@/components/ui/OfflineBanner'
 import { ConsentBanner } from '@/components/Legal/ConsentBanner'
 import { DynamicIslandHost } from '@/components/ui/DynamicIsland'
+import { TelegramBrowserHint } from '@/components/TelegramMiniApp/TelegramBrowserHint'
 import { InstallPrompt } from '@/components/PwaInstall/InstallPrompt'
 import {
   PwaOnboardingModal,
@@ -855,6 +856,7 @@ export function App() {
       <Equalizer />
       <QueueSheet />
       <InstallPrompt />
+      <TelegramBrowserHint />
       {showPwaModal && (
         <PwaOnboardingModal
           onDismiss={() => setShowPwaModal(false)}

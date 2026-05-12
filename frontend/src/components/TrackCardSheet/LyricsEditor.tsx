@@ -635,13 +635,13 @@ export function LyricsEditor({
       <div className="le-fs-header">
         <MotionPress
           type="button"
-          variant="icon"
+          variant="ghost"
           haptic="light"
-          className="icon-btn"
-          ariaLabel={t('common.back', 'Назад')}
+          className="le-fs-header-back icon-btn"
+          ariaLabel={t('lyrics.editor.backToText')}
           onClick={() => setStep('text')}
         >
-          <Icon name="undo" size={18} />
+          <Icon name="chevron-left" size={18} />
         </MotionPress>
         <span className="le-fs-time">
           {draftSaved
@@ -653,11 +653,11 @@ export function LyricsEditor({
           variant="icon"
           haptic="light"
           className="icon-btn"
-          ariaLabel={t('common.undo', 'Отменить')}
+          ariaLabel={t('lyrics.editor.undoLastMark')}
           onClick={undoLast}
           disabled={!history.length}
         >
-          <Icon name="undo" size={18} />
+          <Icon name="reply" size={18} />
         </MotionPress>
       </div>
 

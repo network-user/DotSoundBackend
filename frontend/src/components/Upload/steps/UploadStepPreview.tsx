@@ -8,6 +8,7 @@ interface Props {
   artistLabel: string
   audioDuration: number | null
   coverPreview: string | null
+  lyricsLineCount?: number
 }
 
 function fmtDuration(sec: number | null): string {
@@ -22,6 +23,7 @@ export function UploadStepPreview({
   artistLabel,
   audioDuration,
   coverPreview,
+  lyricsLineCount = 0,
 }: Props) {
   const { t } = useTranslation()
   const missing = t('redesign.upload.file.previewMissing')
@@ -46,6 +48,13 @@ export function UploadStepPreview({
             <span>{artistLabel.trim() || missing}</span>
             {audioDuration !== null && (
               <span>{fmtDuration(audioDuration)}</span>
+            )}
+            {lyricsLineCount > 0 && (
+              <span className="ru-up-preview-meta__lyrics">
+                {t('redesign.upload.file.previewLyricsLines', {
+                  count: lyricsLineCount,
+                })}
+              </span>
             )}
           </div>
         </div>

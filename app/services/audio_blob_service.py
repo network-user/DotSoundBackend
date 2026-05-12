@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,9 +11,7 @@ from app.core import audio_storage_metrics, s3
 from app.models.audio_blob import AudioBlob
 from app.models.track import Track
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 def _sha256_hex(data: bytes) -> str:
@@ -31,9 +29,7 @@ class AudioBlobService:
         if not source_sha256:
             return None
         res = await self._session.execute(
-            select(AudioBlob).where(
-                AudioBlob.source_sha256 == source_sha256
-            )
+            select(AudioBlob).where(AudioBlob.source_sha256 == source_sha256)
         )
         return res.scalars().first()
 
@@ -116,7 +112,9 @@ class AudioBlobService:
         extension: str,
         content_type: str,
     ) -> tuple[AudioBlob, bool]:
-        """Return (row, created). `created` is True for a new DB row; False on reuse.
+        """Return (row, created).
+
+        ``created`` is True for a new DB row; False on reuse.
 
         S3 is only written for a new logical content hash; a concurrent insert
         may have stored the same hash first, in which case the CAS put may be
@@ -124,9 +122,7 @@ class AudioBlobService:
         """
         sha = _sha256_hex(data)
         res0 = await self._session.execute(
-            select(AudioBlob).where(
-                AudioBlob.content_sha256 == sha
-            )
+            select(AudioBlob).where(AudioBlob.content_sha256 == sha)
         )
         existing0 = res0.scalars().first()
         if existing0 is not None:
@@ -135,9 +131,7 @@ class AudioBlobService:
             )
             return existing0, False
 
-        s3_key = await s3.put_cas_audio(
-            data, sha, extension, content_type
-        )
+        s3_key = await s3.put_cas_audio(data, sha, extension, content_type)
         row = AudioBlob(
             content_sha256=sha,
             s3_key=s3_key,
@@ -156,13 +150,9 @@ class AudioBlobService:
             audio_storage_metrics.log_blob_dedup_hit(
                 size_bytes=len(data), content_sha256=sha
             )
-            audio_storage_metrics.log_s3_put_skipped(
-                content_sha256=sha
-            )
+            audio_storage_metrics.log_s3_put_skipped(content_sha256=sha)
             r2 = await self._session.execute(
-                select(AudioBlob).where(
-                    AudioBlob.content_sha256 == sha
-                )
+                select(AudioBlob).where(AudioBlob.content_sha256 == sha)
             )
             return r2.scalars().one(), False
 
@@ -178,6 +168,8 @@ class AudioBlobService:
     ) -> None:
         if track.blob_id is not None and track.blob_id != blob.id:
             raise ValueError("track already linked to a different blob")
+        if track.blob_id == blob.id and not track.blob_ref_freed:
+            return
         b = await self._session.get(AudioBlob, blob.id)
         if b is None:
             return
@@ -197,23 +189,31 @@ class AudioBlobService:
             select(Track).where(Track.id == track.id)
         )
         locked = t_res.scalars().first()
-        if (
-            locked is None
-            or locked.blob_id is None
-            or locked.blob_ref_freed
-        ):
+        if locked is None or locked.blob_id is None or locked.blob_ref_freed:
             return
         b_res = await self._session.execute(
-            select(AudioBlob).where(
-                AudioBlob.id == locked.blob_id
-            )
+            select(AudioBlob)
+            .where(AudioBlob.id == locked.blob_id)
+            .with_for_update()
         )
         blob = b_res.scalars().one_or_none()
         if blob is None:
             return
 
+        sibling_ct = int(
+            await self._session.scalar(
+                select(func.count()).where(
+                    Track.blob_id == blob.id,
+                    Track.id != locked.id,
+                    Track.blob_ref_freed.is_(False),
+                )
+            )
+            or 0
+        )
+
         locked.blob_ref_freed = True
-        if blob.ref_count < 1:
+
+        async def _purge_blob_row() -> None:
             try:
                 await s3.delete_object(blob.s3_key)
             except Exception as exc:  # noqa: BLE001
@@ -224,18 +224,21 @@ class AudioBlobService:
                 )
             await self._session.delete(blob)
             await self._session.flush()
+
+        if blob.ref_count < 1:
+            if sibling_ct > 0:
+                blob.ref_count = sibling_ct
+                await self._session.flush()
+                return
+            await _purge_blob_row()
             return
+
         new_ref = blob.ref_count - 1
         blob.ref_count = new_ref
         await self._session.flush()
         if new_ref <= 0:
-            try:
-                await s3.delete_object(blob.s3_key)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "audio_blob_s3_delete_failed",
-                    s3_key=blob.s3_key,
-                    error=str(exc),
-                )
-            await self._session.delete(blob)
-            await self._session.flush()
+            if sibling_ct > 0:
+                blob.ref_count = sibling_ct
+                await self._session.flush()
+                return
+            await _purge_blob_row()

@@ -280,7 +280,9 @@
       "draftHourAgo": "{{count}} h ago",
       "draftRestore": "Restore",
       "draftDiscard": "Discard",
-      "draftAutoSaved": "Draft saved"
+      "draftAutoSaved": "Draft saved",
+      "backToText": "Back to lyrics text",
+      "undoLastMark": "Undo last timecode mark"
     }
   }
 }

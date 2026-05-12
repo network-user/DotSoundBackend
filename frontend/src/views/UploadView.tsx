@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   m,
   SPRING_GENTLE,
@@ -25,9 +25,12 @@ import type { Track } from '@/types/api'
 
 type Tab = 'file' | 'soundcloud' | 'bandcamp'
 
+type UploadLocationState = { applyDraft?: boolean }
+
 export function UploadView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const location = useLocation()
   const reduce = useReducedMotion()
   const { playTrack } = usePlayerActions()
   const [tab, setTab] = useState<Tab>('file')
@@ -40,6 +43,19 @@ export function UploadView() {
       setPendingDraft(draft)
     }
   }, [])
+
+  useEffect(() => {
+    const st = location.state as UploadLocationState | null
+    if (!st?.applyDraft) {
+      return
+    }
+    const draft = loadDraft()
+    if (draft && hasMeaningfulDraft(draft)) {
+      setAppliedDraft(draft)
+      setPendingDraft(null)
+    }
+    navigate(location.pathname, { replace: true, state: null })
+  }, [location.pathname, location.state, navigate])
 
   const handleContinueDraft = () => {
     hapticSelection()
@@ -55,8 +71,9 @@ export function UploadView() {
   }
 
   const handleSuccess = async (track: Track) => {
+    clearDraft()
     hapticNotification('success')
-    navigate('/')
+    navigate(`/track/${track.id}`)
     await playTrack(track)
   }
 
@@ -154,6 +171,11 @@ export function UploadView() {
           >
             {tab === 'file' && (
               <UploadFileTab
+                key={
+                  appliedDraft
+                    ? `upload-file-${appliedDraft.savedAt}`
+                    : 'upload-file-new'
+                }
                 onSuccess={handleSuccess}
                 initialDraft={appliedDraft}
               />

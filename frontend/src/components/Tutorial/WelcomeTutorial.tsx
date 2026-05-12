@@ -18,6 +18,7 @@ import { RadioPage } from './pages/RadioPage'
 import { ImportPage } from './pages/ImportPage'
 import { CardsPage } from './pages/CardsPage'
 import { MixPage } from './pages/MixPage'
+import { BrowserPage } from './pages/BrowserPage'
 import { ReadyPage } from './pages/ReadyPage'
 
 interface Props {
@@ -30,6 +31,7 @@ const PAGE_KEYS = [
   'import',
   'cards',
   'mix',
+  'browser',
   'ready',
 ] as const
 
@@ -111,6 +113,8 @@ export function WelcomeTutorial({ onComplete }: Props) {
         return <CardsPage />
       case 'mix':
         return <MixPage />
+      case 'browser':
+        return <BrowserPage />
       case 'ready':
         return <ReadyPage />
       default:

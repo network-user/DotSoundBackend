@@ -16,11 +16,45 @@
 
 ## Mini App / ngrok console (2026-05-12)
 
+- [x] **Telegram Mini App: подсказка «удобнее в браузере» + слайд в Welcome Tutorial**
+  — Отложенная карточка (120 с, `z-index` как у install-prompt, над мини-плеером)
+    только в Telegram; `localStorage` `ds-tg-browser-hint`: `tutorial` после слайда
+    «Браузер», `perm` после «Понятно» / открытия в браузере. Слайд с мокапом PWA /
+    уведомлений / блокировки между Mix и Ready. `TelegramBrowserHint`,
+    `BrowserPage`, локали `i18n_extra2_*`, стили `components.css` / `onboarding.css`.
+
+- [x] **Дубликаты UGC: hard-delete одного не ломает аудио второго**
+  — `AudioBlobService.try_release_for_track`: `FOR UPDATE` на blob,
+    учёт соседей с `blob_ref_freed=false` перед удалением S3;
+    идемпотентный `attach_playback_blob` (гонка transcode + dedup).
+  Тесты: `test_attach_playback_blob_idempotent_when_already_linked`,
+  `test_release_reconciles_ref_when_counter_below_sibling_tracks`.
+
+- [x] **Профиль артиста: `track_count` после удаления трека**
+  — `GET /artists/{id}` считал через `get_artist_track_ids` без фильтра
+  `Track.is_active`; теперь `track_count` = total из
+  `ArtistService.list_artist_tracks` (как у `GET .../tracks`).
+  `app/api/v1/artists.py`, тесты `test_artist_service.py`.
+
 - [x] **Экран загрузки трека: отступы и без вкладки YouTube**
   — Больше вертикальных промежутков между шапкой, табами и контентом;
   panel padding; мастер файла (`ru-up-file-wizard`) с равномерным `gap`;
   вкладка YouTube скрыта до дальнейшего включения. `UploadView`,
   `redesign-upload.css`, `global.css` (`#upload-form`), `UploadFileTab`.
+
+- [x] **Профиль: блок загрузки; черновик; lyrics sync; успех после upload**
+  — `ProfileUploadCallout` перед «Мои треки»; `hasMeaningfulDraft(step>0)`;
+  мгновенный `saveDraft` на шагах; восстановление шага после выбора файла;
+  `saveLyrics` перед `saveLyricsSync`; успех: `/track/:id` + тост;
+  правки `LyricsEditor` / play-кнопка / `ProfileArtistPreview`.
+
+- [x] **Профиль: «Продолжить черновик» и сохранение черновика загрузки**
+  — `UploadFileTab` с `key` по `appliedDraft.savedAt` после навигации
+    `applyDraft` (иначе state формы не подхватывался); загрузка профиля
+    не перезаписывает поля при `initialDraft`; в черновике `audioFileMeta`
+    + `hasMeaningfulDraft` (черновик только с выбранным файлом);
+    немедленный `saveDraft` при выборе аудио; debounce 250 ms; событие
+    `dotsound:upload-draft-changed` + focus/storage/route для каллута.
 
 - [x] **`/admin/manifest` — лавина запросов при 500**
   — `AdminContext`: один `useEffect` с отменой in-flight, без цикла
@@ -123,8 +157,10 @@
   `profile_visibility` / `profile_access` в `UserResponse`, 403 на
   stats/tracks/albums/share-card/followers при скрытом или
   «только подписчикам» профиле. Настройки в `SettingsSheet`, `AuthorView`:
-  копирование ссылки, модалка QR (`ProfileShareModal` + `initialTab`).
+  копирование ссылки, модалка QR (`ProfileShareModal`, `initialShowQr`).
   Стили QR в `redesign-profile.css`. Тесты: `test_users.py`, `test_user.py`.
+  Плюс: `GET /artists/{id}/share-card`, шаринг артиста в `ArtistView`,
+  скруглённый QR (`roundedQr.ts`), карточка + «Копировать»/«QR»/share.
 
 ## Mobile player UX (2026-05-12)
 

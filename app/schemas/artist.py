@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DiscographyItemResponse(BaseModel):
@@ -62,3 +62,15 @@ class ArtistDetailResponse(ArtistResponse):
 
 class ArtistResolveResponse(BaseModel):
     id: int
+
+
+class ArtistShareCardResponse(BaseModel):
+    artist_id: int
+    display_name: str
+    image_url: str | None = None
+    profile_url: str
+    deep_link: str | None = None
+    total_tracks: int = Field(ge=0, default=0)
+    followers_count: int = Field(ge=0, default=0)
+    monthly_listeners: int = Field(ge=0, default=0)
+    top_track_titles: list[str] = Field(default_factory=list)

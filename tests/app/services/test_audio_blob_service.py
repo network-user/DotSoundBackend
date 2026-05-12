@@ -13,9 +13,7 @@ pytestmark = pytest.mark.anyio
 _MOD = "app.services.audio_blob_service"
 
 
-async def _put_cas_side(
-    _data: bytes, sha: str, ext: str, _ct: str
-) -> str:
+async def _put_cas_side(_data: bytes, sha: str, ext: str, _ct: str) -> str:
     from app.core.s3 import build_cas_audio_key
 
     return build_cas_audio_key(sha, ext)
@@ -39,12 +37,8 @@ async def test_get_or_create_dedupes_same_bytes(
     await db_session.flush()
     await db_session.refresh(user)
     svc = AudioBlobService(db_session)
-    b1, c1 = await svc.get_or_create_from_bytes(
-        b"same", "mp3", "audio/mpeg"
-    )
-    b2, c2 = await svc.get_or_create_from_bytes(
-        b"same", "mp3", "audio/mpeg"
-    )
+    b1, c1 = await svc.get_or_create_from_bytes(b"same", "mp3", "audio/mpeg")
+    b2, c2 = await svc.get_or_create_from_bytes(b"same", "mp3", "audio/mpeg")
     assert c1 is True
     assert c2 is False
     assert b1.id == b2.id
@@ -70,9 +64,7 @@ async def test_release_deletes_s3_when_last_ref(
     await db_session.flush()
     await db_session.refresh(user)
     svc = AudioBlobService(db_session)
-    b, _ = await svc.get_or_create_from_bytes(
-        b"one", "mp3", "audio/mpeg"
-    )
+    b, _ = await svc.get_or_create_from_bytes(b"one", "mp3", "audio/mpeg")
     t = Track(
         title="x",
         file_key=None,
@@ -121,9 +113,7 @@ async def test_two_users_reference_same_blob(
     await db_session.refresh(u1)
     await db_session.refresh(u2)
     svc = AudioBlobService(db_session)
-    b, _ = await svc.get_or_create_from_bytes(
-        b"shared", "mp3", "audio/mpeg"
-    )
+    b, _ = await svc.get_or_create_from_bytes(b"shared", "mp3", "audio/mpeg")
     t1 = Track(
         title="1",
         file_key=None,
@@ -168,9 +158,7 @@ async def test_find_by_source_sha256_and_claim(
     db_session: AsyncSession,
 ) -> None:
     svc = AudioBlobService(db_session)
-    b, _ = await svc.get_or_create_from_bytes(
-        b"src1", "mp3", "audio/mpeg"
-    )
+    b, _ = await svc.get_or_create_from_bytes(b"src1", "mp3", "audio/mpeg")
     src = "1" * 64
     assert await svc.find_by_source_sha256(src) is None
     await svc.claim_source(blob=b, source_sha256=src)
@@ -224,18 +212,13 @@ async def test_attach_pending_tracks_reconciles_after_transcode(
         blob=blob, hls_manifest_key="hls-blobs/ab/abc.../master.m3u8"
     )
 
-    reconciled = await svc.attach_pending_tracks(
-        source_sha256=src, blob=blob
-    )
+    reconciled = await svc.attach_pending_tracks(source_sha256=src, blob=blob)
     assert reconciled == 1
     await db_session.refresh(pending_b)
     assert pending_b.blob_id == blob.id
     assert pending_b.file_key == blob.s3_key
     assert pending_b.processing_status == "active"
-    assert (
-        pending_b.hls_manifest_key
-        == "hls-blobs/ab/abc.../master.m3u8"
-    )
+    assert pending_b.hls_manifest_key == "hls-blobs/ab/abc.../master.m3u8"
 
 
 @patch(
@@ -276,3 +259,87 @@ async def test_two_users_active_on_same_blob_no_unique_violation(
     await svc.attach_playback_blob(t2, b)
     await db_session.refresh(b)
     assert b.ref_count == 2
+
+
+@patch(
+    "app.core.s3.put_cas_audio",
+    new_callable=AsyncMock,
+    side_effect=_put_cas_side,
+)
+async def test_attach_playback_blob_idempotent_when_already_linked(
+    _put: AsyncMock,
+    db_session: AsyncSession,
+) -> None:
+    u = User(telegram_id=5021, username="u", first_name="U")
+    db_session.add(u)
+    await db_session.flush()
+    await db_session.refresh(u)
+    svc = AudioBlobService(db_session)
+    b, _ = await svc.get_or_create_from_bytes(
+        b"idempotent-bytes", "mp3", "audio/mpeg"
+    )
+    t = Track(
+        title="One",
+        file_key=None,
+        uploaded_by_id=u.id,
+        is_active=True,
+    )
+    db_session.add(t)
+    await db_session.flush()
+    await svc.attach_playback_blob(t, b)
+    await db_session.refresh(b)
+    assert b.ref_count == 1
+    await svc.attach_playback_blob(t, b)
+    await db_session.refresh(b)
+    assert b.ref_count == 1
+
+
+@patch("app.core.s3.delete_object", new_callable=AsyncMock)
+@patch(
+    "app.core.s3.put_cas_audio",
+    new_callable=AsyncMock,
+    side_effect=_put_cas_side,
+)
+async def test_release_reconciles_ref_when_counter_below_sibling_tracks(
+    _put: AsyncMock,
+    mock_delete: AsyncMock,
+    db_session: AsyncSession,
+) -> None:
+    """If ref_count drifts low but another Track still points at the blob,
+    releasing one track must not delete storage (duplicate-upload case)."""
+    u = User(telegram_id=5022, username="u", first_name="U")
+    db_session.add(u)
+    await db_session.flush()
+    await db_session.refresh(u)
+    svc = AudioBlobService(db_session)
+    b, _ = await svc.get_or_create_from_bytes(
+        b"drift-bytes", "mp3", "audio/mpeg"
+    )
+    t1 = Track(
+        title="A",
+        file_key=None,
+        uploaded_by_id=u.id,
+        is_active=True,
+    )
+    t2 = Track(
+        title="B",
+        file_key=None,
+        uploaded_by_id=u.id,
+        is_active=True,
+    )
+    db_session.add_all([t1, t2])
+    await db_session.flush()
+    await svc.attach_playback_blob(t1, b)
+    t2.file_key = b.s3_key
+    t2.blob_id = b.id
+    b.ref_count = 1
+    await db_session.flush()
+    await svc.try_release_for_track(t1)
+    await db_session.commit()
+    mock_delete.assert_not_awaited()
+    br = await db_session.get(AudioBlob, b.id)
+    assert br is not None
+    assert br.ref_count == 1
+    t2r = await db_session.get(Track, t2.id)
+    assert t2r is not None
+    assert t2r.blob_id == b.id

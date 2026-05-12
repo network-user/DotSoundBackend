@@ -13,6 +13,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ArtistCatalogReleasePanel } from '@/components/ArtistView/ArtistCatalogReleasePanel'
 import { ArtistCatalogReleasesPanel } from '@/components/ArtistView/ArtistCatalogReleasesPanel'
 import { ArtistTopTracksPanel } from '@/components/ArtistView/ArtistTopTracksPanel'
+import { ProfileShareModal } from '@/components/Profile/ProfileShareModal'
 import { Icon } from '@/components/Icon/Icon'
 import { AmbientStage } from '@/components/ui/AmbientStage'
 import { HorizontalSnap } from '@/components/ui/HorizontalSnap'
@@ -139,6 +140,7 @@ export function ArtistView() {
   const [catalogEditorMounted, setCatalogEditorMounted] =
     useState(false)
   const [myArtistId, setMyArtistId] = useState<number | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
 
   const goBack = useCallback(() => {
     if (window.history.length > 1) {
@@ -474,86 +476,103 @@ export function ArtistView() {
             )}
           </div>
           <div className="rf-artist__actions">
-            <MotionPress
-              variant="primary"
-              haptic="medium"
-              onClick={() => {
-                void handlePlayAll()
-              }}
-              disabled={!tracks || tracks.length === 0}
-            >
-              <Icon name="play" size={16} />
-              <span>{t('redesign.artist.play')}</span>
-            </MotionPress>
+            <div className="rf-artist__actions-cluster">
+              <MotionPress
+                variant="primary"
+                haptic="medium"
+                onClick={() => {
+                  void handlePlayAll()
+                }}
+                disabled={!tracks || tracks.length === 0}
+              >
+                <Icon name="play" size={16} />
+                <span>{t('redesign.artist.play')}</span>
+              </MotionPress>
+              <MotionPress
+                variant="ghost"
+                haptic="selection"
+                onClick={() => {
+                  void handleShuffle()
+                }}
+                disabled={!tracks || tracks.length === 0}
+              >
+                <Icon name="shuffle" size={16} />
+                <span>{t('redesign.artist.shuffle')}</span>
+              </MotionPress>
+              <MotionPress
+                variant={following ? 'primary' : 'ghost'}
+                haptic="selection"
+                onClick={() => {
+                  void handleFollow()
+                }}
+                disabled={followBusy}
+                ariaLabel={
+                  following
+                    ? t('redesign.artist.followingAria')
+                    : t('redesign.artist.followAria')
+                }
+                className="rf-artist__follow-btn"
+                data-active={following ? 'true' : 'false'}
+              >
+                <MorphIcon
+                  name="heart"
+                  size={16}
+                  filled={following}
+                />
+                <span>
+                  {following
+                    ? t('redesign.artist.following')
+                    : t('redesign.artist.follow')}
+                </span>
+              </MotionPress>
+              {isOwnArtist && (
+                <>
+                  <MotionPress
+                    variant="ghost"
+                    haptic="light"
+                    onClick={() => navigate('/upload')}
+                    className="rf-artist__follow-btn"
+                  >
+                    <Icon name="upload" size={16} />
+                    <span>
+                      {t(
+                        'redesign.artist.uploadTrack',
+                        'Загрузить трек',
+                      )}
+                    </span>
+                  </MotionPress>
+                  <MotionPress
+                    variant="ghost"
+                    haptic="light"
+                    onClick={() => navigate('/profile/artist')}
+                    className="rf-artist__follow-btn"
+                  >
+                    <Icon name="edit" size={16} />
+                    <span>
+                      {t(
+                        'artistEdit.title',
+                        'Профиль артиста',
+                      )}
+                    </span>
+                  </MotionPress>
+                </>
+              )}
+            </div>
             <MotionPress
               variant="ghost"
-              haptic="selection"
-              onClick={() => {
-                void handleShuffle()
-              }}
-              disabled={!tracks || tracks.length === 0}
+              haptic="light"
+              onClick={() => setShareOpen(true)}
+              ariaLabel={t(
+                'artist.shareAria',
+                'Поделиться',
+              )}
+              className="rf-artist__follow-btn rf-artist__actions-share"
             >
-              <Icon name="shuffle" size={16} />
-              <span>{t('redesign.artist.shuffle')}</span>
-            </MotionPress>
-            <MotionPress
-              variant={following ? 'primary' : 'ghost'}
-              haptic="selection"
-              onClick={() => {
-                void handleFollow()
-              }}
-              disabled={followBusy}
-              ariaLabel={
-                following
-                  ? t('redesign.artist.followingAria')
-                  : t('redesign.artist.followAria')
-              }
-              className="rf-artist__follow-btn"
-              data-active={following ? 'true' : 'false'}
-            >
-              <MorphIcon
-                name="heart"
-                size={16}
-                filled={following}
-              />
+              <Icon name="share-arrow" size={16} />
               <span>
-                {following
-                  ? t('redesign.artist.following')
-                  : t('redesign.artist.follow')}
+                {t('profile.share.shareNative', 'Поделиться')}
               </span>
             </MotionPress>
-            {isOwnArtist && (
-              <>
-                <MotionPress
-                  variant="ghost"
-                  haptic="light"
-                  onClick={() => navigate('/upload')}
-                  className="rf-artist__follow-btn"
-                >
-                  <Icon name="upload" size={16} />
-                  <span>
-                    {t(
-                      'redesign.artist.uploadTrack',
-                      'Загрузить трек',
-                    )}
-                  </span>
-                </MotionPress>
-                <MotionPress
-                  variant="ghost"
-                  haptic="light"
-                  onClick={() => navigate('/profile/artist')}
-                  className="rf-artist__follow-btn"
-                >
-                  <Icon name="edit" size={16} />
-                  <span>
-                    {t(
-                      'artistEdit.title',
-                      'Профиль артиста',
-                    )}
-                  </span>
-                </MotionPress>
-              </>
-            )}
           </div>
         </div>
       </AmbientStage>
@@ -729,6 +748,13 @@ export function ArtistView() {
             onClose={() => setCatalogEditorOpen(false)}
           />
         </Suspense>
+      )}
+      {Number.isFinite(artistId) && (
+        <ProfileShareModal
+          open={shareOpen}
+          artistId={artistId}
+          onClose={() => setShareOpen(false)}
+        />
       )}
     </section>
   )

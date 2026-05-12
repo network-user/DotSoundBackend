@@ -31,6 +31,7 @@ import { ProfileStats } from '@/components/Profile/ProfileStats'
 import { ListenerStats } from '@/components/Profile/ListenerStats'
 import { ProfileActions } from '@/components/Profile/ProfileActions'
 import { ArtistProfileCard } from '@/components/Profile/ArtistProfileCard'
+import { ProfileUploadCallout } from '@/components/Profile/ProfileUploadCallout'
 import { ProfileTrackList } from '@/components/Profile/ProfileTrackList'
 import { ImportView } from '@/components/Import/ImportView'
 import { NotificationBell } from '@/components/Notifications/NotificationBell'
@@ -506,6 +507,7 @@ export function ProfileView({
               onOpenDislikes={() => goTab('dislikes')}
               onOpenStats={() => goTab('stats')}
             />
+            <ProfileUploadCallout />
             <ProfileTrackList
               tracks={myTracks}
               onPlay={playTrack}

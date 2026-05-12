@@ -137,6 +137,19 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
   } | null>(null)
 
   useEffect(() => {
+    if (!initialDraft) {
+      return
+    }
+    if (!audioFile) {
+      setWizardStep(0)
+      return
+    }
+    setWizardStep(
+      Math.min(3, Math.max(0, initialDraft.stepIndex)),
+    )
+  }, [initialDraft, audioFile])
+
+  useEffect(() => {
     api.getGenres().then(setGenres).catch(() => {})
   }, [])
 
@@ -149,16 +162,21 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
         const display = user.display_name?.trim() ?? ''
         if (!display) {
           setProfileArtistName(null)
-          setArtistMode('custom')
+          if (!initialDraft) {
+            setArtistMode('custom')
+          }
           return
         }
         setProfileArtistName(display)
+        if (initialDraft) {
+          return
+        }
         setArtist(display)
         setArtistQuery(display)
         setArtistMode('profile')
       })
       .catch(() => {})
-  }, [])
+  }, [initialDraft])
 
   const normalizedGenres = useMemo(
     () => new Map(genres.map((g) => [g.toLowerCase(), g])),
@@ -296,8 +314,15 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
         termsAccepted,
         lyricsPlainText: lyrics?.plain_text ?? '',
         lyricsSyncedLines: lyrics?.synced_lines ?? null,
+        audioFileMeta: audioFile
+          ? {
+              name: audioFile.name,
+              size: audioFile.size,
+              lastModified: audioFile.lastModified,
+            }
+          : null,
       })
-    }, 500)
+    }, 250)
     return () => window.clearTimeout(timer)
   }, [
     title,
@@ -311,11 +336,53 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
     lyrics,
     wizardStep,
     uploading,
+    audioFile,
   ])
+
+  function persistDraftAtStep(stepIndex: number) {
+    saveDraft({
+      stepIndex,
+      title,
+      artistMode,
+      artistName: artist,
+      artistQuery,
+      genre,
+      genreQuery,
+      isPublic,
+      termsAccepted,
+      lyricsPlainText: lyrics?.plain_text ?? '',
+      lyricsSyncedLines: lyrics?.synced_lines ?? null,
+      audioFileMeta: audioFile
+        ? {
+            name: audioFile.name,
+            size: audioFile.size,
+            lastModified: audioFile.lastModified,
+          }
+        : null,
+    })
+  }
 
   const applyAudioFile = (file: File) => {
     setError('')
     setAudioFile(file)
+    saveDraft({
+      stepIndex: wizardStep,
+      title,
+      artistMode,
+      artistName: artist,
+      artistQuery,
+      genre,
+      genreQuery,
+      isPublic,
+      termsAccepted,
+      lyricsPlainText: lyrics?.plain_text ?? '',
+      lyricsSyncedLines: lyrics?.synced_lines ?? null,
+      audioFileMeta: {
+        name: file.name,
+        size: file.size,
+        lastModified: file.lastModified,
+      },
+    })
     hapticSelection()
     if (localAudioUrl) URL.revokeObjectURL(localAudioUrl)
     const url = URL.createObjectURL(file)
@@ -483,6 +550,7 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
         setError(t('redesign.upload.file.errorAudioRequired'))
         return
       }
+      persistDraftAtStep(1)
       setWizardStep(1)
       return
     }
@@ -499,17 +567,21 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
         setError(t('redesign.upload.file.errorArtistProfile'))
         return
       }
+      persistDraftAtStep(2)
       setWizardStep(2)
       return
     }
     if (wizardStep === 2) {
+      persistDraftAtStep(3)
       setWizardStep(3)
     }
   }
 
   function handleWizardBack() {
     if (!uploading && wizardStep > 0) {
-      setWizardStep((s) => Math.max(0, s - 1))
+      const next = Math.max(0, wizardStep - 1)
+      persistDraftAtStep(next)
+      setWizardStep(next)
     }
   }
 
@@ -549,7 +621,6 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
     }
 
     if (dupeMatch && !allowDupe) {
-      // user must resolve the duplicate prompt first
       return
     }
 
@@ -613,10 +684,20 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
       }
 
       if (lyrics) {
-        if (lyrics.synced_lines) {
-          await api.saveLyricsSync(uploaded.id, lyrics.synced_lines)
-        } else {
-          await api.saveLyrics(uploaded.id, lyrics.plain_text)
+        let plain = lyrics.plain_text?.trim() ?? ''
+        if (!plain && lyrics.synced_lines?.length) {
+          plain = lyrics.synced_lines
+            .map((l) => l.text)
+            .join('\n')
+        }
+        if (plain) {
+          await api.saveLyrics(uploaded.id, plain)
+        }
+        if (lyrics.synced_lines?.length) {
+          await api.saveLyricsSync(
+            uploaded.id,
+            lyrics.synced_lines,
+          )
         }
       }
       setUploadDone(true)
@@ -624,7 +705,7 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
       showIsland({
         kind: 'toast',
         title: t('redesign.upload.doneToast'),
-        durationMs: 2200,
+        durationMs: 3000,
       })
       hapticNotification('success')
 
@@ -659,6 +740,15 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
     setUploadDone(false)
   }
 
+  const previewLyricsLineCount = useMemo(() => {
+    if (!lyrics?.plain_text?.trim()) {
+      return 0
+    }
+    return lyrics.plain_text
+      .split('\n')
+      .filter((line) => line.trim().length > 0).length
+  }, [lyrics])
+
   const draftArtistLabel =
     artistMode === 'profile'
       ? profileArtistName?.trim() || artist.trim()
@@ -672,6 +762,11 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
           const fullTrack = await api.getTrack(uploadedTrackId)
           setUploadedTrackId(null)
           reset()
+          showIsland({
+            kind: 'toast',
+            title: t('redesign.upload.doneToast'),
+            durationMs: 3000,
+          })
           onSuccess(fullTrack)
         }}
         onUploadAnother={() => {
@@ -808,6 +903,7 @@ export function UploadFileTab({ onSuccess, initialDraft }: Props) {
               artistLabel={draftArtistLabel}
               audioDuration={audioDuration}
               coverPreview={coverPreview}
+              lyricsLineCount={previewLyricsLineCount}
             />
           )}
         </m.div>

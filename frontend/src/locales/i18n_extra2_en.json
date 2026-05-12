@@ -611,6 +611,7 @@
         "termsLink": "upload rules",
         "coverLabel": "Add cover art",
         "previewMissing": "—",
+        "previewLyricsLines": "{{count}} lines of lyrics",
         "progressUploading": "Uploading file…",
         "progressProcessing": "Processing…",
         "errorAudioRequired": "Choose an audio file.",
@@ -868,10 +869,24 @@
         "title": "Daily mix and smart playlists",
         "body": "Your daily mix and themed playlists refresh automatically based on what you play, like and skip. The more you listen, the sharper the picks get."
       },
+      "browser": {
+        "title": "Listen in the browser",
+        "body": "In Chrome, Safari or Edge open DotSound as a website: you can install it to your home screen, keep playback with the screen locked, and control it from notifications. Telegram is great to get started — the browser is better for long listening sessions."
+      },
       "ready": {
         "title": "All set",
         "body": "Start radio on Home and hear everything come together. Settings and a one-tap recommendations reset live in your profile."
       }
+    },
+    "telegramBrowserHint": {
+      "title": "Better in a browser",
+      "body": "In your system browser you can install the app, use the notification player, and keep music playing with the screen locked. We show this reminder once after you have had time to explore.",
+      "open": "Open in browser",
+      "copy": "Copy link",
+      "copied": "Link copied",
+      "copyFail": "Could not copy",
+      "dismiss": "Got it",
+      "dismissAria": "Dismiss reminder"
     },
     "achievements": {},
     "legal": {

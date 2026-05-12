@@ -175,7 +175,48 @@ async def test_get_track_artists(
     assert len(artists) >= 2
 
 
-async def test_list_artist_tracks_primary_billing_only(
+async def test_artist_detail_track_count_matches_list_after_delete(
+    db_session: AsyncSession,
+) -> None:
+    from app.api.v1.artists import _build_artist_detail
+
+    uid = await _make_user(db_session)
+    tid_keep = await _make_track(
+        db_session, title="Keep", owner_id=uid
+    )
+    tid_drop = await _make_track(
+        db_session, title="Drop", owner_id=uid
+    )
+    svc = ArtistService(db_session)
+    first = await svc.resolve_and_link(
+        tid_keep, "ZetaArtistCountSync",
+    )
+    await svc.resolve_and_link(tid_drop, "ZetaArtistCountSync")
+    artist_id = first[0].id
+
+    _, listed_total = await svc.list_artist_tracks(
+        artist_id, page=1, size=20
+    )
+    detail = await _build_artist_detail(db_session, artist_id)
+    assert detail.track_count == listed_total
+
+    await TrackRepository(db_session).delete_by_owner(
+        tid_drop, uid
+    )
+    await db_session.flush()
+
+    _, after_total = await svc.list_artist_tracks(
+        artist_id, page=1, size=20
+    )
+    detail_after = await _build_artist_detail(
+        db_session, artist_id
+    )
+    assert after_total == 1
+    assert detail_after.track_count == 1
+    assert detail_after.track_count == after_total
+
+
+async def test_list_artist_tracks_includes_featured_credits(
     db_session: AsyncSession,
 ) -> None:
     uid = await _make_user(db_session)
@@ -196,9 +237,12 @@ async def test_list_artist_tracks_primary_billing_only(
     tracks_b, total_b = await svc.list_artist_tracks(
         beta_id, page=1, size=20
     )
-    assert total_b == 1
-    assert len(tracks_b) == 1
-    assert tracks_b[0].id == tid_solo
+    assert total_b == 2
+    assert len(tracks_b) == 2
+    assert {t.id for t in tracks_b} == {
+        tid_collab,
+        tid_solo,
+    }
 
     alpha_id = (await svc.get_track_artists(tid_collab))[0].id
     tracks_a, total_a = await svc.list_artist_tracks(

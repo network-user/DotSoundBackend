@@ -6,8 +6,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1.admin.schemas import (
+    ArtistSupplementalBatchImportRequest,
+    ArtistSupplementalBatchImportResponse,
+    ArtistSupplementalBatchPromptRequest,
+    ArtistSupplementalBatchPromptResponse,
+)
 from app.config import settings
-from app.core import s3
 from app.core.rate_limit import limiter
 from app.dependencies import (
     get_current_user,
@@ -15,9 +20,20 @@ from app.dependencies import (
     require_admin,
 )
 from app.models.user import User
-from app.repositories.artist import ArtistRepository
 from app.repositories.artist_follow import (
     ArtistFollowRepository,
+)
+from app.schemas.artist import (
+    ArtistDetailResponse,
+    ArtistListResponse,
+    ArtistResolveResponse,
+    ArtistResponse,
+    ArtistShareCardResponse,
+    ArtistSourceProfileResponse,
+)
+from app.schemas.artist_catalog import (
+    ArtistCatalogReleaseDetailResponse,
+    ArtistCatalogReleaseListResponse,
 )
 from app.schemas.artist_follow import (
     ArtistFollowStatusResponse,
@@ -26,32 +42,12 @@ from app.schemas.artist_follow import (
     FollowedArtistItem,
     FollowedArtistListResponse,
 )
-from app.services.artist_follow_service import (
-    ArtistFollowService,
-)
-from app.services.artist_stats_service import (
-    ArtistStatsService,
-)
-from app.schemas.artist import (
-    ArtistDetailResponse,
-    ArtistListResponse,
-    ArtistResolveResponse,
-    ArtistResponse,
-    ArtistSourceProfileResponse,
-)
-from app.schemas.artist_catalog import (
-    ArtistCatalogReleaseDetailResponse,
-    ArtistCatalogReleaseListResponse,
-)
 from app.schemas.artist_supplemental import ArtistSupplementalResponse
-from app.api.v1.admin.schemas import (
-    ArtistSupplementalBatchImportRequest,
-    ArtistSupplementalBatchImportResponse,
-    ArtistSupplementalBatchPromptRequest,
-    ArtistSupplementalBatchPromptResponse,
-)
 from app.schemas.track import TrackListResponse
 from app.services import artist_enrichment_progress as progress
+from app.services.admin_artist_supplemental_service import (
+    AdminArtistSupplementalService,
+)
 from app.services.artist_catalog_read_service import (
     ArtistCatalogReadService,
 )
@@ -59,9 +55,12 @@ from app.services.artist_enrichment_service import (
     ArtistEnrichmentService,
     ArtistNotFound,
 )
+from app.services.artist_follow_service import (
+    ArtistFollowService,
+)
 from app.services.artist_service import ArtistService
-from app.services.admin_artist_supplemental_service import (
-    AdminArtistSupplementalService,
+from app.services.artist_stats_service import (
+    ArtistStatsService,
 )
 from app.services.track_response_build import dedupe_and_build_track_list
 
@@ -100,8 +99,11 @@ async def _build_artist_detail(
             status_code=404, detail="Artist not found"
         )
 
-    repo = ArtistRepository(session)
-    track_ids = await repo.get_artist_track_ids(artist_id)
+    _, track_total = await svc.list_artist_tracks(
+        artist_id=artist_id,
+        page=1,
+        size=1,
+    )
 
     image_url: str | None = None
     if artist.image_key:
@@ -136,7 +138,7 @@ async def _build_artist_detail(
         enrichment_status=artist.enrichment_status,
         enriched_at=artist.enriched_at,
         created_at=artist.created_at,
-        track_count=len(track_ids),
+        track_count=track_total,
         age=_compute_age(artist.birth_date),
         discography=artist.discography,
         source_profiles=source_profiles,
@@ -262,6 +264,82 @@ async def list_followed_artists(
     ]
     return FollowedArtistListResponse(
         items=items, total=len(items)
+    )
+
+
+@router.get(
+    "/{artist_id}/share-card",
+    response_model=ArtistShareCardResponse,
+    summary="Public share payload for an artist page",
+)
+@limiter.limit("60/minute")
+async def get_artist_share_card(
+    request: Request,
+    artist_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> ArtistShareCardResponse:
+    structlog.contextvars.bind_contextvars(artist_id=artist_id)
+    svc = ArtistService(db)
+    artist = await svc.get_by_id(artist_id)
+    if not artist:
+        raise HTTPException(
+            status_code=404,
+            detail="Artist not found",
+        )
+    _, track_total = await svc.list_artist_tracks(
+        artist_id,
+        page=1,
+        size=1,
+    )
+    top_tracks, _ = await svc.list_artist_tracks(
+        artist_id,
+        page=1,
+        size=3,
+    )
+    top_titles: list[str] = []
+    for tr in top_tracks:
+        title = getattr(tr, "title", None)
+        if title:
+            top_titles.append(str(title))
+
+    image_url: str | None = None
+    if artist.image_key:
+        image_url = (
+            f"/api/v1/tracks/cover_proxy?key={artist.image_key}"
+        )
+
+    mini_app_url = (settings.mini_app_url or "").rstrip("/")
+    bot_username = settings.telegram_bot_username or ""
+    profile_url = (
+        f"{mini_app_url}/artist/{artist_id}"
+        if mini_app_url
+        else f"/artist/{artist_id}"
+    )
+    deep_link = (
+        f"https://t.me/{bot_username}/app?startapp=artist_{artist_id}"
+        if bot_username
+        else None
+    )
+
+    follow_repo = ArtistFollowRepository(db)
+    follower_count = await follow_repo.count_followers(
+        artist_id,
+    )
+    stats_svc = ArtistStatsService(db)
+    monthly_listeners = (
+        await stats_svc.get_current_month_listeners(artist_id)
+    )
+
+    return ArtistShareCardResponse(
+        artist_id=artist_id,
+        display_name=artist.name,
+        image_url=image_url,
+        profile_url=profile_url,
+        deep_link=deep_link,
+        total_tracks=int(track_total or 0),
+        followers_count=int(follower_count or 0),
+        monthly_listeners=int(monthly_listeners or 0),
+        top_track_titles=top_titles,
     )
 
 

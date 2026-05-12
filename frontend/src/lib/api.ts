@@ -9,6 +9,7 @@ import type {
   ArtistCatalogReleaseDetail,
   ArtistCatalogReleaseListPayload,
   ArtistDetail,
+  ArtistShareCardResponse,
   ArtistItemsResponse,
   ArtistFollowToggleResponse,
   ArtistFollowStatusResponse,
@@ -905,6 +906,12 @@ export const api = {
 
   getProfileShareCard(userId: number): Promise<ShareCardResponse> {
     return request(`/api/v1/users/${userId}/share-card`)
+  },
+
+  getArtistShareCard(
+    artistId: number,
+  ): Promise<ArtistShareCardResponse> {
+    return request(`/api/v1/artists/${artistId}/share-card`)
   },
 
   // ── Lyrics ────────────────────────────────────────────────────────────────

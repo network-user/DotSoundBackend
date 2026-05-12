@@ -2009,6 +2009,128 @@ body.ds-perf-lite .queue-eq-bars span {
   background: var(--accent-hover);
 }
 
+.telegram-browser-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(
+    var(--nav-h, 60px) + var(--player-h, 80px) +
+      var(--safe-bottom) + var(--space-3)
+  );
+  transform: translateX(-50%);
+  z-index: var(--z-install);
+  width: min(94vw, 440px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--glass-tint-3);
+  -webkit-backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  backdrop-filter: var(--glass-blur-strong)
+    var(--glass-saturate);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--r-lg);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  animation: toast-enter var(--dur-fast)
+    var(--ease-standard);
+}
+
+.telegram-browser-hint__icon {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--r-md);
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.telegram-browser-hint__body {
+  flex: 1;
+  min-width: min(100%, 200px);
+}
+
+.telegram-browser-hint__title {
+  font-weight: 700;
+  font-size: var(--fs-15);
+  margin-bottom: 4px;
+  line-height: var(--lh-tight);
+}
+
+.telegram-browser-hint__text {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.telegram-browser-hint__copy {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--fs-12);
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.telegram-browser-hint__copy:hover {
+  color: var(--accent-hover);
+}
+
+.telegram-browser-hint__actions {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.telegram-browser-hint__btn {
+  min-height: 38px;
+  padding: 0 var(--space-3);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-13);
+  font-weight: 600;
+}
+
+.telegram-browser-hint__btn--primary {
+  flex: 1 1 auto;
+  min-width: 140px;
+}
+
+.telegram-browser-hint__btn--ghost {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 400px) {
+  .telegram-browser-hint {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .telegram-browser-hint__icon {
+    display: none;
+  }
+  .telegram-browser-hint__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .telegram-browser-hint__btn--primary,
+  .telegram-browser-hint__btn--ghost {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 /* ---------- PWA Onboarding Modal ---------- */
 
 .pwa-onb-overlay {
@@ -2706,7 +2828,8 @@ body.ds-perf-lite .queue-eq-bars span {
 @media (display-mode: standalone) {
   .pwa-onb-overlay,
   .ig-overlay,
-  .install-prompt {
+  .install-prompt,
+  .telegram-browser-hint {
     display: none !important;
   }
 }

@@ -93,7 +93,13 @@
     "myTracksEmptyTitle": "Your tracks will appear here",
     "myTracksEmptyHint": "Upload your first track to see it here",
     "myTracksUpload": "Upload track",
-    "avatarEditHint": "Change profile photo"
+    "avatarEditHint": "Change profile photo",
+    "uploadCallout": {
+      "title": "Upload a track",
+      "body": "Open the upload wizard to add audio, then add your own lyrics and timecodes before publishing.",
+      "ctaUpload": "Open upload",
+      "ctaContinueDraft": "Continue draft"
+    }
   },
   "myTop": {
     "title": "Your Top",

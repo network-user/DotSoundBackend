@@ -280,7 +280,9 @@
       "draftHourAgo": "{{count}} ч. назад",
       "draftRestore": "Восстановить",
       "draftDiscard": "Удалить",
-      "draftAutoSaved": "Черновик сохранён"
+      "draftAutoSaved": "Черновик сохранён",
+      "backToText": "К тексту песни",
+      "undoLastMark": "Отменить последнюю отметку"
     }
   }
 }
