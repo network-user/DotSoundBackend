@@ -16,9 +16,9 @@ import { AppErrorFallback } from '@/components/AppErrorFallback'
 
 class ErrorBoundary extends Component<
   { children: ReactNode; fallback?: ReactNode },
-  { hasError: boolean; resetKey: number }
+  { hasError: boolean }
 > {
-  state = { hasError: false, resetKey: 0 }
+  state = { hasError: false }
   static getDerivedStateFromError() {
     return { hasError: true }
   }
@@ -32,21 +32,14 @@ class ErrorBoundary extends Component<
         this.props.fallback ?? (
           <AppErrorFallback
             variant="crash"
-            onPrimary={() =>
-              this.setState((s) => ({
-                hasError: false,
-                resetKey: s.resetKey + 1,
-              }))
-            }
+            onPrimary={() => {
+              window.location.reload()
+            }}
           />
         )
       )
     }
-    return (
-      <Fragment key={this.state.resetKey}>
-        {this.props.children}
-      </Fragment>
-    )
+    return <Fragment>{this.props.children}</Fragment>
   }
 }
 
@@ -67,10 +60,9 @@ function RouteFallback({
     return (
       <AppErrorFallback
         variant="section"
-        // Reset the timer so the chunk gets more time — avoids a hard reload
-        // that would kill playback. If chunks are truly stale, vite:preloadError
-        // fires first and reloads the page automatically.
-        onPrimary={() => setStuck(false)}
+        onPrimary={() => {
+          window.location.reload()
+        }}
       />
     )
   }

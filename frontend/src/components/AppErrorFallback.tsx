@@ -1,7 +1,6 @@
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
-import { MotionPress } from '@/components/ui/MotionPress'
 
 type Props = {
   variant: 'crash' | 'section'
@@ -42,13 +41,13 @@ export function AppErrorFallback({
           {title}
         </h1>
         <p className="app-issue-panel__hint">{hint}</p>
-        <MotionPress
+        <button
           type="button"
-          variant="primary"
+          className="mp-press mp-press--primary app-issue-panel__btn"
           onClick={onPrimary}
         >
           {action}
-        </MotionPress>
+        </button>
       </div>
     </div>
   )

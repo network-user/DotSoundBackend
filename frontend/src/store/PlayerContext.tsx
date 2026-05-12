@@ -8,7 +8,8 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import Hls from 'hls.js'
+import { loadHlsClass } from '@/lib/hlsLoader'
+import type { HlsPlayer } from '@/lib/hlsLoader'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { showIsland } from '@/lib/island'
@@ -586,7 +587,7 @@ export function PlayerProvider({
 }) {
   const initialEqRef = useRef(_loadEqState())
   const audioRef = useRef<HTMLAudioElement>(null)
-  const hlsRef = useRef<Hls | null>(null)
+  const hlsRef = useRef<HlsPlayer | null>(null)
   const prefetchCacheRef = useRef<{
     forTrackId: number
     tracks: Track[]
@@ -615,7 +616,7 @@ export function PlayerProvider({
   })
   const srcAssignedAtRef = useRef<number>(0)
   const playSessionRef = useRef(0)
-  const preloadHlsRef = useRef<Hls | null>(null)
+  const preloadHlsRef = useRef<HlsPlayer | null>(null)
   const preloadHlsTrackIdRef = useRef<number | null>(
     null,
   )
@@ -1025,7 +1026,8 @@ export function PlayerProvider({
             restoredTrack.id,
           )
 
-          if (Hls.isSupported()) {
+          const HlsMod = await loadHlsClass()
+          if (HlsMod.isSupported()) {
             srcAssignedAtRef.current = Date.now()
             startHlsPlayback(audio, hlsUrl, fallback, false)
               .then(seekAfterLoad)
@@ -1222,13 +1224,14 @@ export function PlayerProvider({
   )
 
   const startHlsPlayback = useCallback(
-    (
+    async (
       audio: HTMLAudioElement,
       sourceUrl: string,
       fallbackUrl?: string,
       autoplay = true,
-    ) =>
-      new Promise<void>((resolve, reject) => {
+    ) => {
+      const Hls = await loadHlsClass()
+      return new Promise<void>((resolve, reject) => {
         const hls = new Hls({
           enableWorker: true,
           startLevel: -1,
@@ -1260,7 +1263,8 @@ export function PlayerProvider({
             )
           }
         })
-      }),
+      })
+    },
     [volume],
   )
 
@@ -1285,54 +1289,54 @@ export function PlayerProvider({
       streamExpiresAtRef.current = stream.expires_in
         ? Date.now() + stream.expires_in * 1000
         : null
-      if (
-        stream.stream_type === 'hls' &&
-        Hls.isSupported()
-      ) {
-        await startHlsPlayback(
-          audio,
-          stream.url,
-          undefined,
-          false,
-        )
-        const afterReady = () => {
-          if (atSec > 0.25) {
-            try {
-              audio.currentTime = atSec
-            } catch {
-              /* */
+      if (stream.stream_type === 'hls') {
+        const HlsMod = await loadHlsClass()
+        if (HlsMod.isSupported()) {
+          await startHlsPlayback(
+            audio,
+            stream.url,
+            undefined,
+            false,
+          )
+          const afterReady = () => {
+            if (atSec > 0.25) {
+              try {
+                audio.currentTime = atSec
+              } catch {
+                /* */
+              }
             }
+            void safePlay(audio)
           }
-          void safePlay(audio)
+          if (audio.readyState >= 2) {
+            afterReady()
+          } else {
+            audio.addEventListener('canplay', afterReady, {
+              once: true,
+            })
+          }
+          return
         }
-        if (audio.readyState >= 2) {
-          afterReady()
-        } else {
-          audio.addEventListener('canplay', afterReady, {
-            once: true,
-          })
+      }
+      audio.crossOrigin = 'anonymous'
+      audio.src = stream.url
+      audio.volume = volume
+      const onReady = () => {
+        if (atSec > 0.25) {
+          try {
+            audio.currentTime = atSec
+          } catch {
+            /* */
+          }
         }
+        void safePlay(audio)
+      }
+      if (audio.readyState >= 2) {
+        onReady()
       } else {
-        audio.crossOrigin = 'anonymous'
-        audio.src = stream.url
-        audio.volume = volume
-        const onReady = () => {
-          if (atSec > 0.25) {
-            try {
-              audio.currentTime = atSec
-            } catch {
-              /* */
-            }
-          }
-          void safePlay(audio)
-        }
-        if (audio.readyState >= 2) {
-          onReady()
-        } else {
-          audio.addEventListener('canplay', onReady, {
-            once: true,
-          })
-        }
+        audio.addEventListener('canplay', onReady, {
+          once: true,
+        })
       }
     },
     [startHlsPlayback, volume],
@@ -1814,9 +1818,10 @@ export function PlayerProvider({
         streamExpiresAtRef.current = stream.expires_in
           ? Date.now() + stream.expires_in * 1000
           : null
+        const HlsMod = await loadHlsClass()
         if (
           stream.stream_type === 'hls' &&
-          Hls.isSupported()
+          HlsMod.isSupported()
         ) {
           await startHlsPlayback(
             audio,
@@ -1857,7 +1862,8 @@ export function PlayerProvider({
         overrideUrl ||
         trackProgressiveAudioUrl(newTrack.id)
 
-      if (Hls.isSupported()) {
+      const HlsMod = await loadHlsClass()
+      if (HlsMod.isSupported()) {
         const preloaded =
           preloadHlsRef.current &&
           preloadHlsTrackIdRef.current ===
@@ -2165,34 +2171,43 @@ export function PlayerProvider({
       _applyPitchPreservation(pa)
       prefetchAudioRef.current = pa
 
-      const canHls =
-        next.is_public &&
-        next.access_mode !== 'third_party_stream' &&
-        Hls.isSupported()
-      if (!canHls) return
+      void (async () => {
+        let HlsMod: Awaited<ReturnType<typeof loadHlsClass>>
+        try {
+          HlsMod = await loadHlsClass()
+        } catch {
+          return
+        }
+        if (cancelled) return
+        const canHls =
+          next.is_public &&
+          next.access_mode !== 'third_party_stream' &&
+          HlsMod.isSupported()
+        if (!canHls) return
 
-      try {
-        const hls = new Hls({
-          enableWorker: true,
-          startLevel: -1,
-          autoStartLoad: true,
-          maxBufferLength: 12,
-        })
-        hls.loadSource(
-          `/api/v1/tracks/${next.id}/hls/master.m3u8`,
-        )
-        const sink = document.createElement('audio')
-        sink.muted = true
-        sink.preload = 'auto'
-        hls.attachMedia(sink)
-        preloadHlsRef.current = hls
-        preloadHlsTrackIdRef.current = next.id
-        hls.on(Hls.Events.ERROR, (_e, d) => {
-          if (d.fatal) teardownPreloadHls()
-        })
-      } catch {
-        teardownPreloadHls()
-      }
+        try {
+          const hls = new HlsMod({
+            enableWorker: true,
+            startLevel: -1,
+            autoStartLoad: true,
+            maxBufferLength: 12,
+          })
+          hls.loadSource(
+            `/api/v1/tracks/${next.id}/hls/master.m3u8`,
+          )
+          const sink = document.createElement('audio')
+          sink.muted = true
+          sink.preload = 'auto'
+          hls.attachMedia(sink)
+          preloadHlsRef.current = hls
+          preloadHlsTrackIdRef.current = next.id
+          hls.on(HlsMod.Events.ERROR, (_e, d) => {
+            if (d.fatal) teardownPreloadHls()
+          })
+        } catch {
+          teardownPreloadHls()
+        }
+      })()
     }
 
     api.getRadio(track.id, 5)

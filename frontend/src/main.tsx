@@ -52,8 +52,32 @@ window.addEventListener('vite:preloadError', () => {
 
 api.restoreSession()
 
-const params = new URLSearchParams(window.location.search)
-const forceUnregisterSw = params.get('nosw') === '1'
+function scheduleServiceWorkerRegistration(): void {
+  if (!import.meta.env.PROD) return
+  if (forceUnregisterSw) return
+  if (!('serviceWorker' in navigator)) return
+  const base = import.meta.env.BASE_URL.replace(/\/?$/, '/')
+  const url = `${base}sw.js`
+  const scope = base
+  const register = () => {
+    void navigator.serviceWorker
+      .register(url, { scope })
+      .catch(() => {})
+  }
+  const delayMs = 4000
+  if (document.readyState === 'complete') {
+    window.setTimeout(register, delayMs)
+  } else {
+    window.addEventListener(
+      'load',
+      () => window.setTimeout(register, delayMs),
+      { once: true },
+    )
+  }
+}
+
+const bootSearch = new URLSearchParams(window.location.search)
+const forceUnregisterSw = bootSearch.get('nosw') === '1'
 
 if (
   (import.meta.env.DEV || forceUnregisterSw) &&
@@ -88,4 +112,5 @@ void i18nReady.then(() => {
       </OfflineErrorBoundary>
     </StrictMode>,
   )
+  scheduleServiceWorkerRegistration()
 })

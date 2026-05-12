@@ -78,7 +78,9 @@
       "minutesCaption": "minutes listened",
       "exportHint": "Coming soon: save to gallery",
       "save": "Save",
-      "share": "Share"
+      "share": "Share",
+      "genreStemDetail": "{{name}} · {{duration}} · {{plays}} plays",
+      "artistStemDetail": "{{name}} · {{duration}} · {{plays}} plays"
     },
     "openSettings": "Settings",
     "uploadTrack": "Upload track",
@@ -104,7 +106,11 @@
     "topGenres": "Top Genres",
     "topTracks": "Top Tracks",
     "hoursByDay": "Minutes by day",
-    "hoursTotal": "Total: {{m}} min"
+    "hoursTotal": "Total: {{m}} min",
+    "dayBarA11y": "{{day}}: {{mins}}",
+    "dayChartHoverHint": "Hover a bar for details",
+    "dayChartTapHint": "Tap a bar for details",
+    "genreRowDetail": "{{genre}} · {{plays}} completed listens"
   },
   "playlists": {
     "title": "Playlists",

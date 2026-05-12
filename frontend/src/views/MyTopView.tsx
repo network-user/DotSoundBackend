@@ -2,13 +2,16 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { TrackList } from '@/components/TrackList/TrackList'
+import { ListeningDayChart } from '@/components/Profile/ListeningDayChart'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { useMatchMedia } from '@/hooks/useMatchMedia'
 import { api } from '@/lib/api'
 import type { Track } from '@/types/api'
 
@@ -32,11 +35,6 @@ interface ApiTopTrack {
   cover_key: string | null
 }
 
-interface DayBucket {
-  date: string
-  minutes: number
-}
-
 const WINDOW_TO_DAYS: Record<
   '7d' | '30d' | '90d' | 'all',
   number
@@ -47,43 +45,22 @@ const WINDOW_TO_DAYS: Record<
   all: 90,
 }
 
-function ListeningHoursChart({
-  buckets,
-}: {
-  buckets: DayBucket[]
-}) {
-  const max = Math.max(1, ...buckets.map((b) => b.minutes))
-  return (
-    <div className="my-top-hours__chart" aria-hidden>
-      {buckets.map((b) => {
-        const pct = Math.round((b.minutes / max) * 100)
-        return (
-          <div
-            key={b.date}
-            className="my-top-hours__bar-wrap"
-            title={`${b.date}: ${b.minutes} мин`}
-          >
-            <div
-              className="my-top-hours__bar"
-              style={{ height: `${Math.max(2, pct)}%` }}
-            />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 export function MyTopView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const coarse = useMatchMedia('(pointer: coarse)')
+  const genreListRef = useRef<HTMLUListElement>(null)
   const [windowKey, setWindowKey] = useState<
     '7d' | '30d' | '90d' | 'all'
   >('30d')
   const [tracks, setTracks] = useState<ApiTopTrack[]>([])
   const [genres, setGenres] = useState<ApiTopGenre[]>([])
-  const [buckets, setBuckets] = useState<DayBucket[]>([])
+  const [buckets, setBuckets] = useState<
+    { date: string; minutes: number }[]
+  >([])
   const [loading, setLoading] = useState(false)
+  const [peekGenre, setPeekGenre] = useState<string | null>(null)
+  const [stickGenre, setStickGenre] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -107,6 +84,24 @@ export function MyTopView() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    setPeekGenre(null)
+    setStickGenre(null)
+  }, [windowKey])
+
+  useEffect(() => {
+    if (!coarse || !stickGenre) return
+    const fn = (ev: PointerEvent) => {
+      if (!genreListRef.current?.contains(ev.target as Node)) {
+        setStickGenre(null)
+      }
+    }
+    document.addEventListener('pointerdown', fn, true)
+    return () => document.removeEventListener('pointerdown', fn, true)
+  }, [coarse, stickGenre])
+
+  const activeGenre = coarse ? stickGenre : stickGenre ?? peekGenre
 
   const trackList = useMemo<Track[]>(
     () =>
@@ -179,7 +174,7 @@ export function MyTopView() {
                   'Минуты прослушивания по дням',
                 )}
               </h2>
-              <ListeningHoursChart buckets={buckets} />
+              <ListeningDayChart buckets={buckets} />
               <div className="my-top-hours__total settings-hint">
                 {t('myTop.hoursTotal', 'Всего: {{m}} мин', {
                   m: buckets.reduce(
@@ -193,11 +188,31 @@ export function MyTopView() {
           {genres.length > 0 ? (
             <section className="my-top-section my-top-genres">
               <h2>{t('myTop.topGenres', 'Топ жанров')}</h2>
-              <ul className="my-top-genres__list">
+              <ul
+                ref={genreListRef}
+                className="my-top-genres__list"
+                onPointerLeave={() => setPeekGenre(null)}
+              >
                 {genres.map((g) => (
                   <li
                     key={g.genre}
-                    className="my-top-genres__item"
+                    className={`my-top-genres__item${
+                      g.genre === activeGenre ? ' is-active' : ''
+                    }${
+                      activeGenre && g.genre !== activeGenre
+                        ? ' is-dimmed'
+                        : ''
+                    }`}
+                    onPointerEnter={() => {
+                      if (!coarse) setPeekGenre(g.genre)
+                    }}
+                    onPointerDown={(ev) => {
+                      if (!coarse) return
+                      ev.preventDefault()
+                      setStickGenre((cur) =>
+                        cur === g.genre ? null : g.genre,
+                      )
+                    }}
                   >
                     <span>{g.genre}</span>
                     <span className="settings-hint">
@@ -206,6 +221,31 @@ export function MyTopView() {
                   </li>
                 ))}
               </ul>
+              {activeGenre ? (
+                <div
+                  className="my-top-genres__callout"
+                  aria-live="polite"
+                >
+                  {(() => {
+                    const g = genres.find(
+                      (x) => x.genre === activeGenre,
+                    )
+                    if (!g) return null
+                    return (
+                      <span>
+                        {t(
+                          'myTop.genreRowDetail',
+                          '{{genre}} · {{plays}} completed listens',
+                          {
+                            genre: g.genre,
+                            plays: g.completed_listens,
+                          },
+                        )}
+                      </span>
+                    )
+                  })()}
+                </div>
+              ) : null}
             </section>
           ) : null}
           {trackList.length > 0 ? (

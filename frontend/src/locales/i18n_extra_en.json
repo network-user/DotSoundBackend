@@ -168,7 +168,11 @@
     "topGenres": "Top genres",
     "topTracks": "Top tracks",
     "hoursByDay": "Minutes listened by day",
-    "hoursTotal": "Total: {{m}} min"
+    "hoursTotal": "Total: {{m}} min",
+    "dayBarA11y": "{{day}}: {{mins}}",
+    "dayChartHoverHint": "Hover a bar for details",
+    "dayChartTapHint": "Tap a bar for details",
+    "genreRowDetail": "{{genre}} · {{plays}} completed listens"
   },
   "trash": {
     "title": "Deleted tracks",

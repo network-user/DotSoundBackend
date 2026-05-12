@@ -1,10 +1,18 @@
-import { useCallback, useEffect, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import { AnimatePresence } from 'framer-motion'
 import { m, useReducedMotion } from '@/lib/motion'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { RecapShareCard } from '@/components/Recap/RecapShareCard'
 import { RECAP_MOCK_COVERS } from '@/components/Recap/recapMock'
+import { ListeningDayChart } from '@/components/Profile/ListeningDayChart'
+import type { ListeningDayBucket } from '@/components/Profile/ListeningDayChart'
+import { useMatchMedia } from '@/hooks/useMatchMedia'
 import { api } from '@/lib/api'
 import { showIsland } from '@/lib/island'
 import { tg } from '@/lib/telegram'
@@ -48,48 +56,27 @@ interface ListeningStats {
   top_genres: { name: string; minutes: number; plays: number }[]
 }
 
-interface DayBucket {
-  date: string
-  minutes: number
-}
-
 interface ApiTopTrack {
   id: number
   cover_key: string | null
 }
 
-function HoursChart({ buckets }: { buckets: DayBucket[] }) {
-  const max = Math.max(1, ...buckets.map((b) => b.minutes))
-  return (
-    <div className="my-top-hours__chart" aria-hidden>
-      {buckets.map((b) => {
-        const pct = Math.round((b.minutes / max) * 100)
-        return (
-          <div
-            key={b.date}
-            className="my-top-hours__bar-wrap"
-            title={`${b.date}: ${b.minutes} мин`}
-          >
-            <div
-              className="my-top-hours__bar"
-              style={{ height: `${Math.max(2, pct)}%` }}
-            />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 export function ProfileStatsTab() {
   const { t } = useTranslation()
   const reduce = useReducedMotion()
+  const coarse = useMatchMedia('(pointer: coarse)')
+  const genreListRef = useRef<HTMLUListElement>(null)
+  const artistListRef = useRef<HTMLUListElement>(null)
   const [period, setPeriod] = useState<7 | 30 | 365>(30)
   const [stats, setStats] = useState<ListeningStats | null>(null)
-  const [buckets, setBuckets] = useState<DayBucket[]>([])
+  const [buckets, setBuckets] = useState<ListeningDayBucket[]>([])
   const [topTracks, setTopTracks] = useState<ApiTopTrack[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [peekGenre, setPeekGenre] = useState<string | null>(null)
+  const [stickGenre, setStickGenre] = useState<string | null>(null)
+  const [peekArtist, setPeekArtist] = useState<string | null>(null)
+  const [stickArtist, setStickArtist] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -105,7 +92,7 @@ export function ProfileStatsTab() {
       setTopTracks(
         (topRes.top_tracks as unknown as ApiTopTrack[]).slice(0, 4),
       )
-      setBuckets((dayRes.buckets as DayBucket[]) ?? [])
+      setBuckets((dayRes.buckets as ListeningDayBucket[]) ?? [])
     } catch {
       setStats(null)
       setTopTracks([])
@@ -118,6 +105,38 @@ export function ProfileStatsTab() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (!coarse || !stickGenre) return
+    const fn = (ev: PointerEvent) => {
+      if (!genreListRef.current?.contains(ev.target as Node)) {
+        setStickGenre(null)
+      }
+    }
+    document.addEventListener('pointerdown', fn, true)
+    return () => document.removeEventListener('pointerdown', fn, true)
+  }, [coarse, stickGenre])
+
+  useEffect(() => {
+    if (!coarse || !stickArtist) return
+    const fn = (ev: PointerEvent) => {
+      if (!artistListRef.current?.contains(ev.target as Node)) {
+        setStickArtist(null)
+      }
+    }
+    document.addEventListener('pointerdown', fn, true)
+    return () => document.removeEventListener('pointerdown', fn, true)
+  }, [coarse, stickArtist])
+
+  useEffect(() => {
+    setPeekGenre(null)
+    setStickGenre(null)
+    setPeekArtist(null)
+    setStickArtist(null)
+  }, [period])
+
+  const activeGenreName = coarse ? stickGenre : stickGenre ?? peekGenre
+  const activeArtistName = coarse ? stickArtist : stickArtist ?? peekArtist
 
   const minutes = stats?.minutes_listened ?? 0
   const genres = stats?.top_genres?.slice(0, 6) ?? []
@@ -239,7 +258,7 @@ export function ProfileStatsTab() {
                   'Минуты прослушивания по дням',
                 )}
               </h2>
-              <HoursChart buckets={buckets} />
+              <ListeningDayChart buckets={buckets} />
             </section>
           )}
 
@@ -251,17 +270,27 @@ export function ProfileStatsTab() {
               </h2>
               <AnimatePresence mode="wait" initial={false}>
                 <m.ul
+                  ref={genreListRef}
                   key={period}
                   className="pst-genre-bars"
                   initial={reduce ? { opacity: 1 } : { opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={reduce ? { opacity: 1 } : { opacity: 0 }}
                   transition={{ duration: 0.18 }}
+                  onPointerLeave={() => setPeekGenre(null)}
                 >
                   {genres.map((g, i) => (
                     <m.li
                       key={g.name}
-                      className="pst-genre-bar"
+                      className={`pst-genre-bar${
+                        g.name === activeGenreName
+                          ? ' is-active'
+                          : ''
+                      }${
+                        activeGenreName && g.name !== activeGenreName
+                          ? ' is-dimmed'
+                          : ''
+                      }`}
                       initial={
                         reduce ? {} : { opacity: 0, x: -6 }
                       }
@@ -269,6 +298,16 @@ export function ProfileStatsTab() {
                       transition={{
                         duration: 0.22,
                         delay: reduce ? 0 : i * 0.04,
+                      }}
+                      onPointerEnter={() => {
+                        if (!coarse) setPeekGenre(g.name)
+                      }}
+                      onPointerDown={(ev) => {
+                        if (!coarse) return
+                        ev.preventDefault()
+                        setStickGenre((cur) =>
+                          cur === g.name ? null : g.name,
+                        )
                       }}
                     >
                       <span className="pst-genre-bar__name">
@@ -295,6 +334,32 @@ export function ProfileStatsTab() {
                   ))}
                 </m.ul>
               </AnimatePresence>
+              {activeGenreName ? (
+                <div
+                  className="pst-interactive-callout"
+                  aria-live="polite"
+                >
+                  {(() => {
+                    const g = genres.find(
+                      (x) => x.name === activeGenreName,
+                    )
+                    if (!g) return null
+                    return (
+                      <span>
+                        {t(
+                          'profile.stats.genreStemDetail',
+                          '{{name}} · {{duration}} · {{plays}} plays',
+                          {
+                            name: g.name,
+                            duration: formatMinutes(g.minutes),
+                            plays: g.plays,
+                          },
+                        )}
+                      </span>
+                    )
+                  })()}
+                </div>
+              ) : null}
             </section>
           )}
 
@@ -304,9 +369,34 @@ export function ProfileStatsTab() {
               <h2 className="pst-section__title">
                 {t('profile.stats.artists', 'Топ исполнители')}
               </h2>
-              <ul className="pst-artist-list">
+              <ul
+                ref={artistListRef}
+                className="pst-artist-list"
+                onPointerLeave={() => setPeekArtist(null)}
+              >
                 {artists.map((a, i) => (
-                  <li key={a.name} className="pst-artist-row">
+                  <li
+                    key={a.name}
+                    className={`pst-artist-row${
+                      a.name === activeArtistName
+                        ? ' is-active'
+                        : ''
+                    }${
+                      activeArtistName && a.name !== activeArtistName
+                        ? ' is-dimmed'
+                        : ''
+                    }`}
+                    onPointerEnter={() => {
+                      if (!coarse) setPeekArtist(a.name)
+                    }}
+                    onPointerDown={(ev) => {
+                      if (!coarse) return
+                      ev.preventDefault()
+                      setStickArtist((cur) =>
+                        cur === a.name ? null : a.name,
+                      )
+                    }}
+                  >
                     <span className="pst-artist-row__rank">
                       {i + 1}
                     </span>
@@ -319,6 +409,32 @@ export function ProfileStatsTab() {
                   </li>
                 ))}
               </ul>
+              {activeArtistName ? (
+                <div
+                  className="pst-interactive-callout"
+                  aria-live="polite"
+                >
+                  {(() => {
+                    const a = artists.find(
+                      (x) => x.name === activeArtistName,
+                    )
+                    if (!a) return null
+                    return (
+                      <span>
+                        {t(
+                          'profile.stats.artistStemDetail',
+                          '{{name}} · {{duration}} · {{plays}} plays',
+                          {
+                            name: a.name,
+                            duration: formatMinutes(a.minutes),
+                            plays: a.plays,
+                          },
+                        )}
+                      </span>
+                    )
+                  })()}
+                </div>
+              ) : null}
             </section>
           )}
 

@@ -168,7 +168,11 @@
     "topGenres": "Топ жанров",
     "topTracks": "Топ треков",
     "hoursByDay": "Минуты прослушивания по дням",
-    "hoursTotal": "Всего: {{m}} мин"
+    "hoursTotal": "Всего: {{m}} мин",
+    "dayBarA11y": "{{day}}: {{mins}}",
+    "dayChartHoverHint": "Наведите на столбец для деталей",
+    "dayChartTapHint": "Нажмите на столбец для деталей",
+    "genreRowDetail": "{{genre}} · {{plays}} завершённых прослушиваний"
   },
   "trash": {
     "title": "Удалённые треки",

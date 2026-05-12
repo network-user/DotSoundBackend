@@ -352,6 +352,19 @@ export function TrackCardSheet({
           return
         }
         setCard(c)
+        if (c.cover_url) {
+          try {
+            const u = new URL(c.cover_url, window.location.origin)
+            const k = u.searchParams.get('key')
+            if (k) {
+              setCoverKey(k)
+              setCoverVer((v) => v + 1)
+              setCoverFailed(false)
+            }
+          } catch {
+            // ignore malformed cover_url
+          }
+        }
       })
       .catch(() => {})
       .finally(() => {

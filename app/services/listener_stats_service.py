@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
 
-import structlog
-from dotsound_private_core.services.listener_stats_policy import (
+import structlogfrom dotsound_private_core.services.listener_stats_policy import (
     credited_listen_seconds,
     is_allowed_period_days,
+    listener_stats_since_utc,
     topic_qualifies_as_top,
 )
 from sqlalchemy import select
@@ -36,11 +35,7 @@ class ListenerStatsService:
     ) -> dict:
         if not is_allowed_period_days(period_days):
             period_days = 30
-        since: datetime | None = None
-        if period_days > 0:
-            since = datetime.now(UTC) - timedelta(
-                days=period_days
-            )
+        since = listener_stats_since_utc(period_days)
 
         rows = await self._listen_repo.get_user_listen_rows_since(
             user_id=user_id, since=since
@@ -102,7 +97,10 @@ class ListenerStatsService:
             )
             out: list[dict] = []
             for name, secs in ranked[:5]:
-                if not topic_qualifies_as_top(plays.get(name, 0)):
+                if not topic_qualifies_as_top(
+                    plays.get(name, 0),
+                    period_days=period_days,
+                ):
                     continue
                 out.append(
                     {

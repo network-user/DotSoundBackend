@@ -47,44 +47,70 @@ function localizeRuBrand(v: unknown): unknown {
   return v
 }
 
-async function loadLocaleBundle(
+async function loadCoreLocale(
   lang: 'ru' | 'en',
 ): Promise<JsonObj> {
   if (lang === 'ru') {
-    const [base, x1, x2, x3] = await Promise.all([
-      import('@/locales/ru.json'),
-      import('@/locales/i18n_extra_ru.json'),
-      import('@/locales/i18n_extra2_ru.json'),
-      import('@/locales/i18n_extra3_ru.json'),
+    const base = await import('@/locales/ru.json')
+    return localizeRuBrand(
+      base.default as unknown as JsonObj,
+    ) as JsonObj
+  }
+  const base = await import('@/locales/en.json')
+  return base.default as unknown as JsonObj
+}
+
+async function mergeExtrasInto(
+  lang: 'ru' | 'en',
+): Promise<void> {
+  try {
+    if (lang === 'ru') {
+      const [x1, x2, x3] = await Promise.all([
+        import('@/locales/i18n_extra_ru.json'),
+        import('@/locales/i18n_extra2_ru.json'),
+        import('@/locales/i18n_extra3_ru.json'),
+      ])
+      const merged = deepMerge(
+        deepMerge(
+          x1.default as unknown as JsonObj,
+          x2.default as unknown as JsonObj,
+        ),
+        x3.default as unknown as JsonObj,
+      )
+      const localized = localizeRuBrand(
+        merged,
+      ) as JsonObj
+      i18n.addResourceBundle(
+        'ru',
+        'translation',
+        localized,
+        true,
+        true,
+      )
+      return
+    }
+    const [x1, x2, x3] = await Promise.all([
+      import('@/locales/i18n_extra_en.json'),
+      import('@/locales/i18n_extra2_en.json'),
+      import('@/locales/i18n_extra3_en.json'),
     ])
     const merged = deepMerge(
       deepMerge(
-        deepMerge(
-          base.default as unknown as JsonObj,
-          x1.default as unknown as JsonObj,
-        ),
+        x1.default as unknown as JsonObj,
         x2.default as unknown as JsonObj,
       ),
       x3.default as unknown as JsonObj,
     )
-    return localizeRuBrand(merged) as JsonObj
+    i18n.addResourceBundle(
+      'en',
+      'translation',
+      merged,
+      true,
+      true,
+    )
+  } catch {
+    /* ignore */
   }
-  const [base, x1, x2, x3] = await Promise.all([
-    import('@/locales/en.json'),
-    import('@/locales/i18n_extra_en.json'),
-    import('@/locales/i18n_extra2_en.json'),
-    import('@/locales/i18n_extra3_en.json'),
-  ])
-  return deepMerge(
-    deepMerge(
-      deepMerge(
-        base.default as unknown as JsonObj,
-        x1.default as unknown as JsonObj,
-      ),
-      x2.default as unknown as JsonObj,
-    ),
-    x3.default as unknown as JsonObj,
-  )
 }
 
 const loadedLocales = new Set<string>()
@@ -94,15 +120,16 @@ async function ensureLocale(lang: string): Promise<void> {
     ? 'ru'
     : 'en'
   if (loadedLocales.has(normalized)) return
-  const bundle = await loadLocaleBundle(normalized)
+  const core = await loadCoreLocale(normalized)
   i18n.addResourceBundle(
     normalized,
     'translation',
-    bundle,
+    core,
     true,
     true,
   )
   loadedLocales.add(normalized)
+  void mergeExtrasInto(normalized)
 }
 
 function getTelegramLanguage(): string | undefined {
@@ -144,7 +171,7 @@ function detectInitialLanguage(): 'ru' | 'en' {
 const initialLang = detectInitialLanguage()
 
 export const i18nReady: Promise<typeof i18n> =
-  loadLocaleBundle(initialLang).then(async (bundle) => {
+  loadCoreLocale(initialLang).then(async (bundle) => {
     loadedLocales.add(initialLang)
     await i18n
       .use(detector)
@@ -171,6 +198,7 @@ export const i18nReady: Promise<typeof i18n> =
     i18n.on('languageChanged', (lng) => {
       void ensureLocale(lng)
     })
+    void mergeExtrasInto(initialLang)
     return i18n
   })
 

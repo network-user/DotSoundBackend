@@ -711,6 +711,8 @@ export function SettingsSheet({
               </MotionPress>
             )}
 
+            <div className="settings-section-gap--xl" />
+
             {/* ── Аккаунт ──────────────────────────────── */}
             <div className="settings-section-header">
               {t('settings.sectionAccount', {
@@ -756,6 +758,8 @@ export function SettingsSheet({
                 v0.1.0
               </span>
             </MotionPress>
+
+            <div className="settings-section-gap--xl" />
 
             <MotionPress
               type="button"

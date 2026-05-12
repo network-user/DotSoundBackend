@@ -39,6 +39,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       includeAssets: [
         'icon-192.svg',
         'icon-512.svg',
@@ -123,7 +124,10 @@ export default defineConfig({
         globPatterns: [
           '**/*.{js,css,html,svg,woff2}',
         ],
-        globIgnores: ['**/secure/**'],
+        globIgnores: [
+          '**/secure/**',
+          '**/assets/hls-*.js',
+        ],
         runtimeCaching: [
           {
             urlPattern: /^https?:\/\/.*\/api\/v1\/tracks\/cover_proxy/,
@@ -259,10 +263,13 @@ export default defineConfig({
     outDir: '../app/static/mini_app',
     emptyOutDir: true,
     modulePreload: {
-      polyfill: true,
+      polyfill: false,
       resolveDependencies: (_filename, deps) =>
         deps.filter(
-          (d) => !d.includes('admin-bundle'),
+          (d) =>
+            !d.includes('admin-bundle') &&
+            !d.includes('/hls-') &&
+            !d.includes('\\hls-'),
         ),
     },
     rollupOptions: {

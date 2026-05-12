@@ -178,6 +178,10 @@ Backend (file_validator.py):
   `app/services/lyrics_cascade.py`,
   `app/services/lyrics_worker.py`,
   `app/services/asr_speechkit_adapter.py`.
+- `services/listener_stats_policy.py` -- допустимые периоды
+  личной статистики (`period_days`), порог топа по периоду,
+  нижняя граница времени для агрегатов (календарные сутки для
+  `period_days=1`). Используется в `app/services/listener_stats_service.py`.
 - `services/network_policy.py` -- CIDR validation + IP-in-CIDR
   helper. Питает `app/middlewares/internal_api_allowlist.py` и
   per-worker IP allowlist в

@@ -45,9 +45,14 @@ class CardService:
                     cover_key=album.cover_key,
                 )
 
+        cover_key = track.cover_key
+        if not cover_key and album_info and album_info.cover_key:
+            cover_key = album_info.cover_key
         cover_url = None
-        if track.cover_key:
-            cover_url = f"/api/v1/tracks/cover_proxy?key={quote(track.cover_key, safe='')}"
+        if cover_key:
+            cover_url = (
+                f"/api/v1/tracks/cover_proxy?key={quote(cover_key, safe='')}"
+            )
 
         logger.debug("card_built", track_id=track_id)
         enriched = await build_track_response(self._session, track)

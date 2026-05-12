@@ -18,6 +18,7 @@ interface ListenerStats {
 }
 
 const PROFILE_TODAY_PERIOD_DAYS = 1
+const PROFILE_LISTEN_SPARKLINE_DAYS = 7
 
 function formatMinutes(min: number): string {
   if (min < 60) return `${min} мин`
@@ -51,7 +52,7 @@ export function ListenerStats() {
         }
       })
     api
-      .getMyListeningByDay(PROFILE_TODAY_PERIOD_DAYS)
+      .getMyListeningByDay(PROFILE_LISTEN_SPARKLINE_DAYS)
       .then((res) => {
         if (cancelled) return
         const pts: SparklinePoint[] = (res.buckets || []).map(

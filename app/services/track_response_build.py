@@ -4,9 +4,14 @@ import asyncio
 from datetime import datetime
 from urllib.parse import quote
 
+from dotsound_private_core.services.playback_variant_policy import (
+    catalog_rank,
+    external_platform_rank,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
+from app.repositories.album import AlbumRepository
 from app.repositories.artist import ArtistRepository
 from app.repositories.lyrics import LyricsRepository
 from app.repositories.signal import ListenEventRepository
@@ -19,6 +24,22 @@ from app.schemas.track import (
 from app.services.playback_variant_service import PlaybackVariantService
 
 
+def _pick_display_cover_key(rows: list[Track]) -> str | None:
+    with_cover = [r for r in rows if r.cover_key]
+    if not with_cover:
+        return None
+    chosen = sorted(
+        with_cover,
+        key=lambda t: (
+            catalog_rank(t.catalog_type),
+            external_platform_rank(t.source_platform),
+            -(t.play_count or 0),
+            t.id,
+        ),
+    )[0]
+    return chosen.cover_key
+
+
 def _artist_briefs(
     rows: list[tuple],
 ) -> list[TrackArtistBrief]:
@@ -28,7 +49,8 @@ def _artist_briefs(
             name=artist.name,
             role=role,
             image_url=(
-                f"/api/v1/tracks/cover_proxy?key={quote(artist.image_key, safe='')}"
+                "/api/v1/tracks/cover_proxy"
+                f"?key={quote(artist.image_key, safe='')}"
                 if artist.image_key
                 else None
             ),
@@ -73,47 +95,64 @@ async def build_track_response(
     base = TrackResponse.model_validate(track)
     pvs = PlaybackVariantService(session)
     ids = await pvs.resolve_variant_track_ids(track)
-    enriched: TrackResponse
-    if len(ids) <= 1:
-        enriched = base
-    else:
-        rows = await TrackRepository(session).get_by_ids_preserve_order(
+    variant_rows: list[Track] | None = None
+    if len(ids) > 1:
+        variant_rows = await TrackRepository(
+            session
+        ).get_by_ids_preserve_order(
             ids,
         )
-        active = [r for r in rows if r.is_active and r.is_public]
-        if len(active) <= 1:
-            enriched = base
-        else:
-            primary = pvs.pick_primary_track(active)
-            briefs: list[TrackPlaybackVariantBrief] = []
-            for r in sorted(
-                active,
-                key=lambda x: (
-                    x.catalog_type,
-                    (x.source_platform or ""),
-                    x.id,
-                ),
-            ):
-                briefs.append(
-                    TrackPlaybackVariantBrief(
-                        track_id=r.id,
-                        source=r.source,
-                        catalog_type=r.catalog_type,
-                        source_platform=r.source_platform,
-                        source_name=r.source_name,
-                        is_primary_for_display=(r.id == primary.id),
-                    )
+    active: list[Track] = []
+    if variant_rows is not None:
+        active = [r for r in variant_rows if r.is_active and r.is_public]
+
+    enriched: TrackResponse
+    if not active or len(active) <= 1:
+        enriched = base
+    else:
+        primary = pvs.pick_primary_track(active)
+        briefs: list[TrackPlaybackVariantBrief] = []
+        for r in sorted(
+            active,
+            key=lambda x: (
+                x.catalog_type,
+                (x.source_platform or ""),
+                x.id,
+            ),
+        ):
+            briefs.append(
+                TrackPlaybackVariantBrief(
+                    track_id=r.id,
+                    source=r.source,
+                    catalog_type=r.catalog_type,
+                    source_platform=r.source_platform,
+                    source_name=r.source_name,
+                    is_primary_for_display=(r.id == primary.id),
                 )
-            enriched = base.model_copy(
-                update={"playback_variants": briefs},
+            )
+        enriched = base.model_copy(
+            update={"playback_variants": briefs},
+        )
+
+    if not enriched.cover_key and active:
+        borrowed = _pick_display_cover_key(active)
+        if borrowed:
+            enriched = enriched.model_copy(update={"cover_key": borrowed})
+    if not enriched.cover_key and track.album_id is not None:
+        album = await AlbumRepository(session).get_by_id(
+            int(track.album_id),
+        )
+        if album and album.cover_key:
+            enriched = enriched.model_copy(
+                update={"cover_key": album.cover_key},
             )
 
     if preloaded_artists is not None:
         artist_rows = preloaded_artists
     else:
-        artist_rows = await ArtistRepository(session).get_track_artists_with_roles(
-            int(enriched.id)
-        )
+        artist_rows = await ArtistRepository(
+            session
+        ).get_track_artists_with_roles(int(enriched.id))
     enriched = enriched.model_copy(
         update={"track_artists": _artist_briefs(artist_rows)}
     )
@@ -129,9 +168,7 @@ async def build_track_response(
     ).has_nonempty_plain_text(int(enriched.id))
     result = enriched.model_copy(update={"has_lyrics": has_l})
     if viewer_id is not None:
-        result = await _apply_resume_position(
-            session, result, viewer_id
-        )
+        result = await _apply_resume_position(session, result, viewer_id)
     return result
 
 
@@ -145,9 +182,9 @@ async def build_track_responses(
         return []
 
     track_ids = [t.id for t in tracks]
-    artists_by_track = await ArtistRepository(session).get_tracks_artists_with_roles_batch(
-        track_ids
-    )
+    artists_by_track = await ArtistRepository(
+        session
+    ).get_tracks_artists_with_roles_batch(track_ids)
 
     results = await asyncio.gather(
         *[
@@ -169,9 +206,9 @@ async def build_track_responses(
 
     if viewer_id is not None and final:
         resp_ids = [int(r.id) for r in final]
-        positions = await ListenEventRepository(session).latest_resume_position(
-            viewer_id, resp_ids
-        )
+        positions = await ListenEventRepository(
+            session
+        ).latest_resume_position(viewer_id, resp_ids)
         if positions:
             final = [
                 r.model_copy(

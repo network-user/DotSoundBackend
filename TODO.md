@@ -14,6 +14,13 @@
 
 ---
 
+## Track covers display (2026-05-12)
+
+- [x] **Карточка трека / лента**: `cover_key` в ответах подставляется из
+  варианта группы (если у primary пусто) и с альбома; `GET .../card` и sheet
+  подхватывают `cover_url`. Тесты: `test_track_response_build`,
+  `test_get_card_falls_back_to_album_cover`.
+
 ## Mini App mobile load (2026-05-12)
 
 - [x] **Чёрный экран / долгая «загрузка» в Telegram WebView**
@@ -21,10 +28,44 @@
   в течение 30 мин отключало и fallback 8 с (`done` уже true), React при
   `!isInitialized` возвращал `null` — оставался пустой `#root` на время
   загрузки бандла/i18n. `frontend/index.html`: без раннего hide, fallback
-  120 с. `App.tsx`: splash при инициализации всегда. Скрипт Telegram
-  перенесён в конец head с `defer`. Сборка обновляет `app/static/mini_app/`.
+  120 с. `App.tsx`: splash при инициализации всегда. Скрипт Telegram в head
+  до entry (см. также пункт «Мобильный WebView»). Сборка обновляет
+  `app/static/mini_app/`.
+
+- [x] **Ускорение холодного старта на телефоне**
+  — `hls.js` (~520 KB) только по `import()` при первом HLS (`hlsLoader.ts`,
+  `PlayerContext`). `modulepreload` без hls; Workbox precache без
+  `assets/hls-*.js` (~−500 KiB precache). i18n: первый кадр после одного
+  чанка `ru.json`/`en.json`, три `i18n_extra*` подмешиваются в фоне.
+
+- [x] **Экран ошибки App / daily-mix: кнопка не срабатывала**
+  — `app-issue-overlay` z-index ниже части fixed UI (sheets до 10050);
+  кнопка через `MotionPress`/portal на touch не доходила. Поднят z-index
+  до 10060, нативная `button` + классы `mp-press`. Crash-boundary и
+  fallback ленивого маршрута: `window.location.reload()` вместо no-op.
+
+- [x] **Мобильный WebView: «не грузится вообще»**
+  — `telegram-web-app.js` снова подключается **синхронно** в head (до entry
+  module), плюс `dns-prefetch`/`preconnect` на telegram.org. Регистрация SW
+  убрана из HTML (`injectRegister: false`), перенесена в `main.tsx` с
+  задержкой ~4 с после `load`, чтобы не конкурировать с первой загрузкой
+  JS/CSS. `modulePreload.polyfill: false` (меньше сюрпризов в WKWebView).
 
 ## Profile / My Top polish (2026-05-12)
+
+- [x] **«Ваше прослушивание» в профиле: реально за сегодня (UTC), не 30 дней**
+  — `period_days=1` не входил в `ALLOWED_PERIOD_DAYS` в PrivateCore,
+  бэкенд тихо подменял период на 30. Добавлен день `1`, граница
+  `listener_stats_since_utc` (полночь UTC для одного дня), порог
+  топа за день — 1 событие. Sparkline в `ListenerStats` берёт 7 дней.
+  Тесты: `tests/.../test_listener_stats_policy.py` (PrivateCore).
+
+- [x] **Интерактивные графики «Минуты по дням» + строки жанров/артистов**
+  — `ListeningDayChart`: hover (fine pointer) / tap (coarse) с подсветкой
+  столбца и строкой деталей; dim остальных. `ProfileStatsTab`: те же
+  паттерны для баров жанров и списка артистов + callout с минутами и
+  `plays`. `MyTopView`: общий дневной график + интерактивный список жанров.
+  Стили в `global.css`, строки `myTop.*` / `profile.stats.*` в локалях.
 
 - [x] **Профиль + «Ваш топ» + экран артиста: UI/UX доводка под монохром**
   — `MyTopView`: добавлена кнопка «назад в профиль», увеличены отступы
@@ -36,6 +77,14 @@
   приведены к нейтральной палитре. Backend `artist_service.py`:
   улучшен текст 409-конфликта имени артиста. Тесты:
   `tests/app/api/v1/test_artists_me.py` (новый кейс 409 при занятом имени).
+
+- [x] **Артист: аватар через cover_proxy + CTA загрузки трека**
+  — Ключи `artist-avatars/*` не проходили `GET /tracks/cover_proxy`; фронт
+  ссылался на несуществующий `/api/v1/files/cover`. Исправлено: префикс в
+  `discovery.py`, общий `coverProxyUrl`, обновление `image_key` после POST
+  аватара, кнопки «Загрузить трек» на экране редактирования и на своей
+  странице артиста, финальный блок текста/кнопок. Тест:
+  `test_cover_proxy_accepts_artist_avatars_prefix`.
 
 ## Mobile player UX (2026-05-12)
 
