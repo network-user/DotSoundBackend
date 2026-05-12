@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   Component,
+  type ComponentType,
   type ReactNode,
   type ErrorInfo,
 } from 'react'
@@ -126,40 +127,51 @@ import {
 import { useLikes } from '@/store/LikesContext'
 import { useUploadQueueAutoResume } from '@/lib/uploadQueueAutoResume'
 
-const SearchView = lazy(() => import('@/views/SearchView').then(m => ({ default: m.SearchView })))
-const UploadView = lazy(() => import('@/views/UploadView').then(m => ({ default: m.UploadView })))
-const TrackEditView = lazy(() => import('@/views/TrackEditView').then(m => ({ default: m.TrackEditView })))
-const ArtistProfileEditView = lazy(() => import('@/views/ArtistProfileEditView').then(m => ({ default: m.ArtistProfileEditView })))
-const TrashView = lazy(() => import('@/views/TrashView').then(m => ({ default: m.TrashView })))
-const MyTopView = lazy(() => import('@/views/MyTopView').then(m => ({ default: m.MyTopView })))
-const LibraryView = lazy(() => import('@/views/LibraryView').then(m => ({ default: m.LibraryView })))
+function lazyWithRetry<T extends ComponentType<any>>(
+  fn: () => Promise<{ default: T }>,
+) {
+  return lazy(() =>
+    fn().catch(
+      () =>
+        new Promise<void>((r) => setTimeout(r, 1_000)).then(fn),
+    ),
+  )
+}
+
+const SearchView = lazyWithRetry(() => import('@/views/SearchView').then(m => ({ default: m.SearchView })))
+const UploadView = lazyWithRetry(() => import('@/views/UploadView').then(m => ({ default: m.UploadView })))
+const TrackEditView = lazyWithRetry(() => import('@/views/TrackEditView').then(m => ({ default: m.TrackEditView })))
+const ArtistProfileEditView = lazyWithRetry(() => import('@/views/ArtistProfileEditView').then(m => ({ default: m.ArtistProfileEditView })))
+const TrashView = lazyWithRetry(() => import('@/views/TrashView').then(m => ({ default: m.TrashView })))
+const MyTopView = lazyWithRetry(() => import('@/views/MyTopView').then(m => ({ default: m.MyTopView })))
+const LibraryView = lazyWithRetry(() => import('@/views/LibraryView').then(m => ({ default: m.LibraryView })))
 // [REGULATORY-DISABLED v1] чаты отключены — см. docs/REGULATORY_DISABLED.md
-// const ChatsView = lazy(() => import('@/views/ChatsView').then(m => ({ default: m.ChatsView })))
-// const ChatView = lazy(() => import('@/views/ChatView').then(m => ({ default: m.ChatView })))
-const ProfileView = lazy(() => import('@/views/ProfileView').then(m => ({ default: m.ProfileView })))
-const LegalView = lazy(() => import('@/views/LegalView').then(m => ({ default: m.LegalView })))
-const LegalDocView = lazy(() => import('@/views/LegalDocView').then(m => ({ default: m.LegalDocView })))
-const DailyMixView = lazy(() => import('@/views/DailyMixView').then(m => ({ default: m.DailyMixView })))
-const WeeklyMixView = lazy(() => import('@/views/WeeklyMixView').then(m => ({ default: m.WeeklyMixView })))
-const UserChoiceView = lazy(() => import('@/views/UserChoiceView').then(m => ({ default: m.UserChoiceView })))
-const WeeklyTopView = lazy(() => import('@/views/WeeklyTopView').then(m => ({ default: m.WeeklyTopView })))
-const ForgottenTreasuresView = lazy(() =>
+// const ChatsView = lazyWithRetry(() => import('@/views/ChatsView').then(m => ({ default: m.ChatsView })))
+// const ChatView = lazyWithRetry(() => import('@/views/ChatView').then(m => ({ default: m.ChatView })))
+const ProfileView = lazyWithRetry(() => import('@/views/ProfileView').then(m => ({ default: m.ProfileView })))
+const LegalView = lazyWithRetry(() => import('@/views/LegalView').then(m => ({ default: m.LegalView })))
+const LegalDocView = lazyWithRetry(() => import('@/views/LegalDocView').then(m => ({ default: m.LegalDocView })))
+const DailyMixView = lazyWithRetry(() => import('@/views/DailyMixView').then(m => ({ default: m.DailyMixView })))
+const WeeklyMixView = lazyWithRetry(() => import('@/views/WeeklyMixView').then(m => ({ default: m.WeeklyMixView })))
+const UserChoiceView = lazyWithRetry(() => import('@/views/UserChoiceView').then(m => ({ default: m.UserChoiceView })))
+const WeeklyTopView = lazyWithRetry(() => import('@/views/WeeklyTopView').then(m => ({ default: m.WeeklyTopView })))
+const ForgottenTreasuresView = lazyWithRetry(() =>
   import('@/views/ForgottenTreasuresView').then(m => ({
     default: m.ForgottenTreasuresView,
   })),
 )
-const RadioView = lazy(() => import('@/views/RadioView').then(m => ({ default: m.RadioView })))
-const GenreMixView = lazy(() => import('@/views/GenreMixView').then(m => ({ default: m.GenreMixView })))
-const ArtistStatsView = lazy(() => import('@/views/ArtistStatsView').then(m => ({ default: m.ArtistStatsView })))
-const ArtistView = lazy(() => import('@/views/ArtistView').then(m => ({ default: m.ArtistView })))
-const AlbumView = lazy(() => import('@/views/AlbumView').then(m => ({ default: m.AlbumView })))
-const PlaylistView = lazy(() => import('@/views/PlaylistView').then(m => ({ default: m.PlaylistView })))
-const GenreView = lazy(() => import('@/views/GenreView').then(m => ({ default: m.GenreView })))
-const ExternalTrackView = lazy(() => import('@/views/ExternalTrackView').then(m => ({ default: m.ExternalTrackView })))
-const ExternalAlbumView = lazy(() => import('@/views/ExternalAlbumView').then(m => ({ default: m.ExternalAlbumView })))
-const NowPlayingView = lazy(() => import('@/views/NowPlayingView').then(m => ({ default: m.NowPlayingView })))
-const RecapView = lazy(() => import('@/views/RecapView').then(m => ({ default: m.RecapView })))
-const AdminApp = lazy(() =>
+const RadioView = lazyWithRetry(() => import('@/views/RadioView').then(m => ({ default: m.RadioView })))
+const GenreMixView = lazyWithRetry(() => import('@/views/GenreMixView').then(m => ({ default: m.GenreMixView })))
+const ArtistStatsView = lazyWithRetry(() => import('@/views/ArtistStatsView').then(m => ({ default: m.ArtistStatsView })))
+const ArtistView = lazyWithRetry(() => import('@/views/ArtistView').then(m => ({ default: m.ArtistView })))
+const AlbumView = lazyWithRetry(() => import('@/views/AlbumView').then(m => ({ default: m.AlbumView })))
+const PlaylistView = lazyWithRetry(() => import('@/views/PlaylistView').then(m => ({ default: m.PlaylistView })))
+const GenreView = lazyWithRetry(() => import('@/views/GenreView').then(m => ({ default: m.GenreView })))
+const ExternalTrackView = lazyWithRetry(() => import('@/views/ExternalTrackView').then(m => ({ default: m.ExternalTrackView })))
+const ExternalAlbumView = lazyWithRetry(() => import('@/views/ExternalAlbumView').then(m => ({ default: m.ExternalAlbumView })))
+const NowPlayingView = lazyWithRetry(() => import('@/views/NowPlayingView').then(m => ({ default: m.NowPlayingView })))
+const RecapView = lazyWithRetry(() => import('@/views/RecapView').then(m => ({ default: m.RecapView })))
+const AdminApp = lazyWithRetry(() =>
   import('@/admin/AdminApp').then((m) => ({
     default: m.AdminApp,
   })),

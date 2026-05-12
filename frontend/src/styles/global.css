@@ -5010,6 +5010,13 @@ html.le-lyrics-sync-open body {
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
+.onb-v2-artists-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  padding: 24px 0;
+}
 .onb-v2-artists-loading {
   height: 120px;
   background: linear-gradient(

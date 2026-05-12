@@ -111,7 +111,7 @@ export class OfflineErrorBoundary extends Component<Props, State> {
           >
             Повторить
           </button>
-          {offlineLike && (
+          {offlineLike ? (
             <button
               type="button"
               onClick={this.handleOpenLibrary}
@@ -127,6 +127,23 @@ export class OfflineErrorBoundary extends Component<Props, State> {
               }}
             >
               Открыть оффлайн-библиотеку
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              style={{
+                padding: '10px 16px',
+                borderRadius: '999px',
+                border: 'none',
+                background: '#fff',
+                color: '#000',
+                fontSize: '14px',
+                cursor: 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              Перезагрузить
             </button>
           )}
         </div>

@@ -242,8 +242,37 @@ export function SettingsRoute() {
           emptyHint={t('admin.settings.noFlags')}
         />
       </section>
-      <AiEnrichmentSettings />
-      <BackupsSection />
+      <details className="admin-collapse-card">
+        <summary className="admin-collapse-card__summary">
+          <span className="admin-collapse-card__title">
+            {t(
+              'admin.settings.aiEnrichmentTitle',
+              'AI enrichment',
+            )}
+          </span>
+          <span
+            className="admin-collapse-card__chev"
+            aria-hidden
+          >
+            ▾
+          </span>
+        </summary>
+        <AiEnrichmentSettings />
+      </details>
+      <details className="admin-collapse-card">
+        <summary className="admin-collapse-card__summary">
+          <span className="admin-collapse-card__title">
+            {t('admin.settings.backupsTitle', 'Backups')}
+          </span>
+          <span
+            className="admin-collapse-card__chev"
+            aria-hidden
+          >
+            ▾
+          </span>
+        </summary>
+        <BackupsSection />
+      </details>
     </div>
   )
 }

@@ -166,7 +166,20 @@ export function SecurityRoute() {
           }
         />
       </section>
-      <AntiAbuseSection />
+      <details className="admin-collapse-card">
+        <summary className="admin-collapse-card__summary">
+          <span className="admin-collapse-card__title">
+            Anti-abuse events
+          </span>
+          <span
+            className="admin-collapse-card__chev"
+            aria-hidden
+          >
+            ▾
+          </span>
+        </summary>
+        <AntiAbuseSection />
+      </details>
     </div>
   )
 }

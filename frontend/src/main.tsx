@@ -38,6 +38,13 @@ installViewportListener()
 installOnlineFlush()
 captureBeforeInstallPrompt()
 
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[unhandledRejection]', event.reason)
+})
+window.addEventListener('error', (event) => {
+  if (event.error) console.error('[globalError]', event.error)
+})
+
 api.restoreSession()
 
 const params = new URLSearchParams(window.location.search)

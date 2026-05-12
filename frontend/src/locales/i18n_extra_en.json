@@ -233,7 +233,9 @@
     "artists": {
       "title": "Choose your artists",
       "subtitle": "Optional — you can always follow more later",
-      "cta": "Continue"
+      "cta": "Continue",
+      "searchPlaceholder": "Search artists…",
+      "empty": "No artists found"
     }
   },
   "artistStats": {

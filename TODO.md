@@ -14,6 +14,38 @@
 
 ---
 
+## Artist Follows UX (2026-05-12)
+
+- [x] **Онбординг: шаг выбора артистов**
+  — `OnboardingV2.tsx`: добавлен шаг `'artists'` между `genres` и `swipe`;
+  CSS-классы, API-метод `getOnboardingArtists` и тип `OnboardingArtistItem`
+  уже были готовы. `handleGenresSubmit` больше не вызывает
+  `saveOnboardingPreferences` — вызов перенесён в `handleArtistsSubmit`
+  вместе с реальными `artist_ids`. Результат: при завершении онбординга
+  выбранные артисты добавляются как подписки через `follow_artists_bulk`.
+
+- [x] **Слушатели на карточках поиска/дискавера**
+  — `app/schemas/artist.py`: `monthly_listeners: int = 0` перенесён
+  из `ArtistDetailResponse` в `ArtistResponse` (base).
+  `app/repositories/artist_stats.py`: новый метод
+  `get_latest_listeners_batch(artist_ids)` — возвращает последний
+  снапшот по каждому артисту за один запрос.
+  `app/api/v1/recommendations.py`: discover endpoint заполняет
+  `monthly_listeners` через batch-запрос.
+  Frontend: `ArtistInfo.monthly_listeners?` в `types/api.ts`;
+  `search-artist-pill__listeners` в `global.css`; значение
+  отображается под именем артиста в поиске.
+
+- [x] **Таблица по месяцам в ArtistStatsView**
+  — `frontend/src/views/ArtistStatsView.tsx`: секция
+  `.stats-history-table-section` с таблицей (Месяц / Слушатели /
+  Прослушивания / Лайки / Подписчики) добавлена под графиками.
+  Данные — те же `sortedHistory`, отсортированные от нового к старому.
+  Стили встроены в `ArtistStatsStyles`. i18n ключи добавлены
+  в `i18n_extra_en.json` / `i18n_extra_ru.json`.
+
+---
+
 ## Цензура текстов (2026-05-12)
 
 - [x] **Глобальная цензура запрещённых слов (RF)**

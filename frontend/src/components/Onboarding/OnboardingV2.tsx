@@ -1792,6 +1792,16 @@ function ArtistsStep({
   loading,
 }: ArtistsStepProps) {
   const { t } = useTranslation()
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const filteredArtists = useMemo(() => {
+    if (!searchQuery.trim()) return artists
+    const q = searchQuery.toLowerCase()
+    return artists.filter((a) =>
+      a.name.toLowerCase().includes(q),
+    )
+  }, [artists, searchQuery])
+
   return (
     <>
       <div className="onb-v2-step__hero">
@@ -1806,28 +1816,60 @@ function ArtistsStep({
         {loading ? (
           <div className="onb-v2-artists-loading" />
         ) : (
-          <div className="onboarding-artists-grid">
-            {artists.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                className={
-                  selected.includes(a.id)
-                    ? 'onboarding-artist-card selected'
-                    : 'onboarding-artist-card'
+          <>
+            <div className="onb-v2-genre-search">
+              <Icon name="search" size={15} />
+              <input
+                className="onb-v2-genre-search__input"
+                type="search"
+                enterKeyHint="search"
+                placeholder={t(
+                  'onboarding.artists.searchPlaceholder',
+                )}
+                value={searchQuery}
+                onChange={(e) =>
+                  setSearchQuery(e.target.value)
                 }
-                onClick={() => onToggle(a.id)}
-              >
-                <CoverImage
-                  coverKey={a.image_key}
-                  className="cover-image"
-                />
-                <span className="onboarding-artist-name">
-                  {a.name}
-                </span>
-              </button>
-            ))}
-          </div>
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="onb-v2-genre-search__clear"
+                  onClick={() => setSearchQuery('')}
+                  aria-label="Clear"
+                >
+                  <Icon name="x" size={14} />
+                </button>
+              )}
+            </div>
+            <div className="onboarding-artists-grid">
+              {filteredArtists.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  className={
+                    selected.includes(a.id)
+                      ? 'onboarding-artist-card selected'
+                      : 'onboarding-artist-card'
+                  }
+                  onClick={() => onToggle(a.id)}
+                >
+                  <CoverImage
+                    coverKey={a.image_key}
+                    className="cover-image"
+                  />
+                  <span className="onboarding-artist-name">
+                    {a.name}
+                  </span>
+                </button>
+              ))}
+              {filteredArtists.length === 0 && (
+                <p className="onb-v2-artists-empty">
+                  {t('onboarding.artists.empty')}
+                </p>
+              )}
+            </div>
+          </>
         )}
       </div>
     </>

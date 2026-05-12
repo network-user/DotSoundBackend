@@ -1028,7 +1028,8 @@
 
 .admin-log-row {
   display: grid;
-  grid-template-columns: 80px 120px 1fr;
+  grid-template-columns: 10px 80px 120px 1fr;
+  align-items: baseline;
   gap: var(--space-3);
   padding: 4px var(--space-2);
   border-radius: var(--r-sm);
@@ -1036,10 +1037,13 @@
 }
 
 .admin-log-row--error {
-  background: rgba(255, 69, 58, 0.1);
+  background: color-mix(in srgb, var(--state-error) 10%, transparent);
+}
+.admin-log-row--critical {
+  background: color-mix(in srgb, var(--state-error) 16%, transparent);
 }
 .admin-log-row--warning {
-  background: rgba(255, 204, 0, 0.08);
+  background: color-mix(in srgb, var(--state-warn) 10%, transparent);
 }
 
 .admin-log-ts {
@@ -2374,6 +2378,215 @@
   .admin-outbound__service-row .admin-outbound__service-breaker {
     grid-column: 1 / -1;
   }
+}
+
+/* ── Collapsible card: универсальный <details> для редких секций ── */
+.admin-collapse-card {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.admin-collapse-card__summary {
+  list-style: none;
+  cursor: pointer;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  user-select: none;
+}
+
+.admin-collapse-card__summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-collapse-card__title {
+  font-size: var(--fs-14);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.admin-collapse-card__chev {
+  color: var(--text-muted);
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.admin-collapse-card[open] .admin-collapse-card__chev {
+  transform: rotate(180deg);
+}
+
+.admin-collapse-card > *:not(summary) {
+  border-top: 1px solid var(--border);
+}
+
+/* ── LiveLogStream: popover-фильтры + severity-точки ── */
+.admin-live-log__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  flex-wrap: wrap;
+}
+
+.admin-live-log__search {
+  flex: 1 1 240px;
+  min-width: 200px;
+  max-width: 400px;
+}
+
+.admin-live-log__filters {
+  position: relative;
+}
+
+.admin-live-log__filters-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.admin-live-log__filters-btn.is-active {
+  color: var(--text);
+  background: var(--bg-card-hover);
+}
+
+.admin-live-log__filters-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--text);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-live-log__filters-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 280px;
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-md);
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.admin-live-log__pop-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+}
+
+.admin-live-log__pop-row input,
+.admin-live-log__pop-row select {
+  height: 32px;
+  padding: 0 var(--space-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-13);
+}
+
+.admin-live-log__pop-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.admin-live-log__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-live-log__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.admin-live-log__status-dot.is-on {
+  background: var(--state-ok);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--state-ok) 25%, transparent);
+}
+
+.admin-live-log__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+.admin-live-log__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px 8px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-11);
+  cursor: pointer;
+}
+
+.admin-live-log__chip:hover {
+  background: var(--bg-card-hover);
+  color: var(--text);
+}
+
+.admin-live-log__chip-val {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.admin-log-sev {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.admin-log-sev--error,
+.admin-log-sev--critical {
+  background: var(--state-error);
+}
+
+.admin-log-sev--warning {
+  background: var(--state-warn);
+}
+
+.admin-log-sev--info {
+  background: var(--state-info);
+}
+
+.admin-log-sev--debug {
+  background: var(--text-muted);
 }
 
 /* ── AdminPageNav: sticky chips для быстрой навигации внутри страницы ── */
