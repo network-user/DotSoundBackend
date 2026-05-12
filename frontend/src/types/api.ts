@@ -610,6 +610,7 @@ export interface PrefetchPolicyResponse {
   concurrent_prefetch_limit: number
   skip_third_party_audio_cache: boolean
   lookahead_by_context: Record<string, number>
+  full_download_ahead: number
 }
 
 export interface AcceptedResponse {

@@ -250,7 +250,13 @@
       "autoDetectQueued": "Auto-detection queued. Watch the lyrics panel for results.",
       "autoDetectError": "Could not start auto-detection.",
       "nudgeMinus": "−50ms",
-      "nudgePlus": "+50ms"
+      "nudgePlus": "+50ms",
+      "draftBanner": "Draft ({{age}})",
+      "draftJustNow": "just now",
+      "draftMinAgo": "{{count}} min ago",
+      "draftHourAgo": "{{count}} h ago",
+      "draftRestore": "Restore",
+      "draftDiscard": "Discard"
     }
   }
 }

@@ -17,6 +17,12 @@ import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { looksLikeLrc, parseLrc } from '@/lib/lrc'
+import {
+  saveLyricsDraft,
+  loadLyricsDraft,
+  clearLyricsDraft,
+  type LyricsDraft,
+} from '@/lib/lyricsDraft'
 import type {
   LyricsResponse,
   SyncedLine,
@@ -37,6 +43,20 @@ function msToDisplay(ms: number): string {
   const m = Math.floor(sec / 60)
   const s = (sec % 60).toFixed(1).padStart(4, '0')
   return `${m}:${s}`
+}
+
+function formatDraftAge(
+  savedAt: number,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
+  const diffMs = Date.now() - savedAt
+  const mins = Math.floor(diffMs / 60000)
+  if (mins < 1) return t('lyrics.editor.draftJustNow')
+  if (mins < 60)
+    return t('lyrics.editor.draftMinAgo', { count: mins })
+  return t('lyrics.editor.draftHourAgo', {
+    count: Math.floor(mins / 60),
+  })
 }
 
 export function LyricsEditor({
@@ -66,29 +86,85 @@ export function LyricsEditor({
   >([])
   const [currentLine, setCurrentLine] = useState(0)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(
-    null,
-  )
+  const [error, setError] = useState<string | null>(null)
   const [history, setHistory] = useState<
     { idx: number; prev: number | null }[]
   >([])
-  const [autoDetectStarting, setAutoDetectStarting] = useState(false)
-  const [autoDetectInfo, setAutoDetectInfo] = useState<string | null>(null)
+  const [autoDetectStarting, setAutoDetectStarting] =
+    useState(false)
+  const [autoDetectInfo, setAutoDetectInfo] = useState<
+    string | null
+  >(null)
+  const [draftBanner, setDraftBanner] =
+    useState<LyricsDraft | null>(null)
+
   const listRef = useRef<HTMLDivElement>(null)
   const activeRef = useRef<HTMLDivElement>(null)
   const lrcInputRef = useRef<HTMLInputElement>(null)
+  const autosaveTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null)
+  const hasUserEdited = useRef(false)
+
+  useEffect(() => {
+    if (!trackId) return
+    const draft = loadLyricsDraft(trackId)
+    if (!draft || !draft.plainText.trim()) return
+    const existingText = existingLyrics?.plain_text ?? ''
+    if (draft.plainText !== existingText) {
+      setDraftBanner(draft)
+    }
+  }, [])
+
+  const scheduleAutosave = (
+    text: string,
+    synced: SyncedLine[] | null,
+  ) => {
+    if (!trackId || !hasUserEdited.current) return
+    if (autosaveTimerRef.current)
+      clearTimeout(autosaveTimerRef.current)
+    autosaveTimerRef.current = setTimeout(() => {
+      saveLyricsDraft(trackId, text, synced)
+    }, 800)
+  }
+
+  useEffect(
+    () => () => {
+      if (autosaveTimerRef.current)
+        clearTimeout(autosaveTimerRef.current)
+    },
+    [],
+  )
+
+  const handleTextChange = (
+    e: ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    hasUserEdited.current = true
+    const next = e.target.value
+    setPlainText(next)
+    scheduleAutosave(next, null)
+  }
+
+  const restoreDraft = (draft: LyricsDraft) => {
+    hasUserEdited.current = true
+    setPlainText(draft.plainText)
+    setDraftBanner(null)
+    if (trackId) saveLyricsDraft(trackId, draft.plainText, draft.syncedLines)
+  }
+
+  const discardDraft = () => {
+    if (trackId) clearLyricsDraft(trackId)
+    setDraftBanner(null)
+  }
 
   const enterSync = () => {
     const split = plainText
       .split('\n')
       .filter((l) => l.trim())
     setLines(split)
-    const existing =
-      existingLyrics?.synced_lines ?? []
+    const existing = existingLyrics?.synced_lines ?? []
     setTimecodes(
-      split.map(
-        (_, i) => existing[i]?.time_ms ?? null,
-      ),
+      split.map((_, i) => existing[i]?.time_ms ?? null),
     )
     setCurrentLine(0)
     setHistory([])
@@ -98,13 +174,18 @@ export function LyricsEditor({
   const markCurrent = () => {
     const ms = Math.round(currentTime * 1000)
     const idx = currentLine
-    setHistory((h) => [
-      ...h,
-      { idx, prev: timecodes[idx] },
-    ])
+    hasUserEdited.current = true
+    setHistory((h) => [...h, { idx, prev: timecodes[idx] }])
     setTimecodes((prev) => {
       const next = [...prev]
       next[idx] = ms
+      scheduleAutosave(
+        plainText,
+        lines.map((text, i) => ({
+          time_ms: (i === idx ? ms : prev[i]) ?? 0,
+          text,
+        })),
+      )
       return next
     })
     if (currentLine < lines.length - 1) {
@@ -128,8 +209,7 @@ export function LyricsEditor({
     setCurrentLine(idx)
     if (timecodes[idx] !== null) {
       const pct = duration
-        ? (timecodes[idx]! / 1000 / duration) *
-          100
+        ? (timecodes[idx]! / 1000 / duration) * 100
         : 0
       seek(pct)
     }
@@ -139,10 +219,7 @@ export function LyricsEditor({
     if (!duration) return
     const target = Math.max(
       0,
-      Math.min(
-        duration,
-        currentTime + sec,
-      ),
+      Math.min(duration, currentTime + sec),
     )
     seek((target / duration) * 100)
   }
@@ -192,11 +269,19 @@ export function LyricsEditor({
   }, [step, currentLine, lines.length, history.length])
 
   const nudgeCurrent = (deltaMs: number) => {
+    hasUserEdited.current = true
     setTimecodes((prev) => {
       const next = [...prev]
       const cur = next[currentLine]
       if (cur === null) return prev
       next[currentLine] = Math.max(0, cur + deltaMs)
+      scheduleAutosave(
+        plainText,
+        lines.map((text, i) => ({
+          time_ms: next[i] ?? 0,
+          text,
+        })),
+      )
       return next
     })
   }
@@ -270,6 +355,7 @@ export function LyricsEditor({
         trackId!,
         plainText.trim(),
       )
+      if (trackId) clearLyricsDraft(trackId)
       onSaved(saved)
     } catch {
       setError(t('lyrics.editor.saveError'))
@@ -300,10 +386,8 @@ export function LyricsEditor({
     setSaving(true)
     setError(null)
     try {
-      const saved = await api.saveLyricsSync(
-        trackId!,
-        synced,
-      )
+      const saved = await api.saveLyricsSync(trackId!, synced)
+      if (trackId) clearLyricsDraft(trackId)
       onSaved(saved)
     } catch {
       setError(t('lyrics.editor.saveError'))
@@ -319,6 +403,7 @@ export function LyricsEditor({
       return
     }
     const linesText = result.lines.map((l) => l.text)
+    hasUserEdited.current = true
     setPlainText(linesText.join('\n'))
     setLines(linesText)
     setTimecodes(result.lines.map((l) => l.time_ms))
@@ -340,7 +425,8 @@ export function LyricsEditor({
       }
       importLrcText(raw)
     }
-    reader.onerror = () => setError(t('lyrics.editor.lrcInvalid'))
+    reader.onerror = () =>
+      setError(t('lyrics.editor.lrcInvalid'))
     reader.readAsText(file)
     e.target.value = ''
   }
@@ -390,13 +476,44 @@ export function LyricsEditor({
             <Icon name="x" size={16} />
           </MotionPress>
         </div>
+
+        {draftBanner && (
+          <div className="le-draft-banner">
+            <span className="le-draft-banner__text">
+              {t('lyrics.editor.draftBanner', {
+                age: formatDraftAge(draftBanner.savedAt, t),
+              })}
+            </span>
+            <div className="le-draft-banner__actions">
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
+                className="le-draft-banner__btn le-draft-banner__btn--primary"
+                onClick={() => restoreDraft(draftBanner)}
+              >
+                {t('lyrics.editor.draftRestore')}
+              </MotionPress>
+              <MotionPress
+                type="button"
+                variant="ghost"
+                haptic="light"
+                className="le-draft-banner__btn"
+                onClick={discardDraft}
+              >
+                {t('lyrics.editor.draftDiscard')}
+              </MotionPress>
+            </div>
+          </div>
+        )}
+
         <textarea
           className="form-input le-textarea"
           rows={10}
           maxLength={10000}
           placeholder={t('lyrics.editor.placeholder')}
           value={plainText}
-          onChange={(e) => setPlainText(e.target.value)}
+          onChange={handleTextChange}
           onPaste={handlePasteIntoTextarea}
         />
         {autoDetectInfo && (
@@ -468,9 +585,7 @@ export function LyricsEditor({
     )
   }
 
-  const pct = duration
-    ? (currentTime / duration) * 100
-    : 0
+  const pct = duration ? (currentTime / duration) * 100 : 0
 
   const syncNode = (
     <div
@@ -491,9 +606,7 @@ export function LyricsEditor({
           <Icon name="undo" size={18} />
         </MotionPress>
         <span className="le-fs-time">
-          {msToDisplay(
-            Math.round(currentTime * 1000),
-          )}
+          {msToDisplay(Math.round(currentTime * 1000))}
         </span>
         <MotionPress
           type="button"
@@ -515,9 +628,7 @@ export function LyricsEditor({
           max={100}
           step={0.1}
           value={pct}
-          onChange={(e) =>
-            seek(Number(e.target.value))
-          }
+          onChange={(e) => seek(Number(e.target.value))}
         />
       </div>
 
@@ -564,10 +675,7 @@ export function LyricsEditor({
         </MotionPress>
       </div>
 
-      <div
-        className="le-fs-current"
-        onClick={markCurrent}
-      >
+      <div className="le-fs-current" onClick={markCurrent}>
         <p className="le-fs-current-text">
           {lines[currentLine] || '—'}
         </p>
@@ -608,19 +716,14 @@ export function LyricsEditor({
         </div>
       )}
 
-      <div
-        className="le-fs-list"
-        ref={listRef}
-      >
+      <div className="le-fs-list" ref={listRef}>
         {lines.map((line, i) => (
           <div
             key={i}
-            ref={
-              i === currentLine
-                ? activeRef
-                : null
-            }
-            className={`le-fs-line${i === currentLine ? ' active' : ''}`}
+            ref={i === currentLine ? activeRef : null}
+            className={`le-fs-line${
+              i === currentLine ? ' active' : ''
+            }`}
             onClick={() => jumpTo(i)}
           >
             <span className="le-fs-line-time">
@@ -628,9 +731,7 @@ export function LyricsEditor({
                 ? msToDisplay(timecodes[i]!)
                 : '—'}
             </span>
-            <span className="le-fs-line-text">
-              {line}
-            </span>
+            <span className="le-fs-line-text">{line}</span>
           </div>
         ))}
       </div>
@@ -657,8 +758,7 @@ export function LyricsEditor({
           className="btn-primary le-fs-save-btn"
           onClick={handleSaveSync}
           disabled={
-            saving ||
-            timecodes.every((tc) => tc === null)
+            saving || timecodes.every((tc) => tc === null)
           }
         >
           {t('lyrics.editor.save')}
@@ -667,8 +767,5 @@ export function LyricsEditor({
     </div>
   )
 
-  return createPortal(
-    syncNode,
-    document.body,
-  )
+  return createPortal(syncNode, document.body)
 }

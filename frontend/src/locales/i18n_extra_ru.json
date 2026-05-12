@@ -250,7 +250,13 @@
       "autoDetectQueued": "Распознавание запущено. Следите за панелью текста.",
       "autoDetectError": "Не удалось запустить распознавание.",
       "nudgeMinus": "−50 мс",
-      "nudgePlus": "+50 мс"
+      "nudgePlus": "+50 мс",
+      "draftBanner": "Черновик ({{age}})",
+      "draftJustNow": "только что",
+      "draftMinAgo": "{{count}} мин. назад",
+      "draftHourAgo": "{{count}} ч. назад",
+      "draftRestore": "Восстановить",
+      "draftDiscard": "Удалить"
     }
   }
 }

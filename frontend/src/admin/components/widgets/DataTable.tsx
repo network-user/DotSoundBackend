@@ -14,6 +14,12 @@ interface Props<T> {
   columns: ColumnDef<T>[]
   rows: T[]
   emptyHint?: string
+  emptyTitle?: string
+  emptyIcon?: string
+  isLoading?: boolean
+  loadingRows?: number
+  error?: string | null
+  onRetry?: () => void
   enableSorting?: boolean
 }
 
@@ -23,10 +29,35 @@ function sortIconName(state: false | 'asc' | 'desc'): string | null {
   return null
 }
 
+function SkeletonRows({ count, cols }: { count: number; cols: number }) {
+  return (
+    <>
+      {Array.from({ length: count }).map((_, r) => (
+        <tr key={`sk-${r}`} className="adm-r-table__row admin-table__row--skel">
+          {Array.from({ length: cols }).map((_, c) => (
+            <td
+              key={`sk-${r}-${c}`}
+              className="adm-r-table__cell admin-table__cell--skel"
+            >
+              <span className="admin-skel-bar" aria-hidden />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  )
+}
+
 export function DataTable<T>({
   columns,
   rows,
   emptyHint = 'No data',
+  emptyTitle,
+  emptyIcon = 'empty-staff',
+  isLoading = false,
+  loadingRows = 6,
+  error = null,
+  onRetry,
   enableSorting = false,
 }: Props<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
@@ -39,6 +70,11 @@ export function DataTable<T>({
     getSortedRowModel: enableSorting ? getSortedRowModel() : undefined,
     enableSorting,
   })
+
+  const showLoading = isLoading && rows.length === 0
+  const showError = !!error && rows.length === 0 && !isLoading
+  const showEmpty =
+    !showLoading && !showError && table.getRowModel().rows.length === 0
 
   return (
     <div className="admin-table-wrap adm-r-table-wrap">
@@ -89,13 +125,44 @@ export function DataTable<T>({
           ))}
         </thead>
         <tbody>
-          {table.getRowModel().rows.length === 0 ? (
+          {showLoading ? (
+            <SkeletonRows count={loadingRows} cols={columns.length} />
+          ) : showError ? (
             <tr>
               <td
                 colSpan={columns.length}
-                className="admin-table__empty adm-r-table__empty"
+                className="admin-table__state admin-table__state--error"
               >
-                {emptyHint}
+                <div className="admin-table__state-icon" aria-hidden>
+                  <Icon name="alert-triangle" size={28} />
+                </div>
+                <div className="admin-table__state-text">{error}</div>
+                {onRetry ? (
+                  <MotionPress
+                    type="button"
+                    variant="ghost"
+                    onClick={onRetry}
+                    className="admin-table__state-action"
+                  >
+                    <Icon name="refresh" size={14} />
+                    <span>Retry</span>
+                  </MotionPress>
+                ) : null}
+              </td>
+            </tr>
+          ) : showEmpty ? (
+            <tr>
+              <td
+                colSpan={columns.length}
+                className="admin-table__empty adm-r-table__empty admin-table__state"
+              >
+                <div className="admin-table__state-icon" aria-hidden>
+                  <Icon name={emptyIcon} size={32} />
+                </div>
+                {emptyTitle ? (
+                  <div className="admin-table__state-title">{emptyTitle}</div>
+                ) : null}
+                <div className="admin-table__state-text">{emptyHint}</div>
               </td>
             </tr>
           ) : (

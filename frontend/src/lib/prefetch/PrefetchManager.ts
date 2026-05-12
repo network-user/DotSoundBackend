@@ -31,6 +31,12 @@ import {
   subscribeToNetworkChanges,
   type NetworkSnapshot,
 } from './network'
+
+const _EMPTY_NETWORK: NetworkSnapshot = {
+  effectiveType: null,
+  saveData: false,
+  downlinkMbps: null,
+}
 import {
   dropWarmRecord,
   getStorageQuota,
@@ -171,6 +177,7 @@ export class PrefetchManager {
   private policy: PrefetchPolicySnapshot = DEFAULT_PREFETCH_POLICY
   private policySource: 'default' | 'remote' = 'default'
   private policyAt = 0
+  private currentNetwork: NetworkSnapshot = { ..._EMPTY_NETWORK }
   private semaphore = new FifoSemaphore(
     DEFAULT_PREFETCH_POLICY.concurrentPrefetchLimit,
   )
@@ -609,11 +616,21 @@ export class PrefetchManager {
     return bytes
   }
 
+  private _shouldPreferHiVariant(): boolean {
+    const net = this.currentNetwork
+    if (net.saveData) return false
+    if (net.effectiveType === '4g') return true
+    return net.downlinkMbps !== null && net.downlinkMbps >= 5.0
+  }
+
   private _pickVariant(masterText: string): string | null {
-    for (const v of SEGMENT_VARIANT_PREFERENCE) {
+    const order: readonly string[] = this._shouldPreferHiVariant()
+      ? (['hi', 'lo'] as const)
+      : SEGMENT_VARIANT_PREFERENCE
+    for (const v of order) {
       if (masterText.includes(`${v}/playlist.m3u8`)) return v
     }
-    return SEGMENT_VARIANT_PREFERENCE[0]
+    return order[0] ?? SEGMENT_VARIANT_PREFERENCE[0]
   }
 
   private async _warmProgressivePrefix(
@@ -666,6 +683,7 @@ export class PrefetchManager {
       return
     }
     const network = readNetworkSnapshot()
+    this.currentNetwork = network
     const { quota } = await getStorageQuota()
     try {
       const remote = await this.fetcher({

@@ -88,6 +88,7 @@ export function PrefetchProvider({
               remote.skip_third_party_audio_cache,
             lookaheadByContext:
               remote.lookahead_by_context as PrefetchPolicySnapshot['lookaheadByContext'],
+            fullDownloadAhead: remote.full_download_ahead,
           }
           setPolicy(next)
           return next

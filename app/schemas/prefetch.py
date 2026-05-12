@@ -27,3 +27,12 @@ class PrefetchPolicyResponse(BaseModel):
             "continue_on_app_start, library)."
         ),
     )
+    full_download_ahead: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "How many warmed tracks (per enqueue call) to escalate "
+            "from warm prefix to full offline download. 0 on low "
+            "bandwidth or save-data."
+        ),
+    )

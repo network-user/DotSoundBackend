@@ -3133,6 +3133,42 @@ body.ds-perf-lite .tcs-video-pulse {
   line-height: 1.4;
 }
 
+.le-draft-banner {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: var(--r-md, 12px);
+  background: var(--glass-medium-bg, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.le-draft-banner__text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+}
+.le-draft-banner__actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.le-draft-banner__btn {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  height: auto;
+  min-height: unset;
+}
+.le-draft-banner__btn--primary {
+  background: var(--accent, #3b82f6);
+  border-color: var(--accent, #3b82f6);
+  color: #fff;
+}
+
 .le-fs-nudge {
   display: flex;
   align-items: center;

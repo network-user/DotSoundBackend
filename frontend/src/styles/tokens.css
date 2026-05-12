@@ -151,8 +151,18 @@
   --z-cookie-notice: 170;
   --z-sheet: 180;
   --z-modal: 220;
+  --z-drawer: 230;
   --z-toast: 500;
   --z-install: 175;
+
+  /* Admin scope (read in frontend/src/admin only). The base palette
+   * tokens live in global.css; these are the few admin-only knobs
+   * that were previously hardcoded inline. Monochrome rule still
+   * applies — no new hues here. */
+  --bg-sidebar: #0d0d0d;
+  --state-info: #5e9eff;
+  --ring-focus: rgba(255, 255, 255, 0.55);
+  --admin-tooltip-bg: var(--surface-2);
 }
 
 /* Narrow phones (iPhone SE / Android small): trim chrome a bit so

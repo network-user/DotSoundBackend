@@ -86,4 +86,5 @@ async def get_prefetch_policy(
         concurrent_prefetch_limit=snapshot.concurrent_prefetch_limit,
         skip_third_party_audio_cache=snapshot.skip_third_party_audio_cache,
         lookahead_by_context=dict(snapshot.lookahead_by_context),
+        full_download_ahead=snapshot.full_download_ahead,
     )
