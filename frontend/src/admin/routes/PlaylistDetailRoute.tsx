@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link, useParams } from 'react-router-dom'
 import {
@@ -30,9 +30,10 @@ export function PlaylistDetailRoute() {
   const [orderedTrackIds, setOrderedTrackIds] = useState<number[]>([])
   const [addModal, setAddModal] = useState(false)
   const [addSearch, setAddSearch] = useState('')
-  const [addPage, setAddPage] = useState(1)
-  const [adminFullCatalog, setAdminFullCatalog] =
-    useState(false)
+  const [addResults, setAddResults] = useState<
+    Array<Record<string, unknown>>
+  >([])
+  const [addLoading, setAddLoading] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const detailQuery = useQuery({
@@ -159,50 +160,37 @@ export function PlaylistDetailRoute() {
     }
   }
 
-  const addQuery = useQuery({
-    queryKey: [
-      'admin',
-      'playlists',
-      'pick-track',
-      playlistId,
-      addPage,
-      addSearch,
-      adminFullCatalog,
-      detailQuery.data?.owner_id,
-    ],
-    queryFn: () => {
-      const base = {
-        page: addPage,
-        size: 15,
-        search: addSearch || undefined,
-      } as const
-      if (adminFullCatalog) {
-        return adminApi.listTracks(base)
+  useEffect(() => {
+    if (!addModal) {
+      setAddResults([])
+      return
+    }
+    let cancelled = false
+    setAddLoading(true)
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await adminApi.listTracks({
+          search: addSearch.trim() || undefined,
+          size: 20,
+        })
+        if (cancelled) return
+        const inPl = new Set(orderedTrackIds)
+        setAddResults(
+          res.items.filter(
+            (it) => !inPl.has(it.id as number),
+          ),
+        )
+      } catch {
+        if (!cancelled) setAddResults([])
+      } finally {
+        if (!cancelled) setAddLoading(false)
       }
-      const oid = detailQuery.data?.owner_id
-      if (oid == null) {
-        return adminApi.listTracks(base)
-      }
-      return adminApi.listTracks({
-        ...base,
-        for_playlist_owner_id: oid,
-        playable_only: true,
-      })
-    },
-    enabled:
-      addModal &&
-      (adminFullCatalog ||
-        detailQuery.data?.owner_id != null),
-  })
-
-  const addPickItems = useMemo(() => {
-    const raw = addQuery.data?.items ?? []
-    const inPl = new Set(orderedTrackIds)
-    return raw.filter(
-      (it: Record<string, unknown>) =>
-        !inPl.has(it.id as number),
-    )
-  }, [addQuery.data?.items, orderedTrackIds])
+    }, 300)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [addModal, addSearch, orderedTrackIds])
 
   if (!Number.isFinite(playlistId) || playlistId <= 0) {
     return (
@@ -439,9 +427,7 @@ export function PlaylistDetailRoute() {
           disabled={busy}
           onClick={() => {
             setAddModal(true)
-            setAddPage(1)
             setAddSearch('')
-            setAdminFullCatalog(false)
           }}
         >
           {t('admin.playlists.addTrack')}
@@ -452,111 +438,155 @@ export function PlaylistDetailRoute() {
         <div
           className="admin-modal-overlay"
           onClick={(e) => {
-            if (e.target === e.currentTarget) setAddModal(false)
+            if (e.target === e.currentTarget)
+              setAddModal(false)
           }}
         >
           <div className="admin-modal">
             <h3>{t('admin.playlists.addTrackTitle')}</h3>
-            <div className="admin-toolbar" style={{ marginBottom: 12 }}>
-              <input
-                type="search"
-                placeholder={t('admin.playlists.addTrackSearch')}
-                value={addSearch}
-                onChange={(e) => {
-                  setAddSearch(e.target.value)
-                  setAddPage(1)
-                }}
-              />
-            </div>
-            <label
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                marginBottom: 12,
-                fontSize: 13,
-                cursor: 'pointer',
-              }}
+            <div
+              className="admin-toolbar"
+              style={{ marginBottom: 12 }}
             >
               <input
-                type="checkbox"
-                checked={adminFullCatalog}
-                onChange={(e) => {
-                  setAdminFullCatalog(e.target.checked)
-                  setAddPage(1)
-                }}
+                type="search"
+                placeholder={t(
+                  'admin.playlists.addTrackSearch',
+                )}
+                value={addSearch}
+                autoFocus
+                onChange={(e) =>
+                  setAddSearch(e.target.value)
+                }
               />
-              {t('admin.playlists.addTrackFullCatalog')}
-            </label>
+            </div>
             <ul
               style={{
                 listStyle: 'none',
                 margin: 0,
                 padding: 0,
-                maxHeight: 320,
-                overflow: 'auto',
+                maxHeight: 360,
+                overflowY: 'auto',
               }}
             >
-              {addPickItems.map(
-                (it: Record<string, unknown>) => {
-                  const id = it.id as number
-                  const ttl = String(it.title ?? '')
-                  const art = it.artist as string | null
-                  return (
-                    <li key={id} style={{ marginBottom: 6 }}>
-                      <MotionPress
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => void handleAddTrack(id)}
+              {addResults.map((it) => {
+                const id = it.id as number
+                const ttl = String(it.title ?? '')
+                const art = it.artist as
+                  | string
+                  | null
+                  | undefined
+                const ck = it.cover_key as
+                  | string
+                  | null
+                  | undefined
+                const coverUrl = ck
+                  ? `/api/v1/tracks/cover_proxy?key=${encodeURIComponent(ck)}`
+                  : null
+                return (
+                  <li
+                    key={id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '5px 2px',
+                      borderBottom:
+                        '1px solid var(--border)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: 6,
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        background: 'var(--surface)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {coverUrl ? (
+                        <img
+                          src={coverUrl}
+                          alt=""
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            display: 'block',
+                          }}
+                        />
+                      ) : (
+                        <Icon name="music" size={18} />
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        flex: 1,
+                        overflow: 'hidden',
+                        minWidth: 0,
+                      }}
+                    >
+                      <div
                         style={{
-                          width: '100%',
-                          justifyContent: 'flex-start',
+                          fontSize: 14,
+                          fontWeight: 500,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
                         }}
                       >
                         {ttl}
-                        {art ? ` — ${art}` : ''}{' '}
-                        <span
+                      </div>
+                      {art && (
+                        <div
                           style={{
+                            fontSize: 12,
                             color: 'var(--text-secondary)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          #{id}
-                        </span>
-                      </MotionPress>
-                    </li>
-                  )
-                },
-              )}
+                          {art}
+                        </div>
+                      )}
+                    </div>
+                    <MotionPress
+                      variant="ghost"
+                      disabled={busy}
+                      style={{ flexShrink: 0, fontSize: 13 }}
+                      onClick={() =>
+                        void handleAddTrack(id)
+                      }
+                    >
+                      {t('admin.playlists.addTrack')}
+                    </MotionPress>
+                  </li>
+                )
+              })}
             </ul>
-            {addPickItems.length === 0 && !addQuery.isLoading && (
+            {addResults.length === 0 && !addLoading && (
               <p
                 className="admin-card__sub"
-                style={{ marginBottom: 12 }}
+                style={{ margin: '12px 0 4px' }}
               >
-                {t('admin.playlists.addTrackAllInPlaylist')}
+                {t(
+                  'admin.playlists.addTrackAllInPlaylist',
+                )}
               </p>
             )}
-            <div className="admin-pagination">
-              <MotionPress
-                variant="ghost"
-                disabled={addPage <= 1}
-                onClick={() =>
-                  setAddPage((p) => Math.max(1, p - 1))
-                }
+            {addLoading && (
+              <p
+                className="admin-card__sub"
+                style={{ margin: '12px 0 4px' }}
               >
-                {t('admin.common.prev')}
-              </MotionPress>
-              <MotionPress
-                variant="ghost"
-                disabled={
-                  !addQuery.data ||
-                  (addQuery.data.items?.length ?? 0) < 15
-                }
-                onClick={() => setAddPage((p) => p + 1)}
-              >
-                {t('admin.common.next')}
-              </MotionPress>
-            </div>
+                …
+              </p>
+            )}
           </div>
         </div>
       )}
