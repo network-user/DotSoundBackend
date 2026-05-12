@@ -288,8 +288,7 @@ export function TracksRoute() {
     const ok = await showConfirm(
       t(
         'admin.tracks.confirmHardDelete',
-        'Удалить трек "{{title}}" (#{{id}}) безвозвратно? ' +
-          'Файлы из S3 и индекс будут удалены немедленно.',
+        t('admin.tracks.confirmDeleteHard'),
         { id, title },
       ),
       { danger: true },
@@ -355,7 +354,7 @@ export function TracksRoute() {
 
   const handleFullRestorePlayback = async (id: number) => {
     const ok = await showConfirm(
-      'Полное восстановление: снять авто-hide и очистить метки ошибки на карточке трека. Продолжить?',
+      t('admin.tracks.confirmFullRecovery'),
     )
     if (!ok) return
     setBusyId(id)
@@ -459,7 +458,10 @@ export function TracksRoute() {
 
   const handleClearContext = async () => {
     if (!contextModal) return
-    const ok = await showConfirm('Очистить контекст трека?', { danger: true })
+    const ok = await showConfirm(
+      t('admin.tracks.confirmClearContext'),
+      { danger: true },
+    )
     if (!ok) return
     setBusyContext(true)
     try {
@@ -581,7 +583,7 @@ export function TracksRoute() {
           type="checkbox"
           checked={allOnPageSelected}
           onChange={(e) => toggleSelectAll(e.target.checked)}
-          aria-label="Выбрать все"
+          aria-label={t('admin.tracks.selectAllAria')}
         />
       ),
       cell: (i) => (
@@ -589,7 +591,9 @@ export function TracksRoute() {
           type="checkbox"
           checked={selectedIds.has(i.row.original.id)}
           onChange={(e) => toggleSelectOne(i.row.original.id, e.target.checked)}
-          aria-label={`Выбрать трек ${i.row.original.id}`}
+          aria-label={t('admin.tracks.selectOneAria', {
+            id: i.row.original.id,
+          })}
         />
       ),
       enableSorting: false,
@@ -624,13 +628,13 @@ export function TracksRoute() {
       accessorKey: 'source',
     },
     {
-      header: 'Жанр',
+      header: t('admin.tracks.colGenre'),
       accessorKey: 'genre',
       cell: (i) => (
         <input
           type="text"
           defaultValue={i.row.original.genre || ''}
-          placeholder="Без жанра"
+          placeholder={t('admin.tracks.noGenrePlaceholder')}
           onBlur={(e) => {
             if (e.target.value !== (i.row.original.genre || '')) {
               handleGenreChange(i.row.original.id, e.target.value)
@@ -725,7 +729,7 @@ export function TracksRoute() {
               onClick={() => setSourceEditModal(i.row.original)}
               disabled={busy}
             >
-              Источники
+              {t('admin.tracks.actionSources')}
             </MotionPress>
             {pbRow && (
               <>
@@ -734,7 +738,7 @@ export function TracksRoute() {
                   onClick={() => handleVerifyPlayback(id)}
                   disabled={busy}
                 >
-                  Проверить
+                  {t('admin.tracks.actionCheck')}
                 </MotionPress>
                 <MotionPress
                   variant="ghost"
@@ -743,7 +747,7 @@ export function TracksRoute() {
                   }
                   disabled={busy}
                 >
-                  Сброс меток
+                  {t('admin.tracks.actionResetMarks')}
                 </MotionPress>
                 <MotionPress
                   variant="ghost"
@@ -752,7 +756,7 @@ export function TracksRoute() {
                   }
                   disabled={busy}
                 >
-                  Полное восст.
+                  {t('admin.tracks.actionFullRecovery')}
                 </MotionPress>
               </>
             )}
@@ -764,7 +768,7 @@ export function TracksRoute() {
                 }
                 disabled={busy}
               >
-                Снять auto-hide
+                {t('admin.tracks.actionUnsuppress')}
               </MotionPress>
             )}
             <MotionPress
@@ -805,14 +809,14 @@ export function TracksRoute() {
               onClick={() => handlePrompt(id)}
               disabled={busy}
             >
-              Промпт
+              {t('admin.tracks.actionPrompt')}
             </MotionPress>
             <MotionPress
               variant="ghost"
               onClick={() => handleContext(id)}
               disabled={busy}
             >
-              Контекст
+              {t('admin.tracks.actionContext')}
             </MotionPress>
             {listView === 'deleted' ? (
               <>
@@ -821,10 +825,7 @@ export function TracksRoute() {
                   onClick={() => handleRestoreDeleted(id)}
                   disabled={busy}
                 >
-                  {t(
-                    'admin.tracks.actionRestore',
-                    'Восстановить',
-                  )}
+                  {t('admin.tracks.actionRestore')}
                 </MotionPress>
                 <MotionPress
                   variant="danger"
@@ -833,10 +834,7 @@ export function TracksRoute() {
                   }
                   disabled={busy}
                 >
-                  {t(
-                    'admin.tracks.actionHardDelete',
-                    'Удалить навсегда',
-                  )}
+                  {t('admin.tracks.actionHardDelete')}
                 </MotionPress>
               </>
             ) : (
@@ -996,7 +994,7 @@ export function TracksRoute() {
               setSelectedIds(new Set())
             }}
           />
-          Без текста
+          {t('admin.tracks.filterWithoutLyrics')}
         </label>
         <MotionPress
           variant="primary"
@@ -1092,7 +1090,7 @@ export function TracksRoute() {
         size="lg"
         title={
           <>
-            Промпт для нейросети{' '}
+            {t('admin.tracks.promptModalTitle')}{' '}
             <span style={{ fontSize: 12, fontWeight: 400 }}>
               [{promptModal?.lang.toUpperCase()}]
             </span>
@@ -1105,7 +1103,7 @@ export function TracksRoute() {
               variant="ghost"
               onClick={() => setPromptModal(null)}
             >
-              Закрыть
+              {t('admin.common.close')}
             </MotionPress>
             <MotionPress
               variant="primary"
@@ -1114,7 +1112,7 @@ export function TracksRoute() {
                 navigator.clipboard.writeText(promptModal.prompt)
               }
             >
-              Копировать
+              {t('admin.common.copy')}
             </MotionPress>
           </>
         }
@@ -1135,10 +1133,14 @@ export function TracksRoute() {
       <FormModal
         open={!!contextModal}
         size="md"
-        title={`Контекст — трек #${contextModal?.trackId ?? ''}`}
+        title={t('admin.tracks.contextModalTitle', {
+          id: contextModal?.trackId ?? '',
+        })}
         subtitle={
           contextModal
-            ? `Статус: ${contextModal.status}`
+            ? t('admin.tracks.contextStatus', {
+                status: contextModal.status,
+              })
             : undefined
         }
         submitting={busyContext}
@@ -1151,21 +1153,21 @@ export function TracksRoute() {
               onClick={() => setContextModal(null)}
               disabled={busyContext}
             >
-              Отмена
+              {t('admin.common.cancel')}
             </MotionPress>
             <MotionPress
               variant="ghost"
               onClick={handleClearContext}
               disabled={busyContext}
             >
-              Очистить
+              {t('admin.common.clear')}
             </MotionPress>
             <MotionPress
               variant="primary"
               onClick={handleSaveContext}
               disabled={busyContext || !contextEditValue.trim()}
             >
-              Сохранить
+              {t('admin.common.save')}
             </MotionPress>
           </>
         }
@@ -1178,7 +1180,7 @@ export function TracksRoute() {
           maxLength={5000}
           style={{ width: '100%', resize: 'vertical' }}
           disabled={busyContext}
-          placeholder="Введите описание трека (3–5 предложений)..."
+          placeholder={t('admin.tracks.contextEditPlaceholder')}
         />
         <p
           style={{
@@ -1195,8 +1197,10 @@ export function TracksRoute() {
       <FormModal
         open={!!batchPromptModal}
         size="lg"
-        title={`Batch Prompt (${selectedIds.size} треков)`}
-        subtitle="Скопируйте и вставьте в нейросеть. Ответ вставьте через «Импорт ответа AI»."
+        title={t('admin.tracks.batchPromptTitle', {
+          count: selectedIds.size,
+        })}
+        subtitle={t('admin.tracks.batchPromptSubtitle')}
         onClose={() => setBatchPromptModal(null)}
         footer={
           <>
@@ -1204,7 +1208,7 @@ export function TracksRoute() {
               variant="ghost"
               onClick={() => setBatchPromptModal(null)}
             >
-              Закрыть
+              {t('admin.common.close')}
             </MotionPress>
             <MotionPress
               variant="primary"
@@ -1213,7 +1217,7 @@ export function TracksRoute() {
                 navigator.clipboard.writeText(batchPromptModal)
               }
             >
-              Копировать
+              {t('admin.common.copy')}
             </MotionPress>
           </>
         }
@@ -1235,7 +1239,7 @@ export function TracksRoute() {
         open={!!batchGenreMoodPromptModal}
         size="lg"
         title="Genre / mood batch prompt"
-        subtitle="Промпт для нейросети; ответ импортируйте через «Импорт AI (genre/mood)»."
+        subtitle={t('admin.tracks.batchGenreMoodSubtitle')}
         onClose={() => setBatchGenreMoodPromptModal(null)}
         footer={
           <>
@@ -1243,7 +1247,7 @@ export function TracksRoute() {
               variant="ghost"
               onClick={() => setBatchGenreMoodPromptModal(null)}
             >
-              Закрыть
+              {t('admin.common.close')}
             </MotionPress>
             <MotionPress
               variant="primary"
@@ -1254,7 +1258,7 @@ export function TracksRoute() {
                 )
               }
             >
-              Копировать
+              {t('admin.common.copy')}
             </MotionPress>
           </>
         }
@@ -1276,7 +1280,7 @@ export function TracksRoute() {
         open={!!batchLyricsPromptModal}
         size="lg"
         title="Lyrics Batch Prompt"
-        subtitle="Вставьте этот промпт в нейросеть, затем импортируйте JSON-ответ."
+        subtitle={t('admin.tracks.batchLyricsSubtitle')}
         onClose={() => setBatchLyricsPromptModal(null)}
         footer={
           <>
@@ -1284,7 +1288,7 @@ export function TracksRoute() {
               variant="ghost"
               onClick={() => setBatchLyricsPromptModal(null)}
             >
-              Закрыть
+              {t('admin.common.close')}
             </MotionPress>
             <MotionPress
               variant="primary"
@@ -1293,7 +1297,7 @@ export function TracksRoute() {
                 navigator.clipboard.writeText(batchLyricsPromptModal)
               }
             >
-              Копировать
+              {t('admin.common.copy')}
             </MotionPress>
           </>
         }
@@ -1314,7 +1318,9 @@ export function TracksRoute() {
       <FormModal
         open={!!sourceEditModal}
         size="md"
-        title={`Источники воспроизведения · #${sourceEditModal?.id ?? ''}`}
+        title={t('admin.tracks.sourceEditTitle', {
+          id: sourceEditModal?.id ?? '',
+        })}
         subtitle={
           sourceEditModal
             ? `${sourceEditModal.title} · ${
@@ -1327,8 +1333,8 @@ export function TracksRoute() {
             : undefined
         }
         submitting={sourceBusy}
-        submitText="Сохранить"
-        cancelText="Отмена"
+        submitText={t('admin.common.save')}
+        cancelText={t('admin.common.cancel')}
         closeOnOverlayClick={!sourceBusy}
         onClose={() => setSourceEditModal(null)}
         onSubmit={() => handleSavePlaybackSources()}
@@ -1366,7 +1372,7 @@ export function TracksRoute() {
           disabled={sourceBusy}
         />
         <label style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
-          Канонический URL (canonical_source_url)
+          {t('admin.tracks.sourceEditCanonical')}
         </label>
         <textarea
           value={sourceForm.can}
@@ -1388,17 +1394,17 @@ export function TracksRoute() {
             margin: 0,
           }}
         >
-          Пустое поле очищает соответствующий URL в базе (null).
+          {t('admin.tracks.sourceEditClearHint')}
         </p>
       </FormModal>
 
       <FormModal
         open={importModal}
         size="md"
-        title="Импорт ответа AI (Lyrics)"
-        subtitle="Вставьте JSON-ответ нейросети в формате tracks[].id + tracks[].lyrics. Импорт пропускает треки, где текст уже существует."
-        submitText="Импортировать"
-        cancelText="Закрыть"
+        title={t('admin.tracks.importLyricsTitle')}
+        subtitle={t('admin.tracks.importLyricsSubtitle')}
+        submitText={t('admin.common.import')}
+        cancelText={t('admin.common.close')}
         submitDisabled={!importText.trim()}
         onClose={() => setImportModal(false)}
         onSubmit={() => handleLyricsImport()}
@@ -1420,7 +1426,9 @@ export function TracksRoute() {
         {importResult && (
           <div>
             <p style={{ fontWeight: 600, margin: 0 }}>
-              Импортировано: {importResult.imported}
+              {t('admin.tracks.importedCount', {
+                count: importResult.imported,
+              })}
             </p>
             {importResult.errors.length > 0 && (
               <ul
@@ -1443,10 +1451,10 @@ export function TracksRoute() {
       <FormModal
         open={gmImportModal}
         size="md"
-        title="Импорт ответа AI (genre / mood)"
-        subtitle="JSON: tracks[].id, genre (строка), moods (массив тегов). Пустой genre не меняет поле. Новые mood добавляются к существующим."
-        submitText="Импортировать"
-        cancelText="Закрыть"
+        title={t('admin.tracks.importGmTitle')}
+        subtitle={t('admin.tracks.importGmSubtitle')}
+        submitText={t('admin.common.import')}
+        cancelText={t('admin.common.close')}
         submitDisabled={!gmImportText.trim()}
         onClose={() => setGmImportModal(false)}
         onSubmit={() => handleGenreMoodImport()}
@@ -1464,7 +1472,7 @@ export function TracksRoute() {
             checked={gmOverwriteGenre}
             onChange={(e) => setGmOverwriteGenre(e.target.checked)}
           />
-          Перезаписать жанр, если уже заполнен
+          {t('admin.tracks.gmOverwriteLabel')}
         </label>
         <textarea
           value={gmImportText}
@@ -1483,7 +1491,9 @@ export function TracksRoute() {
         {gmImportResult && (
           <div>
             <p style={{ fontWeight: 600, margin: 0 }}>
-              Импортировано: {gmImportResult.imported}
+              {t('admin.tracks.importedCount', {
+                count: gmImportResult.imported,
+              })}
             </p>
             {gmImportResult.errors.length > 0 && (
               <ul

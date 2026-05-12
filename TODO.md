@@ -49,6 +49,24 @@
   `.rd-pl-desc`, `.rd-pl-create-row`, `.rd-pl-invite-accept-btn`,
   `.rd-pl-invite-input-wrap/actions`, `.loader--sm`.
 
+- [x] **track_count в списке плейлистов**
+  — `PlaylistRepository.list_by_owner()` переведён на subquery-паттерн
+  (аналогично `list_for_admin`), возвращает `list[tuple[Playlist, int]]`.
+  `PlaylistResponse` получил поле `track_count: int = 0`.
+  API `list_playlists` заполняет его из subquery-результата.
+  Карточки в `PlaylistsView` теперь показывают корректное число треков.
+
+- [x] **Очистка description через PUT**
+  — Sentinel `_UNSET` в `playlist_service.py` и `playlist_repository.py`.
+  API `update_playlist` проверяет `model_fields_set`: если `description`
+  не передан — не трогает поле; если передан пустой/null — очищает.
+  Каллеры типа rename (`{name: ...}` без description) не затронуты.
+
+- [x] **Поиск исключает свои плейлисты**
+  — `search_public(exclude_owner_id)` в repo и сервисе.
+  Endpoint `GET /playlists/search` переключён на `get_optional_user`
+  и передаёт `current_user.id` как `exclude_owner_id`.
+
 - [x] **UI принятия инвайта**
   — Кнопка «Принять инвайт» в list-экране (`rd-pl-invite-accept-btn`).
   Модал с инпутом токена → `api.acceptPlaylistInvite()` →

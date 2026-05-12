@@ -464,7 +464,7 @@ export function ArtistsRoute() {
               variant="ghost"
               onClick={() => setBatchPromptModal(null)}
             >
-              Закрыть
+              {t('admin.common.close')}
             </MotionPress>
             <MotionPress
               variant="primary"
@@ -473,7 +473,7 @@ export function ArtistsRoute() {
                 navigator.clipboard.writeText(batchPromptModal)
               }
             >
-              Копировать
+              {t('admin.common.copy')}
             </MotionPress>
           </>
         }
@@ -496,8 +496,8 @@ export function ArtistsRoute() {
         size="md"
         title="Импорт ответа AI (Artists)"
         subtitle="Вставьте JSON-ответ в формате artists[].id + artists[].content."
-        submitText="Импортировать"
-        cancelText="Закрыть"
+        submitText={t('admin.common.import')}
+        cancelText={t('admin.common.close')}
         submitDisabled={!importText.trim()}
         onClose={() => setImportModal(false)}
         onSubmit={() => handleBatchImport()}

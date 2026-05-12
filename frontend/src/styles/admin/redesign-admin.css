@@ -1,9 +1,0 @@
-/* This file has been merged into
- * frontend/src/admin/styles/admin.css (Section A at the top).
- * Kept as an empty marker for two reasons:
- *   1. Backwards compatibility — any external code that still
- *      references this path keeps working.
- *   2. Diff-friendly migration — git history of the move is
- *      preserved on this file's location.
- * Safe to delete once no import statements reference it.
- */
