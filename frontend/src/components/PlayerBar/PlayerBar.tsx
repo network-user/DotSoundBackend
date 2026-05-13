@@ -336,7 +336,7 @@ export function PlayerBar() {
             <MotionPress
               variant="ghost"
               haptic="selection"
-              className="player-radio-pill"
+              className="player-radio-pill player-radio-pill--waves-only"
               onClick={(e) => {
                 e.stopPropagation()
                 navigate('/radio')
@@ -359,9 +359,6 @@ export function PlayerBar() {
                   getAnalyser={getAnalyser}
                 />
               )}
-              <span className="player-radio-pill__label">
-                LIVE
-              </span>
             </MotionPress>
           )}
           <p

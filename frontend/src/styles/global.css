@@ -2185,6 +2185,7 @@ textarea.form-input { resize: none; }
   margin: 20px auto 0;
   border-radius: var(--radius-lg);
   overflow: hidden;
+  isolation: isolate;
   background: var(--surface);
   display: flex;
   align-items: center;
@@ -2228,7 +2229,7 @@ textarea.form-input { resize: none; }
   height: 100%;
   max-height: 72px;
   margin: 0;
-  padding: 0 8px 10px;
+  padding: 0 10px 10px;
   box-sizing: border-box;
   opacity: 0.97;
   mix-blend-mode: screen;
@@ -2237,6 +2238,32 @@ textarea.form-input { resize: none; }
 .tcs-cover-waveform canvas {
   position: relative;
   z-index: 1;
+}
+.tcs-cover-wave-area--touch {
+  height: 28%;
+  max-height: 76px;
+}
+.tcs-cover-waveform--touch {
+  max-height: 48px;
+  padding: 0 10px 8px;
+  opacity: 0.88;
+  mix-blend-mode: normal;
+}
+.tcs-cover-wave-area--touch .tcs-cover-wave-gradient {
+  background: linear-gradient(
+    to top,
+    rgba(8, 8, 8, 0.72) 0%,
+    rgba(8, 8, 8, 0.22) 52%,
+    rgba(8, 8, 8, 0) 100%
+  );
+}
+@media (pointer: coarse) {
+  .tcs-cover-wrap {
+    margin-bottom: 12px;
+  }
+  .tcs-info {
+    padding-top: 26px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .tcs-cover-waveform {
@@ -8023,6 +8050,18 @@ html.ds-low-glass .tcs-sheet {
   border: none;
   -webkit-tap-highlight-color: transparent;
   animation: radioPillPulse 1.8s ease-in-out infinite;
+}
+.player-radio-pill--waves-only {
+  gap: 0;
+  padding: 1px 5px;
+  font-size: 0;
+  letter-spacing: 0;
+}
+.player-radio-pill--waves-only .player-radio-pill__waves {
+  height: 7px;
+}
+.player-radio-pill--waves-only .player-radio-pill__waves > span {
+  width: 1.5px;
 }
 .player-radio-pill:hover {
   filter: brightness(1.08);

@@ -1272,6 +1272,7 @@ export function TrackCardSheet({
                           srcSet={coverSrcSetAttr}
                           alt=""
                           duration={20}
+                          motion="breathe"
                           className="re-tcs-kb"
                         />
                       </AmbientStage>
@@ -1281,9 +1282,10 @@ export function TrackCardSheet({
                         srcSet={coverSrcSetAttr}
                         sizes="min(92vw, 480px)"
                         alt=""
-                        className="re-tcs-cover-probe"
+                        className="re-tcs-cover-static"
                         loading="eager"
                         fetchPriority="high"
+                        onError={() => setCoverFailed(true)}
                       />
                     )}
                     <img
@@ -1302,13 +1304,36 @@ export function TrackCardSheet({
               </div>
             )}
             {showCoverWaves && (
-              <div className="tcs-cover-wave-area" aria-hidden>
+              <div
+                className={[
+                  'tcs-cover-wave-area',
+                  isCoarsePointer
+                    ? 'tcs-cover-wave-area--touch'
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                aria-hidden
+              >
                 <div className="tcs-cover-wave-gradient" />
                 <Waveform
                   overlay
-                  height={64}
-                  bars={perfLite ? 18 : 36}
-                  className="tcs-cover-waveform"
+                  height={isCoarsePointer ? 48 : 64}
+                  bars={
+                    perfLite
+                      ? 18
+                      : isCoarsePointer
+                        ? 28
+                        : 36
+                  }
+                  className={[
+                    'tcs-cover-waveform',
+                    isCoarsePointer
+                      ? 'tcs-cover-waveform--touch'
+                      : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
                 />
               </div>
             )}
@@ -1688,13 +1713,20 @@ export function TrackCardSheet({
             className="tcs-action-btn"
             haptic="light"
             onClick={() => {
-              void startRadio(track).catch(() => {
-                showIsland({
-                  kind: 'error',
-                  title: t('redesign.home.radioError'),
-                  durationMs: 3000,
+              void startRadio(track)
+                .then(() => {
+                  if (isCoarsePointer) {
+                    closeCard()
+                    navigate('/radio')
+                  }
                 })
-              })
+                .catch(() => {
+                  showIsland({
+                    kind: 'error',
+                    title: t('redesign.home.radioError'),
+                    durationMs: 3000,
+                  })
+                })
             }}
           >
             <Icon name="radio" size={20} />

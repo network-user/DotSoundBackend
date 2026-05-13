@@ -109,8 +109,9 @@ export function RadioView() {
       cancelled = true
     }
   }, [heroCover])
-  const discIsLive = radioMode && isPlaying
-  const discSwipeEnabled = radioMode && Boolean(currentTrack)
+  const discIsLive = Boolean(currentTrack && isPlaying)
+  const discPointerActive = Boolean(currentTrack)
+  const discSwipeEnabled = radioMode && discPointerActive
   const nextTrack = queue[0] ?? radioPreviewTracks[0] ?? null
   const nextTrackCover = nextTrack
     ? coverUrl(nextTrack.cover_key)
@@ -238,7 +239,7 @@ export function RadioView() {
   const handleDiscPointerDown = (
     e: ReactPointerEvent<HTMLDivElement>,
   ) => {
-    if (!discSwipeEnabled || switchingRef.current) return
+    if (!discPointerActive || switchingRef.current) return
     discPointerRef.current = {
       pointerId: e.pointerId,
       startX: e.clientX,
@@ -283,13 +284,13 @@ export function RadioView() {
     if (
       Math.abs(pointer.offsetX) <= DISC_TAP_MAX_OFFSET_PX &&
       Math.abs(pointer.offsetY) <= DISC_TAP_MAX_OFFSET_PX &&
-      radioMode &&
       currentTrack &&
       !switchingRef.current
     ) {
-      togglePlay()
+      void togglePlay()
       return
     }
+    if (!radioMode) return
     if (pointer.offsetX <= -DISC_SWIPE_THRESHOLD_PX) {
       void handleDiscSwipe('next')
     } else if (pointer.offsetX >= DISC_SWIPE_THRESHOLD_PX) {
@@ -372,49 +373,53 @@ export function RadioView() {
             aria-hidden
           >
             <div className="rh-radio-hero-wave-gradient" />
-            <Waveform
-              overlay
-              variant="radio"
-              height={
-                RADIO_WAVE_STYLE === 'style3'
-                  ? 112
-                  : RADIO_WAVE_STYLE === 'style2'
-                    ? 102
-                    : 84
-              }
-              bars={
-                RADIO_WAVE_STYLE === 'style3'
-                  ? 52
-                  : RADIO_WAVE_STYLE === 'style2'
-                    ? 44
-                    : 36
-              }
-              className="rh-radio-hero-waveform"
-            />
-            <Waveform
-              overlay
-              variant="radio"
-              height={
-                RADIO_WAVE_STYLE === 'style3'
-                  ? 92
-                  : RADIO_WAVE_STYLE === 'style2'
-                    ? 86
-                    : 70
-              }
-              bars={
-                RADIO_WAVE_STYLE === 'style3'
-                  ? 52
-                  : RADIO_WAVE_STYLE === 'style2'
-                    ? 44
-                    : 36
-              }
-              className="rh-radio-hero-waveform rh-radio-hero-waveform--reflection"
-            />
+            <div className="rh-radio-hero-wave-stack">
+              <Waveform
+                overlay
+                variant="radio"
+                height={
+                  RADIO_WAVE_STYLE === 'style3'
+                    ? 112
+                    : RADIO_WAVE_STYLE === 'style2'
+                      ? 102
+                      : 84
+                }
+                bars={
+                  RADIO_WAVE_STYLE === 'style3'
+                    ? 52
+                    : RADIO_WAVE_STYLE === 'style2'
+                      ? 44
+                      : 36
+                }
+                className="rh-radio-hero-waveform"
+              />
+              <div className="rh-radio-hero-wave-reflect-wrap">
+                <Waveform
+                  overlay
+                  variant="radio"
+                  height={
+                    RADIO_WAVE_STYLE === 'style3'
+                      ? 92
+                      : RADIO_WAVE_STYLE === 'style2'
+                        ? 86
+                        : 70
+                  }
+                  bars={
+                    RADIO_WAVE_STYLE === 'style3'
+                      ? 52
+                      : RADIO_WAVE_STYLE === 'style2'
+                        ? 44
+                        : 36
+                  }
+                  className="rh-radio-hero-waveform rh-radio-hero-waveform--reflection"
+                />
+              </div>
+            </div>
           </div>
           <m.div
             className={[
               'rh-radio-disc-swipe',
-              discSwipeEnabled && 'rh-radio-disc-swipe--enabled',
+              discPointerActive && 'rh-radio-disc-swipe--enabled',
               isSwitching && 'rh-radio-disc-swipe--switching',
             ]
               .filter(Boolean)
@@ -494,6 +499,8 @@ export function RadioView() {
                           src={heroCover}
                           alt=""
                           active={discIsLive}
+                          motion="breathe"
+                          duration={20}
                         />
                       ) : (
                         <div className="rh-radio-disc-placeholder">

@@ -2,9 +2,9 @@ import {
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
 } from 'react'
 import { AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import { useLikes } from '@/store/LikesContext'
@@ -18,6 +18,7 @@ import { m, useReducedMotion } from '@/lib/motion'
 import { MorphIcon } from '@/components/ui/MorphIcon'
 import { BeatPulse } from '@/components/ui/BeatPulse'
 import { SharedCover } from '@/components/ui/SharedCover'
+import { SpectrumMicroBars } from '@/components/ui/SpectrumMicroBars'
 import { AddToPlaylistSheet } from '@/components/AddToPlaylistSheet/AddToPlaylistSheet'
 import { useSwipeX } from '@/hooks/useSwipeX'
 
@@ -40,6 +41,7 @@ const SWIPE_THRESHOLD = 52
 
 export function MiniPlayerBar() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const reduce = useReducedMotion()
   const { isPlaying, duration } = usePlayerPlayback()
   const {
@@ -60,6 +62,8 @@ export function MiniPlayerBar() {
     toggleRepeat,
     seek,
     getPreciseTime,
+    radioMode,
+    getAnalyser,
   } = usePlayerActions()
   const { isLiked, toggleLike } = useLikes()
   const telegramUserId = getUserId()
@@ -70,20 +74,21 @@ export function MiniPlayerBar() {
   const [swipeDx, setSwipeDx] = useState(0)
   const overflowRef = useRef<HTMLDivElement>(null)
   const seekInputRef = useRef<HTMLInputElement>(null)
+  const seekWrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const el = seekInputRef.current
-    if (!el) return
+    const wrap = seekWrapRef.current
+    if (!el || !wrap) return
     const write = () => {
       const t = getPreciseTime()
       const pct = duration
         ? Math.max(0, Math.min(100, (t / duration) * 100))
         : 0
       el.value = String(pct)
-      el.style.setProperty('--progress', `${pct}%`)
+      wrap.style.setProperty('--progress', `${pct}%`)
     }
     write()
-    if (!isPlaying) return
     let rafId = 0
     const frame = () => {
       write()
@@ -148,9 +153,15 @@ export function MiniPlayerBar() {
     <>
       {/* Seek bar — top of player bar, full width */}
       <div
+        ref={seekWrapRef}
         className="mp-seek-wrap"
         onPointerDown={(e) => e.stopPropagation()}
       >
+        {/* div-overlay: avoids WebKit pseudo-element CSS var bug */}
+        <div
+          className="mp-seek-track"
+          aria-hidden="true"
+        />
         <input
           ref={seekInputRef}
           type="range"
@@ -159,9 +170,6 @@ export function MiniPlayerBar() {
           max={100}
           step={0.1}
           defaultValue={0}
-          style={
-            { '--progress': '0%' } as CSSProperties
-          }
           aria-label="Перемотка"
           onChange={(e) =>
             seek(Number(e.currentTarget.value))
@@ -270,6 +278,28 @@ export function MiniPlayerBar() {
           className="mp-actions"
           onPointerDown={(e) => e.stopPropagation()}
         >
+          {radioMode && (
+            <button
+              type="button"
+              className="mp-live-badge"
+              onClick={(e) => {
+                e.stopPropagation()
+                haptic('light')
+                navigate('/radio')
+              }}
+              aria-label={t('redesign.playerBar.radioMode')}
+            >
+              <span className="mp-live-dot" aria-hidden="true" />
+              <span className="mp-live-label">LIVE</span>
+              {!reduce && (
+                <SpectrumMicroBars
+                  active={isPlaying}
+                  getAnalyser={getAnalyser}
+                />
+              )}
+            </button>
+          )}
+
           <button
             className="mp-btn mp-btn--skip"
             onClick={() => {
@@ -458,6 +488,11 @@ export function MiniPlayerBar() {
           </div>
         </div>
       </div>
+
+      <div
+        className="mp-touch-bottom-fill"
+        aria-hidden
+      />
 
       {telegramUserId ? (
         <AddToPlaylistSheet

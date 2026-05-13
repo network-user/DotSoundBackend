@@ -269,6 +269,10 @@
   will-change: transform;
 }
 
+.kenburns-cover--breathe img {
+  transform-origin: 50% 50%;
+}
+
 .kenburns-cover--static img {
   will-change: auto;
 }

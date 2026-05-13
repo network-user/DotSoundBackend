@@ -165,14 +165,28 @@
   --admin-tooltip-bg: var(--surface-2);
 }
 
+/* Touch devices: mini player bar (seek + row + bottom fill) is taller
+ * than the desktop strip; keep scroll padding in sync with
+ * redesign-player.css `.rp-player-bar--touch` --player-h. */
+@media (pointer: coarse) {
+  :root {
+    --layout-player-h: 106px;
+  }
+}
+
 /* Narrow phones (iPhone SE / Android small): trim chrome a bit so
  * #main has more vertical room. */
 @media (max-width: 360px) {
   :root {
     --layout-nav-h: 56px;
-    --layout-player-h: 72px;
     --layout-content-gutter: 12px;
     --layout-section-gap: 20px;
+  }
+}
+
+@media (max-width: 360px) and (pointer: coarse) {
+  :root {
+    --layout-player-h: 100px;
   }
 }
 
@@ -182,9 +196,14 @@
 @media (orientation: landscape) and (max-height: 500px) {
   :root {
     --layout-nav-h: 48px;
-    --layout-player-h: 64px;
     --layout-content-gutter: 12px;
     --layout-section-gap: 16px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  :root {
+    --layout-player-h: 86px;
   }
 }
 

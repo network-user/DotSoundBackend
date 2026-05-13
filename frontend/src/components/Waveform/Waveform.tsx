@@ -9,7 +9,6 @@ interface Props {
   height?: number
   bars?: number
   className?: string
-  /** Softer colors when drawn over the cover art. */
   overlay?: boolean
   variant?: 'default' | 'radio'
 }
@@ -102,6 +101,12 @@ function ensureSmoothed(
 
 const IDLE_COLOR_EPS = 0.025
 
+function isRadioVariant(
+  v: 'default' | 'radio',
+): boolean {
+  return v === 'radio'
+}
+
 function drawBars(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -114,29 +119,30 @@ function drawBars(
   variant: 'default' | 'radio',
 ) {
   ctx.clearRect(0, 0, w, h)
-  const radioStyle = variant === 'radio'
-  const barW = (w / bars) * (radioStyle ? 0.52 : 0.64)
-  const gap = (w / bars) * (radioStyle ? 0.48 : 0.36)
-  const radius = radioStyle ? Math.max(1, barW * 0.52) : 0
+  const radio = isRadioVariant(variant)
+  const barW = (w / bars) * (radio ? 0.52 : 0.64)
+  const gap = (w / bars) * (radio ? 0.48 : 0.36)
+  const radius = radio
+    ? Math.max(0.75, barW * 0.52)
+    : 0
   for (let i = 0; i < bars; i++) {
-    const profile =
-      radioStyle
-        ? 0.44 +
-          0.56 *
-            (1 -
-              Math.abs((i / Math.max(1, bars - 1)) * 2 - 1) **
-                1.34)
-        : 1
+    const profile = !radio
+      ? 1
+      : 0.44 +
+        0.56 *
+          (1 -
+            Math.abs((i / Math.max(1, bars - 1)) * 2 - 1) **
+              1.34)
     const frac = Math.max(MIN_PLAY_FRAC, heights[i] * profile)
     const bh = Math.max(h * MIN_PLAY_FRAC, frac * h)
     const x = i * (barW + gap) + gap / 2
-    const y = radioStyle ? h - bh : (h - bh) / 2
+    const y = radio ? h - bh : (h - bh) / 2
     ctx.fillStyle =
       useIdleTint &&
       frac <= IDLE_FRAC + IDLE_COLOR_EPS
         ? idleColor
         : playColor
-    if (!radioStyle) {
+    if (!radio) {
       ctx.fillRect(x, y, barW, bh)
       continue
     }
@@ -156,22 +162,24 @@ function drawIdleBars(
 ) {
   ctx.clearRect(0, 0, w, h)
   ctx.fillStyle = idleColor
-  const radioStyle = variant === 'radio'
-  const barW = (w / bars) * (radioStyle ? 0.52 : 0.64)
-  const gap = (w / bars) * (radioStyle ? 0.48 : 0.36)
-  const radius = radioStyle ? Math.max(1, barW * 0.52) : 0
+  const radio = isRadioVariant(variant)
+  const barW = (w / bars) * (radio ? 0.52 : 0.64)
+  const gap = (w / bars) * (radio ? 0.48 : 0.36)
+  const radius = radio
+    ? Math.max(0.75, barW * 0.52)
+    : 0
   for (let i = 0; i < bars; i++) {
-    const profile =
-      radioStyle
-        ? 0.5 +
-          0.5 *
-            (1 -
-              Math.abs((i / Math.max(1, bars - 1)) * 2 - 1) ** 1.26)
-        : 1
+    const profile = !radio
+      ? 1
+      : 0.5 +
+        0.5 *
+          (1 -
+            Math.abs((i / Math.max(1, bars - 1)) * 2 - 1) **
+              1.26)
     const x = i * (barW + gap) + gap / 2
     const bh = h * IDLE_FRAC * profile
-    const y = radioStyle ? h - bh : (h - bh) / 2
-    if (!radioStyle) {
+    const y = radio ? h - bh : (h - bh) / 2
+    if (!radio) {
       ctx.fillRect(x, y, barW, bh)
       continue
     }
@@ -299,7 +307,7 @@ export function Waveform({
           playColor,
           idleColor,
           false,
-            variant,
+          variant,
         )
         return
       }

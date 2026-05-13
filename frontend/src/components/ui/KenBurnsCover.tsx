@@ -3,6 +3,8 @@ import {
   useReducedMotion,
 } from '@/lib/motion'
 
+export type KenBurnsMotion = 'pan' | 'breathe'
+
 export interface KenBurnsCoverProps {
   src: string
   srcSet?: string
@@ -10,6 +12,7 @@ export interface KenBurnsCoverProps {
   duration?: number
   className?: string
   active?: boolean
+  motion?: KenBurnsMotion
 }
 
 export function KenBurnsCover({
@@ -19,6 +22,7 @@ export function KenBurnsCover({
   duration = 18,
   className,
   active = true,
+  motion = 'pan',
 }: KenBurnsCoverProps) {
   const reduce = useReducedMotion()
 
@@ -41,6 +45,42 @@ export function KenBurnsCover({
           loading="eager"
           fetchPriority="high"
           draggable={false}
+        />
+      </div>
+    )
+  }
+
+  if (motion === 'breathe') {
+    const breatheDur = Math.min(
+      8.5,
+      Math.max(4.2, duration * 0.32),
+    )
+    return (
+      <div
+        className={[
+          'kenburns-cover',
+          'kenburns-cover--breathe',
+          className,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <m.img
+          src={src}
+          srcSet={srcSet}
+          sizes={srcSet ? 'min(92vw, 480px)' : undefined}
+          alt={alt}
+          loading="eager"
+          fetchPriority="high"
+          draggable={false}
+          animate={{
+            scale: [1, 1.038, 1.014, 1.042, 1],
+          }}
+          transition={{
+            duration: breatheDur,
+            ease: 'easeInOut',
+            repeat: Infinity,
+          }}
         />
       </div>
     )

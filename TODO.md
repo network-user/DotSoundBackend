@@ -12,6 +12,15 @@
 - `[x]` - завершено
 - `[-]` - отменено / неактуально
 
+- [x] **Мини-плеер (touch): два прогресс-бара**
+  — В `MiniPlayerBar.tsx` был лишний второй `mp-seek-wrap` с тем же `seekInputRef`;
+  нижний слайдер убран, RAF и перемотка снова на одном верхнем seek + `mp-seek-track`.
+
+- [x] **Мини-плеер (touch): seek выше, чёрная подложка, центр метаданных**
+  — `--mp-seek-h` 32px, толще видимая полоса; `mp-touch-bottom-fill` (#000);
+  `#player-bar` column flex; `tokens.css` `--layout-player-h` для coarse pointer
+  синхронизирован с высотой панели.
+
 - [x] **Главная: скелетоны без конца при pull-to-refresh / зависших запросах**
   — При ошибке `getHomeRecommendations` после refresh `sections` оставался
   `null` (вечный скелетон «Продолжить»); catch теперь зеркалит первый mount
@@ -25,6 +34,31 @@
   в карточке трека волны (`Waveform`) показываются при `isPlaying` даже на телефоне;
   KenBurns + Ambient по-прежнему только без perf-lite. Плашка LIVE в плеере:
   `SpectrumMicroBars` по данным анализатора; при `prefers-reduced-motion` — CSS-полоски.
+
+- [x] **Радио / карточка: круглая рябь вместо «овала»**
+  — `KenBurnsCover` `motion="breathe"` (только scale) на диске радио и в карточке;
+  `AudioRipple`: квадратный canvas, концентрические кольца, ease + двойной обвод,
+  редкие idle-кольца; `.rh-radio-disc-pulse` без translateY, только scale.
+
+- [x] **Карточка трека (touch): радио → экран радио, компактные волны**
+  — После успешного `startRadio` при `isCoarsePointer`: `closeCard()` + `navigate('/radio')`.
+  Волны: классы `--touch`, ниже/уже область, меньше `Waveform` height/bars; отступы обложка/инфо.
+
+- [x] **Мобильные волны радио: двойной слой, отражение, диск**
+  — Два `Waveform` в `.rh-radio-hero-wave-stack`; отражение в
+  `.rh-radio-hero-wave-reflect-wrap` (`scaleY(-1)`), основная волна выше,
+  отступ `gap` между слоями; фон волн `isolation: isolate`, `z-index: 0`,
+  мета `z-index: 5`, диск `z-index: 4`, `touch-action: none` на диске
+  (горизонтальный свайд на touch), `pointer-events: none` на фоне волн;
+  тап по диску — `togglePlay` при любом треке, свайп — только в
+  `radioMode`; `discIsLive` для KenBurns/ripple при `isPlaying`.
+  Карточка: обычный `Waveform` на touch (без `radio-tiny`).
+
+- [x] **Мини-плеер: компактные волны радио, прогресс-бар; карточка: обложка без probe**
+  — Убран текст LIVE в десктоп-пилле, класс `player-radio-pill--waves-only`; в мини-плеере
+  кнопка радио только полоски (`mp-radio-mini`). Слайдер: RAF всегда обновляет `--progress`,
+  трек WebKit/Moz с белой заливкой. Статическая обложка в карточке: `re-tcs-cover-static`
+  вместо скрывающего `re-tcs-cover-probe`.
 
 - [x] **Плеер: без автоперехода по prefetch после трека вне радио**
   — При естественном `ended` вызывается `playNext({ afterNaturalEnd: true })`;
