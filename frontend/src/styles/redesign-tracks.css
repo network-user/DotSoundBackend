@@ -126,7 +126,13 @@
   height: 100%;
 }
 
-.re-tcs-ambient,
+.re-tcs-kb-wrap {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
 .re-tcs-kb {
   position: absolute;
   inset: 0;

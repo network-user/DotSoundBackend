@@ -87,7 +87,8 @@ _DEFAULT_DIVERSITY_LAMBDA = 0.7
 _RETRIEVAL_BLEND_KEY = "recsys.retrieval_blend"
 _RADIO_SESSION_KEY_PREFIX = "radio:session:"
 _RADIO_SESSION_TTL = 3600
-_RADIO_SESSION_BUFFER = 16
+_RADIO_SESSION_BUFFER = 48
+_RADIO_MERGED_EXCLUDE_CAP = 280
 _SEQUENTIAL_RADIO_KEY = "recsys.sequential_radio"
 _DEFAULT_SEQUENTIAL_BLEND_WEIGHT = 0.45
 
@@ -199,10 +200,11 @@ class RecommendationService:
         )
         if merged_artist_ids:
             cat_repo = self._catalog_repo
-            similar_artist_ids, similar_artist_weights = (
-                await cat_repo.get_similar_artist_recommendation_signals(
-                    merged_artist_ids,
-                )
+            (
+                similar_artist_ids,
+                similar_artist_weights,
+            ) = await cat_repo.get_similar_artist_recommendation_signals(
+                merged_artist_ids,
             )
         else:
             similar_artist_ids = []
@@ -231,19 +233,23 @@ class RecommendationService:
         genre_filter: list[str] | None,
         user_prefs: UserPrefs,
         user_locale: str | None,
+        exclude_ids: set[int] | None = None,
     ) -> list[Track]:
         strat = should_boost_russian_discovery(
             user_prefs.language_affinity,
             user_locale,
         )
+        ex = set(exclude_ids) if exclude_ids else set()
         if strat:
             return await self._rec_repo.get_candidate_tracks_stratified(
                 total_limit=limit,
                 genre_filter=genre_filter,
+                exclude_ids=ex,
             )
         return await self._rec_repo.get_candidate_tracks(
             limit=limit,
             genre_filter=genre_filter,
+            exclude_ids=ex if ex else None,
         )
 
     async def _get_implicit_dislike_ids(self, user_id: int) -> set[int]:
@@ -716,10 +722,12 @@ class RecommendationService:
 
         neighbor_ids: list[int] = []
         if seed_artist_ids:
-            neighbor_ids = await self._catalog_repo.get_station_neighbor_track_ids_for_artists(
-                seed_artist_ids,
-                exclude_track_ids=frozenset({seed.id}),
-                limit=120,
+            neighbor_ids = await (
+                self._catalog_repo.get_station_neighbor_track_ids_for_artists(
+                    seed_artist_ids,
+                    exclude_track_ids=frozenset({seed.id}),
+                    limit=120,
+                )
             )
 
         candidates = await self._rec_repo.get_candidate_tracks_stratified(
@@ -1046,13 +1054,16 @@ class RecommendationService:
         )
 
         redis = get_redis_client()
-        exclude_normalized = sorted(
-            {
-                int(tid)
-                for tid in (exclude_ids or [])
-                if int(tid) > 0 and int(tid) != seed_track_id
-            }
-        )
+        merged_exclude: set[int] = {
+            int(tid)
+            for tid in (exclude_ids or [])
+            if int(tid) > 0 and int(tid) != seed_track_id
+        }
+        if user_id:
+            for tid in await self._load_radio_session(user_id=user_id):
+                if tid > 0 and tid != seed_track_id:
+                    merged_exclude.add(tid)
+        exclude_normalized = sorted(merged_exclude)[:_RADIO_MERGED_EXCLUDE_CAP]
         exclude_hash = hashlib.blake2b(
             ",".join(str(tid) for tid in exclude_normalized).encode(),
             digest_size=8,
@@ -1122,9 +1133,15 @@ class RecommendationService:
                 None,
                 user_prefs,
                 user_locale,
+                exclude_ids=set(exclude_normalized),
             )
         else:
-            candidates = await self._rec_repo.get_candidate_tracks(limit=200)
+            candidates = await self._rec_repo.get_candidate_tracks(
+                limit=200,
+                exclude_ids=(
+                    set(exclude_normalized) if exclude_normalized else None
+                ),
+            )
         if not candidates:
             radio_request_observed(
                 surface="recommendations_radio",
@@ -1159,13 +1176,17 @@ class RecommendationService:
         cand_features = [
             feat_by_id[t.id]
             for t in candidates
-            if t.id != seed.id and t.id in feat_by_id
+            if t.id != seed.id
+            and t.id in feat_by_id
+            and t.id not in exclude_set
         ]
         unseen_features = (
             [
                 feat_by_id[t.id]
                 for t in unseen
-                if t.id in feat_by_id and t.id != seed.id
+                if t.id in feat_by_id
+                and t.id != seed.id
+                and t.id not in exclude_set
             ]
             if unseen
             else None
@@ -1185,6 +1206,12 @@ class RecommendationService:
             queue_size,
             unseen_candidates=unseen_features,
             tuning=radio_tuning,
+            liked_track_ids=(
+                user_prefs.liked_track_ids if user_prefs else None
+            ),
+            disliked_track_ids=(
+                user_prefs.disliked_track_ids if user_prefs else None
+            ),
             use_diversity_rerank=rerank_enabled,
             diversity_lambda=rerank_lambda,
         )

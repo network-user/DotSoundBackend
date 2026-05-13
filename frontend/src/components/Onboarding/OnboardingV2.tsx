@@ -9,6 +9,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import {
   type PanInfo,
+  type ValueAnimationTransition,
   animate,
   useMotionValue,
   useTransform,
@@ -1397,7 +1398,11 @@ function SwipeCard({
     } else if (v < -SWIPE_THRESHOLD) {
       onDislike()
     } else {
-      void animate(x, 0, SPRING_SNAPPY)
+      void animate(
+        x,
+        0,
+        SPRING_SNAPPY as ValueAnimationTransition<number>,
+      )
     }
   }
 

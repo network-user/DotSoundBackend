@@ -50,7 +50,10 @@ import type {
 } from '@/types/api'
 // [REGULATORY-DISABLED v1] комментарии отключены — см. docs/REGULATORY_DISABLED.md
 // import { CommentSection } from '@/components/Comments/CommentSection'
-import { AmbientStage } from '@/components/ui/AmbientStage'
+import {
+  extractCoverPalette,
+  type CoverPalette,
+} from '@/lib/coverPalette'
 import { KenBurnsCover } from '@/components/ui/KenBurnsCover'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
@@ -295,6 +298,29 @@ export function TrackCardSheet({
       mq.removeEventListener('change', apply)
     }
   }, [])
+
+  const [sheetCoverPalette, setSheetCoverPalette] =
+    useState<CoverPalette | null>(null)
+  const sheetPaletteSrc = useMemo(() => {
+    if (!coverKey) return null
+    return coverUrl(coverKey, coverVer, 480)
+  }, [coverKey, coverVer])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!sheetPaletteSrc) {
+      setSheetCoverPalette(null)
+      return
+    }
+    void extractCoverPalette(sheetPaletteSrc).then((p) => {
+      if (!cancelled) {
+        setSheetCoverPalette(p)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [sheetPaletteSrc])
 
   useEffect(() => {
     if (!isCardOpen || !track) {
@@ -1052,6 +1078,31 @@ export function TrackCardSheet({
         dragMomentum={false}
         onDragEnd={handleSheetDragEnd}
       >
+        <div className="tcs-sheet-mood-bg" aria-hidden>
+          {coverSrc ? (
+            <div
+              className="tcs-sheet-mood-bg__cover"
+              style={{
+                backgroundImage: `url(${coverSrc})`,
+              }}
+            />
+          ) : null}
+          <div
+            className="tcs-sheet-mood-bg__tones"
+            style={
+              sheetCoverPalette
+                ? {
+                    background: [
+                      `radial-gradient(72% 58% at 20% 16%, color-mix(in srgb, ${sheetCoverPalette.tones[0]} 40%, transparent) 0%, transparent 58%)`,
+                      `radial-gradient(68% 62% at 84% 24%, color-mix(in srgb, ${sheetCoverPalette.tones[1]} 36%, transparent) 0%, transparent 62%)`,
+                      `radial-gradient(98% 88% at 50% 108%, color-mix(in srgb, ${sheetCoverPalette.tones[2]} 42%, transparent) 0%, transparent 72%)`,
+                    ].join(','),
+                  }
+                : undefined
+            }
+          />
+          <div className="tcs-sheet-mood-bg__scrim" />
+        </div>
         <div
           className="tcs-handle re-tcs-handle"
           aria-label={t('redesign.tracks.tcsCloseAria')}
@@ -1201,10 +1252,7 @@ export function TrackCardSheet({
                 >
                   <div className="re-tcs-cover-stack">
                     {useAmbientKenBurns ? (
-                      <AmbientStage
-                        coverUrl={coverSrc}
-                        className="re-tcs-ambient"
-                      >
+                      <div className="re-tcs-kb-wrap">
                         <KenBurnsCover
                           src={coverSrc}
                           srcSet={coverSrcSetAttr}
@@ -1213,7 +1261,7 @@ export function TrackCardSheet({
                           motion="breathe"
                           className="re-tcs-kb"
                         />
-                      </AmbientStage>
+                      </div>
                     ) : (
                       <img
                         src={coverSrc}

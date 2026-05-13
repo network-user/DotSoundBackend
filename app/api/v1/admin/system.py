@@ -52,14 +52,15 @@ class AiSettingsUpdate(BaseModel):
 
 
 class RadioTuningPayload(BaseModel):
-    recent_track_cooldown_hours: float = 2.0
+    recent_track_cooldown_hours: float = 3.0
     soft_recent_days: float = 2.0
     rediscovery_days: float = 21.0
     artist_cooldown_window: int = 2
     seed_lock_min: int = 2
     seed_lock_max: int = 5
-    unseen_boost: float = 0.25
+    unseen_boost: float = 0.28
     favorite_boost_cap: float = 0.2
+    explicit_like_boost: float = 0.22
     rediscovery_boost: float = 0.2
     similar_recent_penalty: float = 0.2
     queue_pool_multiplier: int = 8
@@ -77,6 +78,7 @@ class RadioTuningUpdate(BaseModel):
     ab_split_percent_b: int | None = None
     variant_a: RadioTuningPayload | None = None
     variant_b: RadioTuningPayload | None = None
+
 
 router = APIRouter(prefix="/system", tags=["admin-system"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -336,6 +338,7 @@ def _to_payload(tuning: RadioTuning) -> RadioTuningPayload:
         seed_lock_max=tuning.seed_lock_max,
         unseen_boost=tuning.unseen_boost,
         favorite_boost_cap=tuning.favorite_boost_cap,
+        explicit_like_boost=tuning.explicit_like_boost,
         rediscovery_boost=tuning.rediscovery_boost,
         similar_recent_penalty=tuning.similar_recent_penalty,
         queue_pool_multiplier=tuning.queue_pool_multiplier,

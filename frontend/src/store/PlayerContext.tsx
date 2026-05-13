@@ -2164,7 +2164,7 @@ export function PlayerProvider({
         const seedId = radioSeedTrackIdRef.current
         const excludeIds = Array.from(
           radioPlayedIdsRef.current,
-        ).slice(-20)
+        ).slice(-60)
         try {
           const result = await api.getRadio(seedId, 15, excludeIds)
           const newTracks = result.tracks.filter(
@@ -2177,9 +2177,9 @@ export function PlayerProvider({
             for (const t of newTracks) {
               radioPlayedIdsRef.current.add(t.id)
             }
-            if (radioPlayedIdsRef.current.size > 50) {
+            if (radioPlayedIdsRef.current.size > 80) {
               const arr = Array.from(radioPlayedIdsRef.current)
-              radioPlayedIdsRef.current = new Set(arr.slice(-50))
+              radioPlayedIdsRef.current = new Set(arr.slice(-80))
             }
             manualQueueRef.current = newTracks.slice(1)
             setQueue([...manualQueueRef.current])

@@ -113,10 +113,11 @@ export function MiniPlayerBar() {
       haptic('light')
       void playPrev()
     },
-    onSwipeUp: () => {
-      haptic('medium')
-      openCard()
-    },
+    // Временно: свайп вверх не открывает карточку трека (openCard).
+    // onSwipeUp: () => {
+    //   haptic('medium')
+    //   openCard()
+    // },
   })
 
   useEffect(() => {

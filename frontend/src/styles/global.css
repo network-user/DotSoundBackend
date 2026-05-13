@@ -2236,11 +2236,7 @@ textarea.form-input { resize: none; }
   position: relative;
   width: 100%;
   max-height: 95dvh;
-  background: var(--glass-tint-3);
-  -webkit-backdrop-filter: var(--glass-blur-strong)
-    var(--glass-saturate);
-  backdrop-filter: var(--glass-blur-strong)
-    var(--glass-saturate);
+  background: transparent;
   border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   border-top: 1px solid var(--glass-edge);
   padding: 0 0
@@ -2258,6 +2254,63 @@ textarea.form-input { resize: none; }
   animation: sheet-exit-tcs var(--dur-fast) var(--ease-standard)
     forwards;
 }
+.tcs-sheet-mood-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: inherit;
+}
+.tcs-sheet-mood-bg__cover {
+  position: absolute;
+  inset: -20%;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  filter: blur(46px) saturate(1.08);
+  opacity: 0.52;
+}
+.tcs-sheet-mood-bg__tones {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(
+      70% 56% at 18% 18%,
+      rgba(72, 56, 120, 0.38) 0%,
+      transparent 58%
+    ),
+    radial-gradient(
+      66% 60% at 86% 24%,
+      rgba(36, 72, 108, 0.32) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      96% 90% at 50% 108%,
+      rgba(18, 20, 32, 0.48) 0%,
+      transparent 72%
+    );
+  opacity: 0.92;
+}
+.tcs-sheet-mood-bg__scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(8, 8, 11, 0.38) 0%,
+    rgba(10, 10, 14, 0.62) 42%,
+    rgba(12, 12, 16, 0.82) 100%
+  );
+}
+.tcs-video-mode .tcs-sheet-mood-bg {
+  opacity: 0.18;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tcs-sheet-mood-bg__cover {
+    filter: blur(32px) saturate(1.02);
+    opacity: 0.44;
+  }
+}
 @keyframes sheet-exit-tcs {
   to {
     transform: translate3d(0, 100%, 0);
@@ -2272,6 +2325,7 @@ textarea.form-input { resize: none; }
   }
 }
 .tcs-sheet > .tcs-handle,
+.tcs-sheet > .tcs-track-content,
 .tcs-sheet > .tcs-cover-wrap,
 .tcs-sheet > .tcs-info,
 .tcs-sheet > .tcs-player-controls,
@@ -2352,8 +2406,10 @@ textarea.form-input { resize: none; }
   bottom: 0;
   height: 56%;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
+  padding-bottom: 10px;
+  box-sizing: border-box;
   pointer-events: none;
 }
 .tcs-cover-wave-gradient {
