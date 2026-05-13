@@ -82,11 +82,15 @@ function hslToRgb(
   ]
 }
 
-function desaturateHex(hex: string, target = 0.3): string {
+function toBackgroundTone(hex: string): string {
   const [r, g, b] = hexToRgb(hex)
   const [h, s, l] = rgbToHsl(r, g, b)
-  const ns = Math.min(s, target)
-  const [nr, ng, nb] = hslToRgb(h, ns, l)
+  // Allow up to 55 % saturation so the cover hue is clearly visible on a
+  // dark background. Cap lightness at 38 % so the gradient never bleaches out
+  // text; darken by 30 % relative so bright covers still feel rich but dark.
+  const ns = Math.min(s, 0.55)
+  const nl = Math.max(0.14, Math.min(l * 0.7, 0.38))
+  const [nr, ng, nb] = hslToRgb(h, ns, nl)
   return rgbToHex(nr, ng, nb)
 }
 
@@ -169,7 +173,7 @@ async function compute(url: string): Promise<CoverPalette | null> {
     const r = Math.round(b.r / b.count)
     const g = Math.round(b.g / b.count)
     const bl = Math.round(b.b / b.count)
-    return desaturateHex(rgbToHex(r, g, bl), 0.3)
+    return toBackgroundTone(rgbToHex(r, g, bl))
   }) as [string, string, string]
 
   const avgLum = lumCount > 0 ? lumSum / lumCount : 128
