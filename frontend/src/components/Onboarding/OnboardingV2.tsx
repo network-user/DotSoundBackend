@@ -940,7 +940,15 @@ function GenresStep({
     },
     [],
   )
-  const preview = usePreviewLoop<string>({ fetcher: genreFetcher })
+  const onGenrePreviewStart = useCallback((genre: string) => {
+    trackActivationEvent('preview_started', {
+      meta: { kind: 'genre', key: genre },
+    })
+  }, [])
+  const preview = usePreviewLoop<string>({
+    fetcher: genreFetcher,
+    onPreviewStart: onGenrePreviewStart,
+  })
 
   // Warm the queue cache for the first ~14 bubbles so the first tap
   // is instant. Idempotent — repeat calls skip already-loaded keys.
@@ -1368,6 +1376,7 @@ function SwipeCard({
         track={track}
         isPlaying={isPlaying}
         isLoading={audioLoading}
+        onTogglePreview={onTogglePreview}
       />
       <m.span
         className="onb-v2-swipe-card__tint onb-v2-swipe-card__tint--like"
@@ -1422,13 +1431,30 @@ interface CardArtProps {
   track: Track
   isPlaying?: boolean
   isLoading?: boolean
+  onTogglePreview?: () => void
 }
 
 function CoverArt({
   track,
   isPlaying = false,
   isLoading = false,
+  onTogglePreview,
 }: CardArtProps) {
+  const { t } = useTranslation()
+  const interactive = typeof onTogglePreview === 'function'
+  const klass = [
+    'onb-v2-swipe-card__play-pulse',
+    isPlaying ? 'is-playing' : '',
+    isLoading ? 'is-loading' : '',
+    interactive ? 'is-interactive' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+  const content = isLoading ? (
+    <span className="onb-v2-swipe-card__spinner" />
+  ) : (
+    <Icon name={isPlaying ? 'pause' : 'play'} size={28} />
+  )
   return (
     <div className="onb-v2-swipe-card__cover">
       <CoverImage
@@ -1436,25 +1462,31 @@ function CoverArt({
         size={360}
       />
       <span className="onb-v2-swipe-card__cover-fade" />
-      <span
-        className={[
-          'onb-v2-swipe-card__play-pulse',
-          isPlaying ? 'is-playing' : '',
-          isLoading ? 'is-loading' : '',
-        ]
-          .filter(Boolean)
-          .join(' ')}
-        aria-hidden="true"
-      >
-        {isLoading ? (
-          <span className="onb-v2-swipe-card__spinner" />
-        ) : (
-          <Icon
-            name={isPlaying ? 'pause' : 'play'}
-            size={28}
-          />
-        )}
-      </span>
+      {interactive ? (
+        <button
+          type="button"
+          className={klass}
+          aria-label={
+            isPlaying
+              ? t('onboarding.preview.stop')
+              : t('onboarding.preview.play')
+          }
+          onPointerDown={(e) => {
+            // Stop framer-motion drag/tap from picking this up
+            e.stopPropagation()
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+            onTogglePreview?.()
+          }}
+        >
+          {content}
+        </button>
+      ) : (
+        <span className={klass} aria-hidden="true">
+          {content}
+        </span>
+      )}
     </div>
   )
 }
@@ -1613,7 +1645,15 @@ function ArtistsStep({
     },
     [],
   )
-  const preview = usePreviewLoop<number>({ fetcher: artistFetcher })
+  const onArtistPreviewStart = useCallback((id: number) => {
+    trackActivationEvent('preview_started', {
+      meta: { kind: 'artist', key: id },
+    })
+  }, [])
+  const preview = usePreviewLoop<number>({
+    fetcher: artistFetcher,
+    onPreviewStart: onArtistPreviewStart,
+  })
 
   // Warm queue cache for the first ~12 artist cards so the first
   // tap on ▶ doesn't wait on the network.

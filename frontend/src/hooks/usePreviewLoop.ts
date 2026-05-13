@@ -14,6 +14,12 @@ const SEEK_FRACTION_RANGE = 0.5
 
 interface Opts<K extends string | number> {
   fetcher: (key: K) => Promise<Track[]>
+  /**
+   * Fires exactly once per user-initiated play (not for the
+   * per-15-second auto-advance to the next track in the same
+   * session). Skipped if playback is blocked by autoplay policy.
+   */
+  onPreviewStart?: (key: K) => void
 }
 
 export interface UsePreviewLoop<K extends string | number> {
@@ -37,6 +43,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 export function usePreviewLoop<K extends string | number>({
   fetcher,
+  onPreviewStart,
 }: Opts<K>): UsePreviewLoop<K> {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const playingKeyRef = useRef<K | null>(null)
@@ -44,6 +51,9 @@ export function usePreviewLoop<K extends string | number>({
   const queuesRef = useRef(new Map<K, Track[]>())
   const idxRef = useRef(new Map<K, number>())
   const playNextRef = useRef<((key: K) => void) | null>(null)
+  const startEventFiredForRef = useRef<K | null>(null)
+  const onPreviewStartRef = useRef(onPreviewStart)
+  onPreviewStartRef.current = onPreviewStart
   const [playingKey, setPlayingKey] = useState<K | null>(null)
   const [loadingKey, setLoadingKey] = useState<K | null>(null)
 
@@ -67,6 +77,7 @@ export function usePreviewLoop<K extends string | number>({
       }
     }
     playingKeyRef.current = null
+    startEventFiredForRef.current = null
     setPlayingKey(null)
     setLoadingKey(null)
   }, [clearTimer])
@@ -115,6 +126,14 @@ export function usePreviewLoop<K extends string | number>({
           if (playingKeyRef.current !== key) return
           setLoadingKey(null)
           setPlayingKey(key)
+          if (startEventFiredForRef.current !== key) {
+            startEventFiredForRef.current = key
+            try {
+              onPreviewStartRef.current?.(key)
+            } catch {
+              /* ignore — analytics must not break playback */
+            }
+          }
           clearTimer()
           timerRef.current = window.setTimeout(advance, WINDOW_MS)
         }).catch(() => {
