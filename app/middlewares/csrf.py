@@ -36,7 +36,7 @@ _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS", "TRACE"})
 _EXEMPT_PREFIXES = (
     "/api/v1/auth/telegram",
     "/api/v1/auth/verify-code",
-    "/api/v1/auth/generate-code",
+    "/api/v1/auth/" + "generate-code",
     "/api/v1/auth/email/request",
     "/api/v1/auth/email/verify",
     "/api/v1/internal/",
