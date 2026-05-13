@@ -170,41 +170,23 @@ function getTokenUserId(
   return Number.isFinite(sub) ? sub : null
 }
 
-function persistToken(
-  token: string | null,
-) {
+// F1 hardening: the access token now lives in an httpOnly cookie
+// (ds_access), so JavaScript must NOT persist it. These shims keep
+// the call sites compatible but never touch localStorage.
+function persistToken(_token: string | null) {
   try {
-    if (token) {
-      localStorage.setItem(
-        AUTH_TOKEN_KEY,
-        token,
-      )
-    } else {
-      localStorage.removeItem(
-        AUTH_TOKEN_KEY,
-      )
-    }
+    // Best-effort cleanup of legacy localStorage entries from older
+    // builds. Once enough time has passed this can be deleted.
+    localStorage.removeItem(AUTH_TOKEN_KEY)
   } catch {}
 }
 
-function loadStoredToken():
-  | string
-  | null {
+function loadStoredToken(): string | null {
   try {
-    const token = localStorage.getItem(
-      AUTH_TOKEN_KEY,
-    )
-    if (!token) return null
-    if (isTokenExpired(token)) {
-      localStorage.removeItem(
-        AUTH_TOKEN_KEY,
-      )
-      return null
-    }
-    return token
-  } catch {
-    return null
-  }
+    // Same legacy cleanup as above. Never read the token back.
+    localStorage.removeItem(AUTH_TOKEN_KEY)
+  } catch {}
+  return null
 }
 
 async function readApiErrorMessage(
@@ -266,6 +248,14 @@ function _sleep(ms: number) {
   return new Promise<void>((r) => setTimeout(r, ms))
 }
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+function readCsrfCookie(): string | null {
+  if (typeof document === 'undefined') return null
+  const m = document.cookie.match(/(?:^|;\s*)ds_csrf=([^;]+)/)
+  return m ? decodeURIComponent(m[1]) : null
+}
+
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers = new Headers(opts.headers)
   const sentWithAuth =
@@ -276,6 +266,11 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
       'Authorization',
       `Bearer ${accessToken}`,
     )
+  }
+  const method = (opts.method || 'GET').toUpperCase()
+  if (!SAFE_METHODS.has(method) && !headers.has('X-CSRF-Token')) {
+    const csrf = readCsrfCookie()
+    if (csrf) headers.set('X-CSRF-Token', csrf)
   }
   if (!headers.has('X-DS-Signal')) {
     try {
@@ -289,7 +284,6 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     }
   }
 
-  const method = (opts.method || 'GET').toUpperCase()
   const canRetry = RETRY_SAFE_METHODS.has(method)
 
   let attempt = 0
@@ -299,6 +293,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
     attempt += 1
     try {
       const res = await fetch(path, {
+        credentials: 'same-origin',
         ...opts,
         headers,
       })

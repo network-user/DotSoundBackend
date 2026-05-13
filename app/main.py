@@ -229,8 +229,10 @@ def create_app() -> FastAPI:
     from app.middlewares.body_size_limit import (
         BodySizeLimitMiddleware,
     )
+    from app.middlewares.csrf import CSRFMiddleware
 
     application.add_middleware(BodySizeLimitMiddleware)
+    application.add_middleware(CSRFMiddleware)
     application.add_middleware(SlowAPIMiddleware)
     application.add_middleware(SecureStaticMiddleware)
     application.add_middleware(AdminSecurityMiddleware)
