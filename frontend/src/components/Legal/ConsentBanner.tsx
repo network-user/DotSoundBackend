@@ -66,12 +66,12 @@ export function ConsentBanner() {
           id="consent-banner-title"
           className="consent-banner__title"
         >
-          {t('consent.title', 'Обработка данных и защита аккаунта')}
+          {t('consent.title', 'Данные и приватность')}
         </h2>
         <p className="consent-banner__text">
           {t(
             'consent.body',
-            'DotSound использует localStorage и cookies, нужные для авторизации, настроек плеера и темы. Рекламных и сторонних аналитических трекеров нет. Дополнительно подключаем минимальные сигналы против автоматических регистраций, связанные записи храним до 30 дней.',
+            'Используем cookies для авторизации и настроек — рекламы нет. Дополнительно включаем минимальную защиту от спам-регистраций, записи хранятся до 30 дней.',
           )}
         </p>
         <p className="consent-banner__links">
@@ -79,7 +79,7 @@ export function ConsentBanner() {
             className="consent-banner__agreement"
             to="/legal/privacy"
           >
-            {t('consent.privacyLink', 'Политика конфиденциальности')}
+            {t('consent.privacyLink', 'Политика данных')}
           </Link>
           <span className="consent-banner__sep" aria-hidden>
             ·
@@ -88,7 +88,7 @@ export function ConsentBanner() {
             className="consent-banner__agreement"
             to="/legal/anti-abuse-signals"
           >
-            {t('consent.agreementLink', 'Сигналы против ботов')}
+            {t('consent.agreementLink', 'Подробнее о защите')}
           </Link>
         </p>
         <div className="consent-banner__actions">
@@ -111,7 +111,7 @@ export function ConsentBanner() {
             className="consent-banner__btn consent-banner__btn--secondary"
             onClick={() => choose(false)}
           >
-            {t('consent.minimal', 'Только необходимое')}
+            {t('consent.minimal', 'Отклонить')}
           </MotionPress>
         </div>
       </div>

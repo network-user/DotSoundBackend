@@ -10817,20 +10817,20 @@ html.ds-low-glass .tcs-sheet {
 }
 @media (max-width: 639px) {
   .consent-banner__shell {
-    padding: 11px 12px 9px;
-    gap: 7px;
+    padding: 12px 14px 10px;
+    gap: 8px;
   }
   .consent-banner__title {
     font-size: 15px;
     line-height: 1.28;
   }
   .consent-banner__text {
-    font-size: 14px;
-    line-height: 1.4;
+    font-size: 13px;
+    line-height: 1.45;
   }
   .consent-banner__actions {
-    margin-top: 3px;
-    padding-top: 6px;
+    margin-top: 4px;
+    padding-top: 8px;
     gap: 8px;
   }
   .consent-banner__btn {
@@ -10840,26 +10840,6 @@ html.ds-low-glass .tcs-sheet {
     padding: 10px 14px;
     font-size: 14px;
     line-height: 1.25;
-  }
-  .consent-banner__btn--primary.mp-press--primary {
-    background: rgba(255, 255, 255, 0.12);
-    color: #ececec;
-    border: 1px solid rgba(255, 255, 255, 0.18);
-  }
-  .consent-banner__btn--secondary.mp-press--ghost {
-    background: #f2f2f2;
-    color: #121212;
-    border-color: rgba(0, 0, 0, 0.06);
-  }
-}
-@media (hover: hover) and (max-width: 639px) {
-  .consent-banner__btn--primary.mp-press--primary:hover {
-    background: rgba(255, 255, 255, 0.18);
-    color: #fff;
-  }
-  .consent-banner__btn--secondary.mp-press--ghost:hover {
-    background: #fff;
-    color: #0a0a0a;
   }
 }
 @media (min-width: 640px) and (pointer: fine) {
