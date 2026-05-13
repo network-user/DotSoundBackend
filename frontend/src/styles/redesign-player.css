@@ -91,6 +91,7 @@
 #player-bar.rp-player-bar--touch {
   display: flex;
   flex-direction: column;
+  border-top: none;
 }
 
 .rp-player-bar--touch #pb-row.pb-row-v2 {
@@ -827,11 +828,43 @@
   user-select: none;
 }
 
+/* Progress-fill background: tints the whole mini-player surface
+ * from left to right by the same --progress CSS-var that drives
+ * the seek line on #player-bar (written by PlayerBarSeek RAF). */
+.rp-player-bar--touch .mp-zone::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.14) var(--progress, 0%),
+    transparent var(--progress, 0%),
+    transparent 100%
+  );
+}
+
+.rp-player-bar--touch .mp-zone > * {
+  position: relative;
+  z-index: 1;
+}
+
 .mp-touch-bottom-fill {
   flex-shrink: 0;
   height: var(--mp-bottom-fill);
-  background: inherit;
   pointer-events: none;
+  /* Same tint-fill as mp-zone so the progress colour extends to the very
+     bottom of the bar. --progress cascades from #player-bar (set by
+     PlayerBarSeek RAF which runs even in touch mode). */
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.14) var(--progress, 0%),
+    transparent var(--progress, 0%),
+    transparent 100%
+  );
 }
 
 /* Swipeable inner wrapper: cover + info, fills remaining space */
@@ -857,19 +890,39 @@
   overflow: hidden;
 }
 
-/* White played segment only; unplayed is transparent (player bg shows) */
+/* White played segment — top 10px bright indicator */
 .mp-seek-track {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 6px;
+  height: 10px;
   border-radius: 0;
   pointer-events: none;
   background: linear-gradient(
     to right,
     #fff 0%,
     #fff var(--progress, 0%),
+    transparent var(--progress, 0%),
+    transparent 100%
+  );
+}
+
+/* Bottom half of seek-wrap (the 10px gap below the bright line):
+   fill with the same subtle tint as mp-zone so there's no dark strip.
+   --progress is set directly on mp-seek-wrap by MiniPlayerBar RAF. */
+#player-bar.rp-player-bar--touch .mp-seek-wrap::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 10px;
+  pointer-events: none;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.14) var(--progress, 0%),
     transparent var(--progress, 0%),
     transparent 100%
   );
@@ -893,17 +946,17 @@
 }
 
 .mp-seek::-webkit-slider-runnable-track {
-  height: 6px;
+  height: 10px;
   background: transparent;
 }
 
 .mp-seek::-moz-range-track {
-  height: 6px;
+  height: 10px;
   background: transparent;
 }
 
 .mp-seek::-moz-range-progress {
-  height: 6px;
+  height: 10px;
   background: transparent;
 }
 
@@ -912,7 +965,7 @@
   -webkit-appearance: none;
   width: 18px;
   height: 18px;
-  margin-top: -6px;
+  margin-top: -4px;
   border-radius: 50%;
   background: #fff;
   cursor: pointer;
@@ -954,6 +1007,11 @@
   background: var(--surface-2, #1e1e1e);
   cursor: pointer;
   contain: paint;
+  transition: transform 120ms var(--ease-out, ease-out);
+}
+
+.mp-cover:active {
+  transform: scale(0.96);
 }
 
 .mp-cover-frame {
@@ -989,6 +1047,11 @@
   flex-direction: column;
   justify-content: center;
   min-height: 0;
+  transition: opacity 120ms var(--ease-out, ease-out);
+}
+
+.mp-info:active {
+  opacity: 0.72;
 }
 
 .mp-info-body {
@@ -1085,48 +1148,44 @@
   background: rgba(255, 255, 255, 0.82);
 }
 
-/* Live / Radio badge — leftmost button, redesigned */
+/* Radio waves button — leftmost, opens radio screen on tap */
 .mp-live-badge {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding: 0 8px 0 6px;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   margin: 0;
   border: none;
-  border-radius: 6px;
-  background: rgba(255, 55, 55, 0.18);
+  border-radius: 8px;
+  background: transparent;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  color: #ff5f57;
+  color: var(--accent, #ff5f57);
+  transition: background var(--dur-fast) var(--ease-out);
 }
 
-.mp-live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #ff5f57;
-  flex-shrink: 0;
-  animation: mp-live-pulse 1.4s ease-in-out infinite;
+.mp-live-badge:active {
+  background: rgba(255, 255, 255, 0.06);
 }
 
-@keyframes mp-live-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.45; transform: scale(0.7); }
+.mp-live-badge .player-radio-pill__waves {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+  width: 18px;
 }
 
-.mp-live-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 1;
-  color: #ff5f57;
-}
-
-.mp-live-badge .spectrum-micro-bars {
-  height: 10px;
-  gap: 1px;
+.mp-live-badge .player-radio-pill__waves > span {
+  display: block;
+  width: 3px;
+  min-height: 30%;
+  background: currentColor;
+  border-radius: 2px;
+  transition: height 60ms linear;
 }
 
 /* Overflow menu */
@@ -1199,6 +1258,17 @@
     width: 38px;
     height: 38px;
   }
+
+  .mp-seek-track,
+  .mp-seek::-webkit-slider-runnable-track,
+  .mp-seek::-moz-range-track,
+  .mp-seek::-moz-range-progress {
+    height: 8px;
+  }
+
+  .mp-seek::-webkit-slider-thumb {
+    margin-top: -5px;
+  }
 }
 
 @media (orientation: landscape) and (max-height: 500px) {
@@ -1216,5 +1286,16 @@
   .mp-btn--play {
     width: 36px;
     height: 36px;
+  }
+
+  .mp-seek-track,
+  .mp-seek::-webkit-slider-runnable-track,
+  .mp-seek::-moz-range-track,
+  .mp-seek::-moz-range-progress {
+    height: 8px;
+  }
+
+  .mp-seek::-webkit-slider-thumb {
+    margin-top: -5px;
   }
 }
