@@ -196,6 +196,14 @@ export function AudioRipple({
     }
   }, [bpm, active, getAnalyser, ringColor, reduce])
 
+  // Deps MUST include [active, reduce]: the <canvas> is conditionally
+  // rendered (`active && !reduce` below), so each time `active` toggles
+  // false→true a fresh DOM node mounts with no inline width/height. If we
+  // used [] here, sync() would run only once with whatever canvasRef was
+  // at first mount — typically null when isPlaying starts false — and the
+  // remounted canvas would stay at its default 300×150 anchored to the
+  // span's top-left, which visually looks like ripples drifting off to
+  // the right of the cover instead of emanating from its center.
   useEffect(() => {
     const span = spanRef.current
     const canvas = canvasRef.current

@@ -1603,7 +1603,9 @@ export function TrackCardSheet({
           <MotionPress
             type="button"
             variant="ghost"
-            className={`tcs-action-btn${liked ? ' active' : ''}`}
+            className={`tcs-action-btn tcs-action-like${
+              liked ? ' active' : ''
+            }`}
             haptic={liked ? 'light' : 'medium'}
             onClick={() => toggleLike(track.id, track)}
           >
@@ -1620,11 +1622,17 @@ export function TrackCardSheet({
           <MotionPress
             type="button"
             variant="ghost"
-            className={`tcs-action-btn${disliked ? ' active' : ''}`}
+            className={`tcs-action-btn tcs-action-dislike${
+              disliked ? ' active' : ''
+            }`}
             haptic="light"
             onClick={() => toggleDislike(track.id)}
           >
-            <Icon name="thumbs-down" size={20} />
+            <MorphIcon
+              name="thumbs-down"
+              size={20}
+              filled={disliked}
+            />
             <span className="tcs-action-label">
               {t('trackSheet.dislike')}
             </span>

@@ -319,7 +319,24 @@
       "playlistCollabAcceptPlaceholder": "Токен приглашения…",
       "playlistCollabAcceptDo": "Принять",
       "playlistCollabAcceptDone": "Вы добавлены в «{{name}}»",
-      "playlistCollabAcceptFail": "Неверный или истёкший токен"
+      "playlistCollabAcceptFail": "Неверный или истёкший токен",
+      "playlistCollabInviteModalTitle": "Пригласить соавтора",
+      "playlistCollabInviteIntro": "Передайте этот код другу. Он сможет вступить в плейлист и редактировать его вместе с вами.",
+      "playlistCollabInviteCodeLabel": "Код приглашения",
+      "playlistCollabInviteExpires": "Действителен до {{date}}",
+      "playlistCollabInviteCopyCode": "Скопировать код",
+      "playlistCollabInviteCopyLink": "Скопировать ссылку",
+      "playlistCollabInviteSendToChat": "Отправить в чат",
+      "playlistCollabInviteNoChats": "Нет открытых чатов — поделитесь кодом другим способом.",
+      "playlistCollabInviteSentToChat": "Приглашение отправлено",
+      "playlistCollabInviteHowTo1": "Друг открывает раздел «Плейлисты» в DotSound.",
+      "playlistCollabInviteHowTo2": "Нажимает «Принять инвайт» вверху списка.",
+      "playlistCollabInviteHowTo3": "Вставляет этот код и подтверждает.",
+      "playlistCollabInviteShareMsg": "Приглашаю в плейлист «{{playlist}}» в DotSound.\n\nКод: {{token}}\nДействителен до: {{expires}}\n\nИли открой: {{url}}",
+      "playlistReorderHint": "Возьмите трек за маркер слева и перетащите, чтобы изменить порядок. Свайп вправо — лайк, влево — убрать из плейлиста.",
+      "playlistReorderFail": "Не удалось сохранить новый порядок",
+      "playlistDragHandle": "Перетащить",
+      "playlistSwipeRemove": "Убрать"
     },
     "tracks": {
       "like": "В избранное",
@@ -758,7 +775,9 @@
       "refreshUrl": "Не удалось обновить ссылку на трек",
       "buffering": "Буферизация…",
       "blockedByBrowser": "Браузер заблокировал воспроизведение",
-      "trackUnavailable": "Трек недоступен"
+      "trackUnavailable": "Трек недоступен",
+      "tracksUnavailableSkipped": "Пропущено {{count}} недоступных треков",
+      "noPlayableTracks": "Нет доступных треков подряд"
     },
     "likesErrors": {
       "likeFail": "Не удалось обновить лайк",
@@ -785,7 +804,8 @@
       "welcome": {
         "logo": ".звук",
         "title": "Музыка под ваш вкус",
-        "subtitle": "Несколько шагов — и подборки заработают",
+        "subtitle": "Несколько шагов, и подборки заработают",
+        "quote": "«{{brand}}» — альтернативный источник музыки: мини-приложение в Telegram без рекламы в потоке, подборки под ваш вкус и перенос треков из других сервисов.",
         "cta": "Начать"
       },
       "profile": {
@@ -831,6 +851,7 @@
         "counter": "{{current}} / {{total}}",
         "cta": "Готово",
         "finish": "Завершить",
+        "allDoneHint": "Вы прослушали все треки. Нажмите кнопку ниже, чтобы завершить регистрацию.",
         "continueHint": "Или продолжайте — чем больше оценок, тем лучше подборки"
       },
       "complete": {

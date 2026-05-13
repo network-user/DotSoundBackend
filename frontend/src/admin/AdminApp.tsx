@@ -12,6 +12,10 @@ import { DeviceApproval } from './components/auth/DeviceApproval'
 import { StepUpProvider } from './components/auth/StepUpDialog'
 import { AdminPromptProvider } from './components/layout/AdminPromptContext'
 import { AdminShell } from './components/layout/AdminShell'
+import {
+  clearDeviceApprovalBrowserState,
+  readPendingDeviceId,
+} from './lib/adminDeviceApprovalSession'
 import { adminApi } from './lib/adminApi'
 import { setUserTokenProvider } from './lib/adminApi'
 import { useAdminAuth } from './store/adminAuthStore'
@@ -64,6 +68,9 @@ function AuthGate({
   const setCapabilities = useAdminAuth(
     (s) => s.setCapabilities,
   )
+  const restorePendingDevice = useAdminAuth(
+    (s) => s.restorePendingDevice,
+  )
 
   useEffect(() => {
     setUserTokenProvider(() => api.getToken())
@@ -87,11 +94,13 @@ function AuthGate({
     ]).then(async ([_csrf, metaRes]) => {
       if (!active) return
       if (metaRes.status !== 'fulfilled') {
+        clearDeviceApprovalBrowserState()
         setStatus('unauth')
         return
       }
       const meta = metaRes.value
       if (!meta.is_admin) {
+        clearDeviceApprovalBrowserState()
         setStatus('unauth')
         return
       }
@@ -118,14 +127,26 @@ function AuthGate({
           /* manifest is optional for auth */
         }
       } catch {
-        if (active) setStatus('needs_login')
+        if (!active) return
+        const pendingId = readPendingDeviceId()
+        if (pendingId !== null) {
+          restorePendingDevice(pendingId)
+        } else {
+          setStatus('needs_login')
+        }
       }
     })
 
     return () => {
       active = false
     }
-  }, [status, setStatus, setSession, setCapabilities])
+  }, [
+    status,
+    setStatus,
+    setSession,
+    setCapabilities,
+    restorePendingDevice,
+  ])
 
   if (status === 'loading') {
     return (

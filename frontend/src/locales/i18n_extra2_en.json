@@ -317,7 +317,24 @@
       "playlistCollabAcceptPlaceholder": "Invite token…",
       "playlistCollabAcceptDo": "Accept",
       "playlistCollabAcceptDone": "You joined \"{{name}}\"",
-      "playlistCollabAcceptFail": "Invalid or expired token"
+      "playlistCollabAcceptFail": "Invalid or expired token",
+      "playlistCollabInviteModalTitle": "Invite a collaborator",
+      "playlistCollabInviteIntro": "Send this code to a friend. They will be able to join and edit this playlist with you.",
+      "playlistCollabInviteCodeLabel": "Invite code",
+      "playlistCollabInviteExpires": "Valid until {{date}}",
+      "playlistCollabInviteCopyCode": "Copy code",
+      "playlistCollabInviteCopyLink": "Copy link",
+      "playlistCollabInviteSendToChat": "Send via chat",
+      "playlistCollabInviteNoChats": "No open chats — share the code another way.",
+      "playlistCollabInviteSentToChat": "Invite sent",
+      "playlistCollabInviteHowTo1": "Your friend opens \"Playlists\" inside DotSound.",
+      "playlistCollabInviteHowTo2": "They tap \"Accept invite\" at the top of the list.",
+      "playlistCollabInviteHowTo3": "They paste this code and confirm.",
+      "playlistCollabInviteShareMsg": "I'm inviting you to the \"{{playlist}}\" playlist on DotSound.\n\nCode: {{token}}\nValid until: {{expires}}\n\nOr open: {{url}}",
+      "playlistReorderHint": "Grab the handle on the left of any track to reorder. Swipe right to like, swipe left to remove from the playlist.",
+      "playlistReorderFail": "Could not save the new order",
+      "playlistDragHandle": "Drag",
+      "playlistSwipeRemove": "Remove"
     },
     "tracks": {
       "like": "Like",
@@ -752,7 +769,9 @@
       "refreshUrl": "Could not refresh the track URL",
       "buffering": "Buffering…",
       "blockedByBrowser": "Browser blocked playback",
-      "trackUnavailable": "Track unavailable"
+      "trackUnavailable": "Track unavailable",
+      "tracksUnavailableSkipped": "Skipped {{count}} unavailable tracks",
+      "noPlayableTracks": "No playable tracks in a row"
     },
     "likesErrors": {
       "likeFail": "Could not update like",
@@ -780,6 +799,7 @@
         "logo": ".sound",
         "title": "Music tuned to your taste",
         "subtitle": "A few steps and your home is ready",
+        "quote": "\"{{brand}}\" is an alternative source of music — a Telegram mini app with no ads in the stream, picks tuned to you, and easy imports from the services you already use.",
         "cta": "Start"
       },
       "profile": {
@@ -825,6 +845,7 @@
         "counter": "{{current}} / {{total}}",
         "cta": "Done",
         "finish": "Finish",
+        "allDoneHint": "You've listened to all the tracks. Tap the button below to complete signup.",
         "continueHint": "Or keep swiping — more ratings mean better picks"
       },
       "complete": {

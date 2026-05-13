@@ -83,20 +83,32 @@ export function GenreBubble({
     .join(' ')
 
   return (
-    <button
-      type="button"
-      className={stateClass}
-      onClick={() => onToggle(bubble.genre)}
-      aria-pressed={selected}
-    >
-      {renderCover()}
-      <span
-        className="onb-v2-bubble__cover-fade"
-        aria-hidden="true"
-      />
-      <span
-        role="button"
-        tabIndex={0}
+    <div className={stateClass}>
+      <button
+        type="button"
+        className="onb-v2-bubble__toggle"
+        onClick={() => onToggle(bubble.genre)}
+        aria-pressed={selected}
+      >
+        {renderCover()}
+        <span
+          className="onb-v2-bubble__cover-fade"
+          aria-hidden="true"
+        />
+        <span className="onb-v2-bubble__name">
+          {bubble.genre}
+        </span>
+        {selected && (
+          <span
+            className="onb-v2-bubble__check"
+            aria-hidden="true"
+          >
+            ✓
+          </span>
+        )}
+      </button>
+      <button
+        type="button"
         className={[
           'onb-v2-bubble__preview-btn',
           isPlaying ? 'is-playing' : '',
@@ -109,17 +121,7 @@ export function GenreBubble({
             ? t('onboarding.preview.stop')
             : t('onboarding.preview.play')
         }
-        onClick={(e) => {
-          e.stopPropagation()
-          onTogglePreview(bubble.genre)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            e.stopPropagation()
-            onTogglePreview(bubble.genre)
-          }
-        }}
+        onClick={() => onTogglePreview(bubble.genre)}
       >
         {isLoading ? (
           <span className="onb-v2-bubble__preview-spinner" />
@@ -129,18 +131,7 @@ export function GenreBubble({
             size={14}
           />
         )}
-      </span>
-      <span className="onb-v2-bubble__name">
-        {bubble.genre}
-      </span>
-      {selected && (
-        <span
-          className="onb-v2-bubble__check"
-          aria-hidden="true"
-        >
-          ✓
-        </span>
-      )}
-    </button>
+      </button>
+    </div>
   )
 }

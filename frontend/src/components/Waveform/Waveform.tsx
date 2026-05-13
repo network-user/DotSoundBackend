@@ -13,6 +13,8 @@ interface Props {
   className?: string
   overlay?: boolean
   variant?: 'default' | 'radio'
+  /** Optional accent color (hex like "#aabbcc") for the line + glow. */
+  color?: string
 }
 
 const REDUCED_MOTION_QUERY =
@@ -29,6 +31,9 @@ const RELEASE = 0.18
 const IDLE_AMP = 0.06
 
 const EDGE_TAPER_POWER = 1.5
+
+const RMS_ATTACK = 0.35
+const RMS_RELEASE = 0.08
 
 function easeOutQuad(x: number): number {
   return 1 - (1 - x) * (1 - x)
@@ -50,12 +55,35 @@ function ensureSamples(
   }
 }
 
+function hexToRgba(hex: string, alpha: number): string | null {
+  const h = hex.replace('#', '').trim()
+  if (h.length !== 3 && h.length !== 6) return null
+  const full =
+    h.length === 3
+      ? h
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : h
+  const r = parseInt(full.slice(0, 2), 16)
+  const g = parseInt(full.slice(2, 4), 16)
+  const b = parseInt(full.slice(4, 6), 16)
+  if (
+    Number.isNaN(r) ||
+    Number.isNaN(g) ||
+    Number.isNaN(b)
+  )
+    return null
+  return `rgba(${r},${g},${b},${alpha.toFixed(3)})`
+}
+
 export function Waveform({
   height = 64,
   bars = 64,
   className,
   overlay = false,
   variant = 'default',
+  color,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const timeBufRef =
@@ -63,6 +91,7 @@ export function Waveform({
   const samplesRef = useRef<Float32Array | null>(null)
   const rafRef = useRef<number | null>(null)
   const lastTickRef = useRef<number>(0)
+  const rmsRef = useRef<number>(0)
   const { isPlaying } = usePlayerPlayback()
   const { getAnalyser } = usePlayerActions()
 
@@ -98,12 +127,16 @@ export function Waveform({
       canvas.height = Math.floor(rect.height * dpr)
     }
 
-    const lineColor = overlay
-      ? 'rgba(255,255,255,0.88)'
-      : 'rgba(255,255,255,0.96)'
-    const glowColor = overlay
-      ? 'rgba(255,255,255,0.38)'
-      : 'rgba(255,255,255,0.55)'
+    const lineColor =
+      (color && hexToRgba(color, overlay ? 0.92 : 0.98)) ||
+      (overlay
+        ? 'rgba(255,255,255,0.88)'
+        : 'rgba(255,255,255,0.96)')
+    const glowColor =
+      (color && hexToRgba(color, overlay ? 0.42 : 0.58)) ||
+      (overlay
+        ? 'rgba(255,255,255,0.38)'
+        : 'rgba(255,255,255,0.55)')
     const centerLineColor = overlay
       ? 'rgba(255,255,255,0.06)'
       : 'rgba(255,255,255,0.09)'
@@ -172,6 +205,18 @@ export function Waveform({
         }
       }
 
+      // Frame RMS — drives line thickness so peaks visibly swell.
+      let sqSum = 0
+      for (let i = 0; i < points; i++) {
+        sqSum += samples[i] * samples[i]
+      }
+      const frameRms = Math.sqrt(sqSum / points)
+      const prevRms = rmsRef.current
+      const rmsAlpha = frameRms > prevRms ? RMS_ATTACK : RMS_RELEASE
+      rmsRef.current = prevRms + (frameRms - prevRms) * rmsAlpha
+      // Map RMS (~0..0.5 typical) to a 0..1 swell factor.
+      const swell = Math.min(1, rmsRef.current * 2.4)
+
       // Subtle center line as anchor
       ctx.save()
       const stroke0 = Math.max(0.5, 0.6 * dpr)
@@ -208,12 +253,25 @@ export function Waveform({
         ctx.lineTo(w, yAt(points - 1))
       }
 
+      const baseGlowWidth = isRadio ? 1.6 : 1.4
+      const baseTopWidth = isRadio ? 1.25 : 1.1
+      const glowLw = Math.max(
+        1,
+        (baseGlowWidth + swell * 1.8) * dpr,
+      )
+      const topLw = Math.max(
+        0.75,
+        (baseTopWidth + swell * 1.1) * dpr,
+      )
+      const glowBlur =
+        ((isRadio ? 14 : 10) + swell * 10) * dpr
+
       // Glow underlay
       if (!perfLite) {
         ctx.save()
         ctx.shadowColor = glowColor
-        ctx.shadowBlur = (isRadio ? 14 : 10) * dpr
-        ctx.lineWidth = Math.max(1, 1.6 * dpr)
+        ctx.shadowBlur = glowBlur
+        ctx.lineWidth = glowLw
         ctx.strokeStyle = lineColor
         ctx.lineCap = 'round'
         ctx.lineJoin = 'round'
@@ -224,7 +282,7 @@ export function Waveform({
 
       // Crisp top line
       ctx.save()
-      ctx.lineWidth = Math.max(0.75, 1.25 * dpr)
+      ctx.lineWidth = topLw
       ctx.strokeStyle = lineColor
       ctx.lineCap = 'round'
       ctx.lineJoin = 'round'
@@ -248,7 +306,7 @@ export function Waveform({
         rafRef.current = null
       }
     }
-  }, [getAnalyser, isPlaying, bars, overlay, variant])
+  }, [getAnalyser, isPlaying, bars, overlay, variant, color])
 
   return (
     <canvas

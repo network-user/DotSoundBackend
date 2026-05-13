@@ -9,6 +9,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useTranslation } from 'react-i18next'
 import {
   type PanInfo,
+  animate,
   useMotionValue,
   useTransform,
 } from 'framer-motion'
@@ -30,6 +31,7 @@ import { useOnboardingAudio } from '@/hooks/useOnboardingAudio'
 import { usePreviewLoop } from '@/hooks/usePreviewLoop'
 import { AvatarBuilder } from '@/components/Onboarding/AvatarBuilder'
 import { GenreBubble } from '@/components/Onboarding/GenreBubble'
+import { useBrandLabel } from '@/lib/brand'
 import { LEGAL_VERSION } from '@/views/legalContent'
 import type {
   OnboardingArtistItem,
@@ -112,6 +114,7 @@ export function OnboardingV2({ onComplete }: Props) {
     }[]
   >([])
   const [tasteLoading, setTasteLoading] = useState(false)
+  const [tasteExhausted, setTasteExhausted] = useState(false)
 
   const audio = useOnboardingAudio()
   const lastFetchCountRef = useRef(0)
@@ -176,6 +179,7 @@ export function OnboardingV2({ onComplete }: Props) {
         if (cancelled) return
         setTasteTracks(tracks)
         setTasteIndex(0)
+        setTasteExhausted(false)
       })
       .catch(() => {
         if (cancelled) return
@@ -209,6 +213,7 @@ export function OnboardingV2({ onComplete }: Props) {
       setTasteTracks([])
       setTasteIndex(0)
       setTasteDecisions([])
+      setTasteExhausted(false)
       lastFetchCountRef.current = 0
       autoPlayedTrackRef.current = null
     }
@@ -392,6 +397,7 @@ export function OnboardingV2({ onComplete }: Props) {
     if (step !== 'swipe') return
     if (tasteTracks.length === 0) return
     if (tasteIndex < tasteTracks.length) return
+    if (tasteExhausted) return
     if (lastFetchCountRef.current === tasteTracks.length)
       return
     lastFetchCountRef.current = tasteTracks.length
@@ -410,15 +416,13 @@ export function OnboardingV2({ onComplete }: Props) {
         )
         if (fresh.length > 0) {
           setTasteTracks((prev) => [...prev, ...fresh])
+          setTasteExhausted(false)
         } else {
-          // Server returned only duplicates — reset guard
-          // so the next swipe triggers a retry instead of
-          // freezing with an empty card stack.
-          lastFetchCountRef.current = 0
+          setTasteExhausted(true)
         }
       })
       .catch(() => {
-        lastFetchCountRef.current = 0
+        if (!cancelled) setTasteExhausted(true)
       })
       .finally(() => {
         if (!cancelled) setTasteLoading(false)
@@ -426,7 +430,13 @@ export function OnboardingV2({ onComplete }: Props) {
     return () => {
       cancelled = true
     }
-  }, [step, tasteIndex, tasteTracks])
+  }, [step, tasteIndex, tasteTracks, tasteExhausted])
+
+  useEffect(() => {
+    if (!tasteExhausted) return
+    if (step !== 'swipe') return
+    audio.stop()
+  }, [tasteExhausted, step, audio])
 
   useEffect(() => {
     if (step !== 'swipe') return
@@ -442,7 +452,7 @@ export function OnboardingV2({ onComplete }: Props) {
   }, [step, tasteIndex, tasteTracks, audio])
 
   const canFinish =
-    tasteDecisions.length >= SWIPE_BATCH
+    tasteDecisions.length >= SWIPE_BATCH || tasteExhausted
 
   const handleManualFinish = useCallback(() => {
     hapticSelection()
@@ -583,6 +593,7 @@ export function OnboardingV2({ onComplete }: Props) {
                 tracks={tasteTracks}
                 index={tasteIndex}
                 loading={tasteLoading}
+                exhausted={tasteExhausted}
                 playingId={
                   audio.state === 'playing'
                     ? audio.currentTrackId
@@ -799,6 +810,7 @@ interface WelcomeStepProps {
 
 function WelcomeStep({ onStart }: WelcomeStepProps) {
   const { t } = useTranslation()
+  const brand = useBrandLabel()
   return (
     <div className="onb-v2-welcome">
       <div
@@ -815,6 +827,11 @@ function WelcomeStep({ onStart }: WelcomeStepProps) {
           'redesign.onboardingV2.welcome.subtitle',
         )}
       </p>
+      <blockquote className="onb-v2-welcome__quote">
+        {t('redesign.onboardingV2.welcome.quote', {
+          brand,
+        })}
+      </blockquote>
       <div
         className="onb-v2-footer"
         style={{ width: '100%', maxWidth: 360 }}
@@ -1079,6 +1096,7 @@ interface SwipeStepProps {
   tracks: Track[]
   index: number
   loading: boolean
+  exhausted: boolean
   playingId: number | null
   audioLoading: boolean
   audioBlocked: boolean
@@ -1093,6 +1111,7 @@ function SwipeStep({
   tracks,
   index,
   loading,
+  exhausted,
   playingId,
   audioLoading,
   audioBlocked,
@@ -1191,6 +1210,18 @@ function SwipeStep({
               />
             )}
           </AnimatePresence>
+          {!top &&
+            exhausted &&
+            !loading &&
+            tracks.length > 0 && (
+              <div className="onb-v2-swipe-all-done">
+                <p className="onb-v2-swipe-all-done__text">
+                  {t(
+                    'redesign.onboardingV2.swipe.allDoneHint',
+                  )}
+                </p>
+              </div>
+            )}
           {!top && loading && (
             <div className="onb-v2-swipe-loading">
               <div className="upload-spinner" />
@@ -1201,18 +1232,20 @@ function SwipeStep({
           className="onb-v2-counter"
           style={{ marginTop: 12 }}
         >
-          {tracks.length > 0
-            ? t(
-                'redesign.onboardingV2.swipe.counter',
-                {
-                  current: Math.min(
-                    index + 1,
-                    tracks.length,
-                  ),
-                  total: tracks.length,
-                },
-              )
-            : '\u00A0'}
+          {exhausted && !top
+            ? '\u00A0'
+            : tracks.length > 0
+              ? t(
+                  'redesign.onboardingV2.swipe.counter',
+                  {
+                    current: Math.min(
+                      index + 1,
+                      tracks.length,
+                    ),
+                    total: tracks.length,
+                  },
+                )
+              : '\u00A0'}
         </p>
         {top && (
           <div className="onb-v2-swipe-actions">
@@ -1295,11 +1328,43 @@ function SwipeCard({
   reduce,
 }: SwipeCardProps) {
   const { t } = useTranslation()
+  const [transportVisible, setTransportVisible] = useState(true)
+  const transportHideTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null)
+
+  useEffect(() => {
+    if (transportHideTimerRef.current) {
+      clearTimeout(transportHideTimerRef.current)
+      transportHideTimerRef.current = null
+    }
+    if (!isPlaying) {
+      setTransportVisible(true)
+      return
+    }
+    if (audioLoading) {
+      setTransportVisible(true)
+      return
+    }
+    setTransportVisible(true)
+    transportHideTimerRef.current = setTimeout(() => {
+      setTransportVisible(false)
+      transportHideTimerRef.current = null
+    }, 2200)
+    return () => {
+      if (transportHideTimerRef.current) {
+        clearTimeout(transportHideTimerRef.current)
+        transportHideTimerRef.current = null
+      }
+    }
+  }, [isPlaying, audioLoading, track.id])
+
   const x = useMotionValue(0)
+  const xSpan = reduce ? 120 : 200
   const rotate = useTransform(
     x,
-    [-200, 0, 200],
-    [-12, 0, 12],
+    [-xSpan, 0, xSpan],
+    reduce ? [-7, 0, 7] : [-12, 0, 12],
   )
   const likeOpacity = useTransform(
     x,
@@ -1331,22 +1396,9 @@ function SwipeCard({
       onLike()
     } else if (v < -SWIPE_THRESHOLD) {
       onDislike()
+    } else {
+      void animate(x, 0, SPRING_SNAPPY)
     }
-  }
-
-  if (reduce) {
-    return (
-      <div className="onb-v2-swipe-card">
-        <CoverArt
-          track={track}
-          isPlaying={isPlaying}
-          isLoading={audioLoading}
-          onTogglePreview={onTogglePreview}
-        />
-        <CardInfo track={track} />
-        {audioBlocked && !audioLoading && <MuteHint />}
-      </div>
-    )
   }
 
   return (
@@ -1357,17 +1409,28 @@ function SwipeCard({
         left: -240,
         right: 240,
       }}
-      dragElastic={0.6}
+      dragElastic={reduce ? 0.35 : 0.6}
+      dragSnapToOrigin={false}
       style={{ x, rotate }}
       onDragEnd={handleDragEnd}
+      onTap={() => {
+        if (!onTogglePreview) return
+        if (audioLoading) return
+        if (isPlaying && !transportVisible) {
+          onTogglePreview()
+        }
+      }}
       whileTap={{ cursor: 'grabbing' }}
       transition={SPRING_SNAPPY}
       variants={{
         exit: (dir: number) => ({
-          x: (dir || 0) * 520,
-          rotate: (dir || 0) * 22,
+          x: (dir || 0) * (reduce ? 300 : 520),
+          rotate: (dir || 0) * (reduce ? 12 : 22),
           opacity: 0,
-          transition: { duration: 0.26, ease: [0.2, 0.65, 0.3, 1] },
+          transition: {
+            duration: reduce ? 0.18 : 0.26,
+            ease: [0.2, 0.65, 0.3, 1],
+          },
         }),
       }}
       exit="exit"
@@ -1376,6 +1439,7 @@ function SwipeCard({
         track={track}
         isPlaying={isPlaying}
         isLoading={audioLoading}
+        transportVisible={transportVisible}
         onTogglePreview={onTogglePreview}
       />
       <m.span
@@ -1431,6 +1495,7 @@ interface CardArtProps {
   track: Track
   isPlaying?: boolean
   isLoading?: boolean
+  transportVisible?: boolean
   onTogglePreview?: () => void
 }
 
@@ -1438,10 +1503,16 @@ function CoverArt({
   track,
   isPlaying = false,
   isLoading = false,
+  transportVisible = true,
   onTogglePreview,
 }: CardArtProps) {
   const { t } = useTranslation()
   const interactive = typeof onTogglePreview === 'function'
+  const showChrome =
+    !interactive ||
+    isLoading ||
+    !isPlaying ||
+    transportVisible
   const klass = [
     'onb-v2-swipe-card__play-pulse',
     isPlaying ? 'is-playing' : '',
@@ -1462,31 +1533,32 @@ function CoverArt({
         size={360}
       />
       <span className="onb-v2-swipe-card__cover-fade" />
-      {interactive ? (
-        <button
-          type="button"
-          className={klass}
-          aria-label={
-            isPlaying
-              ? t('onboarding.preview.stop')
-              : t('onboarding.preview.play')
-          }
-          onPointerDown={(e) => {
-            // Stop framer-motion drag/tap from picking this up
-            e.stopPropagation()
-          }}
-          onClick={(e) => {
-            e.stopPropagation()
-            onTogglePreview?.()
-          }}
-        >
-          {content}
-        </button>
-      ) : (
-        <span className={klass} aria-hidden="true">
-          {content}
-        </span>
-      )}
+      {showChrome ? (
+        interactive ? (
+          <button
+            type="button"
+            className={klass}
+            aria-label={
+              isPlaying
+                ? t('onboarding.preview.stop')
+                : t('onboarding.preview.play')
+            }
+            onPointerDown={(e) => {
+              e.stopPropagation()
+            }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onTogglePreview?.()
+            }}
+          >
+            {content}
+          </button>
+        ) : (
+          <span className={klass} aria-hidden="true">
+            {content}
+          </span>
+        )
+      ) : null}
     </div>
   )
 }
@@ -1728,9 +1800,8 @@ function ArtistsStep({
                 const playing = preview.playingKey === a.id
                 const playLoading = preview.loadingKey === a.id
                 return (
-                  <button
+                  <div
                     key={a.id}
-                    type="button"
                     className={
                       [
                         'onboarding-artist-card',
@@ -1740,54 +1811,49 @@ function ArtistsStep({
                         .filter(Boolean)
                         .join(' ')
                     }
-                    onClick={() => onToggle(a.id)}
                   >
-                    <span className="onboarding-artist-cover-wrap">
-                      <CoverImage
-                        coverKey={a.image_key}
-                        className="cover-image"
-                      />
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className={[
-                          'onboarding-artist-preview-btn',
-                          playing ? 'is-playing' : '',
-                          playLoading ? 'is-loading' : '',
-                        ]
-                          .filter(Boolean)
-                          .join(' ')}
-                        aria-label={
-                          playing
-                            ? t('onboarding.preview.stop')
-                            : t('onboarding.preview.play')
-                        }
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleTogglePreview(a.id)
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            handleTogglePreview(a.id)
-                          }
-                        }}
-                      >
-                        {playLoading ? (
-                          <span className="onboarding-artist-preview-spinner" />
-                        ) : (
-                          <Icon
-                            name={playing ? 'pause' : 'play'}
-                            size={14}
-                          />
-                        )}
+                    <button
+                      type="button"
+                      className="onboarding-artist-card__toggle"
+                      aria-pressed={selected.includes(a.id)}
+                      onClick={() => onToggle(a.id)}
+                    >
+                      <span className="onboarding-artist-cover-wrap">
+                        <CoverImage
+                          coverKey={a.image_key}
+                          className="cover-image"
+                        />
                       </span>
-                    </span>
-                    <span className="onboarding-artist-name">
-                      {a.name}
-                    </span>
-                  </button>
+                      <span className="onboarding-artist-name">
+                        {a.name}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className={[
+                        'onboarding-artist-preview-btn',
+                        playing ? 'is-playing' : '',
+                        playLoading ? 'is-loading' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                      aria-label={
+                        playing
+                          ? t('onboarding.preview.stop')
+                          : t('onboarding.preview.play')
+                      }
+                      onClick={() => handleTogglePreview(a.id)}
+                    >
+                      {playLoading ? (
+                        <span className="onboarding-artist-preview-spinner" />
+                      ) : (
+                        <Icon
+                          name={playing ? 'pause' : 'play'}
+                          size={14}
+                        />
+                      )}
+                    </button>
+                  </div>
                 )
               })}
               {filteredArtists.length === 0 && (

@@ -81,7 +81,18 @@ export function LikesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const uid = getUserId()
     if (!uid) return
-    api.getLikedTracks(uid, 1, 200).then(async (data) => {
+    void (async () => {
+      const [likesRes, disRes] = await Promise.allSettled([
+        api.getLikedTracks(uid, 1, 200),
+        api.getDislikedTracks(uid, 1, 200),
+      ])
+      if (disRes.status === 'fulfilled') {
+        setDislikedIds(
+          new Set(disRes.value.items.map((t) => t.id)),
+        )
+      }
+      if (likesRes.status !== 'fulfilled') return
+      const data = likesRes.value
       setLikedIds(new Set(data.items.map((t) => t.id)))
       if (
         !isOfflineCacheSupported() ||
@@ -115,7 +126,7 @@ export function LikesProvider({ children }: { children: ReactNode }) {
           })
         }
       })
-    }).catch(() => {})
+    })()
   }, [authTick])
 
   useEffect(() => {

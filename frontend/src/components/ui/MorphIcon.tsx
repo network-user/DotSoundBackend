@@ -92,6 +92,12 @@ const PAIRS: Record<string, MorphPair> = {
     filled:
       'M12 2c1 4 5 5 5 10a5 5 0 11-10 0c0-2 1-3 1-5 0-3-2-3-2-5 2 0 3 1 3 1 0-1 1-2 3-1z',
   },
+  'thumbs-down': {
+    outline:
+      'M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9A2 2 0 004.32 15H10zm10-13h2a2 2 0 012 2v7a2 2 0 01-2 2h-2',
+    filled:
+      'M10 15v4a3 3 0 003 3l4-9V2H5.72a2 2 0 00-2 1.7l-1.38 9A2 2 0 004.32 15H10zm10-13h2a2 2 0 012 2v7a2 2 0 01-2 2h-2',
+  },
   calendar: {
     outline:
       'M7 2v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2V2h-2v2H9V2H7zM5 10h14v10H5V10z',

@@ -999,9 +999,44 @@ export function TracksRoute() {
         <MotionPress
           variant="primary"
           disabled={selectedIds.size === 0}
+          title={
+            selectedIds.size === 0
+              ? t('admin.tracks.batchSelectHint')
+              : undefined
+          }
           onClick={handleBatchPrompt}
         >
-          Batch Prompt ({selectedIds.size})
+          {t('admin.tracks.batchContextPromptBtn', {
+            count: selectedIds.size,
+          })}
+        </MotionPress>
+        <MotionPress
+          variant="ghost"
+          disabled={selectedIds.size === 0}
+          title={
+            selectedIds.size === 0
+              ? t('admin.tracks.batchSelectHint')
+              : undefined
+          }
+          onClick={handleBatchLyricsPromptSelected}
+        >
+          {t('admin.tracks.batchLyricsPromptBtn', {
+            count: selectedIds.size,
+          })}
+        </MotionPress>
+        <MotionPress
+          variant="ghost"
+          disabled={selectedIds.size === 0}
+          title={
+            selectedIds.size === 0
+              ? t('admin.tracks.batchSelectHint')
+              : undefined
+          }
+          onClick={handleBatchGenreMoodPromptSelected}
+        >
+          {t('admin.tracks.batchGenreMoodPromptBtn', {
+            count: selectedIds.size,
+          })}
         </MotionPress>
         <MotionPress
           variant="ghost"
@@ -1011,44 +1046,24 @@ export function TracksRoute() {
             setImportModal(true)
           }}
         >
-          Import AI · Lyrics
+          {t('admin.tracks.importLyricsOpenBtn')}
         </MotionPress>
         <OverflowMenu
-          label="More batch actions"
+          label={t('admin.tracks.moreBatchActions')}
           items={[
             {
-              id: 'lyrics-prompt-sel',
-              label: 'Lyrics Prompt (selected)',
-              hint:
-                selectedIds.size > 0
-                  ? `× ${selectedIds.size}`
-                  : undefined,
-              disabled: selectedIds.size === 0,
-              onSelect: handleBatchLyricsPromptSelected,
-            },
-            {
               id: 'lyrics-prompt-filt',
-              label: 'Lyrics Prompt (filtered)',
+              label: t('admin.tracks.lyricsPromptFiltered'),
               onSelect: handleBatchLyricsPromptFiltered,
             },
             {
-              id: 'gm-prompt-sel',
-              label: 'Genre/Mood prompt (selected)',
-              hint:
-                selectedIds.size > 0
-                  ? `× ${selectedIds.size}`
-                  : undefined,
-              disabled: selectedIds.size === 0,
-              onSelect: handleBatchGenreMoodPromptSelected,
-            },
-            {
               id: 'gm-prompt-filt',
-              label: 'Genre/Mood prompt (filtered)',
+              label: t('admin.tracks.genreMoodPromptFiltered'),
               onSelect: handleBatchGenreMoodPromptFiltered,
             },
             {
               id: 'gm-import',
-              label: 'Import AI · Genre/Mood',
+              label: t('admin.tracks.importGmOpenBtn'),
               onSelect: () => {
                 setGmImportText('')
                 setGmImportResult(null)
@@ -1238,7 +1253,7 @@ export function TracksRoute() {
       <FormModal
         open={!!batchGenreMoodPromptModal}
         size="lg"
-        title="Genre / mood batch prompt"
+        title={t('admin.tracks.batchGenreMoodPromptTitle')}
         subtitle={t('admin.tracks.batchGenreMoodSubtitle')}
         onClose={() => setBatchGenreMoodPromptModal(null)}
         footer={
@@ -1279,7 +1294,7 @@ export function TracksRoute() {
       <FormModal
         open={!!batchLyricsPromptModal}
         size="lg"
-        title="Lyrics Batch Prompt"
+        title={t('admin.tracks.batchLyricsPromptTitle')}
         subtitle={t('admin.tracks.batchLyricsSubtitle')}
         onClose={() => setBatchLyricsPromptModal(null)}
         footer={

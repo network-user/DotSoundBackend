@@ -182,11 +182,20 @@ export function usePreviewLoop<K extends string | number>({
 
   const start = useCallback(
     async (key: K) => {
-      stop()
+      clearTimer()
+      const a = audioRef.current
+      if (a) {
+        try {
+          a.pause()
+          a.onended = null
+        } catch {
+          /* ignore */
+        }
+      }
       playingKeyRef.current = key
       setLoadingKey(key)
       setPlayingKey(null)
-      const a = audioRef.current
+      startEventFiredForRef.current = null
       if (!a) return
       a.muted = true
       a.src = SILENT_WAV
@@ -206,7 +215,9 @@ export function usePreviewLoop<K extends string | number>({
           queuesRef.current.set(key, queue)
           idxRef.current.set(key, 0)
         } catch {
-          if (playingKeyRef.current === key) stop()
+          if (playingKeyRef.current === key) {
+            stop()
+          }
           return
         }
       }

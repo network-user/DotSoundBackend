@@ -1,5 +1,10 @@
 import { create } from 'zustand'
 
+import {
+  clearDeviceApprovalBrowserState,
+  persistPendingDeviceId,
+} from '../lib/adminDeviceApprovalSession'
+
 export type AdminAuthStatus =
   | 'loading'
   | 'unauth'
@@ -20,6 +25,7 @@ export interface AdminAuthState {
     expiresInSeconds: number,
   ) => void
   setPendingDevice: (id: number) => void
+  restorePendingDevice: (id: number) => void
   setCapabilities: (caps: string[]) => void
   reset: () => void
 }
@@ -32,28 +38,41 @@ export const useAdminAuth = create<AdminAuthState>(
     pendingDeviceId: null,
     capabilities: [],
     setStatus: (status) => set({ status }),
-    setSession: (token, expiresInSeconds) =>
+    setSession: (token, expiresInSeconds) => {
+      clearDeviceApprovalBrowserState()
       set({
         status: 'authenticated',
         accessToken: token,
         expiresAt:
           Date.now() + expiresInSeconds * 1000,
         pendingDeviceId: null,
-      }),
-    setPendingDevice: (id) =>
+      })
+    },
+    setPendingDevice: (id) => {
+      persistPendingDeviceId(id)
       set({
         status: 'needs_device_approval',
         pendingDeviceId: id,
-      }),
+      })
+    },
+    restorePendingDevice: (id) => {
+      persistPendingDeviceId(id)
+      set({
+        status: 'needs_device_approval',
+        pendingDeviceId: id,
+      })
+    },
     setCapabilities: (caps) =>
       set({ capabilities: caps }),
-    reset: () =>
+    reset: () => {
+      clearDeviceApprovalBrowserState()
       set({
         status: 'unauth',
         accessToken: null,
         expiresAt: null,
         pendingDeviceId: null,
         capabilities: [],
-      }),
+      })
+    },
   }),
 )

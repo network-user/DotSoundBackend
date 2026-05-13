@@ -12,6 +12,94 @@
 - `[x]` - завершено
 - `[-]` - отменено / неактуально
 
+- [x] **Главная: герой — последний прослушанный; «Бесконечная волна» от рекомендаций**
+  — В шапке героя приоритет `getListenHistory` (последний уникальный трек),
+  затем home highlight, секции и fallback. Подпись героя — `sectionRecent`, если
+  источник — история. Кнопка волны на главной берёт сид из порядка секций
+  (`continue` → `personalized` → …), не из карточки героя; общая логика с
+  пустым состоянием. `HomeView.tsx`.
+
+- [x] **Радио: история «назад» только на 1–2 трека**
+  — Локальный `historyRef` в `RadioView` обновлялся только пока смонтирован
+  экран `/radio`, поэтому листание с главной/плеера не попадало в стек.
+  Хронология сессии (`radioSessionTimeline`, до 30 треков) перенесена в
+  `PlayerContext`; назад — `playRadioPrevious` / ветка `playPrev` в радио.
+  `RadioView.tsx`, `PlayerContext.tsx`.
+
+- [x] **Настройки: «Сбросить рекомендации» не срабатывало**
+  — Баннер согласия (`.consent-banner`) был с `z-index: 1500` и перекрывал
+  модалку подтверждения (`z-index: 200`), клики уходили в пустоту. Баннер
+  опущен до 166 (выше плеера 165, ниже листов 170+). Базовый `.modal` —
+  `var(--z-modal, 220)`. `replayOnboarding`: POST с `Content-Type` и `{}`.
+  `ResetRecommendationsSection`: `stopPropagation` на открытии. `global.css`,
+  `api.ts`.
+
+- [x] **Онбординг свайп: конец списка — текст и завершение**
+  — Флаг `tasteExhausted` после ответа API без новых треков; повторный опрос
+  без дублей убран. Плашка с `allDoneHint` в стеке, `canFinish` включает
+  исчерпание. `OnboardingV2.tsx`, `onboarding.css`, `i18n_extra2_ru/en.json`.
+
+- [x] **Онбординг свайп-калибровка: play менее навязчив + свайп снова работает**
+  — При `prefers-reduced-motion` карточка рендерилась без `drag`, свайпа не было.
+  Карточка всегда `m.div` с горизонтальным drag; при reduce — мягче elastic и
+  короче exit. Блок `.onb-v2-swipe-card__info` перехватывал указатель — добавлен
+  `pointer-events: none`. Неполный свайп: `animate(x, 0)`. После старта
+  воспроизведения ~2.2s скрывается центральная кнопка play/pause; пауза — тап
+  по карточке (`onTap`). Стили play: ниже непрозрачность, без пульсации.
+  `OnboardingV2.tsx`, `onboarding.css`.
+
+- [x] **Онбординг артисты: play под аватаром и не кликался**
+  — Та же вложенная кнопка, что у жанров: внешний `<button>` и внутренний
+  `role="button"`. Карточка — `div`, выбор — `button.onboarding-artist-card__toggle`,
+  превью — отдельный `button.onboarding-artist-preview-btn` с `z-index: 4` и
+  позицией `top`/`left` относительно карточки (как раньше угол у 56px-аватара).
+  `OnboardingV2.tsx`, `global.css`.
+
+- [x] **Онбординг жанры: превью по play не стартовало**
+  — В `usePreviewLoop.start()` первым вызывался `stop()` с `audio.src = ''`,
+  что сбрасывает разрешение автовоспроизведения до `await fetcher()` (особенно
+  iOS / WebView Telegram). В начале `start()` теперь только `pause` + снятие
+  `onended`, без обнуления `src`. В `GenreBubble` убрана вложенная интерактивность
+  внутри `<button>` (невалидный DOM): обёртка `div`, выбор жанра и play — два
+  соседних `button`, стили `onb-v2-bubble__toggle` в `onboarding.css`.
+
+- [x] **Карточка трека: лайк/дизлайк — белая заливка и синк дизлайков**
+  — При входе подгружаются `dislikedIds` через `getDislikedTracks` (раньше
+  только лайки). В шите: `MorphIcon` для дизлайка как для сердца; активные
+  кнопки `tcs-action-like` / `tcs-action-dislike` с белым текстом и иконкой.
+  `LikesContext.tsx`, `MorphIcon.tsx`, `TrackCardSheet.tsx`, `global.css`.
+
+- [x] **Главная: кнопка-«волна» (heroRadio) в монохроме**
+  — У `.rh-home-hero__actions .mp-press--ghost` фон и бегущая обводка
+  (`::before`, `rh-hero-wave-border`) были цветными (голубой/фиолетовый/бирюза).
+  Переведены в белые градиенты: внутренний fill —
+  `linear-gradient(135deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.06) 50%,
+  rgba(255,255,255,0.14) 100%)`; анимированная обводка — белая, alpha
+  0.55→0.18→0.55→0.18. Анимация и форма сохранены, только цвет — белый.
+  Точки внизу (`::after`) уже были белыми. `frontend/src/styles/redesign-home.css`.
+
+- [x] **Админ · Треки: три batch-промпта в тулбаре**
+  — Раньше одна кнопка «Batch Prompt» (только контекст карточки); lyrics и
+  genre/mood были только в overflow. Добавлены отдельные кнопки с счётчиком
+  выбранных, overflow — промпты по фильтрам + импорты. i18n en/ru.
+  `TracksRoute.tsx`, `locales/en.json`, `locales/ru.json`.
+
+- [x] **Радио: волна-спектр всегда белая**
+  — В `RadioView` под диском у `Waveform` стоял `color={accentColor}` из
+  палитры обложки, поэтому волна «адаптировалась» в цвет трека. Проп `color`
+  убран — компонент сам падает в белый дефолт
+  (`rgba(255,255,255,0.88)`/`0.38` для overlay). `AudioRipple` (`ringColor`)
+  оставлен на акценте, его пользователь не трогал. `frontend/src/views/RadioView.tsx`.
+
+- [x] **Радио / артист: плавный фон hero (как на главной)**
+  — В `.rh-radio-root .rh-radio-hero` и `.rf-artist__hero` за ambient-слоями
+  не было подложки, поэтому радиальные «пятна» цвета висели на прозрачном фоне
+  и выглядели грязно по краям и за круглой обложкой. Добавлен такой же
+  background, как у `.rh-home-hero` (`#0d0d0d` + лёгкий радиальный градиент
+  `120% 70% at 50% 0%`), и понижена непрозрачность ambient-слоёв до 0.85,
+  как на главной. `frontend/src/styles/redesign-home.css`,
+  `frontend/src/styles/redesign-artist.css`.
+
 - [x] **Мини-плеер (touch): два прогресс-бара**
   — В `MiniPlayerBar.tsx` был лишний второй `mp-seek-wrap` с тем же `seekInputRef`;
   нижний слайдер убран, RAF и перемотка снова на одном верхнем seek + `mp-seek-track`.
@@ -306,6 +394,18 @@
   — Убран `#player-bar::after` (подсветка снизу). Класс
   `rp-player-bar--touch`: компактные отступы, обложка 44px, скрыта
   ссылка на внешний источник в баре.
+
+- [x] **Плеер: автосkip недоступных треков**
+  — Ошибка загрузки стрима (`playTrack` catch) для любых треков ведёт в
+  `skipUnavailableTrack` (раньше `playNext` только SoundCloud + radio).
+  — В `audio` `onError` убран дебаунс 500ms после `src` (глушил быстрые
+  404); вместо этого игнор только при пустом `currentSrc`/`src`.
+  — `playNext` для prefetch/offline якорится на `lastTrackIdRef`, не на
+  устаревший `track` из замыкания; `stop`/restore синхронизируют ref.
+  — `skipUnavailableTrack` вызывает `playNext({ bypassInFlightGuard: true })`:
+  иначе при ошибке `playTrack` внутри обычного `playNext` флаг
+  `playNextInFlightRef` блокировал вложенный переход — тосты «пропущено N»
+  без смены трека в UI.
 
 - [x] **Анимация смены трека (слайд)**
   — `PlayerContext`: `trackChangeSlide` + инжект направления в `playNext` /

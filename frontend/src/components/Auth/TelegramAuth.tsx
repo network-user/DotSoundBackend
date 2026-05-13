@@ -24,11 +24,17 @@ type Step = 'welcome' | 'code' | 'success'
 interface Props {
   onAuth: () => void
   onEmail?: () => void
+  initialStep?: 'welcome' | 'code'
+  initialPopupBlocked?: boolean
+  botUsername?: string
 }
 
 export function TelegramAuth({
   onAuth,
   onEmail,
+  initialStep,
+  initialPopupBlocked,
+  botUsername: botUsernameProp,
 }: Props) {
   const { t } = useTranslation()
   const brandLabel = useBrandLabel()
@@ -40,12 +46,18 @@ export function TelegramAuth({
   const startOnCode = params.get('auth') === 'code'
 
   const [step, setStep] = useState<Step>(
-    startOnCode ? 'code' : 'welcome',
+    initialStep ?? (startOnCode ? 'code' : 'welcome'),
   )
-  const [botUsername, setBotUsername] = useState('')
-  const [configReady, setConfigReady] = useState(false)
+  const [botUsername, setBotUsername] = useState(
+    botUsernameProp ?? '',
+  )
+  const [configReady, setConfigReady] = useState(
+    Boolean(botUsernameProp),
+  )
   const [configFailed, setConfigFailed] = useState(false)
-  const [popupBlocked, setPopupBlocked] = useState(false)
+  const [popupBlocked, setPopupBlocked] = useState(
+    Boolean(initialPopupBlocked),
+  )
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -75,23 +87,25 @@ export function TelegramAuth({
   }, [loading, t])
 
   useEffect(() => {
-    api
-      .getAuthConfig()
-      .then((cfg) => {
-        setBotUsername(
-          String(cfg.bot_username ?? '').trim(),
-        )
-        setConfigFailed(false)
-      })
-      .catch(() => {
-        setConfigFailed(true)
-      })
-      .finally(() => setConfigReady(true))
+    if (!botUsernameProp) {
+      api
+        .getAuthConfig()
+        .then((cfg) => {
+          setBotUsername(
+            String(cfg.bot_username ?? '').trim(),
+          )
+          setConfigFailed(false)
+        })
+        .catch(() => {
+          setConfigFailed(true)
+        })
+        .finally(() => setConfigReady(true))
+    }
     return () => {
       if (successTimer.current)
         clearTimeout(successTimer.current)
     }
-  }, [])
+  }, [botUsernameProp])
 
   const botOpenUrl =
     botUsername.length > 0

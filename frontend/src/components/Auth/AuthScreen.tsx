@@ -98,18 +98,31 @@ export function AuthScreen({
   const brandLabel = useBrandLabel()
   const [showDebug, setShowDebug] =
     useState(import.meta.env.DEV)
+  const [botUsername, setBotUsername] = useState('')
+  const [configReady, setConfigReady] =
+    useState(false)
+  const [configError, setConfigError] = useState('')
+  const [popupBlocked, setPopupBlocked] =
+    useState(false)
+  const [telegramStartStep, setTelegramStartStep] =
+    useState<'welcome' | 'code'>('welcome')
 
   useEffect(() => {
-    if (showDebug) return
     api
       .getAuthConfig()
       .then((cfg) => {
-        if (cfg.debug) {
-          setShowDebug(true)
-        }
+        setBotUsername(
+          String(cfg.bot_username ?? '').trim(),
+        )
+        if (cfg.debug) setShowDebug(true)
       })
-      .catch(() => {})
-  }, [showDebug])
+      .catch(() => {
+        setConfigError(
+          'Не удалось загрузить настройки. Проверьте, что API доступен.',
+        )
+      })
+      .finally(() => setConfigReady(true))
+  }, [])
 
   const params = new URLSearchParams(
     window.location.search,
@@ -126,11 +139,38 @@ export function AuthScreen({
   const [method, setMethod] =
     useState<Method>(initial)
 
+  const handleTelegramClick = () => {
+    if (!configReady) return
+    if (!botUsername) {
+      setConfigError(
+        configError ||
+          'Бот не настроен (telegram_bot_username в бэкенде).',
+      )
+      return
+    }
+    // Open the bot synchronously inside the click handler so the
+    // browser keeps user-activation for window.open. Doing this in
+    // TelegramAuth (after a state transition) is what forced the
+    // second click users were seeing.
+    const url = `https://t.me/${botUsername}?start=web_login`
+    const opened = window.open(
+      url,
+      '_blank',
+      'noopener,noreferrer',
+    )
+    setPopupBlocked(!opened)
+    setTelegramStartStep('code')
+    setMethod('telegram')
+  }
+
   if (method === 'telegram') {
     return (
       <TelegramAuth
         onAuth={onAuth}
         onEmail={() => setMethod('email')}
+        initialStep={telegramStartStep}
+        initialPopupBlocked={popupBlocked}
+        botUsername={botUsername}
       />
     )
   }
@@ -171,10 +211,25 @@ export function AuthScreen({
           variant="primary"
           className="btn-primary auth-tg-btn"
           haptic="medium"
-          onClick={() => setMethod('telegram')}
+          onClick={handleTelegramClick}
+          disabled={!configReady}
         >
-          {t('auth.loginTelegram')}
+          {!configReady
+            ? t('common.loading', 'Загрузка…')
+            : t('auth.loginTelegram')}
         </MotionPress>
+        {configError && (
+          <p
+            className="auth-error"
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              color: '#e55',
+            }}
+          >
+            {configError}
+          </p>
+        )}
         <p className="auth-microcopy">
           {t('auth.tgMicrocopy')}
         </p>

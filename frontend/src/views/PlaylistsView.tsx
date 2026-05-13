@@ -1,4 +1,5 @@
 ﻿import {
+  type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -6,17 +7,22 @@
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Reorder, useDragControls } from 'framer-motion'
 
 import { Icon } from '@/components/Icon/Icon'
 import { LongPressMenu } from '@/components/ui/LongPressMenu'
 import { MotionPress } from '@/components/ui/MotionPress'
+import { SwipeRow } from '@/components/ui/SwipeRow'
+import { TrackCard } from '@/components/TrackCard/TrackCard'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { TrackPickerSheet } from '@/components/TrackPickerSheet/TrackPickerSheet'
+import { useLikes } from '@/store/LikesContext'
 import { useSound } from '@/store/SoundContext'
 import { api } from '@/lib/api'
 import {
   getIsAdmin,
   getUserId,
+  haptic,
   setBackButton,
 } from '@/lib/telegram'
 import { showIsland } from '@/lib/island'
@@ -25,7 +31,9 @@ import type {
   ChatListItem,
   Playlist,
   PlaylistCollaboratorItem,
+  PlaylistInviteOut,
   PlaylistWithTracks,
+  Track,
 } from '@/types/api'
 
 interface PlaylistsViewProps {
@@ -34,6 +42,113 @@ interface PlaylistsViewProps {
 
 type Screen = 'list' | 'detail'
 
+interface ReorderablePlaylistTrackProps {
+  track: Track
+  contextTracks: Track[]
+  onRemove: () => void
+  onDragEnd: () => void
+  dragHandleAriaLabel: string
+  likeLabel: string
+  unlikeLabel: string
+  removeLabel: string
+}
+
+function ReorderablePlaylistTrack({
+  track,
+  contextTracks,
+  onRemove,
+  onDragEnd,
+  dragHandleAriaLabel,
+  likeLabel,
+  unlikeLabel,
+  removeLabel,
+}: ReorderablePlaylistTrackProps) {
+  const controls = useDragControls()
+  const [dragging, setDragging] = useState(false)
+  const { isLiked, toggleLike } = useLikes()
+  const liked = isLiked(track.id)
+
+  const handleGripPointerDown = (e: ReactPointerEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragging(true)
+    try {
+      haptic('medium')
+    } catch {
+      /* haptic optional */
+    }
+    controls.start(e.nativeEvent)
+  }
+
+  return (
+    <Reorder.Item
+      value={track}
+      dragListener={false}
+      dragControls={controls}
+      className={`rd-pl-track-row${dragging ? ' is-dragging' : ''}`}
+      onDragEnd={() => {
+        setDragging(false)
+        onDragEnd()
+      }}
+      whileDrag={{ scale: 1.015 }}
+      transition={{
+        type: 'spring',
+        stiffness: 360,
+        damping: 32,
+        mass: 0.7,
+      }}
+    >
+      <button
+        type="button"
+        className="rd-pl-track-row-grip"
+        aria-label={dragHandleAriaLabel}
+        onPointerDown={handleGripPointerDown}
+        onClick={(e) => e.preventDefault()}
+      >
+        <Icon name="grip" size={18} />
+      </button>
+      <SwipeRow
+        className="rd-pl-track-row-swipe"
+        leftAction={{
+          icon: liked ? 'heart' : 'heart-outline',
+          label: liked ? unlikeLabel : likeLabel,
+          onTrigger: () => {
+            void toggleLike(track.id, track)
+          },
+        }}
+        rightAction={{
+          icon: 'x',
+          label: removeLabel,
+          onTrigger: onRemove,
+        }}
+      >
+        <TrackCard track={track} contextTracks={contextTracks} />
+      </SwipeRow>
+    </Reorder.Item>
+  )
+}
+
+function formatInviteExpiry(iso: string): string {
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return iso
+    return d.toLocaleString(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    })
+  } catch {
+    return iso
+  }
+}
+
+
+// === FEATURE FLAG: invite-collaborator UI ===
+// Set to `true` to restore the "Пригласить соавтора" / "Принять инвайт"
+// buttons, both modals, and the hash deep-link (#playlist-invite-<token>)
+// handler. The underlying state, handlers, and helpers below are kept
+// intact so flipping this flag is the only change needed to bring the
+// feature back online. Currently disabled 2026-05 per product request.
+const SHOW_INVITE_FEATURE: boolean = false
 
 export function PlaylistsView({
   embedded = false,
@@ -56,7 +171,6 @@ export function PlaylistsView({
   const [editPublic, setEditPublic] = useState(false)
   const [editBusy, setEditBusy] = useState(false)
   const [addingTrackId, setAddingTrackId] = useState<number | null>(null)
-  const [trackOrderFilter, setTrackOrderFilter] = useState('')
   const [addTrackSheetOpen, setAddTrackSheetOpen] = useState(false)
   const [renameOpen, setRenameOpen] = useState<Playlist | null>(null)
   const [renameValue, setRenameValue] = useState('')
@@ -75,6 +189,17 @@ export function PlaylistsView({
   const [inviteAcceptOpen, setInviteAcceptOpen] = useState(false)
   const [inviteToken, setInviteToken] = useState('')
   const [inviteAcceptBusy, setInviteAcceptBusy] = useState(false)
+  const [inviteCreateOpen, setInviteCreateOpen] = useState(false)
+  const [inviteData, setInviteData] = useState<
+    PlaylistInviteOut | null
+  >(null)
+  const [inviteShareSendingConvId, setInviteShareSendingConvId] =
+    useState<number | null>(null)
+  const [inviteShareChatsLoading, setInviteShareChatsLoading] =
+    useState(false)
+  const [inviteShareChats, setInviteShareChats] = useState<
+    ChatListItem[]
+  >([])
   const uid = getUserId()
   const isAdmin = getIsAdmin()
   const canEditSelected = Boolean(
@@ -118,7 +243,6 @@ export function PlaylistsView({
   }, [selected?.id])
 
   useEffect(() => {
-    setTrackOrderFilter('')
     setAddTrackSheetOpen(false)
     setCollaborators(null)
   }, [selected?.id])
@@ -132,6 +256,35 @@ export function PlaylistsView({
       .then(setCollaborators)
       .catch(() => setCollaborators([]))
   }, [selected?.id, uid, isAdmin])
+
+  useEffect(() => {
+    if (!SHOW_INVITE_FEATURE) return
+    const consume = () => {
+      const hash = window.location.hash
+      const m = hash.match(/^#playlist-invite-(.+)$/)
+      if (!m) return
+      const token = decodeURIComponent(m[1])
+      if (!token) return
+      setInviteToken(token)
+      setInviteAcceptOpen(true)
+      try {
+        const url = new URL(window.location.href)
+        url.hash = ''
+        window.history.replaceState(
+          null,
+          '',
+          url.toString(),
+        )
+      } catch {
+        /* ignore */
+      }
+    }
+    consume()
+    window.addEventListener('hashchange', consume)
+    return () => {
+      window.removeEventListener('hashchange', consume)
+    }
+  }, [])
 
 
   useEffect(() => {
@@ -211,18 +364,27 @@ export function PlaylistsView({
     }
   }
 
+  const loadInviteShareChats = useCallback(async () => {
+    setInviteShareChatsLoading(true)
+    try {
+      const chats = await api.listChats()
+      setInviteShareChats(chats)
+    } catch {
+      setInviteShareChats([])
+    } finally {
+      setInviteShareChatsLoading(false)
+    }
+  }, [])
+
   const handleCollabInvite = async () => {
     if (!selected) return
     setCollabBusy(true)
     try {
-      const { token } = await api.createPlaylistInvite(selected.id)
-      await navigator.clipboard.writeText(token)
+      const data = await api.createPlaylistInvite(selected.id)
+      setInviteData(data)
+      setInviteCreateOpen(true)
       sound.play('notificationInfo')
-      showIsland({
-        kind: 'toast',
-        title: t('redesign.library.playlistCollabInviteCopied'),
-        durationMs: 2400,
-      })
+      void loadInviteShareChats()
     } catch {
       sound.play('notificationError')
       showIsland({
@@ -234,6 +396,104 @@ export function PlaylistsView({
       setCollabBusy(false)
     }
   }
+
+  const buildInviteShareMessage = useCallback(
+    (
+      playlistName: string,
+      token: string,
+      expiresAt: string,
+    ): string => {
+      const url = `${window.location.origin}${import.meta.env.BASE_URL}#playlist-invite-${token}`
+      return t('redesign.library.playlistCollabInviteShareMsg', {
+        playlist: playlistName,
+        token,
+        expires: formatInviteExpiry(expiresAt),
+        url,
+      })
+    },
+    [t],
+  )
+
+  const handleInviteCopyCode = useCallback(async () => {
+    if (!inviteData) return
+    try {
+      await navigator.clipboard.writeText(inviteData.token)
+      sound.play('notificationInfo')
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.library.playlistCollabInviteCopied'),
+        durationMs: 2000,
+      })
+    } catch {
+      sound.play('notificationError')
+      showIsland({
+        kind: 'error',
+        title: t('redesign.library.shareCopyFail'),
+        durationMs: 3000,
+      })
+    }
+  }, [inviteData, sound, t])
+
+  const handleInviteCopyLink = useCallback(async () => {
+    if (!inviteData) return
+    const url = `${window.location.origin}${import.meta.env.BASE_URL}#playlist-invite-${inviteData.token}`
+    try {
+      await navigator.clipboard.writeText(url)
+      sound.play('notificationInfo')
+      showIsland({
+        kind: 'toast',
+        title: t('redesign.library.shareCopyDone'),
+        durationMs: 2000,
+      })
+    } catch {
+      sound.play('notificationError')
+      showIsland({
+        kind: 'error',
+        title: t('redesign.library.shareCopyFail'),
+        durationMs: 3000,
+      })
+    }
+  }, [inviteData, sound, t])
+
+  const handleInviteSendToChat = useCallback(
+    async (conversationId: number) => {
+      if (!selected || !inviteData) return
+      setInviteShareSendingConvId(conversationId)
+      try {
+        const msg = buildInviteShareMessage(
+          selected.name,
+          inviteData.token,
+          inviteData.expires_at,
+        )
+        await api.sendMessage(conversationId, msg)
+        sound.play('notificationInfo')
+        showIsland({
+          kind: 'toast',
+          title: t(
+            'redesign.library.playlistCollabInviteSentToChat',
+          ),
+          durationMs: 2000,
+        })
+      } catch {
+        sound.play('notificationError')
+        showIsland({
+          kind: 'error',
+          title: t('redesign.library.shareSendFail'),
+          durationMs: 3000,
+        })
+      } finally {
+        setInviteShareSendingConvId(null)
+      }
+    },
+    [selected, inviteData, buildInviteShareMessage, sound, t],
+  )
+
+  const closeInviteCreateModal = useCallback(() => {
+    setInviteCreateOpen(false)
+    setInviteData(null)
+    setInviteShareChats([])
+    setInviteShareSendingConvId(null)
+  }, [])
 
   const handleCollabRemove = async (
     item: PlaylistCollaboratorItem,
@@ -305,17 +565,33 @@ export function PlaylistsView({
     }
   }
 
-  const moveTrack = async (index: number, dir: -1 | 1) => {
+  const handleReorderTracks = useCallback(
+    (next: Track[]) => {
+      setSelected((prev) =>
+        prev ? { ...prev, tracks: next } : prev,
+      )
+    },
+    [],
+  )
+
+  const persistTrackOrder = useCallback(async () => {
     if (!selected || !canEditSelected) return
-    const nextIndex = index + dir
-    if (nextIndex < 0 || nextIndex >= selected.tracks.length) return
-    const ids = selected.tracks.map((t) => t.id)
-    const tmp = ids[index]
-    ids[index] = ids[nextIndex]
-    ids[nextIndex] = tmp
-    await api.setPlaylistTrackOrder(selected.id, ids)
-    await refreshSelected()
-  }
+    const ids = selected.tracks.map((tr) => tr.id)
+    try {
+      await api.setPlaylistTrackOrder(selected.id, ids)
+    } catch {
+      showIsland({
+        kind: 'error',
+        title: t('redesign.library.playlistReorderFail'),
+        durationMs: 3500,
+      })
+      try {
+        await refreshSelected()
+      } catch {
+        /* ignore secondary failure */
+      }
+    }
+  }, [selected, canEditSelected, refreshSelected, t])
 
   const beginRename = useCallback((p: Playlist) => {
     setRenameOpen(p)
@@ -444,22 +720,6 @@ export function PlaylistsView({
       new Set(selected?.tracks.map((t) => t.id) ?? []),
     [selected],
   )
-
-  const orderFilterQ = trackOrderFilter.trim().toLowerCase()
-  const filteredOrderIndices = useMemo(() => {
-    if (!selected?.tracks?.length) return []
-    if (!orderFilterQ) {
-      return selected.tracks.map((_, i) => i)
-    }
-    return selected.tracks
-      .map((tr, i) => ({ tr, i }))
-      .filter(({ tr }) => {
-        const hay =
-          `${tr.title} ${tr.artist ?? ''}`.toLowerCase()
-        return hay.includes(orderFilterQ)
-      })
-      .map(({ i }) => i)
-  }, [selected?.tracks, orderFilterQ])
 
   const formatShareChatTitle = (item: ChatListItem): string => {
     if (item.conversation.type === 'saved') {
@@ -802,19 +1062,21 @@ export function PlaylistsView({
               <span className="rd-pl-collab-title">
                 {t('redesign.library.playlistCollabTitle')}
               </span>
-              <MotionPress
-                type="button"
-                variant="ghost"
-                haptic="light"
-                className="btn-secondary rd-pl-collab-invite-btn"
-                disabled={collabBusy}
-                onClick={() => {
-                  void handleCollabInvite()
-                }}
-              >
-                <Icon name="user-plus" size={14} />
-                {t('redesign.library.playlistCollabInvite')}
-              </MotionPress>
+              {SHOW_INVITE_FEATURE && (
+                <MotionPress
+                  type="button"
+                  variant="ghost"
+                  haptic="light"
+                  className="btn-secondary rd-pl-collab-invite-btn"
+                  disabled={collabBusy}
+                  onClick={() => {
+                    void handleCollabInvite()
+                  }}
+                >
+                  <Icon name="user-plus" size={14} />
+                  {t('redesign.library.playlistCollabInvite')}
+                </MotionPress>
+              )}
             </div>
             {collaborators === null && (
               <div className="rd-pl-collab-loading">
@@ -863,84 +1125,55 @@ export function PlaylistsView({
         )}
 
         {canEditSelected && selected.tracks.length > 0 && (
-          <div className="rd-pl-order-tools">
-            <input
-              className="form-input rd-pl-order-search"
-              placeholder={t(
-                'redesign.library.playlistTracksFilterPlaceholder',
-              )}
-              aria-label={t(
-                'redesign.library.playlistTracksFilterPlaceholder',
-              )}
-              value={trackOrderFilter}
-              onChange={(e) =>
-                setTrackOrderFilter(e.target.value)
-              }
-            />
-          </div>
-        )}
-        {canEditSelected &&
-          orderFilterQ &&
-          filteredOrderIndices.length === 0 && (
-            <p className="hint rd-pl-order-empty">
-              {t('redesign.library.playlistTracksFilterEmpty')}
-            </p>
-          )}
-        {canEditSelected && filteredOrderIndices.length > 0 && (
-          <div className="rd-pl-edit-rows">
-            {filteredOrderIndices.map((idx) => {
-              const tr = selected.tracks[idx]
-              return (
-                <div key={tr.id} className="rd-pl-edit-row">
-                  <span className="rd-pl-edit-row-title">
-                    {tr.title}
-                  </span>
-                  <MotionPress
-                    type="button"
-                    variant="icon"
-                    haptic="selection"
-                    className="icon-btn"
-                    ariaLabel={t(
-                      'redesign.library.playlistMoveUp',
-                    )}
-                    onClick={() => void moveTrack(idx, -1)}
-                  >
-                    <Icon name="chevron-up" size={14} />
-                  </MotionPress>
-                  <MotionPress
-                    type="button"
-                    variant="icon"
-                    haptic="selection"
-                    className="icon-btn"
-                    ariaLabel={t(
-                      'redesign.library.playlistMoveDown',
-                    )}
-                    onClick={() => void moveTrack(idx, 1)}
-                  >
-                    <Icon name="chevron-down" size={14} />
-                  </MotionPress>
-                  <MotionPress
-                    type="button"
-                    variant="icon"
-                    haptic="medium"
-                    className="icon-btn"
-                    ariaLabel={tr.title}
-                    onClick={() =>
-                      void handleRemoveTrack(tr.id)
-                    }
-                  >
-                    <Icon name="x" size={14} />
-                  </MotionPress>
-                </div>
-              )
-            })}
-          </div>
+          <p className="rd-pl-edit-hint">
+            <Icon name="grip" size={14} />
+            <span>
+              {t('redesign.library.playlistReorderHint')}
+            </span>
+          </p>
         )}
 
-        <TrackList
-          tracks={selected.tracks}
-          emptyMessage={t('redesign.library.playlistEmptyTracks')}
-        />
+        {canEditSelected && selected.tracks.length > 0 ? (
+          <Reorder.Group
+            axis="y"
+            values={selected.tracks}
+            onReorder={handleReorderTracks}
+            className="track-list re-tl-root rd-pl-tracks-edit"
+          >
+            {selected.tracks.map((tr) => (
+              <ReorderablePlaylistTrack
+                key={tr.id}
+                track={tr}
+                contextTracks={selected.tracks}
+                onRemove={() => {
+                  void handleRemoveTrack(tr.id)
+                }}
+                onDragEnd={() => {
+                  void persistTrackOrder()
+                }}
+                dragHandleAriaLabel={t(
+                  'redesign.library.playlistDragHandle',
+                )}
+                likeLabel={t(
+                  'redesign.tracks.swipeLike',
+                  'Like',
+                )}
+                unlikeLabel={t(
+                  'redesign.tracks.swipeUnlike',
+                  'Unlike',
+                )}
+                removeLabel={t(
+                  'redesign.library.playlistSwipeRemove',
+                )}
+              />
+            ))}
+          </Reorder.Group>
+        ) : (
+          <TrackList
+            tracks={selected.tracks}
+            emptyMessage={t('redesign.library.playlistEmptyTracks')}
+          />
+        )}
 
         {shareOpen && (
           <div
@@ -1062,16 +1295,18 @@ export function PlaylistsView({
           <Icon name="plus" size={18} />
           {t('redesign.library.playlistCreate')}
         </MotionPress>
-        <MotionPress
-          type="button"
-          variant="ghost"
-          haptic="light"
-          className="rd-pl-invite-accept-btn"
-          onClick={() => setInviteAcceptOpen(true)}
-        >
-          <Icon name="user-plus" size={16} />
-          {t('redesign.library.playlistCollabAcceptBtn')}
-        </MotionPress>
+        {SHOW_INVITE_FEATURE && (
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="rd-pl-invite-accept-btn"
+            onClick={() => setInviteAcceptOpen(true)}
+          >
+            <Icon name="user-plus" size={16} />
+            {t('redesign.library.playlistCollabAcceptBtn')}
+          </MotionPress>
+        )}
       </div>
 
       {creating && (
@@ -1311,7 +1546,211 @@ export function PlaylistsView({
         )}
       </div>
 
-      {inviteAcceptOpen && (
+      {SHOW_INVITE_FEATURE && inviteCreateOpen && inviteData && selected && (
+        <div
+          className="share-modal-overlay fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              closeInviteCreateModal()
+            }
+          }}
+        >
+          <div className="share-modal scale-in">
+            <div className="share-modal-header">
+              <div className="share-modal-title-wrap">
+                <h3 className="share-modal-title">
+                  {t(
+                    'redesign.library.playlistCollabInviteModalTitle',
+                  )}
+                </h3>
+                <p className="share-modal-subtitle">
+                  {selected.name}
+                </p>
+              </div>
+              <MotionPress
+                type="button"
+                variant="icon"
+                haptic="light"
+                className="icon-btn"
+                ariaLabel={t('redesign.library.shareClose')}
+                onClick={closeInviteCreateModal}
+              >
+                <Icon name="x" size={18} />
+              </MotionPress>
+            </div>
+
+            <div className="rd-pl-invite-create">
+              <p className="rd-pl-invite-intro">
+                {t(
+                  'redesign.library.playlistCollabInviteIntro',
+                )}
+              </p>
+
+              <div>
+                <span className="rd-pl-invite-code-label">
+                  {t(
+                    'redesign.library.playlistCollabInviteCodeLabel',
+                  )}
+                </span>
+                <div className="rd-pl-invite-code-box">
+                  <span
+                    className="rd-pl-invite-code-value"
+                    aria-live="polite"
+                  >
+                    {inviteData.token}
+                  </span>
+                  <MotionPress
+                    type="button"
+                    variant="icon"
+                    haptic="light"
+                    className="icon-btn rd-pl-invite-code-copy"
+                    ariaLabel={t(
+                      'redesign.library.playlistCollabInviteCopyCode',
+                    )}
+                    onClick={() => {
+                      void handleInviteCopyCode()
+                    }}
+                  >
+                    <Icon name="copy" size={16} />
+                  </MotionPress>
+                </div>
+                <p className="rd-pl-invite-expires">
+                  {t(
+                    'redesign.library.playlistCollabInviteExpires',
+                    {
+                      date: formatInviteExpiry(
+                        inviteData.expires_at,
+                      ),
+                    },
+                  )}
+                </p>
+              </div>
+
+              <ol className="rd-pl-invite-howto">
+                <li>
+                  {t(
+                    'redesign.library.playlistCollabInviteHowTo1',
+                  )}
+                </li>
+                <li>
+                  {t(
+                    'redesign.library.playlistCollabInviteHowTo2',
+                  )}
+                </li>
+                <li>
+                  {t(
+                    'redesign.library.playlistCollabInviteHowTo3',
+                  )}
+                </li>
+              </ol>
+
+              <div className="rd-pl-invite-share-actions">
+                <MotionPress
+                  type="button"
+                  variant="primary"
+                  haptic="medium"
+                  className="btn-primary"
+                  onClick={() => {
+                    void handleInviteCopyCode()
+                  }}
+                >
+                  <Icon name="copy" size={16} />
+                  {t(
+                    'redesign.library.playlistCollabInviteCopyCode',
+                  )}
+                </MotionPress>
+                <MotionPress
+                  type="button"
+                  variant="ghost"
+                  haptic="light"
+                  className="btn-secondary"
+                  onClick={() => {
+                    void handleInviteCopyLink()
+                  }}
+                >
+                  <Icon name="link" size={16} />
+                  {t(
+                    'redesign.library.playlistCollabInviteCopyLink',
+                  )}
+                </MotionPress>
+              </div>
+
+              <div className="rd-pl-invite-share-chats">
+                <p className="rd-pl-invite-share-chats-label">
+                  {t(
+                    'redesign.library.playlistCollabInviteSendToChat',
+                  )}
+                </p>
+                {inviteShareChatsLoading ? (
+                  <div className="share-modal-loading">
+                    <div className="loader loader--sm" />
+                  </div>
+                ) : inviteShareChats.length === 0 ? (
+                  <p className="hint">
+                    {t(
+                      'redesign.library.playlistCollabInviteNoChats',
+                    )}
+                  </p>
+                ) : (
+                  <div className="share-chat-list">
+                    {inviteShareChats.map((item) => {
+                      const convId = item.conversation.id
+                      const sending =
+                        inviteShareSendingConvId === convId
+                      return (
+                        <MotionPress
+                          key={convId}
+                          type="button"
+                          variant="ghost"
+                          haptic="light"
+                          className="share-chat-row"
+                          onClick={() => {
+                            void handleInviteSendToChat(convId)
+                          }}
+                          disabled={
+                            inviteShareSendingConvId !== null
+                          }
+                        >
+                          <span className="share-chat-icon">
+                            <Icon
+                              name={
+                                item.conversation.type ===
+                                'group'
+                                  ? 'users-following'
+                                  : item.conversation.type ===
+                                      'saved'
+                                    ? 'heart'
+                                    : 'user'
+                              }
+                              size={16}
+                            />
+                          </span>
+                          <span className="share-chat-meta">
+                            <span className="share-chat-title">
+                              {formatShareChatTitle(item)}
+                            </span>
+                          </span>
+                          <span className="share-chat-action">
+                            {sending
+                              ? t(
+                                  'redesign.library.shareSending',
+                                )
+                              : t(
+                                  'redesign.library.shareSend',
+                                )}
+                          </span>
+                        </MotionPress>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {SHOW_INVITE_FEATURE && inviteAcceptOpen && (
         <div
           className="share-modal-overlay fade-in"
           onClick={(e) => {

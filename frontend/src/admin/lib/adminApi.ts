@@ -99,6 +99,14 @@ export function setUserTokenProvider(
   userTokenProvider = fn
 }
 
+function readDsCsrfCookie(): string {
+  if (typeof document === 'undefined') return ''
+  const match = document.cookie.match(
+    /(?:^|;\s*)ds_csrf=([^;]+)/,
+  )
+  return match ? decodeURIComponent(match[1]) : ''
+}
+
 async function rawRequest(
   path: string,
   opts: RequestOptions,
@@ -119,6 +127,12 @@ async function rawRequest(
   ) {
     const csrf = await ensureCsrf()
     if (csrf) headers['X-Admin-CSRF'] = csrf
+    if (!headers['X-CSRF-Token']) {
+      const dsCsrf = readDsCsrfCookie()
+      if (dsCsrf) {
+        headers['X-CSRF-Token'] = dsCsrf
+      }
+    }
   }
   if (opts.isUserToken) {
     const userToken = userTokenProvider()

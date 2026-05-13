@@ -5,6 +5,7 @@ import {
   AdminApiError,
   adminApi,
 } from '../../lib/adminApi'
+import { beginDeviceApprovalFlow } from '../../lib/adminDeviceApprovalSession'
 import { computeFingerprint } from '../../lib/fingerprint'
 import { useAdminAuth } from '../../store/adminAuthStore'
 import { TotpInput } from './TotpInput'
@@ -36,6 +37,7 @@ export function AdminLogin() {
       })
       if (result.requires_device_approval) {
         if (result.device_id) {
+          beginDeviceApprovalFlow()
           setPendingDevice(result.device_id)
         } else {
           setError('device approval required')

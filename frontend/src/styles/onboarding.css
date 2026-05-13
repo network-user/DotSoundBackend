@@ -341,6 +341,19 @@
   animation: onbWelcomeFade 600ms 240ms var(--ease-snappy, ease-out) both;
 }
 
+.onb-v2-welcome__quote {
+  margin: -8px 0 0;
+  padding: 12px 14px 12px 13px;
+  border-left: 3px solid rgba(255, 255, 255, 0.22);
+  max-width: min(320px, 90vw);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.68);
+  text-align: left;
+  animation: onbWelcomeFade 600ms 360ms var(--ease-snappy, ease-out) both;
+}
+
 @keyframes onbWelcomeFade {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -537,17 +550,27 @@
   aspect-ratio: 1.1 / 1;
   border-radius: 20px;
   overflow: hidden;
-  border: 0;
   background: rgba(255, 255, 255, 0.06);
-  cursor: pointer;
-  display: flex;
-  align-items: flex-end;
-  padding: 14px;
-  text-align: left;
   transition:
     transform 200ms var(--ease-snappy, ease-out),
     box-shadow 200ms ease,
     background-color 200ms ease;
+}
+
+.onb-v2-bubble__toggle {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 14px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: flex-end;
+  text-align: left;
 }
 
 .onb-v2-bubble:active {
@@ -720,6 +743,9 @@
   left: 10px;
   width: 32px;
   height: 32px;
+  margin: 0;
+  padding: 0;
+  border: none;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.62);
   backdrop-filter: blur(6px);
@@ -815,6 +841,28 @@
   margin-top: 8px;
 }
 
+.onb-v2-swipe-all-done {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+  border-radius: 24px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.onb-v2-swipe-all-done__text {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.88);
+}
+
 .onb-v2-swipe-card {
   position: absolute;
   inset: 0;
@@ -883,6 +931,7 @@
   right: 16px;
   bottom: 16px;
   z-index: 1;
+  pointer-events: none;
 }
 
 .onb-v2-swipe-card__title {
@@ -980,8 +1029,8 @@
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
   padding: 0;
   transform: translate(-50%, -50%);
@@ -989,20 +1038,20 @@
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  opacity: 0.5;
-  transition: opacity 200ms ease, transform 160ms var(--ease-snappy, ease-out);
+  opacity: 0.38;
+  transition: opacity 220ms ease, transform 160ms var(--ease-snappy, ease-out);
   z-index: 4;
 }
 
 .onb-v2-swipe-card__play-pulse.is-interactive {
   pointer-events: auto;
   cursor: pointer;
-  opacity: 0.85;
+  opacity: 0.36;
   touch-action: manipulation;
 }
 
 .onb-v2-swipe-card__play-pulse.is-interactive:hover {
-  opacity: 1;
+  opacity: 0.52;
 }
 
 .onb-v2-swipe-card__play-pulse.is-interactive:active {
@@ -1010,12 +1059,20 @@
 }
 
 .onb-v2-swipe-card__play-pulse.is-playing {
-  opacity: 0.9;
-  animation: onbPlayPulse 1.6s ease-in-out infinite;
+  opacity: 0.4;
+}
+
+.onb-v2-swipe-card__play-pulse.is-interactive.is-playing {
+  animation: none;
+  opacity: 0.4;
+}
+
+.onb-v2-swipe-card__play-pulse.is-interactive.is-playing:hover {
+  opacity: 0.52;
 }
 
 .onb-v2-swipe-card__play-pulse.is-loading {
-  opacity: 1;
+  opacity: 0.72;
   animation: none;
 }
 
@@ -1026,11 +1083,6 @@
   border: 3px solid rgba(255, 255, 255, 0.25);
   border-top-color: #fff;
   animation: onbBubbleSpin 0.8s linear infinite;
-}
-
-@keyframes onbPlayPulse {
-  0%, 100% { transform: translate(-50%, -50%) scale(0.97); opacity: 0.8; }
-  50% { transform: translate(-50%, -50%) scale(1.05); opacity: 1; }
 }
 
 .onb-v2-swipe-card__mute-hint {
@@ -1341,9 +1393,9 @@
   .onb-v2-welcome__logo,
   .onb-v2-welcome__title,
   .onb-v2-welcome__subtitle,
+  .onb-v2-welcome__quote,
   .onb-v2-complete__check,
-  .onb-v2-bubble__check,
-  .onb-v2-swipe-card__play-pulse.is-playing {
+  .onb-v2-bubble__check {
     animation: none !important;
   }
 }

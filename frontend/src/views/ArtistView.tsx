@@ -525,6 +525,21 @@ export function ArtistView() {
                     : t('redesign.artist.follow')}
                 </span>
               </MotionPress>
+              <MotionPress
+                variant="ghost"
+                haptic="light"
+                onClick={() => setShareOpen(true)}
+                ariaLabel={t(
+                  'artist.shareAria',
+                  'Поделиться',
+                )}
+                className="rf-artist__follow-btn"
+              >
+                <Icon name="share-arrow" size={16} />
+                <span>
+                  {t('profile.share.shareNative', 'Поделиться')}
+                </span>
+              </MotionPress>
               {isOwnArtist && (
                 <>
                   <MotionPress
@@ -558,21 +573,6 @@ export function ArtistView() {
                 </>
               )}
             </div>
-            <MotionPress
-              variant="ghost"
-              haptic="light"
-              onClick={() => setShareOpen(true)}
-              ariaLabel={t(
-                'artist.shareAria',
-                'Поделиться',
-              )}
-              className="rf-artist__follow-btn rf-artist__actions-share"
-            >
-              <Icon name="share-arrow" size={16} />
-              <span>
-                {t('profile.share.shareNative', 'Поделиться')}
-              </span>
-            </MotionPress>
           </div>
         </div>
       </AmbientStage>

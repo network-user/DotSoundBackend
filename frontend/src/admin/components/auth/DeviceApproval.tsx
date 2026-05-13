@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -11,16 +10,22 @@ import {
   AdminApiError,
   adminApi,
 } from '../../lib/adminApi'
+import {
+  getFlowEpoch,
+  getLastAutoSentFlowEpoch,
+  markAutoApprovalSentForCurrentFlow,
+} from '../../lib/adminDeviceApprovalSession'
 import { useAdminAuth } from '../../store/adminAuthStore'
 import { TotpInput } from './TotpInput'
 
+let startedAutoApprovalForFlowEpoch = ''
+
 export function DeviceApproval() {
   const { t } = useTranslation()
-  const { pendingDeviceId, setSession } =
-    useAdminAuth((s) => ({
-      pendingDeviceId: s.pendingDeviceId,
-      setSession: s.setSession,
-    }))
+  const pendingDeviceId = useAdminAuth(
+    (s) => s.pendingDeviceId,
+  )
+  const setSession = useAdminAuth((s) => s.setSession)
   const [emailCode, setEmailCode] = useState('')
   const [totpCode, setTotpCode] = useState('')
   const [label, setLabel] = useState('')
@@ -30,13 +35,10 @@ export function DeviceApproval() {
   const [error, setError] = useState<string | null>(
     null,
   )
-  const autoSentForDeviceRef = useRef<number | null>(
-    null,
-  )
 
   const sendApprovalRequest = useCallback(
-    async (force: boolean) => {
-      if (!pendingDeviceId) return
+    async (force: boolean): Promise<boolean> => {
+      if (!pendingDeviceId) return false
       setApprovalBusy(true)
       setError(null)
       try {
@@ -44,8 +46,8 @@ export function DeviceApproval() {
           pendingDeviceId,
           force ? { force: true } : undefined,
         )
+        return true
       } catch (err) {
-        autoSentForDeviceRef.current = null
         let message: string
         if (
           err instanceof AdminApiError &&
@@ -58,6 +60,7 @@ export function DeviceApproval() {
           message = String(err)
         }
         setError(message)
+        return false
       } finally {
         setApprovalBusy(false)
       }
@@ -67,14 +70,23 @@ export function DeviceApproval() {
 
   useEffect(() => {
     if (!pendingDeviceId) return
-    if (
-      autoSentForDeviceRef.current ===
-      pendingDeviceId
-    ) {
+    const flow = getFlowEpoch()
+    const lastSent = getLastAutoSentFlowEpoch()
+    if (flow && lastSent === flow) {
       return
     }
-    autoSentForDeviceRef.current = pendingDeviceId
-    void sendApprovalRequest(false)
+    if (flow && startedAutoApprovalForFlowEpoch === flow) {
+      return
+    }
+    if (flow) {
+      startedAutoApprovalForFlowEpoch = flow
+    }
+    void (async () => {
+      const ok = await sendApprovalRequest(false)
+      if (ok) {
+        markAutoApprovalSentForCurrentFlow()
+      }
+    })()
   }, [pendingDeviceId, sendApprovalRequest])
 
   async function handleConfirm() {
@@ -119,7 +131,6 @@ export function DeviceApproval() {
   }
 
   function handleResend() {
-    autoSentForDeviceRef.current = null
     void sendApprovalRequest(true)
   }
 

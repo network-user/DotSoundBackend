@@ -12,7 +12,7 @@ import { loadHlsClass } from '@/lib/hlsLoader'
 import type { HlsPlayer } from '@/lib/hlsLoader'
 import { api, getApiErrorMessage } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
-import { showIsland } from '@/lib/island'
+import { dismissIsland, showIsland, updateIsland } from '@/lib/island'
 import i18n from '@/lib/i18n'
 import {
   getCachedAudioUrl,
@@ -146,6 +146,7 @@ interface PlayerContextValue {
   playbackRate: number
   queue: Track[]
   history: Track[]
+  radioSessionTimeline: Track[]
   abLoop: { a: number | null; b: number | null }
   toggleRepeat: () => void
   toggleShuffle: () => void
@@ -164,9 +165,13 @@ interface PlayerContextValue {
   setPlaybackRate: (rate: number) => void
   getPreciseTime: () => number
   playNext: (
-    opts?: { afterNaturalEnd?: boolean },
+    opts?: {
+      afterNaturalEnd?: boolean
+      bypassInFlightGuard?: boolean
+    },
   ) => Promise<boolean>
   playPrev: () => Promise<void>
+  playRadioPrevious: () => Promise<boolean>
   setEqBand: (idx: number, gain: number) => void
   setEqPreset: (preset: string | null) => void
   toggleEqBypass: () => void
@@ -242,9 +247,13 @@ interface PlayerActionsValue {
   setPlaybackRate: (rate: number) => void
   getPreciseTime: () => number
   playNext: (
-    opts?: { afterNaturalEnd?: boolean },
+    opts?: {
+      afterNaturalEnd?: boolean
+      bypassInFlightGuard?: boolean
+    },
   ) => Promise<boolean>
   playPrev: () => Promise<void>
+  playRadioPrevious: () => Promise<boolean>
   setVolume: (v: number) => void
   stop: () => void
   setEqBand: (idx: number, gain: number) => void
@@ -306,6 +315,7 @@ interface PlayerMetaValue {
   playbackRate: number
   queue: Track[]
   history: Track[]
+  radioSessionTimeline: Track[]
   abLoop: { a: number | null; b: number | null }
   pendingCommentFocus: {
     trackId: number
@@ -722,6 +732,10 @@ export function PlayerProvider({
   const radioModeRef = useRef(false)
   const radioSeedTrackIdRef = useRef<number | null>(null)
   const radioPlayedIdsRef = useRef<Set<number>>(new Set())
+  const radioSessionTimelineRef = useRef<Track[]>([])
+  const [radioSessionTimeline, setRadioSessionTimeline] = useState<
+    Track[]
+  >([])
   const playTrackSlideInjectRef = useRef<1 | -1 | null>(null)
   const playNextInFlightRef = useRef(false)
   const [trackChangeSlide, setTrackChangeSlide] = useState<{
@@ -976,6 +990,7 @@ export function PlayerProvider({
         }
       }
       setTrack(restoredTrack)
+      lastTrackIdRef.current = restoredTrack.id
       audio.crossOrigin = 'anonymous'
       audio.volume = volume
 
@@ -1166,6 +1181,93 @@ export function PlayerProvider({
     },
     [],
   )
+
+  // Auto-skip chain control. consecutiveAutoSkipsRef counts how many tracks
+  // were skipped in a row WITHOUT a successful playback in between. The
+  // counter resets when onPlay fires (real playback started). When the
+  // counter exceeds MAX_CONSECUTIVE_AUTO_SKIPS we stop the cascade and show
+  // a final error so the UI doesn't churn forever on a broken queue.
+  const MAX_CONSECUTIVE_AUTO_SKIPS = 10
+  const consecutiveAutoSkipsRef = useRef(0)
+
+  // Toast dedup: when a burst of skips happens, collapse them into a single
+  // "Пропущено N недоступных треков" island that updates in place.
+  const unavailableSkipBatchRef = useRef<{
+    count: number
+    islandId: string | null
+    resetTimer: ReturnType<typeof setTimeout> | null
+  }>({ count: 0, islandId: null, resetTimer: null })
+
+  const flushUnavailableSkipBatch = useCallback(() => {
+    const b = unavailableSkipBatchRef.current
+    if (b.resetTimer != null) {
+      clearTimeout(b.resetTimer)
+    }
+    if (b.islandId) {
+      // Let the existing island time out naturally; just detach our handle.
+    }
+    unavailableSkipBatchRef.current = {
+      count: 0,
+      islandId: null,
+      resetTimer: null,
+    }
+  }, [])
+
+  const recordUnavailableSkip = useCallback(() => {
+    const b = unavailableSkipBatchRef.current
+    b.count += 1
+    const title =
+      b.count === 1
+        ? i18n.t('redesign.playerErrors.trackUnavailable')
+        : i18n.t(
+            'redesign.playerErrors.tracksUnavailableSkipped',
+            { count: b.count },
+          )
+    if (b.islandId) {
+      updateIsland(b.islandId, { title })
+    } else {
+      b.islandId = showIsland({
+        kind: 'toast',
+        title,
+        durationMs: 3500,
+      })
+    }
+    if (b.resetTimer != null) {
+      clearTimeout(b.resetTimer)
+    }
+    b.resetTimer = setTimeout(() => {
+      unavailableSkipBatchRef.current = {
+        count: 0,
+        islandId: null,
+        resetTimer: null,
+      }
+    }, 3500)
+  }, [])
+
+  // Component-scoped helper used by both onError and playTrack. Returns
+  // true if the cascade advanced, false if the safety limit kicked in.
+  const skipUnavailableTrack = async (
+    trackId: number,
+  ): Promise<boolean> => {
+    markTrackUnavailableInSession(trackId)
+    recordUnavailableSkip()
+    consecutiveAutoSkipsRef.current += 1
+    if (
+      consecutiveAutoSkipsRef.current > MAX_CONSECUTIVE_AUTO_SKIPS
+    ) {
+      consecutiveAutoSkipsRef.current = 0
+      const b = unavailableSkipBatchRef.current
+      if (b.islandId) dismissIsland(b.islandId)
+      flushUnavailableSkipBatch()
+      showIsland({
+        kind: 'error',
+        title: i18n.t('redesign.playerErrors.noPlayableTracks'),
+        durationMs: 4200,
+      })
+      return false
+    }
+    return await playNext({ bypassInFlightGuard: true })
+  }
 
   const pendingPlaybackErrorRef = useRef<number | null>(null)
 
@@ -1376,6 +1478,10 @@ export function PlayerProvider({
       setIsPlaying(true)
       setCurrentTime(audio.currentTime)
       playerTimeUiLastRef.current = performance.now()
+      // Real playback started — reset auto-skip cascade guard so the
+      // next failure starts a fresh attempt count.
+      consecutiveAutoSkipsRef.current = 0
+      flushUnavailableSkipBatch()
       if ('mediaSession' in navigator)
         navigator.mediaSession.playbackState = 'playing'
       if (audioCtxRef.current?.state === 'suspended')
@@ -1458,18 +1564,8 @@ export function PlayerProvider({
       const code = a.error?.code
       if (code === MediaError.MEDIA_ERR_ABORTED) return
       if (!a.paused && a.currentTime > 0) return
-      // 500ms debounce: enough to ignore the audio.src='' echo but catches
-      // immediate 404/stream failures that the 2500ms window was hiding.
-      if (Date.now() - srcAssignedAtRef.current < 500) return
-      const skipUnavailable = async (trackId: number) => {
-        markTrackUnavailableInSession(trackId)
-        showIsland({
-          kind: 'toast',
-          title: i18n.t('redesign.playerErrors.trackUnavailable'),
-          durationMs: 2200,
-        })
-        await playNext()
-      }
+      const effectiveSrc = `${a.currentSrc || a.src || ''}`.trim()
+      if (!effectiveSrc) return
       if (
         (code === MediaError.MEDIA_ERR_NETWORK ||
           code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) &&
@@ -1489,11 +1585,11 @@ export function PlayerProvider({
             isSoundCloudUnavailableTrack(track) &&
             isSoundCloudUnavailableError(message)
           ) {
-            await skipUnavailable(track.id)
+            await skipUnavailableTrack(track.id)
             return
           }
           showPlaybackErrorOnce(track.id, message)
-          await skipUnavailable(track.id)
+          await skipUnavailableTrack(track.id)
         })
         return
       }
@@ -1524,12 +1620,12 @@ export function PlayerProvider({
               }
             })
             .catch(async () => {
-              await skipUnavailable(track.id)
+              await skipUnavailableTrack(track.id)
             })
           return
         }
       }
-      void skipUnavailable(track.id)
+      void skipUnavailableTrack(track.id)
     }
     const onStalled = () => {
       try {
@@ -1667,6 +1763,15 @@ export function PlayerProvider({
     const audio = audioRef.current
     if (!audio) {
       playTrackSlideInjectRef.current = null
+      return
+    }
+    // Preventive skip: backend flagged the track as inactive. Bail out
+    // before touching audio.src so we don't trigger a buffer→error
+    // round-trip just to find out it's broken.
+    if (newTrack.is_active === false) {
+      playTrackSlideInjectRef.current = null
+      lastTrackIdRef.current = newTrack.id
+      void skipUnavailableTrack(newTrack.id)
       return
     }
     let prevForSlide: number | null = null
@@ -1915,21 +2020,13 @@ export function PlayerProvider({
         e,
         i18n.t('redesign.playerErrors.playback'),
       )
-      if (
+      const scUnavailable =
         isSoundCloudUnavailableTrack(newTrack) &&
         isSoundCloudUnavailableError(message)
-      ) {
-        markTrackUnavailableInSession(newTrack.id)
+      if (!scUnavailable) {
+        showPlaybackErrorOnce(newTrack.id, message)
       }
-      showPlaybackErrorOnce(newTrack.id, message)
-      if (
-        isSoundCloudUnavailableTrack(newTrack) &&
-        isSoundCloudUnavailableError(message)
-      ) {
-        await playNext()
-      } else if (radioModeRef.current) {
-        await playNext()
-      }
+      await skipUnavailableTrack(newTrack.id)
     }
   }
 
@@ -1938,6 +2035,8 @@ export function PlayerProvider({
   }, [])
 
   const startRadio = async (seedTrack: Track) => {
+    radioSessionTimelineRef.current = []
+    setRadioSessionTimeline([])
     radioModeRef.current = true
     radioSeedTrackIdRef.current = seedTrack.id
     radioPlayedIdsRef.current = new Set([seedTrack.id])
@@ -1960,6 +2059,8 @@ export function PlayerProvider({
   }
 
   const stopRadio = () => {
+    radioSessionTimelineRef.current = []
+    setRadioSessionTimeline([])
     radioModeRef.current = false
     radioSeedTrackIdRef.current = null
     setRadioMode(false)
@@ -1978,12 +2079,29 @@ export function PlayerProvider({
   }
 
   const playNext = async (
-    opts?: { afterNaturalEnd?: boolean },
+    opts?: {
+      afterNaturalEnd?: boolean
+      bypassInFlightGuard?: boolean
+    },
   ): Promise<boolean> => {
-    if (!track) return false
-    if (playNextInFlightRef.current) return false
-    playNextInFlightRef.current = true
-    playTrackSlideInjectRef.current = 1
+    const sessionTrackId =
+      lastTrackIdRef.current ?? track?.id ?? null
+    if (
+      sessionTrackId == null &&
+      manualQueueRef.current.length === 0 &&
+      !radioModeRef.current
+    ) {
+      return false
+    }
+    const bypassInFlight = opts?.bypassInFlightGuard === true
+    if (playNextInFlightRef.current && !bypassInFlight) {
+      return false
+    }
+    const tookPlayNextLock = !playNextInFlightRef.current
+    if (tookPlayNextLock) {
+      playNextInFlightRef.current = true
+      playTrackSlideInjectRef.current = 1
+    }
     try {
     const isOffline =
       typeof navigator !== 'undefined' &&
@@ -2015,7 +2133,9 @@ export function PlayerProvider({
         }
       }
       // 2. Fall back to any cached track in IDB.
-      const ok = await _fallbackToCachedTrack(track.id)
+      const ok = await _fallbackToCachedTrack(
+        sessionTrackId ?? track?.id ?? 0,
+      )
       if (ok) return true
       // 3. Nothing cached — give up; do NOT attempt radio /
       //    prefetch / adjacent (all rely on the network).
@@ -2077,7 +2197,8 @@ export function PlayerProvider({
       if (
         allowPrefetchAdvance &&
         cache &&
-        cache.forTrackId === track.id &&
+        sessionTrackId != null &&
+        cache.forTrackId === sessionTrackId &&
         cache.tracks.length > 0
       ) {
         const availableCacheTracks = cache.tracks.filter(
@@ -2107,13 +2228,19 @@ export function PlayerProvider({
         return true
         }
       }
-      return await _fallbackToCachedTrack(track.id)
+      return await _fallbackToCachedTrack(
+        sessionTrackId ?? track?.id ?? 0,
+      )
     } catch {
-      return await _fallbackToCachedTrack(track.id)
+      return await _fallbackToCachedTrack(
+        sessionTrackId ?? track?.id ?? 0,
+      )
     }
     } finally {
-      playTrackSlideInjectRef.current = null
-      playNextInFlightRef.current = false
+      if (tookPlayNextLock) {
+        playTrackSlideInjectRef.current = null
+        playNextInFlightRef.current = false
+      }
     }
   }
 
@@ -2273,9 +2400,53 @@ export function PlayerProvider({
     }
   }, [track?.id])
 
+  useEffect(() => {
+    if (!track) return
+    if (!radioMode) return
+    const timeline = radioSessionTimelineRef.current
+    const last = timeline[timeline.length - 1]
+    if (last && last.id === track.id) return
+    radioSessionTimelineRef.current = [...timeline, track].slice(-30)
+    setRadioSessionTimeline([...radioSessionTimelineRef.current])
+  }, [track, radioMode])
+
+  const applyRadioTimelineBack = async (): Promise<boolean> => {
+    const h = radioSessionTimelineRef.current
+    if (h.length < 2) return false
+    playNextInFlightRef.current = true
+    playTrackSlideInjectRef.current = -1
+    try {
+      const nextTimeline = h.slice(0, -1)
+      radioSessionTimelineRef.current = nextTimeline
+      setRadioSessionTimeline([...nextTimeline])
+      const prevT = nextTimeline[nextTimeline.length - 1]
+      if (!prevT) return false
+      await playTrack(prevT)
+      return true
+    } finally {
+      playTrackSlideInjectRef.current = null
+      playNextInFlightRef.current = false
+    }
+  }
+
+  const playRadioPrevious = async (): Promise<boolean> => {
+    if (!radioModeRef.current) return false
+    if (playNextInFlightRef.current) return false
+    return applyRadioTimelineBack()
+  }
+
   const playPrev = async () => {
     if (!track) return
     if (playNextInFlightRef.current) return
+    if (radioModeRef.current) {
+      const a = audioRef.current
+      if (a && a.currentTime > 3) {
+        a.currentTime = 0
+        return
+      }
+      await applyRadioTimelineBack()
+      return
+    }
     const a = audioRef.current
     if (a && a.currentTime > 3) {
       a.currentTime = 0
@@ -2367,6 +2538,7 @@ export function PlayerProvider({
       navigator.mediaSession.playbackState = 'none'
     }
     setTrack(null)
+    lastTrackIdRef.current = null
     setTrackChangeSlide({ bump: 0, dir: 0 })
     setIsPlaying(false)
     setCurrentTime(0)
@@ -2633,7 +2805,7 @@ export function PlayerProvider({
       playTrack, togglePlay, seek, seekToSeconds,
       skipForward, skipBackward, setPlaybackRate,
       getPreciseTime,
-      playNext, playPrev, setVolume, stop,
+      playNext, playPrev, playRadioPrevious, setVolume, stop,
       setEqBand, setEqPreset, toggleEqBypass, resetEq,
       toggleRepeat, toggleShuffle, clearHlsError,
       openComplaint, closeComplaint,
@@ -2661,7 +2833,7 @@ export function PlayerProvider({
       playTrack, togglePlay, seek, seekToSeconds,
       skipForward, skipBackward, setPlaybackRate,
       getPreciseTime,
-      playNext, playPrev, setVolume, stop,
+      playNext, playPrev, playRadioPrevious, setVolume, stop,
       setEqBand, setEqPreset, toggleEqBypass, resetEq,
       toggleRepeat, toggleShuffle, clearHlsError,
       openComplaint, closeComplaint,
@@ -2695,6 +2867,7 @@ export function PlayerProvider({
       eqBands, eqPreset, eqBypassed,
       repeatMode, shuffleOn, hlsError,
       playbackRate, queue, history,
+      radioSessionTimeline,
       abLoop,
       pendingCommentFocus,
       isPlayingFromCache,
@@ -2707,6 +2880,7 @@ export function PlayerProvider({
       eqBands, eqPreset, eqBypassed,
       repeatMode, shuffleOn, hlsError,
       playbackRate, queue, history,
+      radioSessionTimeline,
       abLoop,
       pendingCommentFocus,
       isPlayingFromCache,

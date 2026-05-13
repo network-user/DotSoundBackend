@@ -1,6 +1,7 @@
 import {
   type PointerEvent as ReactPointerEvent,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -56,11 +57,13 @@ function rubberBand(value: number, max: number): number {
 export function RadioView() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { track: currentTrack, queue } = usePlayerMeta()
+  const { track: currentTrack, queue, radioSessionTimeline } =
+    usePlayerMeta()
   const { isPlaying } = usePlayerPlayback()
   const {
     playNext,
     playPrev,
+    playRadioPrevious,
     playTrack,
     togglePlay,
     startRadio,
@@ -69,7 +72,6 @@ export function RadioView() {
     getAnalyser,
   } = usePlayerActions()
 
-  const [historyTracks, setHistoryTracks] = useState<Track[]>([])
   const [slideDirection, setSlideDirection] = useState(1)
   const [isSwitching, setIsSwitching] = useState(false)
   const [dragX, setDragX] = useState(0)
@@ -77,7 +79,6 @@ export function RadioView() {
   const [radioPreviewTracks, setRadioPreviewTracks] = useState<Track[]>([])
   const [accentColor, setAccentColor] = useState<string | undefined>(undefined)
 
-  const historyRef = useRef<Track[]>([])
   const switchingRef = useRef(false)
   const pointerRef = useRef<{
     pointerId: number
@@ -91,14 +92,19 @@ export function RadioView() {
   } | null>(null)
   const reduceMotion = useReducedMotion()
 
+  const historyTracks = useMemo(
+    () => [...radioSessionTimeline].reverse(),
+    [radioSessionTimeline],
+  )
+
   const heroCover = currentTrack ? coverUrl(currentTrack.cover_key) : null
   const isLive = Boolean(currentTrack && isPlaying)
 
   const nextTrack = queue[0] ?? radioPreviewTracks[0] ?? null
   const nextCover = nextTrack ? coverUrl(nextTrack.cover_key) : null
   const prevTrack =
-    historyRef.current.length > 1
-      ? historyRef.current[historyRef.current.length - 2] ?? null
+    radioSessionTimeline.length > 1
+      ? radioSessionTimeline[radioSessionTimeline.length - 2] ?? null
       : null
   const prevCover = prevTrack ? coverUrl(prevTrack.cover_key) : null
 
@@ -117,15 +123,6 @@ export function RadioView() {
   }, [heroCover])
 
   useEffect(() => {
-    if (!currentTrack) return
-    if (!radioMode) return
-    const last = historyRef.current[historyRef.current.length - 1]
-    if (last && last.id === currentTrack.id) return
-    historyRef.current = [...historyRef.current, currentTrack].slice(-30)
-    setHistoryTracks([...historyRef.current].reverse())
-  }, [currentTrack, radioMode])
-
-  useEffect(() => {
     if (!radioMode || !currentTrack) {
       setRadioPreviewTracks([])
       return
@@ -133,7 +130,7 @@ export function RadioView() {
     let cancelled = false
     const excludeIds = [
       currentTrack.id,
-      ...historyRef.current.map((track) => track.id),
+      ...radioSessionTimeline.map((track) => track.id),
       ...queue.map((track) => track.id),
     ]
     api
@@ -159,27 +156,17 @@ export function RadioView() {
     return () => {
       cancelled = true
     }
-  }, [radioMode, currentTrack?.id, queue])
+  }, [radioMode, currentTrack?.id, queue, radioSessionTimeline])
 
   const handleStartRadio = async () => {
     if (!currentTrack) return
     haptic('medium')
-    historyRef.current = []
-    setHistoryTracks([])
     await startRadio(currentTrack)
   }
 
   const handleStop = () => {
     haptic('light')
     stopRadio()
-  }
-
-  const switchToPreviousRadioTrack = async () => {
-    if (!prevTrack) return false
-    historyRef.current = historyRef.current.slice(0, -1)
-    setHistoryTracks([...historyRef.current].reverse())
-    await playTrack(prevTrack)
-    return true
   }
 
   const handleSwipe = async (direction: 'next' | 'previous') => {
@@ -201,7 +188,7 @@ export function RadioView() {
         return
       }
       if (radioMode) {
-        const ok = await switchToPreviousRadioTrack()
+        const ok = await playRadioPrevious()
         if (!ok) {
           showIsland({
             kind: 'toast',

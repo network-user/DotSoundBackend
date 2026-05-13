@@ -64,7 +64,10 @@ export function ResetRecommendationsSection({ onClose }: Props) {
         variant="ghost"
         haptic="medium"
         className="settings-item"
-        onClick={() => setConfirmOpen(true)}
+        onClick={(e) => {
+          e.stopPropagation()
+          setConfirmOpen(true)
+        }}
       >
         <Icon name="sparkle" size={20} />
         <span>

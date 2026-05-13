@@ -58,6 +58,47 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 
 const HOME_DATA_WATCHDOG_MS = 22_000
 
+const HOME_RADIO_SECTION_ORDER = [
+  'continue',
+  'personalized',
+  'user_choice',
+  'new_releases',
+  'genre_popular',
+  'fav_artists',
+  'popular',
+] as const
+
+function pickHomeRadioSeedFromSections(
+  sections: HomeSection[] | null,
+): Track | null {
+  if (!sections?.length) return null
+  for (const key of HOME_RADIO_SECTION_ORDER) {
+    const section = sections.find((s) => s.section_type === key)
+    const first = section?.tracks?.[0]
+    if (first) return first
+  }
+  return null
+}
+
+async function resolveHomeRadioSeedTrack(
+  sections: HomeSection[] | null,
+  genreMixes: GenreMixItem[] | null,
+  fallbackTracks: Track[] | null,
+): Promise<Track | null> {
+  const fromSections = pickHomeRadioSeedFromSections(sections)
+  if (fromSections) return fromSections
+  if (genreMixes?.length && genreMixes[0].tracks?.length) {
+    return genreMixes[0].tracks[0]
+  }
+  if (fallbackTracks?.length) return fallbackTracks[0]
+  try {
+    const data = await api.getTracks({ size: 30 })
+    return data.items[0] ?? null
+  } catch {
+    return null
+  }
+}
+
 function normalizeHomeSections(
   raw: HomeSection[] | null | undefined,
 ): HomeSection[] {
@@ -573,82 +614,47 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     [playTrack, t],
   )
 
-  const handleStartRadio = useCallback(
-    async (track: Track) => {
-      try {
-        await startRadio(track)
-        trackActivationEvent('home_start_radio')
-      } catch (e) {
+  const handleStartRadioFromHomeRecommendations = useCallback(
+    async (
+      activation: 'home_start_radio' | 'home_first_session_start',
+    ) => {
+      const seed = await resolveHomeRadioSeedTrack(
+        sections,
+        genreMixes,
+        fallbackTracks,
+      )
+      if (!seed) {
         showIsland({
-          kind: 'error',
-          title: getApiErrorMessage(e, t('redesign.home.radioError')),
-          durationMs: 4000,
-        })
-      }
-    },
-    [startRadio, t],
-  )
-
-  const handleStartFirstSession = useCallback(async () => {
-    const candidates: Track[] = []
-    if (sections) {
-      const order = [
-        'continue',
-        'personalized',
-        'user_choice',
-        'new_releases',
-        'genre_popular',
-        'fav_artists',
-        'popular',
-      ]
-      for (const key of order) {
-        const section = sections.find(
-          (s) => s.section_type === key,
-        )
-        if (section?.tracks?.length) {
-          candidates.push(...section.tracks)
-          break
-        }
-      }
-    }
-    if (!candidates.length && genreMixes && genreMixes.length) {
-      candidates.push(...genreMixes[0].tracks)
-    }
-    if (!candidates.length && fallbackTracks?.length) {
-      candidates.push(...fallbackTracks)
-    }
-    if (!candidates.length) {
-      try {
-        const data = await api.getTracks({ size: 30 })
-        candidates.push(...data.items)
-      } catch {
-        showIsland({
-          kind: 'error',
+          kind: 'toast',
           title: t('redesign.home.emptyNoTracks'),
           durationMs: 3500,
         })
         return
       }
-    }
-    if (!candidates.length) {
-      showIsland({
-        kind: 'toast',
-        title: t('redesign.home.emptyNoTracks'),
-        durationMs: 3500,
-      })
-      return
-    }
-    try {
-      await startRadio(candidates[0])
-      trackActivationEvent('home_first_session_start')
-    } catch (e) {
-      showIsland({
-        kind: 'error',
-        title: getApiErrorMessage(e, t('redesign.home.startError')),
-        durationMs: 4000,
-      })
-    }
-  }, [sections, fallbackTracks, genreMixes, startRadio, t])
+      try {
+        await startRadio(seed)
+        trackActivationEvent(activation)
+      } catch (e) {
+        showIsland({
+          kind: 'error',
+          title: getApiErrorMessage(
+            e,
+            activation === 'home_start_radio'
+              ? t('redesign.home.radioError')
+              : t('redesign.home.startError'),
+          ),
+          durationMs: 4000,
+        })
+      }
+    },
+    [sections, fallbackTracks, genreMixes, startRadio, t],
+  )
+
+  const handleStartFirstSession = useCallback(async () => {
+    await handleStartRadioFromHomeRecommendations(
+      'home_first_session_start',
+    )
+  }, [handleStartRadioFromHomeRecommendations])
 
   const hour = new Date().getHours()
   const greeting =
@@ -684,26 +690,38 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         catalog_type: highlight.catalog_type,
       } as unknown as Track)
     : null
+  const recentHeroTrack =
+    recentlyPlayed !== null && recentlyPlayed.length > 0
+      ? recentlyPlayed[0]
+      : null
   const featuredTrack =
+    recentHeroTrack ||
     highlightTrack ||
     featuredSource?.tracks?.[0] ||
     fallbackTracks?.[0] ||
     null
+  const heroFromRecentListen =
+    recentHeroTrack !== null &&
+    featuredTrack !== null &&
+    featuredTrack.id === recentHeroTrack.id
   const highlightEyebrow = highlight
     ? t(
         `redesign.home.highlight.${highlight.reason_code}`,
         highlight.reason_code,
       )
     : null
-  const featuredEyebrow =
-    highlightEyebrow ||
-    (featuredSource &&
-    (featuredSource.section_type === 'continue' ||
-      featuredSource.section_type === 'user_choice')
-      ? featuredSource.title
-      : brandLabel)
+  const featuredEyebrow = heroFromRecentListen
+    ? t('redesign.home.sectionRecent')
+    : highlightEyebrow ||
+      (featuredSource &&
+      (featuredSource.section_type === 'continue' ||
+        featuredSource.section_type === 'user_choice')
+        ? featuredSource.title
+        : brandLabel)
   const loadingFeatured =
-    sections === null && fallbackTracks === null
+    sections === null &&
+    fallbackTracks === null &&
+    recentlyPlayed === null
   const heroCoverSrc = featuredTrack
     ? coverUrl(featuredTrack.cover_key)
     : null
@@ -830,7 +848,9 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                     <MotionPress
                       variant="ghost"
                       onClick={() => {
-                        void handleStartRadio(featuredTrack)
+                        void handleStartRadioFromHomeRecommendations(
+                          'home_start_radio',
+                        )
                       }}
                     >
                       <Icon name="radio" size={18} />
