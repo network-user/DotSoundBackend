@@ -75,10 +75,10 @@
     }
   </style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script type="module" crossorigin src="/mini_app/assets/index-DZSWwP_h.js"></script>
+  <script type="module" crossorigin src="/mini_app/assets/index-BLJxLrwa.js"></script>
   <link rel="modulepreload" crossorigin href="/mini_app/assets/vendor-V1sCP0F7.js">
   <link rel="stylesheet" crossorigin href="/mini_app/assets/secure/admin-bundle.css">
-  <link rel="stylesheet" crossorigin href="/mini_app/assets/index-ByN04CBv.css">
+  <link rel="stylesheet" crossorigin href="/mini_app/assets/index-DM4X6lUz.css">
 <link rel="manifest" href="/mini_app/manifest.webmanifest"></head>
 <body>
   <div id="ds-loader">
@@ -140,8 +140,15 @@
       }
       var done = false;
       var shownAt = Date.now();
+      // Warm boot: if app was ready recently, skip most of the wait.
       var minVisibleMs = 520;
-      var fallbackMs = 120000;
+      try {
+        var lastReady = parseInt(localStorage.getItem('ds:last-ready-at') || '0', 10);
+        if (lastReady && (Date.now() - lastReady) < 30 * 60 * 1000) {
+          minVisibleMs = 80;
+        }
+      } catch (_e) { /* ignore */ }
+      var fallbackMs = 10000;
       function hide() {
         if (done || !loader) return;
         var elapsed = Date.now() - shownAt;
@@ -167,10 +174,9 @@
       }
       function rememberWarmBoot() {
         try {
-          sessionStorage.setItem(
-            warmBootCacheKey,
-            String(Date.now())
-          );
+          var ts = String(Date.now());
+          sessionStorage.setItem(warmBootCacheKey, ts);
+          localStorage.setItem('ds:last-ready-at', ts);
         } catch (_storeErr) {
           /* ignore */
         }

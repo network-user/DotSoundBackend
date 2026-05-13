@@ -796,6 +796,35 @@ class OnboardingService:
             genre_filter=genres,
         )
 
+    async def get_artist_preview_queue(
+        self,
+        artist_id: int,
+        limit: int = 10,
+    ) -> list[Track]:
+        cap = max(1, min(int(limit), 10))
+        track_ids = await self._artist_repo.get_artist_track_ids(
+            artist_id,
+            limit=cap * 3,
+        )
+        if not track_ids:
+            return []
+        tracks = await self._track_repo.list_active_by_ids_preserve_order(
+            track_ids,
+        )
+        out: list[Track] = []
+        for t in tracks:
+            if not (
+                t.blob_id
+                and t.file_key
+                and t.is_active
+                and t.duration_seconds
+            ):
+                continue
+            out.append(t)
+            if len(out) >= cap:
+                break
+        return out
+
     @staticmethod
     def _is_profile_completed(user: User) -> bool:
         if user.display_name and user.display_name.strip():

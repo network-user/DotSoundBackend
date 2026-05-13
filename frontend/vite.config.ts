@@ -228,15 +228,7 @@ export default defineConfig({
           },
           {
             urlPattern: /\/api\/v1\/users\/me(?:\?.*)?$/,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'user-shell-cache',
-              expiration: {
-                maxEntries: 5,
-                maxAgeSeconds: 60 * 60 * 24 * 7,
-              },
-              cacheableResponse: { statuses: [200] },
-            },
+            handler: 'NetworkOnly',
           },
           {
             urlPattern: /^https?:\/\/.*\/api\//,
@@ -262,6 +254,7 @@ export default defineConfig({
   build: {
     outDir: '../app/static/mini_app',
     emptyOutDir: true,
+    sourcemap: false,
     modulePreload: {
       polyfill: false,
       resolveDependencies: (_filename, deps) =>

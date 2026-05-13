@@ -89,6 +89,7 @@ export function MiniPlayerBar() {
       wrap.style.setProperty('--progress', `${pct}%`)
     }
     write()
+    if (!isPlaying) return
     let rafId = 0
     const frame = () => {
       write()
@@ -108,6 +109,10 @@ export function MiniPlayerBar() {
     onSwipeRight: () => {
       haptic('light')
       void playPrev()
+    },
+    onSwipeUp: () => {
+      haptic('medium')
+      openCard()
     },
   })
 
@@ -199,7 +204,10 @@ export function MiniPlayerBar() {
           {/* Cover — scale pop on track change */}
           <div
             className="mp-cover"
-            onClick={() => openCard()}
+            onClick={() => {
+              haptic('light')
+              openCard()
+            }}
           >
             <AnimatePresence
               initial={false}
@@ -240,7 +248,10 @@ export function MiniPlayerBar() {
           {/* Track info — slide-up on track change */}
           <div
             className="mp-info"
-            onClick={() => openCard()}
+            onClick={() => {
+              haptic('light')
+              openCard()
+            }}
           >
             <AnimatePresence
               initial={false}
@@ -289,14 +300,10 @@ export function MiniPlayerBar() {
               }}
               aria-label={t('redesign.playerBar.radioMode')}
             >
-              <span className="mp-live-dot" aria-hidden="true" />
-              <span className="mp-live-label">LIVE</span>
-              {!reduce && (
-                <SpectrumMicroBars
-                  active={isPlaying}
-                  getAnalyser={getAnalyser}
-                />
-              )}
+              <SpectrumMicroBars
+                active={isPlaying}
+                getAnalyser={getAnalyser}
+              />
             </button>
           )}
 

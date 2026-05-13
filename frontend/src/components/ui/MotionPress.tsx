@@ -5,7 +5,7 @@ import {
 } from 'react'
 import {
   m,
-  SPRING_SNAPPY,
+  SPRING_PRESS,
   TWEEN_FAST,
   useReducedMotion,
 } from '@/lib/motion'
@@ -108,14 +108,14 @@ export const MotionPress = forwardRef<
       whileTap={
         reduce || disabled
           ? undefined
-          : { scale: 0.96 }
+          : { scale: 0.92 }
       }
       whileHover={
         reduce || disabled
           ? undefined
-          : { scale: 1.01 }
+          : { scale: 1.02 }
       }
-      transition={reduce ? TWEEN_FAST : SPRING_SNAPPY}
+      transition={reduce ? TWEEN_FAST : SPRING_PRESS}
       {...rest}
     >
       {children}

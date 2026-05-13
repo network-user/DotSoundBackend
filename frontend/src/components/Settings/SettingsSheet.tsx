@@ -165,6 +165,42 @@ export function SettingsSheet({
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
+  const profilePrivacyOptions = useMemo(
+    () => [
+      {
+        value: 'public',
+        label: t('settings.profilePrivacyPublic', {
+          defaultValue: 'Открытый',
+        }),
+        sublabel: t('settings.profilePrivacyPublicSub', {
+          defaultValue:
+            'Профиль, треки, статистика и подписки видны всем, кто открывает страницу.',
+        }),
+      },
+      {
+        value: 'followers_only',
+        label: t('settings.profilePrivacyFollowers', {
+          defaultValue: 'Только подписчикам',
+        }),
+        sublabel: t('settings.profilePrivacyFollowersSub', {
+          defaultValue:
+            'Полный профиль, треки и статистика видны только тем, кто подписан на вас.',
+        }),
+      },
+      {
+        value: 'hidden',
+        label: t('settings.profilePrivacyHidden', {
+          defaultValue: 'Скрытый',
+        }),
+        sublabel: t('settings.profilePrivacyHiddenSub', {
+          defaultValue:
+            'Расширенный профиль и шаринг недоступны другим: минимальная публичная карточка без лишних данных.',
+        }),
+      },
+    ],
+    [t],
+  )
+
   const exit = useExitTransition(open)
   if (!exit.mounted) return null
   const installable = canInstallPwa()
@@ -376,42 +412,6 @@ export function SettingsSheet({
     TTL_OPTIONS.find(
       (o) => o.value === String(ttlDays),
     )?.label ?? `${ttlDays} дн.`
-
-  const profilePrivacyOptions = useMemo(
-    () => [
-      {
-        value: 'public',
-        label: t('settings.profilePrivacyPublic', {
-          defaultValue: 'Открытый',
-        }),
-        sublabel: t('settings.profilePrivacyPublicSub', {
-          defaultValue:
-            'Профиль, треки, статистика и подписки видны всем, кто открывает страницу.',
-        }),
-      },
-      {
-        value: 'followers_only',
-        label: t('settings.profilePrivacyFollowers', {
-          defaultValue: 'Только подписчикам',
-        }),
-        sublabel: t('settings.profilePrivacyFollowersSub', {
-          defaultValue:
-            'Полный профиль, треки и статистика видны только тем, кто подписан на вас.',
-        }),
-      },
-      {
-        value: 'hidden',
-        label: t('settings.profilePrivacyHidden', {
-          defaultValue: 'Скрытый',
-        }),
-        sublabel: t('settings.profilePrivacyHiddenSub', {
-          defaultValue:
-            'Расширенный профиль и шаринг недоступны другим: минимальная публичная карточка без лишних данных.',
-        }),
-      },
-    ],
-    [t],
-  )
 
   const profilePrivacyLabel =
     profilePrivacyOptions.find(

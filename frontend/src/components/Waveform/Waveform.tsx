@@ -1,9 +1,11 @@
 import {
   useEffect,
   useRef,
-  type MutableRefObject,
 } from 'react'
-import { usePlayerActions, usePlayerPlayback } from '@/store/PlayerContext'
+import {
+  usePlayerActions,
+  usePlayerPlayback,
+} from '@/store/PlayerContext'
 
 interface Props {
   height?: number
@@ -16,213 +18,159 @@ interface Props {
 const REDUCED_MOTION_QUERY =
   '(prefers-reduced-motion: reduce)'
 
-const SPECTRUM_INTERVAL_MS = Math.round(1000 / 10)
-const SPECTRUM_INTERVAL_LITE_MS = Math.round(1000 / 7)
+const FRAME_INTERVAL_MS = 1000 / 60
+const FRAME_INTERVAL_LITE_MS = 1000 / 30
 
-const MAX_CANVAS_DPR = 1.25
+const MAX_CANVAS_DPR = 1.5
 
-const IDLE_FRAC = 0.18
+const ATTACK = 0.45
+const RELEASE = 0.10
 
-const MIN_PLAY_FRAC = 0.04
+const IDLE_AMP = 0.14
 
-const ATTACK_SMOOTH = 0.56
+const VISUAL_CAP = 0.92
+const NORM_GAIN = 1.16
+const NORM_CURVE_EXP = 0.72
 
-const DECAY_PER_TICK = 0.26
+const EDGE_TAPER_POWER = 1.4
 
-const DECAY_EASE_MIN = 0.15
-
-const DECAY_EASE_RANGE = 0.85
-
-const DECAY_EASE_POWER = 0.5
-
-const NORM_GAIN = 1.08
-
-const NORM_CURVE_EXP = 0.74
-
-const VISUAL_HEIGHT_CAP = 0.78
-
-const BAR_SPREAD_AMP = 0.068
-
-const BAR_SPREAD_SLOW = 0.042
-
-const DITHER_AMP = 0.014
+function easeOutQuad(x: number): number {
+  return 1 - (1 - x) * (1 - x)
+}
 
 function shapeLevel(norm: number): number {
   const boosted = Math.min(1, norm * NORM_GAIN)
   const curved = boosted ** NORM_CURVE_EXP
-  return curved * VISUAL_HEIGHT_CAP
+  return curved * VISUAL_CAP
 }
 
-function ditherUnit(barIndex: number, tickMs: number): number {
-  const x =
-    Math.imul(barIndex + 41, 1597334677) ^
-    Math.floor(tickMs * 2.17 + barIndex * 13)
-  const u =
-    Math.imul(x ^ (x >>> 16), 2246822519) >>> 0
-  return u / 4294967296 - 0.5
+function edgeTaper(t: number): number {
+  const u = t * 2 - 1
+  const c = Math.cos(u * 1.05)
+  return Math.max(0, c) ** EDGE_TAPER_POWER
 }
 
-function hash01(i: number): number {
-  const x = Math.imul(i + 1, 0x9e3779b9) >>> 0
-  return x / 0x1_0000_0000
-}
-
-function decaySmoothedTowardIdle(sm: Float32Array, n: number) {
-  const maxSpan = 1 - IDLE_FRAC
-  for (let i = 0; i < n; i++) {
-    const dist = sm[i] - IDLE_FRAC
-    if (dist <= 1e-6) {
-      sm[i] = IDLE_FRAC
-      continue
-    }
-    if (dist < 0) {
-      sm[i] = IDLE_FRAC
-      continue
-    }
-    const distNorm = Math.min(1, dist / maxSpan)
-    const ease =
-      DECAY_EASE_MIN +
-      DECAY_EASE_RANGE * distNorm ** DECAY_EASE_POWER
-    const stagger = 0.85 + 0.3 * hash01(i)
-    const alpha = DECAY_PER_TICK * ease * stagger
-    sm[i] += (IDLE_FRAC - sm[i]) * alpha
-  }
-}
-
-function ensureSmoothed(
-  ref: MutableRefObject<Float32Array | null>,
+function ensureLevels(
+  ref: { current: Float32Array | null },
   n: number,
 ) {
   if (!ref.current || ref.current.length !== n) {
     ref.current = new Float32Array(n)
-    ref.current.fill(IDLE_FRAC)
+    ref.current.fill(IDLE_AMP)
   }
 }
 
-const IDLE_COLOR_EPS = 0.025
-
-function isRadioVariant(
-  v: 'default' | 'radio',
-): boolean {
-  return v === 'radio'
+type LayerSpec = {
+  scale: number
+  fill: string
+  glow: string
+  glowBlur: number
 }
 
-function drawBars(
+function drawMirrorBand(
+  ctx: CanvasRenderingContext2D,
+  amps: Float32Array,
+  w: number,
+  cy: number,
+  spec: LayerSpec,
+  dpr: number,
+) {
+  const points = amps.length
+  ctx.save()
+  if (spec.glowBlur > 0) {
+    ctx.shadowColor = spec.glow
+    ctx.shadowBlur = spec.glowBlur * dpr
+  }
+  ctx.fillStyle = spec.fill
+  ctx.beginPath()
+  const stepX = w / (points - 1)
+  ctx.moveTo(0, cy - amps[0] * spec.scale)
+  for (let i = 0; i < points - 1; i++) {
+    const x1 = i * stepX
+    const y1 = cy - amps[i] * spec.scale
+    const x2 = (i + 1) * stepX
+    const y2 = cy - amps[i + 1] * spec.scale
+    const mx = (x1 + x2) / 2
+    const my = (y1 + y2) / 2
+    ctx.quadraticCurveTo(x1, y1, mx, my)
+  }
+  ctx.lineTo(w, cy - amps[points - 1] * spec.scale)
+  ctx.lineTo(w, cy + amps[points - 1] * spec.scale)
+  for (let i = points - 1; i > 0; i--) {
+    const x1 = i * stepX
+    const y1 = cy + amps[i] * spec.scale
+    const x2 = (i - 1) * stepX
+    const y2 = cy + amps[i - 1] * spec.scale
+    const mx = (x1 + x2) / 2
+    const my = (y1 + y2) / 2
+    ctx.quadraticCurveTo(x1, y1, mx, my)
+  }
+  ctx.lineTo(0, cy + amps[0] * spec.scale)
+  ctx.closePath()
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawCenterLine(
   ctx: CanvasRenderingContext2D,
   w: number,
-  h: number,
-  bars: number,
-  heights: Float32Array,
-  playColor: string,
-  idleColor: string,
-  useIdleTint: boolean,
-  variant: 'default' | 'radio',
+  cy: number,
+  color: string,
+  dpr: number,
 ) {
-  ctx.clearRect(0, 0, w, h)
-  const radio = isRadioVariant(variant)
-  const barW = (w / bars) * (radio ? 0.52 : 0.64)
-  const gap = (w / bars) * (radio ? 0.48 : 0.36)
-  const radius = radio
-    ? Math.max(0.75, barW * 0.52)
-    : 0
-  for (let i = 0; i < bars; i++) {
-    const profile = !radio
-      ? 1
-      : 0.44 +
-        0.56 *
-          (1 -
-            Math.abs((i / Math.max(1, bars - 1)) * 2 - 1) **
-              1.34)
-    const frac = Math.max(MIN_PLAY_FRAC, heights[i] * profile)
-    const bh = Math.max(h * MIN_PLAY_FRAC, frac * h)
-    const x = i * (barW + gap) + gap / 2
-    const y = radio ? h - bh : (h - bh) / 2
-    ctx.fillStyle =
-      useIdleTint &&
-      frac <= IDLE_FRAC + IDLE_COLOR_EPS
-        ? idleColor
-        : playColor
-    if (!radio) {
-      ctx.fillRect(x, y, barW, bh)
-      continue
-    }
-    ctx.beginPath()
-    ctx.roundRect(x, y, barW, bh, radius)
-    ctx.fill()
-  }
-}
-
-function drawIdleBars(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  bars: number,
-  idleColor: string,
-  variant: 'default' | 'radio',
-) {
-  ctx.clearRect(0, 0, w, h)
-  ctx.fillStyle = idleColor
-  const radio = isRadioVariant(variant)
-  const barW = (w / bars) * (radio ? 0.52 : 0.64)
-  const gap = (w / bars) * (radio ? 0.48 : 0.36)
-  const radius = radio
-    ? Math.max(0.75, barW * 0.52)
-    : 0
-  for (let i = 0; i < bars; i++) {
-    const profile = !radio
-      ? 1
-      : 0.5 +
-        0.5 *
-          (1 -
-            Math.abs((i / Math.max(1, bars - 1)) * 2 - 1) **
-              1.26)
-    const x = i * (barW + gap) + gap / 2
-    const bh = h * IDLE_FRAC * profile
-    const y = radio ? h - bh : (h - bh) / 2
-    if (!radio) {
-      ctx.fillRect(x, y, barW, bh)
-      continue
-    }
-    ctx.beginPath()
-    ctx.roundRect(x, y, barW, bh, radius)
-    ctx.fill()
-  }
+  ctx.save()
+  const stroke = Math.max(0.5, 0.6 * dpr)
+  ctx.lineWidth = stroke
+  ctx.strokeStyle = color
+  ctx.beginPath()
+  ctx.moveTo(0, cy)
+  ctx.lineTo(w, cy)
+  ctx.stroke()
+  ctx.restore()
 }
 
 export function Waveform({
   height = 64,
-  bars = 56,
+  bars = 36,
   className,
   overlay = false,
   variant = 'default',
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const freqBufRef = useRef<Uint8Array<ArrayBuffer> | null>(
-    null,
-  )
-  const smoothedRef = useRef<Float32Array | null>(null)
-  const intervalRef = useRef<number | null>(null)
+  const freqBufRef =
+    useRef<Uint8Array<ArrayBuffer> | null>(null)
+  const levelsRef = useRef<Float32Array | null>(null)
+  const rafRef = useRef<number | null>(null)
+  const lastTickRef = useRef<number>(0)
+  const ampsRef = useRef<Float32Array | null>(null)
   const { isPlaying } = usePlayerPlayback()
   const { getAnalyser } = usePlayerActions()
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const perfLite =
-      typeof document !== 'undefined' &&
-      document.body.classList.contains('ds-perf-lite')
-    const reduced = window.matchMedia(
-      REDUCED_MOTION_QUERY,
-    ).matches
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    const idleColor = overlay
-      ? 'rgba(255,255,255,0.12)'
-      : 'rgba(255,255,255,0.15)'
-    const playColor = overlay
-      ? 'rgba(255,255,255,0.78)'
-      : 'rgba(255,255,255,0.98)'
+    const reduced = window.matchMedia(
+      REDUCED_MOTION_QUERY,
+    ).matches
+    const perfLite =
+      typeof document !== 'undefined' &&
+      document.body.classList.contains('ds-perf-lite')
+
+    const points = Math.max(16, Math.min(72, bars))
+    ensureLevels(levelsRef, points)
+    if (!ampsRef.current || ampsRef.current.length !== points) {
+      ampsRef.current = new Float32Array(points)
+    }
+    const levels = levelsRef.current!
+    const amps = ampsRef.current!
+
+    const interval =
+      perfLite || reduced
+        ? FRAME_INTERVAL_LITE_MS
+        : FRAME_INTERVAL_MS
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect()
@@ -234,36 +182,48 @@ export function Waveform({
       canvas.height = Math.floor(rect.height * dpr)
     }
 
-    const tick = () => {
+    const tonalC1 = overlay
+      ? 'rgba(255,255,255,0.05)'
+      : 'rgba(255,255,255,0.07)'
+    const tonalC2 = overlay
+      ? 'rgba(255,255,255,0.16)'
+      : 'rgba(255,255,255,0.20)'
+    const tonalC3 = overlay
+      ? 'rgba(255,255,255,0.62)'
+      : 'rgba(255,255,255,0.82)'
+    const glowSoft = overlay
+      ? 'rgba(255,255,255,0.35)'
+      : 'rgba(255,255,255,0.48)'
+    const centerLineColor = overlay
+      ? 'rgba(255,255,255,0.07)'
+      : 'rgba(255,255,255,0.10)'
+
+    const render = (now: number) => {
+      rafRef.current = requestAnimationFrame(render)
+      if (now - lastTickRef.current < interval) return
+      lastTickRef.current = now
+
       const w = canvas.width
       const h = canvas.height
       if (w === 0 || h === 0) return
 
+      const dpr = Math.min(
+        window.devicePixelRatio || 1,
+        MAX_CANVAS_DPR,
+      )
+      ctx.clearRect(0, 0, w, h)
+
+      const halfH = h / 2
+      const cy = halfH
+      const tSec = now * 0.001
+
+      const analyser = isPlaying ? getAnalyser() : null
+
       if (reduced) {
-        drawIdleBars(ctx, w, h, bars, idleColor, variant)
-        return
-      }
-
-      ensureSmoothed(smoothedRef, bars)
-      const sm = smoothedRef.current!
-
-      if (isPlaying) {
-        const analyser = getAnalyser()
-        if (!analyser) {
-          decaySmoothedTowardIdle(sm, bars)
-          drawBars(
-            ctx,
-            w,
-            h,
-            bars,
-            sm,
-            playColor,
-            idleColor,
-            true,
-            variant,
-          )
-          return
+        for (let i = 0; i < points; i++) {
+          levels[i] = IDLE_AMP
         }
+      } else if (analyser) {
         let buf = freqBufRef.current
         if (
           !buf ||
@@ -275,77 +235,105 @@ export function Waveform({
           freqBufRef.current = buf
         }
         analyser.getByteFrequencyData(buf)
-        const step = Math.floor(buf.length / bars)
-        const tickMs = performance.now()
-        const tSec = tickMs * 0.001
-        for (let i = 0; i < bars; i++) {
+        const binCount = buf.length
+        for (let i = 0; i < points; i++) {
+          const t0 = i / points
+          const t1 = (i + 1) / points
+          const sN = Math.pow(t0, 1.7) * 0.85
+          const eN = Math.pow(t1, 1.7) * 0.85 + 0.004
+          const start = Math.floor(sN * binCount)
+          const end = Math.min(
+            binCount,
+            Math.max(start + 1, Math.floor(eN * binCount)),
+          )
           let sum = 0
-          for (let j = 0; j < step; j++) {
-            sum += buf[i * step + j] || 0
-          }
-          const norm = sum / (step * 255)
+          for (let j = start; j < end; j++) sum += buf[j]
+          const norm = sum / ((end - start) * 255)
           const shaped = shapeLevel(norm)
-          const spread =
-            (1 +
-              BAR_SPREAD_AMP *
-                Math.sin(i * 0.97 + tSec * 0.72)) *
-            (1 +
-              BAR_SPREAD_SLOW *
-                Math.sin(i * 2.13 - tSec * 0.58))
-          const jitter =
-            DITHER_AMP * ditherUnit(i, tickMs)
-          let raw = shaped * spread + jitter
-          raw = Math.min(1, Math.max(MIN_PLAY_FRAC, raw))
-          sm[i] += (raw - sm[i]) * ATTACK_SMOOTH
+          const target = Math.max(IDLE_AMP * 0.6, shaped)
+          const cur = levels[i]
+          const alpha = target > cur ? ATTACK : RELEASE
+          levels[i] = cur + (target - cur) * alpha
         }
-        drawBars(
-          ctx,
-          w,
-          h,
-          bars,
-          sm,
-          playColor,
-          idleColor,
-          false,
-          variant,
-        )
-        return
+      } else {
+        const breathe =
+          (Math.sin(tSec * 0.85) + 1) * 0.5
+        const amp =
+          IDLE_AMP * (0.55 + 0.45 * easeOutQuad(breathe))
+        for (let i = 0; i < points; i++) {
+          const phase = tSec * 0.55 + i * 0.42
+          const w0 = (Math.sin(phase) + 1) * 0.5
+          const w1 =
+            (Math.sin(phase * 1.7 + 1.2) + 1) * 0.5
+          const target =
+            amp * (0.5 + 0.35 * w0 + 0.15 * w1)
+          levels[i] += (target - levels[i]) * 0.08
+        }
       }
 
-      decaySmoothedTowardIdle(sm, bars)
-      drawBars(
+      for (let i = 0; i < points; i++) {
+        const taper = edgeTaper(i / (points - 1))
+        amps[i] = levels[i] * halfH * 0.94 * taper
+      }
+
+      drawCenterLine(ctx, w, cy, centerLineColor, dpr)
+      const isRadio = variant === 'radio'
+      const haloBlur = perfLite ? 10 : 22
+      const midBlur = perfLite ? 4 : 8
+      drawMirrorBand(
         ctx,
+        amps,
         w,
-        h,
-        bars,
-        sm,
-        playColor,
-        idleColor,
-        true,
-        variant,
+        cy,
+        {
+          scale: isRadio ? 1.06 : 1.05,
+          fill: tonalC1,
+          glow: glowSoft,
+          glowBlur: haloBlur,
+        },
+        dpr,
+      )
+      drawMirrorBand(
+        ctx,
+        amps,
+        w,
+        cy,
+        {
+          scale: isRadio ? 0.74 : 0.78,
+          fill: tonalC2,
+          glow: glowSoft,
+          glowBlur: midBlur,
+        },
+        dpr,
+      )
+      drawMirrorBand(
+        ctx,
+        amps,
+        w,
+        cy,
+        {
+          scale: isRadio ? 0.38 : 0.42,
+          fill: tonalC3,
+          glow: 'rgba(0,0,0,0)',
+          glowBlur: 0,
+        },
+        dpr,
       )
     }
 
     resize()
     const ro = new ResizeObserver(() => {
       resize()
-      tick()
     })
     ro.observe(canvas)
 
-    tick()
-    intervalRef.current = window.setInterval(
-      tick,
-      perfLite
-        ? SPECTRUM_INTERVAL_LITE_MS
-        : SPECTRUM_INTERVAL_MS,
-    )
+    rafRef.current = requestAnimationFrame(render)
 
     return () => {
       ro.disconnect()
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
       }
     }
   }, [getAnalyser, isPlaying, bars, overlay, variant])

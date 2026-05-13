@@ -203,6 +203,16 @@
   inset: 0;
 }
 
+/* The global ambient-stage__layers filter desaturates to 60% — too muted
+   for the fullscreen player where we want cover hues to visibly tint the bg. */
+.rp-now__bg .ambient-stage__layers {
+  filter: saturate(0.9) brightness(0.95);
+}
+
+.rp-now__bg .ambient-layer {
+  opacity: 1;
+}
+
 .rp-now__bg .ambient-stage::after {
   content: '';
   position: absolute;
@@ -400,16 +410,46 @@
 }
 
 .rp-now__ctl-play {
-  width: 64px;
-  height: 64px;
+  width: 68px;
+  height: 68px;
   border-radius: 999px;
-  background: var(--text);
-  color: var(--bg);
+  background: #ffffff;
+  color: #0a0a0a;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  -webkit-tap-highlight-color: transparent;
+  box-shadow:
+    0 6px 28px rgba(255, 255, 255, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transition:
+    transform 380ms var(--ease-press-back, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    box-shadow var(--dur-fast) var(--ease-soft),
+    background var(--dur-fast) var(--ease-snappy);
 }
 
-.rp-now__ctl-play:hover,
-.rp-now__ctl-play:focus-visible {
-  background: var(--text);
+@media (hover: hover) and (pointer: fine) {
+  .rp-now__ctl-play:hover {
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow:
+      0 8px 34px rgba(255, 255, 255, 0.38),
+      inset 0 1px 0 rgba(255, 255, 255, 0.48);
+  }
+}
+
+.rp-now__ctl-play:active {
+  transform: scale(0.90);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow:
+    0 2px 10px rgba(255, 255, 255, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.30);
+  transition:
+    transform 55ms var(--ease-press-down, cubic-bezier(0.4, 0, 1, 1)),
+    box-shadow 55ms var(--ease-press-down, cubic-bezier(0.4, 0, 1, 1)),
+    background 55ms var(--ease-press-down, cubic-bezier(0.4, 0, 1, 1));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-now__ctl-play { transition: box-shadow var(--dur-fast) var(--ease-soft); }
+  .rp-now__ctl-play:active { transform: none; }
 }
 
 .rp-now__secondary {
@@ -448,10 +488,24 @@
   border-radius: var(--r-pill);
   cursor: pointer;
   z-index: 1;
+  -webkit-tap-highlight-color: transparent;
   transition:
-    transform 140ms var(--ease-out),
-    color 140ms var(--ease-out),
-    background 140ms var(--ease-out);
+    transform 380ms var(--ease-press-back, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+.rp-now__tab:active {
+  transform: scale(0.94);
+  transition:
+    transform 55ms var(--ease-press-down, cubic-bezier(0.4, 0, 1, 1)),
+    color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-now__tab { transition: color var(--dur-fast), background var(--dur-fast); }
+  .rp-now__tab:active { transform: none; }
 }
 
 .rp-now__tab--active {
@@ -1092,33 +1146,55 @@
   flex-shrink: 0;
 }
 
+/* ---- Mini-player icon buttons ---- */
 .mp-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 36px;
   height: 36px;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text);
   border-radius: var(--r-pill);
   cursor: pointer;
   padding: 0;
   -webkit-tap-highlight-color: transparent;
-  transition: opacity var(--dur-fast) var(--ease-out);
+  /* Spring-back on release: overshoots ~1.04 then settles at 1.0 */
+  transition:
+    transform 380ms var(--ease-press-back, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    background var(--dur-fast) var(--ease-snappy),
+    border-color var(--dur-fast) var(--ease-snappy),
+    box-shadow var(--dur-fast) var(--ease-soft),
+    color var(--dur-fast) var(--ease-standard),
+    opacity var(--dur-fast) var(--ease-out);
 }
 
 .mp-btn:active {
-  opacity: 0.55;
+  transform: scale(0.88);
+  /* Fast press-down */
+  transition-duration: 55ms, var(--dur-fast), var(--dur-fast), var(--dur-fast), var(--dur-fast), var(--dur-fast);
+  transition-timing-function: var(--ease-press-down, cubic-bezier(0.4, 0, 1, 1)), var(--ease-snappy), var(--ease-snappy), var(--ease-soft), var(--ease-standard), var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mp-btn:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.10);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
 }
 
 .mp-btn--skip {
   color: var(--text-secondary);
 }
 
-.mp-btn--skip:active {
-  color: var(--text);
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .mp-btn--skip:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.10);
+  }
 }
 
 .mp-btn--liked {
@@ -1126,16 +1202,25 @@
 }
 
 .mp-btn--burst {
-  animation: like-flash var(--dur-fast) var(--ease-soft) both;
+  animation: like-spring var(--dur-med) var(--ease-emph);
 }
 
+/* Play button: white pill with glow */
 .mp-btn--play {
   width: 42px;
   height: 42px;
   background: #ffffff;
   color: #0f1115;
   border-radius: var(--r-pill);
+  border-color: rgba(255, 255, 255, 0.16);
   flex-shrink: 0;
+  box-shadow:
+    0 3px 18px rgba(255, 255, 255, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.40);
+  transition:
+    transform 380ms var(--ease-press-back, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    box-shadow var(--dur-fast) var(--ease-soft),
+    background var(--dur-fast) var(--ease-snappy);
 }
 
 .mp-btn--play svg {
@@ -1143,12 +1228,63 @@
   stroke: none !important;
 }
 
-.mp-btn--play:active {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.82);
+@media (hover: hover) and (pointer: fine) {
+  .mp-btn--play:hover {
+    box-shadow:
+      0 5px 22px rgba(255, 255, 255, 0.34),
+      inset 0 1px 0 rgba(255, 255, 255, 0.44);
+  }
 }
 
-/* Radio waves button — leftmost, opens radio screen on tap */
+.mp-btn--play:active {
+  transform: scale(0.88);
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow:
+    0 1px 8px rgba(255, 255, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transition-duration: 55ms, var(--dur-fast), var(--dur-fast);
+  transition-timing-function: var(--ease-press-down, cubic-bezier(0.4, 0, 1, 1)), var(--ease-soft), var(--ease-snappy);
+}
+
+.mp-btn--playing {
+  box-shadow:
+    0 4px 24px rgba(255, 255, 255, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.44);
+  animation: mpPlayGlow 3s var(--ease-soft) infinite;
+}
+
+@keyframes mpPlayGlow {
+  0%, 100% {
+    box-shadow:
+      0 3px 18px rgba(255, 255, 255, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.38);
+  }
+  50% {
+    box-shadow:
+      0 5px 28px rgba(255, 255, 255, 0.42),
+      0 0 0 4px rgba(255, 255, 255, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.44);
+  }
+}
+
+body.ds-perf-lite .mp-btn--playing {
+  animation: none;
+  box-shadow:
+    0 3px 14px rgba(255, 255, 255, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mp-btn--playing { animation: none; }
+  .mp-btn,
+  .mp-btn--play {
+    transition: opacity var(--dur-fast) var(--ease-out);
+  }
+  .mp-btn:active { transform: none; opacity: 0.55; }
+  .mp-btn--play:active { transform: none; }
+}
+
+/* Radio live badge */
 .mp-live-badge {
   flex-shrink: 0;
   display: inline-flex;
@@ -1158,17 +1294,30 @@
   height: 30px;
   padding: 0;
   margin: 0;
-  border: none;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
   background: transparent;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   color: var(--accent, #ff5f57);
-  transition: background var(--dur-fast) var(--ease-out);
+  transition:
+    transform 380ms var(--ease-press-back, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    background var(--dur-fast) var(--ease-snappy),
+    border-color var(--dur-fast) var(--ease-snappy);
 }
 
 .mp-live-badge:active {
+  transform: scale(0.88);
   background: rgba(255, 255, 255, 0.06);
+  transition-duration: 55ms, var(--dur-fast), var(--dur-fast);
+  transition-timing-function: var(--ease-press-down, cubic-bezier(0.4, 0, 1, 1)), var(--ease-snappy), var(--ease-snappy);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mp-live-badge:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.10);
+  }
 }
 
 .mp-live-badge .player-radio-pill__waves {
@@ -1196,16 +1345,18 @@
 
 .mp-overflow-menu {
   position: absolute;
-  bottom: calc(100% + 6px);
+  bottom: calc(100% + 8px);
   right: 0;
-  min-width: 196px;
-  padding: 4px 0;
-  border-radius: var(--r-md);
-  border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
-  background: var(--glass-bg, rgba(16, 16, 16, 0.92));
-  backdrop-filter: var(--glass-blur, blur(20px)) saturate(160%);
-  -webkit-backdrop-filter: var(--glass-blur, blur(20px)) saturate(160%);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  min-width: 204px;
+  padding: 6px 0;
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 14, 14, 0.88);
+  backdrop-filter: var(--glass-blur-medium) var(--glass-saturate);
+  -webkit-backdrop-filter: var(--glass-blur-medium) var(--glass-saturate);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
   z-index: 20;
 }
 
@@ -1214,7 +1365,7 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 10px 14px;
+  padding: 10px 16px;
   border: none;
   background: transparent;
   color: var(--text);
@@ -1223,11 +1374,19 @@
   text-align: left;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background var(--dur-fast) var(--ease-out);
+  transition:
+    background var(--dur-fast) var(--ease-snappy),
+    transform 380ms var(--ease-press-back, cubic-bezier(0.34, 1.56, 0.64, 1));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mp-menu-item:hover {
+    background: rgba(255, 255, 255, 0.07);
+  }
 }
 
 .mp-menu-item:active {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.09);
 }
 
 .mp-menu-item--active {
@@ -1235,7 +1394,7 @@
 }
 
 .mp-menu-item--danger {
-  color: var(--error, #ff5f57);
+  color: var(--state-error, #ff453a);
 }
 
 @media (max-width: 360px) {

@@ -4,6 +4,8 @@ import type { PointerEvent } from 'react'
 interface Options {
   onSwipeLeft?: () => void
   onSwipeRight?: () => void
+  onSwipeUp?: () => void
+  onSwipeDown?: () => void
   onProgress?: (dx: number) => void
   threshold?: number
   disabled?: boolean
@@ -12,6 +14,8 @@ interface Options {
 export function useSwipeX({
   onSwipeLeft,
   onSwipeRight,
+  onSwipeUp,
+  onSwipeDown,
   onProgress,
   threshold = 60,
   disabled = false,
@@ -50,6 +54,13 @@ export function useSwipeX({
       onProgress?.(0)
       const absDx = Math.abs(dx)
       const absDy = Math.abs(dy)
+      if (absDy > threshold && absDy > absDx * 1.5) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (dy < 0) onSwipeUp?.()
+        else onSwipeDown?.()
+        return
+      }
       if (absDx > threshold && absDx > absDy * 1.5) {
         e.preventDefault()
         e.stopPropagation()
@@ -57,7 +68,15 @@ export function useSwipeX({
         else onSwipeRight?.()
       }
     },
-    [disabled, threshold, onSwipeLeft, onSwipeRight, onProgress],
+    [
+      disabled,
+      threshold,
+      onSwipeLeft,
+      onSwipeRight,
+      onSwipeUp,
+      onSwipeDown,
+      onProgress,
+    ],
   )
 
   const onPointerCancel = useCallback(() => {

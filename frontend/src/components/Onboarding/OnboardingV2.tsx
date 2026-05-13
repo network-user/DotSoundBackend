@@ -27,6 +27,7 @@ import { showIsland } from '@/lib/island'
 import { trackActivationEvent } from '@/lib/activation'
 import { hapticSelection } from '@/lib/telegram'
 import { useOnboardingAudio } from '@/hooks/useOnboardingAudio'
+import { usePreviewLoop } from '@/hooks/usePreviewLoop'
 import { AvatarBuilder } from '@/components/Onboarding/AvatarBuilder'
 import { GenreBubble } from '@/components/Onboarding/GenreBubble'
 import { LEGAL_VERSION } from '@/views/legalContent'
@@ -34,7 +35,6 @@ import type {
   OnboardingArtistItem,
   OnboardingBootstrap,
   OnboardingTasteDecision,
-  OnboardingGenrePreviewResponse,
   Track,
 } from '@/types/api'
 
@@ -53,9 +53,6 @@ type Step =
 const MIN_GENRES = 3
 const SWIPE_BATCH = 5
 const SWIPE_THRESHOLD = 110
-
-const GENRE_SILENT_WAV =
-  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'
 
 const STEP_ORDER: Step[] = [
   'welcome',
@@ -936,251 +933,26 @@ function GenresStep({
   const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
 
-  const genreAudioRef =
-    useRef<HTMLAudioElement | null>(null)
-  const playingGenreRef = useRef<string | null>(null)
-  const timerRef = useRef<number | null>(null)
-  const queuesRef = useRef(
-    new Map<string, Track[]>(),
-  )
-  const idxRef = useRef(new Map<string, number>())
-  const playNextRef = useRef<
-    ((genre: string) => void) | null
-  >(null)
-  const bubblesRef = useRef(bubbles)
-  const [playingGenre, setPlayingGenre] = useState<
-    string | null
-  >(null)
-  const [loadingGenre, setLoadingGenre] = useState<
-    string | null
-  >(null)
-
-  const stopGenreAudio = useCallback(() => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    const a = genreAudioRef.current
-    if (a) {
-      a.pause()
-      a.onended = null
-      a.src = ''
-    }
-    playingGenreRef.current = null
-    setPlayingGenre(null)
-    setLoadingGenre(null)
-  }, [])
-
-  const playNext = useCallback(
-    (genre: string) => {
-      if (playingGenreRef.current !== genre) return
-      const a = genreAudioRef.current
-      if (!a) return
-      const queue = queuesRef.current.get(genre)
-      if (!queue || queue.length === 0) return
-
-      let idx = idxRef.current.get(genre) ?? 0
-      if (idx >= queue.length) {
-        for (
-          let i = queue.length - 1;
-          i > 0;
-          i--
-        ) {
-          const j = Math.floor(
-            Math.random() * (i + 1),
-          )
-          ;[queue[i], queue[j]] = [
-            queue[j],
-            queue[i],
-          ]
-        }
-        idx = 0
-      }
-      idxRef.current.set(genre, idx + 1)
-      const track = queue[idx]
-
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current)
-      }
-      a.pause()
-      a.muted = false
-      a.src = `/api/v1/tracks/${track.id}/audio?force_progressive=true`
-      try {
-        a.load()
-      } catch {
-        /* ignore */
-      }
-      a.onended = () => {
-        if (timerRef.current !== null) {
-          window.clearTimeout(timerRef.current)
-          timerRef.current = null
-        }
-        playNextRef.current?.(genre)
-      }
-      setLoadingGenre(genre)
-      const playPromise = a.play()
-      if (playPromise && typeof playPromise.then === 'function') {
-        playPromise
-          .then(() => {
-            if (playingGenreRef.current !== genre) return
-            setLoadingGenre(null)
-            setPlayingGenre(genre)
-            // Start the 15s window only once playback
-            // actually began so a slow transcode doesn't
-            // eat into the preview window.
-            if (timerRef.current !== null) {
-              window.clearTimeout(timerRef.current)
-            }
-            timerRef.current = window.setTimeout(() => {
-              timerRef.current = null
-              if (genreAudioRef.current) {
-                genreAudioRef.current.pause()
-                genreAudioRef.current.onended = null
-              }
-              playNextRef.current?.(genre)
-            }, 15000)
-          })
-          .catch(() => {
-            if (playingGenreRef.current === genre) {
-              stopGenreAudio()
-            }
-          })
-      }
+  const genreFetcher = useCallback(
+    async (genre: string): Promise<Track[]> => {
+      const resp = await api.fetchGenrePreviewQueue(genre, 10)
+      return resp.items
     },
-    [stopGenreAudio],
+    [],
   )
+  const preview = usePreviewLoop<string>({ fetcher: genreFetcher })
 
-  playNextRef.current = playNext
-
-  const startGenrePreview = useCallback(
-    async (genre: string) => {
-      stopGenreAudio()
-      playingGenreRef.current = genre
-      setLoadingGenre(genre)
-      setPlayingGenre(null)
-      const a = genreAudioRef.current
-      if (!a) return
-
-      // Always prime in user-gesture tick regardless of
-      // queue cache. Without this, cached queues skip
-      // priming and a.play() is blocked by autoplay policy.
-      a.muted = true
-      a.src = GENRE_SILENT_WAV
-      try {
-        a.load()
-      } catch {
-        /* ignore */
-      }
-      void a.play().catch(() => {})
-
-      let queue = queuesRef.current.get(genre)
-
-      if (!queue) {
-
-        try {
-          const resp: OnboardingGenrePreviewResponse =
-            await api.fetchGenrePreviewQueue(
-              genre,
-              10,
-            )
-          if (playingGenreRef.current !== genre) {
-            return
-          }
-          const arr = [...resp.items]
-          for (
-            let i = arr.length - 1;
-            i > 0;
-            i--
-          ) {
-            const j = Math.floor(
-              Math.random() * (i + 1),
-            )
-            ;[arr[i], arr[j]] = [arr[j], arr[i]]
-          }
-          queue = arr
-          queuesRef.current.set(genre, queue)
-          idxRef.current.set(genre, 0)
-        } catch {
-          if (playingGenreRef.current === genre) {
-            stopGenreAudio()
-          }
-          a.muted = false
-          return
-        }
-      }
-
-      if (!queue || queue.length === 0) {
-        if (playingGenreRef.current === genre) {
-          stopGenreAudio()
-        }
+  const handleTogglePreview = useCallback(
+    (genre: string) => {
+      if (preview.playingKey === genre || preview.loadingKey === genre) {
+        preview.stop()
         return
       }
-      if (playingGenreRef.current !== genre) return
-      playNext(genre)
+      preview.prime()
+      void preview.start(genre)
     },
-    [stopGenreAudio, playNext],
+    [preview],
   )
-
-  // Pre-fetch queues for visible genres on mount
-  // so the first tap on each genre is synchronous.
-  useEffect(() => {
-    let active = true
-    const prefetch = async () => {
-      for (const b of bubblesRef.current.slice(
-        0,
-        14,
-      )) {
-        if (!active) return
-        if (queuesRef.current.has(b.genre)) continue
-        try {
-          const resp =
-            await api.fetchGenrePreviewQueue(
-              b.genre,
-              5,
-            )
-          if (!active) return
-          const arr = [...resp.items]
-          for (
-            let i = arr.length - 1;
-            i > 0;
-            i--
-          ) {
-            const j = Math.floor(
-              Math.random() * (i + 1),
-            )
-            ;[arr[i], arr[j]] = [arr[j], arr[i]]
-          }
-          queuesRef.current.set(b.genre, arr)
-          idxRef.current.set(b.genre, 0)
-        } catch {}
-      }
-    }
-    void prefetch()
-    return () => {
-      active = false
-    }
-  }, [])
-
-  const handleToggle = useCallback(
-    (genre: string) => {
-      const wasSelected = selected.includes(genre)
-      onToggle(genre)
-      if (!wasSelected) {
-        void startGenrePreview(genre)
-      } else if (
-        playingGenreRef.current === genre
-      ) {
-        stopGenreAudio()
-      }
-    },
-    [selected, onToggle, startGenrePreview, stopGenreAudio],
-  )
-
-  useEffect(() => {
-    return () => {
-      stopGenreAudio()
-    }
-  }, [stopGenreAudio])
 
   const filteredBubbles = useMemo(() => {
     if (!searchQuery.trim()) return bubbles
@@ -1253,9 +1025,10 @@ function GenresStep({
                 selected={selected.includes(
                   b.genre,
                 )}
-                isPlaying={playingGenre === b.genre}
-                isLoading={loadingGenre === b.genre}
-                onToggle={handleToggle}
+                isPlaying={preview.playingKey === b.genre}
+                isLoading={preview.loadingKey === b.genre}
+                onToggle={onToggle}
+                onTogglePreview={handleTogglePreview}
               />
             ))}
           </div>
@@ -1275,7 +1048,7 @@ function GenresStep({
         </p>
       </div>
       <audio
-        ref={genreAudioRef}
+        ref={preview.audioRef}
         preload="auto"
         playsInline
         aria-hidden
@@ -1794,6 +1567,27 @@ function ArtistsStep({
   const { t } = useTranslation()
   const [searchQuery, setSearchQuery] = useState('')
 
+  const artistFetcher = useCallback(
+    async (id: number): Promise<Track[]> => {
+      const resp = await api.fetchArtistPreviewQueue(id, 10)
+      return resp.items
+    },
+    [],
+  )
+  const preview = usePreviewLoop<number>({ fetcher: artistFetcher })
+
+  const handleTogglePreview = useCallback(
+    (id: number) => {
+      if (preview.playingKey === id || preview.loadingKey === id) {
+        preview.stop()
+        return
+      }
+      preview.prime()
+      void preview.start(id)
+    },
+    [preview],
+  )
+
   const filteredArtists = useMemo(() => {
     if (!searchQuery.trim()) return artists
     const q = searchQuery.toLowerCase()
@@ -1843,26 +1637,70 @@ function ArtistsStep({
               )}
             </div>
             <div className="onboarding-artists-grid">
-              {filteredArtists.map((a) => (
-                <button
-                  key={a.id}
-                  type="button"
-                  className={
-                    selected.includes(a.id)
-                      ? 'onboarding-artist-card selected'
-                      : 'onboarding-artist-card'
-                  }
-                  onClick={() => onToggle(a.id)}
-                >
-                  <CoverImage
-                    coverKey={a.image_key}
-                    className="cover-image"
-                  />
-                  <span className="onboarding-artist-name">
-                    {a.name}
-                  </span>
-                </button>
-              ))}
+              {filteredArtists.map((a) => {
+                const playing = preview.playingKey === a.id
+                const playLoading = preview.loadingKey === a.id
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    className={
+                      [
+                        'onboarding-artist-card',
+                        selected.includes(a.id) ? 'selected' : '',
+                        playing ? 'is-playing' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ')
+                    }
+                    onClick={() => onToggle(a.id)}
+                  >
+                    <span className="onboarding-artist-cover-wrap">
+                      <CoverImage
+                        coverKey={a.image_key}
+                        className="cover-image"
+                      />
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className={[
+                          'onboarding-artist-preview-btn',
+                          playing ? 'is-playing' : '',
+                          playLoading ? 'is-loading' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ')}
+                        aria-label={
+                          playing ? 'Stop preview' : 'Play preview'
+                        }
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleTogglePreview(a.id)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            handleTogglePreview(a.id)
+                          }
+                        }}
+                      >
+                        {playLoading ? (
+                          <span className="onboarding-artist-preview-spinner" />
+                        ) : (
+                          <Icon
+                            name={playing ? 'pause' : 'play'}
+                            size={14}
+                          />
+                        )}
+                      </span>
+                    </span>
+                    <span className="onboarding-artist-name">
+                      {a.name}
+                    </span>
+                  </button>
+                )
+              })}
               {filteredArtists.length === 0 && (
                 <p className="onb-v2-artists-empty">
                   {t('onboarding.artists.empty')}
@@ -1872,6 +1710,14 @@ function ArtistsStep({
           </>
         )}
       </div>
+      <audio
+        ref={preview.audioRef}
+        preload="auto"
+        playsInline
+        aria-hidden
+        tabIndex={-1}
+        className="onb-v2-hidden-audio"
+      />
     </>
   )
 }

@@ -137,8 +137,15 @@
       }
       var done = false;
       var shownAt = Date.now();
+      // Warm boot: if app was ready recently, skip most of the wait.
       var minVisibleMs = 520;
-      var fallbackMs = 120000;
+      try {
+        var lastReady = parseInt(localStorage.getItem('ds:last-ready-at') || '0', 10);
+        if (lastReady && (Date.now() - lastReady) < 30 * 60 * 1000) {
+          minVisibleMs = 80;
+        }
+      } catch (_e) { /* ignore */ }
+      var fallbackMs = 10000;
       function hide() {
         if (done || !loader) return;
         var elapsed = Date.now() - shownAt;
@@ -164,10 +171,9 @@
       }
       function rememberWarmBoot() {
         try {
-          sessionStorage.setItem(
-            warmBootCacheKey,
-            String(Date.now())
-          );
+          var ts = String(Date.now());
+          sessionStorage.setItem(warmBootCacheKey, ts);
+          localStorage.setItem('ds:last-ready-at', ts);
         } catch (_storeErr) {
           /* ignore */
         }

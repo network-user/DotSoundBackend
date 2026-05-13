@@ -9,6 +9,7 @@ from app.schemas.genre_samples import GenrePreviewQueueResponse
 from app.schemas.onboarding import (
     ActivationEventRequest,
     ArtistBriefResponse,
+    ArtistPreviewQueueResponse,
     CalibrationRequest,
     OnboardingBootstrapResponse,
     OnboardingCompleteRequest,
@@ -195,6 +196,24 @@ async def get_artists(
     genre_list = [g.strip() for g in genres.split(",")] if genres else None
     artists = await svc.get_popular_artists(genres=genre_list, limit=limit)
     return [ArtistBriefResponse.model_validate(a) for a in artists]
+
+
+@router.get(
+    "/artists/{artist_id}/preview-queue",
+    response_model=ArtistPreviewQueueResponse,
+)
+async def get_artist_preview_queue(
+    artist_id: int,
+    limit: int = 10,
+    _user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ArtistPreviewQueueResponse:
+    cap = max(1, min(limit, 10))
+    svc = OnboardingService(db)
+    tracks = await svc.get_artist_preview_queue(artist_id, cap)
+    return ArtistPreviewQueueResponse(
+        items=await dedupe_and_build_track_list(db, tracks),
+    )
 
 
 @router.post("/preferences")

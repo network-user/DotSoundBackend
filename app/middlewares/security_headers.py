@@ -48,4 +48,21 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             response.headers[
                 "Content-Security-Policy"
             ] = "default-src 'none'"
+        elif ct.startswith("text/html"):
+            response.headers.setdefault(
+                "Content-Security-Policy",
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' "
+                "https://telegram.org; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data: blob: https:; "
+                "font-src 'self' data:; "
+                "media-src 'self' blob: https:; "
+                "connect-src 'self' ws: wss: https:; "
+                "worker-src 'self' blob:; "
+                "frame-src 'self' https://telegram.org; "
+                "frame-ancestors 'self' https://web.telegram.org; "
+                "base-uri 'self'; "
+                "form-action 'self'",
+            )
         return response

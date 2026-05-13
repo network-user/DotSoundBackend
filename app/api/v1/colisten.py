@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.auth import AuthError, decode_access_token
 from app.core.rate_limit import limiter
 from app.core.redis import get_redis_client
+from app.core.ws_origin import reject_if_bad_origin
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.colisten import (
@@ -122,6 +123,8 @@ async def colisten_ws(
     room_id: uuid.UUID,
     token: str | None = Query(None),
 ) -> None:
+    if await reject_if_bad_origin(websocket):
+        return
     raw_token = token or ""
     proto = websocket.headers.get("sec-websocket-protocol")
     if not raw_token and proto:

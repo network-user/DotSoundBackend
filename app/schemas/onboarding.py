@@ -1,5 +1,7 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.track import TrackResponse
+
 
 class OnboardingCompleteRequest(BaseModel):
     """Implicit acceptance recorded when user taps the final
@@ -64,6 +66,14 @@ class ArtistBriefResponse(BaseModel):
     id: int
     name: str
     image_key: str | None = None
+
+
+class ArtistPreviewQueueResponse(BaseModel):
+    """Same shape as the genre preview queue, used by the onboarding
+    artist picker so the user can audition tracks before selecting.
+    """
+
+    items: list[TrackResponse]
 
 
 class SmartSkipResponse(BaseModel):

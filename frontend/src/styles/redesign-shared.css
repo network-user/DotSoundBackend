@@ -445,32 +445,100 @@
 .mp-press[disabled] {
   opacity: 0.4;
   cursor: not-allowed;
+  pointer-events: none;
 }
 
+/* Primary: white solid + white glow */
 .mp-press--primary {
-  background: var(--text);
-  color: var(--bg);
+  background: #ffffff;
+  color: #0a0a0a;
   border-radius: var(--r-pill);
   font-weight: 600;
   letter-spacing: var(--ls-snug);
+  border-color: transparent;
+  box-shadow:
+    0 4px 18px rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.12) inset;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .mp-press--primary:hover {
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow:
+      0 6px 22px rgba(255, 255, 255, 0.24),
+      0 0 0 1px rgba(255, 255, 255, 0.16) inset;
+  }
+}
+
+/* Ghost: glassmorphism semi-transparent */
 .mp-press--ghost {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--glass-edge);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
   border-radius: var(--r-pill);
+  backdrop-filter: var(--glass-blur-soft) var(--glass-saturate);
+  -webkit-backdrop-filter: var(--glass-blur-soft) var(--glass-saturate);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 2px 8px rgba(0, 0, 0, 0.28);
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .mp-press--ghost:hover {
+    background: rgba(255, 255, 255, 0.11);
+    border-color: rgba(255, 255, 255, 0.20);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 3px 12px rgba(0, 0, 0, 0.32);
+  }
+}
+
+/* Icon: circular glass button */
 .mp-press--icon {
   width: var(--tap);
   height: var(--tap);
   padding: 0;
   border-radius: var(--r-pill);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.10);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 2px 6px rgba(0, 0, 0, 0.22);
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .mp-press--icon:hover {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.16);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.10),
+      0 3px 10px rgba(0, 0, 0, 0.28);
+  }
+}
+
+/* Subtle: minimal, no background */
 .mp-press--subtle {
   background: transparent;
   border-radius: var(--r-md);
+  color: var(--text-secondary);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mp-press--subtle:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text);
+  }
+}
+
+/* Danger */
+.mp-press--danger {
+  color: var(--state-error, #ff453a);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .mp-press--danger:hover {
+    background: rgba(255, 69, 58, 0.10);
+    border-color: rgba(255, 69, 58, 0.20);
+  }
 }
 
 @media (min-width: 561px) and (pointer: fine) {

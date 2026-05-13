@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { Icon } from '@/components/Icon/Icon'
 import type { OnboardingGenreBubble } from '@/types/api'
 
 interface Props {
@@ -7,6 +8,7 @@ interface Props {
   isPlaying?: boolean
   isLoading?: boolean
   onToggle: (genre: string) => void
+  onTogglePreview: (genre: string) => void
 }
 
 function coverUrl(key: string): string {
@@ -19,6 +21,7 @@ export function GenreBubble({
   isPlaying = false,
   isLoading = false,
   onToggle,
+  onTogglePreview,
 }: Props) {
   const covers = useMemo(
     () => bubble.sample_cover_keys.slice(0, 4),
@@ -89,25 +92,43 @@ export function GenreBubble({
         className="onb-v2-bubble__cover-fade"
         aria-hidden="true"
       />
+      <span
+        role="button"
+        tabIndex={0}
+        className={[
+          'onb-v2-bubble__preview-btn',
+          isPlaying ? 'is-playing' : '',
+          isLoading ? 'is-loading' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        aria-label={
+          isPlaying ? 'Stop preview' : 'Play preview'
+        }
+        onClick={(e) => {
+          e.stopPropagation()
+          onTogglePreview(bubble.genre)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            e.stopPropagation()
+            onTogglePreview(bubble.genre)
+          }
+        }}
+      >
+        {isLoading ? (
+          <span className="onb-v2-bubble__preview-spinner" />
+        ) : (
+          <Icon
+            name={isPlaying ? 'pause' : 'play'}
+            size={14}
+          />
+        )}
+      </span>
       <span className="onb-v2-bubble__name">
         {bubble.genre}
       </span>
-      {isLoading && (
-        <span
-          className="onb-v2-bubble__loader"
-          aria-hidden="true"
-        />
-      )}
-      {isPlaying && !isLoading && (
-        <span
-          className="onb-v2-bubble__eq"
-          aria-hidden="true"
-        >
-          <span className="onb-v2-bubble__eq-bar" />
-          <span className="onb-v2-bubble__eq-bar" />
-          <span className="onb-v2-bubble__eq-bar" />
-        </span>
-      )}
       {selected && (
         <span
           className="onb-v2-bubble__check"

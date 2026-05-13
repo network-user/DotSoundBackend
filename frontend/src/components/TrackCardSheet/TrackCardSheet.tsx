@@ -35,7 +35,6 @@ import {
   OfflineNotAllowedError,
   removeTrack as offlineRemoveTrack,
 } from '@/lib/offlineCache'
-import { useSound } from '@/store/SoundContext'
 import { usePrefetchTracks } from '@/store/PrefetchContext'
 import {
   clearThirdPartyStreamOverride,
@@ -44,7 +43,6 @@ import {
 } from '@/lib/streamDebugOverride'
 import type {
   AlbumWithTracksRecord,
-  ChatListItem,
   Track,
   TrackCardResponse,
   TrackInfoResponse,
@@ -59,6 +57,7 @@ import { MorphIcon } from '@/components/ui/MorphIcon'
 import { m, useReducedMotion } from '@/lib/motion'
 import { AnimatePresence, type PanInfo } from 'framer-motion'
 import { LyricsPanel } from './LyricsPanel'
+import { TrackShareModal, type TrackSharePayload } from './TrackShareModal'
 import { buildTrackCardSummaryLine } from '@/lib/trackCardFormat'
 import { useDesktopFinePointer } from '@/hooks/useDesktopFinePointer'
 import { useSwipeX } from '@/hooks/useSwipeX'
@@ -88,10 +87,6 @@ interface Props {
   onOpenArtist?: (name: string) => void
 }
 
-type ShareEntityType =
-  | 'track'
-  | 'album'
-  | 'playlist'
 
 const GENERATE_COOLDOWN_MS = 20_000
 
@@ -173,7 +168,6 @@ export function TrackCardSheet({
   const desktopFineNav = useDesktopFinePointer()
   const slidePresence = useTrackSlidePresence()
   const [isCoarsePointer, setIsCoarsePointer] = useState(false)
-  const sound = useSound()
   const videoRef = useRef<HTMLVideoElement>(null)
 
   const handleSheetDragEnd = useCallback(
@@ -225,19 +219,7 @@ export function TrackCardSheet({
     useState(false)
   const [genCooldown, setGenCooldown] = useState(0)
   const [shareOpen, setShareOpen] = useState(false)
-  // [REGULATORY-DISABLED v1] чат-список и отправка в DM убраны
-  // из share-модала. Setters сохранены для совместимости с
-  // openShareModal; getters не читаются — их использование
-  // вернётся вместе с чат-стеком.
-  const [, setShareChats] = useState<ChatListItem[]>([])
-  const [, setShareLoading] = useState(false)
-  const [shareError, setShareError] = useState<string | null>(null)
-  const [shareCopyBusy, setShareCopyBusy] = useState(false)
-  const [sharePayload, setSharePayload] = useState<{
-    id: number
-    type: ShareEntityType
-    title: string
-  } | null>(null)
+  const [sharePayload, setSharePayload] = useState<TrackSharePayload | null>(null)
   const [albumEditOpen, setAlbumEditOpen] = useState(false)
   const [albumEditData, setAlbumEditData] =
     useState<AlbumWithTracksRecord | null>(null)
@@ -583,54 +565,10 @@ export function TrackCardSheet({
   //   ... см. git history
   // }, [t])
 
-  const openShareModal = useCallback(async (payload: {
-    id: number
-    type: ShareEntityType
-    title: string
-  }) => {
+  const openShareModal = useCallback((payload: TrackSharePayload) => {
     setSharePayload(payload)
     setShareOpen(true)
-    setShareError(null)
-    // [REGULATORY-DISABLED v1] список чатов и отправка в DM
-    // отключены вместе со всем чат-стеком (ст. 10.1 149-ФЗ).
-    // Модал остаётся для копирования ссылки (handleCopyShare).
-    setShareChats([])
-    setShareLoading(false)
   }, [])
-
-  // [REGULATORY-DISABLED v1] отправка в чат отключена вместе с
-  // чат-стеком. Восстановить вместе с api/v1/messages.py.
-  // const handleShareToChat = useCallback(async (conversationId: number) => {
-  //   ... см. git history
-  // }, [sharePayload, sound])
-
-  const handleCopyShare = useCallback(async () => {
-    if (!sharePayload) return
-    setShareCopyBusy(true)
-    try {
-      if (sharePayload.type === 'track') {
-        const links = await api.getShareLinks(sharePayload.id)
-        await navigator.clipboard.writeText(links.url)
-      } else {
-        const base = `${window.location.origin}${import.meta.env.BASE_URL}`
-        const path = sharePayload.type === 'album'
-          ? `library?shareType=album&id=${sharePayload.id}`
-          : `playlists?shareType=playlist&id=${sharePayload.id}`
-        await navigator.clipboard.writeText(`${base}${path}`)
-      }
-      sound.play('notificationInfo')
-      showIsland({
-        kind: 'toast',
-        title: t('trackSheet.linkCopied'),
-        durationMs: 2000,
-      })
-    } catch {
-      setShareError('Не удалось скопировать')
-      sound.play('notificationError')
-    } finally {
-      setShareCopyBusy(false)
-    }
-  }, [sharePayload, sound])
 
   const openAlbumEditor = useCallback(async () => {
     const albumId = relatedAlbumInfo?.id ?? track?.album_id ?? null
@@ -1429,6 +1367,8 @@ export function TrackCardSheet({
                     id: track.id,
                     type: 'track',
                     title: track.title || 'track',
+                    subtitle: track.artist || undefined,
+                    coverUrl: track.cover_key ?? undefined,
                   })
                 }}
               >
@@ -1460,6 +1400,8 @@ export function TrackCardSheet({
                       id: track.id,
                       type: 'track',
                       title: track.title || 'track',
+                      subtitle: track.artist || undefined,
+                      coverUrl: track.cover_key ?? undefined,
                     })
                   }}
                 >
@@ -1533,6 +1475,7 @@ export function TrackCardSheet({
                       id: albumId,
                       type: 'album',
                       title: relatedAlbumInfo?.title ?? `Альбом #${albumId}`,
+                      subtitle: track.artist || undefined,
                     })
                   }}
                 >
@@ -2621,65 +2564,11 @@ export function TrackCardSheet({
             </div>
           </div>
         )}
-        {shareOpen && (
-          <div
-            className="share-modal-overlay fade-in"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) {
-                setShareOpen(false)
-              }
-            }}
-          >
-            <div className="share-modal scale-in">
-              <div className="share-modal-header">
-                <div className="share-modal-title-wrap">
-                  <h3 className="share-modal-title">
-                    {sharePayload?.type === 'album'
-                      ? 'Поделиться альбомом'
-                      : sharePayload?.type === 'playlist'
-                        ? 'Поделиться плейлистом'
-                        : 'Поделиться треком'}
-                  </h3>
-                  <p className="share-modal-subtitle">
-                    {sharePayload?.title || 'Выберите чат для отправки'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  onClick={() => {
-                    void handleCopyShare()
-                  }}
-                  aria-label="Скопировать ссылку"
-                  disabled={shareCopyBusy}
-                >
-                  <Icon name="copy" size={16} />
-                </button>
-                <button
-                  type="button"
-                  className="icon-btn"
-                  onClick={() => setShareOpen(false)}
-                  aria-label="Закрыть"
-                >
-                  <Icon name="x" size={18} />
-                </button>
-              </div>
-
-              {/* [REGULATORY-DISABLED v1] список чатов и отправка
-              в DM отключены — используйте кнопку копирования ссылки. */}
-              <div className="share-modal-empty">
-                Нажмите кнопку копирования, чтобы получить ссылку
-                на этот трек.
-              </div>
-
-              {shareError && (
-                <div className="share-modal-error">
-                  {shareError}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        <TrackShareModal
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          payload={sharePayload}
+        />
 
         {loading && !card && (
           <div className="tcs-loader">

@@ -84,6 +84,9 @@
   --ease-spring:   cubic-bezier(0.22, 1.00, 0.36, 1.00);
   --ease-snappy:   cubic-bezier(0.20, 0.00, 0.20, 1.00);
   --ease-soft:     cubic-bezier(0.25, 0.10, 0.25, 1.00);
+  /* Spring overshoot for buttons: overshoots ~1.04 on release */
+  --ease-press-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-press-down: cubic-bezier(0.40, 0.00, 1.00, 1.00);
   --press-scale: 0.985;
 
   /* Liquid Glass system.

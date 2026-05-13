@@ -1457,7 +1457,9 @@ export function PlayerProvider({
       const code = a.error?.code
       if (code === MediaError.MEDIA_ERR_ABORTED) return
       if (!a.paused && a.currentTime > 0) return
-      if (Date.now() - srcAssignedAtRef.current < 2500) return
+      // 500ms debounce: enough to ignore the audio.src='' echo but catches
+      // immediate 404/stream failures that the 2500ms window was hiding.
+      if (Date.now() - srcAssignedAtRef.current < 500) return
       if (
         (code === MediaError.MEDIA_ERR_NETWORK ||
           code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) &&
@@ -1483,6 +1485,7 @@ export function PlayerProvider({
             return
           }
           showPlaybackErrorOnce(track.id, message)
+          if (radioModeRef.current) await playNext()
         })
         return
       }
@@ -1529,6 +1532,7 @@ export function PlayerProvider({
         track.id,
         i18n.t('redesign.playerErrors.playback'),
       )
+      if (radioModeRef.current) void playNext()
     }
     const onStalled = () => {
       try {
@@ -1926,6 +1930,8 @@ export function PlayerProvider({
         isSoundCloudUnavailableError(message)
       ) {
         await playNext()
+      } else if (radioModeRef.current) {
+        await playNext()
       }
     }
   }
@@ -2217,6 +2223,9 @@ export function PlayerProvider({
       .then((res) => {
         if (cancelled || !res.tracks.length)
           throw new Error('empty')
+        // Guard: if track changed while request was in-flight, discard stale response.
+        // cancelled alone isn't enough — React cleanup runs async after state flush.
+        if (lastTrackIdRef.current !== track.id) return
         prefetchCacheRef.current = {
           forTrackId: track.id,
           tracks: res.tracks,
@@ -2234,7 +2243,7 @@ export function PlayerProvider({
       .catch(() => {
         api.getTrackQueue(track.id, 3)
           .then((res) => {
-            if (cancelled) return
+            if (cancelled || lastTrackIdRef.current !== track.id) return
             prefetchCacheRef.current = {
               forTrackId: track.id,
               tracks: res.next_tracks,

@@ -870,11 +870,13 @@ export function App() {
         />
       )}
       <SystemEventListener />
-      <SettingsSheet
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onLogout={handleLogout}
-      />
+      <ErrorBoundary fallback={null}>
+        <SettingsSheet
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          onLogout={handleLogout}
+        />
+      </ErrorBoundary>
       <ComplaintModal />
       <TrackCardSheet
         onOpenArtist={async (name) => {

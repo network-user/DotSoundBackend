@@ -700,6 +700,10 @@ export interface OnboardingGenrePreviewResponse {
   items: Track[]
 }
 
+export interface OnboardingArtistPreviewResponse {
+  items: Track[]
+}
+
 export interface OnboardingArtistItem {
   id: number
   name: string

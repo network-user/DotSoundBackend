@@ -120,15 +120,14 @@ export function MorphIcon({
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}
+      style={{ fill: 'currentColor', stroke: 'currentColor' }}
       animate={{
-        fill: filled ? 'currentColor' : 'rgba(0,0,0,0)',
-        stroke: filled
-          ? 'rgba(0,0,0,0)'
-          : 'currentColor',
+        fillOpacity: filled ? 1 : 0,
+        strokeOpacity: filled ? 0 : 1,
+        strokeWidth: filled ? 0 : 2,
       }}
       transition={reduce ? { duration: 0 } : TWEEN_FAST}
     >

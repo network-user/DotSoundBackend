@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from app.core.auth import AuthError, decode_access_token
 from app.core.db import AsyncSessionLocal
 from app.core.ws_manager import ws_manager
+from app.core.ws_origin import reject_if_bad_origin
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.repositories.user import UserRepository
@@ -29,6 +30,8 @@ async def websocket_endpoint(
     websocket: WebSocket,
     token: str | None = None,
 ) -> None:
+    if await reject_if_bad_origin(websocket):
+        return
     raw_token = token or ""
     proto = websocket.headers.get("sec-websocket-protocol")
     if not raw_token and proto:

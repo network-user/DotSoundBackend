@@ -205,12 +205,10 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    if not settings.debug and settings.jwt_secret == (
-        "changeme-set-a-strong-secret-in-production"
-    ):
+    if not settings.jwt_secret or len(settings.jwt_secret) < 32:
         raise RuntimeError(
-            "JWT_SECRET must be changed in production "
-            "(set DEBUG=true for development)"
+            "JWT_SECRET must be set to a strong random value "
+            "(>= 32 chars); see deployment docs."
         )
 
     application = FastAPI(
@@ -239,16 +237,18 @@ def create_app() -> FastAPI:
     application.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins_list,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
-        allow_headers=["*"],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Requested-With",
+            "X-CSRF-Token",
+            "Idempotency-Key",
+        ],
         max_age=3600,
     )
     hosts = settings.allowed_hosts_list
-    if not settings.debug and hosts == ["*"]:
-        logger.warning(
-            "trusted_host_wildcard_in_production",
-            hint="Set ALLOWED_HOSTS to a real list",
-        )
     application.add_middleware(
         TrustedHostMiddleware,
         allowed_hosts=hosts,

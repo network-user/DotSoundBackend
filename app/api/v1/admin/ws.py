@@ -40,6 +40,7 @@ from app.core.auth import (
     decode_admin_token,
 )
 from app.core.db import AsyncSessionLocal
+from app.core.ws_origin import reject_if_bad_origin
 from app.core.observability import (
     ws_gauge_dec,
     ws_gauge_inc,
@@ -503,6 +504,8 @@ async def admin_ws(
     websocket: WebSocket,
     token: str | None = Query(None),
 ) -> None:
+    if await reject_if_bad_origin(websocket):
+        return
     raw_token = token or ""
     proto = websocket.headers.get("sec-websocket-protocol")
     if not raw_token and proto:

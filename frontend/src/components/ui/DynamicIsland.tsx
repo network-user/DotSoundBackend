@@ -1,4 +1,5 @@
 import {
+  forwardRef,
   useEffect,
   useState,
   useSyncExternalStore,
@@ -30,7 +31,8 @@ interface PillProps {
   entry: IslandEntry
 }
 
-function IslandPill({ entry }: PillProps) {
+const IslandPill = forwardRef<HTMLButtonElement, PillProps>(
+  function IslandPill({ entry }, ref) {
   const reduce = useReducedMotion()
   const [progress, setProgress] = useState(
     entry.progress ?? 0,
@@ -51,6 +53,7 @@ function IslandPill({ entry }: PillProps) {
 
   return (
     <m.button
+      ref={ref}
       type="button"
       layout
       className={[
@@ -105,7 +108,7 @@ function IslandPill({ entry }: PillProps) {
       )}
     </m.button>
   )
-}
+})
 
 export function DynamicIslandHost() {
   const queue = useIslandQueue()

@@ -28,6 +28,13 @@ export const SPRING_BOUNCY: Transition = {
   mass: 0.85,
 }
 
+export const SPRING_PRESS: Transition = {
+  type: 'spring',
+  stiffness: 520,
+  damping: 20,
+  mass: 0.5,
+}
+
 export const SPRING_LAYOUT: Transition = {
   type: 'spring',
   stiffness: 260,

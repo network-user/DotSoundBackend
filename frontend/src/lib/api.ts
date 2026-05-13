@@ -88,6 +88,7 @@ import type {
   SmartSkipResponse,
   StatusResponse,
   OnboardingGenrePreviewResponse,
+  OnboardingArtistPreviewResponse,
   OnboardingArtistItem,
   OnboardingBootstrap,
   OnboardingProfileDefaults,
@@ -136,6 +137,18 @@ function decodeJwtPayload(
     >
   } catch {
     return null
+  }
+}
+
+function assertHttpUrl(value: string, field: string): void {
+  let parsed: URL
+  try {
+    parsed = new URL(value)
+  } catch {
+    throw new Error(`${field}: invalid URL`)
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`${field}: only http/https URLs are allowed`)
   }
 }
 
@@ -610,6 +623,7 @@ export const api = {
   },
 
   importSCTrack(sc_url: string, is_public = true): Promise<Track> {
+    assertHttpUrl(sc_url, 'sc_url')
     return request('/api/v1/soundcloud/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -618,6 +632,7 @@ export const api = {
   },
 
   importYouTubeTrack(yt_url: string, is_public = true): Promise<Track> {
+    assertHttpUrl(yt_url, 'yt_url')
     return request('/api/v1/youtube/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -626,6 +641,7 @@ export const api = {
   },
 
   importBandcampTrack(bc_url: string, is_public = true): Promise<Track> {
+    assertHttpUrl(bc_url, 'bc_url')
     return request('/api/v1/bandcamp/import', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2026,6 +2042,18 @@ export const api = {
   ): Promise<OnboardingArtistItem[]> {
     const params = genres?.length ? `?genres=${genres.join(',')}` : ''
     return request(`/api/v1/onboarding/artists${params}`)
+  },
+
+  fetchArtistPreviewQueue(
+    artistId: number,
+    limit: number = 10,
+  ): Promise<OnboardingArtistPreviewResponse> {
+    const q = new URLSearchParams()
+    if (limit) q.set('limit', String(limit))
+    const qs = q.toString() ? `?${q.toString()}` : ''
+    return request(
+      `/api/v1/onboarding/artists/${artistId}/preview-queue${qs}`,
+    )
   },
 
   saveOnboardingPreferences(data: {

@@ -34,16 +34,24 @@
   min-width: 0;
   padding: 6px 4px 4px;
   border: none;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-secondary);
   font: inherit;
   cursor: pointer;
   border-radius: var(--r-md, 12px);
   position: relative;
+  transition: background 150ms var(--ease-out, ease);
 }
 
 .rb-nav__btn.is-active {
   color: var(--text);
+  background: rgba(255, 255, 255, 0.10);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .rb-nav__btn:hover:not(.is-active) {
+    background: rgba(255, 255, 255, 0.08);
+  }
 }
 
 .rb-nav__icon-wrap {
@@ -59,7 +67,7 @@
   position: absolute;
   inset: 2px;
   border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.14);
   z-index: 0;
 }
 

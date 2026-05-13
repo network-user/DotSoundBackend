@@ -1,4 +1,5 @@
 import { useState, type MouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import { Icon } from '@/components/Icon/Icon'
@@ -78,70 +79,73 @@ export function ResetRecommendationsSection({ onClose }: Props) {
           className="settings-chevron"
         />
       </MotionPress>
-      {confirmOpen && (
-        <div
-          className="modal settings-reset-modal"
-          onClick={handleBackdrop}
-        >
+      {confirmOpen &&
+        typeof document !== 'undefined' &&
+        createPortal(
           <div
-            className="modal-content settings-reset-modal__panel"
-            onClick={(e) => e.stopPropagation()}
+            className="modal settings-reset-modal"
+            onClick={handleBackdrop}
           >
-            <div className="modal-header">
-              <h3>
+            <div
+              className="modal-content settings-reset-modal__panel"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-header">
+                <h3>
+                  {t(
+                    'settings.resetRecs.title',
+                    'Сбросить рекомендации?',
+                  )}
+                </h3>
+                <MotionPress
+                  type="button"
+                  variant="icon"
+                  haptic="light"
+                  className="icon-btn"
+                  ariaLabel={t('common.cancel', 'Отмена')}
+                  onClick={() => setConfirmOpen(false)}
+                  disabled={busy}
+                >
+                  <Icon name="x" size={18} />
+                </MotionPress>
+              </div>
+              <p className="modal-hint settings-reset-modal__hint">
                 {t(
-                  'settings.resetRecs.title',
-                  'Сбросить рекомендации?',
+                  'settings.resetRecs.hint',
+                  'Очистим жанровые предпочтения, дизлайки и калибровку вкуса. Библиотека и лайки останутся без изменений.',
                 )}
-              </h3>
-              <MotionPress
-                type="button"
-                variant="icon"
-                haptic="light"
-                className="icon-btn"
-                ariaLabel={t('common.cancel', 'Отмена')}
-                onClick={() => setConfirmOpen(false)}
-                disabled={busy}
-              >
-                <Icon name="x" size={18} />
-              </MotionPress>
+              </p>
+              <div className="settings-danger-zone__actions settings-reset-modal__actions">
+                <MotionPress
+                  type="button"
+                  variant="primary"
+                  haptic="medium"
+                  className="btn-primary"
+                  disabled={busy}
+                  onClick={() => void submit()}
+                >
+                  {busy
+                    ? '…'
+                    : t(
+                        'settings.resetRecs.confirm',
+                        'Сбросить',
+                      )}
+                </MotionPress>
+                <MotionPress
+                  type="button"
+                  variant="ghost"
+                  haptic="light"
+                  className="btn-secondary"
+                  disabled={busy}
+                  onClick={() => setConfirmOpen(false)}
+                >
+                  {t('common.cancel', 'Отмена')}
+                </MotionPress>
+              </div>
             </div>
-            <p className="modal-hint settings-reset-modal__hint">
-              {t(
-                'settings.resetRecs.hint',
-                'Очистим жанровые предпочтения, дизлайки и калибровку вкуса. Библиотека и лайки останутся без изменений.',
-              )}
-            </p>
-            <div className="settings-danger-zone__actions settings-reset-modal__actions">
-              <MotionPress
-                type="button"
-                variant="primary"
-                haptic="medium"
-                className="btn-primary"
-                disabled={busy}
-                onClick={() => void submit()}
-              >
-                {busy
-                  ? '…'
-                  : t(
-                      'settings.resetRecs.confirm',
-                      'Сбросить',
-                    )}
-              </MotionPress>
-              <MotionPress
-                type="button"
-                variant="ghost"
-                haptic="light"
-                className="btn-secondary"
-                disabled={busy}
-                onClick={() => setConfirmOpen(false)}
-              >
-                {t('common.cancel', 'Отмена')}
-              </MotionPress>
-            </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </>
   )
 }

@@ -1,3 +1,5 @@
+import hashlib
+
 import structlog
 from dotsound_private_core.services import (
     mask_ip,
@@ -14,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.rate_limit import limiter
+from app.core.redis import get_redis_client
 from app.dependencies import get_current_user, get_db
 from app.models.login_history import LoginHistory
 from app.models.user import User
@@ -74,6 +77,24 @@ def _record_login(
     )
 
 
+_MAGIC_LINK_PER_EMAIL_LIMIT = 5
+_MAGIC_LINK_PER_EMAIL_WINDOW_SECONDS = 3600
+
+
+async def _enforce_per_email_magic_link_limit(email: str) -> None:
+    digest = hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()
+    key = f"auth:email:magic:{digest}"
+    redis = get_redis_client()
+    count = await redis.incr(key)
+    if count == 1:
+        await redis.expire(key, _MAGIC_LINK_PER_EMAIL_WINDOW_SECONDS)
+    if count > _MAGIC_LINK_PER_EMAIL_LIMIT:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many magic-link requests for this email.",
+        )
+
+
 @router.post(
     "/request",
     response_model=EmailAuthResponse,
@@ -90,6 +111,8 @@ async def email_auth_request(
             ),
             detail="Email auth is not configured",
         )
+
+    await _enforce_per_email_magic_link_limit(body.email)
 
     client_ip = (
         request.client.host

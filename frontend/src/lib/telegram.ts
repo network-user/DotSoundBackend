@@ -122,24 +122,34 @@ const VIBRATE_NOTIF: Record<
   error: 3,
 }
 
+const _tgHapticSupported = (() => {
+  try {
+    return WebApp.isVersionAtLeast('6.1')
+  } catch {
+    return false
+  }
+})()
+
 export function haptic(
   kind: HapticImpact = 'light',
 ): void {
   let tgTriggered = false
-  try {
-    const tgHaptic =
-      (WebApp as any).HapticFeedback
-      ?? (window as any).Telegram?.WebApp
-        ?.HapticFeedback
-    if (tgHaptic?.selectionChanged) {
-      tgHaptic.selectionChanged()
-      tgTriggered = true
-    } else if (tgHaptic?.impactOccurred) {
-      tgHaptic.impactOccurred('light')
-      tgTriggered = true
+  if (_tgHapticSupported) {
+    try {
+      const tgHaptic =
+        (WebApp as any).HapticFeedback
+        ?? (window as any).Telegram?.WebApp
+          ?.HapticFeedback
+      if (tgHaptic?.selectionChanged) {
+        tgHaptic.selectionChanged()
+        tgTriggered = true
+      } else if (tgHaptic?.impactOccurred) {
+        tgHaptic.impactOccurred('light')
+        tgTriggered = true
+      }
+    } catch {
+      /* ignore and use fallback vibration */
     }
-  } catch {
-    /* ignore and use fallback vibration */
   }
   try {
     if ('vibrate' in navigator) {
@@ -158,23 +168,25 @@ export function hapticNotification(
   kind: 'success' | 'warning' | 'error',
 ): void {
   let tgTriggered = false
-  try {
-    const tgHaptic =
-      (WebApp as any).HapticFeedback
-      ?? (window as any).Telegram?.WebApp
-        ?.HapticFeedback
-    if (tgHaptic?.selectionChanged) {
-      tgHaptic.selectionChanged()
-      tgTriggered = true
-    } else if (tgHaptic?.impactOccurred) {
-      tgHaptic.impactOccurred('light')
-      tgTriggered = true
-    } else if (tgHaptic?.notificationOccurred) {
-      tgHaptic.notificationOccurred('success')
-      tgTriggered = true
+  if (_tgHapticSupported) {
+    try {
+      const tgHaptic =
+        (WebApp as any).HapticFeedback
+        ?? (window as any).Telegram?.WebApp
+          ?.HapticFeedback
+      if (tgHaptic?.selectionChanged) {
+        tgHaptic.selectionChanged()
+        tgTriggered = true
+      } else if (tgHaptic?.impactOccurred) {
+        tgHaptic.impactOccurred('light')
+        tgTriggered = true
+      } else if (tgHaptic?.notificationOccurred) {
+        tgHaptic.notificationOccurred('success')
+        tgTriggered = true
+      }
+    } catch {
+      /* ignore and use fallback vibration */
     }
-  } catch {
-    /* ignore and use fallback vibration */
   }
   try {
     if ('vibrate' in navigator) {
@@ -191,20 +203,22 @@ export function hapticNotification(
 
 export function hapticSelection(): void {
   let tgTriggered = false
-  try {
-    const tgHaptic =
-      (WebApp as any).HapticFeedback
-      ?? (window as any).Telegram?.WebApp
-        ?.HapticFeedback
-    if (tgHaptic?.selectionChanged) {
-      tgHaptic.selectionChanged()
-      tgTriggered = true
-    } else if (tgHaptic?.impactOccurred) {
-      tgHaptic.impactOccurred('light')
-      tgTriggered = true
+  if (_tgHapticSupported) {
+    try {
+      const tgHaptic =
+        (WebApp as any).HapticFeedback
+        ?? (window as any).Telegram?.WebApp
+          ?.HapticFeedback
+      if (tgHaptic?.selectionChanged) {
+        tgHaptic.selectionChanged()
+        tgTriggered = true
+      } else if (tgHaptic?.impactOccurred) {
+        tgHaptic.impactOccurred('light')
+        tgTriggered = true
+      }
+    } catch {
+      /* ignore and use fallback vibration */
     }
-  } catch {
-    /* ignore and use fallback vibration */
   }
   try {
     if ('vibrate' in navigator) {

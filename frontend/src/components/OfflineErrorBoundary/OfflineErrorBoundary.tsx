@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from 'react'
+import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 interface State {
   error: Error | null
@@ -23,9 +23,13 @@ export class OfflineErrorBoundary extends Component<Props, State> {
     return { error }
   }
 
-  componentDidCatch(error: Error): void {
+  componentDidCatch(error: Error, info: ErrorInfo): void {
     if (typeof console !== 'undefined') {
       console.error('[OfflineErrorBoundary]', error)
+      console.error(
+        '[OfflineErrorBoundary] component stack:',
+        info.componentStack,
+      )
     }
   }
 
@@ -61,8 +65,51 @@ export class OfflineErrorBoundary extends Component<Props, State> {
             'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
         }}
       >
-        <div style={{ fontSize: '48px', lineHeight: 1 }}>
-          {offlineLike ? '📡' : '⚠️'}
+        <div
+          style={{
+            width: '56px',
+            height: '56px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            opacity: 0.9,
+          }}
+          aria-hidden
+        >
+          {offlineLike ? (
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M1.42 9a16 16 0 0 1 21.16 0" />
+              <path d="M5 12.55a11 11 0 0 1 14.08 0" />
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+              <line x1="12" y1="20" x2="12.01" y2="20" />
+              <line x1="2" y1="2" x2="22" y2="22" />
+            </svg>
+          ) : (
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+          )}
         </div>
         <h1
           style={{

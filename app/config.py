@@ -26,7 +26,11 @@ class AppSettings(BaseSettings):
     complaint_threshold: int = 3
     sc_client_id: str = ""
     telegram_bot_token: str = ""
-    jwt_secret: str = "changeme-set-a-strong-secret-in-production"
+    # JWT_SECRET has no default on purpose: the boot guard in
+    # main.py already refuses to start in prod with the placeholder,
+    # but a missing/empty secret should fail validation immediately
+    # rather than fall back to a known value.
+    jwt_secret: str
     jwt_expire_days: int = 7
     mini_app_url: str = ""
     telegram_bot_username: str = ""
@@ -448,6 +452,25 @@ class AppSettings(BaseSettings):
                 "Pull-worker endpoints are otherwise reachable "
                 "by anyone who can speak HTTP to the host."
             )
+        if not self.debug:
+            origins = self.allowed_origins_list
+            if not origins or "*" in origins:
+                raise ValueError(
+                    "ALLOWED_ORIGINS must be a comma-separated "
+                    "list of explicit origins in production "
+                    "(DEBUG=false). Wildcard '*' is not accepted."
+                )
+            hosts = [
+                h.strip()
+                for h in self.allowed_hosts.split(",")
+                if h.strip()
+            ]
+            if not hosts or "*" in hosts:
+                raise ValueError(
+                    "ALLOWED_HOSTS must be a comma-separated "
+                    "list of explicit hostnames in production "
+                    "(DEBUG=false). Wildcard '*' is not accepted."
+                )
         return self
 
 
