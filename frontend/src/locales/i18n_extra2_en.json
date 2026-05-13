@@ -751,7 +751,8 @@
       "playback": "Playback error",
       "refreshUrl": "Could not refresh the track URL",
       "buffering": "Buffering…",
-      "blockedByBrowser": "Browser blocked playback"
+      "blockedByBrowser": "Browser blocked playback",
+      "trackUnavailable": "Track unavailable"
     },
     "likesErrors": {
       "likeFail": "Could not update like",

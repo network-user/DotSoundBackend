@@ -44,6 +44,7 @@ from app.core.auth import (
     verify_telegram_init_data,
 )
 from app.core.auth_cookie import (
+    ACCESS_COOKIE_NAME,
     clear_access_cookie,
     set_access_cookie,
 )
@@ -93,6 +94,35 @@ async def get_auth_config(
         debug=settings.debug,
         admin_panel_path=admin_panel_path,
         admin_api_path=admin_api_path,
+    )
+
+
+class SessionResponse(BaseModel):
+    user_id: int
+    is_admin: bool
+    access_token: str
+
+
+@router.get("/session", response_model=SessionResponse)
+@limiter.limit("60/minute")
+async def get_session(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> SessionResponse:
+    # Probe endpoint for cookie-based sessions: lets the SPA recover
+    # identity (and a ws-usable token) after a hard reload, when the
+    # in-memory access token is gone but ds_access cookie is still
+    # valid. Returns 401 via the dependency when no/expired cookie.
+    auth_header = request.headers.get("authorization", "")
+    raw_token = ""
+    if auth_header.lower().startswith("bearer "):
+        raw_token = auth_header.split(" ", 1)[1].strip()
+    if not raw_token:
+        raw_token = request.cookies.get(ACCESS_COOKIE_NAME, "") or ""
+    return SessionResponse(
+        user_id=current_user.id,
+        is_admin=current_user.is_admin,
+        access_token=raw_token,
     )
 
 

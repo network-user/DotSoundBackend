@@ -209,15 +209,12 @@ export function AudioRipple({
       canvas.height = side
       canvas.style.width = `${outer * 2}px`
       canvas.style.height = `${outer * 2}px`
-      canvas.style.left = '50%'
-      canvas.style.top = '50%'
-      canvas.style.transform = 'translate(-50%, -50%)'
     }
     const obs = new ResizeObserver(sync)
     obs.observe(span)
     sync()
     return () => obs.disconnect()
-  }, [])
+  }, [active, reduce])
 
   return (
     <span
@@ -239,6 +236,9 @@ export function AudioRipple({
           aria-hidden
           style={{
             position: 'absolute',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
             pointerEvents: 'none',
             zIndex: -1,
           }}

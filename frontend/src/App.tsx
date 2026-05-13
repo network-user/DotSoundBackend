@@ -451,7 +451,7 @@ export function App() {
         }
 
         if (!authenticated) {
-          const restored = api.restoreSession()
+          const restored = await api.restoreSession()
           if (restored?.token) {
             connectWS(restored.token)
             authenticated = true

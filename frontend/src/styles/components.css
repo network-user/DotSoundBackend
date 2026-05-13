@@ -4,6 +4,23 @@
  * styles in global.css are kept untouched for compatibility.
  */
 
+/* ---------- Motion-safe fixed horizontal centering ----------
+ * Centers a position:fixed element without relying on
+ * `transform: translateX(-50%)`. framer-motion animates `transform`
+ * (x/y/scale) via inline style and overwrites any CSS transform —
+ * which breaks translateX-based centering on motion elements.
+ * left:0 + right:0 + margin-inline:auto is orthogonal to transform
+ * and survives any motion animation, so apply this class to any
+ * `m.*` / `motion.*` element that needs to be horizontally centered
+ * while fixed (e.g. install prompts, floating banners, toasts).
+ */
+.fixed-x-centered {
+  position: fixed;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+}
+
 /* ---------- Press / accessible button utility ---------- */
 
 .press {
@@ -1969,16 +1986,25 @@ body.ds-perf-lite .queue-eq-bars span {
 /* ---------- Install prompt ---------- */
 
 .install-prompt {
-  position: fixed;
-  left: 50%;
+  /* Horizontal centering comes from .fixed-x-centered (applied in JSX).
+   * That class handles position:fixed + left/right + margin-inline:auto,
+   * so framer-motion's transform animations don't break centering. */
   bottom: calc(
     var(--nav-h, 60px) + var(--player-h, 80px) +
-      var(--safe-bottom) + var(--space-3)
+      var(--safe-bottom, 0px) + var(--space-4)
   );
-  transform: translateX(-50%);
   z-index: var(--z-install);
   width: min(94vw, 420px);
-  display: flex;
+  max-width: calc(100vw - var(--space-3) * 2);
+  max-height: calc(
+    100dvh - var(--nav-h, 60px) - var(--player-h, 80px) -
+      var(--safe-bottom, 0px) - var(--safe-top, 0px) -
+      var(--space-6)
+  );
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "icon body actions";
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
@@ -1990,11 +2016,13 @@ body.ds-perf-lite .queue-eq-bars span {
   border: 1px solid var(--glass-edge);
   border-radius: var(--r-lg);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
   animation: toast-enter var(--dur-fast)
     var(--ease-standard);
 }
 
 .install-prompt__icon {
+  grid-area: icon;
   width: 44px;
   height: 44px;
   display: inline-flex;
@@ -2006,7 +2034,7 @@ body.ds-perf-lite .queue-eq-bars span {
 }
 
 .install-prompt__body {
-  flex: 1;
+  grid-area: body;
   min-width: 0;
 }
 
@@ -2023,6 +2051,7 @@ body.ds-perf-lite .queue-eq-bars span {
 }
 
 .install-prompt__actions {
+  grid-area: actions;
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
@@ -2044,9 +2073,11 @@ body.ds-perf-lite .queue-eq-bars span {
   min-height: 36px;
 }
 
-.install-prompt__btn:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+@media (hover: hover) and (pointer: fine) {
+  .install-prompt__btn:hover {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.04);
+  }
 }
 
 .install-prompt__btn.primary {
@@ -2055,8 +2086,34 @@ body.ds-perf-lite .queue-eq-bars span {
   font-weight: 600;
 }
 
-.install-prompt__btn.primary:hover {
-  background: var(--accent-hover);
+@media (hover: hover) and (pointer: fine) {
+  .install-prompt__btn.primary:hover {
+    background: var(--accent-hover);
+  }
+}
+
+/* Narrow phones: actions drop to their own row so the hint
+ * text has full width and the panel stops getting clipped or
+ * crammed against the player. */
+@media (max-width: 480px) {
+  .install-prompt {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "icon body"
+      "actions actions";
+    gap: var(--space-2) var(--space-3);
+    padding: var(--space-3);
+  }
+
+  .install-prompt__actions {
+    justify-content: flex-end;
+    gap: var(--space-2);
+  }
+
+  .install-prompt__btn.primary {
+    flex: 1;
+    min-height: 40px;
+  }
 }
 
 .telegram-browser-hint-portal {

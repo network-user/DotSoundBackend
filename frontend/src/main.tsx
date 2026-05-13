@@ -50,7 +50,7 @@ window.addEventListener('vite:preloadError', () => {
   window.location.reload()
 })
 
-api.restoreSession()
+void api.restoreSession()
 
 function scheduleServiceWorkerRegistration(): void {
   if (!import.meta.env.PROD) return

@@ -65,15 +65,42 @@
 .rp-sparkline__line {
   fill: none;
   stroke: var(--accent, #fff);
-  stroke-width: 2;
+  stroke-width: 1.75;
   stroke-linecap: round;
   stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
 .rp-sparkline__dot {
   fill: var(--accent, #fff);
   stroke: var(--bg-elevated, #141414);
   stroke-width: 2;
+}
+
+.rp-sparkline__halo {
+  fill: var(--accent, #fff);
+  opacity: 0.35;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: rp-sparkline-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes rp-sparkline-pulse {
+  0%, 100% {
+    opacity: 0.18;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.25);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-sparkline__halo {
+    animation: none;
+    opacity: 0.3;
+  }
 }
 
 .rp-sparkline__empty {

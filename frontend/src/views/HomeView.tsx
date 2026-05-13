@@ -2,6 +2,7 @@
   type KeyboardEvent,
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -356,6 +357,8 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     access_mode: string
     catalog_type: string
   } | null>(null)
+  const [headerStuck, setHeaderStuck] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -490,6 +493,18 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
     .flatMap((s) => s.tracks.slice(0, 1))
     .slice(0, 6)
   usePrefetchTracks(homeFirstTracks, 'home')
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    const main = document.getElementById('main')
+    if (!sentinel || !main) return
+    const io = new IntersectionObserver(
+      ([entry]) => setHeaderStuck(!entry.isIntersecting),
+      { root: main, threshold: 0, rootMargin: '0px 0px 0px 0px' },
+    )
+    io.observe(sentinel)
+    return () => io.disconnect()
+  }, [])
 
   useEffect(() => {
     const main = document.getElementById('main')
@@ -712,13 +727,16 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
             : ''}
       </span>
 
-      <m.div
-        initial="hidden"
-        animate="visible"
-        variants={VARIANTS_FADE_UP}
+      <div ref={sentinelRef} aria-hidden style={{ height: 0 }} />
+      <header
+        className={
+          headerStuck
+            ? 'rh-home-header is-stuck'
+            : 'rh-home-header'
+        }
       >
         <div className="rh-home-greeting">
-          <div>
+          <div className="rh-home-greeting__copy">
             <div className="rh-home-greeting__label">
               {displayName
                 ? `${greeting} | ${displayName}`
@@ -730,6 +748,13 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
           </div>
           <NotificationBell />
         </div>
+      </header>
+
+      <m.div
+        initial="hidden"
+        animate="visible"
+        variants={VARIANTS_FADE_UP}
+      >
 
         {featuredTrack ? (
           <div className="rh-home-hero">
@@ -847,10 +872,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
                 className="rh-home-quick-card__icon"
                 aria-hidden
               >
-                {'useCalendarIcon' in item &&
-                item.useCalendarIcon ? (
-                  <Icon name="calendar" size={22} />
-                ) : 'morph' in item ? (
+                {'morph' in item ? (
                   <MorphIcon
                     name={item.morph}
                     filled

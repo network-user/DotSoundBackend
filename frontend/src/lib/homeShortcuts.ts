@@ -3,7 +3,7 @@ export const MIX_SHORTCUT_TILES = [
     path: '/daily-mix',
     labelKey: 'quickDaily' as const,
     profileIcon: 'calendar',
-    useCalendarIcon: true as const,
+    morph: 'calendar' as const,
   },
   {
     path: '/weekly-mix',

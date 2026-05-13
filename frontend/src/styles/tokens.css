@@ -143,7 +143,7 @@
    * --nav-h / --player-h tokens declared in global.css; the media
    * queries below shrink them on narrow / landscape phones so the
    * fixed strips stop eating valuable viewport real estate. */
-  --layout-nav-h: 60px;
+  --layout-nav-h: 82px;
   --layout-player-h: 80px;
   --layout-content-gutter: 16px;
   --layout-section-gap: 24px;
@@ -181,7 +181,7 @@
  * #main has more vertical room. */
 @media (max-width: 360px) {
   :root {
-    --layout-nav-h: 56px;
+    --layout-nav-h: 72px;
     --layout-content-gutter: 12px;
     --layout-section-gap: 20px;
   }
@@ -198,7 +198,7 @@
  * cover the active row of content. */
 @media (orientation: landscape) and (max-height: 500px) {
   :root {
-    --layout-nav-h: 48px;
+    --layout-nav-h: 54px;
     --layout-content-gutter: 12px;
     --layout-section-gap: 16px;
   }

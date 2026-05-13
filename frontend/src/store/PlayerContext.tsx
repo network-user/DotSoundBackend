@@ -1461,6 +1461,15 @@ export function PlayerProvider({
       // 500ms debounce: enough to ignore the audio.src='' echo but catches
       // immediate 404/stream failures that the 2500ms window was hiding.
       if (Date.now() - srcAssignedAtRef.current < 500) return
+      const skipUnavailable = async (trackId: number) => {
+        markTrackUnavailableInSession(trackId)
+        showIsland({
+          kind: 'toast',
+          title: i18n.t('redesign.playerErrors.trackUnavailable'),
+          durationMs: 2200,
+        })
+        await playNext()
+      }
       if (
         (code === MediaError.MEDIA_ERR_NETWORK ||
           code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) &&
@@ -1480,13 +1489,11 @@ export function PlayerProvider({
             isSoundCloudUnavailableTrack(track) &&
             isSoundCloudUnavailableError(message)
           ) {
-            markTrackUnavailableInSession(track.id)
-            showPlaybackErrorOnce(track.id, message)
-            await playNext()
+            await skipUnavailable(track.id)
             return
           }
           showPlaybackErrorOnce(track.id, message)
-          if (radioModeRef.current) await playNext()
+          await skipUnavailable(track.id)
         })
         return
       }
@@ -1516,24 +1523,13 @@ export function PlayerProvider({
                 lastStreamUrlRef.current = stream.url
               }
             })
-            .catch((err) =>
-              showIsland({
-                kind: 'error',
-                title: getApiErrorMessage(
-                  err,
-                  i18n.t('redesign.playerErrors.refreshUrl'),
-                ),
-                durationMs: 4000,
-              }),
-            )
+            .catch(async () => {
+              await skipUnavailable(track.id)
+            })
           return
         }
       }
-      showPlaybackErrorOnce(
-        track.id,
-        i18n.t('redesign.playerErrors.playback'),
-      )
-      if (radioModeRef.current) void playNext()
+      void skipUnavailable(track.id)
     }
     const onStalled = () => {
       try {

@@ -177,7 +177,7 @@ export function InstallPrompt() {
 
   return (
     <m.div
-      className="install-prompt rb-install glass--medium"
+      className="install-prompt fixed-x-centered rb-install glass--medium"
       role="dialog"
       aria-label={t('pwa.installLabel')}
       initial="hidden"

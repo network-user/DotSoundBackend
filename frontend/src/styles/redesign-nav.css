@@ -15,13 +15,34 @@
   display: flex;
   align-items: stretch;
   justify-content: space-around;
-  gap: 2px;
-  padding: calc(6px + var(--safe-bottom, 0px)) 8px
-    calc(8px + var(--safe-bottom, 0px));
-  border-top: 1px solid var(--glass-edge, rgba(255, 255, 255, 0.08));
-  background: rgba(10, 10, 10, 0.72);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
+  gap: 4px;
+  padding: 10px 10px calc(16px + var(--safe-bottom, 0px));
+  border-top: 1px solid transparent;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.025) 0%,
+      transparent 30%
+    ),
+    rgba(8, 8, 8, 0.78);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+}
+
+/* Soft top hairline — fades at the edges, gives the bar a
+ * "lifted" glass feel instead of a flat hard border. */
+.rb-nav::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.14) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
 }
 
 .rb-nav__btn {
@@ -30,27 +51,30 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
-  padding: 6px 4px 4px;
+  min-height: 56px;
+  padding: 8px 4px 6px;
   border: none;
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
   color: var(--text-secondary);
   font: inherit;
   cursor: pointer;
-  border-radius: var(--r-md, 12px);
+  border-radius: 14px;
   position: relative;
-  transition: background 150ms var(--ease-out, ease);
+  transition:
+    background var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
 }
 
 .rb-nav__btn.is-active {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.10);
 }
 
 @media (hover: hover) and (pointer: fine) {
   .rb-nav__btn:hover:not(.is-active) {
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.05);
+    color: color-mix(in srgb, var(--text) 80%, var(--text-secondary));
   }
 }
 
@@ -59,15 +83,27 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 28px;
+  width: 44px;
+  height: 32px;
 }
 
+/* Pill-shaped halo behind the active icon.
+ * Layered gradient + inner shine produces a soft glass cap
+ * instead of a flat translucent rectangle. */
 .rb-nav__bubble {
   position: absolute;
-  inset: 2px;
+  inset: 0;
   border-radius: var(--r-pill);
-  background: rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.20) 0%,
+      rgba(255, 255, 255, 0.08) 100%
+    );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.30),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.18),
+    0 4px 14px rgba(0, 0, 0, 0.28);
   z-index: 0;
 }
 
@@ -82,7 +118,9 @@
 }
 
 .rb-nav__label {
-  font-size: 10px;
+  position: relative;
+  z-index: 1;
+  font-size: 10.5px;
   font-weight: 600;
   letter-spacing: var(--ls-snug);
   line-height: 1.2;
@@ -91,6 +129,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+
+.rb-nav__btn.is-active .rb-nav__label {
+  font-weight: 700;
 }
 
 .rb-auth-screen {
@@ -142,19 +185,19 @@
  * their min tap-area without overflowing on iPhone SE / 320px. */
 @media (max-width: 360px) {
   .rb-nav {
-    padding: calc(4px + var(--safe-bottom, 0px)) 4px
-      calc(6px + var(--safe-bottom, 0px));
-    gap: 0;
+    padding: 8px 6px calc(12px + var(--safe-bottom, 0px));
+    gap: 2px;
   }
   .rb-nav__btn {
-    padding: 4px 2px 2px;
+    min-height: 52px;
+    padding: 6px 2px 4px;
   }
   .rb-nav__icon-wrap {
-    width: 30px;
-    height: 26px;
+    width: 38px;
+    height: 28px;
   }
   .rb-nav__label {
-    font-size: 9.5px;
+    font-size: 10px;
   }
 }
 
@@ -164,20 +207,20 @@
  * the bubble + filled icon. */
 @media (orientation: landscape) and (max-height: 500px) {
   .rb-nav {
-    padding: calc(2px + var(--safe-bottom, 0px))
-      var(--safe-right, 0px) calc(4px + var(--safe-bottom, 0px))
+    padding: 6px var(--safe-right, 0px) calc(8px + var(--safe-bottom, 0px))
       var(--safe-left, 0px);
   }
   .rb-nav__btn {
     flex-direction: row;
     gap: 0;
+    min-height: 40px;
     padding: 4px 2px;
   }
   .rb-nav__label {
     display: none;
   }
   .rb-nav__icon-wrap {
-    width: 36px;
+    width: 40px;
     height: 30px;
   }
 }

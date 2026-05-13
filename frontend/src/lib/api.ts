@@ -162,31 +162,15 @@ function isTokenExpired(token: string): boolean {
   return exp <= now
 }
 
-function getTokenUserId(
-  token: string,
-): number | null {
-  const payload = decodeJwtPayload(token)
-  const sub = Number(payload?.sub)
-  return Number.isFinite(sub) ? sub : null
-}
-
 // F1 hardening: the access token now lives in an httpOnly cookie
-// (ds_access), so JavaScript must NOT persist it. These shims keep
-// the call sites compatible but never touch localStorage.
+// (ds_access), so JavaScript must NOT persist it. This shim keeps
+// the call sites compatible but never touches localStorage.
 function persistToken(_token: string | null) {
   try {
     // Best-effort cleanup of legacy localStorage entries from older
     // builds. Once enough time has passed this can be deleted.
     localStorage.removeItem(AUTH_TOKEN_KEY)
   } catch {}
-}
-
-function loadStoredToken(): string | null {
-  try {
-    // Same legacy cleanup as above. Never read the token back.
-    localStorage.removeItem(AUTH_TOKEN_KEY)
-  } catch {}
-  return null
 }
 
 async function readApiErrorMessage(
@@ -1163,46 +1147,61 @@ export const api = {
   },
 
   hasSession(): boolean {
-    const t = accessToken || loadStoredToken()
-    if (!t) return false
-    return !isTokenExpired(t)
+    if (accessToken && !isTokenExpired(accessToken)) return true
+    // After a hard reload the access token lives only in the
+    // httpOnly cookie; restoreSession() probes the server and
+    // sets the internal user id when the cookie is still valid.
+    return getInternalUserId() !== null
   },
 
-  restoreSession():
+  async restoreSession(): Promise<
     | {
         token: string
         userId: number
       }
-    | null {
-    const token = loadStoredToken()
-    if (!token) {
-      setInternalUserId(null)
+    | null
+  > {
+    // Ask the backend to validate the ds_access cookie. The
+    // endpoint returns 401 when the cookie is missing/expired, in
+    // which case we clear local identity state and let the caller
+    // route to the login flow.
+    try {
+      const res = await fetch('/api/v1/auth/session', {
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+      if (!res.ok) {
+        accessToken = null
+        setInternalUserId(null)
+        return null
+      }
+      const data = (await res.json()) as {
+        user_id: number
+        is_admin: boolean
+        access_token: string
+      }
+      const storedUserId = getInternalUserId()
+      if (
+        storedUserId !== null &&
+        storedUserId !== data.user_id
+      ) {
+        accessToken = null
+        setInternalUserId(null)
+        return null
+      }
+      accessToken = data.access_token || null
+      setInternalUserId(data.user_id)
+      setIsAdmin(Boolean(data.is_admin))
+      unauthorizedFired = false
+      accountBlockedFired = false
+      if (!accessToken) return null
+      return { token: accessToken, userId: data.user_id }
+    } catch {
+      // Network error: keep whatever in-memory state we already
+      // had and let the caller decide (watchdog will surface
+      // needs-auth if nothing recovers).
       return null
     }
-    const userId = getTokenUserId(token)
-    if (userId === null) {
-      persistToken(null)
-      setInternalUserId(null)
-      return null
-    }
-    const storedUserId = getInternalUserId()
-    if (
-      storedUserId !== null &&
-      storedUserId !== userId
-    ) {
-      persistToken(null)
-      setInternalUserId(null)
-      return null
-    }
-    accessToken = token
-    const payload = decodeJwtPayload(token)
-    if (typeof payload?.is_admin === 'boolean') {
-      setIsAdmin(payload.is_admin)
-    }
-    if (storedUserId === null) {
-      setInternalUserId(userId)
-    }
-    return { token, userId }
   },
 
   logout() {
