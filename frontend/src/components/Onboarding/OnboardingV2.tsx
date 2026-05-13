@@ -942,6 +942,14 @@ function GenresStep({
   )
   const preview = usePreviewLoop<string>({ fetcher: genreFetcher })
 
+  // Warm the queue cache for the first ~14 bubbles so the first tap
+  // is instant. Idempotent — repeat calls skip already-loaded keys.
+  const prefetch = preview.prefetchKeys
+  useEffect(() => {
+    const keys = bubbles.slice(0, 14).map((b) => b.genre)
+    if (keys.length > 0) prefetch(keys)
+  }, [bubbles, prefetch])
+
   const handleTogglePreview = useCallback(
     (genre: string) => {
       if (preview.playingKey === genre || preview.loadingKey === genre) {
@@ -1010,7 +1018,7 @@ function GenresStep({
               type="button"
               className="onb-v2-genre-search__clear"
               onClick={() => setSearchQuery('')}
-              aria-label="Clear"
+              aria-label={t('onboarding.searchClear')}
             >
               <Icon name="x" size={14} />
             </button>
@@ -1306,40 +1314,6 @@ function SwipeCard({
     [0.55, 0],
   )
 
-  const tapTimerRef = useRef<number | null>(null)
-  const lastTapAtRef = useRef(0)
-
-  useEffect(() => {
-    return () => {
-      if (tapTimerRef.current !== null) {
-        window.clearTimeout(tapTimerRef.current)
-        tapTimerRef.current = null
-      }
-    }
-  }, [])
-
-  const handleTap = useCallback(() => {
-    const now = Date.now()
-    const dt = now - lastTapAtRef.current
-    lastTapAtRef.current = now
-    if (
-      dt < 320 &&
-      tapTimerRef.current !== null
-    ) {
-      window.clearTimeout(tapTimerRef.current)
-      tapTimerRef.current = null
-      onLike()
-      return
-    }
-    if (tapTimerRef.current !== null) {
-      window.clearTimeout(tapTimerRef.current)
-    }
-    tapTimerRef.current = window.setTimeout(() => {
-      tapTimerRef.current = null
-      onTogglePreview()
-    }, 240)
-  }, [onLike, onTogglePreview])
-
   const handleDragEnd = (
     _: unknown,
     info: PanInfo,
@@ -1354,16 +1328,12 @@ function SwipeCard({
 
   if (reduce) {
     return (
-      <div
-        className="onb-v2-swipe-card"
-        onClick={handleTap}
-        role="button"
-        tabIndex={0}
-      >
+      <div className="onb-v2-swipe-card">
         <CoverArt
           track={track}
           isPlaying={isPlaying}
           isLoading={audioLoading}
+          onTogglePreview={onTogglePreview}
         />
         <CardInfo track={track} />
         {audioBlocked && !audioLoading && <MuteHint />}
@@ -1382,7 +1352,6 @@ function SwipeCard({
       dragElastic={0.6}
       style={{ x, rotate }}
       onDragEnd={handleDragEnd}
-      onTap={handleTap}
       whileTap={{ cursor: 'grabbing' }}
       transition={SPRING_SNAPPY}
       variants={{
@@ -1646,6 +1615,14 @@ function ArtistsStep({
   )
   const preview = usePreviewLoop<number>({ fetcher: artistFetcher })
 
+  // Warm queue cache for the first ~12 artist cards so the first
+  // tap on ▶ doesn't wait on the network.
+  const prefetch = preview.prefetchKeys
+  useEffect(() => {
+    const ids = artists.slice(0, 12).map((a) => a.id)
+    if (ids.length > 0) prefetch(ids)
+  }, [artists, prefetch])
+
   const handleTogglePreview = useCallback(
     (id: number) => {
       if (preview.playingKey === id || preview.loadingKey === id) {
@@ -1700,7 +1677,7 @@ function ArtistsStep({
                   type="button"
                   className="onb-v2-genre-search__clear"
                   onClick={() => setSearchQuery('')}
-                  aria-label="Clear"
+                  aria-label={t('onboarding.searchClear')}
                 >
                   <Icon name="x" size={14} />
                 </button>

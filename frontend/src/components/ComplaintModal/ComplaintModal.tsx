@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { api } from '@/lib/api'
 import { tg } from '@/lib/telegram'
 import {
@@ -8,6 +8,7 @@ import {
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { useExitTransition } from '@/hooks/useExitTransition'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 import { showIsland } from '@/lib/island'
 import { hapticNotification } from '@/lib/telegram'
 
@@ -46,6 +47,8 @@ export function ComplaintModal() {
   const exit = useExitTransition(
     Boolean(isComplaintOpen && track),
   )
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  useFocusTrap(contentRef, Boolean(isComplaintOpen && track))
   if (!exit.mounted || !track) return null
 
   const isRightsholderNotice = mode === 'rightsholder'
@@ -132,9 +135,14 @@ export function ComplaintModal() {
   return (
     <div
       className={`modal${exit.cls}`}
+      role="dialog"
+      aria-modal="true"
+      aria-label={isRightsholderNotice
+        ? 'Уведомление правообладателя'
+        : 'Жалоба на контент'}
       onClick={handleBackdrop}
     >
-      <div className="modal-content">
+      <div className="modal-content" ref={contentRef}>
         <div className="modal-header">
           <h3>
             {isRightsholderNotice

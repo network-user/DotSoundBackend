@@ -251,7 +251,8 @@ export function TrackPickerSheet({
                   ariaLabel={t(
                     'redesign.library.trackPickerAdd',
                   )}
-                  disabled={addingId !== null}
+                  disabled={isAdding}
+                  aria-busy={isAdding}
                   onClick={() => void handleAdd(it.id)}
                 >
                   {isAdding ? (

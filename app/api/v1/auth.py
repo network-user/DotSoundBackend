@@ -28,8 +28,10 @@ from fastapi import (
     Depends,
     HTTPException,
     Request,
+    Response,
     status,
 )
+from jose import JWTError, jwt
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,10 +40,15 @@ from app.core.auth import (
     AuthError,
     create_access_token,
     create_scoped_token,
+    revoke_token,
     verify_telegram_init_data,
 )
+from app.core.auth_cookie import (
+    clear_access_cookie,
+    set_access_cookie,
+)
 from app.core.rate_limit import limiter
-from app.dependencies import get_db, get_optional_user
+from app.dependencies import get_current_user, get_db, get_optional_user
 from app.models.user import User
 from app.schemas.auth import (
     TelegramAuthRequest,
@@ -96,6 +103,7 @@ async def get_auth_config(
 @limiter.limit("20/minute")
 async def auth_telegram(
     request: Request,
+    response: Response,
     body: TelegramAuthRequest,
     session: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
@@ -141,6 +149,7 @@ async def auth_telegram(
     )
 
     token = create_access_token(user.id, user.is_admin)
+    set_access_cookie(response, token)
     logger.info(
         "telegram_auth_success",
         user_id=user.id,
@@ -151,6 +160,48 @@ async def auth_telegram(
         user_id=user.id,
         is_admin=user.is_admin,
     )
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+@limiter.limit("30/minute")
+async def auth_logout(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    """Revoke the caller's access token and clear the cookie."""
+    auth_header = request.headers.get("authorization", "")
+    raw_token = ""
+    if auth_header.lower().startswith("bearer "):
+        raw_token = auth_header.split(" ", 1)[1].strip()
+    if not raw_token:
+        raw_token = request.cookies.get("ds_access", "") or ""
+    if raw_token:
+        try:
+            payload = jwt.decode(
+                raw_token,
+                settings.jwt_secret,
+                algorithms=["HS256"],
+                options={"verify_exp": False},
+            )
+            jti = str(payload.get("jti") or "")
+            exp = payload.get("exp")
+            ttl = 0
+            if isinstance(exp, int):
+                ttl = max(
+                    0,
+                    exp - int(datetime.now(UTC).timestamp()),
+                )
+            if jti:
+                await revoke_token(jti, ttl or 60)
+        except JWTError:
+            pass
+    clear_access_cookie(response)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
 
 
 class GenerateCodeRequest(BaseModel):
@@ -215,6 +266,7 @@ class CodeVerifyRequest(BaseModel):
 @limiter.limit("5/minute")
 async def verify_telegram_code(
     request: Request,
+    response: Response,
     body: CodeVerifyRequest,
     session: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
@@ -241,6 +293,7 @@ async def verify_telegram_code(
         )
 
     token = create_access_token(user.id, user.is_admin)
+    set_access_cookie(response, token)
 
     client_ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "")

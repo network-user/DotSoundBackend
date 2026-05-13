@@ -23,6 +23,7 @@ export interface UsePreviewLoop<K extends string | number> {
   prime: () => void
   start: (key: K) => Promise<void>
   stop: () => void
+  prefetchKeys: (keys: K[]) => void
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -200,6 +201,33 @@ export function usePreviewLoop<K extends string | number>({
     [fetcher, stop],
   )
 
+  const inFlightRef = useRef(new Set<K>())
+  const prefetchKeys = useCallback(
+    (keys: K[]) => {
+      for (const key of keys) {
+        if (queuesRef.current.has(key)) continue
+        if (inFlightRef.current.has(key)) continue
+        inFlightRef.current.add(key)
+        // Fire-and-forget; failures are non-fatal — the first
+        // tap will retry through start().
+        void (async () => {
+          try {
+            const items = await fetcher(key)
+            if (!queuesRef.current.has(key)) {
+              queuesRef.current.set(key, shuffle(items))
+              idxRef.current.set(key, 0)
+            }
+          } catch {
+            /* ignore */
+          } finally {
+            inFlightRef.current.delete(key)
+          }
+        })()
+      }
+    },
+    [fetcher],
+  )
+
   useEffect(() => {
     return () => {
       clearTimer()
@@ -222,5 +250,6 @@ export function usePreviewLoop<K extends string | number>({
     prime,
     start,
     stop,
+    prefetchKeys,
   }
 }

@@ -5,12 +5,15 @@ import {
   type PointerEvent,
   type ReactNode,
 } from 'react'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 interface Props {
   open: boolean
   onClose: () => void
   children: ReactNode
   ariaLabel?: string
+  /** Element id of the visible title to expose via aria-labelledby. */
+  ariaLabelledBy?: string
   /** Distance in px the user has to drag to dismiss. */
   swipeThreshold?: number
   /**
@@ -37,6 +40,7 @@ export function Sheet({
   onClose,
   children,
   ariaLabel,
+  ariaLabelledBy,
   swipeThreshold = 100,
   snap = 'auto',
 }: Props) {
@@ -47,6 +51,8 @@ export function Sheet({
   const [mounted, setMounted] = useState(open)
   const [closing, setClosing] = useState(false)
   const closingTimer = useRef<number | null>(null)
+
+  useFocusTrap(innerRef, open && mounted && !closing)
 
   useEffect(() => {
     if (open) {
@@ -166,7 +172,8 @@ export function Sheet({
       className={`sheet-backdrop${closing ? ' is-closing' : ''}`}
       role="dialog"
       aria-modal="true"
-      aria-label={ariaLabel}
+      aria-label={ariaLabelledBy ? undefined : ariaLabel}
+      aria-labelledby={ariaLabelledBy}
       onClick={onClose}
     >
       <div

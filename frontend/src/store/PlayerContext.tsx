@@ -723,6 +723,7 @@ export function PlayerProvider({
   const radioSeedTrackIdRef = useRef<number | null>(null)
   const radioPlayedIdsRef = useRef<Set<number>>(new Set())
   const playTrackSlideInjectRef = useRef<1 | -1 | null>(null)
+  const playNextInFlightRef = useRef(false)
   const [trackChangeSlide, setTrackChangeSlide] = useState<{
     bump: number
     dir: 0 | 1 | -1
@@ -1984,6 +1985,8 @@ export function PlayerProvider({
     opts?: { afterNaturalEnd?: boolean },
   ): Promise<boolean> => {
     if (!track) return false
+    if (playNextInFlightRef.current) return false
+    playNextInFlightRef.current = true
     playTrackSlideInjectRef.current = 1
     try {
     const isOffline =
@@ -2114,6 +2117,7 @@ export function PlayerProvider({
     }
     } finally {
       playTrackSlideInjectRef.current = null
+      playNextInFlightRef.current = false
     }
   }
 
@@ -2275,11 +2279,13 @@ export function PlayerProvider({
 
   const playPrev = async () => {
     if (!track) return
+    if (playNextInFlightRef.current) return
     const a = audioRef.current
     if (a && a.currentTime > 3) {
       a.currentTime = 0
       return
     }
+    playNextInFlightRef.current = true
     playTrackSlideInjectRef.current = -1
     try {
     const prev = historyRef.current.pop()
@@ -2298,6 +2304,7 @@ export function PlayerProvider({
     } catch {}
     } finally {
       playTrackSlideInjectRef.current = null
+      playNextInFlightRef.current = false
     }
   }
 

@@ -136,7 +136,12 @@ export function NowPlayingView() {
       )}`
     : null
 
-  const pct = duration ? (currentTime / duration) * 100 : 0
+  const pct =
+    Number.isFinite(duration) &&
+    Number.isFinite(currentTime) &&
+    duration > 0
+      ? Math.max(0, Math.min(100, (currentTime / duration) * 100))
+      : 0
   const trackBpm = (track as unknown as { bpm?: number }).bpm
   const tabBpm =
     typeof trackBpm === 'number' ? trackBpm : 120

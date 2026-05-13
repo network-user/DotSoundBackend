@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import secrets
 from datetime import UTC, datetime, timedelta
 from urllib.parse import parse_qs
 
@@ -13,6 +14,8 @@ from dotsound_private_core.services.auth_policy import (
 from jose import JWTError, jwt
 
 from app.config import settings
+
+_TOKEN_REVOCATION_PREFIX = "auth:revoked:"
 
 _ALGORITHM = "HS256"
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
@@ -91,6 +94,7 @@ def create_access_token(
         "sub": str(user_id),
         "admin": is_admin,
         "exp": expire,
+        "jti": secrets.token_hex(16),
     }
     return str(
         jwt.encode(
@@ -98,6 +102,29 @@ def create_access_token(
             settings.jwt_secret,
             algorithm=_ALGORITHM,
         )
+    )
+
+
+async def revoke_token(jti: str, ttl_seconds: int) -> None:
+    """Mark a token as revoked until its natural expiry."""
+    if not jti:
+        return
+    from app.core.redis import get_redis_client
+
+    redis = get_redis_client()
+    await redis.setex(
+        f"{_TOKEN_REVOCATION_PREFIX}{jti}", max(ttl_seconds, 1), "1"
+    )
+
+
+async def is_token_revoked(jti: str) -> bool:
+    if not jti:
+        return False
+    from app.core.redis import get_redis_client
+
+    redis = get_redis_client()
+    return bool(
+        await redis.exists(f"{_TOKEN_REVOCATION_PREFIX}{jti}")
     )
 
 

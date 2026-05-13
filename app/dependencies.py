@@ -12,12 +12,24 @@ from app.core.auth import (
     AuthError,
     decode_access_token,
     decode_admin_token,
+    is_token_revoked,
 )
 from app.core.db import AsyncSessionLocal
 from app.models.user import User
 from app.repositories.user import UserRepository
 
 _bearer = HTTPBearer(auto_error=False)
+_ACCESS_COOKIE = "ds_access"
+
+
+def _extract_token(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str | None:
+    if credentials and credentials.credentials:
+        return credentials.credentials
+    cookie = request.cookies.get(_ACCESS_COOKIE)
+    return cookie or None
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -35,12 +47,14 @@ def get_settings() -> AppSettings:
 
 
 async def get_current_user(
+    request: Request,
     credentials: (
         HTTPAuthorizationCredentials | None
     ) = Depends(_bearer),
     session: AsyncSession = Depends(get_db),
 ) -> User:
-    if not credentials:
+    token = _extract_token(request, credentials)
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
@@ -48,13 +62,19 @@ async def get_current_user(
         )
 
     try:
-        payload = decode_access_token(
-            credentials.credentials
-        )
+        payload = decode_access_token(token)
     except AuthError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    jti = str(payload.get("jti") or "")
+    if jti and await is_token_revoked(jti):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token revoked",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -90,18 +110,21 @@ async def get_current_user(
 
 
 async def get_optional_user(
+    request: Request,
     credentials: (
         HTTPAuthorizationCredentials | None
     ) = Depends(_bearer),
     session: AsyncSession = Depends(get_db),
 ) -> User | None:
-    if not credentials:
+    token = _extract_token(request, credentials)
+    if not token:
         return None
     try:
-        payload = decode_access_token(
-            credentials.credentials
-        )
+        payload = decode_access_token(token)
     except AuthError:
+        return None
+    jti = str(payload.get("jti") or "")
+    if jti and await is_token_revoked(jti):
         return None
     user_id = int(str(payload["sub"]))
     repo = UserRepository(session)

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
@@ -12,6 +12,7 @@ import {
 } from '@/lib/platform'
 import { showIsland } from '@/lib/island'
 import { extractCoverPalette, type CoverPalette } from '@/lib/coverPalette'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 function hexToRgba(hex: string, alpha: number): string {
   const v = hex.replace('#', '')
@@ -57,6 +58,8 @@ export function TrackShareModal({ open, onClose, payload }: Props) {
   const [showQr, setShowQr] = useState(false)
   const [qrDataUrl, setQrDataUrl] = useState('')
   const [palette, setPalette] = useState<CoverPalette | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+  useFocusTrap(panelRef, open && payload !== null)
 
   const caps = useMemo(() => getShareCapabilities(), [])
 
@@ -181,7 +184,7 @@ export function TrackShareModal({ open, onClose, payload }: Props) {
         if (e.target === e.currentTarget) onClose()
       }}
     >
-      <div className="rp-share-modal__panel">
+      <div className="rp-share-modal__panel" ref={panelRef}>
         <div className="rp-share-modal__head">
           <h2 className="rp-share-modal__title">{modalTitle}</h2>
           <button
