@@ -12,6 +12,22 @@
 - `[x]` - завершено
 - `[-]` - отменено / неактуально
 
+- [x] **Прод-инфраструктура: Caddy, мульти-репо CI/CD, deploy script (2026-05-13)**
+  — Починен `DotSoundBot/Dockerfile`: editable PrivateCore больше не утекает в
+    runtime через `pip freeze` (`--exclude-editable` в builder, `pip install
+    --no-deps` для PrivateCore в runtime). `frontend/nginx.conf` теперь
+    апгрейдит WebSocket-соединения (`/api/v1/ws*`, `colisten`, admin ws).
+    Добавлены `docker-compose.prod.yml` (overlay: убирает публичные порты у
+    Postgres/Redis/MinIO/ES/Backend/Frontend, снимает dev bind-mount-ы,
+    форсирует `DEBUG=false`) и `Caddyfile` (auto-TLS Let's Encrypt по
+    `DOMAIN`/`ACME_EMAIL`; закомментированный блок для `media.*` сабдомена
+    под presigned MinIO URL). `scripts/deploy.sh` — идемпотентный CD-скрипт
+    с режимами `full / only-backend / only-bot / only-frontend / skip-pull`,
+    запускает `alembic upgrade head` через one-shot контейнер.
+    GitHub Actions: `deploy.yml` в трёх репо (Backend → only-backend,
+    Bot → only-bot, PrivateCore → full). Документация: `docs/deploy/PRODUCTION.md`.
+    Makefile: `prod-deploy*`, `prod-logs`, `prod-ps`.
+
 - [x] **Главная: герой — последний прослушанный; «Бесконечная волна» от рекомендаций**
   — В шапке героя приоритет `getListenHistory` (последний уникальный трек),
   затем home highlight, секции и fallback. Подпись героя — `sectionRecent`, если

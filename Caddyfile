@@ -1,0 +1,54 @@
+# DotSound — production reverse proxy.
+#
+# Required env vars in DotSoundBackend/.env (Caddy reads them via
+# docker-compose.prod.yml -> env_file: - .env):
+#
+#   DOMAIN=your-domain.com
+#   ACME_EMAIL=you@your-domain.com
+#
+# Optional: MinIO presigned-URL subdomain. Required if the Mini App
+# fetches audio/cover URLs directly from S3 (default in this codebase).
+# After adding an A record for media.your-domain.com pointing here,
+# uncomment the second site block AND set in .env:
+#
+#   MINIO_ENDPOINT=media.your-domain.com
+#   MINIO_USE_SSL=true
+
+{
+	email {$ACME_EMAIL}
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Frontend nginx already routes / -> /mini_app/ and /api/ ->
+	# backend:8000 with WebSocket upgrade headers (see
+	# frontend/nginx.conf). Caddy only terminates TLS and forwards.
+	reverse_proxy frontend:80 {
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Real-IP {remote_host}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
+
+# === Uncomment when MinIO subdomain is ready ===
+#
+# media.your-domain.com {
+# 	# No `encode` — audio is already compressed; gzipping wastes CPU.
+# 	reverse_proxy minio:9000 {
+# 		header_up X-Forwarded-Proto {scheme}
+# 		header_up X-Real-IP {remote_host}
+# 		flush_interval -1
+# 	}
+# 	log {
+# 		output stdout
+# 		format console
+# 	}
+# }

@@ -1,4 +1,4 @@
-.PHONY: dev dev-full seed-dev-worker reaper-dev infra migrate test test-cov test-fast lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop hooks admin-dev admin-build observability-up observability-down test-admin test-all bootstrap-admin bootstrap-admin-docker
+.PHONY: dev dev-full seed-dev-worker reaper-dev infra migrate test test-cov test-fast lint format stop clean init backup backup-pg backup-list backup-restore backup-health backup-start backup-stop hooks admin-dev admin-build observability-up observability-down test-admin test-all bootstrap-admin bootstrap-admin-docker prod-deploy prod-deploy-backend prod-deploy-bot prod-deploy-frontend prod-logs prod-ps
 
 hooks: ## Install repo git hooks (boundary check before push)
 	git config core.hooksPath .githooks
@@ -121,3 +121,21 @@ bootstrap-admin: ## Grant full admin to user. USAGE: make bootstrap-admin USER="
 
 bootstrap-admin-docker: ## Same as bootstrap-admin, but inside docker compose. USAGE: make bootstrap-admin-docker USER="--email me@x.com"
 	docker compose exec backend poetry run python scripts/bootstrap_admin.py $(USER)
+
+prod-deploy: ## Full production deploy: pull all repos, build, migrate, roll
+	./scripts/deploy.sh full
+
+prod-deploy-backend: ## Rebuild only backend + worker (after Backend push)
+	./scripts/deploy.sh only-backend
+
+prod-deploy-bot: ## Rebuild only bot (after Bot push)
+	./scripts/deploy.sh only-bot
+
+prod-deploy-frontend: ## Rebuild only frontend + caddy (UI-only changes)
+	./scripts/deploy.sh only-frontend
+
+prod-logs: ## Tail production logs from all app services
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f --tail=200 backend worker bot frontend caddy
+
+prod-ps: ## Show production container status
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml ps

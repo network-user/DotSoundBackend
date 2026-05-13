@@ -1,0 +1,57 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "5"
+
+services:
+  postgres:
+    ports: !reset []
+
+  minio:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  elasticsearch:
+    ports: !reset []
+
+  clamav:
+    ports: !reset []
+
+  backend:
+    environment:
+      DEBUG: "false"
+    ports: !reset []
+    volumes: !reset []
+
+  worker:
+    volumes: !reset []
+
+  frontend:
+    ports: !reset []
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+    logging: *default-logging
+    networks:
+      - dotsound
+
+volumes:
+  caddy_data:
+  caddy_config:
