@@ -75,6 +75,7 @@ export function MiniPlayerBar() {
   const overflowRef = useRef<HTMLDivElement>(null)
   const seekInputRef = useRef<HTMLInputElement>(null)
   const seekWrapRef = useRef<HTMLDivElement>(null)
+  const seekDraggingRef = useRef(false)
 
   useEffect(() => {
     const el = seekInputRef.current
@@ -85,7 +86,9 @@ export function MiniPlayerBar() {
       const pct = duration
         ? Math.max(0, Math.min(100, (t / duration) * 100))
         : 0
-      el.value = String(pct)
+      if (!seekDraggingRef.current) {
+        el.value = String(pct)
+      }
       wrap.style.setProperty('--progress', `${pct}%`)
     }
     write()
@@ -176,6 +179,15 @@ export function MiniPlayerBar() {
           step={0.1}
           defaultValue={0}
           aria-label="Перемотка"
+          onPointerDown={() => {
+            seekDraggingRef.current = true
+          }}
+          onPointerUp={() => {
+            seekDraggingRef.current = false
+          }}
+          onPointerCancel={() => {
+            seekDraggingRef.current = false
+          }}
           onChange={(e) =>
             seek(Number(e.currentTarget.value))
           }

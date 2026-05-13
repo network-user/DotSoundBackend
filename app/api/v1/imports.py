@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.rate_limit import limiter
+from app.core.ssrf_guard import assert_public_http_url
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.services.import_service import ImportService
@@ -113,6 +114,7 @@ async def import_album_from_url(
                 "Only admin can import to artist catalog releases"
             ),
         )
+    assert_public_http_url(body.url.strip(), field="url")
     svc = ExternalAlbumImportService(session)
     try:
         out = await svc.import_from_url(
@@ -180,6 +182,7 @@ async def scan_yandex_music(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=("URL must be a music.yandex.ru playlist or " "album link"),
         )
+    assert_public_http_url(body.url, field="url")
     service = ImportService(session)
     job = await service.scan_external_playlist(
         user_id=current_user.id,
@@ -209,6 +212,7 @@ async def scan_vk_music(
                 "music or playlist link"
             ),
         )
+    assert_public_http_url(norm, field="url")
     service = ImportService(session)
     job = await service.scan_external_playlist(
         user_id=current_user.id,
@@ -238,6 +242,7 @@ async def scan_soundcloud_playlist(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc) or "Invalid SoundCloud playlist URL",
         ) from exc
+    assert_public_http_url(normalized, field="url")
     service = ImportService(session)
     job = await service.scan_external_playlist(
         user_id=current_user.id,
@@ -265,6 +270,7 @@ async def scan_spotify(
                 "URL must be an open.spotify.com public playlist or album link"
             ),
         )
+    assert_public_http_url(body.url, field="url")
     service = ImportService(session)
     job = await service.scan_external_playlist(
         user_id=current_user.id,

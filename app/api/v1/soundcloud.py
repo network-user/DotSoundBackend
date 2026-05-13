@@ -73,6 +73,9 @@ async def import_soundcloud_track(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="URL must be a soundcloud.com track link",
         )
+    from app.core.ssrf_guard import assert_public_http_url
+
+    assert_public_http_url(data.sc_url, field="sc_url")
     service = SoundCloudService(settings.sc_client_id, session)
     sc_data = await service.resolve_url(data.sc_url)
     if sc_data.get("kind") != "track":

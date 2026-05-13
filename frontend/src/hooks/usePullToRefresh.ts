@@ -60,6 +60,18 @@ export function usePullToRefresh(
   const startYRef = useRef<number | null>(null)
   const distRef = useRef(0)
   const armedRef = useRef(false)
+  const refreshingRef = useRef(false)
+  const pullingRef = useRef(false)
+  const onRefreshRef = useRef(onRefresh)
+
+  useEffect(() => {
+    refreshingRef.current = state.refreshing
+    pullingRef.current = state.pulling
+  }, [state.refreshing, state.pulling])
+
+  useEffect(() => {
+    onRefreshRef.current = onRefresh
+  }, [onRefresh])
 
   useEffect(() => {
     if (!enabled) return
@@ -67,7 +79,7 @@ export function usePullToRefresh(
     if (!el) return
 
     const onTouchStart = (e: TouchEvent) => {
-      if (state.refreshing) return
+      if (refreshingRef.current) return
       if (el.scrollTop > 0) {
         startYRef.current = null
         return
@@ -78,11 +90,11 @@ export function usePullToRefresh(
     }
 
     const onTouchMove = (e: TouchEvent) => {
-      if (state.refreshing) return
+      if (refreshingRef.current) return
       if (startYRef.current == null) return
       if (el.scrollTop > 0) {
         startYRef.current = null
-        if (state.pulling) {
+        if (pullingRef.current) {
           setState((s) => ({
             ...s,
             pulling: false,
@@ -119,7 +131,7 @@ export function usePullToRefresh(
     }
 
     const onTouchEnd = () => {
-      if (state.refreshing) return
+      if (refreshingRef.current) return
       const final = distRef.current
       startYRef.current = null
       distRef.current = 0
@@ -132,7 +144,7 @@ export function usePullToRefresh(
           distance: triggerDistance,
           refreshing: true,
         })
-        Promise.resolve(onRefresh())
+        Promise.resolve(onRefreshRef.current())
           .catch(() => {})
           .finally(() => {
             setState({
@@ -166,14 +178,7 @@ export function usePullToRefresh(
       el.removeEventListener('touchend', onTouchEnd)
       el.removeEventListener('touchcancel', onTouchEnd)
     }
-  }, [
-    containerId,
-    triggerDistance,
-    onRefresh,
-    enabled,
-    state.refreshing,
-    state.pulling,
-  ])
+  }, [containerId, triggerDistance, enabled])
 
   return state
 }

@@ -65,6 +65,9 @@ async def import_bandcamp_track(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="URL must be a link to a track on bandcamp.com.",
         )
+    from app.core.ssrf_guard import assert_public_http_url
+
+    assert_public_http_url(data.bc_url, field="bc_url")
 
     service = BandcampService(session)
     bc_data = await service.resolve_url(data.bc_url)

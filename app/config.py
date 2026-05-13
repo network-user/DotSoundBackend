@@ -41,6 +41,9 @@ class AppSettings(BaseSettings):
     redact_log_identifiers: bool = True
     allowed_origins: str = "*"
     allowed_hosts: str = "*"
+    # CIDRs of reverse proxies allowed to set X-Forwarded-For.
+    # Empty means rate-limiter ignores XFF and uses the direct peer.
+    trusted_proxy_cidrs: str = ""
     bot_internal_url: str = "http://localhost:8081"
     bot_internal_secret: str = ""
 
@@ -393,6 +396,14 @@ class AppSettings(BaseSettings):
     def allowed_hosts_list(self) -> list[str]:
         items = [h.strip() for h in self.allowed_hosts.split(",") if h.strip()]
         return items or ["*"]
+
+    @property
+    def trusted_proxy_cidrs_list(self) -> list[str]:
+        return [
+            c.strip()
+            for c in (self.trusted_proxy_cidrs or "").split(",")
+            if c.strip()
+        ]
 
     @property
     def internal_api_allowed_cidrs_list(self) -> list[str]:

@@ -905,31 +905,72 @@
   margin: 0;
 }
 
-.onb-v2-swipe-card__badge {
+.onb-v2-swipe-card__tint {
   position: absolute;
-  top: 16px;
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  padding: 6px 16px;
-  border-radius: 12px;
-  border: 3px solid currentColor;
+  inset: 0;
   pointer-events: none;
-  text-transform: uppercase;
+  z-index: 1;
+  mix-blend-mode: screen;
   opacity: 0;
-  transition: opacity 80ms ease-out;
 }
 
-.onb-v2-swipe-card__badge--like {
-  right: 16px;
+.onb-v2-swipe-card__tint--like {
+  background:
+    radial-gradient(
+      120% 80% at 100% 50%,
+      rgba(46, 213, 115, 0.85) 0%,
+      rgba(46, 213, 115, 0.45) 38%,
+      rgba(46, 213, 115, 0) 70%
+    );
+}
+
+.onb-v2-swipe-card__tint--nope {
+  background:
+    radial-gradient(
+      120% 80% at 0% 50%,
+      rgba(255, 71, 87, 0.85) 0%,
+      rgba(255, 71, 87, 0.45) 38%,
+      rgba(255, 71, 87, 0) 70%
+    );
+}
+
+.onb-v2-swipe-card__stamp {
+  position: absolute;
+  top: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px 10px 14px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  border-radius: 14px;
+  border: 4px solid currentColor;
+  background: rgba(0, 0, 0, 0.18);
+  text-transform: uppercase;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 3;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.45);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 4px 24px rgba(0, 0, 0, 0.32);
+}
+
+.onb-v2-swipe-card__stamp-text {
+  line-height: 1;
+}
+
+.onb-v2-swipe-card__stamp--like {
+  right: 22px;
   color: #2ade7e;
-  transform: rotate(8deg);
+  transform: rotate(-15deg);
 }
 
-.onb-v2-swipe-card__badge--dislike {
-  left: 16px;
-  color: #ff5566;
-  transform: rotate(-8deg);
+.onb-v2-swipe-card__stamp--nope {
+  left: 22px;
+  color: #ff4757;
+  transform: rotate(15deg);
 }
 
 .onb-v2-swipe-card__play-pulse {

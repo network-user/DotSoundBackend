@@ -226,7 +226,11 @@ def create_app() -> FastAPI:
     from app.middlewares.abuse_signal import (
         AbuseSignalMiddleware,
     )
+    from app.middlewares.body_size_limit import (
+        BodySizeLimitMiddleware,
+    )
 
+    application.add_middleware(BodySizeLimitMiddleware)
     application.add_middleware(SlowAPIMiddleware)
     application.add_middleware(SecureStaticMiddleware)
     application.add_middleware(AdminSecurityMiddleware)

@@ -114,6 +114,8 @@ let onUnauthorized: (() => void) | null = null
 let onAccountBlocked:
   | ((reason?: string | null) => void)
   | null = null
+let unauthorizedFired = false
+let accountBlockedFired = false
 const AUTH_TOKEN_KEY = 'auth-token'
 
 function decodeJwtPayload(
@@ -313,16 +315,23 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
         accessToken = null
         persistToken(null)
         if (isBanned) {
-          onAccountBlocked?.(
-            res.headers.get('X-Account-Reason'),
-          )
-        } else {
+          if (!accountBlockedFired) {
+            accountBlockedFired = true
+            onAccountBlocked?.(
+              res.headers.get('X-Account-Reason'),
+            )
+          }
+        } else if (!unauthorizedFired) {
+          unauthorizedFired = true
           onUnauthorized?.()
         }
       } else if (isBanned) {
-        onAccountBlocked?.(
-          res.headers.get('X-Account-Reason'),
-        )
+        if (!accountBlockedFired) {
+          accountBlockedFired = true
+          onAccountBlocked?.(
+            res.headers.get('X-Account-Reason'),
+          )
+        }
       }
       if (
         canRetry &&
@@ -331,6 +340,11 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
       ) {
         await _sleep(250 + Math.floor(Math.random() * 350))
         continue
+      }
+      if (res.ok && sentWithAuth) {
+        if (unauthorizedFired) unauthorizedFired = false
+        if (accountBlockedFired && !isBanned)
+          accountBlockedFired = false
       }
       if (!res.ok) {
         const message = await readApiErrorMessage(res)
@@ -1143,6 +1157,10 @@ export const api = {
   setToken(token: string | null) {
     accessToken = token
     persistToken(token)
+    if (token) {
+      unauthorizedFired = false
+      accountBlockedFired = false
+    }
   },
 
   getToken(): string | null {

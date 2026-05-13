@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Icon } from '@/components/Icon/Icon'
 import type { OnboardingGenreBubble } from '@/types/api'
 
@@ -23,6 +24,7 @@ export function GenreBubble({
   onToggle,
   onTogglePreview,
 }: Props) {
+  const { t } = useTranslation()
   const covers = useMemo(
     () => bubble.sample_cover_keys.slice(0, 4),
     [bubble.sample_cover_keys],
@@ -103,7 +105,9 @@ export function GenreBubble({
           .filter(Boolean)
           .join(' ')}
         aria-label={
-          isPlaying ? 'Stop preview' : 'Play preview'
+          isPlaying
+            ? t('onboarding.preview.stop')
+            : t('onboarding.preview.play')
         }
         onClick={(e) => {
           e.stopPropagation()

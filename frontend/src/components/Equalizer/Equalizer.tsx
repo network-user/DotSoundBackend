@@ -10,6 +10,7 @@ import {
 import { Icon } from '@/components/Icon/Icon'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { MorphIcon } from '@/components/ui/MorphIcon'
+import { Waveform } from '@/components/Waveform/Waveform'
 import { useExitTransition } from '@/hooks/useExitTransition'
 import { hapticTick, haptic } from '@/lib/telegram'
 import type { Track } from '@/types/api'
@@ -67,6 +68,15 @@ export function Equalizer() {
     useState<string | null>(null)
   const [confirmReset, setConfirmReset] = useState(false)
   const confirmResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (confirmResetTimerRef.current) {
+        clearTimeout(confirmResetTimerRef.current)
+        confirmResetTimerRef.current = null
+      }
+    }
+  }, [])
 
   const handlePreset = (name: string) => {
     const values = PRESETS[name]
@@ -175,6 +185,10 @@ export function Equalizer() {
         transition={SPRING_GENTLE}
       >
         <div className="eq-handle rp-eq__handle" />
+
+        <div className="eq-spectrum" aria-hidden>
+          <Waveform height={64} bars={40} className="eq-spectrum__canvas" />
+        </div>
 
         <div className="eq-header">
           <div className="eq-header-main">

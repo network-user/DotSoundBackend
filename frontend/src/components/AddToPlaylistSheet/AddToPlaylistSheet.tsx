@@ -132,7 +132,8 @@ export function AddToPlaylistSheet({
                   type="button"
                   role="listitem"
                   className="rd-pl-playlist-pick-row"
-                  disabled={busyId !== null}
+                  disabled={busy}
+                  aria-busy={busy}
                   onClick={() => void pick(pl)}
                 >
                   <span>

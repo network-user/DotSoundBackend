@@ -261,6 +261,10 @@
       "cta": "Continue",
       "searchPlaceholder": "Search artists…",
       "empty": "No artists found"
+    },
+    "preview": {
+      "play": "Play preview",
+      "stop": "Stop preview"
     }
   },
   "artistStats": {

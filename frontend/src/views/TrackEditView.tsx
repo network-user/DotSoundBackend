@@ -224,6 +224,14 @@ export function TrackEditView() {
     }
   }
 
+  useEffect(() => {
+    return () => {
+      if (coverPreview && coverPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(coverPreview)
+      }
+    }
+  }, [coverPreview])
+
   const handleDelete = async () => {
     if (
       !window.confirm(

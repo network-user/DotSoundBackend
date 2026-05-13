@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { Icon } from '@/components/Icon/Icon'
 
 interface Props {
@@ -49,6 +49,11 @@ export function CoverImage({
   const srcSet = coverKey ? buildSrcSet(coverKey) : undefined
   const sizesAttr = coverKey ? pickSizesAttr(size) : undefined
   const src = proxySrc ?? externalUrl ?? null
+
+  useEffect(() => {
+    setFailed(false)
+    setLoaded(false)
+  }, [src])
 
   return (
     <div

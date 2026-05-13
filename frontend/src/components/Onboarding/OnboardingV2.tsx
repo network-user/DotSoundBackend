@@ -1089,6 +1089,44 @@ function SwipeStep({
   const { t } = useTranslation()
   const top = tracks[index]
   const next = tracks[index + 1]
+  const [exitDir, setExitDir] = useState<-1 | 0 | 1>(0)
+
+  // Preload next 2 tracks' audio so the auto-play swap on swipe is
+  // instant instead of waiting for transcode each time.
+  useEffect(() => {
+    const upcoming = tracks.slice(index + 1, index + 3)
+    const els: HTMLAudioElement[] = []
+    for (const t of upcoming) {
+      try {
+        const a = new Audio()
+        a.preload = 'auto'
+        a.src = `/api/v1/tracks/${t.id}/audio?force_progressive=true`
+        a.load()
+        els.push(a)
+      } catch {
+        /* ignore */
+      }
+    }
+    return () => {
+      for (const a of els) {
+        try {
+          a.src = ''
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }, [tracks, index])
+
+  const handleLike = useCallback(() => {
+    setExitDir(1)
+    onLike()
+  }, [onLike])
+
+  const handleDislike = useCallback(() => {
+    setExitDir(-1)
+    onDislike()
+  }, [onDislike])
 
   return (
     <>
@@ -1122,19 +1160,21 @@ function SwipeStep({
               track={next}
             />
           )}
-          {top && (
-            <SwipeCard
-              key={top.id}
-              track={top}
-              isPlaying={playingId === top.id}
-              audioLoading={audioLoading}
-              audioBlocked={audioBlocked}
-              onLike={onLike}
-              onDislike={onDislike}
-              onTogglePreview={onTogglePreview}
-              reduce={reduce}
-            />
-          )}
+          <AnimatePresence custom={exitDir} initial={false}>
+            {top && (
+              <SwipeCard
+                key={top.id}
+                track={top}
+                isPlaying={playingId === top.id}
+                audioLoading={audioLoading}
+                audioBlocked={audioBlocked}
+                onLike={handleLike}
+                onDislike={handleDislike}
+                onTogglePreview={onTogglePreview}
+                reduce={reduce}
+              />
+            )}
+          </AnimatePresence>
           {!top && loading && (
             <div className="onb-v2-swipe-loading">
               <div className="upload-spinner" />
@@ -1164,7 +1204,7 @@ function SwipeStep({
               variant="ghost"
               haptic="medium"
               className="onb-v2-swipe-btn onb-v2-swipe-btn--dislike"
-              onClick={onDislike}
+              onClick={handleDislike}
               ariaLabel={t(
                 'redesign.onboardingV2.swipe.dislike',
               )}
@@ -1186,7 +1226,7 @@ function SwipeStep({
               variant="ghost"
               haptic="medium"
               className="onb-v2-swipe-btn onb-v2-swipe-btn--like"
-              onClick={onLike}
+              onClick={handleLike}
               ariaLabel={t(
                 'redesign.onboardingV2.swipe.like',
               )}
@@ -1254,6 +1294,16 @@ function SwipeCard({
     x,
     [-SWIPE_THRESHOLD, -40],
     [1, 0],
+  )
+  const likeTint = useTransform(
+    x,
+    [0, SWIPE_THRESHOLD * 1.5],
+    [0, 0.55],
+  )
+  const nopeTint = useTransform(
+    x,
+    [-SWIPE_THRESHOLD * 1.5, 0],
+    [0.55, 0],
   )
 
   const tapTimerRef = useRef<number | null>(null)
@@ -1335,31 +1385,51 @@ function SwipeCard({
       onTap={handleTap}
       whileTap={{ cursor: 'grabbing' }}
       transition={SPRING_SNAPPY}
-      exit={{
-        opacity: 0,
-        scale: 0.95,
-        transition: TWEEN_FAST,
+      variants={{
+        exit: (dir: number) => ({
+          x: (dir || 0) * 520,
+          rotate: (dir || 0) * 22,
+          opacity: 0,
+          transition: { duration: 0.26, ease: [0.2, 0.65, 0.3, 1] },
+        }),
       }}
+      exit="exit"
     >
       <CoverArt
         track={track}
         isPlaying={isPlaying}
         isLoading={audioLoading}
       />
+      <m.span
+        className="onb-v2-swipe-card__tint onb-v2-swipe-card__tint--like"
+        style={{ opacity: likeTint }}
+        aria-hidden="true"
+      />
+      <m.span
+        className="onb-v2-swipe-card__tint onb-v2-swipe-card__tint--nope"
+        style={{ opacity: nopeTint }}
+        aria-hidden="true"
+      />
       <CardInfo track={track} />
       <m.span
-        className="onb-v2-swipe-card__badge onb-v2-swipe-card__badge--like"
+        className="onb-v2-swipe-card__stamp onb-v2-swipe-card__stamp--like"
         style={{ opacity: likeOpacity }}
         aria-hidden="true"
       >
-        {t('redesign.onboardingV2.swipe.badgeLike')}
+        <Icon name="heart" size={28} />
+        <span className="onb-v2-swipe-card__stamp-text">
+          {t('redesign.onboardingV2.swipe.badgeLike')}
+        </span>
       </m.span>
       <m.span
-        className="onb-v2-swipe-card__badge onb-v2-swipe-card__badge--dislike"
+        className="onb-v2-swipe-card__stamp onb-v2-swipe-card__stamp--nope"
         style={{ opacity: nopeOpacity }}
         aria-hidden="true"
       >
-        {t('redesign.onboardingV2.swipe.badgeNope')}
+        <Icon name="x" size={28} />
+        <span className="onb-v2-swipe-card__stamp-text">
+          {t('redesign.onboardingV2.swipe.badgeNope')}
+        </span>
       </m.span>
       {audioBlocked && !audioLoading && <MuteHint />}
     </m.div>
@@ -1671,7 +1741,9 @@ function ArtistsStep({
                           .filter(Boolean)
                           .join(' ')}
                         aria-label={
-                          playing ? 'Stop preview' : 'Play preview'
+                          playing
+                            ? t('onboarding.preview.stop')
+                            : t('onboarding.preview.play')
                         }
                         onClick={(e) => {
                           e.stopPropagation()

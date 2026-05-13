@@ -56,7 +56,10 @@ async def websocket_endpoint(
             return
 
     subprotocol = proto.split(",")[0].strip() if proto else None
-    await ws_manager.connect(user_id, websocket, subprotocol=subprotocol)
+    if not await ws_manager.connect(
+        user_id, websocket, subprotocol=subprotocol
+    ):
+        return
 
     try:
         while True:

@@ -607,6 +607,31 @@ export function App() {
     setAuthorId(null)
   }, [location.pathname])
 
+  // Deferred onboarding tutorial: when the user finishes onboarding
+  // with "Import", we send them straight to /profile?import=1 and
+  // store ds_pending_tutorial=1. As soon as they navigate away from
+  // the import screen, surface the welcome tutorial once.
+  useEffect(() => {
+    if (needsOnboarding || needsAuth || needsTutorial) return
+    try {
+      const pending =
+        window.localStorage.getItem('ds_pending_tutorial') === '1'
+      if (!pending) return
+      const onProfile = location.pathname.startsWith('/profile')
+      if (!onProfile) {
+        window.localStorage.removeItem('ds_pending_tutorial')
+        setNeedsTutorial(true)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [
+    location.pathname,
+    needsOnboarding,
+    needsAuth,
+    needsTutorial,
+  ])
+
   // [REGULATORY-DISABLED v1] handler использовался только в
   // отключённом ChatsView. Восстановить вместе с чат-маршрутом.
   // const handleOpenAuthor = (id: number) =>
@@ -692,10 +717,38 @@ export function App() {
       <OnboardingV2
         onComplete={() => {
           setNeedsOnboarding(false)
-          setNeedsTutorial(true)
           reloadLikes()
           if (shouldShowPwaOnboardingModal()) {
             setShowPwaModal(true)
+          }
+          let pendingImport = false
+          try {
+            pendingImport =
+              window.localStorage.getItem(
+                'ds_pending_import_open',
+              ) === '1'
+          } catch {
+            /* ignore */
+          }
+          if (pendingImport) {
+            // Open the import flow immediately. The welcome
+            // tutorial is deferred until the user navigates
+            // away from the import screen so the import flow
+            // isn't blocked by an overlay.
+            try {
+              window.localStorage.removeItem(
+                'ds_pending_import_open',
+              )
+              window.localStorage.setItem(
+                'ds_pending_tutorial',
+                '1',
+              )
+            } catch {
+              /* ignore */
+            }
+            navigate('/profile?import=1')
+          } else {
+            setNeedsTutorial(true)
           }
         }}
       />
@@ -707,20 +760,6 @@ export function App() {
       <WelcomeTutorial
         onComplete={() => {
           setNeedsTutorial(false)
-          try {
-            const pendingImport =
-              window.localStorage.getItem(
-                'ds_pending_import_open',
-              ) === '1'
-            if (pendingImport) {
-              window.localStorage.removeItem(
-                'ds_pending_import_open',
-              )
-              navigate('/profile?import=1')
-            }
-          } catch {
-            /* ignore */
-          }
         }}
       />
     )

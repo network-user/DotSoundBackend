@@ -18,6 +18,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(
 
 _PRESENCE_TTL = 120
 _PRESENCE_PREFIX = "presence:"
+_MAX_WS_PER_USER = 6
 
 ACTIVITY_TYPES = frozenset(
     {
@@ -83,7 +84,16 @@ class ConnectionManager:
         user_id: int,
         ws: WebSocket,
         subprotocol: str | None = None,
-    ) -> None:
+    ) -> bool:
+        existing = self._connections.get(user_id, [])
+        if len(existing) >= _MAX_WS_PER_USER:
+            logger.warning(
+                "ws_per_user_cap_exceeded",
+                user_id=user_id,
+                cap=_MAX_WS_PER_USER,
+            )
+            await ws.close(code=4429)
+            return False
         if subprotocol:
             await ws.accept(subprotocol=subprotocol)
         else:
@@ -103,6 +113,7 @@ class ConnectionManager:
         logger.debug(
             "ws_connected", user_id=user_id
         )
+        return True
 
     async def disconnect(
         self, user_id: int, ws: WebSocket

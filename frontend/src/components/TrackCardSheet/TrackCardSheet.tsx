@@ -1241,40 +1241,30 @@ export function TrackCardSheet({
                 <Icon name="music" size={72} />
               </div>
             )}
-            {showCoverWaves && (
-              <div
-                className={[
-                  'tcs-cover-wave-area',
-                  isCoarsePointer
-                    ? 'tcs-cover-wave-area--touch'
-                    : '',
-                ]
-                  .filter(Boolean)
-                  .join(' ')}
-                aria-hidden
-              >
-                <div className="tcs-cover-wave-gradient" />
-                <Waveform
-                  overlay
-                  height={isCoarsePointer ? 48 : 64}
-                  bars={
-                    perfLite
-                      ? 18
-                      : isCoarsePointer
-                        ? 28
-                        : 36
-                  }
-                  className={[
-                    'tcs-cover-waveform',
-                    isCoarsePointer
-                      ? 'tcs-cover-waveform--touch'
-                      : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                />
-              </div>
-            )}
+          </div>
+        )}
+
+        {!hasActiveVideo && !showLyrics && showCoverWaves && (
+          <div
+            className={[
+              'tcs-wave-strip',
+              isCoarsePointer ? 'tcs-wave-strip--touch' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            aria-hidden
+          >
+            <Waveform
+              height={isCoarsePointer ? 56 : 72}
+              bars={
+                perfLite
+                  ? 22
+                  : isCoarsePointer
+                    ? 32
+                    : 44
+              }
+              className="tcs-wave-strip__canvas"
+            />
           </div>
         )}
 

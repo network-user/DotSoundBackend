@@ -73,6 +73,9 @@ async def import_youtube_track(
                 detail="URL должен быть ссылкой на YouTube-видео "
                 "(youtube.com или youtu.be).",
             )
+    from app.core.ssrf_guard import assert_public_http_url
+
+    assert_public_http_url(data.yt_url, field="yt_url")
 
     service = YouTubeService(session)
     yt_data = await service.resolve_url(data.yt_url)

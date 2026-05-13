@@ -51,6 +51,7 @@ function PlayerBarSeekInner({
   parentRef,
 }: SeekProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const draggingRef = useRef(false)
 
   const writePct = (pct: number) => {
     const clamped = clampPct(pct)
@@ -60,7 +61,7 @@ function PlayerBarSeekInner({
         `${clamped}%`,
       )
     }
-    if (inputRef.current) {
+    if (inputRef.current && !draggingRef.current) {
       inputRef.current.value = String(clamped)
     }
   }
@@ -100,6 +101,15 @@ function PlayerBarSeekInner({
         defaultValue={0}
         style={seekStyle}
         aria-label="Перемотка трека"
+        onPointerDown={() => {
+          draggingRef.current = true
+        }}
+        onPointerUp={() => {
+          draggingRef.current = false
+        }}
+        onPointerCancel={() => {
+          draggingRef.current = false
+        }}
         onChange={(e) =>
           onSeek(Number(e.currentTarget.value))
         }
