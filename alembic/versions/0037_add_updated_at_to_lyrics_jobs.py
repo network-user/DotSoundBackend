@@ -6,7 +6,6 @@ Create Date: 2026-04-18
 """
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision = "0037"
@@ -16,16 +15,14 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "lyrics_jobs",
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
+    op.execute(
+        "ALTER TABLE lyrics_jobs "
+        "ADD COLUMN IF NOT EXISTS updated_at "
+        "TIMESTAMP WITH TIME ZONE DEFAULT now() NOT NULL"
     )
 
 
 def downgrade() -> None:
-    op.drop_column("lyrics_jobs", "updated_at")
+    op.execute(
+        "ALTER TABLE lyrics_jobs DROP COLUMN IF EXISTS updated_at"
+    )
