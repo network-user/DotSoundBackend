@@ -12,6 +12,15 @@
 - `[x]` - завершено
 - `[-]` - отменено / неактуально
 
+- [ ] **Убрать временный admin escape hatch в онбординге**
+  — На welcome-шаге `OnboardingV2` есть кнопка «Пропустить онбординг
+  (admin)», видимая только при `getIsAdmin()`. Нужна, потому что на
+  свежем деплое нет треков и swipe-шаг недостижим. Дёргает
+  `api.smartSkipOnboarding()`. Когда в каталоге появятся треки
+  и любой пользователь сможет закончить онбординг сам — убрать
+  блок и его handler в `frontend/src/components/Onboarding/OnboardingV2.tsx`
+  (метка `TEMPORARY: admin escape hatch`).
+
 - [x] **Telegram Mini App: онбординг/reset/activation 403 на мобиле (2026-05-14)**
   — После перехода SPA на cookie-based session с double-submit CSRF
   (`b2ace93`) на iOS/Android Telegram WebView cookie `ds_csrf` не

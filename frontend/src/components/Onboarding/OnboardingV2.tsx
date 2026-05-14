@@ -27,7 +27,7 @@ import {
 } from '@/lib/motion'
 import { showIsland } from '@/lib/island'
 import { trackActivationEvent } from '@/lib/activation'
-import { hapticSelection } from '@/lib/telegram'
+import { getIsAdmin, hapticSelection } from '@/lib/telegram'
 import { useOnboardingAudio } from '@/hooks/useOnboardingAudio'
 import { usePreviewLoop } from '@/hooks/usePreviewLoop'
 import { AvatarBuilder } from '@/components/Onboarding/AvatarBuilder'
@@ -227,6 +227,22 @@ export function OnboardingV2({ onComplete }: Props) {
     audio.prime()
     goNext('welcome')
   }
+
+  // TEMPORARY: admin escape hatch for fresh deploys where there
+  // are no tracks yet, so the swipe step cannot be completed.
+  // Remove once the catalog has enough content for any user to
+  // finish onboarding on their own.
+  const isAdmin = useMemo(() => getIsAdmin(), [])
+  const handleAdminSkip = useCallback(async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      await api.smartSkipOnboarding()
+      onComplete()
+    } catch {
+      setSaving(false)
+    }
+  }, [saving, onComplete])
 
   const handleProfileSubmit = async () => {
     if (saving) return
@@ -518,6 +534,10 @@ export function OnboardingV2({ onComplete }: Props) {
             >
               <WelcomeStep
                 onStart={handleWelcomeStart}
+                onAdminSkip={
+                  isAdmin ? handleAdminSkip : null
+                }
+                adminSkipBusy={saving}
               />
             </m.div>
           )}
@@ -807,9 +827,15 @@ function ProgressBar({
 
 interface WelcomeStepProps {
   onStart: () => void
+  onAdminSkip: (() => void) | null
+  adminSkipBusy: boolean
 }
 
-function WelcomeStep({ onStart }: WelcomeStepProps) {
+function WelcomeStep({
+  onStart,
+  onAdminSkip,
+  adminSkipBusy,
+}: WelcomeStepProps) {
   const { t } = useTranslation()
   const brand = useBrandLabel()
   return (
@@ -845,6 +871,26 @@ function WelcomeStep({ onStart }: WelcomeStepProps) {
         >
           {t('redesign.onboardingV2.welcome.cta')}
         </MotionPress>
+        {onAdminSkip && (
+          <MotionPress
+            type="button"
+            variant="ghost"
+            haptic="light"
+            className="onb-v2-admin-skip"
+            onClick={onAdminSkip}
+            disabled={adminSkipBusy}
+            ariaLabel="Пропустить онбординг (admin)"
+            style={{
+              marginTop: 12,
+              opacity: 0.7,
+              fontSize: 13,
+            }}
+          >
+            {adminSkipBusy
+              ? '…'
+              : 'Пропустить онбординг (admin)'}
+          </MotionPress>
+        )}
       </div>
     </div>
   )
