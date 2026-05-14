@@ -14,8 +14,6 @@
  *   - AbortController support so the caller can cancel cleanly
  */
 
-import { api } from '@/lib/api'
-
 export interface UploadInitMeta {
   filename: string
   mime: string
@@ -72,10 +70,17 @@ const DEFAULT_RETRIES = 4
 // attach the in-memory bearer explicitly so upload requests work on
 // transports where the cookie is unreliable — most notably the
 // Telegram Mini App webview, and on first auth before the cookie
-// has propagated.
-function authHeaders(): HeadersInit {
-  const token = api.getToken()
-  return token ? { Authorization: `Bearer ${token}` } : {}
+// has propagated. Lazy import keeps Vite from collapsing api.ts
+// into an early init slot of the admin chunk, which can trigger an
+// ESM temporal-dead-zone crash on first render.
+async function authHeaders(): Promise<HeadersInit> {
+  try {
+    const { api } = await import('@/lib/api')
+    const token = api.getToken()
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  } catch {
+    return {}
+  }
 }
 
 async function _sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -103,7 +108,7 @@ export async function initUpload(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
+      ...(await authHeaders()),
     },
     body: JSON.stringify(meta),
   })
@@ -117,7 +122,7 @@ export async function getUploadStatus(
   uploadId: string,
 ): Promise<UploadStatus> {
   const res = await fetch(`/api/v1/tracks/upload/${uploadId}`, {
-    headers: authHeaders(),
+    headers: await authHeaders(),
   })
   if (!res.ok) {
     throw new Error(await _readError(res, 'status fetch failed'))
@@ -128,7 +133,7 @@ export async function getUploadStatus(
 export async function cancelUpload(uploadId: string): Promise<void> {
   await fetch(`/api/v1/tracks/upload/${uploadId}`, {
     method: 'DELETE',
-    headers: authHeaders(),
+    headers: await authHeaders(),
   })
 }
 
@@ -149,7 +154,7 @@ async function uploadChunk(
         `/api/v1/tracks/upload/${uploadId}/chunk/${index}`,
         {
           method: 'PUT',
-          headers: authHeaders(),
+          headers: await authHeaders(),
           body: form,
           signal,
         },
@@ -244,7 +249,7 @@ export async function uploadFile(
     `/api/v1/tracks/upload/${plan.upload_id}/complete`,
     {
       method: 'POST',
-      headers: authHeaders(),
+      headers: await authHeaders(),
       body: completeForm,
       signal,
     },
@@ -270,7 +275,7 @@ export async function checkDuplicate(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(),
+      ...(await authHeaders()),
     },
     body: JSON.stringify({
       audio_hash: audioHash,
