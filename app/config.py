@@ -174,18 +174,27 @@ class AppSettings(BaseSettings):
     # same route unless split-tunnel excludes tor.exe.
     tor_log_outbound_public_ip: bool = False
 
-    # SoundCloud transcoding-manifest fallback when Tor is active.
-    # When ``TOR_POOL_ENABLED=true`` all SC API calls (resolve + the
-    # ``/media/.../stream/{progressive,hls}`` step) are routed through
-    # a Tor exit. Some exits are silently downranked by SC at the
+    # Comma or newline separated httpx ``proxy=`` URLs (http://, https://,
+    # socks5://, …). SoundCloud, Bandcamp, internal SC CDN proxy pick one
+    # via round-robin. Filled list wins over Tor; do not enable Tor pool
+    # at the same time (model validator rejects).
+    outbound_static_proxy_urls: str = ""
+    outbound_static_proxy_max_urls: int = 64
+
+    # SoundCloud transcoding-manifest fallback when outbound proxy
+    # (Tor pool or ``OUTBOUND_STATIC_PROXY_URLS``) is active.
+    # All SC API calls (resolve + the
+    # ``/media/.../stream/{progressive,hls}`` step) use that egress.
+    # Some Tor exits are silently downranked by SC at the
     # transcoding-manifest level: ``/resolve`` and our health-check
     # ``HEAD https://api.soundcloud.com`` both succeed, but every
     # transcoding ``GET`` returns ``404`` (so the user sees the
     # ``"SoundCloud stream unavailable"`` 502). When this flag is on
     # and the proxied attempt saw a 404 on every transcoding format,
     # we retry the transcoding step ONCE without a proxy. The actual
-    # CDN audio fetch already runs without Tor, so retrying just this
-    # step does not return us to the pre-Tor exposure profile.
+    # CDN audio fetch already runs without the API egress proxy, so
+    # retrying just this step does not return us to the pre-proxy
+    # exposure profile.
     sc_stream_fallback_direct_on_tor_failure: bool = True
 
     # Redis TTLs for cached stream URLs (seconds).
@@ -447,6 +456,27 @@ class AppSettings(BaseSettings):
         return [piece.strip() for piece in raw.split(",") if piece.strip()]
 
     @property
+    def outbound_static_proxy_urls_list(self) -> list[str]:
+        raw = (self.outbound_static_proxy_urls or "").strip()
+        if not raw:
+            return []
+        parts: list[str] = []
+        for line in raw.splitlines():
+            for piece in line.split(","):
+                p = piece.strip()
+                if p:
+                    parts.append(p)
+        seen: set[str] = set()
+        out: list[str] = []
+        for p in parts:
+            if p in seen:
+                continue
+            seen.add(p)
+            out.append(p)
+        cap = max(0, int(self.outbound_static_proxy_max_urls))
+        return out[:cap] if cap else out
+
+    @property
     def admin_panel_path_slug(self) -> str:
         raw = (self.admin_panel_path or "").strip().strip("/")
         if not raw:
@@ -501,6 +531,11 @@ class AppSettings(BaseSettings):
                     "list of explicit hostnames in production "
                     "(DEBUG=false). Wildcard '*' is not accepted."
                 )
+        if self.outbound_static_proxy_urls_list and self.tor_pool_enabled:
+            raise ValueError(
+                "OUTBOUND_STATIC_PROXY_URLS and TOR_POOL_ENABLED "
+                "cannot both be set; use one egress mode."
+            )
         return self
 
 

@@ -411,7 +411,7 @@ def _two_transcodings_payload() -> dict:
 @patch(f"{_MOD}.get_cached_stream", _noop_get_cached_stream)
 @patch(f"{_MOD}.soundcloud_slot", _noop_slot)
 @patch(f"{_MOD}.httpx.AsyncClient")
-@patch("app.services.tor_pool.get_outbound_proxy")
+@patch("app.services.outbound_proxy.get_outbound_proxy")
 async def test_get_stream_info_all_404_with_tor_retries_direct_succeeds(
     mock_proxy: MagicMock,
     mock_client_cls: AsyncMock,
@@ -451,7 +451,7 @@ async def test_get_stream_info_all_404_with_tor_retries_direct_succeeds(
 @patch(f"{_MOD}.get_cached_stream", _noop_get_cached_stream)
 @patch(f"{_MOD}.soundcloud_slot", _noop_slot)
 @patch(f"{_MOD}.httpx.AsyncClient")
-@patch("app.services.tor_pool.get_outbound_proxy")
+@patch("app.services.outbound_proxy.get_outbound_proxy")
 async def test_get_stream_info_all_404_with_tor_retry_direct_also_fails(
     mock_proxy: MagicMock,
     mock_client_cls: AsyncMock,
@@ -492,7 +492,7 @@ async def test_get_stream_info_all_404_with_tor_retry_direct_also_fails(
 @patch(f"{_MOD}.get_cached_stream", _noop_get_cached_stream)
 @patch(f"{_MOD}.soundcloud_slot", _noop_slot)
 @patch(f"{_MOD}.httpx.AsyncClient")
-@patch("app.services.tor_pool.get_outbound_proxy")
+@patch("app.services.outbound_proxy.get_outbound_proxy")
 async def test_get_stream_info_all_404_no_tor_does_not_retry_direct(
     mock_proxy: MagicMock,
     mock_client_cls: AsyncMock,
@@ -526,7 +526,7 @@ async def test_get_stream_info_all_404_no_tor_does_not_retry_direct(
 @patch(f"{_MOD}.get_cached_stream", _noop_get_cached_stream)
 @patch(f"{_MOD}.soundcloud_slot", _noop_slot)
 @patch(f"{_MOD}.httpx.AsyncClient")
-@patch("app.services.tor_pool.get_outbound_proxy")
+@patch("app.services.outbound_proxy.get_outbound_proxy")
 async def test_get_stream_info_all_404_with_tor_fallback_flag_off(
     mock_proxy: MagicMock,
     mock_client_cls: AsyncMock,

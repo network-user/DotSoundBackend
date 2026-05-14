@@ -39,14 +39,14 @@ from app.repositories.audio_compute import (
 from app.repositories.lyrics import LyricsRepository
 from app.services import compute_worker_service as cws
 from app.services import worker_rate_limit as rl
-from app.services.worker_job_control import (
-    merge_heartbeat_control_payload,
-)
-from app.services.tor_pool import get_outbound_proxy
 from app.services.lyrics_worker import (
     set_lyrics_progress,
     store_partial_synced,
     store_partial_text,
+)
+from app.services.outbound_proxy import get_outbound_proxy
+from app.services.worker_job_control import (
+    merge_heartbeat_control_payload,
 )
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
@@ -61,7 +61,7 @@ def _sc_cdn_proxy_headers() -> dict[str, str]:
     """Browser-like request to ``cf-media.sndcdn.com`` (CloudFront).
 
     A plain server-side GET often gets 403; these headers and the same
-    Tor/proxy as ``SoundCloudService`` help match how the stream URL
+    egress proxy as ``SoundCloudService`` help match how the stream URL
     was minted.
     """
     return {

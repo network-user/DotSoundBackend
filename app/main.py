@@ -67,6 +67,12 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         log_level=settings.log_level,
         event_loop=loop_type,
     )
+    _n_static = len(settings.outbound_static_proxy_urls_list)
+    if _n_static:
+        logger.info(
+            "outbound_static_proxies_configured",
+            count=_n_static,
+        )
     if sys.platform == "win32" and loop_type != "ProactorEventLoop":
         logger.warning(
             "incorrect_event_loop_type",

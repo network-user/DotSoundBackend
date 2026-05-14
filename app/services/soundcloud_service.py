@@ -5,13 +5,12 @@ from typing import Any
 
 import httpx
 import structlog
+from dotsound_private_core import censor_text
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from dotsound_private_core import censor_text
 
 from app.config import settings
 from app.core import s3
@@ -37,8 +36,8 @@ _SC_API_BASE = "https://api-v2.soundcloud.com"
 # cost on each call. We keep one client per outbound proxy variant
 # and let httpx pool the underlying TCP connections.
 #
-# Tor pool integration: ``get_outbound_proxy`` round-robins across
-# circuit SOCKS ports, so each circuit gets its own client — a
+# Tor pool or static ``OUTBOUND_STATIC_PROXY_URLS``: ``get_outbound_proxy``
+# round-robins; each distinct proxy URL gets its own client — a
 # fresh circuit rotation just creates one extra entry, not a full
 # new TLS handshake on every call.
 _sc_http_client_cache: dict[tuple[str | None, float], httpx.AsyncClient] = {}
@@ -155,7 +154,7 @@ class SoundCloudService:
         *,
         force_direct: bool = False,
     ) -> AsyncIterator[httpx.AsyncClient]:
-        """Yield a pooled AsyncClient routed through Tor if active.
+        """Yield a pooled AsyncClient routed through egress proxy if set.
 
         The yielded client is shared across calls — do NOT close it
         from the call site (the ``async with`` here is a no-op
@@ -163,12 +162,12 @@ class SoundCloudService:
         Process-wide shutdown is handled by
         :func:`close_sc_http_clients`.
 
-        ``force_direct=True`` bypasses the Tor pool for this call.
+        ``force_direct=True`` bypasses Tor/static proxy for this call.
         Used as a one-shot retry for the SC transcoding-manifest step
         when every proxied attempt returns 404 — see
         ``get_stream_info``.
         """
-        from app.services.tor_pool import get_outbound_proxy
+        from app.services.outbound_proxy import get_outbound_proxy
 
         proxy: str | None = (
             None if force_direct else get_outbound_proxy("soundcloud")
@@ -648,7 +647,7 @@ class SoundCloudService:
             # and the health-check ``HEAD api.soundcloud.com`` still
             # succeed). Retry the transcoding step once without a
             # proxy when the original attempt was actually proxied.
-            from app.services.tor_pool import get_outbound_proxy
+            from app.services.outbound_proxy import get_outbound_proxy
 
             proxied = get_outbound_proxy("soundcloud") is not None
             fallback_enabled = (

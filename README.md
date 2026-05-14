@@ -94,12 +94,16 @@ poetry run python scripts/sc_id_refresher.py
 poetry run python scripts/sc_id_refresher.py --now --log-level DEBUG
 ```
 
-**Docker Compose (по желанию):** тот же демон как отдельный контейнер. Поднимается
-с профилем `sc-refresh` и пишет в смонтированный `.env` (после смены ключа
-перезапустите `backend` вручную, как и при локальном демоне).
+**Docker Compose (по желанию, dev):** тот же демон как отдельный контейнер.
+В **обычном** `docker compose up` он не стартует — включите профиль
+`sc-refresh`. В **prod** (`docker-compose.yml` + `docker-compose.prod.yml`,
+`scripts/deploy.sh`) сервис `sc_id_refresher` поднимается вместе с
+`backend`/`worker` и раз в неделю обновляет `SC_CLIENT_ID` в `.env` на
+хосте (bind-mount). После смены id перезапустите `backend`/`worker`,
+чтобы pydantic подхватил значение (или дождитесь следующего деплоя).
 
 ```bash
-# Вместе со стеком
+# Локально / dev — вместе со стеком
 docker compose --profile sc-refresh up -d
 
 # Только контейнер-обновляльщик (когда остальное уже поднято)

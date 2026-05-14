@@ -94,7 +94,7 @@ export function AdminProvider({
 
   useEffect(() => {
     if (!getIsAdmin()) return
-    if (!api.getToken()) return
+    if (!api.hasSession()) return
     if (authTick === 0) return
     const authBumped = prevAuthTickRef.current !== authTick
     prevAuthTickRef.current = authTick

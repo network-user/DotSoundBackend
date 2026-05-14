@@ -42,6 +42,7 @@
 - **Дедупликация загрузок:** двухслойная. (1) Клиентский compound-хеш (head+tail+size) — UX pre-check per-user через `POST /tracks/check-duplicate`. (2) Серверный SHA-256 источника, считается стримом в `/upload/.../complete`, прозрачно дедуплицирует кросс-юзерно. При попадании в существующий блоб транскод пропускается, трек сразу `active`.
 - **GC orphan-блобов:** ежедневный шедулер `audio-blob-orphan-gc` (миграция 0098) реконсилирует `audio_blobs` и S3-префиксы `blobs/`, `hls-blobs/`; удаляет осиротевшее старше 6 часов.
 - **Исходящий HTTP (опц.):** все внешние вызовы из PrivateCore идут через единый opaque outbound-слой (`dotsound_private_core.services.outbound`). Настраивается env-переменными `OUTBOUND_*`. Внутренние детали (транспорт, имперсонация, провайдеры) бэкенду не известны и не упоминаются в этом репо.
+- **Исходящий HTTP к SoundCloud/Bandcamp (Backend):** опционально `OUTBOUND_STATIC_PROXY_URLS` (список URL для httpx, round-robin) или локальный пул Tor (`TOR_POOL_ENABLED`); одновременно нельзя — см. `app/services/outbound_proxy.py`, `app/config.py`.
 - **Аутентификация:** JWT + Telegram HMAC + Email (magic link) + TOTP 2FA
 - **Real-time:** WebSocket (Redis Pub/Sub), присутствие, typing indicators
 - **Фронтенд:** React 18 + TypeScript + Vite, CSS custom properties (без Tailwind)

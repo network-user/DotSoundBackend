@@ -26,6 +26,12 @@ services:
     ports: !reset []
     volumes: !reset []
 
+  # Парсит SC_CLIENT_ID с soundcloud.com раз в неделю и пишет в .env на
+  # хосте (bind-mount из базового compose). Профиль sc-refresh снят,
+  # чтобы сервис поднимался вместе с prod-стеком и deploy.sh.
+  sc_id_refresher:
+    profiles: !reset []
+
   worker:
     volumes: !reset []
 

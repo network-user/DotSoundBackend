@@ -12,6 +12,8 @@ _REQUIRED_ENV = {
     "MINIO_SECRET_KEY": "minioadmin",
     "MINIO_BUCKET": "test-bucket",
     "INTERNAL_API_ALLOWED_CIDRS": "10.0.0.0/8",
+    "JWT_SECRET": "unit-test-jwt-secret-not-for-prod",
+    "DEBUG": "true",
 }
 
 
@@ -90,7 +92,7 @@ def test_default_values(
     cfg = _make_settings(monkeypatch)
 
     assert cfg.jwt_expire_days == 7
-    assert cfg.debug is False
+    assert cfg.debug is True
     assert cfg.allowed_origins == "*"
     assert cfg.log_level == "INFO"
     assert cfg.complaint_threshold == 3
@@ -140,6 +142,34 @@ def test_env_overrides_defaults(
     assert cfg.debug is True
     assert cfg.log_level == "DEBUG"
     assert cfg.log_third_party_level == "ERROR"
+
+
+def test_outbound_static_proxy_urls_list_parses_mixed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _make_settings(
+        monkeypatch,
+        OUTBOUND_STATIC_PROXY_URLS=(
+            "http://a:1 , socks5://b:2\n"
+            "http://c:3,,http://a:1"
+        ),
+    )
+    assert cfg.outbound_static_proxy_urls_list == [
+        "http://a:1",
+        "socks5://b:2",
+        "http://c:3",
+    ]
+
+
+def test_outbound_static_proxy_urls_rejects_tor_pool_together(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with pytest.raises(ValueError, match="egress mode"):
+        _make_settings(
+            monkeypatch,
+            OUTBOUND_STATIC_PROXY_URLS="http://127.0.0.1:9",
+            TOR_POOL_ENABLED="true",
+        )
 
 
 def test_allowed_origins_wildcard_default(

@@ -4,7 +4,9 @@
 # Idempotent: safe to re-run. Pulls latest sibling-repo code, rebuilds
 # changed images, runs Alembic migrations against the live database,
 # then rolls all app services. Postgres / Redis / MinIO / Elasticsearch
-# are NOT recreated unless their compose definition changed.
+# are NOT recreated unless their compose definition changed. The
+# sc_id_refresher sidecar (SoundCloud client_id → .env weekly) is
+# started with backend/worker on prod (see docker-compose.prod.yml).
 #
 # Layout expected on the server:
 #   /opt/dotsound/DotSoundBackend       (this repo, cwd)
@@ -96,7 +98,8 @@ case "${MODE}" in
     run_migrations
 
     log "Rolling app services"
-    "${COMPOSE[@]}" up -d backend worker frontend caddy bot
+    "${COMPOSE[@]}" up -d \
+      backend worker frontend caddy bot sc_id_refresher
     if [ "${OBSERVABILITY:-0}" = "1" ]; then
       log "Starting observability stack"
       "${COMPOSE[@]}" up -d \
@@ -110,7 +113,8 @@ case "${MODE}" in
     "${COMPOSE[@]}" up -d postgres redis minio elasticsearch
     wait_for_postgres
     run_migrations
-    "${COMPOSE[@]}" up -d backend worker frontend caddy bot
+    "${COMPOSE[@]}" up -d \
+      backend worker frontend caddy bot sc_id_refresher
     if [ "${OBSERVABILITY:-0}" = "1" ]; then
       log "Starting observability stack"
       "${COMPOSE[@]}" up -d \
@@ -121,11 +125,11 @@ case "${MODE}" in
   only-backend)
     pull_repo DotSoundBackend
     pull_repo DotSoundPrivateCore
-    "${COMPOSE[@]}" build backend worker
+    "${COMPOSE[@]}" build backend worker sc_id_refresher
     "${COMPOSE[@]}" up -d postgres redis minio elasticsearch
     wait_for_postgres
     run_migrations
-    "${COMPOSE[@]}" up -d backend worker
+    "${COMPOSE[@]}" up -d backend worker sc_id_refresher
     ;;
 
   only-bot)

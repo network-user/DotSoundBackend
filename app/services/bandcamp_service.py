@@ -114,8 +114,8 @@ class BandcampService:
     def _bc_client(
         self, timeout: float = 15, **kwargs: object
     ) -> httpx.AsyncClient:
-        """Return an AsyncClient routed through Tor if the pool is active."""
-        from app.services.tor_pool import get_outbound_proxy
+        """Return an AsyncClient routed through egress proxy if configured."""
+        from app.services.outbound_proxy import get_outbound_proxy
 
         proxy = get_outbound_proxy("bandcamp")
         return httpx.AsyncClient(timeout=timeout, proxy=proxy, **kwargs)  # type: ignore[arg-type]

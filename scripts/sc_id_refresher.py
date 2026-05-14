@@ -49,8 +49,10 @@ _SC_HOME = "https://soundcloud.com/"
 _RE_SCRIPT_URL = re.compile(
     r'src="(https://a-v2\.sndcdn\.com/assets/[^"]+\.js)"'
 )
-# Ищем client_id:"<value>" в JS-бандле
-_RE_CLIENT_ID = re.compile(r'client_id:"([a-zA-Z0-9_-]+)"')
+_RE_CLIENT_IDS = (
+    re.compile(r'client_id:"([a-zA-Z0-9_-]+)"'),
+    re.compile(r"client_id:'([a-zA-Z0-9_-]+)'"),
+)
 
 _HEADERS: dict[str, str] = {
     "User-Agent": (
@@ -89,8 +91,11 @@ async def _find_client_id_in_bundle(
     except httpx.HTTPStatusError:
         logger.warning("sc_bundle_fetch_failed", url=url)
         return None
-    match = _RE_CLIENT_ID.search(response.text)
-    return match.group(1) if match else None
+    for pat in _RE_CLIENT_IDS:
+        match = pat.search(response.text)
+        if match:
+            return match.group(1)
+    return None
 
 
 async def scrape_client_id() -> str | None:

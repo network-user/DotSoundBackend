@@ -385,24 +385,20 @@ export function App() {
               !res.requires_2fa
             ) {
               connectWS(res.access_token)
+              authenticated = true
               markAuthSuccess()
               setNeedsAuth(false)
               trackActivationEvent('auth_success', {
                 once: true,
                 meta: { via: 'magic_link' },
               })
-              api.setOnUnauthorized(() => {
-                disconnectWS()
-                setNeedsAuth(true)
-              })
-              return
             }
           } catch {
             // fall through
           }
         }
 
-        if (hasTelegramContext) {
+        if (hasTelegramContext && !authenticated) {
           try {
             const authRes =
               await api.authTelegram(initData)

@@ -73,14 +73,6 @@ def _set_tor_pool(pool: TorPool | None) -> None:
     _tor_pool = pool
 
 
-def get_outbound_proxy(service: str = "") -> str | None:
-    """Return a Tor SOCKS5 proxy URL for the given service, or None."""
-    pool = get_tor_pool()
-    if pool is None:
-        return None
-    return pool.get_proxy(service)
-
-
 def _tbb_nest_parts(executable: str) -> tuple[str, ...]:
     return (
         "Tor Browser",
