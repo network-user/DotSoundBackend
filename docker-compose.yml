@@ -186,7 +186,8 @@ services:
 
   # Периодически парсит актуальный client_id с SoundCloud и пишет в
   # .env (раз в неделю; см. scripts/sc_id_refresher.py). Профиль sc-refresh
-  # не подключается при обычном `docker compose up` — контейнер включай явно.
+  # для локального `docker compose up` без профилей — контейнер не стартует.
+  # В prod docker-compose.prod.yml снимает профиль; deploy.sh поднимает сервис.
   clamav:
     image: clamav/clamav:stable
     restart: unless-stopped
@@ -248,6 +249,7 @@ services:
     env_file:
       - ../DotSoundBot/.env
     environment:
+      INTERNAL_API_HOST: 0.0.0.0
       REDIS_URL: redis://redis:6379/1
       BACKEND_BASE_URL: http://backend:8000
     depends_on:

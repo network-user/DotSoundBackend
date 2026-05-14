@@ -32,7 +32,8 @@ RUN poetry lock --no-update && poetry install --no-interaction --no-ansi --no-ro
 
 # PrivateCore runtime extras are installed separately so they never appear
 # in the backend's declarative dependency graph.
-RUN pip install --no-cache-dir "/DotSoundPrivateCore[ml]"
+RUN pip install --no-cache-dir \
+    "/DotSoundPrivateCore[ml,outbound,scanners,proxies]"
 
 COPY DotSoundBackend/. .
 RUN poetry install --no-interaction --no-ansi

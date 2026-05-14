@@ -12,6 +12,38 @@
 - `[x]` - завершено
 - `[-]` - отменено / неактуально
 
+- [x] **Импорт Telegram / Yandex: Docker internal API + outbound extras (2026-05-14)**
+  — Telegram: backend бьётся в ``BOT_INTERNAL_URL``; бот по умолчанию
+  слушал internal API только на ``127.0.0.1`` — из контейнера backend
+  connection refused / «All connection attempts failed». В
+  ``docker-compose.yml`` для сервиса ``bot`` задан
+  ``INTERNAL_API_HOST=0.0.0.0``; в ``.env.example`` и ``PRODUCTION.md``
+  задокументированы ``BOT_INTERNAL_URL=http://bot:8081`` и
+  ``INTERNAL_API_HOST`` для бота.
+  — Yandex: образ backend делал ``pip install PrivateCore[ml]`` без
+  ``outbound``/``scanners``/``proxies`` — риск неполного outbound-стека;
+  Dockerfile ставит ``[ml,outbound,scanners,proxies]``; в
+  ``pyproject.toml`` добавлен extra ``outbound`` для path-зависимости.
+  В ``PrivateCore/.env.example`` заменена устаревшая подсказка
+  ``YANDEX_MUSIC_PROXIES`` на актуальные ``OUTBOUND_*``.
+  — Сообщение ``OutboundExhaustedError`` в ``transport.py`` разделено
+  на «нет кандидатов» vs «все в карантине».
+
+- [x] **Админ SPA: боковое меню пустое (только дашборд) (2026-05-14)**
+  — `AdminProvider` грузил manifest только при `api.getToken()`; при
+  cookie-сессии и гонке с `app-auth-ready` токен в памяти мог быть ещё
+  `null`, хотя `api.hasSession()` уже true — меню из `useAdminMenu()`
+  оставалось пустым. Заменена проверка на `api.hasSession()`.
+  — Вход по magic link делал `return` до общего блока init, из-за чего
+  не диспатчился `app-auth-ready` (и снова пустое меню). Magic link
+  теперь выставляет `authenticated` и не прерывает init; Telegram-auth
+  не дёргается, если magic link уже аутентифицировал.
+
+- [x] **Prod: автозапуск sc_id_refresher (2026-05-14)**
+  — `docker-compose.prod.yml` снимает профиль `sc-refresh` с сервиса
+  `sc_id_refresher`; `scripts/deploy.sh` добавляет его в `up -d` для
+  full / skip-pull / only-backend и в `build` для only-backend.
+
 - [ ] **Убрать временный admin escape hatch в онбординге**
   — На welcome-шаге `OnboardingV2` есть кнопка «Пропустить онбординг
   (admin)», видимая только при `getIsAdmin()`. Нужна, потому что на
@@ -1482,7 +1514,9 @@
 
 - Система бэкапов: PostgreSQL + Redis + configs (локально)
 - Система логирования: JSON structlog + Docker log rotation (тонкая настройка: `REDACT_LOGS`, `REDACT_LOG_IDENTIFIERS`, `LOG_THIRD_PARTY_LEVEL`)
-- Outbound Tor pool: по умолчанию выкл., `TOR_POOL_ENABLED=true` - opt-in
+- Outbound Tor pool: по умолчанию выкл., `TOR_POOL_ENABLED=true` — opt-in;
+  альтернатива: `OUTBOUND_STATIC_PROXY_URLS` (список URL httpx, RR) —
+  вместе с Tor не включаются (`app/services/outbound_proxy.py`).
 - Taskiq worker: graceful shutdown (`WORKER_SHUTDOWN`: cancel `import_queue_dispatcher` / `lyrics_global_orchestrator` background tasks, `close_es` в воркере) - 2026-04
 - Docker Compose `worker` service: taskiq modules aligned with root `main.py` (imports, lyrics queue, snippets) - 2026-04
 - SoundCloud `get_stream_info`: progressive manifest 404 - try HLS transcoding before 502; other upstream HTTP errors - 502 - 2026-04-29
