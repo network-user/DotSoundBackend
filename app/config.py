@@ -18,6 +18,11 @@ class AppSettings(BaseSettings):
     minio_secret_key: str
     minio_bucket: str
     minio_use_ssl: bool = False
+    # Public-facing endpoint used ONLY when generating presigned URLs
+    # that the browser will follow (e.g. media.<DOMAIN>). Leave empty to
+    # reuse `minio_endpoint` for both internal ops and presigning.
+    minio_public_endpoint: str = ""
+    minio_public_use_ssl: bool = True
     log_level: str = "INFO"
     # Uvicorn root uses ``LOG_LEVEL``. This caps noisy third-party
     # loggers (Elasticsearch transport, urllib3, httpx, …). Use DEBUG

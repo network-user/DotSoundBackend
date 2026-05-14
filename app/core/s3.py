@@ -93,9 +93,28 @@ _COVER_EXT_MAP = {
 
 
 @asynccontextmanager
-async def get_s3_client() -> AsyncGenerator[Any, None]:
-    protocol = "https" if settings.minio_use_ssl else "http"
-    endpoint = f"{protocol}://{settings.minio_endpoint}"
+async def get_s3_client(
+    *, for_presign: bool = False
+) -> AsyncGenerator[Any, None]:
+    """S3/MinIO client.
+
+    When *for_presign* is True, the client is constructed against the
+    public-facing endpoint (`minio_public_endpoint` + `minio_public_use_ssl`)
+    so that any URL it generates (e.g. via `generate_presigned_url`) is
+    reachable from a browser. Falls back to the internal endpoint when
+    no public one is configured.
+
+    For all I/O (head_bucket, put_object, get_object, …) call without
+    arguments to keep traffic on the internal docker network.
+    """
+    use_public = for_presign and bool(settings.minio_public_endpoint)
+    if use_public:
+        host = settings.minio_public_endpoint
+        protocol = "https" if settings.minio_public_use_ssl else "http"
+    else:
+        host = settings.minio_endpoint
+        protocol = "https" if settings.minio_use_ssl else "http"
+    endpoint = f"{protocol}://{host}"
     async with _session.client(
         "s3",
         endpoint_url=endpoint,
@@ -133,7 +152,7 @@ async def upload_audio(
 
 async def get_presigned_url(file_key: str) -> str:
     logger.debug("s3_presign_requested", file_key=file_key)
-    async with get_s3_client() as s3:
+    async with get_s3_client(for_presign=True) as s3:
         url: str = await s3.generate_presigned_url(
             "get_object",
             Params={
