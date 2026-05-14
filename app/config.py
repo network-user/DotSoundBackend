@@ -174,6 +174,20 @@ class AppSettings(BaseSettings):
     # same route unless split-tunnel excludes tor.exe.
     tor_log_outbound_public_ip: bool = False
 
+    # SoundCloud transcoding-manifest fallback when Tor is active.
+    # When ``TOR_POOL_ENABLED=true`` all SC API calls (resolve + the
+    # ``/media/.../stream/{progressive,hls}`` step) are routed through
+    # a Tor exit. Some exits are silently downranked by SC at the
+    # transcoding-manifest level: ``/resolve`` and our health-check
+    # ``HEAD https://api.soundcloud.com`` both succeed, but every
+    # transcoding ``GET`` returns ``404`` (so the user sees the
+    # ``"SoundCloud stream unavailable"`` 502). When this flag is on
+    # and the proxied attempt saw a 404 on every transcoding format,
+    # we retry the transcoding step ONCE without a proxy. The actual
+    # CDN audio fetch already runs without Tor, so retrying just this
+    # step does not return us to the pre-Tor exposure profile.
+    sc_stream_fallback_direct_on_tor_failure: bool = True
+
     # Redis TTLs for cached stream URLs (seconds).
     stream_url_cache_ttl_soundcloud: int = 3600
     stream_url_cache_ttl_bandcamp: int = 7200

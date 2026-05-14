@@ -63,6 +63,10 @@ class SoundCloudRateLimitError(Exception):
         self.retry_after = retry_after
 
 
+class _SCAllTranscodings404(Exception):
+    """Every transcoding format returned 404 for this attempt."""
+
+
 async def _maybe_enqueue_audio_cache(track_id: int) -> None:
     """Enqueue audio caching task when the feature flag is enabled."""
     if not settings.audio_caching_enabled:
@@ -146,7 +150,10 @@ class SoundCloudService:
 
     @contextlib.asynccontextmanager
     async def _sc_client(
-        self, timeout: float = 10
+        self,
+        timeout: float = 10,
+        *,
+        force_direct: bool = False,
     ) -> AsyncIterator[httpx.AsyncClient]:
         """Yield a pooled AsyncClient routed through Tor if active.
 
@@ -155,10 +162,17 @@ class SoundCloudService:
         cleanup wrapper, just to keep the existing call shape).
         Process-wide shutdown is handled by
         :func:`close_sc_http_clients`.
+
+        ``force_direct=True`` bypasses the Tor pool for this call.
+        Used as a one-shot retry for the SC transcoding-manifest step
+        when every proxied attempt returns 404 — see
+        ``get_stream_info``.
         """
         from app.services.tor_pool import get_outbound_proxy
 
-        proxy = get_outbound_proxy("soundcloud")
+        proxy: str | None = (
+            None if force_direct else get_outbound_proxy("soundcloud")
+        )
         key = (proxy, float(timeout))
         client = _sc_http_client_cache.get(key)
         if client is None or client.is_closed:
@@ -471,6 +485,115 @@ class SoundCloudService:
                 detail="SoundCloud is busy, retry later",
             ) from exc
 
+    async def _resolve_stream_via_transcodings(
+        self,
+        *,
+        transcodings: list[dict],
+        protocols_order: list[str],
+        params: dict,
+        cache_id: str,
+        force_direct: bool,
+    ) -> tuple[str, str]:
+        """Iterate transcodings and resolve a single playable URL.
+
+        Raises :class:`_SCAllTranscodings404` if every attempted format
+        returned 404 — so the caller can decide whether to retry with
+        a different egress (e.g. direct, without Tor).
+        Raises :class:`HTTPException` for non-404 upstream errors.
+        """
+        async with (
+            soundcloud_slot(
+                timeout_seconds=(
+                    settings.soundcloud_slot_acquire_timeout_seconds
+                ),
+            ),
+            self._sc_client(force_direct=force_direct) as client,
+        ):
+            attempted = False
+            saw_manifest_404 = False
+            saw_transient_network_error = False
+            for protocol in protocols_order:
+                selected = next(
+                    (
+                        t
+                        for t in transcodings
+                        if t.get("format", {}).get("protocol") == protocol
+                        and not t.get("snipped")
+                    ),
+                    None,
+                )
+                if not selected:
+                    continue
+                attempted = True
+                try:
+                    r = await client.get(selected["url"], params=params)
+                except httpx.HTTPError as exc:
+                    saw_transient_network_error = True
+                    logger.warning(
+                        "soundcloud_transcoding_network_error",
+                        protocol=protocol,
+                        error=type(exc).__name__,
+                        force_direct=force_direct,
+                    )
+                    continue
+                if r.status_code in (401, 403):
+                    raise HTTPException(
+                        status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
+                        detail=(
+                            "SoundCloud: неверный или устаревший "
+                            "SC_CLIENT_ID. Обновите в .env "
+                            "и перезапустите."
+                        ),
+                    )
+                if r.status_code == 404:
+                    saw_manifest_404 = True
+                    logger.warning(
+                        "soundcloud_transcoding_manifest_404",
+                        protocol=protocol,
+                        force_direct=force_direct,
+                    )
+                    continue
+                if not r.is_success:
+                    logger.warning(
+                        "soundcloud_transcoding_http_error",
+                        status_code=r.status_code,
+                        protocol=protocol,
+                        force_direct=force_direct,
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="SoundCloud upstream error",
+                    )
+                stream_url: str = r.json()["url"]
+                protocol_out: str = selected.get("format", {}).get(
+                    "protocol", protocol
+                )
+                await set_cached_stream(
+                    CACHE_KEY_SC,
+                    cache_id,
+                    stream_url,
+                    protocol_out,
+                    settings.stream_url_cache_ttl_soundcloud,
+                )
+                return stream_url, protocol_out
+
+            if not attempted:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="No streamable format found for this SC track",
+                )
+            if saw_transient_network_error and not saw_manifest_404:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="SoundCloud upstream temporarily unavailable",
+                )
+            if saw_manifest_404:
+                raise _SCAllTranscodings404()
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="SoundCloud stream unavailable",
+            )
+
     async def get_stream_info(
         self,
         sc_url: str,
@@ -508,98 +631,72 @@ class SoundCloudService:
             params["track_authorization"] = track_auth
 
         try:
-            async with (
-                soundcloud_slot(
-                    timeout_seconds=(
-                        settings.soundcloud_slot_acquire_timeout_seconds
-                    ),
-                ),
-                self._sc_client() as client,
-            ):
-                attempted = False
-                saw_manifest_404 = False
-                saw_transient_network_error = False
-                for protocol in protocols_order:
-                    selected = next(
-                        (
-                            t
-                            for t in transcodings
-                            if t.get("format", {}).get("protocol") == protocol
-                            and not t.get("snipped")
-                        ),
-                        None,
-                    )
-                    if not selected:
-                        continue
-                    attempted = True
-                    try:
-                        r = await client.get(selected["url"], params=params)
-                    except httpx.HTTPError as exc:
-                        saw_transient_network_error = True
-                        logger.warning(
-                            "soundcloud_transcoding_network_error",
-                            protocol=protocol,
-                            error=type(exc).__name__,
-                        )
-                        continue
-                    if r.status_code in (401, 403):
-                        raise HTTPException(
-                            status_code=(status.HTTP_503_SERVICE_UNAVAILABLE),
-                            detail=(
-                                "SoundCloud: неверный или устаревший "
-                                "SC_CLIENT_ID. Обновите в .env "
-                                "и перезапустите."
-                            ),
-                        )
-                    if r.status_code == 404:
-                        saw_manifest_404 = True
-                        logger.warning(
-                            "soundcloud_transcoding_manifest_404",
-                            protocol=protocol,
-                        )
-                        continue
-                    if not r.is_success:
-                        logger.warning(
-                            "soundcloud_transcoding_http_error",
-                            status_code=r.status_code,
-                            protocol=protocol,
-                        )
-                        raise HTTPException(
-                            status_code=status.HTTP_502_BAD_GATEWAY,
-                            detail="SoundCloud upstream error",
-                        )
-                    stream_url: str = r.json()["url"]
-                    protocol_out: str = selected.get("format", {}).get(
-                        "protocol", protocol
-                    )
-                    await set_cached_stream(
-                        CACHE_KEY_SC,
-                        cache_id,
-                        stream_url,
-                        protocol_out,
-                        settings.stream_url_cache_ttl_soundcloud,
-                    )
-                    return stream_url, protocol_out
+            try:
+                return await self._resolve_stream_via_transcodings(
+                    transcodings=transcodings,
+                    protocols_order=protocols_order,
+                    params=params,
+                    cache_id=cache_id,
+                    force_direct=False,
+                )
+            except _SCAllTranscodings404:
+                pass
 
-                if not attempted:
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail="No streamable format found for this SC track",
-                    )
-                if saw_manifest_404:
-                    logger.warning(
-                        "soundcloud_stream_unavailable_all_formats",
-                        sc_host="api-v2.soundcloud.com",
-                    )
-                if saw_transient_network_error:
-                    raise HTTPException(
-                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail=("SoundCloud upstream temporarily unavailable"),
-                    )
+            # Every proxied transcoding returned 404. SC sometimes
+            # downranks Tor exits only on the
+            # ``/media/.../stream/{progressive,hls}`` step (``/resolve``
+            # and the health-check ``HEAD api.soundcloud.com`` still
+            # succeed). Retry the transcoding step once without a
+            # proxy when the original attempt was actually proxied.
+            from app.services.tor_pool import get_outbound_proxy
+
+            proxied = get_outbound_proxy("soundcloud") is not None
+            fallback_enabled = (
+                settings.sc_stream_fallback_direct_on_tor_failure
+            )
+            if not (proxied and fallback_enabled):
+                logger.warning(
+                    "soundcloud_stream_unavailable_all_formats",
+                    sc_host="api-v2.soundcloud.com",
+                    retried_direct=False,
+                    proxied=proxied,
+                    fallback_enabled=fallback_enabled,
+                )
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail="SoundCloud stream unavailable",
                 )
+
+            logger.info(
+                "soundcloud_stream_retry_direct",
+                sc_host="api-v2.soundcloud.com",
+                reason="proxied_manifest_all_404",
+            )
+            try:
+                result = await self._resolve_stream_via_transcodings(
+                    transcodings=transcodings,
+                    protocols_order=protocols_order,
+                    params=params,
+                    cache_id=cache_id,
+                    force_direct=True,
+                )
+            except _SCAllTranscodings404:
+                logger.warning(
+                    "soundcloud_stream_unavailable_all_formats",
+                    sc_host="api-v2.soundcloud.com",
+                    retried_direct=True,
+                    retry_outcome="all_404",
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="SoundCloud stream unavailable",
+                ) from None
+            logger.info(
+                "soundcloud_stream_retry_direct_succeeded",
+                sc_host="api-v2.soundcloud.com",
+                protocol=result[1],
+            )
+            return result
         except SoundCloudSemaphoreTimeout as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

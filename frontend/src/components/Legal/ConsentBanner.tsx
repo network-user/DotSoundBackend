@@ -6,6 +6,7 @@ import {
   hasAbuseConsent,
   setAbuseConsent,
 } from '@/lib/clientSignals'
+import { usePlayerMeta } from '@/store/PlayerContext'
 
 const COOKIE_KEY = 'cookie_notice_dismissed'
 const COOKIE_VALUE = 'v1'
@@ -39,6 +40,7 @@ function persistCookieFlag(): void {
  */
 export function ConsentBanner() {
   const { t } = useTranslation()
+  const { track } = usePlayerMeta()
   const [decided, setDecided] = useState(true)
 
   useEffect(() => {
@@ -53,9 +55,13 @@ export function ConsentBanner() {
     setDecided(true)
   }
 
+  const className = track
+    ? 'consent-banner consent-banner--with-player'
+    : 'consent-banner'
+
   return (
     <div
-      className="consent-banner"
+      className={className}
       role="dialog"
       aria-modal="false"
       aria-labelledby="consent-banner-title"

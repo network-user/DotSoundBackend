@@ -1,3 +1,5 @@
+import contextlib
+from collections.abc import AsyncIterator
 from unittest import mock
 from unittest.mock import (
     AsyncMock,
@@ -17,6 +19,20 @@ from app.services.soundcloud_service import (
     normalize_soundcloud_permalink,
     synthetic_soundcloud_id_for_artist_station,
 )
+
+
+@contextlib.asynccontextmanager
+async def _noop_slot(*_args: object, **_kwargs: object) -> AsyncIterator[None]:
+    yield
+
+
+async def _noop_get_cached_stream(*_args: object, **_kwargs: object) -> None:
+    return None
+
+
+async def _noop_set_cached_stream(*_args: object, **_kwargs: object) -> None:
+    return None
+
 
 pytestmark = pytest.mark.anyio
 
@@ -359,6 +375,191 @@ async def test_get_stream_url(
     url = await svc.get_stream_url("https://sc.com/y-get-stream-url")
 
     assert url == "https://cdn/audio.mp3"
+
+
+def _make_resp(status_code: int, json_body: dict | None = None) -> MagicMock:
+    r = MagicMock()
+    r.status_code = status_code
+    r.is_success = 200 <= status_code < 300
+    r.raise_for_status = MagicMock()
+    if json_body is not None:
+        r.json.return_value = json_body
+    return r
+
+
+def _two_transcodings_payload() -> dict:
+    return {
+        "media": {
+            "transcodings": [
+                {
+                    "url": "https://api/prog",
+                    "format": {"protocol": "progressive"},
+                    "snipped": False,
+                },
+                {
+                    "url": "https://api/hls",
+                    "format": {"protocol": "hls"},
+                    "snipped": False,
+                },
+            ]
+        },
+        "track_authorization": "auth",
+    }
+
+
+@patch(f"{_MOD}.set_cached_stream", _noop_set_cached_stream)
+@patch(f"{_MOD}.get_cached_stream", _noop_get_cached_stream)
+@patch(f"{_MOD}.soundcloud_slot", _noop_slot)
+@patch(f"{_MOD}.httpx.AsyncClient")
+@patch("app.services.tor_pool.get_outbound_proxy")
+async def test_get_stream_info_all_404_with_tor_retries_direct_succeeds(
+    mock_proxy: MagicMock,
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_proxy.return_value = "socks5://127.0.0.1:9050"
+
+    resolve_resp = _make_resp(200, _two_transcodings_payload())
+    prog_404 = _make_resp(404)
+    hls_404 = _make_resp(404)
+    prog_ok = _make_resp(200, {"url": "https://cdn/audio.mp3"})
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        side_effect=[resolve_resp, prog_404, hls_404, prog_ok],
+    )
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    url, protocol = await svc.get_stream_info(
+        "https://sc.com/x-tor-retry-direct",
+    )
+
+    assert url == "https://cdn/audio.mp3"
+    assert protocol == "progressive"
+
+    proxies_used = [
+        c.kwargs.get("proxy") for c in mock_client_cls.call_args_list
+    ]
+    assert "socks5://127.0.0.1:9050" in proxies_used
+    assert None in proxies_used
+
+
+@patch(f"{_MOD}.set_cached_stream", _noop_set_cached_stream)
+@patch(f"{_MOD}.get_cached_stream", _noop_get_cached_stream)
+@patch(f"{_MOD}.soundcloud_slot", _noop_slot)
+@patch(f"{_MOD}.httpx.AsyncClient")
+@patch("app.services.tor_pool.get_outbound_proxy")
+async def test_get_stream_info_all_404_with_tor_retry_direct_also_fails(
+    mock_proxy: MagicMock,
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_proxy.return_value = "socks5://127.0.0.1:9050"
+
+    resolve_resp = _make_resp(200, _two_transcodings_payload())
+    prog_404 = _make_resp(404)
+    hls_404 = _make_resp(404)
+    prog_404_direct = _make_resp(404)
+    hls_404_direct = _make_resp(404)
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        side_effect=[
+            resolve_resp,
+            prog_404,
+            hls_404,
+            prog_404_direct,
+            hls_404_direct,
+        ],
+    )
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.get_stream_info("https://sc.com/x-tor-retry-direct-fails")
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail == "SoundCloud stream unavailable"
+
+
+@patch(f"{_MOD}.set_cached_stream", _noop_set_cached_stream)
+@patch(f"{_MOD}.get_cached_stream", _noop_get_cached_stream)
+@patch(f"{_MOD}.soundcloud_slot", _noop_slot)
+@patch(f"{_MOD}.httpx.AsyncClient")
+@patch("app.services.tor_pool.get_outbound_proxy")
+async def test_get_stream_info_all_404_no_tor_does_not_retry_direct(
+    mock_proxy: MagicMock,
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_proxy.return_value = None
+
+    resolve_resp = _make_resp(200, _two_transcodings_payload())
+    prog_404 = _make_resp(404)
+    hls_404 = _make_resp(404)
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        side_effect=[resolve_resp, prog_404, hls_404],
+    )
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+
+    with pytest.raises(HTTPException) as exc:
+        await svc.get_stream_info("https://sc.com/x-no-tor-no-retry")
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail == "SoundCloud stream unavailable"
+    assert mock_client.get.await_count == 3
+
+
+@patch(f"{_MOD}.set_cached_stream", _noop_set_cached_stream)
+@patch(f"{_MOD}.get_cached_stream", _noop_get_cached_stream)
+@patch(f"{_MOD}.soundcloud_slot", _noop_slot)
+@patch(f"{_MOD}.httpx.AsyncClient")
+@patch("app.services.tor_pool.get_outbound_proxy")
+async def test_get_stream_info_all_404_with_tor_fallback_flag_off(
+    mock_proxy: MagicMock,
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_proxy.return_value = "socks5://127.0.0.1:9050"
+
+    resolve_resp = _make_resp(200, _two_transcodings_payload())
+    prog_404 = _make_resp(404)
+    hls_404 = _make_resp(404)
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        side_effect=[resolve_resp, prog_404, hls_404],
+    )
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+
+    with (
+        patch(
+            f"{_MOD}.settings.sc_stream_fallback_direct_on_tor_failure",
+            False,
+        ),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await svc.get_stream_info("https://sc.com/x-flag-off")
+
+    assert exc.value.status_code == 502
+    assert exc.value.detail == "SoundCloud stream unavailable"
+    assert mock_client.get.await_count == 3
 
 
 @patch(f"{_MOD}.httpx.AsyncClient")

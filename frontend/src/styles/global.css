@@ -11161,13 +11161,33 @@ html.ds-low-glass .tcs-sheet {
 
 .consent-banner {
   position: fixed;
-  z-index: 166;
+  z-index: 200;
   right: max(12px, env(safe-area-inset-right, 0px));
-  bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  bottom: calc(
+    var(--nav-h, 60px) + 12px +
+      env(safe-area-inset-bottom, 0px)
+  );
   left: auto;
   width: min(400px, calc(100vw - 24px));
   max-width: 400px;
+  max-height: calc(
+    100dvh - var(--nav-h, 60px) -
+      env(safe-area-inset-bottom, 0px) -
+      env(safe-area-inset-top, 0px) - 24px
+  );
   pointer-events: none;
+}
+.consent-banner--with-player {
+  bottom: calc(
+    var(--nav-h, 60px) + var(--player-h, 80px) + 12px +
+      env(safe-area-inset-bottom, 0px)
+  );
+  max-height: calc(
+    100dvh - var(--nav-h, 60px) -
+      var(--player-h, 80px) -
+      env(safe-area-inset-bottom, 0px) -
+      env(safe-area-inset-top, 0px) - 24px
+  );
 }
 .consent-banner__shell {
   pointer-events: auto;
@@ -11181,6 +11201,9 @@ html.ds-low-glass .tcs-sheet {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  max-height: inherit;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .consent-banner__title {
   margin: 0;
@@ -11317,9 +11340,19 @@ html.ds-low-glass .tcs-sheet {
 @media (max-width: 380px) {
   .consent-banner {
     right: max(10px, env(safe-area-inset-right, 0px));
-    bottom: max(10px, env(safe-area-inset-bottom, 0px));
-    width: calc(100vw - 20px);
+    left: max(10px, env(safe-area-inset-left, 0px));
+    bottom: calc(
+      var(--nav-h, 60px) + 10px +
+        env(safe-area-inset-bottom, 0px)
+    );
+    width: auto;
     max-width: none;
+  }
+  .consent-banner--with-player {
+    bottom: calc(
+      var(--nav-h, 60px) + var(--player-h, 80px) + 10px +
+        env(safe-area-inset-bottom, 0px)
+    );
   }
   .consent-banner__actions {
     flex-direction: column;
