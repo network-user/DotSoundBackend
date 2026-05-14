@@ -1,0 +1,37 @@
+# Production overlay for the observability stack.
+#
+# - Binds Grafana / cAdvisor to 127.0.0.1 so they are reachable only
+#   from the host (use SSH tunnel:  ssh -L 3001:127.0.0.1:3001 user@server).
+# - Closes Prometheus / Loki / Tempo to host completely: they are
+#   reachable only over the internal `dotsound` docker network.
+# - Overrides the `external: true` declaration from the base
+#   observability file so the stack joins the main compose project's
+#   network rather than expecting a pre-existing one.
+
+services:
+  prometheus:
+    ports: !reset []
+
+  loki:
+    ports: !reset []
+
+  tempo:
+    ports: !reset []
+
+  cadvisor:
+    ports: !override
+      - "127.0.0.1:8082:8080"
+
+  grafana:
+    ports: !override
+      - "127.0.0.1:3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
+
+networks:
+  dotsound:
+    external: false
+    driver: bridge

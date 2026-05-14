@@ -19,6 +19,11 @@
 #   ./scripts/deploy.sh only-backend   # rebuild only backend+worker
 #   ./scripts/deploy.sh only-bot       # rebuild only bot
 #   ./scripts/deploy.sh only-frontend  # rebuild only frontend+caddy
+#
+# Optional observability stack (Prometheus / Loki / Tempo / Grafana /
+# Promtail / OTEL collector / cAdvisor):
+#   OBSERVABILITY=1 ./scripts/deploy.sh full
+#   OBSERVABILITY=1 ./scripts/deploy.sh skip-pull
 
 set -euo pipefail
 
@@ -28,6 +33,16 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PARENT_DIR="$(cd "${REPO_ROOT}/.." && pwd)"
 
 COMPOSE_FILES=(-f docker-compose.yml -f docker-compose.prod.yml)
+
+# Optional observability stack (Prometheus / Loki / Tempo / Grafana /
+# Promtail / OTEL / cAdvisor). Enable by exporting OBSERVABILITY=1
+# before invoking this script:
+#   OBSERVABILITY=1 ./scripts/deploy.sh full
+if [ "${OBSERVABILITY:-0}" = "1" ]; then
+  COMPOSE_FILES+=(-f docker-compose.observability.yml)
+  COMPOSE_FILES+=(-f docker-compose.observability.prod.yml)
+fi
+
 COMPOSE=(docker compose "${COMPOSE_FILES[@]}")
 
 log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
@@ -82,6 +97,11 @@ case "${MODE}" in
 
     log "Rolling app services"
     "${COMPOSE[@]}" up -d backend worker frontend caddy bot
+    if [ "${OBSERVABILITY:-0}" = "1" ]; then
+      log "Starting observability stack"
+      "${COMPOSE[@]}" up -d \
+        prometheus loki promtail tempo otel-collector cadvisor grafana
+    fi
     ;;
 
   skip-pull)
@@ -91,6 +111,11 @@ case "${MODE}" in
     wait_for_postgres
     run_migrations
     "${COMPOSE[@]}" up -d backend worker frontend caddy bot
+    if [ "${OBSERVABILITY:-0}" = "1" ]; then
+      log "Starting observability stack"
+      "${COMPOSE[@]}" up -d \
+        prometheus loki promtail tempo otel-collector cadvisor grafana
+    fi
     ;;
 
   only-backend)

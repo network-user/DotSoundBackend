@@ -122,4 +122,4 @@ volumes:
 
 networks:
   dotsound:
-    external: true
+    driver: bridge
