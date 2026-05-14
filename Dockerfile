@@ -13,7 +13,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     curl \
     libmagic1 \
+    tor \
     && rm -rf /var/lib/apt/lists/*
+
+# `tor` package starts a system service by default. We don't want
+# that — the backend manages its own pool via stem, on per-instance
+# data dirs. Disable the system service so it doesn't conflict.
+RUN if [ -f /etc/init.d/tor ]; then update-rc.d -f tor remove || true; fi
 
 RUN curl -sSL https://install.python-poetry.org | python3 -
 
