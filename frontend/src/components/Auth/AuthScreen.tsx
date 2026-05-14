@@ -148,6 +148,32 @@ export function AuthScreen({
       )
       return
     }
+    // Persist the "waiting for code" state in the URL BEFORE we
+    // attempt to navigate. On mobile browsers and when popups are
+    // blocked, `window.open(_, '_blank')` can navigate the current
+    // tab to `t.me/<bot>` instead of opening a new one — and on
+    // return / reload we'd land back on the choose screen without
+    // any way to reach the code-entry form. With `?auth=code` in
+    // the URL, AuthScreen re-initializes directly on TelegramAuth
+    // with step='code'.
+    try {
+      const params = new URLSearchParams(
+        window.location.search,
+      )
+      params.set('auth', 'code')
+      const newSearch = params.toString()
+      const newUrl =
+        window.location.pathname +
+        (newSearch ? `?${newSearch}` : '') +
+        window.location.hash
+      window.history.replaceState({}, '', newUrl)
+    } catch {
+      /* ignore */
+    }
+    // Switch React state first so the user sees the code-entry UI
+    // even if the new tab fails to open / steals focus.
+    setTelegramStartStep('code')
+    setMethod('telegram')
     // Open the bot synchronously inside the click handler so the
     // browser keeps user-activation for window.open. Doing this in
     // TelegramAuth (after a state transition) is what forced the
@@ -159,8 +185,6 @@ export function AuthScreen({
       'noopener,noreferrer',
     )
     setPopupBlocked(!opened)
-    setTelegramStartStep('code')
-    setMethod('telegram')
   }
 
   if (method === 'telegram') {

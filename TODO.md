@@ -21,6 +21,23 @@
   блок и его handler в `frontend/src/components/Onboarding/OnboardingV2.tsx`
   (метка `TEMPORARY: admin escape hatch`).
 
+- [x] **Web-логин через Telegram: `?auth=code` в URL для устойчивости (2026-05-14)**
+  — `AuthScreen.handleTelegramClick` и `TelegramAuth.handleOpenBot`
+  делали только `window.open('https://t.me/<bot>?start=web_login',
+  '_blank')` + `setMethod('telegram')` / `setStep('code')` в React-state.
+  На мобильных браузерах и при включённом popup blocker `_blank`
+  часто открывается в текущей вкладке, либо `t.me` перехватывается
+  установленным Telegram-клиентом — итоговая вкладка возвращается
+  на `/mini_app/` без `?auth=code` и `AuthScreen` стартует на
+  шаге `choose`. Юзер бесконечно жмёт кнопку, поле для ввода кода
+  никогда не показывается. Фикс: перед `window.open` пишем
+  `?auth=code` в URL через `history.replaceState`. AuthScreen на
+  mount читает `params.get('auth') === 'code'` и стартует в
+  `method='telegram'` / `step='code'`. На кнопке «Назад» и после
+  успешной `verifyTelegramCode` query чистится обратно. Файлы:
+  `frontend/src/components/Auth/AuthScreen.tsx`,
+  `frontend/src/components/Auth/TelegramAuth.tsx`.
+
 - [x] **Telegram Mini App: онбординг/reset/activation 403 на мобиле (2026-05-14)**
   — После перехода SPA на cookie-based session с double-submit CSRF
   (`b2ace93`) на iOS/Android Telegram WebView cookie `ds_csrf` не

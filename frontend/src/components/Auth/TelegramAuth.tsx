@@ -124,6 +124,25 @@ export function TelegramAuth({
       )
       return
     }
+    // Persist `?auth=code` in the URL so a reload / back-navigation
+    // (e.g. after a mobile browser routed `t.me/<bot>` through the
+    // current tab) restores the code-entry step instead of bouncing
+    // the user back to the welcome screen.
+    try {
+      const params = new URLSearchParams(
+        window.location.search,
+      )
+      params.set('auth', 'code')
+      const newSearch = params.toString()
+      const newUrl =
+        window.location.pathname +
+        (newSearch ? `?${newSearch}` : '') +
+        window.location.hash
+      window.history.replaceState({}, '', newUrl)
+    } catch {
+      /* ignore */
+    }
+    setStep('code')
     const url = botOpenUrl
     const opened = window.open(
       url,
@@ -131,7 +150,6 @@ export function TelegramAuth({
       'noopener,noreferrer',
     )
     setPopupBlocked(!opened)
-    setStep('code')
   }
 
   const handleVerifyCode = async () => {
@@ -162,6 +180,22 @@ export function TelegramAuth({
         }
       }
       setStep('success')
+      try {
+        const params = new URLSearchParams(
+          window.location.search,
+        )
+        if (params.get('auth') === 'code') {
+          params.delete('auth')
+          const newSearch = params.toString()
+          const newUrl =
+            window.location.pathname +
+            (newSearch ? `?${newSearch}` : '') +
+            window.location.hash
+          window.history.replaceState({}, '', newUrl)
+        }
+      } catch {
+        /* ignore */
+      }
       successTimer.current = setTimeout(onAuth, 1500)
     } catch {
       setError('Неверный или просроченный код')
@@ -309,6 +343,26 @@ export function TelegramAuth({
                 setCode('')
                 setError('')
                 setPopupBlocked(false)
+                try {
+                  const params = new URLSearchParams(
+                    window.location.search,
+                  )
+                  if (params.get('auth') === 'code') {
+                    params.delete('auth')
+                    const newSearch = params.toString()
+                    const newUrl =
+                      window.location.pathname +
+                      (newSearch ? `?${newSearch}` : '') +
+                      window.location.hash
+                    window.history.replaceState(
+                      {},
+                      '',
+                      newUrl,
+                    )
+                  }
+                } catch {
+                  /* ignore */
+                }
               }}
             >
               Назад
