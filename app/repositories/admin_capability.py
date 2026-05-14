@@ -8,6 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.admin_capability import AdminCapability
 
 
+def _sorted_caps(caps: frozenset[str]) -> list[str]:
+    return sorted(caps)
+
+
 class AdminCapabilityRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -56,12 +60,33 @@ class AdminCapabilityRepository:
         )
         return result.scalar_one_or_none()
 
+    async def grant_all_known_if_empty(
+        self,
+        *,
+        user_id: int,
+        capabilities: frozenset[str],
+    ) -> bool:
+        if await self.list_for_user(user_id):
+            return False
+        now = datetime.now(UTC)
+        for cap in _sorted_caps(capabilities):
+            self._session.add(
+                AdminCapability(
+                    user_id=user_id,
+                    capability=cap,
+                    granted_by=None,
+                    granted_at=now,
+                )
+            )
+        await self._session.flush()
+        return True
+
     async def grant(
         self,
         *,
         user_id: int,
         capability: str,
-        granted_by: int,
+        granted_by: int | None,
     ) -> AdminCapability:
         row = AdminCapability(
             user_id=user_id,

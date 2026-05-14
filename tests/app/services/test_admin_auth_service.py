@@ -9,6 +9,9 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
+from app.repositories.admin_capability import (
+    AdminCapabilityRepository,
+)
 from app.services import admin_auth_service
 from app.services.admin_auth_service import (
     AdminAuthError,
@@ -24,6 +27,7 @@ from app.services.admin_auth_service import (
     verify_admin_login,
     verify_step_up,
 )
+from app.services.admin_manifest_service import KNOWN_CAPABILITIES
 
 pytestmark = pytest.mark.anyio
 
@@ -169,6 +173,9 @@ async def test_confirm_admin_init_happy_path(
             user.admin_totp_secret_encrypted
             is not None
         )
+        cap_repo = AdminCapabilityRepository(db_session)
+        caps = await cap_repo.list_for_user(user.id)
+        assert len(caps) == len(KNOWN_CAPABILITIES)
 
 
 async def test_confirm_admin_init_wrong_code(

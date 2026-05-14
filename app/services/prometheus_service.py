@@ -121,6 +121,15 @@ async def query_range(
         raise PrometheusServiceError("end must be after start")
     if (end - start) > 7 * 24 * 3600:
         raise PrometheusServiceError("range too wide (max 7 days)")
+    if not settings.prometheus_url:
+        metric_expr(metric)
+        return {
+            "status": "success",
+            "data": {
+                "resultType": "matrix",
+                "result": [],
+            },
+        }
     url = _ensure_url() + "/api/v1/query_range"
     params = {
         "query": metric_expr(metric),

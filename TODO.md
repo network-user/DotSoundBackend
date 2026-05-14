@@ -39,6 +39,16 @@
   теперь выставляет `authenticated` и не прерывает init; Telegram-auth
   не дёргается, если magic link уже аутентифицировал.
 
+- [x] **Админ: в сайдбаре только «Дашборд» при пустой таблице capabilities (2026-05-14)**
+  — Манифест строит меню из строк ``admin_capabilities``; без строк
+  остаётся единственный пункт с ``capability: null`` (дашборд).
+  — ``ensure_admin_capabilities_for_initialized``: для
+  ``is_admin`` + ``admin_init`` и пустого списка грантов — однократная
+  выдача всех ``KNOWN_CAPABILITIES``; вызывается из ``build_manifest``
+  и ``confirm_admin_init`` (идемпотентно).
+  — Дашборд без Prometheus: при пустом ``prometheus_url`` ``query_range``
+  возвращает пустую matrix вместо 400.
+
 - [x] **Prod: автозапуск sc_id_refresher (2026-05-14)**
   — `docker-compose.prod.yml` снимает профиль `sc-refresh` с сервиса
   `sc_id_refresher`; `scripts/deploy.sh` добавляет его в `up -d` для

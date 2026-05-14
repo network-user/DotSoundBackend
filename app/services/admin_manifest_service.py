@@ -20,6 +20,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.admin_capability import AdminCapability
 from app.models.user import User
+from app.repositories.admin_capability import (
+    AdminCapabilityRepository,
+)
 
 KNOWN_CAPABILITIES: frozenset[str] = frozenset(
     {
@@ -114,6 +117,19 @@ def _labels(locale: str) -> dict[str, str]:
     if locale.lower().startswith("ru"):
         return _LABELS_RU
     return _LABELS_EN
+
+
+async def ensure_admin_capabilities_for_initialized(
+    session: AsyncSession,
+    user: User,
+) -> None:
+    if not user.is_admin or not user.admin_init:
+        return
+    repo = AdminCapabilityRepository(session)
+    await repo.grant_all_known_if_empty(
+        user_id=user.id,
+        capabilities=KNOWN_CAPABILITIES,
+    )
 
 
 async def _effective_capabilities(
@@ -356,6 +372,7 @@ async def build_manifest(
     locale: str | None = None,
 ) -> dict:
     loc = (locale or getattr(user, "locale", None) or "ru").strip()
+    await ensure_admin_capabilities_for_initialized(session, user)
     caps = await _effective_capabilities(session, user)
 
     menu = _filter_menu(caps, loc)
@@ -381,6 +398,7 @@ async def build_manifest(
 __all__ = [
     "KNOWN_CAPABILITIES",
     "build_manifest",
+    "ensure_admin_capabilities_for_initialized",
     "sign_bundle_token",
     "verify_bundle_token",
 ]

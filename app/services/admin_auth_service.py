@@ -46,6 +46,9 @@ from app.repositories.admin_login_attempt import (
 from app.repositories.admin_session import (
     AdminSessionRepository,
 )
+from app.services.admin_manifest_service import (
+    ensure_admin_capabilities_for_initialized,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -150,6 +153,7 @@ async def confirm_admin_init(
         [hash_backup_code(c) for c in backup_codes]
     )
     await session.flush()
+    await ensure_admin_capabilities_for_initialized(session, user)
 
     devices = AdminDeviceRepository(session)
     existing = await devices.get_by_fingerprint(user.id, fp)
