@@ -70,26 +70,33 @@ function postEvent(
   name: ActivationEvent,
   meta: Record<string, string | number | boolean | null>,
 ): void {
-  try {
-    const blob = new Blob(
-      [JSON.stringify({ event: name, meta })],
-      { type: 'application/json' },
-    )
-    const sent = navigator.sendBeacon?.(
-      '/api/v1/onboarding/activation-event',
-      blob,
-    )
-    if (!sent) {
-      void fetch('/api/v1/onboarding/activation-event', {
+  // sendBeacon cannot attach custom headers (no Authorization, no
+  // X-CSRF-Token), so on cookie-flaky transports — most notably the
+  // Telegram Mini App webview on iOS/Android — the request hits the
+  // server unauthenticated and the activation endpoint returns 403.
+  // Plain fetch with `keepalive: true` survives page unload (modulo
+  // the 64 KB payload cap, which we are nowhere near) AND lets us
+  // pass the in-memory access token. Done lazily to avoid a static
+  // import cycle between activation.ts and api.ts.
+  void (async () => {
+    try {
+      const { api } = await import('@/lib/api')
+      const token = api.getToken()
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      }
+      if (token) headers.Authorization = `Bearer ${token}`
+      await fetch('/api/v1/onboarding/activation-event', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        headers,
         body: JSON.stringify({ event: name, meta }),
         keepalive: true,
-      }).catch(() => {})
+      })
+    } catch {
+      /* best-effort telemetry */
     }
-  } catch {
-    /* best-effort */
-  }
+  })()
 }
 
 export function trackActivationEvent(

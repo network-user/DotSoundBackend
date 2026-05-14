@@ -12,6 +12,38 @@
 - `[x]` - завершено
 - `[-]` - отменено / неактуально
 
+- [x] **Telegram Mini App: онбординг/reset/activation 403 на мобиле (2026-05-14)**
+  — После перехода SPA на cookie-based session с double-submit CSRF
+  (`b2ace93`) на iOS/Android Telegram WebView cookie `ds_csrf` не
+  всегда возвращается в `document.cookie`, хотя `ds_access` ставится
+  и автоматически летит в каждый POST. В результате CSRF middleware
+  видел cookie-auth, требовал `X-CSRF-Token`, не находил и резал
+  любой mutating-запрос 403-кой: `POST /onboarding/activation-event`
+  (после auth_success), `POST /onboarding/replay` (кнопка «Сбросить
+  рекомендации»), `POST /onboarding/preferences` и т.д. Онбординг
+  при этом не появлялся, потому что у уже-онбордившегося user_id=1
+  единственный путь его перезапустить — через replay, который
+  падал. Лечение: `app/middlewares/csrf.py` пропускает CSRF-проверку
+  для запросов с явным `Authorization: Bearer ...` (Bearer нельзя
+  выставить кросс-сайтом без CORS-preflight, поэтому cookie-ride
+  атака не применима). `frontend/src/lib/activation.ts` отказался
+  от `sendBeacon` в пользу `fetch(..., keepalive: true)` с Bearer:
+  beacon не умеет ставить заголовки и поэтому всегда уходил без
+  auth. `frontend/src/App.tsx` теперь скрывает `<ConsentBanner />`
+  пока идёт auth/онбординг/туториал — раньше он накрывал первый
+  экран TMA. Тесты: `tests/app/middlewares/test_csrf.py`.
+
+  Параллельно `b2ace93` отключил persisting access-токена в
+  `localStorage`, но `frontend/src/lib/chunkedUploader.ts` и
+  `frontend/src/lib/pendingEvents.ts` продолжали читать
+  `localStorage.getItem('auth-token')` для построения
+  `Authorization: Bearer ...`. После коммита они всегда получали
+  `null` и POST-запросы уходили без auth: cookie-auth-only ловила
+  CSRF middleware (403), а в TMA, где cookie ненадёжна, — сразу
+  401. Регрессия ломала загрузку треков (`/tracks/upload/...`) и
+  ретраи офлайн-плейкаунтов (IndexedDB-очередь `pendingEvents`).
+  Оба места переведены на in-memory токен `api.getToken()`.
+
 - [x] **Прод-инфраструктура: Caddy, мульти-репо CI/CD, deploy script (2026-05-13)**
   — Починен `DotSoundBot/Dockerfile`: editable PrivateCore больше не утекает в
     runtime через `pip freeze` (`--exclude-editable` в builder, `pip install

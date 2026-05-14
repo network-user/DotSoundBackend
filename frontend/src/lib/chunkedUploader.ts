@@ -14,6 +14,8 @@
  *   - AbortController support so the caller can cancel cleanly
  */
 
+import { api } from '@/lib/api'
+
 export interface UploadInitMeta {
   filename: string
   mime: string
@@ -65,13 +67,14 @@ export interface UploadOptions {
 const DEFAULT_PARALLEL = 2
 const DEFAULT_RETRIES = 4
 
-const AUTH_TOKEN_LS_KEY = 'auth-token'
-
+// The SPA no longer persists the access token in localStorage (the
+// session lives in the httpOnly ``ds_access`` cookie). We still
+// attach the in-memory bearer explicitly so upload requests work on
+// transports where the cookie is unreliable — most notably the
+// Telegram Mini App webview, and on first auth before the cookie
+// has propagated.
 function authHeaders(): HeadersInit {
-  const token =
-    typeof window !== 'undefined'
-      ? window.localStorage.getItem(AUTH_TOKEN_LS_KEY)
-      : null
+  const token = api.getToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 

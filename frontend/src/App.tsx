@@ -769,7 +769,9 @@ export function App() {
     <div id="app">
       <DynamicIslandHost />
       <OfflineBanner />
-      <ConsentBanner />
+      {!needsOnboarding && !needsAuth && !needsTutorial && (
+        <ConsentBanner />
+      )}
       {!needsOnboarding && !needsAuth && <ImportActivityBanner />}
       <main id="main">
         <ErrorBoundary>

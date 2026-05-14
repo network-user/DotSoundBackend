@@ -10,6 +10,15 @@ GET/HEAD/OPTIONS/TRACE bypass the check. The middleware exempts a
 narrow set of paths that never carry session cookies (Telegram
 WebApp login, internal pull-worker API gated by HMAC, admin auth
 init, webhook endpoints) so existing automation does not break.
+
+Requests that explicitly carry ``Authorization: Bearer ...`` also
+bypass the check. The classic CSRF threat model is "browser silently
+rides an ambient session cookie from another origin"; an explicit
+``Authorization`` header cannot be forged that way (the CORS
+preflight blocks it), so a Bearer-authenticated request is by
+construction not a CSRF. This is required for the Telegram Mini App
+webview on iOS/Android where the ``ds_csrf`` cookie does not always
+survive round-tripping through ``document.cookie``.
 """
 
 from __future__ import annotations
@@ -65,11 +74,17 @@ class CSRFMiddleware(BaseHTTPMiddleware):
             return response
 
         # Only enforce CSRF when the request actually authenticates via
-        # the session cookie. Bearer-token clients (legacy mobile, CI
-        # smoke probes) are unaffected: their session is not riding a
-        # browser cookie, so CSRF cannot apply.
+        # the session cookie. Bearer-token clients (Telegram Mini App
+        # webview, mobile clients with flaky cookie jars, CI smoke
+        # probes) are unaffected: a cross-site attacker cannot forge
+        # an ``Authorization`` header (the CORS preflight blocks it),
+        # so the cookie-ride attack model that CSRF defends against
+        # does not apply. We therefore bypass the check whenever the
+        # caller proves possession of the token explicitly.
+        auth_header = request.headers.get("authorization", "")
+        has_bearer_auth = auth_header.lower().startswith("bearer ")
         has_cookie_auth = bool(request.cookies.get("ds_access"))
-        if not has_cookie_auth:
+        if has_bearer_auth or not has_cookie_auth:
             response = await call_next(request)
             self._ensure_cookie(request, response)
             return response
@@ -96,9 +111,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         self._ensure_cookie(request, response)
         return response
 
-    def _ensure_cookie(
-        self, request: Request, response: Response
-    ) -> None:
+    def _ensure_cookie(self, request: Request, response: Response) -> None:
         if request.cookies.get(CSRF_COOKIE_NAME):
             return
         token = secrets.token_urlsafe(32)

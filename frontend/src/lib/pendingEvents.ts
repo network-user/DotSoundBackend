@@ -144,12 +144,13 @@ async function bumpAttempts(
   }
 }
 
-function getAuthHeader(): Record<string, string> {
+async function getAuthHeader(): Promise<Record<string, string>> {
   try {
-    const t = localStorage.getItem('auth-token')
-    return t
-      ? { Authorization: `Bearer ${t}` }
-      : {}
+    // Lazily import api.ts to avoid a static cycle (api.ts may
+    // schedule a flush via this module during retry handling).
+    const { api } = await import('@/lib/api')
+    const t = api.getToken()
+    return t ? { Authorization: `Bearer ${t}` } : {}
   } catch {
     return {}
   }
@@ -161,9 +162,10 @@ async function attemptSend(
   try {
     const init: RequestInit = {
       method: ev.method || 'POST',
+      credentials: 'same-origin',
       headers: {
         'Content-Type': 'application/json',
-        ...getAuthHeader(),
+        ...(await getAuthHeader()),
       },
     }
     if (ev.body && ev.body.length > 0) {
