@@ -173,19 +173,37 @@ function persistToken(_token: string | null) {
   } catch {}
 }
 
-async function readApiErrorMessage(
+export type ApiErrorDetail = Record<string, unknown>
+
+export class ApiError extends Error {
+  status: number
+  detail: ApiErrorDetail | null
+
+  constructor(
+    message: string,
+    status: number,
+    detail: ApiErrorDetail | null,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.detail = detail
+  }
+}
+
+async function readApiError(
   res: Response,
-): Promise<string> {
+): Promise<ApiError> {
   const ct = res.headers.get('content-type') || ''
   if (!ct.includes('application/json')) {
-    return String(res.status)
+    return new ApiError(String(res.status), res.status, null)
   }
   try {
     const body = (await res.json()) as {
       detail?: unknown
     }
     if (typeof body?.detail === 'string') {
-      return body.detail
+      return new ApiError(body.detail, res.status, null)
     }
     if (
       body?.detail &&
@@ -194,11 +212,12 @@ async function readApiErrorMessage(
     ) {
       const detail = body.detail as Record<string, unknown>
       if (typeof detail.message === 'string') {
-        return detail.message
+        return new ApiError(detail.message, res.status, detail)
       }
       if (typeof detail.code === 'string') {
-        return detail.code
+        return new ApiError(detail.code, res.status, detail)
       }
+      return new ApiError(String(res.status), res.status, detail)
     }
     if (Array.isArray(body?.detail)) {
       const parts: string[] = []
@@ -212,12 +231,14 @@ async function readApiErrorMessage(
           parts.push((d as { msg: string }).msg)
         }
       }
-      if (parts.length) return parts.join('; ')
+      if (parts.length) {
+        return new ApiError(parts.join('; '), res.status, null)
+      }
     }
   } catch {
     /* not JSON or partial body */
   }
-  return String(res.status)
+  return new ApiError(String(res.status), res.status, null)
 }
 
 /** API errors from `request` carry server `detail` in `message` when available. */
@@ -236,6 +257,23 @@ export function getApiErrorMessage(
     return fallback
   }
   return m
+}
+
+export function getApiErrorTelemetry(
+  err: unknown,
+): { errorCode?: string; errorReason?: string } {
+  if (!(err instanceof ApiError) || !err.detail) {
+    return {}
+  }
+  const code =
+    typeof err.detail.code === 'string'
+      ? err.detail.code
+      : undefined
+  const reason =
+    typeof err.detail.reason === 'string'
+      ? err.detail.reason
+      : undefined
+  return { errorCode: code, errorReason: reason }
 }
 
 const RETRY_STATUS = new Set([502, 503, 504])
@@ -339,8 +377,7 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
           accountBlockedFired = false
       }
       if (!res.ok) {
-        const message = await readApiErrorMessage(res)
-        throw new Error(message)
+        throw await readApiError(res)
       }
       if (res.status === 204) return null as T
       return res.json() as Promise<T>

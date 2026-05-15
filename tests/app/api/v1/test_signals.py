@@ -100,6 +100,10 @@ async def test_record_client_playback_event(
             "radio_seed_track_id": 10,
             "consecutive_skips": 3,
             "queue_size": 0,
+            "error_code": "soundcloud_stream_unavailable",
+            "error_reason": (
+                "provider_manifest_not_found_for_all_formats"
+            ),
         },
         headers=headers,
     )

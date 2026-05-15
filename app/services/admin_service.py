@@ -8,6 +8,7 @@ soft-validation on PATCHes).
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import structlog
@@ -25,6 +26,63 @@ from app.schemas.admin_playback import (
 )
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _diag_str(value: object, max_len: int) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    return cleaned[:max_len]
+
+
+def _diag_int(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    return None
+
+
+def _diag_protocols(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    protocols: list[str] = []
+    for item in value[:5]:
+        if isinstance(item, str) and item.strip():
+            protocols.append(item.strip()[:40])
+    return protocols
+
+
+def _parse_playback_detail(raw: str | None) -> dict[str, object]:
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    result: dict[str, object] = {}
+    code = _diag_str(parsed.get("code"), 96)
+    reason = _diag_str(parsed.get("reason"), 160)
+    stage = _diag_str(parsed.get("stage"), 96)
+    upstream_status = _diag_int(parsed.get("upstream_status"))
+    attempted_protocols = _diag_protocols(
+        parsed.get("attempted_protocols"),
+    )
+    if code:
+        result["playback_last_error_code"] = code
+    if reason:
+        result["playback_last_error_reason"] = reason
+    if stage:
+        result["playback_last_error_stage"] = stage
+    if upstream_status is not None:
+        result["playback_last_upstream_status"] = upstream_status
+    if attempted_protocols:
+        result["playback_last_attempted_protocols"] = attempted_protocols
+    return result
 
 
 class AdminServiceError(Exception):
@@ -112,6 +170,23 @@ class AdminService:
             size=size,
             search=search,
         )
+
+    async def get_playback_failure_diagnostics(
+        self,
+        track_ids: list[int],
+    ) -> dict[int, dict[str, object]]:
+        events = await self._repo.latest_track_playback_failure_events(
+            track_ids,
+        )
+        return {
+            track_id: parsed
+            for track_id, event in events.items()
+            if (
+                parsed := _parse_playback_detail(
+                    event.detail_truncated,
+                )
+            )
+        }
 
     async def list_track_ids_playback_suppressed(
         self,

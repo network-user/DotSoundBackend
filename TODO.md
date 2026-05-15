@@ -1,5 +1,12 @@
 # DotSound - TODO Tracker
 
+- [x] **Notification panel portal layering fix (2026-05-15)**
+  - In-app notification panel now renders through a document-level portal,
+    so sticky/profile headers and other local stacking contexts cannot cover
+    the full-screen overlay.
+  - Added regression coverage for body-level overlay placement and verified
+    the frontend production build.
+
 - [x] **SoundCloud stream diagnostics (2026-05-15)**
   - SoundCloud playback failures now return structured API diagnostics
     in `detail`: stable `code`, `reason`, `stage`, upstream status,
@@ -7,8 +14,14 @@
     type, and access mode.
   - Frontend API error parsing keeps showing the human `message` when
     backend `detail` is an object, so playback UX remains compatible.
+  - Admin Tracks playback-health cells now show the latest structured
+    failure `code`, `reason`, `stage`, upstream status, and attempted
+    protocols from `track_playback_failure_events`.
+  - Radio auto-skip exhaustion telemetry now forwards the latest client
+    playback `error_code` and `error_reason`.
   - Verified SoundCloud service regressions, the new playback API
-    diagnostics case, Ruff, and frontend production build.
+    diagnostics case, admin playback diagnostics, signals API, Ruff, and
+    frontend production build.
 
 - [x] **Profile imported track playback and bulk repair (2026-05-15)**
   - Profile “My tracks” cards now pass their list as playback context,

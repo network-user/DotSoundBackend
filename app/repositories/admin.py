@@ -17,6 +17,9 @@ from app.models.artist import TrackArtist
 from app.models.complaint import Complaint
 from app.models.lyrics import TrackLyrics
 from app.models.track import Track
+from app.models.track_playback_failure_event import (
+    TrackPlaybackFailureEvent,
+)
 from app.models.user import User
 from app.repositories.track import TrackRepository
 
@@ -261,6 +264,28 @@ class AdminRepository:
         return [int(track_id) for track_id in rows.scalars().all()], int(
             total_result.scalar_one()
         )
+
+    async def latest_track_playback_failure_events(
+        self,
+        track_ids: list[int],
+    ) -> dict[int, TrackPlaybackFailureEvent]:
+        if not track_ids:
+            return {}
+        q = (
+            select(TrackPlaybackFailureEvent)
+            .where(TrackPlaybackFailureEvent.track_id.in_(track_ids))
+            .order_by(
+                TrackPlaybackFailureEvent.track_id,
+                desc(TrackPlaybackFailureEvent.created_at),
+                desc(TrackPlaybackFailureEvent.id),
+            )
+        )
+        result = await self._session.execute(q)
+        latest: dict[int, TrackPlaybackFailureEvent] = {}
+        for event in result.scalars().all():
+            if event.track_id not in latest:
+                latest[event.track_id] = event
+        return latest
 
     async def list_tracks_for_artist(
         self,

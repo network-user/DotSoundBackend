@@ -30,3 +30,5 @@ class ClientPlaybackEventRequest(BaseModel):
     radio_seed_track_id: int | None = Field(default=None, ge=1)
     consecutive_skips: int = Field(ge=1, le=50)
     queue_size: int = Field(default=0, ge=0, le=100)
+    error_code: str | None = Field(default=None, max_length=96)
+    error_reason: str | None = Field(default=None, max_length=160)

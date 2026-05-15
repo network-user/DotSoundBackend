@@ -75,6 +75,20 @@ _ALLOWED_COVER_CT = frozenset(
 )
 
 
+async def _admin_track_responses(
+    service: AdminService,
+    tracks: list[object],
+) -> list[AdminTrackResponse]:
+    rows = [AdminTrackResponse.model_validate(t) for t in tracks]
+    diagnostics = await service.get_playback_failure_diagnostics(
+        [row.id for row in rows],
+    )
+    return [
+        row.model_copy(update=diagnostics.get(row.id, {}))
+        for row in rows
+    ]
+
+
 @router.get(
     "/tracks",
     response_model=AdminTrackListResponse,
@@ -125,7 +139,7 @@ async def admin_list_tracks(
         playable_only=playable_only,
     )
     return AdminTrackListResponse(
-        items=[AdminTrackResponse.model_validate(t) for t in tracks],
+        items=await _admin_track_responses(service, tracks),
         total=total,
         page=page,
         size=size,
@@ -204,7 +218,7 @@ async def admin_list_playback_unavailable_tracks(
         search=search,
     )
     return AdminTrackListResponse(
-        items=[AdminTrackResponse.model_validate(t) for t in tracks],
+        items=await _admin_track_responses(service, tracks),
         total=total,
         page=page,
         size=size,
@@ -232,7 +246,7 @@ async def admin_list_playback_suppressed_tracks(
         search=search,
     )
     return AdminTrackListResponse(
-        items=[AdminTrackResponse.model_validate(t) for t in tracks],
+        items=await _admin_track_responses(service, tracks),
         total=total,
         page=page,
         size=size,
@@ -426,7 +440,7 @@ async def admin_list_deleted_tracks(
         page=page, size=size, search=search
     )
     return AdminTrackListResponse(
-        items=[AdminTrackResponse.model_validate(t) for t in tracks],
+        items=await _admin_track_responses(service, tracks),
         total=total,
         page=page,
         size=size,

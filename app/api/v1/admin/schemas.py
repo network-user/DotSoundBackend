@@ -16,6 +16,13 @@ class AdminTrackResponse(TrackResponse):
     playback_last_failure_at: datetime | None = None
     playback_last_http_status: int | None = None
     playback_last_failure_source: str | None = None
+    playback_last_error_code: str | None = None
+    playback_last_error_reason: str | None = None
+    playback_last_error_stage: str | None = None
+    playback_last_upstream_status: int | None = None
+    playback_last_attempted_protocols: list[str] = Field(
+        default_factory=list,
+    )
     playback_recovery_failed_at: datetime | None = None
     playback_suppressed_until: datetime | None = None
 

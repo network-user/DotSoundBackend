@@ -10,7 +10,7 @@ import {
 } from 'react'
 import { loadHlsClass } from '@/lib/hlsLoader'
 import type { HlsPlayer } from '@/lib/hlsLoader'
-import { api, getApiErrorMessage } from '@/lib/api'
+import { api, getApiErrorMessage, getApiErrorTelemetry } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { dismissIsland, showIsland, updateIsland } from '@/lib/island'
 import i18n from '@/lib/i18n'
@@ -1192,6 +1192,12 @@ export function PlayerProvider({
   const consecutiveAutoSkipsRef = useRef(0)
   const radioAutoSkipsRef = useRef(0)
   const radioAutoSkipHaltedRef = useRef(false)
+  type PlaybackFailureTelemetry = {
+    errorCode?: string
+    errorReason?: string
+  }
+  const lastUnavailableFailureRef =
+    useRef<PlaybackFailureTelemetry>({})
 
   // Toast dedup: when a burst of skips happens, collapse them into a single
   // "Пропущено N недоступных треков" island that updates in place.
@@ -1251,6 +1257,7 @@ export function PlayerProvider({
     radioAutoSkipHaltedRef.current = true
     radioAutoSkipsRef.current = 0
     consecutiveAutoSkipsRef.current = 0
+    lastUnavailableFailureRef.current = {}
     radioSessionTimelineRef.current = []
     setRadioSessionTimeline([])
     radioModeRef.current = false
@@ -1283,10 +1290,14 @@ export function PlayerProvider({
   // true if the cascade advanced, false if the safety limit kicked in.
   const skipUnavailableTrack = async (
     trackId: number,
+    failure: PlaybackFailureTelemetry = {},
   ): Promise<boolean> => {
     const wasRadioMode = radioModeRef.current
     if (wasRadioMode && radioAutoSkipHaltedRef.current) {
       return false
+    }
+    if (failure.errorCode || failure.errorReason) {
+      lastUnavailableFailureRef.current = failure
     }
     markTrackUnavailableInSession(trackId)
     recordUnavailableSkip()
@@ -1303,6 +1314,7 @@ export function PlayerProvider({
       const radioSessionSkips = radioAutoSkipsRef.current
       const radioSeedTrackId = radioSeedTrackIdRef.current
       const queueSize = manualQueueRef.current.length
+      const failureTelemetry = lastUnavailableFailureRef.current
       consecutiveAutoSkipsRef.current = 0
       const b = unavailableSkipBatchRef.current
       if (b.islandId) dismissIsland(b.islandId)
@@ -1321,6 +1333,8 @@ export function PlayerProvider({
               radioSessionSkips,
             ),
             queue_size: queueSize,
+            error_code: failureTelemetry.errorCode,
+            error_reason: failureTelemetry.errorReason,
           },
           { silent: true },
         )
@@ -1648,15 +1662,16 @@ export function PlayerProvider({
             err,
             i18n.t('redesign.playerErrors.playback'),
           )
+          const telemetry = getApiErrorTelemetry(err)
           if (
             isSoundCloudUnavailableTrack(track) &&
             isSoundCloudUnavailableError(message)
           ) {
-            await skipUnavailableTrack(track.id)
+            await skipUnavailableTrack(track.id, telemetry)
             return
           }
           showPlaybackErrorOnce(track.id, message)
-          await skipUnavailableTrack(track.id)
+          await skipUnavailableTrack(track.id, telemetry)
         })
         return
       }
@@ -1686,13 +1701,22 @@ export function PlayerProvider({
                 lastStreamUrlRef.current = stream.url
               }
             })
-            .catch(async () => {
-              await skipUnavailableTrack(track.id)
+            .catch(async (err) => {
+              await skipUnavailableTrack(
+                track.id,
+                getApiErrorTelemetry(err),
+              )
             })
           return
         }
       }
-      void skipUnavailableTrack(track.id)
+      void skipUnavailableTrack(track.id, {
+        errorCode:
+          typeof code === 'number'
+            ? `media_error_${code}`
+            : 'media_error',
+        errorReason: 'browser_media_error',
+      })
     }
     const onStalled = () => {
       try {
@@ -1863,7 +1887,10 @@ export function PlayerProvider({
     if (newTrack.is_active === false) {
       playTrackSlideInjectRef.current = null
       lastTrackIdRef.current = newTrack.id
-      void skipUnavailableTrack(newTrack.id)
+      void skipUnavailableTrack(newTrack.id, {
+        errorCode: 'track_inactive',
+        errorReason: 'backend_flagged_track_inactive',
+      })
       return
     }
     let prevForSlide: number | null = null
@@ -2118,7 +2145,10 @@ export function PlayerProvider({
       if (!scUnavailable) {
         showPlaybackErrorOnce(newTrack.id, message)
       }
-      await skipUnavailableTrack(newTrack.id)
+      await skipUnavailableTrack(
+        newTrack.id,
+        getApiErrorTelemetry(e),
+      )
     }
   }
 
@@ -2130,6 +2160,7 @@ export function PlayerProvider({
     radioAutoSkipHaltedRef.current = false
     radioAutoSkipsRef.current = 0
     consecutiveAutoSkipsRef.current = 0
+    lastUnavailableFailureRef.current = {}
     radioSessionTimelineRef.current = []
     setRadioSessionTimeline([])
     radioModeRef.current = true

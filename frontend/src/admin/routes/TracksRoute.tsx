@@ -37,6 +37,11 @@ interface TrackRow {
   playback_last_failure_at?: string | null
   playback_last_http_status?: number | null
   playback_last_failure_source?: string | null
+  playback_last_error_code?: string | null
+  playback_last_error_reason?: string | null
+  playback_last_error_stage?: string | null
+  playback_last_upstream_status?: number | null
+  playback_last_attempted_protocols?: string[]
   playback_recovery_failed_at?: string | null
   playback_suppressed_until?: string | null
 }
@@ -76,6 +81,30 @@ const initialModals: ModalsState = {
 
 const PAGE_SIZE = 25
 const REPAIR_BULK_BATCH_SIZE = 5000
+
+function playbackDiagnosticParts(row: TrackRow): string[] {
+  const parts: string[] = []
+  if (row.playback_last_error_code) {
+    parts.push(row.playback_last_error_code)
+  }
+  if (
+    row.playback_last_error_reason &&
+    row.playback_last_error_reason !== row.playback_last_error_code
+  ) {
+    parts.push(row.playback_last_error_reason)
+  }
+  if (row.playback_last_error_stage) {
+    parts.push(`stage ${row.playback_last_error_stage}`)
+  }
+  if (typeof row.playback_last_upstream_status === 'number') {
+    parts.push(`upstream ${row.playback_last_upstream_status}`)
+  }
+  const protocols = row.playback_last_attempted_protocols ?? []
+  if (protocols.length > 0) {
+    parts.push(protocols.join('+'))
+  }
+  return parts
+}
 
 type ModalsAction =
   | { type: 'set'; key: keyof ModalsState; value: ModalsState[keyof ModalsState] }
@@ -812,6 +841,7 @@ export function TracksRoute() {
       cell: (i) => {
         const r = i.row.original
         const parts: string[] = []
+        const diagnostics = playbackDiagnosticParts(r)
         if (r.playback_last_failure_source) {
           parts.push(r.playback_last_failure_source)
         }
@@ -834,9 +864,12 @@ export function TracksRoute() {
             ).toLocaleDateString()}`,
           )
         }
+        if (diagnostics.length > 0) {
+          parts.push(diagnostics.join(' / '))
+        }
         return parts.length ? (
           <span style={{ fontSize: 12, lineHeight: 1.35 }}>
-            {parts.join(' · ')}
+            {parts.join(' / ')}
           </span>
         ) : (
           '—'

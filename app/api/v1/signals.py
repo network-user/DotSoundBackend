@@ -92,5 +92,7 @@ async def record_client_playback_event(
         radio_seed_track_id=body.radio_seed_track_id,
         consecutive_skips=body.consecutive_skips,
         queue_size=body.queue_size,
+        error_code=body.error_code,
+        error_reason=body.error_reason,
     )
     return {"status": "ok"}
