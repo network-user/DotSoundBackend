@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -133,6 +133,150 @@ async def test_admin_playback_unavailable_includes_diagnostics(
         "progressive",
         "hls",
     ]
+
+
+async def test_admin_playback_unavailable_filters_latest_diagnostic(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 130007)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    now = datetime.now(UTC)
+    matched = Track(
+        title="Matched Broken SoundCloud",
+        artist="Artist",
+        uploaded_by_id=admin["id"],
+        is_active=True,
+        is_public=True,
+        source="external",
+        catalog_type="external-source",
+        access_mode="third_party_stream",
+        source_platform="soundcloud",
+        playback_last_failure_at=now,
+        playback_last_http_status=502,
+        playback_last_failure_source="server_recovery_exhausted",
+    )
+    other = Track(
+        title="Other Broken SoundCloud",
+        artist="Artist",
+        uploaded_by_id=admin["id"],
+        is_active=True,
+        is_public=True,
+        source="external",
+        catalog_type="external-source",
+        access_mode="third_party_stream",
+        source_platform="soundcloud",
+        playback_last_failure_at=now,
+        playback_last_http_status=502,
+        playback_last_failure_source="server_recovery_exhausted",
+    )
+    stale = Track(
+        title="Stale Broken SoundCloud",
+        artist="Artist",
+        uploaded_by_id=admin["id"],
+        is_active=True,
+        is_public=True,
+        source="external",
+        catalog_type="external-source",
+        access_mode="third_party_stream",
+        source_platform="soundcloud",
+        playback_last_failure_at=now,
+        playback_last_http_status=502,
+        playback_last_failure_source="server_recovery_exhausted",
+    )
+    db_session.add_all([matched, other, stale])
+    await db_session.flush()
+    assert matched.id is not None
+    assert other.id is not None
+    assert stale.id is not None
+    db_session.add_all(
+        [
+            TrackPlaybackFailureEvent(
+                track_id=matched.id,
+                user_id=admin["id"],
+                source="server_recovery_exhausted",
+                http_status=502,
+                detail_truncated=json.dumps(
+                    {
+                        "code": "soundcloud_stream_unavailable",
+                        "reason": (
+                            "provider_manifest_not_found_for_all_formats"
+                        ),
+                    }
+                ),
+                created_at=now,
+            ),
+            TrackPlaybackFailureEvent(
+                track_id=other.id,
+                user_id=admin["id"],
+                source="server_recovery_exhausted",
+                http_status=502,
+                detail_truncated=json.dumps(
+                    {
+                        "code": "audio_proxy_timeout",
+                        "reason": "manifest_fetch_timeout",
+                    }
+                ),
+                created_at=now,
+            ),
+            TrackPlaybackFailureEvent(
+                track_id=stale.id,
+                user_id=admin["id"],
+                source="server_recovery_exhausted",
+                http_status=502,
+                detail_truncated=json.dumps(
+                    {
+                        "code": "soundcloud_stream_unavailable",
+                        "reason": "old_failure",
+                    }
+                ),
+                created_at=now - timedelta(minutes=2),
+            ),
+            TrackPlaybackFailureEvent(
+                track_id=stale.id,
+                user_id=admin["id"],
+                source="server_recovery_exhausted",
+                http_status=502,
+                detail_truncated=json.dumps(
+                    {
+                        "code": "audio_proxy_timeout",
+                        "reason": "latest_failure",
+                    }
+                ),
+                created_at=now + timedelta(minutes=1),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    r = await client.get(
+        "/api/v1/admin/tracks/playback-health/unavailable",
+        headers=headers,
+        params={"playback_error": "soundcloud_stream_unavailable"},
+    )
+
+    assert r.status_code == 200
+    ids = [item["id"] for item in r.json()["items"]]
+    assert matched.id in ids
+    assert other.id not in ids
+    assert stale.id not in ids
+
+    ids_response = await client.get(
+        "/api/v1/admin/tracks/ids",
+        headers=headers,
+        params={
+            "scope": "playback_failures",
+            "playback_error": "provider_manifest_not_found",
+        },
+    )
+
+    assert ids_response.status_code == 200
+    filtered_ids = ids_response.json()["ids"]
+    assert matched.id in filtered_ids
+    assert other.id not in filtered_ids
+    assert stale.id not in filtered_ids
 
 
 async def test_admin_toggle_track_visibility(

@@ -28,6 +28,9 @@ from app.services.prometheus_service import (
     PrometheusServiceError,
     query_range,
 )
+from app.services.radio_auto_skip_stats_service import (
+    get_radio_auto_skip_reason_stats,
+)
 from app.services.system_resource_service import (
     get_system_resource_summary,
 )
@@ -92,6 +95,22 @@ async def system_resources(
     _admin: User = Depends(require_admin_session),
 ) -> dict[str, Any]:
     return await get_system_resource_summary(minutes=minutes)
+
+
+@router.get("/radio-auto-skip-reasons")
+async def radio_auto_skip_reasons(
+    days: int = Query(7, ge=1, le=30),
+    limit: int = Query(10, ge=1, le=50),
+    _admin: User = Depends(require_admin_session),
+) -> dict[str, Any]:
+    return {
+        "generated_at": int(time.time()),
+        "days": days,
+        "items": await get_radio_auto_skip_reason_stats(
+            days=days,
+            limit=limit,
+        ),
+    }
 
 
 @router.get("/timeseries")

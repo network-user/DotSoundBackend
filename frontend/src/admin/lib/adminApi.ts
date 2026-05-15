@@ -611,6 +611,21 @@ export const adminApi = {
     }>('/dashboard/system-resources', {
       query: { minutes },
     }),
+  dashboardRadioAutoSkipReasons: (
+    days: number,
+    limit: number = 10,
+  ) =>
+    adminFetch<{
+      generated_at: number
+      days: number
+      items: Array<{
+        error_code: string
+        error_reason: string
+        count: number
+      }>
+    }>('/dashboard/radio-auto-skip-reasons', {
+      query: { days, limit },
+    }),
   servicesHealth: () =>
     adminFetch<Record<string, unknown>>(
       '/system/services',
@@ -931,6 +946,7 @@ export const adminApi = {
     without_lyrics?: boolean
     lyrics_catalog_miss_only?: boolean
     search?: string
+    playback_error?: string
     for_playlist_owner_id?: number
     playable_only?: boolean
   }) =>
@@ -942,6 +958,7 @@ export const adminApi = {
     page?: number
     size?: number
     search?: string
+    playback_error?: string
   }) =>
     adminFetch<{
       items: Array<Record<string, unknown>>

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Awaitable, Callable
+from typing import cast
 
 import structlog
 
@@ -43,6 +44,8 @@ _PROM_OFFLINE_ELIGIBILITY = None
 _PROM_OFFLINE_PREFETCH = None
 _PROM_CLIENT_PLAYBACK_EVENTS = None
 
+_PROM_REGISTRY: object | None = None
+
 
 def _is_internal_ip(client_host: str | None) -> bool:
     if not client_host:
@@ -56,23 +59,76 @@ def _is_internal_ip(client_host: str | None) -> bool:
     return bool(client_host.startswith(("10.", "192.168.", "172.")))
 
 
+def _metrics_route_present(application: object) -> bool:
+    from fastapi import FastAPI
+
+    if not isinstance(application, FastAPI):
+        return False
+    stack: list[object] = list(application.routes)
+    while stack:
+        route = stack.pop()
+        if getattr(route, "path", None) == "/metrics":
+            return True
+        nested = getattr(route, "routes", None)
+        if nested:
+            stack.extend(nested)
+    return False
+
+
+def _attach_prometheus_metrics_route(
+    application: object,
+    registry: object,
+) -> None:
+    from fastapi import FastAPI
+    from prometheus_client import (
+        CONTENT_TYPE_LATEST,
+        CollectorRegistry,
+        generate_latest,
+    )
+    from starlette.requests import Request
+    from starlette.responses import PlainTextResponse, Response
+
+    if not isinstance(application, FastAPI):
+        return
+    if _metrics_route_present(application):
+        return
+
+    @application.get("/metrics", include_in_schema=False)
+    async def metrics_endpoint(
+        request: Request,
+    ) -> Response:
+        client_host = (
+            request.client.host if request.client is not None else None
+        )
+        if not _is_internal_ip(client_host):
+            return PlainTextResponse("forbidden", status_code=403)
+        body = generate_latest(cast(CollectorRegistry, registry))
+        return PlainTextResponse(
+            content=body.decode("utf-8"),
+            media_type=CONTENT_TYPE_LATEST,
+        )
+
+
 def setup_metrics(application: object) -> None:
     """Install Prometheus instrumentation + /metrics endpoint."""
     global _metrics_initialized
+    global _PROM_REGISTRY
     global _PROM_HTTP_REQUESTS
     global _PROM_HTTP_DURATION
     global _PROM_HTTP_ERRORS
     global _PROM_WS_GAUGE
     if _metrics_initialized:
+        from fastapi import FastAPI
+
+        if isinstance(application, FastAPI) and _PROM_REGISTRY is not None:
+            _attach_prometheus_metrics_route(application, _PROM_REGISTRY)
         return
     try:
         from prometheus_client import (
-            CONTENT_TYPE_LATEST,
             CollectorRegistry,
             Counter,
             Gauge,
             Histogram,
-            generate_latest,
         )
     except ImportError:
         logger.warning("prometheus_client_missing")
@@ -272,10 +328,7 @@ def setup_metrics(application: object) -> None:
     )
     _PROM_OFFLINE_PREFETCH = Counter(
         "offline_prefetch_calls_total",
-        (
-            "Prefetch API invocations by outcome "
-            "(accepted/rejected/error)."
-        ),
+        ("Prefetch API invocations by outcome " "(accepted/rejected/error)."),
         ["outcome"],
         registry=registry,
     )
@@ -291,10 +344,7 @@ def setup_metrics(application: object) -> None:
         BaseHTTPMiddleware,
     )
     from starlette.requests import Request
-    from starlette.responses import (
-        PlainTextResponse,
-        Response,
-    )
+    from starlette.responses import Response
 
     if not isinstance(application, FastAPI):
         return
@@ -336,20 +386,8 @@ def setup_metrics(application: object) -> None:
 
     application.add_middleware(_MetricsMiddleware)
 
-    @application.get("/metrics", include_in_schema=False)
-    async def metrics_endpoint(
-        request: Request,
-    ) -> Response:
-        client_host = (
-            request.client.host if request.client is not None else None
-        )
-        if not _is_internal_ip(client_host):
-            return PlainTextResponse("forbidden", status_code=403)
-        body = generate_latest(registry)
-        return PlainTextResponse(
-            content=body.decode("utf-8"),
-            media_type=CONTENT_TYPE_LATEST,
-        )
+    _PROM_REGISTRY = registry
+    _attach_prometheus_metrics_route(application, registry)
 
     _metrics_initialized = True
     logger.info("observability_metrics_ready")

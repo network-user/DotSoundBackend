@@ -142,20 +142,24 @@ class AdminService:
         page: int,
         size: int,
         search: str | None,
+        playback_error: str | None = None,
     ) -> tuple[list[Track], int]:
         return await self._repo.list_tracks_playback_unavailable(
             page=page,
             size=size,
             search=search,
+            playback_error=playback_error,
         )
 
     async def list_track_ids_playback_unavailable(
         self,
         *,
         search: str | None,
+        playback_error: str | None = None,
     ) -> tuple[list[int], int]:
         return await self._repo.list_track_ids_playback_unavailable(
             search=search,
+            playback_error=playback_error,
         )
 
     async def list_tracks_playback_suppressed(

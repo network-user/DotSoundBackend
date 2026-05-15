@@ -245,7 +245,7 @@ class TorCircuit:
 
     @property
     def proxy_url(self) -> str:
-        return f"socks5://127.0.0.1:{self.socks_port}"
+        return f"socks5h://127.0.0.1:{self.socks_port}"
 
 
 class TorPool:
@@ -255,6 +255,7 @@ class TorPool:
         self._rr_index: int = 0
         self._process: Any = None
         self._controller: Any = None
+        self._control_port: int = 0
         self._health_task: asyncio.Task[None] | None = None
         self._renewal_task: asyncio.Task[None] | None = None
 
@@ -277,6 +278,7 @@ class TorPool:
                 reason="Control port cannot overlap SOCKS range",
             )
 
+        self._control_port = control_port
         self._circuits = [
             TorCircuit(index=i, socks_port=base_port + i)
             for i in range(pool_size)
@@ -424,6 +426,43 @@ class TorPool:
             )
             return
 
+    async def _try_reconnect_controller(self) -> None:
+        """Attempt to re-establish the stem controller connection.
+
+        Called by ``_renewal_loop`` when ``_controller`` is ``None``
+        (e.g. initial auth failure or connection drop). A failed
+        reconnect is logged as a warning and the renewal is skipped
+        for this cycle — the next sleep interval will retry.
+        """
+        if not self._control_port:
+            return
+        try:
+            import stem.control  # type: ignore[import-untyped]
+
+            ctrl = stem.control.Controller.from_port(
+                port=self._control_port
+            )
+            password: str = self._settings.tor_control_password
+            if password:
+                ctrl.authenticate(password=password)
+            else:
+                ctrl.authenticate()
+            self._controller = ctrl
+            logger.info(
+                "tor_controller_reconnected",
+                control_port=self._control_port,
+            )
+        except Exception as exc:
+            logger.warning(
+                "tor_controller_reconnect_failed",
+                control_port=self._control_port,
+                error=str(exc),
+            )
+
+    def circuit_proxy_urls(self) -> list[str]:
+        """Return the proxy URL of every circuit in the pool."""
+        return [c.proxy_url for c in self._circuits]
+
     async def _health_check_loop(self) -> None:
         while True:
             await asyncio.sleep(
@@ -434,16 +473,19 @@ class TorPool:
                     async with httpx.AsyncClient(
                         proxy=circuit.proxy_url, timeout=15
                     ) as client:
-                        await client.head("https://api.soundcloud.com")
-                        await self._refresh_circuit_exit_ip(
-                            circuit,
-                            client=client,
-                        )
+                        r = await client.get("https://api.ipify.org")
+                        r.raise_for_status()
+                        ip = (r.text or "").strip()
+                        if ip:
+                            circuit.exit_ip = ip[:64]
+                            circuit.exit_ip_checked_at = time.time()
+                            circuit.exit_ip_probe_pending = False
                     circuit.ok_count += 1
                     logger.info(
                         "tor_circuit_healthy",
                         circuit=circuit.index,
                         port=circuit.socks_port,
+                        exit_ip=circuit.exit_ip,
                         ok=circuit.ok_count,
                         fail=circuit.fail_count,
                         failure_rate=round(circuit.failure_rate, 2),
@@ -512,7 +554,12 @@ class TorPool:
         while True:
             await asyncio.sleep(self._settings.tor_circuit_max_age_seconds)
             if self._controller is None:
-                logger.warning("tor_renewal_skipped_no_controller")
+                await self._try_reconnect_controller()
+            if self._controller is None:
+                logger.warning(
+                    "tor_renewal_skipped_no_controller",
+                    control_port=self._control_port,
+                )
                 continue
             try:
                 from stem import Signal

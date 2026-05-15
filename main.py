@@ -48,6 +48,7 @@ if __name__ == "__main__":
                 port=8000,
                 reload=True,
                 loop="none",
+                access_log=False,
             )
         else:
             uvicorn.run(
@@ -55,6 +56,7 @@ if __name__ == "__main__":
                 host="0.0.0.0",
                 port=8000,
                 reload=True,
+                access_log=False,
             )
     finally:
         worker_proc.terminate()

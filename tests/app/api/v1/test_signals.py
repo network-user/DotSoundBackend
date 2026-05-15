@@ -78,6 +78,7 @@ async def test_record_client_playback_event(
     await create_test_user(client, 9004)
     headers = await auth_headers(client, 9004)
     observed: list[tuple[str, str]] = []
+    recorded_reasons: list[tuple[str | None, str | None]] = []
 
     def fake_observed(
         *,
@@ -89,6 +90,18 @@ async def test_record_client_playback_event(
     monkeypatch.setattr(
         "app.api.v1.signals.client_playback_event_observed",
         fake_observed,
+    )
+
+    async def fake_record_reason(
+        *,
+        error_code: str | None,
+        error_reason: str | None,
+    ) -> None:
+        recorded_reasons.append((error_code, error_reason))
+
+    monkeypatch.setattr(
+        "app.api.v1.signals.record_radio_auto_skip_reason",
+        fake_record_reason,
     )
 
     r = await client.post(
@@ -111,6 +124,12 @@ async def test_record_client_playback_event(
     assert r.status_code == 200
     assert r.json()["status"] == "ok"
     assert observed == [("radio_auto_skip_exhausted", "radio")]
+    assert recorded_reasons == [
+        (
+            "soundcloud_stream_unavailable",
+            "provider_manifest_not_found_for_all_formats",
+        )
+    ]
 
 
 async def test_record_client_playback_event_rejects_unknown_event(

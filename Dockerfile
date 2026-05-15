@@ -43,4 +43,4 @@ ENV UVICORN_HOST=0.0.0.0 \
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host \"$UVICORN_HOST\" --port \"$UVICORN_PORT\""]
+CMD ["sh", "-c", "uvicorn app.main:app --host \"$UVICORN_HOST\" --port \"$UVICORN_PORT\" --no-access-log"]

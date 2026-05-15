@@ -894,6 +894,7 @@ class TrackRepository(BaseRepository[Track]):
             & self._exclude_hidden_sources()
             & self._playback_listing_allowed()
             & (Track.id != track_id)
+            & (Track.access_mode != "external_link")
         )
         result = await self._session.execute(
             select(Track)

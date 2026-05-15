@@ -164,6 +164,7 @@ async def admin_list_track_ids(
     without_lyrics: bool = Query(False),
     lyrics_catalog_miss_only: bool = Query(False),
     search: str | None = Query(None, max_length=128),
+    playback_error: str | None = Query(None, max_length=160),
     for_playlist_owner_id: int | None = Query(None, ge=1),
     playable_only: bool = Query(False),
     session: AsyncSession = Depends(get_db),
@@ -182,6 +183,9 @@ async def admin_list_track_ids(
     elif scope == "playback_failures":
         ids, total = await service.list_track_ids_playback_unavailable(
             search=search,
+            playback_error=(
+                playback_error.strip() if playback_error else None
+            ),
         )
     elif scope == "playback_suppressed":
         ids, total = await service.list_track_ids_playback_suppressed(
@@ -208,6 +212,7 @@ async def admin_list_playback_unavailable_tracks(
     page: int = Query(1, ge=1),
     size: int = Query(25, ge=1, le=100),
     search: str | None = Query(None, max_length=128),
+    playback_error: str | None = Query(None, max_length=160),
     session: AsyncSession = Depends(get_db),
     _admin: User = Depends(require_admin_session),
 ) -> AdminTrackListResponse:
@@ -216,6 +221,9 @@ async def admin_list_playback_unavailable_tracks(
         page=page,
         size=size,
         search=search,
+        playback_error=(
+            playback_error.strip() if playback_error else None
+        ),
     )
     return AdminTrackListResponse(
         items=await _admin_track_responses(service, tracks),

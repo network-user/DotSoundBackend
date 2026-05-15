@@ -174,10 +174,13 @@ class AppSettings(BaseSettings):
     # same route unless split-tunnel excludes tor.exe.
     tor_log_outbound_public_ip: bool = False
 
-    # Comma or newline separated httpx ``proxy=`` URLs (http://, https://,
-    # socks5://, …). SoundCloud, Bandcamp, internal SC CDN proxy pick one
-    # via round-robin. Filled list wins over Tor; do not enable Tor pool
-    # at the same time (model validator rejects).
+    # Comma or newline separated httpx ``proxy=`` URLs.
+    # Supported schemes: http://, https://, socks5://, socks5h://.
+    # Authenticated SOCKS5: socks5://login:pass@ip:port
+    # Multiple proxies are used in round-robin; each unique URL gets
+    # its own pooled httpx.AsyncClient (TCP/TLS reuse).
+    # Filled list wins over Tor pool; the two modes are mutually
+    # exclusive (model validator rejects both being set).
     outbound_static_proxy_urls: str = ""
     outbound_static_proxy_max_urls: int = 64
 
@@ -206,6 +209,10 @@ class AppSettings(BaseSettings):
 
     # Redis TTLs for cached stream URLs (seconds).
     stream_url_cache_ttl_soundcloud: int = 3600
+    # SC HLS manifest URLs carry short-lived CDN signatures. Cache them
+    # with a tighter TTL so clients never receive an already-expired URL.
+    # Override with STREAM_URL_CACHE_TTL_SOUNDCLOUD_HLS (seconds).
+    stream_url_cache_ttl_soundcloud_hls: int = 1200
     stream_url_cache_ttl_bandcamp: int = 7200
 
     # Stage 4 backpressure on ImportJob. New jobs above

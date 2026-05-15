@@ -17,6 +17,9 @@ from app.core.redis import get_redis_client
 from app.models.track import Track
 from app.models.user import User
 from app.repositories.track import TrackRepository
+from app.services.track_playback_health_service import (
+    is_track_playback_suppressed,
+)
 from app.services.youtube_service import YouTubeService, _canonical_yt_url
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -193,6 +196,10 @@ class RadioService:
                         error=str(exc),
                     )
 
+        upstream = [
+            t for t in upstream
+            if not is_track_playback_suppressed(t)
+        ]
         merged = merge_dedup_ordered(
             base_ids,
             [t.id for t in upstream],

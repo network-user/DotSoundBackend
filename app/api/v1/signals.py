@@ -11,6 +11,9 @@ from app.schemas.signal import (
     ListenEventRequest,
     SearchClickRequest,
 )
+from app.services.radio_auto_skip_stats_service import (
+    record_radio_auto_skip_reason,
+)
 from app.services.signal_service import (
     SignalService,
 )
@@ -82,6 +85,10 @@ async def record_client_playback_event(
     client_playback_event_observed(
         event_name=body.event_name,
         surface=body.surface,
+    )
+    await record_radio_auto_skip_reason(
+        error_code=body.error_code,
+        error_reason=body.error_reason,
     )
     logger.info(
         "client_playback_event",

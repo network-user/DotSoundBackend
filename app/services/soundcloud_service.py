@@ -686,12 +686,17 @@ class SoundCloudService:
                 protocol_out: str = selected.get("format", {}).get(
                     "protocol", protocol
                 )
+                cache_ttl = (
+                    settings.stream_url_cache_ttl_soundcloud_hls
+                    if protocol_out == "hls"
+                    else settings.stream_url_cache_ttl_soundcloud
+                )
                 await set_cached_stream(
                     CACHE_KEY_SC,
                     cache_id,
                     stream_url,
                     protocol_out,
-                    settings.stream_url_cache_ttl_soundcloud,
+                    cache_ttl,
                 )
                 report_outbound_proxy_result(proxy_url, ok=True)
                 return stream_url, protocol_out

@@ -134,6 +134,7 @@ export function TracksRoute() {
   const qc = useQueryClient()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [playbackErrorFilter, setPlaybackErrorFilter] = useState('')
   const [withoutLyricsOnly, setWithoutLyricsOnly] = useState(false)
   const [listView, setListView] = useState<
     'all' | 'playback_failures' | 'playback_suppressed' | 'deleted'
@@ -220,6 +221,10 @@ export function TracksRoute() {
   const [sourceBusy, setSourceBusy] = useState(false)
 
   const contextTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const playbackErrorQuery =
+    listView === 'playback_failures'
+      ? playbackErrorFilter.trim() || undefined
+      : undefined
 
   const fetchTrackPage = (targetPage: number) => {
     const base = {
@@ -228,7 +233,10 @@ export function TracksRoute() {
       search: search || undefined,
     }
     if (listView === 'playback_failures') {
-      return adminApi.listTracksPlaybackUnavailable(base)
+      return adminApi.listTracksPlaybackUnavailable({
+        ...base,
+        playback_error: playbackErrorQuery,
+      })
     }
     if (listView === 'playback_suppressed') {
       return adminApi.listTracksPlaybackSuppressed(base)
@@ -250,6 +258,7 @@ export function TracksRoute() {
       search,
       withoutLyricsOnly,
       listView,
+      playbackErrorFilter,
     ],
     queryFn: () => fetchTrackPage(page),
     placeholderData: keepPreviousData,
@@ -280,7 +289,7 @@ export function TracksRoute() {
 
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [search, withoutLyricsOnly, listView])
+  }, [search, withoutLyricsOnly, listView, playbackErrorFilter])
 
   useEffect(() => {
     if (!sourceEditModal) return
@@ -470,6 +479,7 @@ export function TracksRoute() {
         adminApi.listTrackIds({
           scope: 'playback_failures',
           search: searchFilter,
+          playback_error: playbackErrorQuery,
         }),
         adminApi.listTrackIds({
           scope: 'playback_suppressed',
@@ -733,6 +743,8 @@ export function TracksRoute() {
     const result = await adminApi.listTrackIds({
       scope,
       search: search || undefined,
+      playback_error:
+        scope === 'playback_failures' ? playbackErrorQuery : undefined,
       without_lyrics:
         listView === 'all' ? withoutLyricsOnly || undefined : undefined,
     })
@@ -1172,6 +1184,18 @@ export function TracksRoute() {
             { value: 'deleted', label: 'Deleted' },
           ]}
         />
+        {listView === 'playback_failures' && (
+          <input
+            type="search"
+            placeholder="Error code or reason"
+            value={playbackErrorFilter}
+            onChange={(e) => {
+              setPlaybackErrorFilter(e.target.value)
+              setPage(1)
+              setSelectedIds(new Set())
+            }}
+          />
+        )}
         <label
           style={{
             display: 'inline-flex',

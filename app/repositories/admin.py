@@ -12,6 +12,7 @@ from typing import Any
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
+from sqlalchemy.sql.selectable import Subquery
 
 from app.models.artist import TrackArtist
 from app.models.complaint import Complaint
@@ -27,6 +28,43 @@ from app.repositories.track import TrackRepository
 class AdminRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    def _latest_playback_failure_details(self) -> Subquery:
+        return (
+            select(
+                TrackPlaybackFailureEvent.track_id.label("track_id"),
+                TrackPlaybackFailureEvent.detail_truncated.label(
+                    "detail_truncated"
+                ),
+                func.row_number()
+                .over(
+                    partition_by=TrackPlaybackFailureEvent.track_id,
+                    order_by=(
+                        TrackPlaybackFailureEvent.created_at.desc(),
+                        TrackPlaybackFailureEvent.id.desc(),
+                    ),
+                )
+                .label("rn"),
+            )
+            .subquery()
+        )
+
+    def _apply_playback_error_filter(
+        self,
+        query: Select,
+        *,
+        playback_error: str | None,
+    ) -> Select:
+        if not playback_error:
+            return query
+        latest = self._latest_playback_failure_details()
+        return (
+            query.join(
+                latest,
+                and_(latest.c.track_id == Track.id, latest.c.rn == 1),
+            )
+            .where(latest.c.detail_truncated.ilike(f"%{playback_error}%"))
+        )
 
     def _apply_track_list_filters(
         self,
@@ -165,6 +203,7 @@ class AdminRepository:
         page: int = 1,
         size: int = 20,
         search: str | None = None,
+        playback_error: str | None = None,
     ) -> tuple[list[Track], int]:
         q = select(Track).where(
             Track.playback_last_failure_at.isnot(None),
@@ -177,6 +216,14 @@ class AdminRepository:
             cond = Track.title.ilike(pattern) | Track.artist.ilike(pattern)
             q = q.where(cond)
             cq = cq.where(cond)
+        q = self._apply_playback_error_filter(
+            q,
+            playback_error=playback_error,
+        )
+        cq = self._apply_playback_error_filter(
+            cq,
+            playback_error=playback_error,
+        )
         q = (
             q.order_by(desc(Track.playback_last_failure_at))
             .offset((page - 1) * size)
@@ -191,6 +238,7 @@ class AdminRepository:
         self,
         *,
         search: str | None = None,
+        playback_error: str | None = None,
     ) -> tuple[list[int], int]:
         q = select(Track.id).where(
             Track.playback_last_failure_at.isnot(None),
@@ -203,6 +251,14 @@ class AdminRepository:
             cond = Track.title.ilike(pattern) | Track.artist.ilike(pattern)
             q = q.where(cond)
             cq = cq.where(cond)
+        q = self._apply_playback_error_filter(
+            q,
+            playback_error=playback_error,
+        )
+        cq = self._apply_playback_error_filter(
+            cq,
+            playback_error=playback_error,
+        )
         q = q.order_by(desc(Track.playback_last_failure_at))
         rows = await self._session.execute(q)
         total_result = await self._session.execute(cq)

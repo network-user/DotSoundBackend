@@ -53,6 +53,50 @@ async def _elasticsearch_drain_lifecycle(
     await playcount_drain_loop(stop)
 
 
+async def _warm_outbound_proxy_pool() -> None:
+    """Fire a lightweight GET through every configured proxy URL.
+
+    This establishes SOCKS5 tunnels and TCP/TLS connections up-front
+    so the first real audio request does not pay the handshake cost.
+    Runs as a fire-and-forget background task; failures are suppressed.
+    """
+    import contextlib
+
+    import httpx
+
+    from app.api.v1.tracks.playback import _get_audio_proxy_client
+
+    proxy_urls: list[str] = list(
+        settings.outbound_static_proxy_urls_list
+    )
+    if not proxy_urls:
+        from app.services.tor_pool import get_tor_pool
+
+        pool = get_tor_pool()
+        if pool is not None:
+            proxy_urls = pool.circuit_proxy_urls()
+
+    if not proxy_urls:
+        return
+
+    warmup_url = "https://api.ipify.org"
+    warmed = 0
+    for proxy_url in proxy_urls:
+        client = _get_audio_proxy_client(proxy_url)
+        with contextlib.suppress(Exception):
+            await client.get(
+                warmup_url,
+                timeout=httpx.Timeout(15.0, connect=10.0),
+            )
+            warmed += 1
+
+    logger.info(
+        "outbound_proxy_pool_warmed",
+        warmed=warmed,
+        total=len(proxy_urls),
+    )
+
+
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     configure_logging(
@@ -162,6 +206,11 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         settings,
         component="api",
     )
+    if _tor_pool_started or settings.outbound_static_proxy_urls_list:
+        asyncio.create_task(
+            _warm_outbound_proxy_pool(),
+            name="outbound_proxy_warmup",
+        )
     resource_stop: asyncio.Event | None = None
     resource_task: asyncio.Task[None] | None = None
     if settings.system_resource_sampler_enabled:
@@ -225,6 +274,12 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         await close_sc_http_clients()
     except Exception:  # noqa: BLE001
         logger.exception("sc_http_client_close_failed")
+    try:
+        from app.api.v1.tracks.playback import close_audio_proxy_clients
+
+        await close_audio_proxy_clients()
+    except Exception:  # noqa: BLE001
+        logger.exception("audio_proxy_client_close_failed")
     await ws_manager.shutdown()
     await close_redis()
     await dispose_engine()

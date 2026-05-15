@@ -1,5 +1,53 @@
 # DotSound - TODO Tracker
 
+- [x] **Admin playback filters and radio skip counters (2026-05-16)**
+  - Admin Tracks playback-issues list and filtered ID endpoint now accept
+    `playback_error`, matching the latest structured failure detail
+    `code` / `reason` from `track_playback_failure_events`.
+  - The frontend playback-issues view adds an error code/reason search field;
+    bulk selection and repair-all for failure IDs respect the same filter.
+  - `radio_auto_skip_exhausted` telemetry now increments Redis daily counters
+    by `error_code` / `error_reason`; admin dashboard exposes and renders the
+    top radio auto-skip reasons with compact bars.
+  - Verified targeted Ruff, admin playback filter tests, signals/stat tests,
+    admin dashboard endpoint test, and frontend production build.
+
+- [x] **Audio streaming network hardening round 2 (2026-05-16)**
+  - `TorCircuit.proxy_url` changed from `socks5://` to `socks5h://` so DNS
+    resolution happens inside Tor (prevents DNS leak on the server host).
+  - Tor health-check loop now calls `api.ipify.org` instead of
+    `api.soundcloud.com`, combining connectivity probe and exit-IP refresh
+    in one request; eliminates spurious SC API traffic from monitoring.
+  - Added `circuit_proxy_urls()` public method on `TorPool` for warmup use.
+  - Added `stream_url_cache_ttl_soundcloud_hls` config field (default 1200 s)
+    and use it in `_resolve_stream_via_transcodings` when `protocol_out="hls"`,
+    so HLS manifests with short CDN signatures expire before being served stale.
+  - Added `_warm_outbound_proxy_pool()` and background task in `lifespan`:
+    fires a GET through every static proxy URL (or every Tor circuit) at
+    startup, establishing SOCKS5 tunnels ahead of the first user request.
+  - `RadioService.build_queue` now filters out suppressed upstream
+    (YouTube-mix) tracks via `is_track_playback_suppressed` before merging.
+  - `TrackRepository.get_next_tracks` excludes `access_mode='external_link'`
+    tracks so reference-only SC entries never appear in radio queues.
+
+- [x] **Audio streaming network hardening (2026-05-15)**
+  - SoundCloud streams now prefer HLS by default (`prefer_hls=True`): manifest
+    resolution still goes through Tor/proxy, but TS segments are fetched
+    directly from the CDN by the client — no more audio bytes through Tor.
+  - `_http_proxy_range_get` now uses a pooled `httpx.AsyncClient` per proxy
+    URL (keyed dict), so TCP/TLS and SOCKS5 tunnels are reused across
+    requests instead of re-negotiated on every audio stream.
+  - Fixed client-disconnect false-positive proxy penalty: early stream
+    termination (user skips track) no longer marks the circuit as failed;
+    only actual upstream `httpx.HTTPError` sets `ok=False`.
+  - Tor renewal loop now attempts to reconnect the stem controller when
+    `_controller is None` before skipping the NEWNYM signal, so circuits
+    are renewed even after a transient controller auth failure at startup.
+  - `close_audio_proxy_clients()` added to app shutdown sequence alongside
+    `close_sc_http_clients()`.
+  - Config comment updated to document `socks5://login:pass@ip:port` format
+    for `OUTBOUND_STATIC_PROXY_URLS`.
+
 - [x] **Notification panel portal layering fix (2026-05-15)**
   - In-app notification panel now renders through a document-level portal,
     so sticky/profile headers and other local stacking contexts cannot cover
@@ -2321,7 +2369,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-15 (SoundCloud radio playback repair).*
+*Последнее обновление: 2026-05-16 (Admin playback filters and radio skip counters).*
 
 ## Session Updates (2026-05-06)
 

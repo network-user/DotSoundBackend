@@ -147,6 +147,12 @@ export function DashboardRoute() {
   const [onlineFallback, setOnlineFallback] = useState<
     ChartPoint[]
   >([])
+  const radioSkipDays =
+    statsPeriod === 'today'
+      ? 1
+      : statsPeriod === '7d'
+        ? 7
+        : 30
 
   const { data, error, isLoading } = useQuery({
     queryKey: ['admin', 'dashboard', 'overview'],
@@ -228,6 +234,18 @@ export function DashboardRoute() {
     refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
+  const radioSkipReasons = useQuery({
+    queryKey: [
+      'admin',
+      'dashboard',
+      'radio-auto-skip-reasons',
+      radioSkipDays,
+    ],
+    queryFn: () =>
+      adminApi.dashboardRadioAutoSkipReasons(radioSkipDays, 10),
+    refetchInterval: live ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  })
   const stats = useQuery({
     queryKey: ['admin', 'dashboard', 'stats', statsPeriod],
     queryFn: () => adminApi.dashboardStats(statsPeriod),
@@ -295,6 +313,12 @@ export function DashboardRoute() {
     radioGuardPoints.at(-1)?.value ?? 0
   const latestRadioQueueSize =
     radioQueueSizePoints.at(-1)?.value ?? 0
+  const radioSkipReasonItems =
+    radioSkipReasons.data?.items ?? []
+  const radioSkipReasonTotal = radioSkipReasonItems.reduce(
+    (sum, item) => sum + item.count,
+    0,
+  )
   const baseOnlinePoints =
     onlinePoints.length > 0
       ? onlinePoints
@@ -863,6 +887,72 @@ export function DashboardRoute() {
           />
         </m.div>
       </m.section>
+
+      <section className="admin-card">
+        <div className="admin-dashboard__chart-head">
+          <div>
+            <h2>Radio auto-skip reasons</h2>
+            <p className="admin-card__sub">
+              Last {radioSkipDays} {radioSkipDays === 1 ? 'day' : 'days'}
+            </p>
+          </div>
+          <span className="admin-card__sub">
+            {radioSkipReasonTotal} events
+          </span>
+        </div>
+        {radioSkipReasons.isLoading ? (
+          <div className="admin-skeleton admin-skeleton--card" />
+        ) : radioSkipReasonItems.length === 0 ? (
+          <div className="admin-log-empty">
+            No radio auto-skip data yet
+          </div>
+        ) : (
+          <div className="admin-dashboard__toplist-rows">
+            {radioSkipReasonItems.map((item) => {
+              const pct =
+                radioSkipReasonTotal > 0
+                  ? (item.count / radioSkipReasonTotal) * 100
+                  : 0
+              const reason =
+                item.error_reason !== item.error_code
+                  ? item.error_reason
+                  : ''
+              return (
+                <div
+                  key={`${item.error_code}:${item.error_reason}`}
+                  className="admin-dashboard__toplist-row"
+                >
+                  <div className="admin-dashboard__toplist-title">
+                    {item.error_code}
+                  </div>
+                  <div className="admin-dashboard__toplist-meta">
+                    {item.count} events
+                    {reason ? ` - ${reason}` : ''}
+                  </div>
+                  <div
+                    aria-hidden
+                    style={{
+                      marginTop: 8,
+                      height: 4,
+                      overflow: 'hidden',
+                      borderRadius: 2,
+                      background: 'var(--surface-2)',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${pct}%`,
+                        height: '100%',
+                        background: 'var(--text)',
+                      }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
 
       <section className="kpi-grid kpi-grid--charts">
         <article className="admin-card">

@@ -142,6 +142,7 @@ async def _resolve_third_party_stream(
         sc_service = SoundCloudService(settings.sc_client_id, session)  # type: ignore[arg-type]
         return await sc_service.get_stream_info(
             sc_url,
+            prefer_hls=True,
             use_cache=use_cache,
         )
 
@@ -189,6 +190,40 @@ def _check_access(track: object, current_user: User | None = None) -> None:
     )
 
 
+_audio_proxy_http_clients: dict[str | None, httpx.AsyncClient] = {}
+
+
+async def close_audio_proxy_clients() -> None:
+    """Close pooled audio-proxy HTTP clients. Called on app shutdown."""
+    for c in list(_audio_proxy_http_clients.values()):
+        with contextlib.suppress(Exception):
+            await c.aclose()
+    _audio_proxy_http_clients.clear()
+
+
+def _get_audio_proxy_client(proxy_url: str | None) -> httpx.AsyncClient:
+    """Return a pooled AsyncClient for the given proxy URL.
+
+    Reuses an existing client so the underlying TCP/TLS connections
+    (and SOCKS5 tunnel for Tor/static proxies) are shared across
+    requests instead of being re-negotiated on every audio stream.
+    """
+    client = _audio_proxy_http_clients.get(proxy_url)
+    if client is None or client.is_closed:
+        client = httpx.AsyncClient(
+            timeout=httpx.Timeout(300.0, connect=30.0),
+            follow_redirects=True,
+            trust_env=False,
+            proxy=proxy_url,
+            limits=httpx.Limits(
+                max_connections=50,
+                max_keepalive_connections=20,
+            ),
+        )
+        _audio_proxy_http_clients[proxy_url] = client
+    return client
+
+
 async def _http_proxy_range_get(
     request: Request,
     stream_url: str,
@@ -216,30 +251,16 @@ async def _http_proxy_range_get(
 
         out_proxy = get_outbound_proxy(proxy_service)
 
-    client_kwargs: dict[str, Any] = {
-        "timeout": httpx.Timeout(300.0, connect=30.0),
-        "follow_redirects": True,
-        "trust_env": False,
-    }
-    if out_proxy:
-        client_kwargs["proxy"] = out_proxy
-    if proxy_service:
-        from app.services.outbound_proxy import instrument_httpx_client_kwargs
-
-        instrument_httpx_client_kwargs(
-            client_kwargs,
-            service=proxy_service,
-            proxy_url=out_proxy,
-        )
-
-    client = httpx.AsyncClient(**client_kwargs)
+    client = _get_audio_proxy_client(out_proxy)
     started_at = time.monotonic()
     try:
         req = client.build_request("GET", stream_url, headers=h)
         resp = await client.send(req, stream=True)
     except httpx.HTTPError as exc:
         if proxy_service:
-            from app.services.outbound_proxy import record_outbound_proxy_error
+            from app.services.outbound_proxy import (
+                record_outbound_proxy_error,
+            )
 
             record_outbound_proxy_error(
                 service=proxy_service,
@@ -255,7 +276,6 @@ async def _http_proxy_range_get(
             )
 
             report_outbound_proxy_result(out_proxy, ok=False)
-        await client.aclose()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=detail_error,
@@ -272,7 +292,6 @@ async def _http_proxy_range_get(
         with contextlib.suppress(Exception):
             body_preview = await resp.aread()
         await resp.aclose()
-        await client.aclose()
         logger.warning(
             "proxy_upstream_error",
             upstream_status=resp.status_code,
@@ -282,7 +301,9 @@ async def _http_proxy_range_get(
                 else "?"
             ),
             outbound_proxied=bool(out_proxy),
-            body_preview=body_preview[:200].decode("utf-8", errors="replace"),
+            body_preview=body_preview[:200].decode(
+                "utf-8", errors="replace"
+            ),
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -299,20 +320,23 @@ async def _http_proxy_range_get(
         out_h["Content-Range"] = cr
 
     async def body_iter() -> AsyncIterator[bytes]:
-        completed = False
+        upstream_error = False
         try:
             async for chunk in resp.aiter_bytes(65536):
                 yield chunk
-            completed = True
+        except httpx.HTTPError:
+            upstream_error = True
+            raise
         finally:
             if out_proxy:
                 from app.services.outbound_proxy import (
                     report_outbound_proxy_result,
                 )
 
-                report_outbound_proxy_result(out_proxy, ok=completed)
+                report_outbound_proxy_result(
+                    out_proxy, ok=not upstream_error
+                )
             await resp.aclose()
-            await client.aclose()
 
     return StreamingResponse(
         body_iter(),
