@@ -22,15 +22,11 @@ _TITLE_WORD_RE = re.compile(r"[a-zA-Zа-яА-Я0-9]+")
 
 
 class TrackFallbackService:
-    def __init__(
-        self, session: AsyncSession, settings: object
-    ) -> None:
+    def __init__(self, session: AsyncSession, settings: object) -> None:
         self._session = session
         self._settings = settings
 
-    async def find_playback_replacement(
-        self, track: Track
-    ) -> Track | None:
+    async def find_playback_replacement(self, track: Track) -> Track | None:
         if track.duration_seconds is None or not track.title:
             return None
 
@@ -169,9 +165,7 @@ class TrackFallbackService:
             )
             return False
 
-        new_ext_id: str | None = (
-            str(best["id"]) if best.get("id") else None
-        )
+        new_ext_id: str | None = str(best["id"]) if best.get("id") else None
         repo = TrackRepository(self._session)
         url_owner = await repo.get_track_id_by_sc_url(new_url)
         if url_owner is not None:
@@ -218,6 +212,8 @@ class TrackFallbackService:
             )
             return False
         track.sc_url = new_url
+        track.source_url = new_url
+        track.canonical_source_url = new_url
         if new_ext_id is not None:
             track.external_id = new_ext_id
 
@@ -228,9 +224,7 @@ class TrackFallbackService:
         )
         return True
 
-    async def find_and_apply_fallback(
-        self, track: Track
-    ) -> Track | None:
+    async def find_and_apply_fallback(self, track: Track) -> Track | None:
         """Return a replacement track for playback without mutating ``track``.
 
         Legacy name kept for callers; rows are no longer rewritten in-place.

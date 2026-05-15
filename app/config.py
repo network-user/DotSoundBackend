@@ -196,6 +196,9 @@ class AppSettings(BaseSettings):
     # retrying just this step does not return us to the pre-proxy
     # exposure profile.
     sc_stream_fallback_direct_on_tor_failure: bool = False
+    # Extra same-mode retries after every SoundCloud transcoding
+    # manifest returns 404 through one outbound identity.
+    sc_stream_manifest_proxy_retries: int = 2
     # When TOR_POOL_ENABLED=true, startup failure must fail closed by
     # default. Otherwise an operator can believe rotated egress is active
     # while the process silently falls back to the server IP.
@@ -394,6 +397,7 @@ class AppSettings(BaseSettings):
     radio_enabled: bool = True
     radio_youtube_mix_enabled: bool = True
     radio_max_suggestions: int = 10
+    playback_repair_sweep_limit: int = 30
 
     snippet_ffmpeg_enabled: bool = True
     snippet_external_catalog_allowed: bool = False

@@ -41,6 +41,7 @@ _SC_API_BASE = "https://api-v2.soundcloud.com"
 # fresh circuit rotation just creates one extra entry, not a full
 # new TLS handshake on every call.
 _sc_http_client_cache: dict[tuple[str | None, float], httpx.AsyncClient] = {}
+_PROXY_AUTO = object()
 
 
 async def close_sc_http_clients() -> None:
@@ -153,6 +154,7 @@ class SoundCloudService:
         timeout: float = 10,
         *,
         force_direct: bool = False,
+        proxy_url: str | None | object = _PROXY_AUTO,
     ) -> AsyncIterator[httpx.AsyncClient]:
         """Yield a pooled AsyncClient routed through egress proxy if set.
 
@@ -172,9 +174,13 @@ class SoundCloudService:
             instrument_httpx_client_kwargs,
         )
 
-        proxy: str | None = (
-            None if force_direct else get_outbound_proxy("soundcloud")
-        )
+        proxy: str | None
+        if force_direct:
+            proxy = None
+        elif proxy_url is not _PROXY_AUTO:
+            proxy = proxy_url if isinstance(proxy_url, str) else None
+        else:
+            proxy = get_outbound_proxy("soundcloud")
         key = (proxy, float(timeout))
         client = _sc_http_client_cache.get(key)
         if client is None or client.is_closed:
@@ -512,13 +518,22 @@ class SoundCloudService:
         a different egress (e.g. direct, without Tor).
         Raises :class:`HTTPException` for non-404 upstream errors.
         """
+        from app.services.outbound_proxy import (
+            get_outbound_proxy,
+            report_outbound_proxy_result,
+        )
+
+        proxy_url = None if force_direct else get_outbound_proxy("soundcloud")
         async with (
             soundcloud_slot(
                 timeout_seconds=(
                     settings.soundcloud_slot_acquire_timeout_seconds
                 ),
             ),
-            self._sc_client(force_direct=force_direct) as client,
+            self._sc_client(
+                force_direct=force_direct,
+                proxy_url=proxy_url,
+            ) as client,
         ):
             attempted = False
             saw_manifest_404 = False
@@ -571,6 +586,7 @@ class SoundCloudService:
                         protocol=protocol,
                         force_direct=force_direct,
                     )
+                    report_outbound_proxy_result(proxy_url, ok=False)
                     raise HTTPException(
                         status_code=status.HTTP_502_BAD_GATEWAY,
                         detail="SoundCloud upstream error",
@@ -586,6 +602,7 @@ class SoundCloudService:
                     protocol_out,
                     settings.stream_url_cache_ttl_soundcloud,
                 )
+                report_outbound_proxy_result(proxy_url, ok=True)
                 return stream_url, protocol_out
 
             if not attempted:
@@ -594,11 +611,13 @@ class SoundCloudService:
                     detail="No streamable format found for this SC track",
                 )
             if saw_transient_network_error and not saw_manifest_404:
+                report_outbound_proxy_result(proxy_url, ok=False)
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="SoundCloud upstream temporarily unavailable",
                 )
             if saw_manifest_404:
+                report_outbound_proxy_result(proxy_url, ok=False)
                 raise _SCAllTranscodings404()
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
@@ -653,15 +672,45 @@ class SoundCloudService:
             except _SCAllTranscodings404:
                 pass
 
+            from app.services.outbound_proxy import outbound_proxy_configured
+
+            proxied = outbound_proxy_configured()
+            retry_count = max(
+                0,
+                int(settings.sc_stream_manifest_proxy_retries),
+            )
+            if proxied and retry_count > 0:
+                for attempt in range(1, retry_count + 1):
+                    try:
+                        result = await self._resolve_stream_via_transcodings(
+                            transcodings=transcodings,
+                            protocols_order=protocols_order,
+                            params=params,
+                            cache_id=cache_id,
+                            force_direct=False,
+                        )
+                    except _SCAllTranscodings404:
+                        logger.warning(
+                            "soundcloud_stream_retry_proxy_all_404",
+                            sc_host="api-v2.soundcloud.com",
+                            attempt=attempt,
+                            max_attempts=retry_count,
+                        )
+                        continue
+                    logger.info(
+                        "soundcloud_stream_retry_proxy_succeeded",
+                        sc_host="api-v2.soundcloud.com",
+                        attempt=attempt,
+                        protocol=result[1],
+                    )
+                    return result
+
             # Every proxied transcoding returned 404. SC sometimes
             # downranks Tor exits only on the
             # ``/media/.../stream/{progressive,hls}`` step (``/resolve``
             # and the health-check ``HEAD api.soundcloud.com`` still
             # succeed). Retry the transcoding step once without a
             # proxy when the original attempt was actually proxied.
-            from app.services.outbound_proxy import outbound_proxy_configured
-
-            proxied = outbound_proxy_configured()
             fallback_enabled = (
                 settings.sc_stream_fallback_direct_on_tor_failure
             )

@@ -20,7 +20,10 @@ from app.dependencies import (
     require_admin_session,
 )
 from app.models.user import User
-from app.schemas.admin_playback import AdminPlaybackVerifyResponse
+from app.schemas.admin_playback import (
+    AdminPlaybackRepairEnqueueResponse,
+    AdminPlaybackVerifyResponse,
+)
 from app.schemas.track import TrackUpdateRequest
 from app.services.admin_lyrics_import_service import (
     AdminLyricsImportService,
@@ -291,6 +294,37 @@ async def admin_verify_track_playback(
 
 
 @router.post(
+    "/tracks/{track_id}/playback-health/repair",
+    response_model=AdminPlaybackRepairEnqueueResponse,
+    summary="[Admin] Queue background playback source repair",
+)
+@limiter.limit("30/minute")
+async def admin_repair_track_playback(
+    request: Request,
+    track_id: int,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> AdminPlaybackRepairEnqueueResponse:
+    service = AdminService(session)
+    result = await service.enqueue_track_playback_repair(
+        track_id,
+        actor_id=admin.id,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Track not found",
+        )
+    logger.info(
+        "admin_playback_repair_queued",
+        track_id=track_id,
+        queued=result.queued,
+        job_id=result.job_id,
+    )
+    return result
+
+
+@router.post(
     "/tracks/{track_id}/playback-health/clear-diagnostics",
     response_model=AdminTrackResponse,
     summary="[Admin] Clear playback failure summary fields on track row",
@@ -400,9 +434,7 @@ async def admin_delete_track(
             detail="Unsupported deletion reason",
         )
     service = AdminService(session)
-    ok = await service.delete_track(
-        track_id, actor_id=admin.id, reason=reason
-    )
+    ok = await service.delete_track(track_id, actor_id=admin.id, reason=reason)
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -459,9 +491,7 @@ async def admin_hard_delete_track(
     admin: User = Depends(require_admin_session),
 ) -> None:
     service = AdminService(session)
-    ok = await service.hard_delete_track_now(
-        track_id, actor_id=admin.id
-    )
+    ok = await service.hard_delete_track_now(track_id, actor_id=admin.id)
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -922,9 +952,7 @@ async def admin_get_upload_meta(
         TrackUploadMetaRepository,
     )
 
-    meta = await TrackUploadMetaRepository(session).get_by_track_id(
-        track_id
-    )
+    meta = await TrackUploadMetaRepository(session).get_by_track_id(track_id)
     if not meta:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

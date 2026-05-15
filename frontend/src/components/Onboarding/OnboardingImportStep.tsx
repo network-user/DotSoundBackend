@@ -45,6 +45,19 @@ interface Props {
 const MAX_POLLS = 150
 const POLL_MS = 2000
 
+function scanErrorMessage(
+  fallback: string,
+  job: ImportJobResponse,
+): string {
+  const code = job.tracks_data?.error_code?.trim()
+  const message = job.tracks_data?.error_message?.trim()
+  const detail = [
+    code ? `code=${code}` : '',
+    message && message !== code ? message : '',
+  ].filter(Boolean).join('; ')
+  return detail ? `${fallback} (${detail})` : fallback
+}
+
 export function OnboardingImportStep({ onDone }: Props) {
   const { t } = useTranslation()
   const [status, setStatus] = useState<OnboardingStatus | null>(null)
@@ -248,7 +261,7 @@ export function OnboardingImportStep({ onDone }: Props) {
     try {
       const j = await api.startYandexMusicImport(url)
       if (j.status === 'failed') {
-        throw new Error('scan_failed')
+        throw new Error(scanErrorMessage('scan_failed', j))
       }
       setYandexOpen(false)
       if (!applyScanJob(j)) {
@@ -274,7 +287,7 @@ export function OnboardingImportStep({ onDone }: Props) {
     try {
       const j = await api.startVkMusicImport(url)
       if (j.status === 'failed') {
-        throw new Error('scan_failed')
+        throw new Error(scanErrorMessage('scan_failed', j))
       }
       setVkOpen(false)
       if (!applyScanJob(j)) {
@@ -300,7 +313,7 @@ export function OnboardingImportStep({ onDone }: Props) {
     try {
       const j = await api.startSoundCloudPlaylistImport(url)
       if (j.status === 'failed') {
-        throw new Error('scan_failed')
+        throw new Error(scanErrorMessage('scan_failed', j))
       }
       setScOpen(false)
       if (!applyScanJob(j)) {
@@ -326,7 +339,7 @@ export function OnboardingImportStep({ onDone }: Props) {
     try {
       const j = await api.startSpotifyImport(url)
       if (j.status === 'failed') {
-        throw new Error('scan_failed')
+        throw new Error(scanErrorMessage('scan_failed', j))
       }
       setSpotifyOpen(false)
       if (!applyScanJob(j)) {

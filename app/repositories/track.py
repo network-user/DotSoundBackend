@@ -247,9 +247,7 @@ class TrackRepository(BaseRepository[Track]):
         )
         return list(result.scalars().all())
 
-    async def list_popular_genres(
-        self, *, limit: int = 50
-    ) -> list[str]:
+    async def list_popular_genres(self, *, limit: int = 50) -> list[str]:
         """Top non-null genres ordered by track count."""
         result = await self._session.execute(
             select(Track.genre)
@@ -551,13 +549,52 @@ class TrackRepository(BaseRepository[Track]):
         sc_url: str,
         external_id: str | None = None,
     ) -> None:
-        values: dict[str, object] = {"sc_url": sc_url}
+        values: dict[str, object] = {
+            "sc_url": sc_url,
+            "source_url": sc_url,
+            "canonical_source_url": sc_url,
+        }
         if external_id is not None:
             values["external_id"] = external_id
         await self._session.execute(
             update(Track).where(Track.id == track_id).values(**values)
         )
         await self._session.flush()
+
+    async def list_soundcloud_playback_repair_candidates(
+        self,
+        *,
+        limit: int,
+    ) -> list[Track]:
+        if limit <= 0:
+            return []
+        soundcloud = (Track.source_platform == "soundcloud") | (
+            Track.sc_url.isnot(None)
+        )
+        needs_repair = (
+            Track.playback_last_failure_at.isnot(None)
+            | Track.playback_recovery_failed_at.isnot(None)
+            | (
+                Track.playback_suppressed_until.isnot(None)
+                & (Track.playback_suppressed_until > func.now())
+            )
+        )
+        result = await self._session.execute(
+            select(Track)
+            .where(
+                Track.is_active.is_(True),
+                Track.deleted_at.is_(None),
+                Track.access_mode == "third_party_stream",
+                soundcloud,
+                needs_repair,
+            )
+            .order_by(
+                Track.playback_last_failure_at.desc(),
+                Track.id.asc(),
+            )
+            .limit(limit)
+        )
+        return list(result.scalars().all())
 
     async def find_existing_by_normalized_title_artist(
         self,
@@ -757,9 +794,7 @@ class TrackRepository(BaseRepository[Track]):
             select(func.count()).where(condition)
         )
         rows = await self._session.execute(
-            select(Track.id)
-            .where(condition)
-            .order_by(Track.deleted_at.desc())
+            select(Track.id).where(condition).order_by(Track.deleted_at.desc())
         )
         return [int(track_id) for track_id in rows.scalars().all()], int(
             total_result.scalar_one()

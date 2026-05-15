@@ -7,7 +7,7 @@ import {
   type MouseEvent,
 } from 'react'
 import { useTranslation } from 'react-i18next'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { TrackList } from '@/components/TrackList/TrackList'
 import { TrackCard } from '@/components/TrackCard/TrackCard'
 import { CoverImage } from '@/components/CoverImage/CoverImage'
@@ -45,6 +45,34 @@ type SearchTab =
 
 const SEARCH_DEBOUNCE_MS = 300
 const GENRES_PAGE_SIZE = 24
+const SEARCH_TABS: readonly SearchTab[] = [
+  'all',
+  'tracks',
+  'artists',
+  'playlists',
+  'genres',
+]
+
+function normalizeSearchTab(value: string | null): SearchTab {
+  return SEARCH_TABS.includes(value as SearchTab)
+    ? (value as SearchTab)
+    : 'all'
+}
+
+function readSearchParam(
+  params: URLSearchParams,
+  key: string,
+): string {
+  return params.get(key) ?? ''
+}
+
+function readOptionalSearchParam(
+  params: URLSearchParams,
+  key: string,
+): string | null {
+  const value = params.get(key)?.trim()
+  return value ? value : null
+}
 
 function fmtCount(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '0'
@@ -237,12 +265,19 @@ function SearchPendingTrackRow({
 export function SearchView({ onOpenArtist }: SearchViewProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { playTrack } = usePlayerActions()
   const { toggleLike } = useLikes()
 
-  const [query, setQuery] = useState('')
-  const [genreFilter, setGenreFilter] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<SearchTab>('all')
+  const [query, setQuery] = useState(() =>
+    readSearchParam(searchParams, 'q'),
+  )
+  const [genreFilter, setGenreFilter] = useState<string | null>(() =>
+    readOptionalSearchParam(searchParams, 'genre'),
+  )
+  const [activeTab, setActiveTab] = useState<SearchTab>(() =>
+    normalizeSearchTab(searchParams.get('tab')),
+  )
 
   const [tracks, setTracks] = useState<Track[] | null | 'idle'>('idle')
   const [scResults, setSCResults] = useState<SCSearchResult[]>([])
@@ -309,6 +344,51 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
       return next
     })
   }
+
+  useEffect(() => {
+    const nextQuery = readSearchParam(searchParams, 'q')
+    const nextGenre = readOptionalSearchParam(searchParams, 'genre')
+    const nextTab = normalizeSearchTab(searchParams.get('tab'))
+
+    setQuery((prev) => (prev === nextQuery ? prev : nextQuery))
+    setGenreFilter((prev) =>
+      prev === nextGenre ? prev : nextGenre,
+    )
+    setActiveTab((prev) => (prev === nextTab ? prev : nextTab))
+  }, [searchParams])
+
+  useEffect(() => {
+    const next = new URLSearchParams(searchParams)
+    const trimmedQuery = query.trim()
+
+    if (trimmedQuery) {
+      next.set('q', query)
+    } else {
+      next.delete('q')
+    }
+
+    if (genreFilter) {
+      next.set('genre', genreFilter)
+    } else {
+      next.delete('genre')
+    }
+
+    if (activeTab !== 'all') {
+      next.set('tab', activeTab)
+    } else {
+      next.delete('tab')
+    }
+
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true })
+    }
+  }, [
+    activeTab,
+    genreFilter,
+    query,
+    searchParams,
+    setSearchParams,
+  ])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -670,6 +750,9 @@ export function SearchView({ onOpenArtist }: SearchViewProps) {
   const clearSearch = () => {
     setQuery('')
     setGenreFilter(null)
+    setActiveTab('all')
+    setGenreSearchTerm('')
+    setGenresVisible(GENRES_PAGE_SIZE)
     setSearchTotal(0)
     setTracks('idle')
     setSCResults([])

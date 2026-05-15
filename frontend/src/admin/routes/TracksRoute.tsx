@@ -351,6 +351,23 @@ export function TracksRoute() {
     }
   }
 
+  const handleRepairPlayback = async (id: number) => {
+    setBusyId(id)
+    try {
+      const r = await adminApi.repairTrackPlayback(id)
+      const lines = [
+        r.queued ? t('admin.tracks.repairQueued') : r.detail,
+        r.job_id ? `job_id=${r.job_id}` : '',
+      ].filter(Boolean)
+      await showAlert(lines.join('\n'))
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   const handleClearPlaybackDiagnostics = async (id: number) => {
     setBusyId(id)
     try {
@@ -782,6 +799,13 @@ export function TracksRoute() {
                   disabled={busy}
                 >
                   {t('admin.tracks.actionCheck')}
+                </MotionPress>
+                <MotionPress
+                  variant="ghost"
+                  onClick={() => handleRepairPlayback(id)}
+                  disabled={busy}
+                >
+                  {t('admin.tracks.actionRepair')}
                 </MotionPress>
                 <MotionPress
                   variant="ghost"

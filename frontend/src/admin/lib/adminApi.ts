@@ -976,6 +976,16 @@ export const adminApi = {
       method: 'POST',
       body: {},
     }),
+  repairTrackPlayback: (trackId: number) =>
+    adminFetch<{
+      queued: boolean
+      track_id: number
+      job_id: string | null
+      detail: string
+    }>(`/tracks/${trackId}/playback-health/repair`, {
+      method: 'POST',
+      body: {},
+    }),
   clearTrackPlaybackDiagnostics: (trackId: number) =>
     adminFetch<Record<string, unknown>>(
       `/tracks/${trackId}/playback-health/clear-diagnostics`,

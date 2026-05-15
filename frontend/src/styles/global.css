@@ -311,6 +311,12 @@ body.monochrome #app {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.track-card-artist--nav {
+  display: inline-block;
+  max-width: 100%;
+  width: fit-content;
+  cursor: pointer;
+}
 .track-card-artist--nav:hover {
   color: var(--text-primary);
   text-decoration: underline;

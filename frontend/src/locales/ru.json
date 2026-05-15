@@ -348,6 +348,8 @@
       "noGenrePlaceholder": "Без жанра",
       "actionSources": "Источники",
       "actionCheck": "Проверить",
+      "actionRepair": "Лечить",
+      "repairQueued": "Задача лечения playback поставлена в очередь",
       "actionResetMarks": "Сброс меток",
       "actionFullRecovery": "Полное восст.",
       "actionUnsuppress": "Снять auto-hide",

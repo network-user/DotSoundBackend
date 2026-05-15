@@ -18,7 +18,10 @@ from app.models.complaint import Complaint
 from app.models.track import Track
 from app.models.user import User
 from app.repositories.admin import AdminRepository
-from app.schemas.admin_playback import AdminPlaybackVerifyResponse
+from app.schemas.admin_playback import (
+    AdminPlaybackRepairEnqueueResponse,
+    AdminPlaybackVerifyResponse,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -186,6 +189,47 @@ class AdminService:
             detail="Internal track has no file_key",
         )
 
+    async def enqueue_track_playback_repair(
+        self,
+        track_id: int,
+        *,
+        actor_id: int,
+    ) -> AdminPlaybackRepairEnqueueResponse | None:
+        track = await self._repo.get_track(track_id)
+        if track is None:
+            return None
+
+        from app.services.background_jobs import (
+            IdempotencySkipped,
+            enqueue,
+        )
+        from app.services.playback_repair_worker import (
+            repair_track_playback_task,
+        )
+
+        try:
+            job_id = await enqueue(
+                repair_track_playback_task,
+                payload={"track_id": track_id},
+                queue="default",
+                max_attempts=2,
+                idempotency_key=f"playback-repair:track:{track_id}",
+                idempotency_ttl_seconds=600,
+                created_by_user_id=actor_id,
+            )
+        except IdempotencySkipped:
+            return AdminPlaybackRepairEnqueueResponse(
+                queued=False,
+                track_id=track_id,
+                detail="Playback repair is already queued",
+            )
+        return AdminPlaybackRepairEnqueueResponse(
+            queued=True,
+            track_id=track_id,
+            job_id=job_id,
+            detail="Playback repair queued",
+        )
+
     async def clear_track_playback_diagnostics(
         self,
         track_id: int,
@@ -284,9 +328,7 @@ class AdminService:
         )
 
         svc = TrackHardDeleteService(self._session)
-        return await svc.hard_delete_one(
-            track_id, actor_id=actor_id
-        )
+        return await svc.hard_delete_one(track_id, actor_id=actor_id)
 
     async def list_deleted_tracks(
         self,
@@ -419,14 +461,10 @@ class AdminService:
             page=page, size=size, search=search
         )
 
-    async def restore_user(
-        self, user_id: int
-    ) -> User | None:
+    async def restore_user(self, user_id: int) -> User | None:
         from app.repositories.user import UserRepository
 
-        return await UserRepository(self._session).restore(
-            user_id
-        )
+        return await UserRepository(self._session).restore(user_id)
 
     async def hard_delete_user_now(
         self, user_id: int, *, actor_id: int

@@ -348,6 +348,8 @@
       "noGenrePlaceholder": "No genre",
       "actionSources": "Sources",
       "actionCheck": "Check",
+      "actionRepair": "Repair",
+      "repairQueued": "Playback repair queued",
       "actionResetMarks": "Reset marks",
       "actionFullRecovery": "Full recovery",
       "actionUnsuppress": "Clear auto-hide",

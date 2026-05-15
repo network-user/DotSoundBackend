@@ -1188,7 +1188,10 @@ export function PlayerProvider({
   // counter reaches MAX_CONSECUTIVE_AUTO_SKIPS we stop the cascade and show
   // a final error so the UI doesn't churn forever on a broken queue.
   const MAX_CONSECUTIVE_AUTO_SKIPS = 3
+  const MAX_RADIO_AUTO_SKIPS_PER_SESSION = 7
   const consecutiveAutoSkipsRef = useRef(0)
+  const radioAutoSkipsRef = useRef(0)
+  const radioAutoSkipHaltedRef = useRef(false)
 
   // Toast dedup: when a burst of skips happens, collapse them into a single
   // "Пропущено N недоступных треков" island that updates in place.
@@ -1245,6 +1248,9 @@ export function PlayerProvider({
   }, [])
 
   const haltRadioAfterAutoSkipExhaustion = useCallback(() => {
+    radioAutoSkipHaltedRef.current = true
+    radioAutoSkipsRef.current = 0
+    consecutiveAutoSkipsRef.current = 0
     radioSessionTimelineRef.current = []
     setRadioSessionTimeline([])
     radioModeRef.current = false
@@ -1253,10 +1259,19 @@ export function PlayerProvider({
     setRadioSeedTrackId(null)
     manualQueueRef.current = []
     setQueue([])
+    playNextInFlightRef.current = false
+    playTrackSlideInjectRef.current = null
+    playSessionRef.current += 1
     const audio = audioRef.current
-    if (audio && !audio.paused) {
+    if (audio) {
       try {
         audio.pause()
+      } catch {
+        /* ignore */
+      }
+      try {
+        audio.removeAttribute('src')
+        audio.load()
       } catch {
         /* ignore */
       }
@@ -1269,14 +1284,23 @@ export function PlayerProvider({
   const skipUnavailableTrack = async (
     trackId: number,
   ): Promise<boolean> => {
+    const wasRadioMode = radioModeRef.current
+    if (wasRadioMode && radioAutoSkipHaltedRef.current) {
+      return false
+    }
     markTrackUnavailableInSession(trackId)
     recordUnavailableSkip()
     consecutiveAutoSkipsRef.current += 1
+    if (wasRadioMode) {
+      radioAutoSkipsRef.current += 1
+    }
     if (
-      consecutiveAutoSkipsRef.current >= MAX_CONSECUTIVE_AUTO_SKIPS
+      consecutiveAutoSkipsRef.current >= MAX_CONSECUTIVE_AUTO_SKIPS ||
+      (wasRadioMode &&
+        radioAutoSkipsRef.current >= MAX_RADIO_AUTO_SKIPS_PER_SESSION)
     ) {
       const consecutiveSkips = consecutiveAutoSkipsRef.current
-      const wasRadioMode = radioModeRef.current
+      const radioSessionSkips = radioAutoSkipsRef.current
       const radioSeedTrackId = radioSeedTrackIdRef.current
       const queueSize = manualQueueRef.current.length
       consecutiveAutoSkipsRef.current = 0
@@ -1292,7 +1316,10 @@ export function PlayerProvider({
             surface: 'radio',
             current_track_id: trackId,
             radio_seed_track_id: radioSeedTrackId,
-            consecutive_skips: consecutiveSkips,
+            consecutive_skips: Math.max(
+              consecutiveSkips,
+              radioSessionSkips,
+            ),
             queue_size: queueSize,
           },
           { silent: true },
@@ -1781,6 +1808,12 @@ export function PlayerProvider({
       typeof optsOrUrl === 'object' && optsOrUrl !== null
         ? optsOrUrl.contextTracks
         : undefined
+    const isInjectedAdvance = playTrackSlideInjectRef.current !== null
+    if (!radioModeRef.current && !isInjectedAdvance) {
+      radioAutoSkipHaltedRef.current = false
+      radioAutoSkipsRef.current = 0
+      consecutiveAutoSkipsRef.current = 0
+    }
     if (contextTracks && contextTracks.length > 0) {
       const idx = contextTracks.findIndex(
         (it) => it.id === newTrack.id,
@@ -2075,6 +2108,9 @@ export function PlayerProvider({
   }, [])
 
   const startRadio = async (seedTrack: Track) => {
+    radioAutoSkipHaltedRef.current = false
+    radioAutoSkipsRef.current = 0
+    consecutiveAutoSkipsRef.current = 0
     radioSessionTimelineRef.current = []
     setRadioSessionTimeline([])
     radioModeRef.current = true
@@ -2099,6 +2135,9 @@ export function PlayerProvider({
   }
 
   const stopRadio = () => {
+    radioAutoSkipHaltedRef.current = false
+    radioAutoSkipsRef.current = 0
+    consecutiveAutoSkipsRef.current = 0
     radioSessionTimelineRef.current = []
     setRadioSessionTimeline([])
     radioModeRef.current = false
@@ -2124,6 +2163,9 @@ export function PlayerProvider({
       bypassInFlightGuard?: boolean
     },
   ): Promise<boolean> => {
+    if (radioAutoSkipHaltedRef.current) {
+      return false
+    }
     const sessionTrackId =
       lastTrackIdRef.current ?? track?.id ?? null
     if (
@@ -2143,6 +2185,9 @@ export function PlayerProvider({
       playTrackSlideInjectRef.current = 1
     }
     try {
+    if (radioAutoSkipHaltedRef.current) {
+      return false
+    }
     const isOffline =
       typeof navigator !== 'undefined' &&
       navigator.onLine === false
@@ -2167,6 +2212,7 @@ export function PlayerProvider({
           if (await isCached(item.id)) {
             manualQueueRef.current.splice(i, 1)
             setQueue([...manualQueueRef.current])
+            if (radioAutoSkipHaltedRef.current) return false
             await playTrack(item)
             return true
           }
@@ -2196,6 +2242,7 @@ export function PlayerProvider({
           return false
         }
         setQueue([...manualQueueRef.current])
+        if (radioAutoSkipHaltedRef.current) return false
         await playTrack(next)
         return true
       }
@@ -2223,6 +2270,7 @@ export function PlayerProvider({
             }
             manualQueueRef.current = newTracks.slice(1)
             setQueue([...manualQueueRef.current])
+            if (radioAutoSkipHaltedRef.current) return false
             await playTrack(next)
             return true
           }
@@ -2264,14 +2312,17 @@ export function PlayerProvider({
             tracks: availableCacheTracks.slice(1),
           }
         }
+        if (radioAutoSkipHaltedRef.current) return false
         await playTrack(next)
         return true
         }
       }
+      if (radioAutoSkipHaltedRef.current) return false
       return await _fallbackToCachedTrack(
         sessionTrackId ?? track?.id ?? 0,
       )
     } catch {
+      if (radioAutoSkipHaltedRef.current) return false
       return await _fallbackToCachedTrack(
         sessionTrackId ?? track?.id ?? 0,
       )

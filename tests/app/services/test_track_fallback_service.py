@@ -238,3 +238,40 @@ async def test_try_refresh_sc_url_noop_when_sc_url_owned_by_other(
     mock_instance.search_best_match.assert_awaited_once()
     redis.set.assert_awaited()
     assert redis.set.call_args[0][0] == f"{_SC_REFRESH_PREFIX}{stale_id}"
+
+
+@patch("app.services.soundcloud_service.SoundCloudService")
+@patch("app.core.redis.get_redis_client")
+async def test_try_refresh_sc_url_updates_source_url_fields(
+    mock_redis_factory: MagicMock,
+    mock_sc_class: MagicMock,
+    db_session: AsyncSession,
+) -> None:
+    redis = _mock_redis()
+    mock_redis_factory.return_value = redis
+    user = await _make_user(db_session)
+    stale = await _make_track(
+        db_session,
+        user,
+        title="Broken Song",
+        artist="Artist",
+        sc_url="https://soundcloud.com/old/broken",
+        source_url="https://soundcloud.com/old/broken",
+    )
+    new_url = "https://soundcloud.com/new/fixed"
+    await db_session.commit()
+
+    mock_instance = MagicMock()
+    mock_instance.search_best_match = AsyncMock(
+        return_value={"permalink_url": new_url, "id": 123456}
+    )
+    mock_sc_class.return_value = mock_instance
+
+    svc = TrackFallbackService(db_session, _SETTINGS)
+    assert await svc.try_refresh_sc_url(stale) is True
+
+    await db_session.refresh(stale)
+    assert stale.sc_url == new_url
+    assert stale.source_url == new_url
+    assert stale.canonical_source_url == new_url
+    assert stale.external_id == "123456"

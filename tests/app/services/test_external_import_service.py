@@ -96,6 +96,11 @@ async def test_scan_external_private_playlist(
     assert job.status == "failed"
     assert job.tracks_data is not None
     assert job.tracks_data["error_code"] == "private"
+    assert job.tracks_data["error_message"] == "playlist is private"
+    assert (
+        job.tracks_data["source_url"]
+        == "https://music.yandex.ru/users/u/playlists/1"
+    )
 
 
 @patch(

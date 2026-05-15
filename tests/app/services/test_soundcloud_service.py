@@ -1,5 +1,5 @@
 import contextlib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from unittest import mock
 from unittest.mock import (
     AsyncMock,
@@ -37,6 +37,28 @@ async def _noop_set_cached_stream(*_args: object, **_kwargs: object) -> None:
 pytestmark = pytest.mark.anyio
 
 _MOD = "app.services.soundcloud_service"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_soundcloud_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[None]:
+    from app.services import soundcloud_service
+
+    soundcloud_service._sc_http_client_cache.clear()
+    monkeypatch.setattr(soundcloud_service, "soundcloud_slot", _noop_slot)
+    monkeypatch.setattr(
+        soundcloud_service,
+        "get_cached_stream",
+        _noop_get_cached_stream,
+    )
+    monkeypatch.setattr(
+        soundcloud_service,
+        "set_cached_stream",
+        _noop_set_cached_stream,
+    )
+    yield
+    soundcloud_service._sc_http_client_cache.clear()
 
 
 async def test_search_no_client_id(
@@ -439,6 +461,10 @@ async def test_get_stream_info_all_404_with_tor_retries_direct_succeeds(
             True,
         ),
         patch(
+            f"{_MOD}.settings.sc_stream_manifest_proxy_retries",
+            0,
+        ),
+        patch(
             "app.services.outbound_proxy.outbound_proxy_configured",
             return_value=True,
         ),
@@ -455,6 +481,71 @@ async def test_get_stream_info_all_404_with_tor_retries_direct_succeeds(
     ]
     assert "socks5://127.0.0.1:9050" in proxies_used
     assert None in proxies_used
+
+
+@patch(f"{_MOD}.set_cached_stream", _noop_set_cached_stream)
+@patch(f"{_MOD}.get_cached_stream", _noop_get_cached_stream)
+@patch(f"{_MOD}.soundcloud_slot", _noop_slot)
+@patch(f"{_MOD}.httpx.AsyncClient")
+@patch("app.services.outbound_proxy.get_outbound_proxy")
+async def test_get_stream_info_all_404_retries_proxy_before_direct(
+    mock_proxy: MagicMock,
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_proxy.side_effect = [
+        "socks5://127.0.0.1:9150",
+        "socks5://127.0.0.1:9151",
+        "socks5://127.0.0.1:9152",
+    ]
+
+    resolve_resp = _make_resp(200, _two_transcodings_payload())
+    prog_404 = _make_resp(404)
+    hls_404 = _make_resp(404)
+    prog_ok = _make_resp(200, {"url": "https://cdn/audio.mp3"})
+
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(
+        side_effect=[resolve_resp, prog_404, hls_404, prog_ok],
+    )
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("test_id", session)
+    with (
+        patch(f"{_MOD}.settings.sc_stream_manifest_proxy_retries", 1),
+        patch(
+            f"{_MOD}.settings.sc_stream_fallback_direct_on_tor_failure",
+            False,
+        ),
+        patch(
+            "app.services.outbound_proxy.outbound_proxy_configured",
+            return_value=True,
+        ),
+        patch(
+            "app.services.outbound_proxy.report_outbound_proxy_result",
+        ) as report_proxy_result,
+    ):
+        url, protocol = await svc.get_stream_info(
+            "https://sc.com/x-proxy-retry",
+        )
+
+    assert url == "https://cdn/audio.mp3"
+    assert protocol == "progressive"
+    proxies_used = [
+        c.kwargs.get("proxy") for c in mock_client_cls.call_args_list
+    ]
+    assert "socks5://127.0.0.1:9152" in proxies_used
+    assert None not in proxies_used
+    report_proxy_result.assert_any_call(
+        "socks5://127.0.0.1:9151",
+        ok=False,
+    )
+    report_proxy_result.assert_any_call(
+        "socks5://127.0.0.1:9152",
+        ok=True,
+    )
 
 
 @patch(f"{_MOD}.set_cached_stream", _noop_set_cached_stream)
@@ -495,6 +586,10 @@ async def test_get_stream_info_all_404_with_tor_retry_direct_also_fails(
         patch(
             f"{_MOD}.settings.sc_stream_fallback_direct_on_tor_failure",
             True,
+        ),
+        patch(
+            f"{_MOD}.settings.sc_stream_manifest_proxy_retries",
+            0,
         ),
         patch(
             "app.services.outbound_proxy.outbound_proxy_configured",
@@ -572,6 +667,10 @@ async def test_get_stream_info_all_404_with_tor_fallback_flag_off(
         patch(
             f"{_MOD}.settings.sc_stream_fallback_direct_on_tor_failure",
             False,
+        ),
+        patch(
+            f"{_MOD}.settings.sc_stream_manifest_proxy_retries",
+            0,
         ),
         patch(
             "app.services.outbound_proxy.outbound_proxy_configured",

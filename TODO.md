@@ -1,5 +1,48 @@
 # DotSound - TODO Tracker
 
+- [x] **SoundCloud radio playback repair (2026-05-15)**
+  - Added same-mode SoundCloud stream-manifest retries through the next
+    outbound identity before returning `SoundCloud stream unavailable`.
+  - SoundCloud manifest success/failure now feeds outbound/Tor pool health,
+    so bad identities are avoided and working ones are reused by pooled
+    HTTP clients.
+  - Added background playback repair tasks plus a scheduled sweep for
+    failed/suppressed SoundCloud third-party streams.
+  - Added an admin playback repair action that queues a per-track repair
+    job and refreshes stale SoundCloud source URLs when a better match is
+    found.
+  - Production log review showed the current failures were emitted with
+    `proxied=false`, so the deployed backend did not actually use the Tor
+    pool/static outbound proxy for those SoundCloud manifest requests.
+
+- [x] **Hard radio auto-skip session cap (2026-05-15)**
+  - Radio mode now has a hard 7-track per-session auto-skip cap that does not
+    reset on intermediate browser `play` events.
+  - After the cap is reached, the player latches radio auto-skip off,
+    clears the radio queue, invalidates the current playback session,
+    and removes the current audio source to stop stale error callbacks.
+  - Verified frontend production build with `npm run build`.
+
+- [x] **Import start Taskiq enqueue race fix (2026-05-15)**
+  - Import start now commits `status=importing` before publishing the
+    Taskiq worker task, so fast workers no longer skip freshly started
+    jobs as `not_found_or_wrong_status`.
+  - Telegram and external import skip logs include the actual persisted
+    job status to diagnose future queue/state mismatches.
+
+- [x] **Track card artist click target and search state (2026-05-15)**
+  - Desktop track cards now make only the rendered artist name clickable,
+    not the whole text row beside it.
+  - Search state is mirrored into URL params (`q`, `tab`, `genre`), so
+    returning from an artist page restores the query and reloads results.
+  - Verified frontend production build with `npm run build`.
+
+- [x] **Import provider error diagnostics (2026-05-15)**
+  - External import scan failures now keep the source URL and provider
+    error message in the job payload for operator/client diagnostics.
+  - Import UI and onboarding import modals append safe provider
+    `error_code` / `error_message` details to failed scan messages.
+
 - [x] **Import source scan UX and proxy diagnostics (2026-05-15)**
   - Fixed import scanning labels so Yandex/VK/Spotify/SoundCloud scans no
     longer show the Telegram fallback text before the scan job is returned.
@@ -2241,7 +2284,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-15 (Import source scan UX).*
+*Последнее обновление: 2026-05-15 (SoundCloud radio playback repair).*
 
 ## Session Updates (2026-05-06)
 

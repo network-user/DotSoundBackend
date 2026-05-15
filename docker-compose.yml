@@ -156,6 +156,7 @@ services:
       - app.services.waveform_worker
       - app.services.snippet_worker
       - app.services.artist_stats_worker
+      - app.services.playback_repair_worker
       - app.services.scheduler_service
       - app.services.account_deletion_worker
       - app.services.track_title_normalization_task

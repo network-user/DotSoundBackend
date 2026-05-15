@@ -29,6 +29,19 @@ type Phase =
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
 
+function scanErrorMessage(
+  fallback: string,
+  job: ImportJobData,
+): string {
+  const code = job.tracks_data?.error_code?.trim()
+  const message = job.tracks_data?.error_message?.trim()
+  const detail = [
+    code ? `code=${code}` : '',
+    message && message !== code ? message : '',
+  ].filter(Boolean).join('; ')
+  return detail ? `${fallback} (${detail})` : fallback
+}
+
 export function ImportView({ active }: { active: boolean }) {
   const { t } = useTranslation()
   const [phase, setPhase] = useState<Phase>('pick')
@@ -164,7 +177,7 @@ export function ImportView({ active }: { active: boolean }) {
     try {
       const j = await api.startTelegramImport()
       if (!applyScanResult(j)) {
-        setError(t('import.profileTracksFail'))
+        setError(scanErrorMessage(t('import.profileTracksFail'), j))
         setPhase('pick')
         setScanningSource(undefined)
       }
@@ -193,7 +206,7 @@ export function ImportView({ active }: { active: boolean }) {
                 : t('import.yandexScanGeneric')
         setPhase('pick')
         setScanningSource(undefined)
-        throw new Error(msg)
+        throw new Error(scanErrorMessage(msg, j))
       }
       applyScanResult(j)
       setYandexModalOpen(false)
@@ -223,7 +236,7 @@ export function ImportView({ active }: { active: boolean }) {
                   : t('import.vkGeneric')
           setPhase('pick')
           setScanningSource(undefined)
-          throw new Error(msg)
+          throw new Error(scanErrorMessage(msg, j))
         }
         applyScanResult(j)
         setVkModalOpen(false)
@@ -247,7 +260,7 @@ export function ImportView({ active }: { active: boolean }) {
           const code = j.tracks_data?.error_code as string | undefined
           setPhase('pick')
           setScanningSource(undefined)
-          throw new Error(extScanError(code))
+          throw new Error(scanErrorMessage(extScanError(code), j))
         }
         applyScanResult(j)
         setScModalOpen(false)
@@ -271,7 +284,7 @@ export function ImportView({ active }: { active: boolean }) {
           const code = j.tracks_data?.error_code as string | undefined
           setPhase('pick')
           setScanningSource(undefined)
-          throw new Error(extScanError(code))
+          throw new Error(scanErrorMessage(extScanError(code), j))
         }
         applyScanResult(j)
         setSpotifyModalOpen(false)
@@ -292,7 +305,7 @@ export function ImportView({ active }: { active: boolean }) {
         setPhase('pick')
         setScanningSource(undefined)
         setError(
-          extScanError(code) ||
+          scanErrorMessage(extScanError(code), j) ||
             t('import.accountTracks'),
         )
         return
