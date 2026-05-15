@@ -1,6 +1,7 @@
 """Track playback endpoints — stream URL, play count, cover, single track."""
 
 import contextlib
+import json
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -59,8 +60,48 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 def _http_exc_detail(exc: HTTPException) -> str:
+    return _detail_to_text(exc.detail)
+
+
+def _detail_to_text(detail: object) -> str:
+    if isinstance(detail, str):
+        return detail
+    try:
+        return json.dumps(detail, ensure_ascii=False, sort_keys=True)
+    except TypeError:
+        return str(detail)
+
+
+def _http_exc_message(exc: HTTPException) -> str:
     d = exc.detail
+    if isinstance(d, dict):
+        msg = d.get("message")
+        if isinstance(msg, str) and msg:
+            return msg
+        code = d.get("code")
+        if isinstance(code, str) and code:
+            return code
     return d if isinstance(d, str) else str(d)
+
+
+def _third_party_error_detail(
+    exc: HTTPException,
+    track: object,
+    track_id: int,
+) -> dict[str, Any]:
+    detail = dict(exc.detail) if isinstance(exc.detail, dict) else {}
+    detail.setdefault("message", _http_exc_message(exc))
+    detail.setdefault("code", "third_party_stream_error")
+    detail.setdefault("reason", "stream_resolution_failed")
+    detail.setdefault("retryable", exc.status_code in (502, 503, 504))
+    detail["http_status"] = exc.status_code
+    detail["track_id"] = track_id
+    detail["access_mode"] = getattr(track, "access_mode", None)
+    detail["catalog_type"] = getattr(track, "catalog_type", None)
+    detail["source_platform"] = getattr(track, "source_platform", None)
+    if _third_party_is_soundcloud(track):
+        detail.setdefault("provider", "soundcloud")
+    return detail
 
 
 def _stream_ttl(source_platform: str | None) -> int:
@@ -453,11 +494,12 @@ async def stream_track(
                 )
             )
         except HTTPException as exc:
+            detail = _third_party_error_detail(exc, track, track_id)
             logger.warning(
                 "stream_track_third_party_failed",
                 track_id=track_id,
                 status_code=exc.status_code,
-                detail=_http_exc_detail(exc),
+                detail=_detail_to_text(detail),
                 source_platform=getattr(track, "source_platform", None),
             )
             ph = TrackPlaybackHealthService(session)
@@ -465,9 +507,13 @@ async def stream_track(
                 track_id=track_id,
                 viewer_user_id=(current_user.id if current_user else None),
                 http_status=exc.status_code,
-                detail=_http_exc_detail(exc),
+                detail=_detail_to_text(detail),
             )
-            raise
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=detail,
+                headers=exc.headers,
+            ) from exc
         stream_track_id = int(getattr(eff_track, "id", track_id))
         stream_pf = getattr(eff_track, "source_platform", None)
         if protocol == "hls" or not _third_party_is_soundcloud(
@@ -784,11 +830,12 @@ async def audio_stream(
                 )
             )
         except HTTPException as exc:
+            detail = _third_party_error_detail(exc, track, track_id)
             logger.warning(
                 "audio_stream_third_party_failed",
                 track_id=track_id,
                 status_code=exc.status_code,
-                detail=_http_exc_detail(exc),
+                detail=_detail_to_text(detail),
                 source_platform=getattr(track, "source_platform", None),
             )
             ph = TrackPlaybackHealthService(session)
@@ -796,9 +843,13 @@ async def audio_stream(
                 track_id=track_id,
                 viewer_user_id=(current_user.id if current_user else None),
                 http_status=exc.status_code,
-                detail=_http_exc_detail(exc),
+                detail=_detail_to_text(detail),
             )
-            raise
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=detail,
+                headers=exc.headers,
+            ) from exc
         view_uid = current_user.id if current_user else None
         if getattr(eff_track, "source_platform", None) in (
             "bandcamp",

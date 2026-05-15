@@ -75,6 +75,7 @@ const initialModals: ModalsState = {
 }
 
 const PAGE_SIZE = 25
+const REPAIR_BULK_BATCH_SIZE = 5000
 
 type ModalsAction =
   | { type: 'set'; key: keyof ModalsState; value: ModalsState[keyof ModalsState] }
@@ -85,6 +86,10 @@ type TrackIdScope =
   | 'playback_failures'
   | 'playback_suppressed'
   | 'deleted'
+
+type PlaybackRepairBulkResult = Awaited<
+  ReturnType<typeof adminApi.repairTracksPlayback>
+>
 
 function modalsReducer(
   state: ModalsState,
@@ -106,6 +111,7 @@ export function TracksRoute() {
   >('all')
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
+  const [bulkRepairBusy, setBulkRepairBusy] = useState(false)
   const [statsPeriod, setStatsPeriod] = useState<
     'today' | '7d' | '30d' | 'all'
   >('7d')
@@ -365,6 +371,96 @@ export function TracksRoute() {
       await showAlert((err as Error).message)
     } finally {
       setBusyId(null)
+    }
+  }
+
+  const repairTrackIds = async (
+    trackIds: number[],
+  ): Promise<PlaybackRepairBulkResult> => {
+    const aggregate: PlaybackRepairBulkResult = {
+      requested: 0,
+      queued: 0,
+      skipped: 0,
+      missing: 0,
+      job_ids: [],
+      detail: '',
+    }
+    for (
+      let offset = 0;
+      offset < trackIds.length;
+      offset += REPAIR_BULK_BATCH_SIZE
+    ) {
+      const batch = trackIds.slice(offset, offset + REPAIR_BULK_BATCH_SIZE)
+      const result = await adminApi.repairTracksPlayback(batch)
+      aggregate.requested += result.requested
+      aggregate.queued += result.queued
+      aggregate.skipped += result.skipped
+      aggregate.missing += result.missing
+      aggregate.job_ids.push(...result.job_ids)
+    }
+    aggregate.detail = (
+      `queued=${aggregate.queued}, skipped=${aggregate.skipped}, ` +
+      `missing=${aggregate.missing}`
+    )
+    return aggregate
+  }
+
+  const showRepairBulkResult = async (
+    result: PlaybackRepairBulkResult,
+  ) => {
+    await showAlert(
+      t('admin.tracks.repairBulkQueued', {
+        queued: result.queued,
+        skipped: result.skipped,
+        missing: result.missing,
+      }),
+    )
+  }
+
+  const handleRepairSelectedPlayback = async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0 || bulkRepairBusy) return
+    setBulkRepairBusy(true)
+    try {
+      const r = await repairTrackIds(ids)
+      await showRepairBulkResult(r)
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setBulkRepairBusy(false)
+    }
+  }
+
+  const handleRepairAllPlaybackIssues = async () => {
+    if (bulkRepairBusy) return
+    setBulkRepairBusy(true)
+    try {
+      const searchFilter = search || undefined
+      const [failures, suppressed] = await Promise.all([
+        adminApi.listTrackIds({
+          scope: 'playback_failures',
+          search: searchFilter,
+        }),
+        adminApi.listTrackIds({
+          scope: 'playback_suppressed',
+          search: searchFilter,
+        }),
+      ])
+      const ids = Array.from(
+        new Set([...failures.ids, ...suppressed.ids]),
+      )
+      if (ids.length === 0) {
+        await showAlert(t('admin.tracks.repairAllNoIssues'))
+        return
+      }
+      const r = await repairTrackIds(ids)
+      await showRepairBulkResult(r)
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setBulkRepairBusy(false)
     }
   }
 
@@ -1117,6 +1213,27 @@ export function TracksRoute() {
           {t('admin.tracks.batchGenreMoodPromptBtn', {
             count: selectedIds.size,
           })}
+        </MotionPress>
+        <MotionPress
+          variant="ghost"
+          disabled={selectedIds.size === 0 || bulkRepairBusy}
+          title={
+            selectedIds.size === 0
+              ? t('admin.tracks.batchSelectHint')
+              : undefined
+          }
+          onClick={handleRepairSelectedPlayback}
+        >
+          {t('admin.tracks.repairSelectedBtn', {
+            count: selectedIds.size,
+          })}
+        </MotionPress>
+        <MotionPress
+          variant="ghost"
+          disabled={bulkRepairBusy}
+          onClick={handleRepairAllPlaybackIssues}
+        >
+          {t('admin.tracks.repairAllIssuesBtn')}
         </MotionPress>
         <MotionPress
           variant="ghost"

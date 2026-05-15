@@ -187,6 +187,19 @@ async function readApiErrorMessage(
     if (typeof body?.detail === 'string') {
       return body.detail
     }
+    if (
+      body?.detail &&
+      typeof body.detail === 'object' &&
+      !Array.isArray(body.detail)
+    ) {
+      const detail = body.detail as Record<string, unknown>
+      if (typeof detail.message === 'string') {
+        return detail.message
+      }
+      if (typeof detail.code === 'string') {
+        return detail.code
+      }
+    }
     if (Array.isArray(body?.detail)) {
       const parts: string[] = []
       for (const d of body.detail) {

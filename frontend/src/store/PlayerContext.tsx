@@ -155,7 +155,7 @@ interface PlayerContextValue {
     t: Track,
     optsOrUrl?:
       | string
-      | { url?: string; contextTracks?: Track[] },
+      | { url?: string; contextTracks?: Track[]; preserveQueue?: boolean },
   ) => Promise<void>
   togglePlay: () => void
   seek: (pct: number) => void
@@ -237,7 +237,7 @@ interface PlayerActionsValue {
     t: Track,
     optsOrUrl?:
       | string
-      | { url?: string; contextTracks?: Track[] },
+      | { url?: string; contextTracks?: Track[]; preserveQueue?: boolean },
   ) => Promise<void>
   togglePlay: () => void
   seek: (pct: number) => void
@@ -1798,7 +1798,7 @@ export function PlayerProvider({
     newTrack: Track,
     optsOrUrl?:
       | string
-      | { url?: string; contextTracks?: Track[] },
+      | { url?: string; contextTracks?: Track[]; preserveQueue?: boolean },
   ) => {
     const overrideUrl: string | undefined =
       typeof optsOrUrl === 'string'
@@ -1808,13 +1808,32 @@ export function PlayerProvider({
       typeof optsOrUrl === 'object' && optsOrUrl !== null
         ? optsOrUrl.contextTracks
         : undefined
+    const preserveQueue =
+      typeof optsOrUrl === 'object' &&
+      optsOrUrl !== null &&
+      optsOrUrl.preserveQueue === true
     const isInjectedAdvance = playTrackSlideInjectRef.current !== null
+    const hasContextTracks =
+      contextTracks !== undefined && contextTracks.length > 0
+    if (!isInjectedAdvance && !preserveQueue) {
+      prefetchCacheRef.current = null
+      if (!hasContextTracks) {
+        manualQueueRef.current = []
+        setQueue([])
+        radioSessionTimelineRef.current = []
+        setRadioSessionTimeline([])
+        radioModeRef.current = false
+        radioSeedTrackIdRef.current = null
+        setRadioMode(false)
+        setRadioSeedTrackId(null)
+      }
+    }
     if (!radioModeRef.current && !isInjectedAdvance) {
       radioAutoSkipHaltedRef.current = false
       radioAutoSkipsRef.current = 0
       consecutiveAutoSkipsRef.current = 0
     }
-    if (contextTracks && contextTracks.length > 0) {
+    if (hasContextTracks) {
       const idx = contextTracks.findIndex(
         (it) => it.id === newTrack.id,
       )
@@ -2131,7 +2150,7 @@ export function PlayerProvider({
     } catch {
       /* best-effort */
     }
-    await playTrack(seedTrack)
+    await playTrack(seedTrack, { preserveQueue: true })
   }
 
   const stopRadio = () => {

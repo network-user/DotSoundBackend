@@ -986,6 +986,18 @@ export const adminApi = {
       method: 'POST',
       body: {},
     }),
+  repairTracksPlayback: (trackIds: number[]) =>
+    adminFetch<{
+      requested: number
+      queued: number
+      skipped: number
+      missing: number
+      job_ids: string[]
+      detail: string
+    }>('/tracks/playback-health/repair', {
+      method: 'POST',
+      body: { track_ids: trackIds },
+    }),
   clearTrackPlaybackDiagnostics: (trackId: number) =>
     adminFetch<Record<string, unknown>>(
       `/tracks/${trackId}/playback-health/clear-diagnostics`,

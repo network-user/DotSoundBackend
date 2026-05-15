@@ -390,7 +390,7 @@ export function NotificationList({
       )
     )
 
-  return (
+  const overlay = (
     <div
       className={`notification-overlay${exit.cls}`}
       onClick={onClose}
@@ -540,4 +540,6 @@ export function NotificationList({
       </div>
     </div>
   )
+
+  return createPortal(overlay, document.body)
 }

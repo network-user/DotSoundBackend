@@ -1,5 +1,19 @@
 # DotSound - TODO Tracker
 
+- [x] **Profile imported track playback and bulk repair (2026-05-15)**
+  - Profile “My tracks” cards now pass their list as playback context,
+    matching the behavior of the main track lists.
+  - Explicit single-track playback clears stale manual/radio/prefetch
+    queues, while radio startup preserves its prepared queue.
+  - Admin Tracks now supports bulk playback repair enqueueing for selected
+    track IDs using the existing per-track background repair worker.
+  - SoundCloud import now verifies the stream immediately after import or
+    dedup; unresolved imports are marked with playback-health failure
+    fields and temporarily suppressed from public feeds until repair.
+  - Admin Tracks now includes a one-click action for all current playback
+    issues, batching failure and active-suppression IDs through repair.
+  - Verified frontend production build and Python syntax compilation.
+
 - [x] **SoundCloud radio playback repair (2026-05-15)**
   - Added same-mode SoundCloud stream-manifest retries through the next
     outbound identity before returning `SoundCloud stream unavailable`.

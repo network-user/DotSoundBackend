@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import structlog
+from dotsound_private_core.services.playback_health_policy import (
+    PLAYBACK_HEALTH_AUTO_SUPPRESS_DURATION,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.track import Track
@@ -109,5 +112,51 @@ class TrackPlaybackHealthService:
         if tr is None:
             return None
         tr.playback_suppressed_until = None
+        await self._session.flush()
+        return tr
+
+    async def record_import_verification_failed(
+        self,
+        *,
+        track_id: int,
+        viewer_user_id: int | None,
+        http_status: int | None,
+        detail: str | None,
+    ) -> None:
+        truncated = detail[:512] if detail else None
+        await self._repo.insert_failure_event(
+            track_id=track_id,
+            user_id=viewer_user_id,
+            source="import_verification_failed",
+            http_status=http_status,
+            detail_truncated=truncated,
+        )
+        tr = await self._session.get(Track, track_id)
+        if tr is None:
+            return
+        now = datetime.now(UTC)
+        tr.playback_last_failure_at = now
+        tr.playback_last_http_status = http_status
+        tr.playback_last_failure_source = "import_verification_failed"
+        tr.playback_recovery_failed_at = now
+        tr.playback_suppressed_until = (
+            now + PLAYBACK_HEALTH_AUTO_SUPPRESS_DURATION
+        )
+        await self._session.flush()
+        logger.info(
+            "playback_health_import_verification_failed_recorded",
+            track_id=track_id,
+            http_status=http_status,
+        )
+
+    async def clear_failure_state(self, track_id: int) -> Track | None:
+        tr = await self._session.get(Track, track_id)
+        if tr is None:
+            return None
+        tr.playback_suppressed_until = None
+        tr.playback_last_failure_at = None
+        tr.playback_last_http_status = None
+        tr.playback_last_failure_source = None
+        tr.playback_recovery_failed_at = None
         await self._session.flush()
         return tr

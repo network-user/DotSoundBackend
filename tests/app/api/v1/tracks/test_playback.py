@@ -494,6 +494,59 @@ async def test_soundcloud_hls_stream_and_audio_redirect(
     assert r2.headers["location"] == hls
 
 
+async def test_soundcloud_stream_failure_returns_diagnostics(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    user = await create_test_user(client, 50193)
+    t = await create_test_track(client, "ThirdSCFail", user["id"])
+    tid = t["id"]
+    await db_session.execute(
+        update(Track)
+        .where(Track.id == tid)
+        .values(
+            access_mode="third_party_stream",
+            catalog_type="external_reference",
+            source_platform="soundcloud",
+            sc_url="https://soundcloud.com/x/fail",
+            file_key=None,
+            hls_manifest_key=None,
+        )
+    )
+    await db_session.commit()
+
+    detail = {
+        "code": "soundcloud_stream_unavailable",
+        "message": "SoundCloud stream unavailable",
+        "reason": "provider_manifest_not_found_for_all_formats",
+        "stage": "transcoding_manifest",
+        "upstream_status": 404,
+        "attempted_protocols": ["progressive", "hls"],
+        "retryable": True,
+    }
+
+    with patch(
+        "app.api.v1.tracks.playback."
+        "_resolve_third_party_stream_with_recovery",
+        new=AsyncMock(
+            side_effect=HTTPException(status_code=502, detail=detail),
+        ),
+    ):
+        r = await client.get(f"/api/v1/tracks/{tid}/stream")
+
+    assert r.status_code == 502
+    body = r.json()
+    assert body["detail"]["code"] == "soundcloud_stream_unavailable"
+    assert body["detail"]["reason"] == (
+        "provider_manifest_not_found_for_all_formats"
+    )
+    assert body["detail"]["track_id"] == tid
+    assert body["detail"]["source_platform"] == "soundcloud"
+    assert body["detail"]["access_mode"] == "third_party_stream"
+    assert body["detail"]["catalog_type"] == "external_reference"
+    assert body["detail"]["attempted_protocols"] == ["progressive", "hls"]
+
+
 async def test_recovery_handles_soundcloud_502_as_recoverable() -> None:
     from app.api.v1.tracks.playback import (
         _resolve_third_party_stream_with_recovery,

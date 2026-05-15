@@ -19,6 +19,7 @@ from app.models.track import Track
 from app.models.user import User
 from app.repositories.admin import AdminRepository
 from app.schemas.admin_playback import (
+    AdminPlaybackRepairBulkResponse,
     AdminPlaybackRepairEnqueueResponse,
     AdminPlaybackVerifyResponse,
 )
@@ -228,6 +229,42 @@ class AdminService:
             track_id=track_id,
             job_id=job_id,
             detail="Playback repair queued",
+        )
+
+    async def enqueue_tracks_playback_repair(
+        self,
+        track_ids: list[int],
+        *,
+        actor_id: int,
+    ) -> AdminPlaybackRepairBulkResponse:
+        unique_ids = list(dict.fromkeys(track_ids))
+        queued = 0
+        skipped = 0
+        missing = 0
+        job_ids: list[str] = []
+        for track_id in unique_ids:
+            result = await self.enqueue_track_playback_repair(
+                track_id,
+                actor_id=actor_id,
+            )
+            if result is None:
+                missing += 1
+            elif result.queued:
+                queued += 1
+                if result.job_id is not None:
+                    job_ids.append(result.job_id)
+            else:
+                skipped += 1
+        return AdminPlaybackRepairBulkResponse(
+            requested=len(unique_ids),
+            queued=queued,
+            skipped=skipped,
+            missing=missing,
+            job_ids=job_ids,
+            detail=(
+                f"Playback repair queued={queued}, "
+                f"skipped={skipped}, missing={missing}"
+            ),
         )
 
     async def clear_track_playback_diagnostics(

@@ -311,7 +311,8 @@ async def test_get_stream_info_progressive_returns_404(
         await svc.get_stream_info("https://sc.com/x-prog-404-only")
 
     assert exc.value.status_code == 502
-    assert exc.value.detail == "SoundCloud stream unavailable"
+    detail = _assert_sc_stream_unavailable_detail(exc.value.detail)
+    assert detail["attempted_protocols"] == ["progressive"]
 
 
 @patch(f"{_MOD}.httpx.AsyncClient")
@@ -427,6 +428,21 @@ def _two_transcodings_payload() -> dict:
         },
         "track_authorization": "auth",
     }
+
+
+def _assert_sc_stream_unavailable_detail(
+    detail: object,
+) -> dict[str, object]:
+    assert isinstance(detail, dict)
+    assert detail["code"] == "soundcloud_stream_unavailable"
+    assert detail["message"] == "SoundCloud stream unavailable"
+    assert (
+        detail["reason"]
+        == "provider_manifest_not_found_for_all_formats"
+    )
+    assert detail["stage"] == "transcoding_manifest"
+    assert detail["upstream_status"] == 404
+    return detail
 
 
 @patch(f"{_MOD}.set_cached_stream", _noop_set_cached_stream)
@@ -600,7 +616,9 @@ async def test_get_stream_info_all_404_with_tor_retry_direct_also_fails(
         await svc.get_stream_info("https://sc.com/x-tor-retry-direct-fails")
 
     assert exc.value.status_code == 502
-    assert exc.value.detail == "SoundCloud stream unavailable"
+    detail = _assert_sc_stream_unavailable_detail(exc.value.detail)
+    assert detail["direct_fallback_attempted"] is True
+    assert detail["direct_fallback_outcome"] == "all_404"
 
 
 @patch(f"{_MOD}.set_cached_stream", _noop_set_cached_stream)
@@ -633,7 +651,8 @@ async def test_get_stream_info_all_404_no_tor_does_not_retry_direct(
         await svc.get_stream_info("https://sc.com/x-no-tor-no-retry")
 
     assert exc.value.status_code == 502
-    assert exc.value.detail == "SoundCloud stream unavailable"
+    detail = _assert_sc_stream_unavailable_detail(exc.value.detail)
+    assert detail["outbound_configured"] is False
     assert mock_client.get.await_count == 3
 
 
@@ -681,7 +700,8 @@ async def test_get_stream_info_all_404_with_tor_fallback_flag_off(
         await svc.get_stream_info("https://sc.com/x-flag-off")
 
     assert exc.value.status_code == 502
-    assert exc.value.detail == "SoundCloud stream unavailable"
+    detail = _assert_sc_stream_unavailable_detail(exc.value.detail)
+    assert detail["direct_fallback_enabled"] is False
     assert mock_client.get.await_count == 3
 
 

@@ -169,6 +169,7 @@ export function ProfileTrackList({
               <LongPressMenu key={track.id} items={buildMenu()}>
                 <TrackCard
                   track={track}
+                  contextTracks={tracks}
                   onDeleted={handleDeleted}
                   onVisibilityChanged={
                     handleVisibilityChanged

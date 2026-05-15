@@ -21,6 +21,8 @@ from app.dependencies import (
 )
 from app.models.user import User
 from app.schemas.admin_playback import (
+    AdminPlaybackRepairBulkRequest,
+    AdminPlaybackRepairBulkResponse,
     AdminPlaybackRepairEnqueueResponse,
     AdminPlaybackVerifyResponse,
 )
@@ -320,6 +322,33 @@ async def admin_repair_track_playback(
         track_id=track_id,
         queued=result.queued,
         job_id=result.job_id,
+    )
+    return result
+
+
+@router.post(
+    "/tracks/playback-health/repair",
+    response_model=AdminPlaybackRepairBulkResponse,
+    summary="[Admin] Queue background playback source repair for many tracks",
+)
+@limiter.limit("10/minute")
+async def admin_repair_tracks_playback(
+    request: Request,
+    body: AdminPlaybackRepairBulkRequest,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> AdminPlaybackRepairBulkResponse:
+    service = AdminService(session)
+    result = await service.enqueue_tracks_playback_repair(
+        body.track_ids,
+        actor_id=admin.id,
+    )
+    logger.info(
+        "admin_playback_repair_bulk_queued",
+        requested=result.requested,
+        queued=result.queued,
+        skipped=result.skipped,
+        missing=result.missing,
     )
     return result
 
