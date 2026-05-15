@@ -15,11 +15,14 @@
 - [x] **Импорт Telegram / Yandex: Docker internal API + outbound extras (2026-05-14)**
   — Telegram: backend бьётся в ``BOT_INTERNAL_URL``; бот по умолчанию
   слушал internal API только на ``127.0.0.1`` — из контейнера backend
-  connection refused / «All connection attempts failed». В
-  ``docker-compose.yml`` для сервиса ``bot`` задан
-  ``INTERNAL_API_HOST=0.0.0.0``; в ``.env.example`` и ``PRODUCTION.md``
-  задокументированы ``BOT_INTERNAL_URL=http://bot:8081`` и
-  ``INTERNAL_API_HOST`` для бота.
+  connection refused / «All connection attempts failed``. В
+  ``docker-compose.yml`` для сервиса ``bot`` заданы
+  ``INTERNAL_API_COMPOSE_BIND=true`` и ``INTERNAL_API_HOST=0.0.0.0``
+  (порт 8081 не на хосте); в ``.env.example`` и ``PRODUCTION.md``
+  задокументированы ``BOT_INTERNAL_URL=http://bot:8081``.
+  — (2026-05-15) Валидатор loopback-only в боте ломал старт при
+  ``INTERNAL_API_HOST=0.0.0.0`` из compose — добавлен явный
+  ``INTERNAL_API_COMPOSE_BIND``.
   — Yandex: образ backend делал ``pip install PrivateCore[ml]`` без
   ``outbound``/``scanners``/``proxies`` — риск неполного outbound-стека;
   Dockerfile ставит ``[ml,outbound,scanners,proxies]``; в

@@ -50,7 +50,7 @@ Each repo has its own `.env.example`. Copy and fill them:
 | --- | --- |
 | `DotSoundBackend/.env` | DB / Redis / MinIO / Elasticsearch / `JWT_SECRET` / `ADMIN_JWT_SECRET` / `ADMIN_CSRF_SECRET` / `TOTP_ENCRYPTION_KEY` / `CHAT_ENCRYPTION_KEY` / `RESEND_API_KEY` / `BACKUP_ENCRYPTION_KEY` / `TELEGRAM_BOT_TOKEN` / `MINI_APP_URL` / `ALLOWED_ORIGINS` / `DOMAIN` / `ACME_EMAIL` / **`BOT_INTERNAL_URL=http://bot:8081`** when Backend and Bot share Compose (not `localhost`) / matching `BOT_INTERNAL_SECRET` |
 | `DotSoundBackend/.env` | **For production: set `DEBUG=false`.** |
-| `DotSoundBot/.env` | `BOT_TOKEN` / `BACKEND_BASE_URL=http://backend:8000` / `INTERNAL_API_SECRET` (must match `BOT_INTERNAL_SECRET` in Backend `.env`) / `MINI_APP_URL` / **`INTERNAL_API_HOST=0.0.0.0`** so other containers can reach the internal HTTP API (compose sets this; bare-metal Docker must set it explicitly). |
+| `DotSoundBot/.env` | `BOT_TOKEN` / `BACKEND_BASE_URL=http://backend:8000` / `INTERNAL_API_SECRET` (must match `BOT_INTERNAL_SECRET` in Backend `.env`) / `MINI_APP_URL` / in Compose, `docker-compose.yml` sets **`INTERNAL_API_COMPOSE_BIND=true`** and **`INTERNAL_API_HOST=0.0.0.0`** (do not publish port 8081 on the host). |
 | `DotSoundPrivateCore/.env` | PrivateCore-only configuration (lyrics provider tokens, audio-stage settings, Whisper config, Yandex Cloud keys, optional `OUTBOUND_*` Tor/proxy knobs for Yandex/VK import). The Backend never reads or echoes these variables. |
 
 Generation helpers for the cryptographic values:

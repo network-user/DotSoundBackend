@@ -249,6 +249,7 @@ services:
     env_file:
       - ../DotSoundBot/.env
     environment:
+      INTERNAL_API_COMPOSE_BIND: "true"
       INTERNAL_API_HOST: 0.0.0.0
       REDIS_URL: redis://redis:6379/1
       BACKEND_BASE_URL: http://backend:8000
