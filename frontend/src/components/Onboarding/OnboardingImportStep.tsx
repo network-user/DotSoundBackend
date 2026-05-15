@@ -59,6 +59,7 @@ export function OnboardingImportStep({ onDone }: Props) {
   >(null)
   const [flow, setFlow] = useState<Flow>('pick')
   const [job, setJob] = useState<ImportJobResponse | null>(null)
+  const [scanningSource, setScanningSource] = useState<string | undefined>()
   const [audios, setAudios] = useState<ImportAudioInfo[]>([])
   const [selected, setSelected] = useState<Set<number>>(() => new Set())
   const [busy, setBusy] = useState(false)
@@ -179,6 +180,7 @@ export function OnboardingImportStep({ onDone }: Props) {
 
   const applyScanJob = useCallback(
     (j: ImportJobResponse) => {
+      setScanningSource(undefined)
       if (j.status === 'failed') {
         return false
       }
@@ -211,6 +213,7 @@ export function OnboardingImportStep({ onDone }: Props) {
     setJob(null)
     setAudios([])
     setSelected(new Set())
+    setScanningSource(undefined)
     setFlow('pick')
   }, [job, flow])
 
@@ -218,16 +221,19 @@ export function OnboardingImportStep({ onDone }: Props) {
     setErr(null)
     setFlow('scanning')
     setJob(null)
+    setScanningSource('telegram')
     setBusy(true)
     try {
       const j = await api.startTelegramImport()
       if (!applyScanJob(j)) {
         setErr('Не удалось прочитать музыку из Telegram')
         setFlow('pick')
+        setScanningSource(undefined)
       }
     } catch {
       setErr('Не удалось связаться с ботом')
       setFlow('pick')
+      setScanningSource(undefined)
     } finally {
       setBusy(false)
     }
@@ -235,6 +241,9 @@ export function OnboardingImportStep({ onDone }: Props) {
 
   const onYandexUrl = async (url: string) => {
     setErr(null)
+    setFlow('scanning')
+    setJob(null)
+    setScanningSource('yandex_music')
     setBusy(true)
     try {
       const j = await api.startYandexMusicImport(url)
@@ -249,6 +258,7 @@ export function OnboardingImportStep({ onDone }: Props) {
     } catch {
       setErr('Не удалось прочитать плейлист')
       setFlow('pick')
+      setScanningSource(undefined)
     } finally {
       setBusy(false)
     }
@@ -256,6 +266,9 @@ export function OnboardingImportStep({ onDone }: Props) {
 
   const onVkUrl = async (url: string) => {
     setErr(null)
+    setFlow('scanning')
+    setJob(null)
+    setScanningSource('vk_music')
     setBusy(true)
     try {
       const j = await api.startVkMusicImport(url)
@@ -270,6 +283,7 @@ export function OnboardingImportStep({ onDone }: Props) {
     } catch {
       setErr('Не удалось прочитать плейлист')
       setFlow('pick')
+      setScanningSource(undefined)
     } finally {
       setBusy(false)
     }
@@ -277,6 +291,9 @@ export function OnboardingImportStep({ onDone }: Props) {
 
   const onSoundCloudUrl = async (url: string) => {
     setErr(null)
+    setFlow('scanning')
+    setJob(null)
+    setScanningSource('soundcloud_playlist')
     setBusy(true)
     try {
       const j = await api.startSoundCloudPlaylistImport(url)
@@ -291,6 +308,7 @@ export function OnboardingImportStep({ onDone }: Props) {
     } catch {
       setErr('Не удалось прочитать плейлист')
       setFlow('pick')
+      setScanningSource(undefined)
     } finally {
       setBusy(false)
     }
@@ -298,6 +316,9 @@ export function OnboardingImportStep({ onDone }: Props) {
 
   const onSpotifyUrl = async (url: string) => {
     setErr(null)
+    setFlow('scanning')
+    setJob(null)
+    setScanningSource('spotify')
     setBusy(true)
     try {
       const j = await api.startSpotifyImport(url)
@@ -312,6 +333,7 @@ export function OnboardingImportStep({ onDone }: Props) {
     } catch {
       setErr('Не удалось прочитать плейлист')
       setFlow('pick')
+      setScanningSource(undefined)
     } finally {
       setBusy(false)
     }
@@ -401,6 +423,7 @@ export function OnboardingImportStep({ onDone }: Props) {
       setJob(null)
       setAudios([])
       setSelected(new Set())
+      setScanningSource(undefined)
       setFlow('pick')
     } catch {
       setErr('Не удалось отменить импорт')
@@ -887,7 +910,7 @@ export function OnboardingImportStep({ onDone }: Props) {
         <div className="import-scanning">
           <div className="loader" />
           <p className="empty-hint" style={{ marginTop: 16 }}>
-            {scanningLabel(job?.source)}
+            {scanningLabel(job?.source ?? scanningSource)}
           </p>
         </div>
         <YandexMusicUrlModal

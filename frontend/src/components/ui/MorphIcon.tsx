@@ -144,6 +144,7 @@ export function MorphIcon({
       transition={reduce ? { duration: 0 } : TWEEN_FAST}
     >
       <m.path
+        key={name}
         animate={{ d: target }}
         initial={false}
         transition={

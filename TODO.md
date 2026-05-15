@@ -1,5 +1,32 @@
 # DotSound - TODO Tracker
 
+- [x] **Admin filtered ID selection endpoint (2026-05-15)**
+  - Added backend admin ID-selection endpoints for tracks and artists so
+    `All filtered` selection no longer walks every page from the browser.
+  - Tracks support all/list issue/deleted scopes; artists support search,
+    enrichment, and catalog-sync filters.
+  - Frontend bulk selector now uses one filtered-ID request for all-filtered
+    selection and keeps page/range selection as explicit page operations.
+  - Verified with Ruff, targeted admin endpoint tests, and frontend build.
+
+- [x] **Radio playback failure guard (2026-05-15)**
+  - Radio queues now exclude tracks with active playback suppression or
+    recent server-side recovery failure before they reach autoplay.
+  - Radio mode stops the client-side auto-skip cascade after a short
+    failed burst, avoids server-warming third-party radio streams, and
+    prevents Workbox from trying to cache HTTP 206 partial responses.
+  - Added 429 backoff for active import polling and stabilized SVG icon
+    path swaps that produced invalid intermediate `d` attributes.
+  - Verified backend, PrivateCore, frontend prefetch tests, and frontend
+    production build.
+
+- [x] **Admin bulk page selection (2026-05-15)**
+  - Added shared admin bulk page selector for tracks and artists:
+    current page, page range, all filtered pages, and clear selection.
+  - Track and artist row selection now persists while moving between
+    pages and resets when the active search/filter scope changes.
+  - Verified frontend production build with `npm run build`.
+
 - [x] **Genius lyrics Tor fallback and diagnostics (2026-05-15)**
   - PrivateCore lyrics provider now allows direct fallback for Genius
     when optional Tor/proxy identities fail or are quarantined.
@@ -2199,7 +2226,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-15 (Genius lyrics Tor fallback).*
+*Последнее обновление: 2026-05-15 (Admin filtered ID selection endpoint).*
 
 ## Session Updates (2026-05-06)
 

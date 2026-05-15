@@ -348,6 +348,20 @@ class ArtistService:
             size=size,
         )
 
+    async def list_admin_ids(
+        self,
+        *,
+        q: str | None,
+        enrichment: str | None,
+    ) -> tuple[list[int], int]:
+        raw = q.strip() if q else None
+        normalized = normalize_name(raw) if raw else None
+        return await self._repo.list_admin_ids(
+            q=raw,
+            q_normalized=normalized,
+            enrichment_filter=enrichment,
+        )
+
     async def list_popular(
         self,
         limit: int = 50,

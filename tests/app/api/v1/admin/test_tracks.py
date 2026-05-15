@@ -32,6 +32,37 @@ async def test_admin_list_tracks(
     assert data["page"] == 1
 
 
+async def test_admin_list_track_ids_search_filter(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 130005)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    matched = await create_test_track(
+        client,
+        "Needle Bulk Track",
+        uploader_id=admin["id"],
+    )
+    await create_test_track(
+        client,
+        "Other Bulk Track",
+        uploader_id=admin["id"],
+    )
+
+    r = await client.get(
+        "/api/v1/admin/tracks/ids",
+        headers=headers,
+        params={"search": "Needle Bulk"},
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 1
+    assert body["ids"] == [matched["id"]]
+
+
 async def test_admin_toggle_track_visibility(
     client: AsyncClient,
     db_session: AsyncSession,

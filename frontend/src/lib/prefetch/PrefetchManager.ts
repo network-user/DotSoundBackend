@@ -385,6 +385,9 @@ export class PrefetchManager {
         continue
       }
       if (isThirdParty && this.policy.skipThirdPartyAudioCache) {
+        if (options.context === 'radio') {
+          continue
+        }
         eligible.push(track)
         continue
       }
@@ -654,7 +657,6 @@ export class PrefetchManager {
   private _shouldPreferHiVariant(): boolean {
     const net = this.currentNetwork
     if (net.saveData) return false
-    if (net.effectiveType === '4g') return true
     return net.downlinkMbps !== null && net.downlinkMbps >= 5.0
   }
 

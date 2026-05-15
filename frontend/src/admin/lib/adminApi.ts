@@ -838,6 +838,15 @@ export const adminApi = {
       }>
       total: number
     }>('/artists', { query: params }),
+  listArtistIds: (params: {
+    q?: string
+    enrichment?: string
+    catalog_sync?: string
+  }) =>
+    adminFetch<{
+      ids: number[]
+      total: number
+    }>('/artists/ids', { query: params }),
   artistEnrichBatch: (artistIds: number[]) =>
     adminFetch<{
       queued: number
@@ -905,6 +914,7 @@ export const adminApi = {
     size?: number
     is_active?: boolean
     without_lyrics?: boolean
+    lyrics_catalog_miss_only?: boolean
     search?: string
     for_playlist_owner_id?: number
     playable_only?: boolean
@@ -915,6 +925,19 @@ export const adminApi = {
       page: number
       size: number
     }>('/tracks', { query: params }),
+  listTrackIds: (params: {
+    scope?: 'all' | 'playback_failures' | 'playback_suppressed' | 'deleted'
+    is_active?: boolean
+    without_lyrics?: boolean
+    lyrics_catalog_miss_only?: boolean
+    search?: string
+    for_playlist_owner_id?: number
+    playable_only?: boolean
+  }) =>
+    adminFetch<{
+      ids: number[]
+      total: number
+    }>('/tracks/ids', { query: params }),
   listTracksPlaybackUnavailable: (params: {
     page?: number
     size?: number

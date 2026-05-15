@@ -18,6 +18,7 @@ import { Sparkline } from '../components/charts/Sparkline'
 import { LineChart } from '../components/charts/LineChart'
 import { OverflowMenu } from '../components/widgets/OverflowMenu'
 import { FormModal } from '../components/widgets/FormModal'
+import { BulkPageSelector } from '../components/widgets/BulkPageSelector'
 
 interface TrackRow {
   id: number
@@ -73,9 +74,17 @@ const initialModals: ModalsState = {
   sourceEdit: null,
 }
 
+const PAGE_SIZE = 25
+
 type ModalsAction =
   | { type: 'set'; key: keyof ModalsState; value: ModalsState[keyof ModalsState] }
   | { type: 'closeAll' }
+
+type TrackIdScope =
+  | 'all'
+  | 'playback_failures'
+  | 'playback_suppressed'
+  | 'deleted'
 
 function modalsReducer(
   state: ModalsState,
@@ -177,6 +186,27 @@ export function TracksRoute() {
 
   const contextTextareaRef = useRef<HTMLTextAreaElement>(null)
 
+  const fetchTrackPage = (targetPage: number) => {
+    const base = {
+      page: targetPage,
+      size: PAGE_SIZE,
+      search: search || undefined,
+    }
+    if (listView === 'playback_failures') {
+      return adminApi.listTracksPlaybackUnavailable(base)
+    }
+    if (listView === 'playback_suppressed') {
+      return adminApi.listTracksPlaybackSuppressed(base)
+    }
+    if (listView === 'deleted') {
+      return adminApi.listDeletedTracks(base)
+    }
+    return adminApi.listTracks({
+      ...base,
+      without_lyrics: withoutLyricsOnly || undefined,
+    })
+  }
+
   const { data, isFetching } = useQuery({
     queryKey: [
       'admin',
@@ -186,26 +216,7 @@ export function TracksRoute() {
       withoutLyricsOnly,
       listView,
     ],
-    queryFn: () => {
-      const base = {
-        page,
-        size: 25,
-        search: search || undefined,
-      }
-      if (listView === 'playback_failures') {
-        return adminApi.listTracksPlaybackUnavailable(base)
-      }
-      if (listView === 'playback_suppressed') {
-        return adminApi.listTracksPlaybackSuppressed(base)
-      }
-      if (listView === 'deleted') {
-        return adminApi.listDeletedTracks(base)
-      }
-      return adminApi.listTracks({
-        ...base,
-        without_lyrics: withoutLyricsOnly || undefined,
-      })
-    },
+    queryFn: () => fetchTrackPage(page),
     placeholderData: keepPreviousData,
   })
   const trackStats = useQuery({
@@ -215,7 +226,7 @@ export function TracksRoute() {
     refetchIntervalInBackground: false,
   })
   const total = data?.total || 0
-  const totalPages = Math.max(1, Math.ceil(total / 25))
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const rows = (data?.items || []) as unknown as TrackRow[]
   const visibleCount = rows.filter((r) => r.is_active).length
   const withGenreCount = rows.filter((r) => !!r.genre).length
@@ -234,7 +245,7 @@ export function TracksRoute() {
 
   useEffect(() => {
     setSelectedIds(new Set())
-  }, [page, listView])
+  }, [search, withoutLyricsOnly, listView])
 
   useEffect(() => {
     if (!sourceEditModal) return
@@ -559,11 +570,43 @@ export function TracksRoute() {
   const allOnPageSelected =
     rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
 
+  const addSelectedIds = (ids: number[]) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      ids.forEach((id) => next.add(id))
+      return next
+    })
+  }
+
+  const fetchTrackPageIds = async (
+    targetPage: number,
+  ): Promise<number[]> => {
+    const result = await fetchTrackPage(targetPage)
+    return (result.items as unknown as TrackRow[]).map((track) => track.id)
+  }
+
+  const fetchTrackAllIds = async (): Promise<number[]> => {
+    const scope: TrackIdScope =
+      listView === 'all' ? 'all' : listView
+    const result = await adminApi.listTrackIds({
+      scope,
+      search: search || undefined,
+      without_lyrics:
+        listView === 'all' ? withoutLyricsOnly || undefined : undefined,
+    })
+    return result.ids
+  }
+
   const toggleSelectAll = (checked: boolean) => {
+    const pageIds = rows.map((r) => r.id)
     if (checked) {
-      setSelectedIds(new Set(rows.map((r) => r.id)))
+      addSelectedIds(pageIds)
     } else {
-      setSelectedIds(new Set())
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        pageIds.forEach((id) => next.delete(id))
+        return next
+      })
     }
   }
 
@@ -946,6 +989,7 @@ export function TracksRoute() {
           onChange={(e) => {
             setSearch(e.target.value)
             setPage(1)
+            setSelectedIds(new Set())
           }}
         />
         <AdminRangeSwitch
@@ -996,6 +1040,18 @@ export function TracksRoute() {
           />
           {t('admin.tracks.filterWithoutLyrics')}
         </label>
+        <BulkPageSelector
+          currentPage={page}
+          totalPages={totalPages}
+          totalItems={total}
+          selectedCount={selectedIds.size}
+          disabled={isFetching}
+          fetchPageIds={fetchTrackPageIds}
+          fetchAllIds={fetchTrackAllIds}
+          onAddIds={addSelectedIds}
+          onClear={() => setSelectedIds(new Set())}
+          onError={(err) => showAlert(err.message)}
+        />
         <MotionPress
           variant="primary"
           disabled={selectedIds.size === 0}

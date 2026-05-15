@@ -57,6 +57,11 @@ class AdminTrackListResponse(BaseModel):
     size: int
 
 
+class AdminIdSelectionResponse(BaseModel):
+    ids: list[int]
+    total: int
+
+
 class AdminUserListResponse(BaseModel):
     items: list[UserResponse]
     total: int

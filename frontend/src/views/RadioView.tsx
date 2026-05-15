@@ -127,6 +127,10 @@ export function RadioView() {
       setRadioPreviewTracks([])
       return
     }
+    if (queue.length > 0) {
+      setRadioPreviewTracks([])
+      return
+    }
     let cancelled = false
     const excludeIds = [
       currentTrack.id,

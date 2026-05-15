@@ -1185,9 +1185,9 @@ export function PlayerProvider({
   // Auto-skip chain control. consecutiveAutoSkipsRef counts how many tracks
   // were skipped in a row WITHOUT a successful playback in between. The
   // counter resets when onPlay fires (real playback started). When the
-  // counter exceeds MAX_CONSECUTIVE_AUTO_SKIPS we stop the cascade and show
+  // counter reaches MAX_CONSECUTIVE_AUTO_SKIPS we stop the cascade and show
   // a final error so the UI doesn't churn forever on a broken queue.
-  const MAX_CONSECUTIVE_AUTO_SKIPS = 10
+  const MAX_CONSECUTIVE_AUTO_SKIPS = 3
   const consecutiveAutoSkipsRef = useRef(0)
 
   // Toast dedup: when a burst of skips happens, collapse them into a single
@@ -1244,6 +1244,26 @@ export function PlayerProvider({
     }, 3500)
   }, [])
 
+  const haltRadioAfterAutoSkipExhaustion = useCallback(() => {
+    radioSessionTimelineRef.current = []
+    setRadioSessionTimeline([])
+    radioModeRef.current = false
+    radioSeedTrackIdRef.current = null
+    setRadioMode(false)
+    setRadioSeedTrackId(null)
+    manualQueueRef.current = []
+    setQueue([])
+    const audio = audioRef.current
+    if (audio && !audio.paused) {
+      try {
+        audio.pause()
+      } catch {
+        /* ignore */
+      }
+    }
+    setIsPlaying(false)
+  }, [])
+
   // Component-scoped helper used by both onError and playTrack. Returns
   // true if the cascade advanced, false if the safety limit kicked in.
   const skipUnavailableTrack = async (
@@ -1253,12 +1273,13 @@ export function PlayerProvider({
     recordUnavailableSkip()
     consecutiveAutoSkipsRef.current += 1
     if (
-      consecutiveAutoSkipsRef.current > MAX_CONSECUTIVE_AUTO_SKIPS
+      consecutiveAutoSkipsRef.current >= MAX_CONSECUTIVE_AUTO_SKIPS
     ) {
       consecutiveAutoSkipsRef.current = 0
       const b = unavailableSkipBatchRef.current
       if (b.islandId) dismissIsland(b.islandId)
       flushUnavailableSkipBatch()
+      haltRadioAfterAutoSkipExhaustion()
       showIsland({
         kind: 'error',
         title: i18n.t('redesign.playerErrors.noPlayableTracks'),

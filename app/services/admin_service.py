@@ -55,6 +55,25 @@ class AdminService:
             playable_only=playable_only,
         )
 
+    async def list_track_ids(
+        self,
+        *,
+        is_active: bool | None = None,
+        without_lyrics: bool = False,
+        lyrics_catalog_miss_only: bool = False,
+        search: str | None = None,
+        for_playlist_owner_id: int | None = None,
+        playable_only: bool = False,
+    ) -> tuple[list[int], int]:
+        return await self._repo.list_track_ids(
+            is_active=is_active,
+            without_lyrics=without_lyrics,
+            lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            search=search,
+            for_playlist_owner_id=for_playlist_owner_id,
+            playable_only=playable_only,
+        )
+
     async def list_tracks_playback_unavailable(
         self,
         *,
@@ -68,6 +87,15 @@ class AdminService:
             search=search,
         )
 
+    async def list_track_ids_playback_unavailable(
+        self,
+        *,
+        search: str | None,
+    ) -> tuple[list[int], int]:
+        return await self._repo.list_track_ids_playback_unavailable(
+            search=search,
+        )
+
     async def list_tracks_playback_suppressed(
         self,
         *,
@@ -78,6 +106,15 @@ class AdminService:
         return await self._repo.list_tracks_playback_suppressed(
             page=page,
             size=size,
+            search=search,
+        )
+
+    async def list_track_ids_playback_suppressed(
+        self,
+        *,
+        search: str | None,
+    ) -> tuple[list[int], int]:
+        return await self._repo.list_track_ids_playback_suppressed(
             search=search,
         )
 
@@ -265,6 +302,16 @@ class AdminService:
         return await repo.list_admin_deleted(
             offset=offset, limit=size, search=search
         )
+
+    async def list_deleted_track_ids(
+        self,
+        *,
+        search: str | None = None,
+    ) -> tuple[list[int], int]:
+        from app.repositories.track import TrackRepository
+
+        repo = TrackRepository(self._session)
+        return await repo.list_admin_deleted_ids(search=search)
 
     async def upload_track_cover(
         self,

@@ -15,6 +15,7 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.admin.schemas import (
+    AdminIdSelectionResponse,
     AdminTrackListResponse,
     AdminTrackResponse,
     ArtistSupplementalBatchImportRequest,
@@ -65,6 +66,59 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/artists", tags=["admin-artist-catalog"])
 
+_CATALOG_SYNC_STATES = frozenset(
+    {
+        "idle",
+        "running",
+        "success",
+        "error",
+    }
+)
+
+
+def _validate_catalog_sync_filter(catalog_sync: str | None) -> None:
+    if catalog_sync and catalog_sync not in _CATALOG_SYNC_STATES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid catalog_sync filter",
+        )
+
+
+async def _build_admin_artist_item(
+    artist: object,
+) -> AdminArtistListItemResponse:
+    base = AdminArtistListItemResponse.model_validate(artist)
+    sync_state = "idle"
+    sync_mode = None
+    sync_updated_at = None
+    artist_id = int(base.id)
+    try:
+        snap = await acsp.get_snapshot(artist_id)
+    except Exception as exc:
+        logger.warning(
+            "admin_artist_list_sync_snapshot_unavailable",
+            artist_id=artist_id,
+            error=str(exc),
+        )
+        snap = None
+    if snap:
+        raw_state = snap.get("state")
+        if raw_state in ("running", "success", "error"):
+            sync_state = raw_state
+        raw_mode = snap.get("mode")
+        if isinstance(raw_mode, str):
+            sync_mode = raw_mode
+        raw_updated = snap.get("updated_at")
+        if isinstance(raw_updated, str):
+            sync_updated_at = raw_updated
+    return base.model_copy(
+        update={
+            "catalog_sync_state": sync_state,
+            "catalog_sync_mode": sync_mode,
+            "catalog_sync_updated_at": sync_updated_at,
+        }
+    )
+
 
 @router.get("", response_model=AdminArtistListResponse)
 @limiter.limit("120/minute")
@@ -79,49 +133,7 @@ async def admin_list_artists(
     _admin: User = Depends(require_admin_session),
 ) -> AdminArtistListResponse:
     svc = ArtistService(session)
-    if catalog_sync and catalog_sync not in (
-        "idle",
-        "running",
-        "success",
-        "error",
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="invalid catalog_sync filter",
-        )
-
-    async def build_item(artist: object) -> AdminArtistListItemResponse:
-        base = AdminArtistListItemResponse.model_validate(artist)
-        sync_state = "idle"
-        sync_mode = None
-        sync_updated_at = None
-        artist_id = int(base.id)
-        try:
-            snap = await acsp.get_snapshot(artist_id)
-        except Exception as exc:
-            logger.warning(
-                "admin_artist_list_sync_snapshot_unavailable",
-                artist_id=artist_id,
-                error=str(exc),
-            )
-            snap = None
-        if snap:
-            raw_state = snap.get("state")
-            if raw_state in ("running", "success", "error"):
-                sync_state = raw_state
-            raw_mode = snap.get("mode")
-            if isinstance(raw_mode, str):
-                sync_mode = raw_mode
-            raw_updated = snap.get("updated_at")
-            if isinstance(raw_updated, str):
-                sync_updated_at = raw_updated
-        return base.model_copy(
-            update={
-                "catalog_sync_state": sync_state,
-                "catalog_sync_mode": sync_mode,
-                "catalog_sync_updated_at": sync_updated_at,
-            }
-        )
+    _validate_catalog_sync_filter(catalog_sync)
 
     if catalog_sync:
         scan_page = 1
@@ -137,7 +149,7 @@ async def admin_list_artists(
             if not artists:
                 break
             for artist in artists:
-                item = await build_item(artist)
+                item = await _build_admin_artist_item(artist)
                 if item.catalog_sync_state == catalog_sync:
                     matched.append(item)
             if scan_page * scan_size >= total_before_sync:
@@ -157,11 +169,48 @@ async def admin_list_artists(
     )
     items: list[AdminArtistListItemResponse] = []
     for artist in artists:
-        items.append(await build_item(artist))
+        items.append(await _build_admin_artist_item(artist))
     return AdminArtistListResponse(
         items=items,
         total=total,
     )
+
+
+@router.get("/ids", response_model=AdminIdSelectionResponse)
+@limiter.limit("30/minute")
+async def admin_list_artist_ids(
+    request: Request,
+    q: str | None = Query(None, max_length=128),
+    enrichment: str | None = Query(None, max_length=24),
+    catalog_sync: str | None = Query(None, max_length=16),
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminIdSelectionResponse:
+    svc = ArtistService(session)
+    _validate_catalog_sync_filter(catalog_sync)
+    if catalog_sync:
+        scan_page = 1
+        scan_size = 100
+        matched: list[int] = []
+        while True:
+            artists, total_before_sync = await svc.list_for_admin(
+                q=q,
+                enrichment=enrichment,
+                page=scan_page,
+                size=scan_size,
+            )
+            if not artists:
+                break
+            for artist in artists:
+                item = await _build_admin_artist_item(artist)
+                if item.catalog_sync_state == catalog_sync:
+                    matched.append(int(item.id))
+            if scan_page * scan_size >= total_before_sync:
+                break
+            scan_page += 1
+        return AdminIdSelectionResponse(ids=matched, total=len(matched))
+    ids, total = await svc.list_admin_ids(q=q, enrichment=enrichment)
+    return AdminIdSelectionResponse(ids=ids, total=total)
 
 
 @router.post(

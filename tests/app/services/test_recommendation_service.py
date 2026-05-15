@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -234,6 +234,48 @@ async def test_get_radio_guard_uses_last_queue(
     )
 
 
+async def test_get_radio_guard_filters_recent_playback_failures(
+    session: AsyncSession,
+) -> None:
+    now = datetime.now(UTC)
+    mock_redis = AsyncMock()
+    mock_redis.set = AsyncMock(return_value=None)
+    mock_redis.get = AsyncMock(
+        return_value=json.dumps([11, 12])
+    )
+    failed = SimpleNamespace(
+        id=11,
+        access_mode="third_party_stream",
+        file_key=None,
+        hls_manifest_key=None,
+        playback_suppressed_until=None,
+        playback_recovery_failed_at=now - timedelta(minutes=5),
+    )
+    playable = SimpleNamespace(
+        id=12,
+        access_mode="internal_stream",
+        file_key="track.mp3",
+        hls_manifest_key=None,
+        playback_suppressed_until=None,
+        playback_recovery_failed_at=None,
+    )
+
+    with patch(
+        f"{_MOD}.get_redis_client",
+        return_value=mock_redis,
+    ):
+        svc = RecommendationService(session)
+        svc._rec_repo.get_tracks_by_ids = AsyncMock(
+            return_value=[failed, playable]
+        )
+        out = await svc.get_radio(
+            seed_track_id=5,
+            user_id=77,
+        )
+
+    assert [t.id for t in out] == [12]
+
+
 async def test_get_radio_cache_key_depends_on_exclude_ids(
     session: AsyncSession,
 ) -> None:
@@ -292,3 +334,108 @@ async def test_get_radio_cache_key_depends_on_exclude_ids(
     ]
     assert len(cache_calls) >= 2
     assert cache_calls[-1] != cache_calls[-2]
+
+
+async def test_get_radio_filters_recent_playback_failures(
+    session: AsyncSession,
+) -> None:
+    now = datetime.now(UTC)
+    seed = SimpleNamespace(
+        id=5,
+        access_mode="internal_stream",
+        file_key="seed.mp3",
+        hls_manifest_key=None,
+        playback_suppressed_until=None,
+        playback_recovery_failed_at=None,
+    )
+    playable = SimpleNamespace(
+        id=21,
+        access_mode="internal_stream",
+        file_key="playable.mp3",
+        hls_manifest_key=None,
+        playback_suppressed_until=None,
+        playback_recovery_failed_at=None,
+    )
+    failed = SimpleNamespace(
+        id=22,
+        access_mode="third_party_stream",
+        file_key=None,
+        hls_manifest_key=None,
+        playback_suppressed_until=None,
+        playback_recovery_failed_at=now - timedelta(minutes=5),
+    )
+    feat_seed = SimpleNamespace(track_id=5)
+    feat_playable = SimpleNamespace(track_id=21)
+    scored = [SimpleNamespace(track_id=21)]
+
+    mock_track_repo = AsyncMock()
+    mock_track_repo.get_by_id = AsyncMock(return_value=seed)
+
+    def fake_build_radio_queue(
+        _seed: object,
+        _history: list[object],
+        candidates: list[object],
+        _queue_size: int,
+        **_kwargs: object,
+    ) -> list[object]:
+        assert [c.track_id for c in candidates] == [21]
+        return scored
+
+    with (
+        patch(
+            "app.repositories.track.TrackRepository",
+            return_value=mock_track_repo,
+        ),
+        patch(
+            f"{_MOD}.build_radio_queue",
+            side_effect=fake_build_radio_queue,
+        ),
+    ):
+        svc = RecommendationService(session)
+        svc._rec_repo.get_candidate_tracks = AsyncMock(
+            return_value=[failed, playable]
+        )
+        svc._tracks_to_features = AsyncMock(
+            return_value=[feat_seed, feat_playable]
+        )
+
+        result = await svc.get_radio(seed_track_id=5, user_id=None)
+
+    assert [t.id for t in result] == [21]
+
+
+async def test_get_radio_filters_non_streamable_external_links(
+    session: AsyncSession,
+) -> None:
+    seed = SimpleNamespace(
+        id=5,
+        access_mode="internal_stream",
+        file_key="seed.mp3",
+        hls_manifest_key=None,
+        playback_suppressed_until=None,
+        playback_recovery_failed_at=None,
+    )
+    external_link = SimpleNamespace(
+        id=22,
+        access_mode="external_link",
+        file_key=None,
+        hls_manifest_key=None,
+        playback_suppressed_until=None,
+        playback_recovery_failed_at=None,
+    )
+
+    mock_track_repo = AsyncMock()
+    mock_track_repo.get_by_id = AsyncMock(return_value=seed)
+
+    with patch(
+        "app.repositories.track.TrackRepository",
+        return_value=mock_track_repo,
+    ):
+        svc = RecommendationService(session)
+        svc._rec_repo.get_candidate_tracks = AsyncMock(
+            return_value=[external_link]
+        )
+
+        result = await svc.get_radio(seed_track_id=5, user_id=None)
+
+    assert result == []

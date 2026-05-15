@@ -14,6 +14,7 @@ const DISMISS_JOB_KEY = 'dotsound_import_activity_banner_dismiss_job_id'
 
 const FOREGROUND_PERIOD_MS = 5000
 const HIDDEN_PERIOD_MS = 30000
+const RATE_LIMIT_BACKOFF_MS = 60000
 
 function readDismissedJobId(): number | null {
   const s = sessionStorage.getItem(DISMISS_JOB_KEY)
@@ -74,6 +75,7 @@ export function ImportActivityBanner() {
     if (!api.getToken()) return
 
     let intervalId: number | null = null
+    let rateLimitedUntil = 0
 
     const periodMs = () =>
       document.visibilityState === 'visible'
@@ -132,10 +134,17 @@ export function ImportActivityBanner() {
     }
 
     const poll = () => {
+      if (Date.now() < rateLimitedUntil) return
       api
         .getActiveImport()
         .then(reflect)
-        .catch(() => reflect(null))
+        .catch((err: unknown) => {
+          if (err instanceof Error && err.message === '429') {
+            rateLimitedUntil = Date.now() + RATE_LIMIT_BACKOFF_MS
+            return
+          }
+          reflect(null)
+        })
     }
 
     const schedule = () => {

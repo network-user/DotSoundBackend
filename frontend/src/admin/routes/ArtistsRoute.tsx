@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   keepPreviousData,
@@ -22,6 +22,9 @@ import {
   type FilterDef,
 } from '../components/widgets/FilterGroup'
 import { FormModal } from '../components/widgets/FormModal'
+import { BulkPageSelector } from '../components/widgets/BulkPageSelector'
+
+const PAGE_SIZE = 25
 
 interface ArtistRow {
   id: number
@@ -158,7 +161,13 @@ export function ArtistsRoute() {
       page,
     ],
     queryFn: () =>
-      fetchArtists(q, enrichmentFilter, catalogSyncFilter, page, 25),
+      fetchArtists(
+        q,
+        enrichmentFilter,
+        catalogSyncFilter,
+        page,
+        PAGE_SIZE,
+      ),
     placeholderData: keepPreviousData,
   })
 
@@ -258,11 +267,50 @@ export function ArtistsRoute() {
   const allOnPageSelected =
     rows.length > 0 && rows.every((r) => selectedIds.has(r.id))
 
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [q, enrichmentFilter, catalogSyncFilter])
+
+  const addSelectedIds = (ids: number[]) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      ids.forEach((id) => next.add(id))
+      return next
+    })
+  }
+
+  const fetchArtistPageIds = async (
+    targetPage: number,
+  ): Promise<number[]> => {
+    const res = await fetchArtists(
+      q,
+      enrichmentFilter,
+      catalogSyncFilter,
+      targetPage,
+      PAGE_SIZE,
+    )
+    return res.items.map((artist) => artist.id)
+  }
+
+  const fetchArtistAllIds = async (): Promise<number[]> => {
+    const res = await adminApi.listArtistIds({
+      q: q || undefined,
+      enrichment: enrichmentFilter || undefined,
+      catalog_sync: catalogSyncFilter || undefined,
+    })
+    return res.ids
+  }
+
   const toggleSelectAll = (checked: boolean) => {
+    const pageIds = rows.map((r) => r.id)
     if (checked) {
-      setSelectedIds(new Set(rows.map((r) => r.id)))
+      addSelectedIds(pageIds)
     } else {
-      setSelectedIds(new Set())
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        pageIds.forEach((id) => next.delete(id))
+        return next
+      })
     }
   }
 
@@ -577,7 +625,7 @@ export function ArtistsRoute() {
   ).length
   const totalPages = Math.max(
     1,
-    Math.ceil(total / 25),
+    Math.ceil(total / PAGE_SIZE),
   )
 
   const filters: FilterDef[] = [
@@ -701,11 +749,24 @@ export function ArtistsRoute() {
                 setQ(v ?? '')
               }
               setPage(1)
+              setSelectedIds(new Set())
             }}
           />
         }
         actions={
           <>
+            <BulkPageSelector
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={total}
+              selectedCount={selectedIds.size}
+              disabled={list.isFetching}
+              fetchPageIds={fetchArtistPageIds}
+              fetchAllIds={fetchArtistAllIds}
+              onAddIds={addSelectedIds}
+              onClear={() => setSelectedIds(new Set())}
+              onError={(err) => showAlert(err.message)}
+            />
             <MotionPress
               variant="primary"
               disabled={selectedIds.size === 0}

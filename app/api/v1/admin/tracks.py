@@ -36,6 +36,7 @@ from app.services.admin_track_genre_mood_import_service import (
 from app.services.transcoding import transcode_hls_only
 
 from .schemas import (
+    AdminIdSelectionResponse,
     AdminTrackGenrePatchRequest,
     AdminTrackListResponse,
     AdminTrackResponse,
@@ -124,6 +125,57 @@ async def admin_list_tracks(
         page=page,
         size=size,
     )
+
+
+@router.get(
+    "/tracks/ids",
+    response_model=AdminIdSelectionResponse,
+    summary="[Admin] List track IDs matching the current table filters",
+)
+@limiter.limit("30/minute")
+async def admin_list_track_ids(
+    request: Request,
+    scope: str = Query(
+        "all",
+        description=(
+            "One of all, playback_failures, playback_suppressed, deleted"
+        ),
+    ),
+    is_active: bool | None = Query(None),
+    without_lyrics: bool = Query(False),
+    lyrics_catalog_miss_only: bool = Query(False),
+    search: str | None = Query(None, max_length=128),
+    for_playlist_owner_id: int | None = Query(None, ge=1),
+    playable_only: bool = Query(False),
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminIdSelectionResponse:
+    service = AdminService(session)
+    if scope == "all":
+        ids, total = await service.list_track_ids(
+            is_active=is_active,
+            without_lyrics=without_lyrics,
+            lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            search=search,
+            for_playlist_owner_id=for_playlist_owner_id,
+            playable_only=playable_only,
+        )
+    elif scope == "playback_failures":
+        ids, total = await service.list_track_ids_playback_unavailable(
+            search=search,
+        )
+    elif scope == "playback_suppressed":
+        ids, total = await service.list_track_ids_playback_suppressed(
+            search=search,
+        )
+    elif scope == "deleted":
+        ids, total = await service.list_deleted_track_ids(search=search)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid track id selection scope",
+        )
+    return AdminIdSelectionResponse(ids=ids, total=total)
 
 
 @router.get(

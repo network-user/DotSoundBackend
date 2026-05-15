@@ -165,11 +165,14 @@ export default defineConfig({
               },
               rangeRequests: true,
               cacheableResponse: {
-                statuses: [200, 206],
+                statuses: [200],
               },
               plugins: [
                 {
                   cacheWillUpdate: async ({ response }) => {
+                    if (response.status === 206) {
+                      return null
+                    }
                     if (
                       response.headers.get(
                         'X-Offline-Allowed',
@@ -195,11 +198,14 @@ export default defineConfig({
               },
               rangeRequests: true,
               cacheableResponse: {
-                statuses: [200, 206],
+                statuses: [200],
               },
               plugins: [
                 {
                   cacheWillUpdate: async ({ response }) => {
+                    if (response.status === 206) {
+                      return null
+                    }
                     if (
                       response.headers.get(
                         'X-Offline-Allowed',

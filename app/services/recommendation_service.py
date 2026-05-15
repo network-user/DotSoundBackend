@@ -5,6 +5,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
+from dotsound_private_core.services.playback_health_policy import (
+    should_exclude_from_autoplay_queue,
+)
 from dotsound_private_core.services.recommendation_engine import (
     MAX_GENRE_MIXES,
     RadioTuning,
@@ -115,6 +118,47 @@ def _weekly_top_ttl() -> int:
 
 
 logger = structlog.get_logger(__name__)
+
+
+def _radio_playback_candidate_allowed(track: object) -> bool:
+    if should_exclude_from_autoplay_queue(
+        playback_suppressed_until=getattr(
+            track,
+            "playback_suppressed_until",
+            None,
+        ),
+        playback_recovery_failed_at=getattr(
+            track,
+            "playback_recovery_failed_at",
+            None,
+        ),
+    ):
+        return False
+
+    has_playback_attrs = any(
+        hasattr(track, attr)
+        for attr in (
+            "access_mode",
+            "file_key",
+            "hls_manifest_key",
+        )
+    )
+    if not has_playback_attrs:
+        return True
+
+    access_mode = getattr(track, "access_mode", None)
+    if access_mode == "third_party_stream":
+        return True
+    if access_mode == "internal_stream":
+        return bool(
+            getattr(track, "file_key", None)
+            or getattr(track, "hls_manifest_key", None)
+        )
+    return bool(getattr(track, "file_key", None))
+
+
+def _filter_radio_playback_candidates(tracks: list[Track]) -> list[Track]:
+    return [t for t in tracks if _radio_playback_candidate_allowed(t)]
 
 
 class RecommendationService:
@@ -1086,6 +1130,18 @@ class RecommendationService:
                     tracks = await self._rec_repo.get_tracks_by_ids(
                         json.loads(guarded)
                     )
+                    before_filter = len(tracks)
+                    tracks = _filter_radio_playback_candidates(tracks)
+                    if len(tracks) != before_filter:
+                        logger.info(
+                            "radio_cached_filtered_unplayable",
+                            source="guarded",
+                            removed=before_filter - len(tracks),
+                            remaining=len(tracks),
+                        )
+                    if not tracks:
+                        guarded = None
+                if guarded:
                     radio_request_observed(
                         surface="recommendations_radio",
                         outcome="guarded",
@@ -1099,6 +1155,18 @@ class RecommendationService:
                 tracks = await self._rec_repo.get_tracks_by_ids(
                     json.loads(cached)
                 )
+                before_filter = len(tracks)
+                tracks = _filter_radio_playback_candidates(tracks)
+                if len(tracks) != before_filter:
+                    logger.info(
+                        "radio_cached_filtered_unplayable",
+                        source="cache",
+                        removed=before_filter - len(tracks),
+                        remaining=len(tracks),
+                    )
+                if not tracks:
+                    cached = None
+            if cached:
                 radio_request_observed(
                     surface="recommendations_radio",
                     outcome="cache_hit",
@@ -1142,14 +1210,14 @@ class RecommendationService:
                     set(exclude_normalized) if exclude_normalized else None
                 ),
             )
-        if not candidates:
-            radio_request_observed(
-                surface="recommendations_radio",
-                outcome="no_candidates",
-                queue_size=0,
+        before_filter = len(candidates)
+        candidates = _filter_radio_playback_candidates(candidates)
+        if len(candidates) != before_filter:
+            logger.info(
+                "radio_candidates_filtered_unplayable",
+                removed=before_filter - len(candidates),
+                remaining=len(candidates),
             )
-            return []
-
         unseen: list[Track] = []
         if user_id and user_prefs is not None:
             unseen = await self._get_unseen_candidates(
@@ -1157,6 +1225,21 @@ class RecommendationService:
                 user_prefs=user_prefs,
                 user_locale=user_locale,
             )
+            unseen_before_filter = len(unseen)
+            unseen = _filter_radio_playback_candidates(unseen)
+            if len(unseen) != unseen_before_filter:
+                logger.info(
+                    "radio_unseen_filtered_unplayable",
+                    removed=unseen_before_filter - len(unseen),
+                    remaining=len(unseen),
+                )
+        if not candidates and not unseen:
+            radio_request_observed(
+                surface="recommendations_radio",
+                outcome="no_candidates",
+                queue_size=0,
+            )
+            return []
 
         exclude_set = set(exclude_normalized)
         all_tracks = (

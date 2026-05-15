@@ -742,6 +742,29 @@ class TrackRepository(BaseRepository[Track]):
         )
         return list(rows.scalars().all()), total
 
+    async def list_admin_deleted_ids(
+        self,
+        *,
+        search: str | None = None,
+    ) -> tuple[list[int], int]:
+        condition: ColumnElement[bool] = Track.deleted_at.is_not(None)
+        if search:
+            pattern = f"%{search.strip()}%"
+            condition = condition & (
+                Track.title.ilike(pattern) | Track.artist.ilike(pattern)
+            )
+        total_result = await self._session.execute(
+            select(func.count()).where(condition)
+        )
+        rows = await self._session.execute(
+            select(Track.id)
+            .where(condition)
+            .order_by(Track.deleted_at.desc())
+        )
+        return [int(track_id) for track_id in rows.scalars().all()], int(
+            total_result.scalar_one()
+        )
+
     async def list_hard_delete_candidates(
         self,
         *,

@@ -259,6 +259,34 @@ describe('PrefetchManager', () => {
     )
   })
 
+  it('does not server-warm third-party radio tracks', async () => {
+    const { spy, calls } = _buildFetchSpy()
+    vi.stubGlobal('fetch', spy)
+
+    const m = new PrefetchManager()
+    m.configurePolicyFetcher(
+      _makePolicyFetcher(
+        _policy({ skipThirdPartyAudioCache: true }),
+      ),
+    )
+    await m.start()
+
+    const scheduled = await m.enqueue(
+      [
+        {
+          id: 401,
+          is_public: true,
+          access_mode: 'third_party_stream',
+        },
+      ],
+      { context: 'radio' },
+    )
+
+    expect(scheduled).toBe(0)
+    expect(calls.map((c) => c.url)).not.toContain('/api/v1/tracks/prefetch')
+    expect(m.wasWarm(401)).toBe(false)
+  })
+
   it('replaceContext: false preserves siblings under the same context', async () => {
     const { spy } = _buildFetchSpy()
     vi.stubGlobal('fetch', spy)

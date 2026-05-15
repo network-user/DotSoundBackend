@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from app.models.artist import TrackArtist
 from app.models.complaint import Complaint
@@ -24,37 +25,27 @@ class AdminRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def list_tracks(
+    def _apply_track_list_filters(
         self,
+        query: Select,
         *,
-        page: int = 1,
-        size: int = 20,
-        is_active: bool | None = None,
-        without_lyrics: bool = False,
-        lyrics_catalog_miss_only: bool = False,
-        search: str | None = None,
-        for_playlist_owner_id: int | None = None,
-        playable_only: bool = False,
-    ) -> tuple[list[Track], int]:
-        query = select(Track)
-        count_query = select(func.count(Track.id))
+        is_active: bool | None,
+        without_lyrics: bool,
+        lyrics_catalog_miss_only: bool,
+        search: str | None,
+        for_playlist_owner_id: int | None,
+        playable_only: bool,
+    ) -> Select:
         if lyrics_catalog_miss_only:
             query = query.where(
-                Track.lyrics_catalog_miss_at.isnot(None),
-            )
-            count_query = count_query.where(
                 Track.lyrics_catalog_miss_at.isnot(None),
             )
         elif without_lyrics:
             query = query.outerjoin(
                 TrackLyrics, TrackLyrics.track_id == Track.id
             ).where(TrackLyrics.id.is_(None))
-            count_query = count_query.outerjoin(
-                TrackLyrics, TrackLyrics.track_id == Track.id
-            ).where(TrackLyrics.id.is_(None))
         if is_active is not None:
             query = query.where(Track.is_active.is_(is_active))
-            count_query = count_query.where(Track.is_active.is_(is_active))
         if for_playlist_owner_id is not None:
             tr = TrackRepository
             pub = (
@@ -73,24 +64,54 @@ class AdminRepository:
                 playable = tr._playable_filter()
                 pub = and_(pub, playable)
                 own = and_(own, playable)
-            scope = or_(pub, own)
-            query = query.where(scope)
-            count_query = count_query.where(scope)
+            query = query.where(or_(pub, own))
         elif playable_only:
             tr = TrackRepository
-            pl = and_(
-                Track.is_active.is_(True),
-                tr._exclude_hidden_sources(),
-                tr._playback_listing_allowed(),
-                tr._playable_filter(),
+            query = query.where(
+                and_(
+                    Track.is_active.is_(True),
+                    tr._exclude_hidden_sources(),
+                    tr._playback_listing_allowed(),
+                    tr._playable_filter(),
+                )
             )
-            query = query.where(pl)
-            count_query = count_query.where(pl)
         if search:
             pattern = f"%{search}%"
-            cond = Track.title.ilike(pattern) | Track.artist.ilike(pattern)
-            query = query.where(cond)
-            count_query = count_query.where(cond)
+            query = query.where(
+                Track.title.ilike(pattern) | Track.artist.ilike(pattern)
+            )
+        return query
+
+    async def list_tracks(
+        self,
+        *,
+        page: int = 1,
+        size: int = 20,
+        is_active: bool | None = None,
+        without_lyrics: bool = False,
+        lyrics_catalog_miss_only: bool = False,
+        search: str | None = None,
+        for_playlist_owner_id: int | None = None,
+        playable_only: bool = False,
+    ) -> tuple[list[Track], int]:
+        query = self._apply_track_list_filters(
+            select(Track),
+            is_active=is_active,
+            without_lyrics=without_lyrics,
+            lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            search=search,
+            for_playlist_owner_id=for_playlist_owner_id,
+            playable_only=playable_only,
+        )
+        count_query = self._apply_track_list_filters(
+            select(func.count(Track.id)),
+            is_active=is_active,
+            without_lyrics=without_lyrics,
+            lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            search=search,
+            for_playlist_owner_id=for_playlist_owner_id,
+            playable_only=playable_only,
+        )
         query = (
             query.order_by(Track.created_at.desc())
             .offset((page - 1) * size)
@@ -100,6 +121,40 @@ class AdminRepository:
         rows = list(result.scalars().all())
         total_result = await self._session.execute(count_query)
         return rows, int(total_result.scalar_one())
+
+    async def list_track_ids(
+        self,
+        *,
+        is_active: bool | None = None,
+        without_lyrics: bool = False,
+        lyrics_catalog_miss_only: bool = False,
+        search: str | None = None,
+        for_playlist_owner_id: int | None = None,
+        playable_only: bool = False,
+    ) -> tuple[list[int], int]:
+        query = self._apply_track_list_filters(
+            select(Track.id),
+            is_active=is_active,
+            without_lyrics=without_lyrics,
+            lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            search=search,
+            for_playlist_owner_id=for_playlist_owner_id,
+            playable_only=playable_only,
+        ).order_by(Track.created_at.desc())
+        count_query = self._apply_track_list_filters(
+            select(func.count(Track.id)),
+            is_active=is_active,
+            without_lyrics=without_lyrics,
+            lyrics_catalog_miss_only=lyrics_catalog_miss_only,
+            search=search,
+            for_playlist_owner_id=for_playlist_owner_id,
+            playable_only=playable_only,
+        )
+        rows = await self._session.execute(query)
+        total = await self._session.execute(count_query)
+        return [int(track_id) for track_id in rows.scalars().all()], int(
+            total.scalar_one()
+        )
 
     async def list_tracks_playback_unavailable(
         self,
@@ -128,6 +183,29 @@ class AdminRepository:
         rows = list(result.scalars().all())
         total_result = await self._session.execute(cq)
         return rows, int(total_result.scalar_one())
+
+    async def list_track_ids_playback_unavailable(
+        self,
+        *,
+        search: str | None = None,
+    ) -> tuple[list[int], int]:
+        q = select(Track.id).where(
+            Track.playback_last_failure_at.isnot(None),
+        )
+        cq = select(func.count(Track.id)).where(
+            Track.playback_last_failure_at.isnot(None),
+        )
+        if search:
+            pattern = f"%{search}%"
+            cond = Track.title.ilike(pattern) | Track.artist.ilike(pattern)
+            q = q.where(cond)
+            cq = cq.where(cond)
+        q = q.order_by(desc(Track.playback_last_failure_at))
+        rows = await self._session.execute(q)
+        total_result = await self._session.execute(cq)
+        return [int(track_id) for track_id in rows.scalars().all()], int(
+            total_result.scalar_one()
+        )
 
     async def list_tracks_playback_suppressed(
         self,
@@ -158,6 +236,31 @@ class AdminRepository:
         rows = list(result.scalars().all())
         total_result = await self._session.execute(cq)
         return rows, int(total_result.scalar_one())
+
+    async def list_track_ids_playback_suppressed(
+        self,
+        *,
+        search: str | None = None,
+    ) -> tuple[list[int], int]:
+        q = select(Track.id).where(
+            Track.playback_suppressed_until.isnot(None),
+            Track.playback_suppressed_until > func.now(),
+        )
+        cq = select(func.count(Track.id)).where(
+            Track.playback_suppressed_until.isnot(None),
+            Track.playback_suppressed_until > func.now(),
+        )
+        if search:
+            pattern = f"%{search}%"
+            cond = Track.title.ilike(pattern) | Track.artist.ilike(pattern)
+            q = q.where(cond)
+            cq = cq.where(cond)
+        q = q.order_by(desc(Track.playback_suppressed_until))
+        rows = await self._session.execute(q)
+        total_result = await self._session.execute(cq)
+        return [int(track_id) for track_id in rows.scalars().all()], int(
+            total_result.scalar_one()
+        )
 
     async def list_tracks_for_artist(
         self,

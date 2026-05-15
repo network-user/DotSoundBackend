@@ -126,6 +126,69 @@ async def test_admin_list_artists_search(
     assert r3.json()["total"] == 1
 
 
+async def test_admin_list_artist_ids_match_filters(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = await create_test_user(client, 140012)
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
+    ready = Artist(
+        name="Needle Bulk Artist",
+        name_normalized="needle bulk artist",
+        soundcloud_permalink="needle-bulk-profile",
+        enrichment_status="done",
+    )
+    pending = Artist(
+        name="Waiting Bulk Artist",
+        name_normalized="waiting bulk artist",
+        soundcloud_permalink="waiting-bulk-profile",
+        enrichment_status="pending",
+    )
+    db_session.add_all([ready, pending])
+    await db_session.commit()
+    await db_session.refresh(ready)
+    await db_session.refresh(pending)
+
+    r = await client.get(
+        "/api/v1/admin/artists/ids",
+        headers=h,
+        params={"q": "Needle Bulk", "enrichment": "done"},
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 1
+    assert body["ids"] == [ready.id]
+
+    async def _snap(artist_id: int) -> dict | None:
+        if artist_id == pending.id:
+            return {
+                "state": "running",
+                "mode": "full",
+                "updated_at": "2026-05-15T00:00:00+00:00",
+            }
+        return None
+
+    monkeypatch.setattr(
+        "app.api.v1.admin.artist_catalog.acsp.get_snapshot",
+        _snap,
+    )
+    r2 = await client.get(
+        "/api/v1/admin/artists/ids",
+        headers=h,
+        params={
+            "q": "Waiting Bulk",
+            "catalog_sync": "running",
+        },
+    )
+
+    assert r2.status_code == 200
+    body2 = r2.json()
+    assert body2["total"] == 1
+    assert body2["ids"] == [pending.id]
+
+
 async def test_admin_catalog_crud_and_reorder(
     client: AsyncClient,
     db_session: AsyncSession,

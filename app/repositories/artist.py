@@ -1,6 +1,7 @@
 import structlog
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from app.models.artist import Artist, TrackArtist
 from app.models.artist_similarity import ArtistSimilarity
@@ -12,6 +13,37 @@ logger = structlog.get_logger(__name__)
 class ArtistRepository(BaseRepository[Artist]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session, Artist)
+
+    def _apply_admin_filters(
+        self,
+        stmt: Select,
+        *,
+        q: str | None,
+        q_normalized: str | None,
+        enrichment_filter: str | None,
+    ) -> Select:
+        predicates = []
+        if q_normalized:
+            pattern = f"%{q_normalized.lower()}%"
+            predicates.append(Artist.name_normalized.ilike(pattern))
+        if q:
+            raw_pattern = f"%{q.lower()}%"
+            predicates.append(Artist.name_normalized.ilike(raw_pattern))
+            predicates.append(Artist.soundcloud_permalink.ilike(raw_pattern))
+        if predicates:
+            stmt = stmt.where(or_(*predicates))
+        if enrichment_filter:
+            if enrichment_filter == "needs_data":
+                stmt = stmt.where(
+                    Artist.enrichment_status.in_(
+                        ("pending", "not_found", "failed")
+                    )
+                )
+            else:
+                stmt = stmt.where(
+                    Artist.enrichment_status == enrichment_filter
+                )
+        return stmt
 
     async def find_by_normalized_name(
         self, name_normalized: str
@@ -90,39 +122,18 @@ class ArtistRepository(BaseRepository[Artist]):
         page: int,
         size: int,
     ) -> tuple[list[Artist], int]:
-        stmt = select(Artist)
-        count_stmt = select(func.count(Artist.id))
-        predicates = []
-        if q_normalized:
-            pattern = f"%{q_normalized.lower()}%"
-            predicates.append(Artist.name_normalized.ilike(pattern))
-        if q:
-            raw_pattern = f"%{q.lower()}%"
-            predicates.append(Artist.name_normalized.ilike(raw_pattern))
-            predicates.append(Artist.soundcloud_permalink.ilike(raw_pattern))
-        if predicates:
-            predicate = or_(*predicates)
-            stmt = stmt.where(predicate)
-            count_stmt = count_stmt.where(predicate)
-        if enrichment_filter:
-            if enrichment_filter == "needs_data":
-                stmt = stmt.where(
-                    Artist.enrichment_status.in_(
-                        ("pending", "not_found", "failed")
-                    )
-                )
-                count_stmt = count_stmt.where(
-                    Artist.enrichment_status.in_(
-                        ("pending", "not_found", "failed")
-                    )
-                )
-            else:
-                stmt = stmt.where(
-                    Artist.enrichment_status == enrichment_filter
-                )
-                count_stmt = count_stmt.where(
-                    Artist.enrichment_status == enrichment_filter
-                )
+        stmt = self._apply_admin_filters(
+            select(Artist),
+            q=q,
+            q_normalized=q_normalized,
+            enrichment_filter=enrichment_filter,
+        )
+        count_stmt = self._apply_admin_filters(
+            select(func.count(Artist.id)),
+            q=q,
+            q_normalized=q_normalized,
+            enrichment_filter=enrichment_filter,
+        )
         stmt = (
             stmt.order_by(Artist.updated_at.desc(), Artist.id.desc())
             .offset((page - 1) * size)
@@ -131,6 +142,31 @@ class ArtistRepository(BaseRepository[Artist]):
         rows = await self._session.execute(stmt)
         total = await self._session.scalar(count_stmt)
         return list(rows.scalars().all()), int(total or 0)
+
+    async def list_admin_ids(
+        self,
+        *,
+        q: str | None,
+        q_normalized: str | None,
+        enrichment_filter: str | None,
+    ) -> tuple[list[int], int]:
+        stmt = self._apply_admin_filters(
+            select(Artist.id),
+            q=q,
+            q_normalized=q_normalized,
+            enrichment_filter=enrichment_filter,
+        ).order_by(Artist.updated_at.desc(), Artist.id.desc())
+        count_stmt = self._apply_admin_filters(
+            select(func.count(Artist.id)),
+            q=q,
+            q_normalized=q_normalized,
+            enrichment_filter=enrichment_filter,
+        )
+        rows = await self._session.execute(stmt)
+        total = await self._session.scalar(count_stmt)
+        return [int(artist_id) for artist_id in rows.scalars().all()], int(
+            total or 0
+        )
 
     async def list_popular(
         self,
