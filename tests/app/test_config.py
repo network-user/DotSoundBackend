@@ -21,9 +21,7 @@ def _make_settings(
     monkeypatch: pytest.MonkeyPatch,
     **overrides: str,
 ) -> AppSettings:
-    for key, val in {
-        **_REQUIRED_ENV, **overrides
-    }.items():
+    for key, val in {**_REQUIRED_ENV, **overrides}.items():
         monkeypatch.setenv(key, val)
     return AppSettings(
         _env_file=None,  # type: ignore[call-arg]
@@ -53,9 +51,7 @@ def test_allowed_origins_list_single_origin(
         ALLOWED_ORIGINS="http://only.one",
     )
 
-    assert cfg.allowed_origins_list == [
-        "http://only.one"
-    ]
+    assert cfg.allowed_origins_list == ["http://only.one"]
 
 
 def test_allowed_origins_list_strips_whitespace(
@@ -101,6 +97,8 @@ def test_default_values(
     assert cfg.redact_log_identifiers is True
     assert cfg.tor_log_outbound_public_ip is False
     assert cfg.tor_pool_enabled is False
+    assert cfg.tor_pool_fail_closed is True
+    assert cfg.sc_stream_fallback_direct_on_tor_failure is False
     assert cfg.elasticsearch_url == "http://127.0.0.1:9200"
     assert cfg.elasticsearch_fallback_to_postgres_on_zero is True
 
@@ -150,8 +148,7 @@ def test_outbound_static_proxy_urls_list_parses_mixed(
     cfg = _make_settings(
         monkeypatch,
         OUTBOUND_STATIC_PROXY_URLS=(
-            "http://a:1 , socks5://b:2\n"
-            "http://c:3,,http://a:1"
+            "http://a:1 , socks5://b:2\n" "http://c:3,,http://a:1"
         ),
     )
     assert cfg.outbound_static_proxy_urls_list == [

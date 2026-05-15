@@ -647,9 +647,9 @@ class SoundCloudService:
             # and the health-check ``HEAD api.soundcloud.com`` still
             # succeed). Retry the transcoding step once without a
             # proxy when the original attempt was actually proxied.
-            from app.services.outbound_proxy import get_outbound_proxy
+            from app.services.outbound_proxy import outbound_proxy_configured
 
-            proxied = get_outbound_proxy("soundcloud") is not None
+            proxied = outbound_proxy_configured()
             fallback_enabled = (
                 settings.sc_stream_fallback_direct_on_tor_failure
             )

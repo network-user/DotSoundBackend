@@ -433,9 +433,19 @@ async def test_get_stream_info_all_404_with_tor_retries_direct_succeeds(
     mock_client_cls.return_value = mock_client
 
     svc = SoundCloudService("test_id", session)
-    url, protocol = await svc.get_stream_info(
-        "https://sc.com/x-tor-retry-direct",
-    )
+    with (
+        patch(
+            f"{_MOD}.settings.sc_stream_fallback_direct_on_tor_failure",
+            True,
+        ),
+        patch(
+            "app.services.outbound_proxy.outbound_proxy_configured",
+            return_value=True,
+        ),
+    ):
+        url, protocol = await svc.get_stream_info(
+            "https://sc.com/x-tor-retry-direct",
+        )
 
     assert url == "https://cdn/audio.mp3"
     assert protocol == "progressive"
@@ -481,7 +491,17 @@ async def test_get_stream_info_all_404_with_tor_retry_direct_also_fails(
 
     svc = SoundCloudService("test_id", session)
 
-    with pytest.raises(HTTPException) as exc:
+    with (
+        patch(
+            f"{_MOD}.settings.sc_stream_fallback_direct_on_tor_failure",
+            True,
+        ),
+        patch(
+            "app.services.outbound_proxy.outbound_proxy_configured",
+            return_value=True,
+        ),
+        pytest.raises(HTTPException) as exc,
+    ):
         await svc.get_stream_info("https://sc.com/x-tor-retry-direct-fails")
 
     assert exc.value.status_code == 502
@@ -552,6 +572,10 @@ async def test_get_stream_info_all_404_with_tor_fallback_flag_off(
         patch(
             f"{_MOD}.settings.sc_stream_fallback_direct_on_tor_failure",
             False,
+        ),
+        patch(
+            "app.services.outbound_proxy.outbound_proxy_configured",
+            return_value=True,
         ),
         pytest.raises(HTTPException) as exc,
     ):

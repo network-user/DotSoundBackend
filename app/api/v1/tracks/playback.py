@@ -1,6 +1,8 @@
 """Track playback endpoints — stream URL, play count, cover, single track."""
 
+import contextlib
 from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 import structlog
@@ -86,7 +88,8 @@ async def _resolve_third_party_stream(
     if platform == "soundcloud" or (
         not platform and getattr(track, "sc_url", None)
     ):
-        if not getattr(track, "sc_url", None):
+        sc_url = getattr(track, "sc_url", None)
+        if not isinstance(sc_url, str) or not sc_url:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="SC track missing URL",
@@ -95,7 +98,10 @@ async def _resolve_third_party_stream(
         from app.services.soundcloud_service import SoundCloudService
 
         sc_service = SoundCloudService(settings.sc_client_id, session)  # type: ignore[arg-type]
-        return await sc_service.get_stream_info(track.sc_url, use_cache=use_cache)  # type: ignore[attr-defined]
+        return await sc_service.get_stream_info(
+            sc_url,
+            use_cache=use_cache,
+        )
 
     if platform == "youtube":
         src: str | None = getattr(track, "source_url", None)
@@ -148,6 +154,7 @@ async def _http_proxy_range_get(
     detail_fail: str,
     detail_error: str,
     extra_headers: dict[str, str] | None = None,
+    proxy_service: str | None = None,
 ) -> StreamingResponse:
     """Proxy GET + Range: media is same-origin for WebAudio + ``<audio>``."""
     from app.config import settings
@@ -161,14 +168,31 @@ async def _http_proxy_range_get(
     if range_header:
         h["Range"] = range_header
 
-    client = httpx.AsyncClient(
-        timeout=httpx.Timeout(300.0, connect=30.0),
-        follow_redirects=True,
-    )
+    out_proxy: str | None = None
+    if proxy_service:
+        from app.services.outbound_proxy import get_outbound_proxy
+
+        out_proxy = get_outbound_proxy(proxy_service)
+
+    client_kwargs: dict[str, Any] = {
+        "timeout": httpx.Timeout(300.0, connect=30.0),
+        "follow_redirects": True,
+        "trust_env": False,
+    }
+    if out_proxy:
+        client_kwargs["proxy"] = out_proxy
+
+    client = httpx.AsyncClient(**client_kwargs)
     try:
         req = client.build_request("GET", stream_url, headers=h)
         resp = await client.send(req, stream=True)
     except httpx.HTTPError as exc:
+        if out_proxy:
+            from app.services.outbound_proxy import (
+                report_outbound_proxy_result,
+            )
+
+            report_outbound_proxy_result(out_proxy, ok=False)
         await client.aclose()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -176,11 +200,15 @@ async def _http_proxy_range_get(
         ) from exc
 
     if resp.status_code not in (200, 206):
+        if out_proxy:
+            from app.services.outbound_proxy import (
+                report_outbound_proxy_result,
+            )
+
+            report_outbound_proxy_result(out_proxy, ok=False)
         body_preview = b""
-        try:
+        with contextlib.suppress(Exception):
             body_preview = await resp.aread()
-        except Exception:
-            pass
         await resp.aclose()
         await client.aclose()
         logger.warning(
@@ -191,13 +219,13 @@ async def _http_proxy_range_get(
                 if "://" in stream_url
                 else "?"
             ),
+            outbound_proxied=bool(out_proxy),
             body_preview=body_preview[:200].decode("utf-8", errors="replace"),
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=detail_fail,
         )
-
     out_h: dict[str, str] = {
         "Accept-Ranges": resp.headers.get("accept-ranges", "bytes"),
     }
@@ -209,10 +237,18 @@ async def _http_proxy_range_get(
         out_h["Content-Range"] = cr
 
     async def body_iter() -> AsyncIterator[bytes]:
+        completed = False
         try:
             async for chunk in resp.aiter_bytes(65536):
                 yield chunk
+            completed = True
         finally:
+            if out_proxy:
+                from app.services.outbound_proxy import (
+                    report_outbound_proxy_result,
+                )
+
+                report_outbound_proxy_result(out_proxy, ok=completed)
             await resp.aclose()
             await client.aclose()
 
@@ -247,6 +283,7 @@ async def _proxy_cors_bypass_third_party_audio(
             stream_url,
             detail_fail="Bandcamp stream failed",
             detail_error="Bandcamp stream error",
+            proxy_service="bandcamp",
         )
     if sp == "youtube":
         from app.services.youtube_service import YouTubeService
@@ -289,8 +326,8 @@ async def _resolve_third_party_stream_with_recovery(
         # SoundCloud may return 502 when all transcodings are unavailable
         # (e.g. both progressive and HLS manifests return 404). Treat this
         # as recoverable to allow fallback refresh/replacement logic.
-        is_sc_502 = (
-            exc.status_code == 502 and _third_party_is_soundcloud(eff_track)
+        is_sc_502 = exc.status_code == 502 and _third_party_is_soundcloud(
+            eff_track
         )
         if exc.status_code not in (403, 404, 410, 503) and not is_sc_502:
             raise
@@ -302,9 +339,8 @@ async def _resolve_third_party_stream_with_recovery(
 
         fallback_svc = TrackFallbackService(session, _settings)
         resolved = False
-        if (
-            exc.status_code in (404, 410)
-            and _third_party_is_soundcloud(eff_track)
+        if exc.status_code in (404, 410) and _third_party_is_soundcloud(
+            eff_track
         ):
             sc_refreshed = await fallback_svc.try_refresh_sc_url(track)
             if sc_refreshed:
@@ -406,9 +442,7 @@ async def stream_track(
             ph = TrackPlaybackHealthService(session)
             await ph.record_server_recovery_exhausted(
                 track_id=track_id,
-                viewer_user_id=(
-                    current_user.id if current_user else None
-                ),
+                viewer_user_id=(current_user.id if current_user else None),
                 http_status=exc.status_code,
                 detail=_http_exc_detail(exc),
             )
@@ -526,9 +560,7 @@ async def get_cover(
 @router.get(
     "/{track_id}/offline-eligibility",
     response_model=OfflineEligibilityResponse,
-    summary=(
-        "Whether this track may be saved into the local PWA cache"
-    ),
+    summary=("Whether this track may be saved into the local PWA cache"),
 )
 @limiter.limit("120/minute")
 async def offline_eligibility(
@@ -545,9 +577,7 @@ async def offline_eligibility(
 
     structlog.contextvars.bind_contextvars(track_id=track_id)
     service = TrackService(session)
-    track = await service.get_track(
-        track_id, viewer=current_user
-    )
+    track = await service.get_track(track_id, viewer=current_user)
     if not track:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -580,9 +610,7 @@ async def offline_eligibility(
 @router.post(
     "/offline-eligibility-batch",
     response_model=OfflineEligibilityBatchResponse,
-    summary=(
-        "Batch eligibility check for the local PWA cache"
-    ),
+    summary=("Batch eligibility check for the local PWA cache"),
 )
 @limiter.limit("60/minute")
 async def offline_eligibility_batch(
@@ -614,9 +642,7 @@ async def offline_eligibility_batch(
                 allowed=False,
                 reason="not_found",
             )
-            offline_eligibility_observed(
-                allowed=False, reason="not_found"
-            )
+            offline_eligibility_observed(allowed=False, reason="not_found")
             continue
         try:
             _check_access(track, current_user)
@@ -625,9 +651,7 @@ async def offline_eligibility_batch(
                 allowed=False,
                 reason="forbidden",
             )
-            offline_eligibility_observed(
-                allowed=False, reason="forbidden"
-            )
+            offline_eligibility_observed(allowed=False, reason="forbidden")
             continue
         allowed, reason = is_offline_allowed(
             catalog_type=track.catalog_type,
@@ -714,9 +738,7 @@ async def audio_stream(
                 access_mode=track.access_mode,
                 file_size_bytes=track.file_size_bytes,
             )
-            headers["X-Offline-Allowed"] = (
-                "1" if allowed else "0"
-            )
+            headers["X-Offline-Allowed"] = "1" if allowed else "0"
             logger.info(
                 "audio_stream_from_cache",
                 track_id=track_id,
@@ -751,9 +773,7 @@ async def audio_stream(
             ph = TrackPlaybackHealthService(session)
             await ph.record_server_recovery_exhausted(
                 track_id=track_id,
-                viewer_user_id=(
-                    current_user.id if current_user else None
-                ),
+                viewer_user_id=(current_user.id if current_user else None),
                 http_status=exc.status_code,
                 detail=_http_exc_detail(exc),
             )
@@ -789,6 +809,7 @@ async def audio_stream(
                         "User-Agent": settings.lyrics_sc_cdn_user_agent,
                         "Referer": settings.lyrics_sc_cdn_referer,
                     },
+                    proxy_service="soundcloud",
                 )
             except HTTPException as exc:
                 ph = TrackPlaybackHealthService(session)

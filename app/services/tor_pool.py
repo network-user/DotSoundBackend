@@ -7,6 +7,7 @@ import shutil
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Protocol
 
 import httpx
 import structlog
@@ -19,6 +20,20 @@ _STEM_TOR_LOG_LINES = [
     "notice stdout",
     "warn stderr",
 ]
+
+
+class TorPoolSettings(Protocol):
+    tor_pool_enabled: bool
+    tor_pool_fail_closed: bool
+    tor_socks_base_port: int
+    tor_pool_size: int
+    tor_control_port: int
+    tor_circuit_max_age_seconds: int
+    tor_bin_path: str
+    tor_control_password: str
+    tor_log_outbound_public_ip: bool
+    tor_circuit_max_failure_rate: float
+    tor_circuit_health_check_interval: int
 
 
 async def _log_outbound_public_ip() -> None:
@@ -71,6 +86,39 @@ def get_tor_pool() -> TorPool | None:
 def _set_tor_pool(pool: TorPool | None) -> None:
     global _tor_pool
     _tor_pool = pool
+
+
+async def start_tor_pool_from_settings(
+    settings: TorPoolSettings,
+    *,
+    component: str,
+) -> bool:
+    if not getattr(settings, "tor_pool_enabled", False):
+        return False
+    pool = TorPool(settings)
+    try:
+        await pool.start()
+    except Exception as exc:
+        logger.error(
+            "tor_pool_start_failed",
+            component=component,
+            error=str(exc),
+            hint="Install Tor (apt) or Tor Browser/Expert (Windows).",
+        )
+        if getattr(settings, "tor_pool_fail_closed", True):
+            raise
+        return False
+    _set_tor_pool(pool)
+    return True
+
+
+async def stop_tor_pool_from_settings(*, component: str) -> None:
+    pool = get_tor_pool()
+    if pool is None:
+        return
+    await pool.stop()
+    _set_tor_pool(None)
+    logger.info("tor_pool_cleared", component=component)
 
 
 def _tbb_nest_parts(executable: str) -> tuple[str, ...]:
@@ -198,18 +246,18 @@ class TorCircuit:
 
 
 class TorPool:
-    def __init__(self, settings: object) -> None:
+    def __init__(self, settings: TorPoolSettings) -> None:
         self._settings = settings
         self._circuits: list[TorCircuit] = []
         self._rr_index: int = 0
-        self._process: object = None
-        self._controller: object = None
+        self._process: Any = None
+        self._controller: Any = None
         self._health_task: asyncio.Task[None] | None = None
         self._renewal_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
-        import stem.control
-        import stem.process
+        import stem.control  # type: ignore[import-untyped]
+        import stem.process  # type: ignore[import-untyped]
 
         s = self._settings
         base_port: int = s.tor_socks_base_port
@@ -314,12 +362,12 @@ class TorPool:
 
         if self._controller is not None:
             with contextlib.suppress(Exception):
-                self._controller.close()  # type: ignore[union-attr]
+                self._controller.close()
             self._controller = None
 
         if self._process is not None:
             with contextlib.suppress(Exception):
-                self._process.kill()  # type: ignore[union-attr]
+                self._process.kill()
             self._process = None
 
         logger.info("tor_pool_stopped")
@@ -341,6 +389,23 @@ class TorPool:
             failure_rate=round(circuit.failure_rate, 2),
         )
         return circuit.proxy_url
+
+    def report_proxy_result(self, proxy_url: str, *, ok: bool) -> None:
+        for circuit in self._circuits:
+            if circuit.proxy_url != proxy_url:
+                continue
+            if ok:
+                circuit.ok_count += 1
+            else:
+                circuit.fail_count += 1
+            logger.info(
+                "tor_pool_proxy_result_recorded",
+                circuit=circuit.index,
+                port=circuit.socks_port,
+                ok=ok,
+                failure_rate=round(circuit.failure_rate, 2),
+            )
+            return
 
     async def _health_check_loop(self) -> None:
         while True:
@@ -389,9 +454,9 @@ class TorPool:
                 logger.warning("tor_renewal_skipped_no_controller")
                 continue
             try:
-                from stem import Signal
+                from stem import Signal  # type: ignore[import-untyped]
 
-                self._controller.signal(Signal.NEWNYM)  # type: ignore[union-attr]
+                self._controller.signal(Signal.NEWNYM)
                 now = time.time()
                 for circuit in self._circuits:
                     circuit.ok_count = 0

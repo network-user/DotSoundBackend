@@ -1,5 +1,19 @@
 # DotSound - TODO Tracker
 
+- [x] **Outbound playback/Tor mode hardening (2026-05-15)**
+  - SoundCloud progressive audio proxy now uses the configured outbound
+    proxy path for the CDN fetch, not only for stream URL resolution.
+  - Taskiq workers now start/stop the same in-process Tor pool lifecycle
+    as the API process when `TOR_POOL_ENABLED=true`.
+  - Tor pool startup now fails closed by default
+    (`TOR_POOL_FAIL_CLOSED=true`) instead of silently falling back to the
+    server IP when the pool cannot start.
+  - Direct SoundCloud transcoding fallback is disabled by default
+    (`SC_STREAM_FALLBACK_DIRECT_ON_TOR_FAILURE=false`), leaving it only
+    as an explicit diagnostic escape hatch.
+  - Added tests for outbound proxy routing, proxy result feedback,
+    config defaults, and SoundCloud direct-fallback behavior.
+
 - [x] **Local audit: admin WS logs and catalog sync tests (2026-05-15)**
   - Fixed admin WebSocket live-log cursor reset: subscribe/filter
     updates no longer reference an out-of-scope `log_since`.

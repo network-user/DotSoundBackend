@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -393,6 +394,60 @@ async def test_soundcloud_progressive_audio_proxies_upstream(
         r = await client.get(f"/api/v1/tracks/{tid}/audio")
     assert r.status_code == 200
     assert r.content == b"\xff\xfb\x92"
+
+
+async def test_http_proxy_range_get_uses_outbound_proxy() -> None:
+    from app.api.v1.tracks import playback as mod
+
+    class _UpstreamResponse:
+        status_code = 200
+        headers = {
+            "content-type": "audio/mpeg",
+            "content-length": "3",
+        }
+
+        async def aiter_bytes(self, _size: int) -> AsyncIterator[bytes]:
+            yield b"abc"
+
+        async def aclose(self) -> None:
+            return None
+
+    fake_client = SimpleNamespace(
+        build_request=lambda *args, **kwargs: object(),
+        send=AsyncMock(return_value=_UpstreamResponse()),
+        aclose=AsyncMock(),
+    )
+
+    with (
+        patch(
+            "app.services.outbound_proxy.get_outbound_proxy",
+            return_value="socks5://127.0.0.1:9050",
+        ),
+        patch(
+            "app.services.outbound_proxy.report_outbound_proxy_result",
+        ) as report_result,
+        patch(
+            "app.api.v1.tracks.playback.httpx.AsyncClient",
+            return_value=fake_client,
+        ) as client_cls,
+    ):
+        response = await mod._http_proxy_range_get(
+            SimpleNamespace(headers={}),  # type: ignore[arg-type]
+            "https://media.sndcdn.com/x.mp3",
+            detail_fail="fail",
+            detail_error="error",
+            proxy_service="soundcloud",
+        )
+        body = b""
+        async for chunk in response.body_iterator:
+            body += chunk
+
+    assert body == b"abc"
+    assert client_cls.call_args.kwargs["proxy"] == "socks5://127.0.0.1:9050"
+    report_result.assert_called_once_with(
+        "socks5://127.0.0.1:9050",
+        ok=True,
+    )
 
 
 async def test_soundcloud_hls_stream_and_audio_redirect(

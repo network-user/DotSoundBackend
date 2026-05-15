@@ -49,9 +49,7 @@ from app.services.worker_job_control import (
     merge_heartbeat_control_payload,
 )
 
-logger: structlog.stdlib.BoundLogger = structlog.get_logger(
-    __name__
-)
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _SC_PROXY_CHUNK = 64 * 1024
 _SC_PROXY_LOG_EVERY_BYTES = 1024 * 1024
@@ -97,7 +95,7 @@ async def _stream_sc_cdn_to_worker(
         "audio_compute_sc_proxy_started",
         job_id=job_id,
         sc_host=sc_host,
-        tor_outbound=bool(out_proxy),
+        outbound_proxied=bool(out_proxy),
     )
     try:
         client_kwargs: dict[str, Any] = {
@@ -112,13 +110,14 @@ async def _stream_sc_cdn_to_worker(
         }
         if out_proxy:
             client_kwargs["proxy"] = out_proxy
-        async with httpx.AsyncClient(
-            **client_kwargs
-        ) as client, client.stream(
-            "GET",
-            stream_url,
-            headers=_sc_cdn_proxy_headers(),
-        ) as r:
+        async with (
+            httpx.AsyncClient(**client_kwargs) as client,
+            client.stream(
+                "GET",
+                stream_url,
+                headers=_sc_cdn_proxy_headers(),
+            ) as r,
+        ):
             r.raise_for_status()
             iterator = r.aiter_bytes(_SC_PROXY_CHUNK)
             while True:
@@ -142,10 +141,7 @@ async def _stream_sc_cdn_to_worker(
                 n += len(chunk)
                 if n > cap:
                     raise ValueError("audio_too_large")
-                if (
-                    n - last_logged_at_bytes
-                    >= _SC_PROXY_LOG_EVERY_BYTES
-                ):
+                if n - last_logged_at_bytes >= _SC_PROXY_LOG_EVERY_BYTES:
                     last_logged_at_bytes = n
                     logger.info(
                         "audio_compute_sc_proxy_chunk_progress",
@@ -153,11 +149,7 @@ async def _stream_sc_cdn_to_worker(
                         bytes_streamed=n,
                     )
                 yield chunk
-        elapsed_ms = int(
-            (
-                datetime.now(UTC) - started
-            ).total_seconds() * 1000
-        )
+        elapsed_ms = int((datetime.now(UTC) - started).total_seconds() * 1000)
         logger.info(
             "audio_compute_sc_proxy_completed",
             job_id=job_id,
@@ -186,6 +178,7 @@ async def _stream_sc_cdn_to_worker(
         )
         raise
 
+
 router = APIRouter(
     prefix="/internal/audio-compute",
     tags=["audio-compute"],
@@ -207,8 +200,8 @@ async def _enforce_rate_limit(
             action=action,
             audit_ip=client_ip(request),
         )
-    except rl.WorkerRateLimitExceeded:
-        raise HTTPException(status_code=429)
+    except rl.WorkerRateLimitExceeded as exc:
+        raise HTTPException(status_code=429) from exc
 
 
 @router.post("/workers/heartbeat")
@@ -232,16 +225,12 @@ async def heartbeat(
     )
     ctl = await merge_heartbeat_control_payload(
         worker,
-        package_version_header=request.headers.get(
-            "X-Worker-Package-Version"
-        ),
+        package_version_header=request.headers.get("X-Worker-Package-Version"),
     )
     await session.commit()
     return {
         "status": "ok",
-        "server_time": int(
-            datetime.now(UTC).timestamp()
-        ),
+        "server_time": int(datetime.now(UTC).timestamp()),
         **ctl,
     }
 
@@ -273,9 +262,7 @@ async def claim(
         await session.commit()
         # 204 must have no body; ``JSONResponse(..., content=None)``
         # can confuse Content-Length under uvicorn (ASGI).
-        return Response(
-            status_code=204
-        )
+        return Response(status_code=204)
 
     token = cws.generate_single_use_token(job.id, worker.id)
     payload = {
@@ -286,12 +273,11 @@ async def claim(
         "audio_sha256": job.audio_sha256,
         "correlation_id": job.id,
         "current_tier": job.current_tier,
-        "deadline_at": job.deadline_at.isoformat()
-        if job.deadline_at
-        else None,
+        "deadline_at": (
+            job.deadline_at.isoformat() if job.deadline_at else None
+        ),
         "audio_url": (
-            f"/api/v1/internal/audio-compute/audio/{job.id}"
-            f"?ott={token}"
+            f"/api/v1/internal/audio-compute/audio/{job.id}" f"?ott={token}"
         ),
     }
     await cws._log_audit(
@@ -325,8 +311,8 @@ async def job_progress(
     )
     try:
         event = json.loads(body or b"{}")
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400) from exc
 
     repo = AudioComputeRepository(session)
     job = await repo.get_job_for_worker(job_id, worker.id)
@@ -340,21 +326,15 @@ async def job_progress(
         job.progress_id,
         stage=stage,
         log_line=log_msg,
-        percent=percent
-        if isinstance(percent, int)
-        else None,
+        percent=percent if isinstance(percent, int) else None,
     )
 
     partial_text = event.get("partial_text")
     if isinstance(partial_text, str) and partial_text:
-        await store_partial_text(
-            job.progress_id, partial_text
-        )
+        await store_partial_text(job.progress_id, partial_text)
     partial_sync = event.get("partial_synced_lines")
     if isinstance(partial_sync, list) and partial_sync:
-        await store_partial_synced(
-            job.progress_id, partial_sync
-        )
+        await store_partial_synced(job.progress_id, partial_sync)
 
     await cws._log_audit(
         session,
@@ -383,8 +363,8 @@ async def job_result(
     )
     try:
         payload = json.loads(body or b"{}")
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=400)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400) from exc
 
     repo = AudioComputeRepository(session)
     job = await repo.get_job_for_worker(job_id, worker.id)
@@ -393,18 +373,21 @@ async def job_result(
     if job.status not in {"running", "queued"}:
         raise HTTPException(status_code=409)
 
-    if job.audio_sha256 and payload.get("audio_sha256"):
-        if job.audio_sha256 != payload.get("audio_sha256"):
-            await cws._log_audit(
-                session,
-                worker_id=worker.id,
-                ip=client_ip(request),
-                action="audio_sha_mismatch",
-                job_id=job.id,
-                status_code=400,
-            )
-            await session.commit()
-            raise HTTPException(status_code=400)
+    if (
+        job.audio_sha256
+        and payload.get("audio_sha256")
+        and job.audio_sha256 != payload.get("audio_sha256")
+    ):
+        await cws._log_audit(
+            session,
+            worker_id=worker.id,
+            ip=client_ip(request),
+            action="audio_sha_mismatch",
+            job_id=job.id,
+            status_code=400,
+        )
+        await session.commit()
+        raise HTTPException(status_code=400)
 
     try:
         clean = cws.validate_lyrics_result(payload)
@@ -419,12 +402,10 @@ async def job_result(
             meta={"reason": str(exc)},
         )
         await session.commit()
-        raise HTTPException(status_code=422)
+        raise HTTPException(status_code=422) from exc
 
     lyrics_repo = LyricsRepository(session)
-    existing = await lyrics_repo.get_by_track_id(
-        job.track_id
-    )
+    existing = await lyrics_repo.get_by_track_id(job.track_id)
 
     plain_out = clean["plain_text"]
     synced_out = clean["synced_lines"]
@@ -449,18 +430,13 @@ async def job_result(
 
             tw_list = clean["asr_timed_words"] or []
             tw_pairs: list[tuple[float, str]] = [
-                (float(x["t"]), str(x["w"]))
-                for x in tw_list
+                (float(x["t"]), str(x["w"])) for x in tw_list
             ]
 
             def _align() -> list[SyncedLine] | None:
-                audio_seconds = float(
-                    clean.get("audio_seconds") or 0.0
-                )
+                audio_seconds = float(clean.get("audio_seconds") or 0.0)
                 audio_duration_ms = (
-                    int(audio_seconds * 1000)
-                    if audio_seconds > 0.0
-                    else 0
+                    int(audio_seconds * 1000) if audio_seconds > 0.0 else 0
                 )
                 return align_text_to_precomputed_asr_timed_words(
                     existing.plain_text,  # type: ignore[arg-type]
@@ -483,9 +459,7 @@ async def job_result(
             {
                 "time_ms": int(sl.time_ms),
                 "text": sl.text,
-                "confidence": float(
-                    getattr(sl, "confidence", 0.0) or 0.0
-                ),
+                "confidence": float(getattr(sl, "confidence", 0.0) or 0.0),
             }
             for sl in aligned
             if (sl.text or "").strip()
@@ -533,23 +507,13 @@ async def job_result(
     if started:
         started_aware = started
         if started_aware.tzinfo is None:
-            started_aware = started_aware.replace(
-                tzinfo=UTC
-            )
+            started_aware = started_aware.replace(tzinfo=UTC)
         duration_ms = int(
-            (
-                datetime.now(UTC)
-                - started_aware
-            ).total_seconds()
-            * 1000
+            (datetime.now(UTC) - started_aware).total_seconds() * 1000
         )
-    await cws.mark_job_result(
-        session, job=job, duration_ms=duration_ms
-    )
+    await cws.mark_job_result(session, job=job, duration_ms=duration_ms)
 
-    audio_seconds = float(
-        payload.get("audio_seconds") or 0
-    )
+    audio_seconds = float(payload.get("audio_seconds") or 0)
     try:
         from app.services.compute_anomaly_service import (
             record_remote_result,
@@ -560,9 +524,7 @@ async def job_result(
             worker_id=worker.id,
             job_id=job.id,
             audio_seconds=audio_seconds,
-            processing_seconds=(
-                duration_ms / 1000.0
-            ),
+            processing_seconds=(duration_ms / 1000.0),
             plain_text=plain_out,
         )
     except Exception:
@@ -630,9 +592,7 @@ async def job_fail(
             session,
             job=job,
             reason=reason,
-            with_sync=bool(
-                getattr(job, "request_with_sync", False)
-            ),
+            with_sync=bool(getattr(job, "request_with_sync", False)),
             bypass_cache=bool(
                 getattr(
                     job,
@@ -645,9 +605,7 @@ async def job_fail(
         will_fallback = False
 
     if not will_fallback:
-        await cws.mark_job_failed(
-            session, job=job, reason=reason
-        )
+        await cws.mark_job_failed(session, job=job, reason=reason)
         await set_lyrics_progress(
             job.progress_id,
             stage="error",
@@ -692,23 +650,18 @@ async def download_audio(
             action="audio",
             audit_ip=client_ip(request),
         )
-    except rl.WorkerRateLimitExceeded:
-        raise HTTPException(status_code=429)
+    except rl.WorkerRateLimitExceeded as exc:
+        raise HTTPException(status_code=429) from exc
 
     repo = AudioComputeRepository(session)
     job = await repo.get_job_for_worker(job_id, worker_id)
-    if (
-        job is None
-        or job.status != "running"
-    ):
+    if job is None or job.status != "running":
         raise HTTPException(status_code=404)
 
     expected_ip = job.routed_to_worker and (
         await repo.get_worker(job.routed_to_worker)
     )
-    pinned_ip = (
-        expected_ip.last_ip if expected_ip else None
-    )
+    pinned_ip = expected_ip.last_ip if expected_ip else None
     exp = await cws.validate_ott_token(
         ott,
         job.id,
@@ -728,9 +681,7 @@ async def download_audio(
         await session.commit()
         raise HTTPException(status_code=404)
 
-    file_key = await repo.get_track_file_key(
-        job.track_id
-    )
+    file_key = await repo.get_track_file_key(job.track_id)
     logger.info(
         "audio_compute_audio_request_start",
         job_id=job_id,
@@ -743,9 +694,7 @@ async def download_audio(
     sc_url_pair: tuple[str, str] | None = None
     if file_key:
         try:
-            presigned = await s3.get_presigned_url(
-                file_key
-            )
+            presigned = await s3.get_presigned_url(file_key)
         except Exception as exc:
             logger.warning(
                 "audio_presign_failed",
@@ -754,9 +703,7 @@ async def download_audio(
                 err=str(exc),
             )
             await session.commit()
-            raise HTTPException(
-                status_code=503
-            ) from exc
+            raise HTTPException(status_code=503) from exc
         s3_presigned = presigned
         payload = {"url": presigned}
         logger.info(
@@ -767,9 +714,7 @@ async def download_audio(
         )
     else:
         track = await session.get(Track, job.track_id)
-        if not track or not getattr(
-            track, "sc_url", None
-        ):
+        if not track or not getattr(track, "sc_url", None):
             logger.warning(
                 "audio_download_no_file_key",
                 job_id=job_id,
@@ -792,27 +737,21 @@ async def download_audio(
             SoundCloudService,
         )
 
-        sc = SoundCloudService(
-            settings.sc_client_id, session
-        )
+        sc = SoundCloudService(settings.sc_client_id, session)
         try:
             sc_stream_url, protocol = await asyncio.wait_for(
                 sc.get_stream_info(
                     track.sc_url,
                     use_cache=False,
                 ),
-                timeout=(
-                    settings.lyrics_audio_resolve_timeout_seconds
-                ),
+                timeout=(settings.lyrics_audio_resolve_timeout_seconds),
             )
         except TimeoutError as exc:
             logger.warning(
                 "audio_compute_sc_resolve_timeout",
                 job_id=job_id,
                 track_id=job.track_id,
-                timeout_s=(
-                    settings.lyrics_audio_resolve_timeout_seconds
-                ),
+                timeout_s=(settings.lyrics_audio_resolve_timeout_seconds),
             )
             await session.commit()
             raise HTTPException(
@@ -830,9 +769,7 @@ async def download_audio(
                 err=str(exc),
             )
             await session.commit()
-            raise HTTPException(
-                status_code=503
-            ) from exc
+            raise HTTPException(status_code=503) from exc
         sc_url_pair = (sc_stream_url, protocol)
         payload = {
             "url": sc_stream_url,
@@ -847,9 +784,7 @@ async def download_audio(
         )
 
     if proxy and s3_presigned is not None:
-        if not await cws.consume_ott_by_exp(
-            exp, job.id, worker_id
-        ):
+        if not await cws.consume_ott_by_exp(exp, job.id, worker_id):
             await cws._log_audit(
                 session,
                 worker_id=worker_id,
@@ -870,14 +805,8 @@ async def download_audio(
             status_code=302,
         )
 
-    if (
-        proxy
-        and sc_url_pair is not None
-        and sc_url_pair[1] == "progressive"
-    ):
-        if not await cws.consume_ott_by_exp(
-            exp, job.id, worker_id
-        ):
+    if proxy and sc_url_pair is not None and sc_url_pair[1] == "progressive":
+        if not await cws.consume_ott_by_exp(exp, job.id, worker_id):
             await cws._log_audit(
                 session,
                 worker_id=worker_id,
@@ -897,16 +826,12 @@ async def download_audio(
             _stream_sc_cdn_to_worker(
                 sc_url_pair[0],
                 job_id=job_id,
-                chunk_idle_timeout=(
-                    settings.lyrics_audio_chunk_idle_seconds
-                ),
+                chunk_idle_timeout=(settings.lyrics_audio_chunk_idle_seconds),
             ),
             media_type="application/octet-stream",
         )
 
-    if not await cws.consume_ott_by_exp(
-        exp, job.id, worker_id
-    ):
+    if not await cws.consume_ott_by_exp(exp, job.id, worker_id):
         await cws._log_audit(
             session,
             worker_id=worker_id,

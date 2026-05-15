@@ -36,14 +36,24 @@ broker.add_middlewares(BackgroundJobLifecycleMiddleware())
 # late — handlers may already have logged.
 apply_third_party_log_levels(settings.log_third_party_level)
 
+_worker_tor_pool_started = False
+
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
 async def _worker_third_party_log_level(_st: TaskiqState) -> None:
+    global _worker_tor_pool_started
     apply_third_party_log_levels(settings.log_third_party_level)
+    from app.services.tor_pool import start_tor_pool_from_settings
+
+    _worker_tor_pool_started = await start_tor_pool_from_settings(
+        settings,
+        component="worker",
+    )
 
 
 @broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)
 async def _taskiq_worker_shutdown(_st: TaskiqState) -> None:
+    global _worker_tor_pool_started
     from app.search.es_client import close_es
     from app.services import (
         import_queue_dispatcher,
@@ -68,3 +78,12 @@ async def _taskiq_worker_shutdown(_st: TaskiqState) -> None:
         await close_sc_http_clients()
     except Exception:  # noqa: BLE001
         logger.exception("sc_http_client_close_failed")
+    if _worker_tor_pool_started:
+        try:
+            from app.services.tor_pool import stop_tor_pool_from_settings
+
+            await stop_tor_pool_from_settings(component="worker")
+        except Exception:  # noqa: BLE001
+            logger.exception("tor_pool_worker_shutdown_failed")
+        finally:
+            _worker_tor_pool_started = False

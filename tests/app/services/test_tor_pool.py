@@ -8,6 +8,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.services.tor_pool import (
+    TorCircuit,
+    TorPool,
     _log_outbound_public_ip,
     _resolve_tor_control_port,
     _search_tor_bundles,
@@ -49,6 +51,18 @@ def test_control_port_moved_out_of_socks_range() -> None:
     assert out2 == 9051
     out3 = _resolve_tor_control_port(9050, 10, 10000)
     assert out3 == 10000
+
+
+def test_report_proxy_result_updates_matching_circuit() -> None:
+    pool = TorPool(settings=mock.MagicMock())
+    pool._circuits = [TorCircuit(index=0, socks_port=9050)]
+
+    pool.report_proxy_result("socks5://127.0.0.1:9050", ok=False)
+    pool.report_proxy_result("socks5://127.0.0.1:9050", ok=True)
+
+    circuit = pool._circuits[0]
+    assert circuit.fail_count == 1
+    assert circuit.ok_count == 1
 
 
 def test_desktop_tbb_path_in_candidates(
