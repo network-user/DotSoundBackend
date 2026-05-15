@@ -111,7 +111,17 @@ async def outbound_status(
         )
     except ImportError:
         return {"available": False}
-    snapshot = await _privatecore_outbound_status()
+    try:
+        snapshot = await _privatecore_outbound_status()
+    except Exception as exc:
+        logger.warning(
+            "admin_outbound_status_unavailable",
+            error=type(exc).__name__,
+        )
+        return {
+            "available": False,
+            "error": type(exc).__name__,
+        }
     return {"available": True, **snapshot}
 
 

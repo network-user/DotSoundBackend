@@ -1,5 +1,43 @@
 # DotSound - TODO Tracker
 
+- [x] **Compute worker reverse-proxy IP allowlist fix (2026-05-15)**
+  - Internal worker API now resolves `X-Forwarded-For` through trusted
+    proxy chains instead of checking the Docker peer IP.
+  - Resolved origin IP is reused for global allowlist, per-worker
+    allowlist/audit, and worker download token IP binding.
+  - `INTERNAL_API_TRUSTED_PROXIES` now inherits `TRUSTED_PROXY_CIDRS`
+    when empty; `.env.example` and compute-worker docs describe the
+    production setup behind Caddy/nginx.
+  - Added regression tests for resolver, middleware, config, and
+    worker request IP propagation.
+
+- [x] **Compute worker allowlist and Network tab hardening (2026-05-15)**
+  - Compose backend/taskiq services now append the Docker bridge CIDR
+    to `INTERNAL_API_ALLOWED_CIDRS`, so local compose compute workers
+    from `172.18.x.x` pass the global internal API gate before HMAC
+    verification.
+  - Admin Network outbound status endpoint now degrades to
+    `available=false` instead of returning 500 when the PrivateCore
+    outbound snapshot is temporarily unavailable.
+  - Network tab UI now shows the backend diagnostic reason for an
+    unavailable outbound snapshot.
+  - Updated compute-worker docs and covered the status fallback with
+    an admin API regression test.
+
+- [x] **Prod memory/storage pressure audit (2026-05-15)**
+  - Server snapshot showed no active RAM runaway: Linux page cache kept
+    `free` low while `available` stayed about 1.6 GiB; swap pressure is
+    real on the 4 GiB host.
+  - Root storage pressure was traced primarily to Docker BuildKit cache
+    (`docker system df -v`: about 24.8 GiB), not container logs or
+    app data.
+  - Backend Docker image no longer installs PrivateCore `ml` extra;
+    ASR stays in DotSoundComputeWorker/local debug only.
+  - Production deploy now prunes Docker build cache with a bounded
+    keep-storage default after image prune.
+  - Docker SDK admin container probe now closes the client even when
+    the Docker socket/list call fails.
+
 - [x] **Lyrics auto-detection, artist resync worker, network admin tab (2026-05-15)**
   - Artist catalog sync now schedules lyrics discovery for every synced
     track, including existing tracks, through the paced global lyrics queue.
@@ -2142,7 +2180,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-15 (TODO.md: кириллица и тире в повреждённых строках).*
+*Последнее обновление: 2026-05-15 (compute worker reverse-proxy IP allowlist).*
 
 ## Session Updates (2026-05-06)
 

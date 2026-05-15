@@ -46,6 +46,8 @@ if [ "${OBSERVABILITY:-0}" = "1" ]; then
 fi
 
 COMPOSE=(docker compose "${COMPOSE_FILES[@]}")
+DEPLOY_PRUNE_BUILDER_CACHE="${DEPLOY_PRUNE_BUILDER_CACHE:-1}"
+DEPLOY_BUILDER_CACHE_KEEP_STORAGE="${DEPLOY_BUILDER_CACHE_KEEP_STORAGE:-4GB}"
 
 log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 
@@ -154,5 +156,12 @@ esac
 
 log "Pruning dangling images"
 docker image prune -f >/dev/null
+
+if [ "${DEPLOY_PRUNE_BUILDER_CACHE}" = "1" ]; then
+  log "Pruning Docker build cache"
+  docker builder prune -af \
+    --keep-storage "${DEPLOY_BUILDER_CACHE_KEEP_STORAGE}" \
+    >/dev/null
+fi
 
 log "Done"

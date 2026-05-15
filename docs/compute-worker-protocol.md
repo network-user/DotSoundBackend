@@ -45,6 +45,16 @@ Access is gated by the global IP allowlist
 `allowed_ip_cidrs` JSON column. A request can be rejected at
 either layer.
 
+When Backend is behind Caddy/nginx in Docker, both allowlists compare
+the resolved origin IP, not the Docker peer. Backend trusts
+`X-Forwarded-For` only when the direct peer is in
+`INTERNAL_API_TRUSTED_PROXIES`; if that variable is empty, it inherits
+`TRUSTED_PROXY_CIDRS`. A `404` plus backend log event
+`internal_api_ip_blocked` with `ip=172.x.x.x` means Backend is checking
+a Docker peer IP. For a compose-local worker this IP must be covered by
+the docker bridge CIDR; for a remote worker Backend should resolve and
+allow the worker egress CIDR instead.
+
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/workers/heartbeat` | "I am alive" — bumps `last_seen_at` |

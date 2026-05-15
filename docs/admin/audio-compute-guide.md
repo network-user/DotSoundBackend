@@ -98,6 +98,7 @@
 | `auth_fail` reason=`ip_not_allowed` | IP воркера не в его персональном allowlist | В drawer'е → **Edit** → добавьте текущий IP |
 | `auth_fail` reason=`nonce_replay` | Воркер посылает один и тот же nonce | Перезапустить воркер; если повторяется — вероятен MITM |
 | HTTP 404 на `/internal/...` | IP не в **глобальном** allowlist | Добавить CIDR в `INTERNAL_API_ALLOWED_CIDRS` в `.env` Backend |
+| HTTP 404 + `internal_api_ip_blocked` `ip=172.x.x.x` | Backend видит docker IP контейнера | Для compose-worker нужен docker bridge CIDR (`172.16.0.0/12`); для remote-worker проверьте `TRUSTED_PROXY_CIDRS` / `INTERNAL_API_TRUSTED_PROXIES` и публичный egress CIDR |
 | `rate_limit_exceeded` | Воркер шлёт слишком часто | Проверить `WORKER_HEARTBEAT_INTERVAL_SECONDS` (должен быть ≥5) |
 
 ---

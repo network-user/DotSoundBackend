@@ -53,6 +53,14 @@ Each repo has its own `.env.example`. Copy and fill them:
 | `DotSoundBot/.env` | `BOT_TOKEN` / `BACKEND_BASE_URL=http://backend:8000` / `INTERNAL_API_SECRET` (must match `BOT_INTERNAL_SECRET` in Backend `.env`) / `MINI_APP_URL` / in Compose, `docker-compose.yml` sets **`INTERNAL_API_COMPOSE_BIND=true`** and **`INTERNAL_API_HOST=0.0.0.0`** (do not publish port 8081 on the host). |
 | `DotSoundPrivateCore/.env` | PrivateCore-only configuration (lyrics provider tokens, audio-stage settings, Whisper config, Yandex Cloud keys, optional `OUTBOUND_*` Tor/proxy knobs for Yandex/VK import). The Backend never reads or echoes these variables. |
 
+For remote compute workers, set `INTERNAL_API_ALLOWED_CIDRS` in
+`DotSoundBackend/.env` to the workers' egress CIDRs. If Backend is
+reached through Caddy/nginx in Compose, keep `TRUSTED_PROXY_CIDRS`
+covering the proxy container subnet or set `INTERNAL_API_TRUSTED_PROXIES`
+explicitly; otherwise `/api/v1/internal/*` will see the Docker peer IP
+and return masked `404` responses.
+The compose file appends `172.16.0.0/12` for local compose workers.
+
 Generation helpers for the cryptographic values:
 
 ```

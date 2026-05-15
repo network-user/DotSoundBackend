@@ -112,6 +112,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dotsound}:${POSTGRES_PASSWORD:-dotsound}@postgres:5432/${POSTGRES_DB:-dotsound}
       ELASTICSEARCH_URL: http://elasticsearch:9200
+      INTERNAL_API_ALLOWED_CIDRS: ${INTERNAL_API_ALLOWED_CIDRS:-},172.16.0.0/12
     ports:
       - "8000:8000"
     depends_on:
@@ -169,6 +170,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-dotsound}:${POSTGRES_PASSWORD:-dotsound}@postgres:5432/${POSTGRES_DB:-dotsound}
       ELASTICSEARCH_URL: http://elasticsearch:9200
+      INTERNAL_API_ALLOWED_CIDRS: ${INTERNAL_API_ALLOWED_CIDRS:-},172.16.0.0/12
     depends_on:
       redis:
         condition: service_healthy

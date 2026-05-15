@@ -95,14 +95,20 @@ export function OutboundStatusPanel() {
   }
 
   if (!data.available) {
+    const reason = data.error
     return (
       <section className="admin-card admin-outbound">
         <h2>{t('admin.dashboard.outbound.title', 'Outbound layer')}</h2>
         <div className="admin-log-empty">
-          {t(
-            'admin.dashboard.outbound.notInstalled',
-            'Outbound module is not installed in this deployment',
-          )}
+          {reason
+            ? t('admin.dashboard.outbound.failedWithReason', {
+                defaultValue: 'Status unavailable: {{reason}}',
+                reason,
+              })
+            : t(
+                'admin.dashboard.outbound.notInstalled',
+                'Outbound module is not installed in this deployment',
+              )}
         </div>
       </section>
     )

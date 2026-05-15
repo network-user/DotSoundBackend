@@ -618,6 +618,7 @@ export const adminApi = {
   outboundStatus: () =>
     adminFetch<{
       available: boolean
+      error?: string
       mode?: 'direct' | 'proxy' | 'tor' | 'hybrid'
       tor?: {
         available: boolean

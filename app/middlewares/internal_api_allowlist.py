@@ -19,6 +19,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.config import settings
+from app.core.client_ip import (
+    internal_api_trusted_proxy_cidrs,
+    resolve_request_client_ip,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -41,15 +45,13 @@ class InternalApiAllowlistMiddleware(BaseHTTPMiddleware):
         if not request.url.path.startswith(_INTERNAL_PREFIX):
             return await call_next(request)
 
-        peer_ip = request.client.host if request.client else None
-        client_ip = peer_ip
-        trusted_proxies = settings.internal_api_trusted_proxies_list
-        if trusted_proxies and is_ip_in_cidrs(peer_ip, trusted_proxies):
-            xff = request.headers.get("x-forwarded-for", "")
-            if xff:
-                candidate = xff.split(",")[-1].strip()
-                if candidate:
-                    client_ip = candidate
+        client_ip, peer_ip = resolve_request_client_ip(
+            request,
+            internal_api_trusted_proxy_cidrs(),
+        )
+        request.state.internal_api_client_ip = client_ip
+        request.state.internal_api_peer_ip = peer_ip
+
         cidrs = settings.internal_api_allowed_cidrs_list
         if not is_ip_in_cidrs(client_ip, cidrs):
             logger.warning(

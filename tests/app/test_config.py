@@ -82,6 +82,30 @@ def test_allowed_origins_list_skips_empty_entries(
     ]
 
 
+def test_internal_api_trusted_proxies_inherits_public_proxy_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _make_settings(
+        monkeypatch,
+        TRUSTED_PROXY_CIDRS="172.16.0.0/12",
+        INTERNAL_API_TRUSTED_PROXIES="",
+    )
+
+    assert cfg.internal_api_trusted_proxies_effective_list == ["172.16.0.0/12"]
+
+
+def test_internal_api_trusted_proxies_can_override_public_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _make_settings(
+        monkeypatch,
+        TRUSTED_PROXY_CIDRS="172.16.0.0/12",
+        INTERNAL_API_TRUSTED_PROXIES="10.0.0.0/8",
+    )
+
+    assert cfg.internal_api_trusted_proxies_effective_list == ["10.0.0.0/8"]
+
+
 def test_default_values(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

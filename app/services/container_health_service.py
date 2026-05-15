@@ -102,70 +102,76 @@ def _collect_sync() -> list[dict[str, Any]]:
     except ImportError:
         logger.warning("docker_sdk_missing")
         return []
+    client: Any | None = None
     try:
-        client = docker.DockerClient(
-            base_url=(f"unix://{settings.docker_socket_path}")
-        )
-        containers = client.containers.list(all=True)
-    except Exception as exc:
-        logger.warning(
-            "docker_socket_unavailable",
-            error=type(exc).__name__,
-        )
-        return []
-
-    results: list[dict[str, Any]] = []
-    for cont in containers:
-        name = (cont.name or "").strip("/")
-        if not _matches_project(name):
-            continue
         try:
-            attrs = cont.attrs
-            state = attrs.get("State", {})
-            health_obj = state.get("Health", {})
-            health = health_obj.get("Status", "unknown")
-            started_at = state.get("StartedAt")
-            uptime: int | None = None
-            if started_at:
-                try:
-                    from datetime import (
-                        datetime,
-                    )
+            client = docker.DockerClient(
+                base_url=(f"unix://{settings.docker_socket_path}")
+            )
+            containers = client.containers.list(all=True)
+        except Exception as exc:
+            logger.warning(
+                "docker_socket_unavailable",
+                error=type(exc).__name__,
+            )
+            return []
 
-                    dt = datetime.fromisoformat(
-                        started_at.replace("Z", "+00:00").split(".")[0]
-                        + "+00:00"
-                    )
-                    uptime = int((datetime.now(UTC) - dt).total_seconds())
-                except Exception:
-                    uptime = None
-            restart_count = int(state.get("RestartCount", 0))
+        results: list[dict[str, Any]] = []
+        for cont in containers:
+            name = (cont.name or "").strip("/")
+            if not _matches_project(name):
+                continue
             try:
-                stats = cont.stats(stream=False)
-            except Exception:
-                stats = {}
-            results.append(
-                asdict(
-                    ContainerStatus(
-                        name=name,
-                        status=str(state.get("Status", "unknown")),
-                        health=str(health or "none"),
-                        uptime_seconds=uptime,
-                        restart_count=restart_count,
-                        cpu_pct=_stats_to_cpu_pct(stats),
-                        mem_mb=_stats_to_mem_mb(stats),
-                        image=str(attrs.get("Config", {}).get("Image") or ""),
+                attrs = cont.attrs
+                state = attrs.get("State", {})
+                health_obj = state.get("Health", {})
+                health = health_obj.get("Status", "unknown")
+                started_at = state.get("StartedAt")
+                uptime: int | None = None
+                if started_at:
+                    try:
+                        from datetime import (
+                            datetime,
+                        )
+
+                        dt = datetime.fromisoformat(
+                            started_at.replace("Z", "+00:00").split(".")[0]
+                            + "+00:00"
+                        )
+                        uptime = int((datetime.now(UTC) - dt).total_seconds())
+                    except Exception:
+                        uptime = None
+                restart_count = int(state.get("RestartCount", 0))
+                try:
+                    stats = cont.stats(stream=False)
+                except Exception:
+                    stats = {}
+                results.append(
+                    asdict(
+                        ContainerStatus(
+                            name=name,
+                            status=str(state.get("Status", "unknown")),
+                            health=str(health or "none"),
+                            uptime_seconds=uptime,
+                            restart_count=restart_count,
+                            cpu_pct=_stats_to_cpu_pct(stats),
+                            mem_mb=_stats_to_mem_mb(stats),
+                            image=str(
+                                attrs.get("Config", {}).get("Image") or ""
+                            ),
+                        )
                     )
                 )
-            )
-        except Exception:
-            logger.exception(
-                "container_inspect_failed",
-                name=name,
-            )
-    with contextlib.suppress(Exception):
-        client.close()
-    return results
+            except Exception:
+                logger.exception(
+                    "container_inspect_failed",
+                    name=name,
+                )
+        return results
+    finally:
+        if client is not None:
+            with contextlib.suppress(Exception):
+                client.close()
 
 
 async def get_container_snapshot(
