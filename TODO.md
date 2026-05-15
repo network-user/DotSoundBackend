@@ -12,6 +12,31 @@
   - Verified targeted Ruff, admin playback filter tests, signals/stat tests,
     admin dashboard endpoint test, and frontend production build.
 
+- [x] **Proxy pool reliability & observability (2026-05-16)**
+  - **IsolateClientAuth**: each `TorCircuit.proxy_url` now includes a unique
+    SOCKS5 credential (`socks5://c{N}:dotsound@...`); Tor `SocksPort` entries
+    use the `IsolateClientAuth` flag, giving each circuit an independent path
+    and genuinely diverse exit IPs within a single Tor process.
+  - **NEWNYM callback chain**: `TorPool.register_newnym_callback()` lets any
+    module register a callable that runs after NEWNYM. `main.py` registers
+    `reset_audio_proxy_clients` so old SOCKS5 tunnels are discarded after
+    circuit rotation — new audio streams always open fresh connections.
+  - **`reset_audio_proxy_clients()`**: non-closing pool clear; active streams
+    keep their existing clients, new requests create fresh ones.
+  - **Prometheus metrics**: `tor_circuit_failure_rate{circuit=N}` Gauge +
+    `outbound_proxy_pool_size` Gauge; `setup_metrics` registers both in the
+    same `CollectorRegistry`. Pool size reported at startup.
+  - **`.env.example`**: documents `STREAM_URL_CACHE_TTL_SOUNDCLOUD_HLS` with
+    explanation of CDN-signature lifetime (~20 min) and default (1200 s).
+  - **Unit tests** (28 passing):
+    - `test_proxy_pool.py`: pool reuse, per-proxy identity, closed-client
+      recreation, `reset_audio_proxy_clients`, `body_iter` ok/fail/disconnect
+      penalty logic, warmup skip when no proxies.
+    - `test_tor_pool.py` extended: credential format, uniqueness per index,
+      callback registration, sync/async/error-swallowing callbacks.
+    - `test_radio_service.py`: suppressed upstream excluded, all-suppressed
+      fallback to base, external_link filter in SQL WHERE clause, catalog path.
+
 - [x] **Audio streaming network hardening round 2 (2026-05-16)**
   - `TorCircuit.proxy_url` changed from `socks5://` to `socks5h://` so DNS
     resolution happens inside Tor (prevents DNS leak on the server host).

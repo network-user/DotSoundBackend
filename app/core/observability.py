@@ -44,6 +44,9 @@ _PROM_OFFLINE_ELIGIBILITY = None
 _PROM_OFFLINE_PREFETCH = None
 _PROM_CLIENT_PLAYBACK_EVENTS = None
 
+_PROM_TOR_CIRCUIT_FAILURE_RATE = None
+_PROM_OUTBOUND_PROXY_POOL_SIZE = None
+
 _PROM_REGISTRY: object | None = None
 
 
@@ -311,6 +314,20 @@ def setup_metrics(application: object) -> None:
         ),
         ["surface"],
         buckets=(1, 2, 3, 5, 8, 13, 21, 34, 55, 89),
+        registry=registry,
+    )
+
+    global _PROM_TOR_CIRCUIT_FAILURE_RATE
+    global _PROM_OUTBOUND_PROXY_POOL_SIZE
+    _PROM_TOR_CIRCUIT_FAILURE_RATE = Gauge(
+        "tor_circuit_failure_rate",
+        "Current rolling failure rate for each Tor circuit (0.0–1.0).",
+        ["circuit"],
+        registry=registry,
+    )
+    _PROM_OUTBOUND_PROXY_POOL_SIZE = Gauge(
+        "outbound_proxy_pool_size",
+        "Number of outbound proxy entries active (Tor circuits or static).",
         registry=registry,
     )
 
@@ -763,3 +780,21 @@ def client_playback_event_observed(
         event_name=event_name,
         surface=surface,
     ).inc()
+
+
+def tor_circuit_health_observed(
+    *, circuit: int, failure_rate: float
+) -> None:
+    """Update the Prometheus gauge for a single Tor circuit's failure rate."""
+    if _PROM_TOR_CIRCUIT_FAILURE_RATE is None:
+        return
+    _PROM_TOR_CIRCUIT_FAILURE_RATE.labels(
+        circuit=str(circuit)
+    ).set(max(0.0, min(1.0, failure_rate)))
+
+
+def outbound_proxy_pool_size_set(*, size: int) -> None:
+    """Set the gauge tracking active outbound proxy pool size."""
+    if _PROM_OUTBOUND_PROXY_POOL_SIZE is None:
+        return
+    _PROM_OUTBOUND_PROXY_POOL_SIZE.set(int(size))

@@ -201,6 +201,16 @@ async def close_audio_proxy_clients() -> None:
     _audio_proxy_http_clients.clear()
 
 
+def reset_audio_proxy_clients() -> None:
+    """Discard pooled clients so the next request opens fresh connections.
+
+    Called after a Tor NEWNYM signal so new audio streams build new SOCKS5
+    tunnels through the rotated circuits.  Active responses keep their
+    existing clients — connections close naturally when the stream ends.
+    """
+    _audio_proxy_http_clients.clear()
+
+
 def _get_audio_proxy_client(proxy_url: str | None) -> httpx.AsyncClient:
     """Return a pooled AsyncClient for the given proxy URL.
 

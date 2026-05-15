@@ -56,9 +56,10 @@ def test_control_port_moved_out_of_socks_range() -> None:
 def test_report_proxy_result_updates_matching_circuit() -> None:
     pool = TorPool(settings=mock.MagicMock())
     pool._circuits = [TorCircuit(index=0, socks_port=9050)]
+    url = pool._circuits[0].proxy_url
 
-    pool.report_proxy_result("socks5://127.0.0.1:9050", ok=False)
-    pool.report_proxy_result("socks5://127.0.0.1:9050", ok=True)
+    pool.report_proxy_result(url, ok=False)
+    pool.report_proxy_result(url, ok=True)
 
     circuit = pool._circuits[0]
     assert circuit.fail_count == 1
@@ -74,8 +75,9 @@ def test_describe_proxy_returns_circuit_observability() -> None:
             exit_ip="203.0.113.77",
         )
     ]
+    url = pool._circuits[0].proxy_url
 
-    description = pool.describe_proxy("socks5://127.0.0.1:9052")
+    description = pool.describe_proxy(url)
 
     assert description == {
         "transport": "tor",
@@ -83,6 +85,67 @@ def test_describe_proxy_returns_circuit_observability() -> None:
         "egress_ip": "203.0.113.77",
         "socks_port": 9052,
     }
+
+
+def test_tor_circuit_proxy_url_includes_isolation_credentials() -> None:
+    c = TorCircuit(index=3, socks_port=9053)
+    url = c.proxy_url
+    assert url.startswith("socks5://")
+    assert "c3:" in url
+    assert "@127.0.0.1:9053" in url
+
+
+def test_tor_circuit_proxy_url_unique_per_index() -> None:
+    c0 = TorCircuit(index=0, socks_port=9050)
+    c1 = TorCircuit(index=1, socks_port=9051)
+    assert c0.proxy_url != c1.proxy_url
+
+
+def test_register_newnym_callback_is_called_after_renewal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called: list[str] = []
+
+    def my_cb() -> None:
+        called.append("sync")
+
+    pool = TorPool(settings=mock.MagicMock())
+    pool.register_newnym_callback(my_cb)
+    assert my_cb in pool._newnym_callbacks
+
+
+async def test_run_newnym_callbacks_calls_sync_and_async() -> None:
+    sync_calls: list[int] = []
+    async_calls: list[int] = []
+
+    def sync_cb() -> None:
+        sync_calls.append(1)
+
+    async def async_cb() -> None:
+        async_calls.append(1)
+
+    pool = TorPool(settings=mock.MagicMock())
+    pool._newnym_callbacks = [sync_cb, async_cb]
+    await pool._run_newnym_callbacks()
+
+    assert sync_calls == [1]
+    assert async_calls == [1]
+
+
+async def test_run_newnym_callbacks_swallows_exceptions() -> None:
+    def bad_cb() -> None:
+        raise RuntimeError("boom")
+
+    good_calls: list[int] = []
+
+    def good_cb() -> None:
+        good_calls.append(1)
+
+    pool = TorPool(settings=mock.MagicMock())
+    pool._newnym_callbacks = [bad_cb, good_cb]
+    await pool._run_newnym_callbacks()
+
+    assert good_calls == [1]
 
 
 def test_desktop_tbb_path_in_candidates(

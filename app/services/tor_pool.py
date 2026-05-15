@@ -245,7 +245,13 @@ class TorCircuit:
 
     @property
     def proxy_url(self) -> str:
-        return f"socks5h://127.0.0.1:{self.socks_port}"
+        # SOCKS5 username acts as circuit-isolation key via IsolateClientAuth.
+        # Tor ignores the password; unique usernames → independent circuits →
+        # genuinely diverse exit IPs even within a single Tor process.
+        # httpx (socksio) sends the target hostname as a domain-name SOCKS5
+        # address type (atyp=0x03), so DNS is still resolved inside Tor —
+        # no need for the socks5h:// scheme that httpx does not support.
+        return f"socks5://c{self.index}:dotsound@127.0.0.1:{self.socks_port}"
 
 
 class TorPool:
@@ -256,6 +262,7 @@ class TorPool:
         self._process: Any = None
         self._controller: Any = None
         self._control_port: int = 0
+        self._newnym_callbacks: list[object] = []
         self._health_task: asyncio.Task[None] | None = None
         self._renewal_task: asyncio.Task[None] | None = None
 
@@ -285,7 +292,10 @@ class TorPool:
         ]
 
         config: dict[str, str | list[str]] = {
-            "SocksPort": [str(base_port + i) for i in range(pool_size)],
+            "SocksPort": [
+                f"{base_port + i} IsolateClientAuth"
+                for i in range(pool_size)
+            ],
             "ControlPort": str(control_port),
             "CookieAuthentication": "1",
             "MaxCircuitDirtiness": str(s.tor_circuit_max_age_seconds),
@@ -463,6 +473,26 @@ class TorPool:
         """Return the proxy URL of every circuit in the pool."""
         return [c.proxy_url for c in self._circuits]
 
+    def register_newnym_callback(self, cb: object) -> None:
+        """Register a callable invoked after each NEWNYM signal.
+
+        The callback may be a plain function or an async coroutine function.
+        It is called with no arguments.  Exceptions are caught and logged so
+        a broken callback cannot block circuit renewal.
+        """
+        self._newnym_callbacks.append(cb)
+
+    async def _run_newnym_callbacks(self) -> None:
+        for cb in list(self._newnym_callbacks):
+            try:
+                result = cb()
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception as exc:
+                logger.warning(
+                    "tor_newnym_callback_failed", error=str(exc)
+                )
+
     async def _health_check_loop(self) -> None:
         while True:
             await asyncio.sleep(
@@ -509,6 +539,17 @@ class TorPool:
                             port=circuit.socks_port,
                             error=str(exc),
                         )
+                try:
+                    from app.core.observability import (
+                        tor_circuit_health_observed,
+                    )
+
+                    tor_circuit_health_observed(
+                        circuit=circuit.index,
+                        failure_rate=circuit.failure_rate,
+                    )
+                except Exception:
+                    pass
 
     def _schedule_exit_ip_refresh(self, circuit: TorCircuit) -> None:
         if circuit.exit_ip_probe_pending:
@@ -578,5 +619,6 @@ class TorPool:
                         port=circuit.socks_port,
                     )
                 logger.info("tor_pool_all_circuits_renewed")
+                await self._run_newnym_callbacks()
             except Exception as exc:
                 logger.error("tor_renewal_failed", error=str(exc))

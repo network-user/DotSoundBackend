@@ -206,11 +206,33 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         settings,
         component="api",
     )
+    if _tor_pool_started:
+        from app.api.v1.tracks.playback import reset_audio_proxy_clients
+        from app.services.tor_pool import get_tor_pool as _gtp
+
+        _tp = _gtp()
+        if _tp is not None:
+            _tp.register_newnym_callback(reset_audio_proxy_clients)
+
     if _tor_pool_started or settings.outbound_static_proxy_urls_list:
         asyncio.create_task(
             _warm_outbound_proxy_pool(),
             name="outbound_proxy_warmup",
         )
+
+    try:
+        from app.core.observability import outbound_proxy_pool_size_set
+        from app.services.tor_pool import get_tor_pool as _gtp2
+
+        _proxy_pool_size = len(settings.outbound_static_proxy_urls_list)
+        if _tor_pool_started:
+            _tp2 = _gtp2()
+            if _tp2 is not None:
+                _proxy_pool_size = len(_tp2.circuit_proxy_urls())
+        if _proxy_pool_size:
+            outbound_proxy_pool_size_set(size=_proxy_pool_size)
+    except Exception:
+        pass
     resource_stop: asyncio.Event | None = None
     resource_task: asyncio.Task[None] | None = None
     if settings.system_resource_sampler_enabled:
