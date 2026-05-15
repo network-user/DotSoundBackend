@@ -197,6 +197,46 @@ async def test_start_import_queues_when_per_user_cap_reached(
     assert result.status == "queued"
 
 
+@patch(
+    f"{_MOD}.settings.import_max_concurrent_jobs",
+    new=100,
+)
+@patch(
+    f"{_MOD}.settings.import_per_user_max_concurrent",
+    new=10,
+)
+async def test_start_import_commits_before_enqueue(
+    session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = await _make_user(session, telegram_id=2015)
+    target = await _make_ready_job(session, user.id)
+    await session.commit()
+
+    events: list[str] = []
+    original_commit = type(session).commit
+
+    async def commit_spy(current: AsyncSession) -> None:
+        if current is session:
+            events.append("commit")
+        await original_commit(current)
+
+    async def kiq_spy(job_id: int) -> None:
+        assert job_id == target.id
+        events.append("kiq")
+
+    from app.services import import_worker
+
+    monkeypatch.setattr(type(session), "commit", commit_spy)
+    monkeypatch.setattr(import_worker.process_import_job, "kiq", kiq_spy)
+
+    svc = ImportService(session)
+    result = await svc.start_import(target.id, user.id, [0])
+
+    assert result.status == "importing"
+    assert events == ["commit", "kiq"]
+
+
 async def test_get_queue_position_for_queued_job(
     session: AsyncSession,
 ) -> None:

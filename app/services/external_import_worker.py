@@ -335,6 +335,7 @@ async def process_external_import_job(job_id: int) -> None:
                 "external_import_skip",
                 job_id=job_id,
                 reason="not_found_or_wrong_status",
+                actual_status=(job.status if job else None),
             )
             return
 

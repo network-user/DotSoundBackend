@@ -107,6 +107,7 @@ async def process_import_job(job_id: int) -> None:
                 "import_job_skip",
                 job_id=job_id,
                 reason="not_found_or_wrong_status",
+                actual_status=(job.status if job else None),
             )
             return
 

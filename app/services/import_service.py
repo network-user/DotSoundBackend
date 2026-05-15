@@ -135,6 +135,19 @@ class ImportService:
         self._session = session
         self._user_repo = UserRepository(session)
 
+    async def _enqueue_started_job(self, job: ImportJob) -> None:
+        if job.source in EXTERNAL_IMPORT_SOURCES:
+            from app.services.external_import_worker import (
+                process_external_import_job,
+            )
+
+            await process_external_import_job.kiq(job.id)
+            return
+
+        from app.services.import_worker import process_import_job
+
+        await process_import_job.kiq(job.id)
+
     async def _resolve_user(self, user_id: int) -> User:
         user = await self._user_repo.get_by_id(user_id)
         if not user:
@@ -243,12 +256,14 @@ class ImportService:
             job.tracks_data = {
                 "error_code": exc.code,
                 "error_message": exc.message,
+                "source_url": url,
             }
             logger.info(
                 "external_scan_provider_error",
                 job_id=job.id,
                 source=source,
                 code=exc.code,
+                message=exc.message,
             )
             return job
         except Exception as exc:
@@ -256,6 +271,7 @@ class ImportService:
             job.tracks_data = {
                 "error_code": "provider_unavailable",
                 "error_message": str(exc),
+                "source_url": url,
             }
             logger.error(
                 "external_scan_error",
@@ -437,19 +453,23 @@ class ImportService:
             return job
 
         job.status = "importing"
+        await self._session.flush()
+        await self._session.commit()
 
-        if is_external:
-            from app.services.external_import_worker import (
-                process_external_import_job,
+        try:
+            await self._enqueue_started_job(job)
+        except Exception as exc:  # noqa: BLE001
+            await self._session.refresh(job)
+            if job.status == "importing":
+                job.status = "queued"
+                await self._session.commit()
+            logger.error(
+                "import_start_enqueue_failed",
+                job_id=job.id,
+                source=job.source,
+                error=str(exc),
             )
-
-            await process_external_import_job.kiq(job.id)
-        else:
-            from app.services.import_worker import (
-                process_import_job,
-            )
-
-            await process_import_job.kiq(job.id)
+            return job
 
         logger.info(
             "import_started",
