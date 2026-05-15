@@ -16,6 +16,9 @@ _MOD = "app.api.v1.auth_email"
 async def test_email_request_returns_check_inbox(
     client: AsyncClient,
 ) -> None:
+    redis = AsyncMock()
+    redis.incr = AsyncMock(return_value=1)
+    redis.expire = AsyncMock()
     with patch(
         f"{_MOD}.request_magic_link",
         new_callable=AsyncMock,
@@ -23,6 +26,9 @@ async def test_email_request_returns_check_inbox(
         "app.core.tor_checker.is_tor_exit_node",
         new_callable=AsyncMock,
         return_value=False,
+    ), patch(
+        f"{_MOD}.get_redis_client",
+        return_value=redis,
     ), patch(f"{_MOD}.settings") as ms:
         ms.resend_api_key = "fake-key"
         r = await client.post(
@@ -89,6 +95,10 @@ async def test_email_verify_success_no_2fa(
         )
     assert r.status_code == 200
     assert r.json()["access_token"] == "tok"
+    assert any(
+        value.startswith("ds_access=")
+        for value in r.headers.get_list("set-cookie")
+    )
 
 
 async def test_email_verify_requires_2fa(
@@ -109,6 +119,10 @@ async def test_email_verify_requires_2fa(
         )
     assert r.status_code == 200
     assert r.json()["requires_2fa"] is True
+    assert all(
+        not value.startswith("ds_access=")
+        for value in r.headers.get_list("set-cookie")
+    )
 
 
 async def test_2fa_verify_success(
@@ -132,6 +146,10 @@ async def test_2fa_verify_success(
         )
     assert r.status_code == 200
     assert r.json()["access_token"] == "tok"
+    assert any(
+        value.startswith("ds_access=")
+        for value in r.headers.get_list("set-cookie")
+    )
 
 
 async def test_2fa_verify_invalid(
@@ -314,6 +332,10 @@ async def test_2fa_email_fallback_verify_success(
         )
     assert r.status_code == 200
     assert r.json()["access_token"] == "tok"
+    assert any(
+        value.startswith("ds_access=")
+        for value in r.headers.get_list("set-cookie")
+    )
 
 
 async def test_2fa_email_fallback_verify_no_code(

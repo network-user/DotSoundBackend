@@ -57,6 +57,26 @@
   `sc_id_refresher`; `scripts/deploy.sh` добавляет его в `up -d` для
   full / skip-pull / only-backend и в `build` для only-backend.
 
+- [x] **Auth security/cookie regression audit + hardening (2026-05-15)**
+  — Backend: в `app/api/v1/auth_email.py` cookie `ds_access` теперь
+  выставляется не только в Telegram-ветке, но и в email-логине:
+  `/api/v1/auth/email/verify`, `/api/v1/auth/2fa/verify`,
+  `/api/v1/auth/2fa/email-fallback/verify`. Это выравнивает поведение
+  всех логин-путей с cookie-based session и убирает потерю сессии после
+  reload у email-auth пользователей.
+  — Backend: `app/core/auth.py` получил graceful fallback на случай
+  недоступного Redis в revoke-check/revoke-write (`is_token_revoked`,
+  `revoke_token`) — запросы авторизации не падают 500 при сетевых
+  сбоях Redis, деградация логируется.
+  — Backend: `app/services/admin_auth_service.py` защищён от Redis
+  отказов в lockout/step-up read-path (`is_locked_out`,
+  `release_lockout`, `consume_step_up`) — админ-логин не падает 500
+  при кратковременной недоступности Redis.
+  — Tests: добавлены регресс-проверки в
+  `tests/app/api/v1/test_auth_email.py` (Set-Cookie для email/2FA
+  логина), и в `tests/app/core/test_auth.py` (fallback поведения при
+  RedisError).
+
 - [ ] **Убрать временный admin escape hatch в онбординге**
   — На welcome-шаге `OnboardingV2` есть кнопка «Пропустить онбординг
   (admin)», видимая только при `getIsAdmin()`. Нужна, потому что на
@@ -2041,7 +2061,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-08 (TODO.md: кириллица и тире в повреждённых строках).*
+*Последнее обновление: 2026-05-15 (TODO.md: кириллица и тире в повреждённых строках).*
 
 ## Session Updates (2026-05-06)
 

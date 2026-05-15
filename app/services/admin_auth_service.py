@@ -17,6 +17,7 @@ from dotsound_private_core.services.admin_security_policy import (
     is_device_trust_expired,
     should_lockout_admin,
 )
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import (
@@ -76,22 +77,47 @@ def _new_jti() -> str:
 
 async def is_locked_out(user_id: int) -> bool:
     redis = get_redis_client()
-    raw = await redis.get(f"{LOCKOUT_REDIS_PREFIX}{user_id}")
+    try:
+        raw = await redis.get(f"{LOCKOUT_REDIS_PREFIX}{user_id}")
+    except RedisError as exc:
+        logger.warning(
+            "admin_lockout_check_cache_unavailable",
+            user_id=user_id,
+            error=str(exc),
+        )
+        return False
     return bool(raw)
 
 
 async def _set_lockout(user_id: int) -> None:
     redis = get_redis_client()
-    await redis.setex(
-        f"{LOCKOUT_REDIS_PREFIX}{user_id}",
-        ADMIN_LOCKOUT_TTL_SECONDS,
-        "1",
-    )
+    try:
+        await redis.setex(
+            f"{LOCKOUT_REDIS_PREFIX}{user_id}",
+            ADMIN_LOCKOUT_TTL_SECONDS,
+            "1",
+        )
+    except RedisError as exc:
+        logger.warning(
+            "admin_lockout_set_cache_unavailable",
+            user_id=user_id,
+            error=str(exc),
+        )
 
 
 async def release_lockout(user_id: int) -> bool:
     redis = get_redis_client()
-    return bool(await redis.delete(f"{LOCKOUT_REDIS_PREFIX}{user_id}"))
+    try:
+        return bool(
+            await redis.delete(f"{LOCKOUT_REDIS_PREFIX}{user_id}")
+        )
+    except RedisError as exc:
+        logger.warning(
+            "admin_lockout_release_cache_unavailable",
+            user_id=user_id,
+            error=str(exc),
+        )
+        return False
 
 
 async def start_admin_init(
@@ -419,16 +445,34 @@ async def verify_step_up(
 async def consume_step_up(*, user_id: int, action: str) -> bool:
     redis = get_redis_client()
     key = f"{STEP_UP_REDIS_PREFIX}{user_id}:{action}"
-    getdel = getattr(redis, "getdel", None)
-    if getdel is not None:
-        raw = await getdel(key)
-    else:
+    try:
+        getdel = getattr(redis, "getdel", None)
+        if callable(getdel):
+            raw = await getdel(key)
+            return bool(raw)
+
+        get_fn = getattr(redis, "get", None)
+        delete_fn = getattr(redis, "delete", None)
+        if callable(get_fn) and callable(delete_fn):
+            raw = await get_fn(key)
+            if raw:
+                await delete_fn(key)
+            return bool(raw)
+
         async with redis.pipeline(transaction=True) as pipe:
             pipe.get(key)
             pipe.delete(key)
             results = await pipe.execute()
         raw = results[0] if results else None
-    return bool(raw)
+        return bool(raw)
+    except RedisError as exc:
+        logger.warning(
+            "admin_step_up_cache_unavailable",
+            user_id=user_id,
+            action=action,
+            error=str(exc),
+        )
+        return False
 
 
 async def has_step_up(*, user_id: int, action: str) -> bool:

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pyotp
 import pytest
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.user import User
@@ -78,6 +79,14 @@ class FakeRedis:
         if key not in self.store:
             return -2
         return self.store[key][1]
+
+
+class _FailingRedis:
+    async def get(self, _key: str) -> None:
+        raise RedisError("boom")
+
+    async def delete(self, _key: str) -> int:
+        raise RedisError("boom")
 
 
 @pytest.fixture
@@ -324,6 +333,28 @@ async def test_verify_step_up_marks_redis(
         )
 
 
+async def test_is_locked_out_redis_error_returns_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        admin_auth_service,
+        "get_redis_client",
+        lambda: _FailingRedis(),
+    )
+    assert await is_locked_out(123) is False
+
+
+async def test_release_lockout_redis_error_returns_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        admin_auth_service,
+        "get_redis_client",
+        lambda: _FailingRedis(),
+    )
+    assert await release_lockout(123) is False
+
+
 async def test_rotate_admin_refresh_rejects_revoked(
     db_session: AsyncSession,
     fake_redis: FakeRedis,
@@ -388,11 +419,19 @@ async def test_consume_backup_code_uses_each_once(
         codes = list(result["backup_codes"])  # type: ignore[arg-type]
         first = codes[0]
         assert (
-            consume_backup_code(user, first)
+            await consume_backup_code(
+                user=user,
+                code=first,
+                session=db_session,
+            )
             is True
         )
         assert (
-            consume_backup_code(user, first)
+            await consume_backup_code(
+                user=user,
+                code=first,
+                session=db_session,
+            )
             is False
         )
 

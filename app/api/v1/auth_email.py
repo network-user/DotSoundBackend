@@ -10,11 +10,13 @@ from fastapi import (
     Depends,
     HTTPException,
     Request,
+    Response,
     status,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.auth_cookie import set_access_cookie
 from app.core.rate_limit import limiter
 from app.core.redis import get_redis_client
 from app.dependencies import get_current_user, get_db
@@ -149,6 +151,7 @@ async def email_auth_request(
 @limiter.limit("10/minute")
 async def email_auth_verify(
     request: Request,
+    response: Response,
     body: EmailVerifyRequest,
     session: AsyncSession = Depends(get_db),
 ) -> EmailVerifyResponse:
@@ -184,6 +187,7 @@ async def email_auth_verify(
         kind="login",
         user_id=int(str(result["user_id"])),
     )
+    set_access_cookie(response, str(result["access_token"]))
 
     return EmailVerifyResponse(
         access_token=str(result["access_token"]),
@@ -199,6 +203,7 @@ async def email_auth_verify(
 @limiter.limit("10/minute")
 async def twofa_verify(
     request: Request,
+    response: Response,
     body: TwoFAVerifyRequest,
     session: AsyncSession = Depends(get_db),
 ) -> EmailVerifyResponse:
@@ -220,6 +225,7 @@ async def twofa_verify(
     _record_login(
         request, session, int(str(result["user_id"]))
     )
+    set_access_cookie(response, str(result["access_token"]))
 
     return EmailVerifyResponse(
         access_token=str(result["access_token"]),
@@ -319,6 +325,7 @@ async def twofa_email_fallback(
 @limiter.limit("10/minute")
 async def twofa_email_fallback_verify(
     request: Request,
+    response: Response,
     body: TwoFAVerifyRequest,
     session: AsyncSession = Depends(get_db),
 ) -> EmailVerifyResponse:
@@ -342,6 +349,7 @@ async def twofa_email_fallback_verify(
             ),
             detail=str(exc),
         )
+    set_access_cookie(response, str(result["access_token"]))
 
     return EmailVerifyResponse(
         access_token=str(result["access_token"]),

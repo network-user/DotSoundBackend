@@ -5,16 +5,19 @@ import hmac
 import json
 import time
 from datetime import UTC, datetime, timedelta
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from jose import jwt
+from redis.exceptions import RedisError
 
 from app.core.auth import (
     _ALGORITHM,
     AuthError,
     create_access_token,
     decode_access_token,
+    is_token_revoked,
+    revoke_token,
     verify_telegram_init_data,
 )
 
@@ -201,6 +204,35 @@ class TestVerifyTelegramInitData:
 
         with _patch_settings(), pytest.raises(AuthError):
             verify_telegram_init_data(init_data)
+
+
+class TestTokenRevocationFallback:
+    async def test_is_token_revoked_returns_false_on_redis_error(
+        self,
+    ) -> None:
+        redis = AsyncMock()
+        redis.exists = AsyncMock(
+            side_effect=RedisError("boom")
+        )
+        with patch(
+            "app.core.redis.get_redis_client",
+            return_value=redis,
+        ):
+            assert await is_token_revoked("jti-x") is False
+
+    async def test_revoke_token_ignores_redis_error(
+        self,
+    ) -> None:
+        redis = AsyncMock()
+        redis.setex = AsyncMock(
+            side_effect=RedisError("boom")
+        )
+        with patch(
+            "app.core.redis.get_redis_client",
+            return_value=redis,
+        ):
+            await revoke_token("jti-y", 60)
+        redis.setex.assert_awaited_once()
 
     async def test_missing_hash_raises(self) -> None:
         init_data = (

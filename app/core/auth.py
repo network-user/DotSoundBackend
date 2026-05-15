@@ -12,6 +12,7 @@ from dotsound_private_core.services.auth_policy import (
     AUTH_DATE_MAX_AGE,
 )
 from jose import JWTError, jwt
+from redis.exceptions import RedisError
 
 from app.config import settings
 
@@ -112,9 +113,17 @@ async def revoke_token(jti: str, ttl_seconds: int) -> None:
     from app.core.redis import get_redis_client
 
     redis = get_redis_client()
-    await redis.setex(
-        f"{_TOKEN_REVOCATION_PREFIX}{jti}", max(ttl_seconds, 1), "1"
-    )
+    try:
+        await redis.setex(
+            f"{_TOKEN_REVOCATION_PREFIX}{jti}",
+            max(ttl_seconds, 1),
+            "1",
+        )
+    except RedisError as exc:
+        logger.warning(
+            "auth_token_revoke_cache_unavailable",
+            error=str(exc),
+        )
 
 
 async def is_token_revoked(jti: str) -> bool:
@@ -123,9 +132,16 @@ async def is_token_revoked(jti: str) -> bool:
     from app.core.redis import get_redis_client
 
     redis = get_redis_client()
-    return bool(
-        await redis.exists(f"{_TOKEN_REVOCATION_PREFIX}{jti}")
-    )
+    try:
+        return bool(
+            await redis.exists(f"{_TOKEN_REVOCATION_PREFIX}{jti}")
+        )
+    except RedisError as exc:
+        logger.warning(
+            "auth_token_revoke_check_cache_unavailable",
+            error=str(exc),
+        )
+        return False
 
 
 def create_scoped_token(
