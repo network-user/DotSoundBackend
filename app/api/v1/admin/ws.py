@@ -71,6 +71,8 @@ from app.services.loki_service import (
 router = APIRouter(prefix="/ws", tags=["admin-ws"])
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
+_LIVE_LOG_BOOTSTRAP_SECONDS = 15
+
 ALLOWED_CHANNELS: frozenset[str] = frozenset(
     {
         "overview",
@@ -437,7 +439,13 @@ async def _broadcast_loop(
     state: dict[str, Any],
 ) -> None:
     last_task_seen = [""]
-    log_since = [int(time.time() * 1_000_000_000)]
+    log_since = [
+        max(
+            0,
+            int(time.time() * 1_000_000_000)
+            - _LIVE_LOG_BOOTSTRAP_SECONDS * 1_000_000_000,
+        )
+    ]
     worker_log_cursor = [
         state.get("worker_logs_last_id", "$"),
     ]
@@ -575,6 +583,12 @@ async def admin_ws(
                             state["logs_selectors"],
                             state["logs_contains"],
                         ) = _parse_log_subscribe(msg)
+                        log_since[0] = max(
+                            0,
+                            int(time.time() * 1_000_000_000)
+                            - _LIVE_LOG_BOOTSTRAP_SECONDS
+                            * 1_000_000_000,
+                        )
                     if channel == "worker_logs":
                         wid = msg.get("worker_id")
                         if (
@@ -601,6 +615,11 @@ async def admin_ws(
                     state["logs_selectors"],
                     state["logs_contains"],
                 ) = _parse_log_subscribe(msg)
+                log_since[0] = max(
+                    0,
+                    int(time.time() * 1_000_000_000)
+                    - _LIVE_LOG_BOOTSTRAP_SECONDS * 1_000_000_000,
+                )
             elif cmd == "ping":
                 await websocket.send_text(
                     json.dumps(
