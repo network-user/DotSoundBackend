@@ -1,5 +1,13 @@
 # DotSound - TODO Tracker
 
+- [x] **Observability prod baseline for admin panel (2026-05-15)**
+  - Promtail now attaches Docker Compose `service` labels and parses
+    backend JSON `level` labels for Loki queries.
+  - Admin log defaults now target the real Compose service name
+    `backend` instead of the stale `dotsound-backend` selector.
+  - Result: `/api/v1/admin/logs` and live admin WS log tail work
+    against the production Docker stack without manual selector fixes.
+
 > Этот файл поддерживается автоматически ИИ-агентом.
 > Агент обязан: (1) прочитать этот файл в начале сессии,
 > (2) обновить статус после выполнения задач,

@@ -233,7 +233,7 @@ async def _push_logs(
     if (
         not loki_configured
         and is_local_dev_logs_enabled()
-        and s.get("service") == "dotsound-backend"
+        and s.get("service") == "backend"
         and not s.get("container")
     ):
         s.pop("service", None)
@@ -310,7 +310,7 @@ def _parse_log_subscribe(
         if value:
             selectors[key] = str(value)[:64]
     if not selectors:
-        selectors["service"] = "dotsound-backend"
+        selectors["service"] = "backend"
     contains = raw.get("contains")
     contains_clean = (
         str(contains)[:128] if isinstance(contains, str) and contains else None
@@ -476,7 +476,7 @@ async def _broadcast_loop(
                     websocket,
                     selectors=state.get(
                         "logs_selectors",
-                        {"service": ("dotsound-backend")},
+                        {"service": "backend"},
                     ),
                     contains=state.get("logs_contains"),
                     since_ns=log_since,
@@ -526,7 +526,7 @@ async def admin_ws(
     ws_gauge_inc()
     subscriptions: set[str] = {"overview"}
     state: dict[str, Any] = {
-        "logs_selectors": {"service": "dotsound-backend"},
+        "logs_selectors": {"service": "backend"},
         "logs_contains": None,
     }
     push_task = asyncio.create_task(

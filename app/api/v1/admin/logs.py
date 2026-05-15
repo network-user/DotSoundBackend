@@ -62,7 +62,7 @@ async def query_logs(
     if level:
         selectors["level"] = level
     if not selectors:
-        selectors["service"] = "dotsound-backend"
+        selectors["service"] = "backend"
 
     end_ns = int(time.time() * 1_000_000_000)
     start_ns = end_ns - minutes * 60 * 1_000_000_000
@@ -70,7 +70,7 @@ async def query_logs(
     if is_local_dev_logs_enabled() and not settings.loki_url.strip():
         s = dict(selectors)
         if (
-            s.get("service") == "dotsound-backend"
+            s.get("service") == "backend"
             and not s.get("container")
         ):
             s.pop("service", None)
