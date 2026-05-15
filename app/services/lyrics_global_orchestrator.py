@@ -35,6 +35,7 @@ from taskiq import TaskiqEvents, TaskiqState
 from app.config import settings
 from app.core.redis import get_redis_client
 from app.core.tkq import broker
+from app.services.lyrics_state import has_nonempty_synced_lines
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -53,6 +54,7 @@ _BLOCK_MARKERS: tuple[str, ...] = (
 class _QueueItem:
     track_id: int
     with_sync: bool
+    force_sync_existing_text: bool = False
 
 
 def _serialize(item: _QueueItem) -> str:
@@ -60,6 +62,9 @@ def _serialize(item: _QueueItem) -> str:
         {
             "track_id": int(item.track_id),
             "with_sync": bool(item.with_sync),
+            "force_sync_existing_text": bool(
+                item.force_sync_existing_text
+            ),
         }
     )
 
@@ -78,10 +83,18 @@ def _deserialize(raw: str | bytes) -> _QueueItem | None:
     return _QueueItem(
         track_id=track_id,
         with_sync=bool(with_sync),
+        force_sync_existing_text=bool(
+            data.get("force_sync_existing_text")
+        ),
     )
 
 
-async def enqueue(track_id: int, with_sync: bool) -> None:
+async def enqueue(
+    track_id: int,
+    with_sync: bool,
+    *,
+    force_sync_existing_text: bool = False,
+) -> None:
     """Push a track onto the shared lyrics queue.
 
     Used by ``import_lyrics_worker.process_import_lyrics_task``
@@ -91,7 +104,13 @@ async def enqueue(track_id: int, with_sync: bool) -> None:
     redis = get_redis_client()
     await redis.rpush(
         settings.lyrics_global_queue_key,
-        _serialize(_QueueItem(track_id, with_sync)),
+        _serialize(
+            _QueueItem(
+                track_id,
+                with_sync,
+                force_sync_existing_text=force_sync_existing_text,
+            )
+        ),
     )
 
 
@@ -141,10 +160,25 @@ async def _process_one(item: _QueueItem) -> str:
     async with AsyncSessionLocal() as session:
         repo = LyricsRepository(session)
         existing = await repo.get_by_track_id(item.track_id)
-        if existing is not None and (existing.plain_text or "").strip():
+        has_text = bool(
+            existing is not None and (existing.plain_text or "").strip()
+        )
+        has_sync = (
+            has_nonempty_synced_lines(existing.synced_lines)
+            if existing is not None
+            else False
+        )
+        should_force_sync = bool(
+            item.with_sync
+            and item.force_sync_existing_text
+            and has_text
+            and not has_sync
+        )
+        if has_text and not should_force_sync:
             logger.debug(
                 "lyrics_global_skip_already_in_db",
                 track_id=item.track_id,
+                has_sync=has_sync,
             )
             return "skipped"
 
@@ -156,6 +190,7 @@ async def _process_one(item: _QueueItem) -> str:
                 requested_by_user_id=None,
                 with_sync=item.with_sync,
                 bypass_cache=False,
+                force_sync_existing_text=item.force_sync_existing_text,
             )
             if not progress_id:
                 return "skipped"

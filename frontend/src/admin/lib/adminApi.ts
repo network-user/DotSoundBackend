@@ -651,6 +651,18 @@ export const adminApi = {
         breaker: string
         by_status: Record<string, number>
       }>
+      recent_requests?: Array<{
+        ts: number
+        service: string
+        method: string
+        host: string
+        path: string
+        transport: string
+        identity: string | null
+        status_code: number | null
+        duration_ms: number | null
+        error: string | null
+      }>
       rotation_events?: Record<string, number>
       burned_identities?: Record<string, number>
     }>('/system/outbound-status'),
@@ -1787,6 +1799,20 @@ export const adminApi = {
     }>('/artists/catalog/sync-batch', {
       method: 'POST',
       body: { artist_ids: artistIds },
+    }),
+
+  artistLyricsSyncBatch: (artistIds: number[]) =>
+    adminFetch<{
+      queued: number
+      job_ids: Record<string, string | null>
+      errors: Array<{ artist_id: number; detail: string }>
+    }>('/artists/lyrics/sync-batch', {
+      method: 'POST',
+      body: {
+        artist_ids: artistIds,
+        with_sync: true,
+        include_existing_text: true,
+      },
     }),
 
   catalogSyncRelease: (artistId: number, releaseId: number) =>

@@ -47,7 +47,7 @@ const GROUPS: MenuGroup[] = [
     labelKey: 'admin.menu.groups.ops',
     fallback: 'Operations',
     match: (i) =>
-      /^(audio-compute|tasks|schedules|logs|metrics|containers|antivirus)$/i.test(
+      /^(audio-compute|tasks|schedules|logs|metrics|network|containers|antivirus)$/i.test(
         i.id,
       ),
   },

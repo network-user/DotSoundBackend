@@ -58,6 +58,13 @@ function BreakerBadge({ state }: { state: string }) {
   return <StatusPill kind={tone}>{state}</StatusPill>
 }
 
+function formatRecentTs(ts: number): string {
+  const raw = ts > 2_000_000_000_000 ? ts : ts * 1000
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return 'n/a'
+  return d.toLocaleTimeString()
+}
+
 export function OutboundStatusPanel() {
   const { t } = useTranslation()
   const { data, isLoading, error } = useQuery({
@@ -117,6 +124,7 @@ export function OutboundStatusPanel() {
     (acc, v) => acc + Number(v ?? 0),
     0,
   )
+  const recentRequests = data.recent_requests ?? []
 
   return (
     <section className="admin-card admin-outbound">
@@ -314,6 +322,87 @@ export function OutboundStatusPanel() {
                 </div>
               )
             })}
+          </div>
+        )}
+      </div>
+
+      <div className="admin-outbound__recent">
+        <div className="admin-outbound__services-head">
+          <h3>
+            {t(
+              'admin.dashboard.outbound.recentTitle',
+              'Recent requests',
+            )}
+          </h3>
+          <span className="admin-outbound__backend">
+            {t(
+              'admin.dashboard.outbound.recentHint',
+              'query strings and secrets are stripped',
+            )}
+          </span>
+        </div>
+        {recentRequests.length === 0 ? (
+          <div className="admin-log-empty">
+            {t(
+              'admin.dashboard.outbound.noRecent',
+              'No recent request trace yet.',
+            )}
+          </div>
+        ) : (
+          <div className="admin-outbound__recent-table">
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  <th>{t('admin.common.time', 'Time')}</th>
+                  <th>{t('admin.common.service', 'Service')}</th>
+                  <th>{t('admin.dashboard.outbound.transport', 'Mode')}</th>
+                  <th>{t('admin.dashboard.outbound.identity', 'Identity')}</th>
+                  <th>{t('admin.dashboard.outbound.request', 'Request')}</th>
+                  <th>{t('admin.common.status', 'Status')}</th>
+                  <th>{t('admin.common.duration', 'Duration')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentRequests.slice(0, 40).map((item, idx) => {
+                  const status =
+                    item.status_code === null
+                      ? item.error || 'error'
+                      : item.status_code
+                  return (
+                    <tr key={`${item.ts}-${idx}`}>
+                      <td className="admin-mono">
+                        {formatRecentTs(Number(item.ts))}
+                      </td>
+                      <td className="admin-mono">{item.service}</td>
+                      <td>
+                        <StatusPill
+                          kind={
+                            item.transport === 'direct'
+                              ? 'warn'
+                              : 'ok'
+                          }
+                        >
+                          {item.transport}
+                        </StatusPill>
+                      </td>
+                      <td className="admin-mono">
+                        {item.identity || 'direct'}
+                      </td>
+                      <td className="admin-mono">
+                        {item.method} {item.host}
+                        {item.path}
+                      </td>
+                      <td className="admin-mono">{status}</td>
+                      <td className="admin-mono">
+                        {item.duration_ms === null
+                          ? 'n/a'
+                          : `${item.duration_ms.toFixed(1)} ms`}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

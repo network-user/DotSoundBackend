@@ -39,6 +39,7 @@ ALLOWED_TASK_NAMES: frozenset[str] = frozenset(
         "refresh_tor_list",
         "transcode_video",
         "generate_lyrics_task",
+        "enqueue_artist_lyrics_task",
         "lyrics_discovery_sweep_task",
         "generate_and_upload_cover",
         "admin.alert.send",

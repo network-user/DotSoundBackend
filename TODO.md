@@ -1,5 +1,12 @@
 # DotSound - TODO Tracker
 
+- [x] **Mini player desktop progress visibility fix (2026-05-15)**
+  - Restored visible bottom mini-player progress on desktop PlayerBar.
+  - Added explicit white played-segment fill and subtle progress background
+    tint tied to `--progress` for non-touch `#player-bar`.
+  - Verified with `frontend` production build (`npm run build`).
+
+
 - [x] **Admin startup alert and system load dashboard (2026-05-15)**
   - Backend now sends a best-effort Telegram admin alert after API
     startup completes, using the existing Bot internal admin-alert

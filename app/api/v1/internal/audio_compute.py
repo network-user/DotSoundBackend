@@ -416,7 +416,6 @@ async def job_result(
 
     use_catalog = (
         existing is not None
-        and existing.source == "auto"
         and (existing.plain_text or "").strip()
         and clean.get("asr_timed_words")
     )

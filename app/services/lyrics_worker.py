@@ -753,21 +753,27 @@ async def _heartbeat_loop(
         pass
 
 
-def _parse_progress_event(event) -> tuple[str, int | None]:
+def _parse_progress_event(event) -> tuple[str, int | None, str | None]:
     """Accept both legacy ``str`` and future structured dict progress.
 
     Returns ``(stage, percent)`` — percent is None if not supplied.
     """
     if isinstance(event, str):
-        return event, None
+        return event, None, None
     if isinstance(event, dict):
         stage = str(event.get("stage") or "processing")
         raw_percent = event.get("percent")
         percent: int | None = None
         if isinstance(raw_percent, (int, float)):
             percent = max(0, min(100, int(raw_percent)))
-        return stage, percent
-    return "processing", None
+        message_raw = event.get("message")
+        message = (
+            str(message_raw).strip()[:500]
+            if message_raw is not None
+            else None
+        )
+        return stage, percent, message or None
+    return "processing", None, None
 
 
 def _call_provider(
@@ -1204,14 +1210,19 @@ async def _generate_lyrics_task_impl(
             loop = asyncio.get_running_loop()
 
             def on_progress(event) -> None:
-                stage, percent_val = _parse_progress_event(event)
+                stage, percent_val, message = _parse_progress_event(event)
                 opaque = _opaque_stage(stage)
                 label = _STAGE_LABELS.get(opaque, "")
                 desc = f" \u2014 {label}" if label else ""
+                log_line = (
+                    message
+                    if message
+                    else f"stage: {opaque}{desc}"
+                )
                 asyncio.run_coroutine_threadsafe(
                     _log(
                         opaque,
-                        f"stage: {opaque}{desc}",
+                        log_line,
                         percent=percent_val,
                     ),
                     loop,
@@ -1536,14 +1547,19 @@ async def generate_lyrics_debug_task(
             loop = asyncio.get_running_loop()
 
             def on_progress(event) -> None:
-                stage, percent_val = _parse_progress_event(event)
+                stage, percent_val, message = _parse_progress_event(event)
                 opaque = _opaque_stage(stage)
                 label = _STAGE_LABELS.get(opaque, "")
                 desc = f" \u2014 {label}" if label else ""
+                log_line = (
+                    message
+                    if message
+                    else f"stage: {opaque}{desc}"
+                )
                 asyncio.run_coroutine_threadsafe(
                     _log(
                         opaque,
-                        f"stage: {opaque}{desc}",
+                        log_line,
                         percent=percent_val,
                     ),
                     loop,
@@ -1712,6 +1728,7 @@ async def _save_catalog_result_and_close(
         sync_quality=payload.get("sync_quality"),
         sync_profile=payload.get("sync_profile"),
         source_name=payload.get("source_name"),
+        sync_source_name=payload.get("sync_source_name"),
     )
     _close_job_attempt(job, status="success")
     job.status = "done"
@@ -1798,6 +1815,27 @@ async def catalog_only_lyrics_task(
 
         artist = track.artist or ""
         title = track.title or ""
+        loop = asyncio.get_running_loop()
+
+        def on_progress(event) -> None:
+            stage, percent_val, message = _parse_progress_event(event)
+            opaque = _opaque_stage(stage)
+            label = _STAGE_LABELS.get(opaque, "")
+            desc = f" \u2014 {label}" if label else ""
+            log_line = (
+                f"[catalog_only] {message}"
+                if message
+                else f"[catalog_only] stage: {opaque}{desc}"
+            )
+            asyncio.run_coroutine_threadsafe(
+                set_lyrics_progress(
+                    progress_id,
+                    stage=opaque,
+                    log_line=log_line,
+                    percent=percent_val,
+                ),
+                loop,
+            )
 
         if not bypass_cache:
             for cache_artist, cache_title, _mode in _lyrics_search_attempts(
@@ -1841,6 +1879,52 @@ async def catalog_only_lyrics_task(
                         "status": "found",
                         "from": "cache",
                     }
+                if (
+                    with_sync
+                    and isinstance(cached, dict)
+                    and (cached.get("text") or "").strip()
+                ):
+                    if job is not None:
+                        if not cached.get("preserve_existing_text"):
+                            repo_l = LyricsRepository(session)
+                            await repo_l.create_or_update(
+                                track_id=track_id,
+                                plain_text=cached["text"],
+                                source="auto",
+                                synced_lines=[],
+                                sync_quality=None,
+                                sync_profile=None,
+                                source_name=cached.get("source_name"),
+                            )
+                            await session.flush()
+                        result = await _escalate_catalog_plain_for_sync(
+                            session,
+                            job=job,
+                            progress_id=progress_id,
+                            with_sync=with_sync,
+                            bypass_cache=bypass_cache,
+                            log_line=(
+                                "[catalog_only] cached plain text "
+                                "without timecodes; escalating to "
+                                "compute worker"
+                            ),
+                        )
+                        await session.commit()
+                        if result["status"] == "fallback":
+                            return result
+                        await _finalise(
+                            progress_id,
+                            "found",
+                            log_line=(
+                                "[catalog_only] cached plain text "
+                                "retained; no remote tier for "
+                                "timing sync"
+                            ),
+                        )
+                        return {
+                            "status": "found",
+                            "from": "cache",
+                        }
 
         audio_path: str | None = None
         tmp_dir: str | None = None
@@ -1860,12 +1944,13 @@ async def catalog_only_lyrics_task(
             try:
                 gen_result = await asyncio.wait_for(
                     asyncio.to_thread(
+                        _call_provider,
                         generate_lyrics,
-                        artist,
-                        title,
-                        audio_path,
-                        None,
-                        None,
+                        artist=artist,
+                        title=title,
+                        audio_path=audio_path,
+                        on_progress=on_progress,
+                        on_cancel=None,
                         external_id=track.external_id,
                         disable_local_asr=(not use_local_asr),
                     ),
@@ -1876,20 +1961,6 @@ async def catalog_only_lyrics_task(
                 logger.warning(
                     "catalog_only_timeout",
                     track_id=track_id,
-                )
-            except TypeError:
-                gen_result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        _call_provider,
-                        generate_lyrics,
-                        artist=artist,
-                        title=title,
-                        audio_path=audio_path,
-                        on_progress=None,
-                        on_cancel=None,
-                        external_id=track.external_id,
-                    ),
-                    timeout=float(settings.lyrics_provider_timeout_seconds),
                 )
 
             if gen_result is None:

@@ -236,6 +236,13 @@ def _filter_menu(caps: set[str], locale: str) -> list[dict]:
             "icon": "trending-up",
         },
         {
+            "id": "network",
+            "label": "Network",
+            "route": f"{base}/network",
+            "capability": "metrics.view",
+            "icon": "globe",
+        },
+        {
             "id": "containers",
             "label": labels["menu.containers"],
             "route": f"{base}/containers",

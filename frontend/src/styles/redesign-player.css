@@ -165,6 +165,43 @@
   display: none !important;
 }
 
+#player-bar.rp-player-bar:not(.rp-player-bar--touch)::before {
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.14) var(--progress, 0%),
+    transparent var(--progress, 0%),
+    transparent 100%
+  );
+}
+
+#player-bar.rp-player-bar:not(.rp-player-bar--touch) #pb-seek-wrap {
+  display: block;
+  height: 10px;
+}
+
+#player-bar.rp-player-bar:not(.rp-player-bar--touch) #pb-seek {
+  height: 10px;
+}
+
+#player-bar.rp-player-bar:not(.rp-player-bar--touch) #pb-seek::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    #fff 0%,
+    #fff var(--progress, 0%),
+    rgba(255, 255, 255, 0.18) var(--progress, 0%),
+    rgba(255, 255, 255, 0.18) 100%
+  );
+}
+
+#player-bar.rp-player-bar:not(.rp-player-bar--touch) #pb-seek::-moz-range-track {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+#player-bar.rp-player-bar:not(.rp-player-bar--touch) #pb-seek::-moz-range-progress {
+  background: #fff;
+}
+
 @media (orientation: landscape) and (max-height: 500px) {
   .rp-player-bar__hint {
     display: none;

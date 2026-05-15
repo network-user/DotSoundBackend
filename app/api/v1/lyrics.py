@@ -244,11 +244,20 @@ async def trigger_auto_lyrics(
         with_sync=body.with_sync,
         bypass_cache=body.bypass_cache,
     )
+    bypass_cache = body.bypass_cache
+    if bypass_cache and not (
+        current_user.is_admin or settings.debug
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="bypass_cache requires admin",
+        )
     service = LyricsService(session)
     task_id = await service.trigger_auto_generation(
         track_id=track_id,
         user_id=current_user.id,
         with_sync=body.with_sync,
+        bypass_cache=bypass_cache,
     )
     return LyricsAutoResponse(task_id=task_id)
 

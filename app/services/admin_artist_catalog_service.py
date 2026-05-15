@@ -474,6 +474,52 @@ class AdminArtistCatalogService:
         )
         return job_id
 
+    async def enqueue_lyrics_sync(
+        self,
+        artist_id: int,
+        *,
+        with_sync: bool,
+        include_existing_text: bool,
+    ) -> str | None:
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None:
+            msg = "artist not found"
+            raise ValueError(msg)
+        from app.services.artist_lyrics_worker import (
+            enqueue_artist_lyrics_task,
+        )
+        from app.services.background_jobs import IdempotencySkipped, enqueue
+
+        job_id: str | None = None
+        try:
+            job_id = await enqueue(
+                enqueue_artist_lyrics_task,
+                payload={
+                    "artist_id": artist_id,
+                    "with_sync": with_sync,
+                    "include_existing_text": include_existing_text,
+                },
+                idempotency_key=(
+                    "artist-lyrics-sync:"
+                    f"{artist_id}:{int(with_sync)}:"
+                    f"{int(include_existing_text)}"
+                ),
+                idempotency_ttl_seconds=300,
+            )
+        except IdempotencySkipped:
+            logger.info(
+                "admin_artist_lyrics_sync_already_queued",
+                artist_id=artist_id,
+            )
+        logger.info(
+            "admin_artist_lyrics_sync_queued",
+            artist_id=artist_id,
+            job_id=job_id,
+            with_sync=with_sync,
+            include_existing_text=include_existing_text,
+        )
+        return job_id
+
     async def enqueue_release_sync(
         self,
         artist_id: int,

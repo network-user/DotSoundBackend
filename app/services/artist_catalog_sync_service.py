@@ -83,7 +83,7 @@ class ArtistCatalogSyncService:
         self,
         artist_id: int,
         *,
-        skip_background_lyrics: bool = True,
+        skip_background_lyrics: bool = False,
     ) -> dict[str, Any]:
         artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
         await sc.sync_artist_soundcloud_uploader_profile(
@@ -203,7 +203,7 @@ class ArtistCatalogSyncService:
         self,
         artist_id: int,
         *,
-        skip_background_lyrics: bool = True,
+        skip_background_lyrics: bool = False,
     ) -> dict[str, Any]:
         artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
         await sc.sync_artist_soundcloud_uploader_profile(
@@ -284,7 +284,7 @@ class ArtistCatalogSyncService:
         artist_id: int,
         soundcloud_album_id: int,
         *,
-        skip_background_lyrics: bool = True,
+        skip_background_lyrics: bool = False,
     ) -> dict[str, Any]:
         artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
         await sc.sync_artist_soundcloud_uploader_profile(
@@ -405,6 +405,7 @@ class ArtistCatalogSyncService:
         is_station = rk == DOTSOUND_SC_ARTIST_STATION_RELEASE_KIND
         artist_svc = ArtistService(self._session) if is_station else None
         ordered_ids: list[int] = []
+        lyrics_track_ids: list[int] = []
         for idx, tr in enumerate(clipped):
             if not isinstance(tr, dict):
                 continue
@@ -441,4 +442,35 @@ class ArtistCatalogSyncService:
                     position=idx,
                 )
             ordered_ids.append(track.id)
+            if not skip_background_lyrics:
+                lyrics_track_ids.append(track.id)
         await self._catalog.replace_release_tracks(rel.id, ordered_ids)
+        for track_id in lyrics_track_ids:
+            await self._enqueue_track_lyrics(track_id)
+
+    async def _enqueue_track_lyrics(self, track_id: int) -> None:
+        try:
+            if settings.lyrics_global_orchestrator_enabled:
+                from app.services import lyrics_global_orchestrator
+
+                await lyrics_global_orchestrator.enqueue(
+                    track_id,
+                    with_sync=True,
+                    force_sync_existing_text=True,
+                )
+                return
+            from app.services.lyrics_service import LyricsService
+
+            await LyricsService(self._session).enqueue_background_lyrics(
+                track_id,
+                requested_by_user_id=None,
+                with_sync=True,
+                bypass_cache=False,
+                force_sync_existing_text=True,
+            )
+        except Exception as exc:
+            logger.warning(
+                "catalog_sync_lyrics_enqueue_failed",
+                track_id=track_id,
+                error=str(exc),
+            )

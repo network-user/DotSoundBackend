@@ -15,6 +15,7 @@ from app.models.track import Track
 from app.repositories.lyrics import LyricsRepository
 from app.repositories.track import TrackRepository
 from app.repositories.user import UserRepository
+from app.services.lyrics_state import has_nonempty_synced_lines
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -206,8 +207,64 @@ class LyricsService:
             set_lyrics_progress,
         )
 
-        await self._get_owned_track(track_id, user_id)
+        track = await self._get_owned_track(track_id, user_id)
         progress_id = uuid.uuid4().hex
+
+        lyrics_row = await self._repo.get_by_track_id(track_id)
+        existing_text = (
+            (lyrics_row.plain_text or "").strip()
+            if lyrics_row is not None
+            else ""
+        )
+        existing_has_sync = (
+            has_nonempty_synced_lines(lyrics_row.synced_lines)
+            if lyrics_row is not None
+            else False
+        )
+        reuse_existing_text = bool(
+            with_sync and existing_text and not existing_has_sync
+        )
+        if existing_text and not reuse_existing_text:
+            await set_lyrics_progress(
+                progress_id,
+                stage="saving",
+                terminal_state="found",
+                percent=100,
+                log_line="existing lyrics kept; auto-detection skipped",
+            )
+            logger.info(
+                "lyrics_auto_skip_existing_text",
+                track_id=track_id,
+                has_sync=existing_has_sync,
+            )
+            return progress_id
+        if reuse_existing_text:
+            assert lyrics_row is not None
+            from app.services.lyrics_worker import (
+                set_cached_lyrics_result,
+            )
+
+            bypass_cache = False
+            try:
+                await set_cached_lyrics_result(
+                    track.artist or "",
+                    track.title or "",
+                    {
+                        "text": lyrics_row.plain_text,
+                        "synced_lines": None,
+                        "sync_quality": None,
+                        "sync_profile": None,
+                        "source_name": lyrics_row.source_name,
+                        "sync_source_name": None,
+                        "preserve_existing_text": True,
+                    },
+                )
+            except Exception:
+                logger.warning(
+                    "lyrics_auto_existing_text_cache_seed_failed",
+                    track_id=track_id,
+                    exc_info=True,
+                )
 
         mode = await get_routing_mode(self._session)
         if mode == "disabled":
@@ -279,6 +336,7 @@ class LyricsService:
         with_sync: bool = True,
         bypass_cache: bool = False,
         profile: str = "catalog_only",
+        force_sync_existing_text: bool = False,
     ) -> str | None:
         from app.models.lyrics_job import LyricsJob
         from app.services.compute_router import (
@@ -300,12 +358,56 @@ class LyricsService:
             return None
 
         lyrics_row = await self._repo.get_by_track_id(track_id)
-        if lyrics_row is not None and ((lyrics_row.plain_text or "").strip()):
+        existing_text = (
+            (lyrics_row.plain_text or "").strip()
+            if lyrics_row is not None
+            else ""
+        )
+        existing_has_sync = (
+            has_nonempty_synced_lines(lyrics_row.synced_lines)
+            if lyrics_row is not None
+            else False
+        )
+        sync_existing_text = bool(
+            with_sync
+            and force_sync_existing_text
+            and existing_text
+            and not existing_has_sync
+        )
+        if existing_text and not sync_existing_text:
             logger.debug(
                 "lyrics_background_skip_has_plain_text",
                 track_id=track_id,
+                has_sync=existing_has_sync,
             )
             return None
+        if sync_existing_text:
+            assert lyrics_row is not None
+            from app.services.lyrics_worker import (
+                set_cached_lyrics_result,
+            )
+
+            bypass_cache = False
+            try:
+                await set_cached_lyrics_result(
+                    track.artist or "",
+                    track.title or "",
+                    {
+                        "text": lyrics_row.plain_text,
+                        "synced_lines": None,
+                        "sync_quality": None,
+                        "sync_profile": None,
+                        "source_name": lyrics_row.source_name,
+                        "sync_source_name": None,
+                        "preserve_existing_text": True,
+                    },
+                )
+            except Exception:
+                logger.warning(
+                    "lyrics_background_existing_text_cache_seed_failed",
+                    track_id=track_id,
+                    exc_info=True,
+                )
 
         mode = await get_routing_mode(self._session)
         if mode == "disabled":
@@ -382,6 +484,7 @@ class LyricsService:
             active_tier=active_tier,
             profile=job.profile,
             requested_by=requested_by_user_id,
+            force_sync_existing_text=sync_existing_text,
         )
         return progress_id
 

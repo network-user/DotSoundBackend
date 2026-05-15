@@ -94,6 +94,18 @@ class AdminCatalogBulkSyncResponse(BaseModel):
     errors: list[AdminCatalogBulkSyncError]
 
 
+class AdminArtistLyricsSyncRequest(BaseModel):
+    artist_ids: list[int] = Field(..., min_length=1, max_length=200)
+    with_sync: bool = True
+    include_existing_text: bool = True
+
+
+class AdminArtistLyricsSyncResponse(BaseModel):
+    queued: int
+    job_ids: dict[int, str | None]
+    errors: list[AdminCatalogBulkSyncError]
+
+
 class AdminArtistBulkEnrichRequest(BaseModel):
     artist_ids: list[int] = Field(..., min_length=1, max_length=200)
     bypass_cache: bool = True

@@ -28,6 +28,7 @@ import { ContainersRoute } from './routes/ContainersRoute'
 import { DashboardRoute } from './routes/DashboardRoute'
 import { LogsRoute } from './routes/LogsRoute'
 import { MetricsRoute } from './routes/MetricsRoute'
+import { NetworkRoute } from './routes/NetworkRoute'
 import { SecurityRoute } from './routes/SecurityRoute'
 import { SettingsRoute } from './routes/SettingsRoute'
 import { SchedulesRoute } from './routes/SchedulesRoute'
@@ -256,6 +257,10 @@ export function AdminApp() {
                 <Route
                   path="metrics"
                   element={<MetricsRoute />}
+                />
+                <Route
+                  path="network"
+                  element={<NetworkRoute />}
                 />
                 <Route
                   path="containers"

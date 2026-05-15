@@ -34,6 +34,8 @@ from app.schemas.admin_artist_catalog import (
     AdminArtistBulkEnrichRequest,
     AdminArtistBulkEnrichResponse,
     AdminArtistCatalogOverviewResponse,
+    AdminArtistLyricsSyncRequest,
+    AdminArtistLyricsSyncResponse,
     AdminArtistListItemResponse,
     AdminArtistListResponse,
     AdminArtistSoundcloudPatch,
@@ -212,6 +214,45 @@ async def admin_artist_enqueue_bulk_enrich(
                 )
             )
     return AdminArtistBulkEnrichResponse(
+        queued=len(job_ids),
+        job_ids=job_ids,
+        errors=errors,
+    )
+
+
+@router.post(
+    "/lyrics/sync-batch",
+    response_model=AdminArtistLyricsSyncResponse,
+)
+@limiter.limit("3/minute")
+async def admin_artist_enqueue_lyrics_sync(
+    request: Request,
+    body: AdminArtistLyricsSyncRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_step_up("catalog.sync.run")),
+) -> AdminArtistLyricsSyncResponse:
+    svc = AdminArtistCatalogService(session)
+    job_ids: dict[int, str | None] = {}
+    errors: list[AdminCatalogBulkSyncError] = []
+    seen: set[int] = set()
+    for artist_id in body.artist_ids:
+        if artist_id in seen:
+            continue
+        seen.add(artist_id)
+        try:
+            job_ids[artist_id] = await svc.enqueue_lyrics_sync(
+                artist_id,
+                with_sync=body.with_sync,
+                include_existing_text=body.include_existing_text,
+            )
+        except ValueError as exc:
+            errors.append(
+                AdminCatalogBulkSyncError(
+                    artist_id=artist_id,
+                    detail=str(exc),
+                )
+            )
+    return AdminArtistLyricsSyncResponse(
         queued=len(job_ids),
         job_ids=job_ids,
         errors=errors,

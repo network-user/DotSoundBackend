@@ -142,7 +142,7 @@ export function ArtistsRoute() {
     errors: string[]
   } | null>(null)
   const [syncResult, setSyncResult] = useState<{
-    kind: 'catalog' | 'enrich'
+    kind: 'catalog' | 'enrich' | 'lyrics'
     queued: number
     jobIds: Array<{ artistId: number | null; jobId: string | null }>
     errors: Array<{ artist_id: number; detail: string }>
@@ -205,6 +205,19 @@ export function ArtistsRoute() {
     number[]
   >({
     mutationFn: (ids: number[]) => adminApi.artistEnrichBatch(ids),
+    onSettled: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'artists'],
+      })
+    },
+  })
+
+  const lyricsSyncMutation = useMutation<
+    BulkQueueResult,
+    Error,
+    number[]
+  >({
+    mutationFn: (ids: number[]) => adminApi.artistLyricsSyncBatch(ids),
     onSettled: () => {
       qc.invalidateQueries({
         queryKey: ['admin', 'artists'],
@@ -334,6 +347,27 @@ export function ArtistsRoute() {
       const res = await bulkEnrichMutation.mutateAsync(ids)
       setSyncResult({
         kind: 'enrich',
+        queued: res.queued,
+        jobIds: Object.entries(res.job_ids).map(([artistId, jobId]) => ({
+          artistId: Number(artistId),
+          jobId,
+        })),
+        errors: res.errors,
+      })
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
+  }
+
+  const handleLyricsSyncSelected = async (idsRaw?: number[]) => {
+    const ids = idsRaw ?? Array.from(selectedIds)
+    if (ids.length === 0 || lyricsSyncMutation.isPending) return
+    const ok = await stepUp.request('catalog.sync.run')
+    if (!ok) return
+    try {
+      const res = await lyricsSyncMutation.mutateAsync(ids)
+      setSyncResult({
+        kind: 'lyrics',
         queued: res.queued,
         jobIds: Object.entries(res.job_ids).map(([artistId, jobId]) => ({
           artistId: Number(artistId),
@@ -510,6 +544,15 @@ export function ArtistsRoute() {
             </MotionPress>
             <MotionPress
               variant="ghost"
+              disabled={busy || lyricsSyncMutation.isPending}
+              onClick={() => handleLyricsSyncSelected([id])}
+            >
+              {t('admin.artists.lyricsOne', {
+                defaultValue: 'Lyrics',
+              })}
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
               disabled={busy}
               onClick={() =>
                 handleDelete(id, name)
@@ -678,6 +721,18 @@ export function ArtistsRoute() {
               onClick={handleBulkEnrich}
             >
               {t('admin.artists.enrichSelected', {
+                count: selectedIds.size,
+              })}
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              disabled={
+                selectedIds.size === 0 || lyricsSyncMutation.isPending
+              }
+              onClick={() => handleLyricsSyncSelected()}
+            >
+              {t('admin.artists.lyricsSelected', {
+                defaultValue: 'Lyrics worker ({{count}})',
                 count: selectedIds.size,
               })}
             </MotionPress>
@@ -867,7 +922,11 @@ export function ArtistsRoute() {
         title={
           syncResult?.kind === 'enrich'
             ? t('admin.artists.enrichResultTitle')
-            : t('admin.artists.syncResultTitle')
+            : syncResult?.kind === 'lyrics'
+              ? t('admin.artists.lyricsResultTitle', {
+                  defaultValue: 'Lyrics worker queued',
+                })
+              : t('admin.artists.syncResultTitle')
         }
         onClose={() => setSyncResult(null)}
         footer={
@@ -880,7 +939,9 @@ export function ArtistsRoute() {
                 navigate(
                   kind === 'enrich'
                     ? '../tasks?bgName=enrich_artist'
-                    : '../tasks?bgName=sync_artist_catalog',
+                    : kind === 'lyrics'
+                      ? '../tasks?bgName=enqueue_artist_lyrics'
+                      : '../tasks?bgName=sync_artist_catalog',
                 )
               }}
             >
