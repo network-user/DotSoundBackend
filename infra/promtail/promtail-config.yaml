@@ -27,7 +27,9 @@ scrape_configs:
         regex: '/(.*)'
         target_label: container
       - source_labels:
-          ['__meta_docker_container_label_com_docker_compose_service']
+          ['__meta_docker_container_name']
+        regex: '/[^-]+-([^-]+)-[0-9]+'
         target_label: service
+        replacement: '$1'
       - source_labels: ['__meta_docker_container_log_stream']
         target_label: stream
