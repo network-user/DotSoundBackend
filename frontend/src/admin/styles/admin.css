@@ -3918,3 +3918,131 @@
   margin-top: 2px;
   font-family: inherit;
 }
+
+.admin-ai-workflow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.admin-ai-workflow__step {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+  font-weight: 600;
+  text-align: center;
+}
+
+.admin-ai-workflow__step.is-active {
+  border-color: var(--border-hover);
+  color: var(--text);
+  background: var(--bg-card-hover);
+}
+
+.admin-sync-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.admin-sync-result p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.admin-sync-result ul {
+  margin: 0;
+  padding-left: var(--space-5);
+  color: color-mix(in srgb, var(--state-error) 78%, var(--text));
+}
+
+.admin-sync-result__jobs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+.admin-sync-result__jobs ul {
+  color: var(--text);
+}
+
+.admin-sync-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 112px;
+}
+
+.admin-sync-cell__mode {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+.admin-task-presets {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin: var(--space-2) 0 var(--space-3);
+}
+
+.admin-bg-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.admin-bg-detail__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.admin-bg-detail__grid > div,
+.admin-bg-detail__block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.admin-bg-detail span {
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+.admin-bg-detail strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-bg-detail__block.is-error pre {
+  margin: 0;
+  color: var(--state-error);
+  white-space: pre-wrap;
+}
+
+.admin-bg-detail details summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--fs-12);
+}
+
+@media (max-width: 720px) {
+  .admin-ai-workflow {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-bg-detail__grid {
+    grid-template-columns: 1fr;
+  }
+}

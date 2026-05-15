@@ -89,7 +89,15 @@ class AdminArtistCatalogService:
             )
             for rel, n in rows
         ]
-        snap = await acsp.get_snapshot(artist_id)
+        try:
+            snap = await acsp.get_snapshot(artist_id)
+        except Exception as exc:
+            logger.warning(
+                "admin_catalog_sync_snapshot_unavailable",
+                artist_id=artist_id,
+                error=str(exc),
+            )
+            snap = None
         cs_state = "idle"
         cs_mode = None
         cs_album = None
@@ -415,7 +423,7 @@ class AdminArtistCatalogService:
         await self._session.commit()
         return await self._read.get_release_detail(artist_id, release_id)
 
-    async def enqueue_full_sync(self, artist_id: int) -> None:
+    async def enqueue_full_sync(self, artist_id: int) -> str | None:
         artist = await self._artists.get_by_id(artist_id)
         if artist is None:
             msg = "artist not found"
@@ -432,24 +440,45 @@ class AdminArtistCatalogService:
         from app.services.artist_catalog_sync_worker import (
             sync_artist_catalog_task,
         )
+        from app.services.background_jobs import IdempotencySkipped, enqueue
 
-        await acsp.set_running(
-            artist_id,
-            mode="full",
-            soundcloud_album_id=None,
-            detail={"phase": "queued"},
-        )
-        await sync_artist_catalog_task.kiq(artist_id=artist_id)
+        try:
+            await acsp.set_running(
+                artist_id,
+                mode="full",
+                soundcloud_album_id=None,
+                detail={"phase": "queued"},
+            )
+        except Exception as exc:
+            logger.warning(
+                "admin_catalog_sync_progress_unavailable",
+                artist_id=artist_id,
+                error=str(exc),
+            )
+        job_id: str | None = None
+        try:
+            job_id = await enqueue(
+                sync_artist_catalog_task,
+                payload={"artist_id": artist_id},
+                idempotency_key=f"artist-catalog-sync:{artist_id}",
+            )
+        except IdempotencySkipped:
+            logger.info(
+                "admin_catalog_full_sync_already_queued",
+                artist_id=artist_id,
+            )
         logger.info(
             "admin_catalog_full_sync_queued",
             artist_id=artist_id,
+            job_id=job_id,
         )
+        return job_id
 
     async def enqueue_release_sync(
         self,
         artist_id: int,
         release_id: int,
-    ) -> int:
+    ) -> tuple[int, str | None]:
         artist = await self._artists.get_by_id(artist_id)
         if artist is None:
             msg = "artist not found"
@@ -477,24 +506,49 @@ class AdminArtistCatalogService:
         from app.services.artist_catalog_sync_worker import (
             sync_artist_catalog_release_task,
         )
+        from app.services.background_jobs import IdempotencySkipped, enqueue
 
-        await acsp.set_running(
-            artist_id,
-            mode="release",
-            soundcloud_album_id=sc_album,
-            detail={
-                "phase": "queued",
-                "soundcloud_album_id": sc_album,
-            },
-        )
-        await sync_artist_catalog_release_task.kiq(
-            artist_id=artist_id,
-            soundcloud_album_id=sc_album,
-        )
+        try:
+            await acsp.set_running(
+                artist_id,
+                mode="release",
+                soundcloud_album_id=sc_album,
+                detail={
+                    "phase": "queued",
+                    "soundcloud_album_id": sc_album,
+                },
+            )
+        except Exception as exc:
+            logger.warning(
+                "admin_catalog_sync_progress_unavailable",
+                artist_id=artist_id,
+                soundcloud_album_id=sc_album,
+                error=str(exc),
+            )
+        job_id: str | None = None
+        try:
+            job_id = await enqueue(
+                sync_artist_catalog_release_task,
+                payload={
+                    "artist_id": artist_id,
+                    "soundcloud_album_id": sc_album,
+                },
+                idempotency_key=(
+                    "artist-catalog-release-sync:" f"{artist_id}:{sc_album}"
+                ),
+            )
+        except IdempotencySkipped:
+            logger.info(
+                "admin_catalog_release_sync_already_queued",
+                artist_id=artist_id,
+                release_id=release_id,
+                soundcloud_album_id=sc_album,
+            )
         logger.info(
             "admin_catalog_release_sync_queued",
             artist_id=artist_id,
             release_id=release_id,
             soundcloud_album_id=sc_album,
+            job_id=job_id,
         )
-        return sc_album
+        return sc_album, job_id

@@ -1,5 +1,38 @@
 # DotSound - TODO Tracker
 
+- [x] **Local audit: admin WS logs and catalog sync tests (2026-05-15)**
+  - Fixed admin WebSocket live-log cursor reset: subscribe/filter
+    updates no longer reference an out-of-scope `log_since`.
+  - Fixed Mini App admin live logs so filters are stored in the WS
+    subscription and survive connection open/reconnect timing.
+  - Fixed artist catalog sync test mock to return a real background
+    job id instead of an `AsyncMock` object.
+  - Made compute routing settings cache and lyrics progress snapshots
+    degrade gracefully when Redis is unavailable, instead of breaking
+    upload/admin track and complaint flows.
+
+- [x] **Admin artists catalog sync UX (2026-05-15)**
+  - Admin artists list now uses a dedicated admin endpoint with search
+    and pagination.
+  - Admin artists list now supports enrichment-state filtering and
+    shows catalog sync state directly in the table.
+  - Artist catalog resync is queued through tracked background jobs,
+    supports bulk admin runs, and reports job ids/errors to the UI.
+  - Successful artist enrichment now schedules catalog sync
+    automatically so parsed artist data can pull catalog details.
+  - Tasks view now supports catalog-sync presets, URL-backed
+    background-job filters, status select, and payload target display.
+  - Added bulk artist enrichment queueing, catalog-sync filtering in
+    Artists, human-readable background-job detail, and Playwright
+    coverage for the Artists/Tasks sync workflow.
+
+- [x] **GitHub Actions backend full deploy with observability (2026-05-15)**
+  - Backend deploy workflow now checks required SSH secrets before
+    invoking `appleboy/ssh-action`.
+  - Backend `main` pushes now run
+    `OBSERVABILITY=1 ./scripts/deploy.sh full` on the production host.
+  - Deploy command timeout raised to 60 minutes for full image rebuilds.
+
 - [x] **Observability prod baseline for admin panel (2026-05-15)**
   - Promtail now attaches Docker Compose `service` labels and parses
     backend JSON `level` labels for Loki queries.

@@ -78,6 +78,38 @@ async def test_enrich_success_full_info(
     assert artist.enriched_at is not None
 
 
+async def test_enrich_success_queues_catalog_sync(
+    db_session: AsyncSession,
+) -> None:
+    artist = await _make_artist(db_session)
+    info = _make_info(bio="A bio", confidence=0.9)
+    provider_module = SimpleNamespace(
+        fetch_artist_info=MagicMock(return_value=info),
+        warmup_artist_info_provider=lambda: None,
+    )
+
+    with patch.dict(
+        "sys.modules",
+        {
+            "dotsound_private_core.services.artist_info_provider": (
+                provider_module
+            ),
+        },
+    ), patch(
+        "app.services.artist_catalog_sync_progress.set_running",
+        new_callable=AsyncMock,
+    ) as set_running, patch(
+        "app.services.background_jobs.enqueue",
+        new_callable=AsyncMock,
+        return_value="job-1",
+    ) as enqueue:
+        svc = ArtistEnrichmentService(db_session)
+        await svc.enrich(artist.id)
+
+    set_running.assert_awaited_once()
+    enqueue.assert_awaited_once()
+
+
 async def test_enrich_partial_info_keeps_status_done(
     db_session: AsyncSession,
 ) -> None:

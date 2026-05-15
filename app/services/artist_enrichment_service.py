@@ -331,6 +331,7 @@ class ArtistEnrichmentService:
         artist.enrichment_confidence = float(info.confidence)
         await self._finalize(artist, "done")
         await _log("done", "saved to DB")
+        await self._schedule_catalog_sync(artist_id)
         logger.info(
             "artist_enrichment_success",
             artist_id=artist_id,
@@ -350,6 +351,47 @@ class ArtistEnrichmentService:
         except Exception:
             logger.exception(
                 "artist_supplemental_schedule_failed",
+                artist_id=artist_id,
+            )
+
+    async def _schedule_catalog_sync(self, artist_id: int) -> None:
+        try:
+            from app.services import artist_catalog_sync_progress as acsp
+            from app.services.artist_catalog_sync_worker import (
+                sync_artist_catalog_task,
+            )
+            from app.services.background_jobs import enqueue
+
+            try:
+                await acsp.set_running(
+                    artist_id,
+                    mode="full",
+                    soundcloud_album_id=None,
+                    detail={
+                        "phase": "queued",
+                        "source": "artist_enrichment",
+                    },
+                )
+            except Exception as exc:
+                logger.warning(
+                    "artist_catalog_auto_sync_progress_unavailable",
+                    artist_id=artist_id,
+                    error=str(exc),
+                )
+            await enqueue(
+                sync_artist_catalog_task,
+                payload={"artist_id": artist_id},
+                idempotency_key=f"artist-catalog-sync:{artist_id}",
+            )
+        except Exception as exc:
+            if exc.__class__.__name__ == "IdempotencySkipped":
+                logger.info(
+                    "artist_catalog_auto_sync_already_queued",
+                    artist_id=artist_id,
+                )
+                return
+            logger.exception(
+                "artist_catalog_auto_sync_schedule_failed",
                 artist_id=artist_id,
             )
 

@@ -13,6 +13,16 @@ jobs:
       group: deploy-dotsound-backend
       cancel-in-progress: false
     steps:
+      - name: Check deploy secrets
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          test -n "$SERVER_HOST" || { echo "::error::Missing required secret SERVER_HOST"; exit 1; }
+          test -n "$SERVER_USER" || { echo "::error::Missing required secret SERVER_USER"; exit 1; }
+          test -n "$SSH_PRIVATE_KEY" || { echo "::error::Missing required secret SSH_PRIVATE_KEY"; exit 1; }
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -20,8 +30,9 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT || 22 }}
+          command_timeout: 60m
           script: |
             set -e
             cd /opt/dotsound/DotSoundBackend
             chmod +x ./scripts/deploy.sh
-            ./scripts/deploy.sh only-backend
+            OBSERVABILITY=1 ./scripts/deploy.sh full

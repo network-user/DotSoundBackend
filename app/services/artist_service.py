@@ -188,9 +188,7 @@ class ArtistService:
     async def get_by_id(self, artist_id: int) -> Artist | None:
         return await self._repo.get_by_id(artist_id)
 
-    async def get_owned_for_user(
-        self, user_id: int
-    ) -> Artist | None:
+    async def get_owned_for_user(self, user_id: int) -> Artist | None:
         return await self._repo.find_by_owner_user_id(user_id)
 
     async def update_owned_profile(
@@ -332,6 +330,24 @@ class ArtistService:
         normalized = normalize_name(query)
         return await self._repo.search(normalized, limit)
 
+    async def list_for_admin(
+        self,
+        *,
+        q: str | None,
+        enrichment: str | None,
+        page: int,
+        size: int,
+    ) -> tuple[list[Artist], int]:
+        raw = q.strip() if q else None
+        normalized = normalize_name(raw) if raw else None
+        return await self._repo.list_admin(
+            q=raw,
+            q_normalized=normalized,
+            enrichment_filter=enrichment,
+            page=page,
+            size=size,
+        )
+
     async def list_popular(
         self,
         limit: int = 50,
@@ -349,6 +365,7 @@ class ArtistService:
         existing_artist_count: int = 0,
     ) -> None:
         from app.services.title_normalizer import parse_title
+
         parsed = parse_title(title)
         if parsed.is_empty():
             return
@@ -419,11 +436,9 @@ class ArtistService:
             [artist_id],
             scope="album",
         )
-        ml_pairs = (
-            await self._repo.list_similar_artists_from_similarity_index(
-                artist_id,
-                limit=max(limit * 4, 24),
-            )
+        ml_pairs = await self._repo.list_similar_artists_from_similarity_index(
+            artist_id,
+            limit=max(limit * 4, 24),
         )
         ml_scores = {i: s for i, s in ml_pairs}
         ranked_ids = rank_similar_artists_for_display(
@@ -432,14 +447,10 @@ class ArtistService:
             ml_scores,
             limit=max(limit * 4, 24),
         )
-        trimmed = [
-            rid for rid in ranked_ids if rid != artist_id
-        ][:limit]
+        trimmed = [rid for rid in ranked_ids if rid != artist_id][:limit]
         if not trimmed:
             popular = await self._repo.list_popular(
                 limit=max(limit * 3, 30),
             )
-            trimmed = [
-                a.id for a in popular if a.id != artist_id
-            ][:limit]
+            trimmed = [a.id for a in popular if a.id != artist_id][:limit]
         return await self._repo.get_by_ids_preserve_order(trimmed)

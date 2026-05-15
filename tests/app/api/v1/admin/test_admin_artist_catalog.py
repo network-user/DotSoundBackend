@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.artist import Artist
 from app.models.artist_catalog import (
     ArtistCatalogRelease,
-    ArtistCatalogReleaseTrack,
 )
 from app.models.track import Track
 from app.services.admin_artist_catalog_service import (
@@ -17,6 +16,24 @@ from app.services.admin_artist_catalog_service import (
 from tests.conftest import admin_bearer_for_user, create_test_user
 
 pytestmark = pytest.mark.anyio
+
+
+@pytest.fixture(autouse=True)
+def no_catalog_progress_redis(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _noop(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    async def _no_snapshot(_artist_id: int) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "app.services.admin_artist_catalog_service.acsp.set_running",
+        _noop,
+    )
+    monkeypatch.setattr(
+        "app.services.admin_artist_catalog_service.acsp.get_snapshot",
+        _no_snapshot,
+    )
 
 
 async def test_admin_catalog_overview_404(
@@ -30,6 +47,83 @@ async def test_admin_catalog_overview_404(
         headers=h,
     )
     assert r.status_code == 404
+
+
+async def test_admin_list_artists_search(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = await create_test_user(client, 140011)
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
+    db_session.add_all(
+        [
+            Artist(
+                name="Needle Artist",
+                name_normalized="needle artist",
+                soundcloud_permalink="needle-profile",
+                enrichment_status="done",
+            ),
+            Artist(
+                name="Other Artist",
+                name_normalized="other artist",
+                enrichment_status="pending",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    async def _snap(_artist_id: int) -> dict:
+        return {
+            "state": "running",
+            "mode": "full",
+            "updated_at": "2026-05-15T00:00:00+00:00",
+        }
+
+    monkeypatch.setattr(
+        "app.api.v1.admin.artist_catalog.acsp.get_snapshot",
+        _snap,
+    )
+    r = await client.get(
+        "/api/v1/admin/artists",
+        headers=h,
+        params={
+            "q": "needle",
+            "enrichment": "done",
+            "page": 1,
+            "size": 10,
+        },
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 1
+    assert body["items"][0]["name"] == "Needle Artist"
+    assert body["items"][0]["catalog_sync_state"] == "running"
+    assert body["items"][0]["catalog_sync_mode"] == "full"
+
+    r2 = await client.get(
+        "/api/v1/admin/artists",
+        headers=h,
+        params={"q": "needle-profile", "page": 1, "size": 10},
+    )
+
+    assert r2.status_code == 200
+    assert r2.json()["total"] == 1
+
+    r3 = await client.get(
+        "/api/v1/admin/artists",
+        headers=h,
+        params={
+            "q": "needle",
+            "catalog_sync": "running",
+            "page": 1,
+            "size": 10,
+        },
+    )
+
+    assert r3.status_code == 200
+    assert r3.json()["total"] == 1
 
 
 async def test_admin_catalog_crud_and_reorder(
@@ -184,39 +278,50 @@ async def test_admin_catalog_sync_requires_step_up(
         )
         assert r0.status_code == 403
 
-    with patch(
-        "app.services.admin_auth_service.consume_step_up",
-        new_callable=AsyncMock,
-        return_value=True,
-    ):
-        with patch(
-            "app.services.artist_catalog_sync_worker.sync_artist_catalog_task.kiq",
+    with (
+        patch(
+            "app.services.admin_auth_service.consume_step_up",
             new_callable=AsyncMock,
-        ) as kiq:
-            r1 = await client.post(
-                f"/api/v1/admin/artists/{artist.id}/catalog/sync",
-                headers=h,
-            )
-            assert r1.status_code == 200
-            assert r1.json()["task"] == "sync_artist_catalog_task"
-            kiq.assert_awaited_once()
+            return_value=True,
+        ),
+        patch(
+            "app.services.background_jobs.enqueue",
+            new_callable=AsyncMock,
+            return_value="job-full",
+        ) as kiq,
+    ):
+        r1 = await client.post(
+            f"/api/v1/admin/artists/{artist.id}/catalog/sync",
+            headers=h,
+        )
+        assert r1.status_code == 200
+        assert r1.json()["task"] == "sync_artist_catalog_task"
+        assert r1.json()["job_id"] == "job-full"
+        kiq.assert_awaited_once()
 
-    with patch(
-        "app.services.admin_auth_service.consume_step_up",
-        new_callable=AsyncMock,
-        return_value=True,
-    ):
-        with patch(
-            "app.services.artist_catalog_sync_worker.sync_artist_catalog_release_task.kiq",
+    with (
+        patch(
+            "app.services.admin_auth_service.consume_step_up",
             new_callable=AsyncMock,
-        ) as kiq2:
-            r2 = await client.post(
-                f"/api/v1/admin/artists/{artist.id}/catalog/releases/{rel.id}/sync",
-                headers=h,
-            )
-            assert r2.status_code == 200
-            assert r2.json()["soundcloud_album_id"] == 999001
-            kiq2.assert_awaited_once()
+            return_value=True,
+        ),
+        patch(
+            "app.services.background_jobs.enqueue",
+            new_callable=AsyncMock,
+            return_value="job-release",
+        ) as kiq2,
+    ):
+        r2 = await client.post(
+            (
+                f"/api/v1/admin/artists/{artist.id}/catalog/"
+                f"releases/{rel.id}/sync"
+            ),
+            headers=h,
+        )
+        assert r2.status_code == 200
+        assert r2.json()["soundcloud_album_id"] == 999001
+        assert r2.json()["job_id"] == "job-release"
+        kiq2.assert_awaited_once()
 
 
 async def test_admin_catalog_full_sync_cooldown_429(
@@ -242,24 +347,27 @@ async def test_admin_catalog_full_sync_cooldown_429(
     db_session.add(rel)
     await db_session.commit()
 
-    with patch(
-        "app.services.admin_auth_service.consume_step_up",
-        new_callable=AsyncMock,
-        return_value=True,
-    ):
-        with patch(
-            "app.services.artist_catalog_sync_worker.sync_artist_catalog_task.kiq",
+    with (
+        patch(
+            "app.services.admin_auth_service.consume_step_up",
             new_callable=AsyncMock,
-        ) as kiq:
-            r = await client.post(
-                f"/api/v1/admin/artists/{artist.id}/catalog/sync",
-                headers=h,
-            )
-            assert r.status_code == 429
-            assert r.json()["detail"] == (
-                AdminArtistCatalogService.COOLDOWN_ENQUEUE_DETAIL
-            )
-            kiq.assert_not_awaited()
+            return_value=True,
+        ),
+        patch(
+            "app.services.background_jobs.enqueue",
+            new_callable=AsyncMock,
+            return_value="job-full-after-cooldown",
+        ) as kiq,
+    ):
+        r = await client.post(
+            f"/api/v1/admin/artists/{artist.id}/catalog/sync",
+            headers=h,
+        )
+        assert r.status_code == 429
+        assert r.json()["detail"] == (
+            AdminArtistCatalogService.COOLDOWN_ENQUEUE_DETAIL
+        )
+        kiq.assert_not_awaited()
 
 
 async def test_admin_catalog_full_sync_calls_autofill_when_no_sc_user(
@@ -272,29 +380,32 @@ async def test_admin_catalog_full_sync_calls_autofill_when_no_sc_user(
     db_session.add(artist)
     await db_session.commit()
 
-    with patch(
-        "app.services.admin_auth_service.consume_step_up",
-        new_callable=AsyncMock,
-        return_value=True,
-    ):
-        with patch(
-            "app.services.artist_catalog_sync_worker.sync_artist_catalog_task.kiq",
+    with (
+        patch(
+            "app.services.admin_auth_service.consume_step_up",
             new_callable=AsyncMock,
-        ) as kiq:
-            with patch(
-                "app.services.soundcloud_service.SoundCloudService."
-                "try_autofill_soundcloud_user_id_for_artist",
-                new_callable=AsyncMock,
-            ) as autofill:
-                autofill.return_value = False
-                r = await client.post(
-                    f"/api/v1/admin/artists/{artist.id}/catalog/sync",
-                    headers=h,
-                )
-                assert r.status_code == 400
-                assert "soundcloud_user_id" in r.json()["detail"]
-                autofill.assert_awaited_once_with(artist.id)
-                kiq.assert_not_awaited()
+            return_value=True,
+        ),
+        patch(
+            "app.services.background_jobs.enqueue",
+            new_callable=AsyncMock,
+            return_value="job-full-after-cooldown",
+        ) as kiq,
+        patch(
+            "app.services.soundcloud_service.SoundCloudService."
+            "try_autofill_soundcloud_user_id_for_artist",
+            new_callable=AsyncMock,
+        ) as autofill,
+    ):
+        autofill.return_value = False
+        r = await client.post(
+            f"/api/v1/admin/artists/{artist.id}/catalog/sync",
+            headers=h,
+        )
+        assert r.status_code == 400
+        assert "soundcloud_user_id" in r.json()["detail"]
+        autofill.assert_awaited_once_with(artist.id)
+        kiq.assert_not_awaited()
 
 
 async def test_admin_catalog_full_sync_after_cooldown_ok(
@@ -320,21 +431,107 @@ async def test_admin_catalog_full_sync_after_cooldown_ok(
     db_session.add(rel)
     await db_session.commit()
 
-    with patch(
-        "app.services.admin_auth_service.consume_step_up",
-        new_callable=AsyncMock,
-        return_value=True,
-    ):
-        with patch(
-            "app.services.artist_catalog_sync_worker.sync_artist_catalog_task.kiq",
+    with (
+        patch(
+            "app.services.admin_auth_service.consume_step_up",
             new_callable=AsyncMock,
-        ) as kiq:
-            r = await client.post(
-                f"/api/v1/admin/artists/{artist.id}/catalog/sync",
-                headers=h,
-            )
-            assert r.status_code == 200
-            kiq.assert_awaited_once()
+            return_value=True,
+        ),
+        patch(
+            "app.services.background_jobs.enqueue",
+            new_callable=AsyncMock,
+            return_value="job-full-after-cooldown",
+        ) as kiq,
+    ):
+        r = await client.post(
+            f"/api/v1/admin/artists/{artist.id}/catalog/sync",
+            headers=h,
+        )
+        assert r.status_code == 200
+        kiq.assert_awaited_once()
+
+
+async def test_admin_catalog_bulk_sync_queues_and_reports_errors(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 140010)
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
+    artist = Artist(
+        name="BulkOk",
+        name_normalized="bulkok",
+        soundcloud_user_id=555001,
+    )
+    missing_sc = Artist(name="BulkNoSc", name_normalized="bulknosc")
+    db_session.add_all([artist, missing_sc])
+    await db_session.commit()
+
+    with (
+        patch(
+            "app.services.admin_auth_service.consume_step_up",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch(
+            "app.services.background_jobs.enqueue",
+            new_callable=AsyncMock,
+            return_value="job-bulk",
+        ) as enqueue,
+        patch(
+            "app.services.soundcloud_service.SoundCloudService."
+            "try_autofill_soundcloud_user_id_for_artist",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+    ):
+        r = await client.post(
+            "/api/v1/admin/artists/catalog/sync-batch",
+            headers=h,
+            json={"artist_ids": [artist.id, missing_sc.id, artist.id]},
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["queued"] == 1
+    assert body["job_ids"][str(artist.id)] == "job-bulk"
+    assert body["errors"] == [
+        {
+            "artist_id": missing_sc.id,
+            "detail": "artist has no soundcloud_user_id",
+        }
+    ]
+    enqueue.assert_awaited_once()
+
+
+async def test_admin_artist_bulk_enrich_queues_and_reports_errors(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 140012)
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
+    artist = Artist(name="BulkEnrich", name_normalized="bulkenrich")
+    db_session.add(artist)
+    await db_session.commit()
+
+    with patch(
+        "app.services.background_jobs.enqueue",
+        new_callable=AsyncMock,
+        return_value="job-enrich",
+    ) as enqueue:
+        r = await client.post(
+            "/api/v1/admin/artists/enrich-batch",
+            headers=h,
+            json={"artist_ids": [artist.id, 999999, artist.id]},
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["queued"] == 1
+    assert body["job_ids"][str(artist.id)] == "job-enrich"
+    assert body["errors"] == [
+        {"artist_id": 999999, "detail": "artist not found"}
+    ]
+    enqueue.assert_awaited_once()
 
 
 async def test_admin_catalog_search_tracks(

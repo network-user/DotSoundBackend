@@ -154,8 +154,9 @@ class AdminTasksRepository:
         base = select(BackgroundJob)
         count_q = select(func.count(BackgroundJob.id))
         if name:
-            base = base.where(BackgroundJob.name == name)
-            count_q = count_q.where(BackgroundJob.name == name)
+            name_pattern = f"%{name}%"
+            base = base.where(BackgroundJob.name.ilike(name_pattern))
+            count_q = count_q.where(BackgroundJob.name.ilike(name_pattern))
         if queue:
             base = base.where(BackgroundJob.queue == queue)
             count_q = count_q.where(BackgroundJob.queue == queue)

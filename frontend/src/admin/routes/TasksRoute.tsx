@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import {
@@ -20,6 +20,7 @@ import {
   StatusPill,
   type StatusKind,
 } from '../components/widgets/StatusPill'
+import { useSearchParams } from 'react-router-dom'
 
 interface QueueRow {
   name: string
@@ -31,6 +32,7 @@ interface BackgroundJobRow {
   name: string
   queue: string
   status: string
+  payload: Record<string, unknown> | null
   attempts: number
   max_attempts: number
   duration_ms: number | null
@@ -41,6 +43,19 @@ interface BackgroundJobRow {
   started_at: string | null
   finished_at: string | null
 }
+
+const CATALOG_SYNC_BG_FILTER = 'sync_artist_catalog'
+
+const BG_STATUS_OPTIONS = [
+  '',
+  'queued',
+  'running',
+  'done',
+  'failed',
+  'failed_terminal',
+  'cancelled',
+  'cancelling',
+]
 
 function bgJobKind(status: string): StatusKind {
   if (status === 'done') return 'ok'
@@ -57,6 +72,25 @@ function bgJobKind(status: string): StatusKind {
     return 'warn'
   if (status === 'cancelled') return 'unknown'
   return 'unknown'
+}
+
+function formatAdminDate(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw) return 'вЂ“'
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return raw
+  return d.toLocaleString()
+}
+
+function readBgPayloadTarget(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return 'вЂ“'
+  const data = payload as Record<string, unknown>
+  const artistId = data.artist_id
+  const albumId = data.soundcloud_album_id
+  if (artistId !== undefined && albumId !== undefined) {
+    return `artist:${artistId} / album:${albumId}`
+  }
+  if (artistId !== undefined) return `artist:${artistId}`
+  return 'вЂ“'
 }
 
 interface JobRow {
@@ -443,6 +477,7 @@ export function TasksRoute() {
   const { t } = useTranslation()
   const { showConfirm } = useAdminPrompt()
   const qc = useQueryClient()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [activeJobId, setActiveJobId] = useState<
     string | null
   >(null)
@@ -452,11 +487,37 @@ export function TasksRoute() {
     queue: string
     status: string
     scheduled_job_id: string
-  }>({ name: '', queue: '', status: '', scheduled_job_id: '' })
+  }>(() => ({
+    name: searchParams.get('bgName') ?? '',
+    queue: searchParams.get('bgQueue') ?? '',
+    status: searchParams.get('bgStatus') ?? '',
+    scheduled_job_id: searchParams.get('schedule') ?? '',
+  }))
   const [bgPage, setBgPage] = useState(1)
   const [bgDetailId, setBgDetailId] = useState<
     string | null
   >(null)
+
+  useEffect(() => {
+    const next = {
+      name: searchParams.get('bgName') ?? '',
+      queue: searchParams.get('bgQueue') ?? '',
+      status: searchParams.get('bgStatus') ?? '',
+      scheduled_job_id: searchParams.get('schedule') ?? '',
+    }
+    setBgFilter((cur) => {
+      if (
+        cur.name === next.name &&
+        cur.queue === next.queue &&
+        cur.status === next.status &&
+        cur.scheduled_job_id === next.scheduled_job_id
+      ) {
+        return cur
+      }
+      setBgPage(1)
+      return next
+    })
+  }, [searchParams])
 
   const overview = useQuery({
     queryKey: ['admin', 'tasks', 'overview'],
@@ -651,6 +712,45 @@ export function TasksRoute() {
     retryBg.mutate(id)
   }
 
+  const setBgPreset = (
+    patch: Partial<typeof bgFilter>,
+  ) => {
+    const next = { ...bgFilter, ...patch }
+    setBgPage(1)
+    setBgFilter(next)
+    setSearchParams((params) => {
+      const out = new URLSearchParams(params)
+      const pairs: Array<[string, string]> = [
+        ['bgName', next.name],
+        ['bgQueue', next.queue],
+        ['bgStatus', next.status],
+        ['schedule', next.scheduled_job_id],
+      ]
+      for (const [key, value] of pairs) {
+        if (value) out.set(key, value)
+        else out.delete(key)
+      }
+      return out
+    })
+  }
+
+  const clearBgFilters = () => {
+    setBgPage(1)
+    setBgFilter({
+      name: '',
+      queue: '',
+      status: '',
+      scheduled_job_id: '',
+    })
+    setSearchParams((params) => {
+      const out = new URLSearchParams(params)
+      for (const key of ['bgName', 'bgQueue', 'bgStatus', 'schedule']) {
+        out.delete(key)
+      }
+      return out
+    })
+  }
+
   const bgColumns: ColumnDef<BackgroundJobRow>[] = [
     {
       header: 'ID',
@@ -679,6 +779,16 @@ export function TasksRoute() {
     {
       header: t('admin.tasks.bg.cols.queue') as string,
       accessorKey: 'queue',
+    },
+    {
+      header: t('admin.tasks.bg.cols.target') as string,
+      id: 'target',
+      accessorFn: (row) => readBgPayloadTarget(row.payload),
+      cell: (i) => (
+        <span className="admin-mono">
+          {String(i.getValue<string>())}
+        </span>
+      ),
     },
     {
       header: t('admin.tasks.detail.status') as string,
@@ -839,13 +949,12 @@ export function TasksRoute() {
                       className="admin-link admin-mono"
                       title={t('admin.tasks.bg.filterBySchedule') as string}
                       onClick={() =>
-                        setBgFilter((f) => ({
-                          ...f,
+                        setBgPreset({
                           scheduled_job_id:
-                            f.scheduled_job_id === s.id
+                            bgFilter.scheduled_job_id === s.id
                               ? ''
                               : s.id,
-                        }))
+                        })
                       }
                     >
                       {s.name}
@@ -899,11 +1008,7 @@ export function TasksRoute() {
               }))
             }}
           />
-          <input
-            type="text"
-            placeholder={
-              t('admin.tasks.bg.filterStatus') as string
-            }
+          <select
             value={bgFilter.status}
             onChange={(e) => {
               setBgPage(1)
@@ -912,17 +1017,23 @@ export function TasksRoute() {
                 status: e.target.value,
               }))
             }}
-          />
+            aria-label={t('admin.tasks.bg.filterStatus') as string}
+          >
+            {BG_STATUS_OPTIONS.map((status) => (
+              <option key={status || 'all'} value={status}>
+                {status || (t('admin.tasks.bg.anyStatus') as string)}
+              </option>
+            ))}
+          </select>
           {bgFilter.scheduled_job_id && (
             <MotionPress
               variant="ghost"
               haptic="selection"
               className="admin-filter-chip"
               onClick={() =>
-                setBgFilter((f) => ({
-                  ...f,
+                setBgPreset({
                   scheduled_job_id: '',
-                }))
+                })
               }
               title={t('admin.tasks.bg.clearScheduleFilter') as string}
             >
@@ -930,6 +1041,54 @@ export function TasksRoute() {
               {bgFilter.scheduled_job_id.length > 16 ? '…' : ''}{' '}×
             </MotionPress>
           )}
+          {(bgFilter.name ||
+            bgFilter.queue ||
+            bgFilter.status ||
+            bgFilter.scheduled_job_id) && (
+            <MotionPress
+              variant="ghost"
+              haptic="selection"
+              className="admin-link"
+              onClick={clearBgFilters}
+            >
+              {t('admin.tasks.bg.clearFilters')}
+            </MotionPress>
+          )}
+        </div>
+        <div className="admin-task-presets">
+          <MotionPress
+            variant="ghost"
+            haptic="selection"
+            onClick={() =>
+              setBgPreset({
+                name: CATALOG_SYNC_BG_FILTER,
+                status: '',
+              })
+            }
+          >
+            {t('admin.tasks.bg.presets.catalogSync')}
+          </MotionPress>
+          <MotionPress
+            variant="ghost"
+            haptic="selection"
+            onClick={() => setBgPreset({ status: 'queued' })}
+          >
+            {t('admin.tasks.bg.presets.queued')}
+          </MotionPress>
+          <MotionPress
+            variant="ghost"
+            haptic="selection"
+            onClick={() => setBgPreset({ status: 'running' })}
+          >
+            {t('admin.tasks.bg.presets.running')}
+          </MotionPress>
+          <MotionPress
+            variant="ghost"
+            haptic="selection"
+            onClick={() => setBgPreset({ status: 'failed_terminal' })}
+          >
+            {t('admin.tasks.bg.presets.failed')}
+          </MotionPress>
         </div>
         <p className="admin-card__sub">
           {t('admin.tasks.bg.hint', { total: bgTotal })}
@@ -992,9 +1151,68 @@ export function TasksRoute() {
               <p>{t('admin.tasks.detail.loading')}</p>
             )}
             {bgDetail.data && (
-              <JsonViewer
-                value={bgDetail.data}
-              />
+              <div className="admin-bg-detail">
+                <div className="admin-bg-detail__grid">
+                  <div>
+                    <span>{t('admin.tasks.bg.detail.task')}</span>
+                    <strong className="admin-mono">
+                      {String(bgDetail.data.name ?? 'вЂ“')}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>{t('admin.tasks.detail.status')}</span>
+                    <StatusPill
+                      kind={bgJobKind(String(bgDetail.data.status ?? ''))}
+                    >
+                      {String(bgDetail.data.status ?? 'вЂ“')}
+                    </StatusPill>
+                  </div>
+                  <div>
+                    <span>{t('admin.tasks.bg.cols.queue')}</span>
+                    <strong className="admin-mono">
+                      {String(bgDetail.data.queue ?? 'вЂ“')}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>{t('admin.tasks.bg.cols.target')}</span>
+                    <strong className="admin-mono">
+                      {readBgPayloadTarget(bgDetail.data.payload)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>{t('admin.tasks.detail.attempts')}</span>
+                    <strong>
+                      {String(bgDetail.data.attempts ?? 0)} /{' '}
+                      {String(bgDetail.data.max_attempts ?? 0)}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>{t('admin.tasks.bg.detail.created')}</span>
+                    <strong>{formatAdminDate(bgDetail.data.created_at)}</strong>
+                  </div>
+                </div>
+                {Boolean(bgDetail.data.error) && (
+                  <div className="admin-bg-detail__block is-error">
+                    <span>{t('admin.tasks.detail.errorTitle')}</span>
+                    <pre>{String(bgDetail.data.error)}</pre>
+                  </div>
+                )}
+                <div className="admin-bg-detail__block">
+                  <span>{t('admin.tasks.bg.detail.payload')}</span>
+                  <JsonViewer value={bgDetail.data.payload ?? {}} collapsed />
+                </div>
+                <div className="admin-bg-detail__block">
+                  <span>{t('admin.tasks.bg.detail.result')}</span>
+                  <JsonViewer
+                    value={bgDetail.data.result_summary ?? {}}
+                    collapsed
+                  />
+                </div>
+                <details>
+                  <summary>{t('admin.tasks.bg.detail.raw')}</summary>
+                  <JsonViewer value={bgDetail.data} />
+                </details>
+              </div>
             )}
           </div>
         )}

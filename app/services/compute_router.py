@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 
+import structlog
 from dotsound_private_core.services.asr_policy import (
     DEFAULT_CASCADE,
     TIER_CATALOG_ONLY,
@@ -27,6 +28,8 @@ from app.config import settings
 from app.core.redis import get_redis_client
 from app.models.app_setting import AppSetting
 from app.models.compute_worker import ComputeWorker
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 ROUTING_MODES = {
     "auto",
@@ -51,7 +54,15 @@ async def _cached_setting(
     session: AsyncSession, key: str
 ) -> object | None:
     redis = get_redis_client()
-    raw = await redis.hget(_SETTINGS_CACHE_KEY, key)
+    raw = None
+    try:
+        raw = await redis.hget(_SETTINGS_CACHE_KEY, key)
+    except Exception as exc:
+        logger.warning(
+            "compute_router_settings_cache_read_failed",
+            key=key,
+            error=str(exc),
+        )
     if raw is not None:
         try:
             return json.loads(raw)
@@ -62,12 +73,19 @@ async def _cached_setting(
     )
     entry = result.scalar_one_or_none()
     value = entry.value if entry else None
-    await redis.hset(
-        _SETTINGS_CACHE_KEY,
-        key,
-        json.dumps(value, ensure_ascii=False),
-    )
-    await redis.expire(_SETTINGS_CACHE_KEY, _SETTINGS_TTL)
+    try:
+        await redis.hset(
+            _SETTINGS_CACHE_KEY,
+            key,
+            json.dumps(value, ensure_ascii=False),
+        )
+        await redis.expire(_SETTINGS_CACHE_KEY, _SETTINGS_TTL)
+    except Exception as exc:
+        logger.warning(
+            "compute_router_settings_cache_write_failed",
+            key=key,
+            error=str(exc),
+        )
     return value
 
 
@@ -114,7 +132,13 @@ async def get_heartbeat_timeout(session: AsyncSession) -> int:
 
 async def invalidate_settings_cache() -> None:
     redis = get_redis_client()
-    await redis.delete(_SETTINGS_CACHE_KEY)
+    try:
+        await redis.delete(_SETTINGS_CACHE_KEY)
+    except Exception as exc:
+        logger.warning(
+            "compute_router_settings_cache_delete_failed",
+            error=str(exc),
+        )
 
 
 async def any_worker_online(
@@ -184,9 +208,7 @@ async def is_tier_available(
         budget = float(
             settings.yandex_speechkit_monthly_budget_rub
         )
-        if budget <= 0:
-            return False
-        return True
+        return budget > 0
     return False
 
 

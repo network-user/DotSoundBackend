@@ -290,7 +290,15 @@ async def set_lyrics_progress(
     """
     redis = get_redis_client()
     key = f"{PROGRESS_KEY_PREFIX}{progress_id}"
-    raw = await redis.get(key)
+    try:
+        raw = await redis.get(key)
+    except Exception as exc:
+        logger.warning(
+            "lyrics_progress_cache_read_failed",
+            progress_id=progress_id,
+            error=str(exc),
+        )
+        raw = None
     if raw:
         try:
             data = json.loads(raw)
@@ -310,11 +318,18 @@ async def set_lyrics_progress(
     if log_line:
         data["logs"] = (data.get("logs") or [])[-99:] + [log_line]
 
-    await redis.set(
-        key,
-        json.dumps(data, ensure_ascii=False),
-        ex=int(settings.lyrics_progress_ttl_seconds),
-    )
+    try:
+        await redis.set(
+            key,
+            json.dumps(data, ensure_ascii=False),
+            ex=int(settings.lyrics_progress_ttl_seconds),
+        )
+    except Exception as exc:
+        logger.warning(
+            "lyrics_progress_cache_write_failed",
+            progress_id=progress_id,
+            error=str(exc),
+        )
 
     event: dict = {"type": "progress"}
     if stage is not None:
@@ -338,7 +353,15 @@ async def get_lyrics_progress(
     progress_id: str,
 ) -> dict | None:
     redis = get_redis_client()
-    raw = await redis.get(f"{PROGRESS_KEY_PREFIX}{progress_id}")
+    try:
+        raw = await redis.get(f"{PROGRESS_KEY_PREFIX}{progress_id}")
+    except Exception as exc:
+        logger.warning(
+            "lyrics_progress_cache_read_failed",
+            progress_id=progress_id,
+            error=str(exc),
+        )
+        return None
     if not raw:
         return None
     try:

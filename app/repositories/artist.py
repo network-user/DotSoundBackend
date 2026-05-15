@@ -81,6 +81,57 @@ class ArtistRepository(BaseRepository[Artist]):
         )
         return list(result.scalars().all())
 
+    async def list_admin(
+        self,
+        *,
+        q: str | None,
+        q_normalized: str | None,
+        enrichment_filter: str | None,
+        page: int,
+        size: int,
+    ) -> tuple[list[Artist], int]:
+        stmt = select(Artist)
+        count_stmt = select(func.count(Artist.id))
+        predicates = []
+        if q_normalized:
+            pattern = f"%{q_normalized.lower()}%"
+            predicates.append(Artist.name_normalized.ilike(pattern))
+        if q:
+            raw_pattern = f"%{q.lower()}%"
+            predicates.append(Artist.name_normalized.ilike(raw_pattern))
+            predicates.append(Artist.soundcloud_permalink.ilike(raw_pattern))
+        if predicates:
+            predicate = or_(*predicates)
+            stmt = stmt.where(predicate)
+            count_stmt = count_stmt.where(predicate)
+        if enrichment_filter:
+            if enrichment_filter == "needs_data":
+                stmt = stmt.where(
+                    Artist.enrichment_status.in_(
+                        ("pending", "not_found", "failed")
+                    )
+                )
+                count_stmt = count_stmt.where(
+                    Artist.enrichment_status.in_(
+                        ("pending", "not_found", "failed")
+                    )
+                )
+            else:
+                stmt = stmt.where(
+                    Artist.enrichment_status == enrichment_filter
+                )
+                count_stmt = count_stmt.where(
+                    Artist.enrichment_status == enrichment_filter
+                )
+        stmt = (
+            stmt.order_by(Artist.updated_at.desc(), Artist.id.desc())
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+        rows = await self._session.execute(stmt)
+        total = await self._session.scalar(count_stmt)
+        return list(rows.scalars().all()), int(total or 0)
+
     async def list_popular(
         self,
         limit: int = 50,
@@ -194,7 +245,12 @@ class ArtistRepository(BaseRepository[Artist]):
         if not track_ids:
             return {}
         result = await self._session.execute(
-            select(Artist, TrackArtist.role, TrackArtist.position, TrackArtist.track_id)
+            select(
+                Artist,
+                TrackArtist.role,
+                TrackArtist.position,
+                TrackArtist.track_id,
+            )
             .join(TrackArtist, TrackArtist.artist_id == Artist.id)
             .where(TrackArtist.track_id.in_(track_ids))
             .order_by(TrackArtist.track_id, TrackArtist.position)

@@ -1,5 +1,6 @@
 """Admin HTTP API for artist catalog editing and sync triggers."""
 
+import structlog
 from fastapi import (
     APIRouter,
     Depends,
@@ -29,8 +30,16 @@ from app.dependencies import (
 )
 from app.models.user import User
 from app.schemas.admin_artist_catalog import (
+    AdminArtistBulkEnrichError,
+    AdminArtistBulkEnrichRequest,
+    AdminArtistBulkEnrichResponse,
     AdminArtistCatalogOverviewResponse,
+    AdminArtistListItemResponse,
+    AdminArtistListResponse,
     AdminArtistSoundcloudPatch,
+    AdminCatalogBulkSyncError,
+    AdminCatalogBulkSyncRequest,
+    AdminCatalogBulkSyncResponse,
     AdminCatalogReleaseCreate,
     AdminCatalogReleaseOrderBody,
     AdminCatalogReleasePatch,
@@ -40,6 +49,7 @@ from app.schemas.admin_artist_catalog import (
     AdminCatalogSyncQueuedResponse,
 )
 from app.schemas.artist_catalog import ArtistCatalogReleaseDetailResponse
+from app.services import artist_catalog_sync_progress as acsp
 from app.services.admin_artist_catalog_service import (
     AdminArtistCatalogService,
 )
@@ -47,8 +57,165 @@ from app.services.admin_artist_supplemental_service import (
     AdminArtistSupplementalService,
 )
 from app.services.admin_service import AdminService
+from app.services.artist_service import ArtistService
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/artists", tags=["admin-artist-catalog"])
+
+
+@router.get("", response_model=AdminArtistListResponse)
+@limiter.limit("120/minute")
+async def admin_list_artists(
+    request: Request,
+    q: str | None = Query(None, max_length=128),
+    enrichment: str | None = Query(None, max_length=24),
+    catalog_sync: str | None = Query(None, max_length=16),
+    page: int = Query(1, ge=1),
+    size: int = Query(25, ge=1, le=100),
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminArtistListResponse:
+    svc = ArtistService(session)
+    if catalog_sync and catalog_sync not in (
+        "idle",
+        "running",
+        "success",
+        "error",
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid catalog_sync filter",
+        )
+
+    async def build_item(artist: object) -> AdminArtistListItemResponse:
+        base = AdminArtistListItemResponse.model_validate(artist)
+        sync_state = "idle"
+        sync_mode = None
+        sync_updated_at = None
+        artist_id = int(base.id)
+        try:
+            snap = await acsp.get_snapshot(artist_id)
+        except Exception as exc:
+            logger.warning(
+                "admin_artist_list_sync_snapshot_unavailable",
+                artist_id=artist_id,
+                error=str(exc),
+            )
+            snap = None
+        if snap:
+            raw_state = snap.get("state")
+            if raw_state in ("running", "success", "error"):
+                sync_state = raw_state
+            raw_mode = snap.get("mode")
+            if isinstance(raw_mode, str):
+                sync_mode = raw_mode
+            raw_updated = snap.get("updated_at")
+            if isinstance(raw_updated, str):
+                sync_updated_at = raw_updated
+        return base.model_copy(
+            update={
+                "catalog_sync_state": sync_state,
+                "catalog_sync_mode": sync_mode,
+                "catalog_sync_updated_at": sync_updated_at,
+            }
+        )
+
+    if catalog_sync:
+        scan_page = 1
+        scan_size = 100
+        matched: list[AdminArtistListItemResponse] = []
+        while True:
+            artists, total_before_sync = await svc.list_for_admin(
+                q=q,
+                enrichment=enrichment,
+                page=scan_page,
+                size=scan_size,
+            )
+            if not artists:
+                break
+            for artist in artists:
+                item = await build_item(artist)
+                if item.catalog_sync_state == catalog_sync:
+                    matched.append(item)
+            if scan_page * scan_size >= total_before_sync:
+                break
+            scan_page += 1
+        start = (page - 1) * size
+        return AdminArtistListResponse(
+            items=matched[start : start + size],
+            total=len(matched),
+        )
+
+    artists, total = await svc.list_for_admin(
+        q=q,
+        enrichment=enrichment,
+        page=page,
+        size=size,
+    )
+    items: list[AdminArtistListItemResponse] = []
+    for artist in artists:
+        items.append(await build_item(artist))
+    return AdminArtistListResponse(
+        items=items,
+        total=total,
+    )
+
+
+@router.post(
+    "/enrich-batch",
+    response_model=AdminArtistBulkEnrichResponse,
+)
+@limiter.limit("5/minute")
+async def admin_artist_enqueue_bulk_enrich(
+    request: Request,
+    body: AdminArtistBulkEnrichRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminArtistBulkEnrichResponse:
+    from app.services.artist_enrichment_worker import enrich_artist_task
+    from app.services.background_jobs import IdempotencySkipped, enqueue
+
+    svc = ArtistService(session)
+    job_ids: dict[int, str | None] = {}
+    errors: list[AdminArtistBulkEnrichError] = []
+    seen: set[int] = set()
+    for artist_id in body.artist_ids:
+        if artist_id in seen:
+            continue
+        seen.add(artist_id)
+        artist = await svc.get_by_id(artist_id)
+        if artist is None:
+            errors.append(
+                AdminArtistBulkEnrichError(
+                    artist_id=artist_id,
+                    detail="artist not found",
+                )
+            )
+            continue
+        try:
+            job_ids[artist_id] = await enqueue(
+                enrich_artist_task,
+                payload={
+                    "artist_id": artist_id,
+                    "bypass_cache": body.bypass_cache,
+                },
+                idempotency_key=f"artist-enrich:{artist_id}",
+            )
+        except IdempotencySkipped:
+            job_ids[artist_id] = None
+        except Exception as exc:
+            errors.append(
+                AdminArtistBulkEnrichError(
+                    artist_id=artist_id,
+                    detail=str(exc),
+                )
+            )
+    return AdminArtistBulkEnrichResponse(
+        queued=len(job_ids),
+        job_ids=job_ids,
+        errors=errors,
+    )
 
 
 @router.post(
@@ -443,7 +610,7 @@ async def admin_catalog_enqueue_full_sync(
 ) -> AdminCatalogSyncQueuedResponse:
     svc = AdminArtistCatalogService(session)
     try:
-        await svc.enqueue_full_sync(artist_id)
+        job_id = await svc.enqueue_full_sync(artist_id)
     except ValueError as exc:
         msg = str(exc)
         if msg == "artist not found":
@@ -463,6 +630,42 @@ async def admin_catalog_enqueue_full_sync(
     return AdminCatalogSyncQueuedResponse(
         queued=True,
         task="sync_artist_catalog_task",
+        job_id=job_id,
+    )
+
+
+@router.post(
+    "/catalog/sync-batch",
+    response_model=AdminCatalogBulkSyncResponse,
+)
+@limiter.limit("3/minute")
+async def admin_catalog_enqueue_bulk_sync(
+    request: Request,
+    body: AdminCatalogBulkSyncRequest,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_step_up("catalog.sync.run")),
+) -> AdminCatalogBulkSyncResponse:
+    svc = AdminArtistCatalogService(session)
+    job_ids: dict[int, str | None] = {}
+    errors: list[AdminCatalogBulkSyncError] = []
+    seen: set[int] = set()
+    for artist_id in body.artist_ids:
+        if artist_id in seen:
+            continue
+        seen.add(artist_id)
+        try:
+            job_ids[artist_id] = await svc.enqueue_full_sync(artist_id)
+        except ValueError as exc:
+            errors.append(
+                AdminCatalogBulkSyncError(
+                    artist_id=artist_id,
+                    detail=str(exc),
+                )
+            )
+    return AdminCatalogBulkSyncResponse(
+        queued=len(job_ids),
+        job_ids=job_ids,
+        errors=errors,
     )
 
 
@@ -480,7 +683,7 @@ async def admin_catalog_enqueue_release_sync(
 ) -> AdminCatalogReleaseSyncQueuedResponse:
     svc = AdminArtistCatalogService(session)
     try:
-        sc_id = await svc.enqueue_release_sync(artist_id, release_id)
+        sc_id, job_id = await svc.enqueue_release_sync(artist_id, release_id)
     except ValueError as exc:
         msg = str(exc)
         if msg in (
@@ -504,4 +707,5 @@ async def admin_catalog_enqueue_release_sync(
         queued=True,
         task="sync_artist_catalog_release_task",
         soundcloud_album_id=sc_id,
+        job_id=job_id,
     )

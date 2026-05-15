@@ -48,6 +48,8 @@ export function LiveLogStream({
   const [paused, setPaused] = useState(false)
   const [connected, setConnected] =
     useState(false)
+  const [closeCode, setCloseCode] =
+    useState<number | null>(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const wsRef = useRef<AdminWs | null>(null)
   const containerRef =
@@ -69,8 +71,14 @@ export function LiveLogStream({
 
   useEffect(() => {
     const ws = new AdminWs({
-      onOpen: () => setConnected(true),
-      onClose: () => setConnected(false),
+      onOpen: () => {
+        setConnected(true)
+        setCloseCode(null)
+      },
+      onClose: (code) => {
+        setConnected(false)
+        setCloseCode(code)
+      },
       onEvent: (event) => {
         if (
           event.channel !== 'logs' ||
@@ -96,12 +104,7 @@ export function LiveLogStream({
     })
     wsRef.current = ws
     ws.connect()
-    ws.subscribe('logs')
-    ws.send({
-      type: 'subscribe',
-      channel: 'logs',
-      filters: filter,
-    })
+    ws.subscribe('logs', { filters: filter })
     return () => {
       ws.unsubscribe('logs')
       ws.close()
@@ -113,11 +116,7 @@ export function LiveLogStream({
   useEffect(() => {
     const ws = wsRef.current
     if (!ws) return
-    ws.send({
-      type: 'logs.update_filter',
-      channel: 'logs',
-      filters: filter,
-    })
+    ws.subscribe('logs', { filters: filter })
   }, [filter])
 
   useEffect(() => {
@@ -184,6 +183,12 @@ export function LiveLogStream({
       {src === 'local_dev' && (
         <div className="admin-card__sub" role="status">
           Local dev: tailing log files (DOTSOUND_DEV_LOG_DIR).
+        </div>
+      )}
+      {closeCode === 4429 && (
+        <div className="admin-warning" role="status">
+          Live stream hit the per-admin WebSocket limit. Close other
+          admin tabs or drawers and retry.
         </div>
       )}
       <div className="admin-live-log__bar">

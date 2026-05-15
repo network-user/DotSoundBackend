@@ -40,12 +40,12 @@ from app.core.auth import (
     decode_admin_token,
 )
 from app.core.db import AsyncSessionLocal
-from app.core.ws_origin import reject_if_bad_origin
 from app.core.observability import (
     ws_gauge_dec,
     ws_gauge_inc,
 )
 from app.core.redis import get_redis_client
+from app.core.ws_origin import reject_if_bad_origin
 from app.repositories.admin_device import (
     AdminDeviceRepository,
 )
@@ -88,6 +88,14 @@ ALLOWED_CHANNELS: frozenset[str] = frozenset(
 _WS_LIMIT_KEY_PREFIX = "admin:ws:conn:"
 _WS_LIMIT_TTL_SECONDS = 60 * 60 * 2
 _WS_MAX_CONN_PER_USER = 5
+
+
+def _initial_log_since_ns() -> int:
+    return max(
+        0,
+        int(time.time() * 1_000_000_000)
+        - _LIVE_LOG_BOOTSTRAP_SECONDS * 1_000_000_000,
+    )
 
 
 async def _acquire_ws_slot(user_id: int) -> bool:
@@ -439,13 +447,7 @@ async def _broadcast_loop(
     state: dict[str, Any],
 ) -> None:
     last_task_seen = [""]
-    log_since = [
-        max(
-            0,
-            int(time.time() * 1_000_000_000)
-            - _LIVE_LOG_BOOTSTRAP_SECONDS * 1_000_000_000,
-        )
-    ]
+    log_since = state.setdefault("logs_since_ns", [_initial_log_since_ns()])
     worker_log_cursor = [
         state.get("worker_logs_last_id", "$"),
     ]
@@ -536,6 +538,7 @@ async def admin_ws(
     state: dict[str, Any] = {
         "logs_selectors": {"service": "backend"},
         "logs_contains": None,
+        "logs_since_ns": [_initial_log_since_ns()],
     }
     push_task = asyncio.create_task(
         _broadcast_loop(websocket, subscriptions, state)
@@ -583,12 +586,7 @@ async def admin_ws(
                             state["logs_selectors"],
                             state["logs_contains"],
                         ) = _parse_log_subscribe(msg)
-                        log_since[0] = max(
-                            0,
-                            int(time.time() * 1_000_000_000)
-                            - _LIVE_LOG_BOOTSTRAP_SECONDS
-                            * 1_000_000_000,
-                        )
+                        state["logs_since_ns"][0] = _initial_log_since_ns()
                     if channel == "worker_logs":
                         wid = msg.get("worker_id")
                         if (
@@ -615,11 +613,7 @@ async def admin_ws(
                     state["logs_selectors"],
                     state["logs_contains"],
                 ) = _parse_log_subscribe(msg)
-                log_since[0] = max(
-                    0,
-                    int(time.time() * 1_000_000_000)
-                    - _LIVE_LOG_BOOTSTRAP_SECONDS * 1_000_000_000,
-                )
+                state["logs_since_ns"][0] = _initial_log_since_ns()
             elif cmd == "ping":
                 await websocket.send_text(
                     json.dumps(

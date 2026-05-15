@@ -7,10 +7,12 @@ import {
   useQueryClient,
 } from '@tanstack/react-query'
 import type { ColumnDef } from '@tanstack/react-table'
+import { useNavigate } from 'react-router-dom'
 import { MotionPress } from '@/components/ui/MotionPress'
 import { api } from '@/lib/api'
 import { adminApi } from '../lib/adminApi'
 import { ArtistCatalogEditor } from '../components/ArtistCatalogEditor'
+import { useStepUp } from '../components/auth/StepUpDialog'
 import { useAdminPrompt } from '../components/layout/AdminPromptContext'
 import { DataTable } from '../components/widgets/DataTable'
 import { StatusPill } from '../components/widgets/StatusPill'
@@ -27,7 +29,10 @@ interface ArtistRow {
   country: string | null
   enrichment_status: string | null
   enrichment_confidence: number | null
-  cover_url: string | null
+  catalog_sync_state: 'idle' | 'running' | 'success' | 'error'
+  catalog_sync_mode: string | null
+  catalog_sync_updated_at: string | null
+  cover_url?: string | null
   updated_at: string | null
   created_at: string | null
 }
@@ -37,27 +42,38 @@ interface ArtistListResponse {
   total: number
 }
 
+type CatalogSyncResult =
+  | {
+      queued: boolean
+      task: string
+      job_id?: string | null
+    }
+  | {
+      queued: number
+      job_ids: Record<string, string | null>
+      errors: Array<{ artist_id: number; detail: string }>
+    }
+
+type BulkQueueResult = {
+  queued: number
+  job_ids: Record<string, string | null>
+  errors: Array<{ artist_id: number; detail: string }>
+}
+
 async function fetchArtists(
   q: string,
+  enrichment: string,
+  catalogSync: string,
   page: number,
   size: number,
 ): Promise<ArtistListResponse> {
-  const params = new URLSearchParams({
-    page: String(page),
-    size: String(size),
+  return adminApi.listArtists({
+    page,
+    size,
+    q: q || undefined,
+    enrichment: enrichment || undefined,
+    catalog_sync: catalogSync || undefined,
   })
-  if (q) params.set('q', q)
-  const url = `/api/v1/artists?${params.toString()}`
-  const token = api.getToken()
-  const res = await fetch(url, {
-    headers: token
-      ? { Authorization: `Bearer ${token}` }
-      : undefined,
-  })
-  if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`)
-  }
-  return res.json()
 }
 
 async function enrichArtist(
@@ -103,8 +119,12 @@ function fmtArtistUpdated(row: ArtistRow): string {
 export function ArtistsRoute() {
   const { t } = useTranslation()
   const { showConfirm, showAlert } = useAdminPrompt()
+  const stepUp = useStepUp()
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const [q, setQ] = useState('')
+  const [enrichmentFilter, setEnrichmentFilter] = useState('')
+  const [catalogSyncFilter, setCatalogSyncFilter] = useState('')
   const [page, setPage] = useState(1)
   const [busyId, setBusyId] = useState<
     number | null
@@ -121,10 +141,24 @@ export function ArtistsRoute() {
     imported: number
     errors: string[]
   } | null>(null)
+  const [syncResult, setSyncResult] = useState<{
+    kind: 'catalog' | 'enrich'
+    queued: number
+    jobIds: Array<{ artistId: number | null; jobId: string | null }>
+    errors: Array<{ artist_id: number; detail: string }>
+  } | null>(null)
 
   const list = useQuery({
-    queryKey: ['admin', 'artists', q, page],
-    queryFn: () => fetchArtists(q, page, 25),
+    queryKey: [
+      'admin',
+      'artists',
+      q,
+      enrichmentFilter,
+      catalogSyncFilter,
+      page,
+    ],
+    queryFn: () =>
+      fetchArtists(q, enrichmentFilter, catalogSyncFilter, page, 25),
     placeholderData: keepPreviousData,
   })
 
@@ -146,6 +180,35 @@ export function ArtistsRoute() {
         queryKey: ['admin', 'artists'],
       })
       setBusyId(null)
+    },
+  })
+
+  const syncMutation = useMutation<
+    CatalogSyncResult,
+    Error,
+    number[]
+  >({
+    mutationFn: (ids: number[]) =>
+      ids.length === 1
+        ? adminApi.catalogSyncFull(ids[0])
+        : adminApi.catalogSyncBatch(ids),
+    onSettled: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'artists'],
+      })
+    },
+  })
+
+  const bulkEnrichMutation = useMutation<
+    BulkQueueResult,
+    Error,
+    number[]
+  >({
+    mutationFn: (ids: number[]) => adminApi.artistEnrichBatch(ids),
+    onSettled: () => {
+      qc.invalidateQueries({
+        queryKey: ['admin', 'artists'],
+      })
     },
   })
 
@@ -172,6 +235,10 @@ export function ArtistsRoute() {
 
   function handleOpenArtist(id: number) {
     window.open(`/mini_app/artist/${id}`, '_blank')
+  }
+
+  function handleOpenCatalogSyncTasks() {
+    navigate('../tasks?bgName=sync_artist_catalog')
   }
 
   const rows = (list.data?.items as ArtistRow[]) || []
@@ -210,6 +277,70 @@ export function ArtistsRoute() {
     try {
       const res = await adminApi.artistSupplementalBatchImport(importText)
       setImportResult(res)
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
+  }
+
+  const handlePasteImport = async () => {
+    try {
+      setImportText(await navigator.clipboard.readText())
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
+  }
+
+  const handleSyncSelected = async (idsRaw?: number[]) => {
+    const ids = idsRaw ?? Array.from(selectedIds)
+    if (ids.length === 0 || syncMutation.isPending) return
+    const ok = await stepUp.request('catalog.sync.run')
+    if (!ok) return
+    try {
+      const res = await syncMutation.mutateAsync(ids)
+      if ('errors' in res) {
+        setSyncResult({
+          kind: 'catalog',
+          queued: res.queued,
+          jobIds: Object.entries(res.job_ids).map(
+            ([artistId, jobId]) => ({
+              artistId: Number(artistId),
+              jobId,
+            }),
+          ),
+          errors: res.errors,
+        })
+        return
+      }
+      setSyncResult({
+        kind: 'catalog',
+        queued: 1,
+        jobIds: [
+          {
+            artistId: ids[0] ?? null,
+            jobId: res.job_id ?? null,
+          },
+        ],
+        errors: [],
+      })
+    } catch (err) {
+      await showAlert((err as Error).message)
+    }
+  }
+
+  const handleBulkEnrich = async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0 || bulkEnrichMutation.isPending) return
+    try {
+      const res = await bulkEnrichMutation.mutateAsync(ids)
+      setSyncResult({
+        kind: 'enrich',
+        queued: res.queued,
+        jobIds: Object.entries(res.job_ids).map(([artistId, jobId]) => ({
+          artistId: Number(artistId),
+          jobId,
+        })),
+        errors: res.errors,
+      })
     } catch (err) {
       await showAlert((err as Error).message)
     }
@@ -297,6 +428,32 @@ export function ArtistsRoute() {
       },
     },
     {
+      header: t('admin.artists.catalogSync'),
+      accessorKey: 'catalog_sync_state',
+      cell: (info) => {
+        const row = info.row.original
+        const state = row.catalog_sync_state || 'idle'
+        const kind =
+          state === 'success'
+            ? 'ok'
+            : state === 'error'
+              ? 'error'
+              : state === 'running'
+                ? 'warn'
+                : 'unknown'
+        return (
+          <div className="admin-sync-cell">
+            <StatusPill kind={kind}>{state}</StatusPill>
+            {row.catalog_sync_mode && (
+              <span className="admin-sync-cell__mode">
+                {row.catalog_sync_mode}
+              </span>
+            )}
+          </div>
+        )
+      },
+    },
+    {
       header: 'Confidence',
       accessorKey: 'enrichment_confidence',
       cell: (info) => {
@@ -346,6 +503,13 @@ export function ArtistsRoute() {
             </MotionPress>
             <MotionPress
               variant="ghost"
+              disabled={busy || syncMutation.isPending}
+              onClick={() => handleSyncSelected([id])}
+            >
+              {t('admin.artists.syncOne')}
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
               disabled={busy}
               onClick={() =>
                 handleDelete(id, name)
@@ -360,6 +524,14 @@ export function ArtistsRoute() {
   ]
 
   const total = list.data?.total ?? 0
+  const doneCount = rows.filter(
+    (r) => r.enrichment_status === 'done',
+  ).length
+  const missingEnrichment = rows.filter(
+    (r) =>
+      !r.enrichment_status ||
+      r.enrichment_status === 'pending',
+  ).length
   const totalPages = Math.max(
     1,
     Math.ceil(total / 25),
@@ -371,6 +543,62 @@ export function ArtistsRoute() {
       key: 'q',
       placeholder: t('admin.artists.searchPlaceholder'),
       ariaLabel: t('admin.artists.searchPlaceholder'),
+    },
+    {
+      type: 'select',
+      key: 'enrichment',
+      placeholder: t('admin.artists.filterAny'),
+      ariaLabel: t('admin.artists.filterEnrichment'),
+      options: [
+        {
+          value: 'needs_data',
+          label: t('admin.artists.filterNeedsData'),
+        },
+        {
+          value: 'pending',
+          label: t('admin.artists.filterPending'),
+        },
+        {
+          value: 'in_progress',
+          label: t('admin.artists.filterInProgress'),
+        },
+        {
+          value: 'done',
+          label: t('admin.artists.filterDone'),
+        },
+        {
+          value: 'failed',
+          label: t('admin.artists.filterFailed'),
+        },
+        {
+          value: 'not_found',
+          label: t('admin.artists.filterNotFound'),
+        },
+      ],
+    },
+    {
+      type: 'select',
+      key: 'catalog_sync',
+      placeholder: t('admin.artists.filterCatalogAny'),
+      ariaLabel: t('admin.artists.filterCatalogSync'),
+      options: [
+        {
+          value: 'idle',
+          label: t('admin.artists.filterCatalogIdle'),
+        },
+        {
+          value: 'running',
+          label: t('admin.artists.filterCatalogRunning'),
+        },
+        {
+          value: 'success',
+          label: t('admin.artists.filterCatalogSuccess'),
+        },
+        {
+          value: 'error',
+          label: t('admin.artists.filterCatalogError'),
+        },
+      ],
     },
   ]
 
@@ -386,12 +614,49 @@ export function ArtistsRoute() {
       )}
       <ListPageTemplate
         title={t('admin.artists.title')}
+        subtitle={t('admin.artists.subtitle')}
+        kpis={
+          <>
+            <div className="admin-kpi">
+              <div className="admin-kpi__label">
+                {t('admin.artists.kpiSelected')}
+              </div>
+              <div className="admin-kpi__value">
+                {selectedIds.size}
+              </div>
+            </div>
+            <div className="admin-kpi">
+              <div className="admin-kpi__label">
+                {t('admin.artists.kpiReady')}
+              </div>
+              <div className="admin-kpi__value">{doneCount}</div>
+            </div>
+            <div className="admin-kpi">
+              <div className="admin-kpi__label">
+                {t('admin.artists.kpiPending')}
+              </div>
+              <div className="admin-kpi__value">
+                {missingEnrichment}
+              </div>
+            </div>
+          </>
+        }
         filters={
           <FilterGroup
             filters={filters}
-            values={{ q: q || undefined }}
-            onChange={(_, v) => {
-              setQ(v ?? '')
+            values={{
+              q: q || undefined,
+              enrichment: enrichmentFilter || undefined,
+              catalog_sync: catalogSyncFilter || undefined,
+            }}
+            onChange={(key, v) => {
+              if (key === 'enrichment') {
+                setEnrichmentFilter(v ?? '')
+              } else if (key === 'catalog_sync') {
+                setCatalogSyncFilter(v ?? '')
+              } else {
+                setQ(v ?? '')
+              }
               setPage(1)
             }}
           />
@@ -401,9 +666,29 @@ export function ArtistsRoute() {
             <MotionPress
               variant="primary"
               disabled={selectedIds.size === 0}
+              onClick={() => handleSyncSelected()}
+            >
+              {t('admin.artists.syncSelected', {
+                count: selectedIds.size,
+              })}
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              disabled={selectedIds.size === 0 || bulkEnrichMutation.isPending}
+              onClick={handleBulkEnrich}
+            >
+              {t('admin.artists.enrichSelected', {
+                count: selectedIds.size,
+              })}
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              disabled={selectedIds.size === 0}
               onClick={handleBatchPrompt}
             >
-              Batch Prompt ({selectedIds.size})
+              {t('admin.artists.batchPrompt', {
+                count: selectedIds.size,
+              })}
             </MotionPress>
             <MotionPress
               variant="ghost"
@@ -413,7 +698,7 @@ export function ArtistsRoute() {
                 setImportModal(true)
               }}
             >
-              Import AI
+              {t('admin.artists.importAi')}
             </MotionPress>
           </>
         }
@@ -456,7 +741,8 @@ export function ArtistsRoute() {
       <FormModal
         open={!!batchPromptModal}
         size="lg"
-        title="Artist Batch Prompt"
+        title={t('admin.artists.batchPromptTitle')}
+        subtitle={t('admin.artists.batchPromptSubtitle')}
         onClose={() => setBatchPromptModal(null)}
         footer={
           <>
@@ -475,9 +761,36 @@ export function ArtistsRoute() {
             >
               {t('admin.common.copy')}
             </MotionPress>
+            <MotionPress
+              variant="ghost"
+              onClick={handleOpenCatalogSyncTasks}
+            >
+              {t('admin.artists.openSyncTasks')}
+            </MotionPress>
+            <MotionPress
+              variant="ghost"
+              onClick={() => {
+                setImportText('')
+                setImportResult(null)
+                setImportModal(true)
+              }}
+            >
+              {t('admin.artists.importAi')}
+            </MotionPress>
           </>
         }
       >
+        <div className="admin-ai-workflow">
+          <div className="admin-ai-workflow__step is-active">
+            {t('admin.artists.workflowCopy')}
+          </div>
+          <div className="admin-ai-workflow__step">
+            {t('admin.artists.workflowRun')}
+          </div>
+          <div className="admin-ai-workflow__step">
+            {t('admin.artists.workflowImport')}
+          </div>
+        </div>
         <textarea
           readOnly
           value={batchPromptModal ?? ''}
@@ -494,14 +807,26 @@ export function ArtistsRoute() {
       <FormModal
         open={importModal}
         size="md"
-        title="Импорт ответа AI (Artists)"
-        subtitle="Вставьте JSON-ответ в формате artists[].id + artists[].content."
+        title={t('admin.artists.importTitle')}
+        subtitle={t('admin.artists.importSubtitle')}
         submitText={t('admin.common.import')}
         cancelText={t('admin.common.close')}
         submitDisabled={!importText.trim()}
         onClose={() => setImportModal(false)}
         onSubmit={() => handleBatchImport()}
       >
+        <div className="admin-toolbar admin-toolbar--compact">
+          <MotionPress variant="ghost" onClick={handlePasteImport}>
+            {t('admin.common.paste')}
+          </MotionPress>
+          <MotionPress
+            variant="ghost"
+            disabled={!importText.trim()}
+            onClick={() => setImportText('')}
+          >
+            {t('admin.common.clear')}
+          </MotionPress>
+        </div>
         <textarea
           value={importText}
           onChange={(e) => setImportText(e.target.value)}
@@ -530,6 +855,84 @@ export function ArtistsRoute() {
               >
                 {importResult.errors.map((e, idx) => (
                   <li key={idx}>{e}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </FormModal>
+      <FormModal
+        open={syncResult !== null}
+        size="md"
+        title={
+          syncResult?.kind === 'enrich'
+            ? t('admin.artists.enrichResultTitle')
+            : t('admin.artists.syncResultTitle')
+        }
+        onClose={() => setSyncResult(null)}
+        footer={
+          <>
+            <MotionPress
+              variant="ghost"
+              onClick={() => {
+                const kind = syncResult?.kind
+                setSyncResult(null)
+                navigate(
+                  kind === 'enrich'
+                    ? '../tasks?bgName=enrich_artist'
+                    : '../tasks?bgName=sync_artist_catalog',
+                )
+              }}
+            >
+              {t('admin.artists.openTasks')}
+            </MotionPress>
+            <MotionPress
+              variant="primary"
+              onClick={() => setSyncResult(null)}
+            >
+              {t('admin.common.ok')}
+            </MotionPress>
+          </>
+        }
+      >
+        {syncResult && (
+          <div className="admin-sync-result">
+            <p>
+              {t('admin.artists.syncResultQueued', {
+                count: syncResult.queued,
+              })}
+            </p>
+            {syncResult.jobIds.length > 0 && (
+              <div className="admin-sync-result__jobs">
+                <div>{t('admin.artists.syncJobIds')}</div>
+                <ul>
+                  {syncResult.jobIds.map((item, idx) => (
+                    <li key={`${item.artistId ?? 'na'}-${idx}`}>
+                      {item.artistId !== null && (
+                        <>
+                          <span className="admin-mono">
+                            {item.artistId}
+                          </span>
+                          :{' '}
+                        </>
+                      )}
+                      <span className="admin-mono">
+                        {item.jobId ?? 'deduplicated'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {syncResult.errors.length > 0 && (
+              <ul>
+                {syncResult.errors.map((e) => (
+                  <li key={e.artist_id}>
+                    <span className="admin-mono">
+                      {e.artist_id}
+                    </span>
+                    : {e.detail}
+                  </li>
                 ))}
               </ul>
             )}

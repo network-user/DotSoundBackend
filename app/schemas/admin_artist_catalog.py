@@ -3,6 +3,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.artist import ArtistResponse
+
 
 class AdminCatalogReleaseSummaryResponse(BaseModel):
     id: int
@@ -68,9 +70,57 @@ class AdminCatalogReleaseTracksBody(BaseModel):
 class AdminCatalogSyncQueuedResponse(BaseModel):
     queued: bool = True
     task: str
+    job_id: str | None = None
 
 
 class AdminCatalogReleaseSyncQueuedResponse(
     AdminCatalogSyncQueuedResponse,
 ):
     soundcloud_album_id: int
+
+
+class AdminCatalogBulkSyncRequest(BaseModel):
+    artist_ids: list[int] = Field(..., min_length=1, max_length=200)
+
+
+class AdminCatalogBulkSyncError(BaseModel):
+    artist_id: int
+    detail: str
+
+
+class AdminCatalogBulkSyncResponse(BaseModel):
+    queued: int
+    job_ids: dict[int, str | None]
+    errors: list[AdminCatalogBulkSyncError]
+
+
+class AdminArtistBulkEnrichRequest(BaseModel):
+    artist_ids: list[int] = Field(..., min_length=1, max_length=200)
+    bypass_cache: bool = True
+
+
+class AdminArtistBulkEnrichError(BaseModel):
+    artist_id: int
+    detail: str
+
+
+class AdminArtistBulkEnrichResponse(BaseModel):
+    queued: int
+    job_ids: dict[int, str | None]
+    errors: list[AdminArtistBulkEnrichError]
+
+
+class AdminArtistListItemResponse(ArtistResponse):
+    catalog_sync_state: Literal[
+        "idle",
+        "running",
+        "success",
+        "error",
+    ] = "idle"
+    catalog_sync_mode: str | None = None
+    catalog_sync_updated_at: str | None = None
+
+
+class AdminArtistListResponse(BaseModel):
+    items: list[AdminArtistListItemResponse]
+    total: int

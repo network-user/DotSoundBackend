@@ -758,6 +758,46 @@ export const adminApi = {
       page: number
       size: number
     }>('/users', { query: params }),
+  listArtists: (params: {
+    page?: number
+    size?: number
+    q?: string
+    enrichment?: string
+    catalog_sync?: string
+  }) =>
+    adminFetch<{
+      items: Array<{
+        id: number
+        name: string
+        image_key: string | null
+        image_url: string | null
+        source: string
+        bio: string | null
+        birth_date: string | null
+        birthplace: string | null
+        country: string | null
+        website_url: string | null
+        enrichment_status: string
+        enrichment_confidence: number | null
+        enriched_at: string | null
+        created_at: string
+        updated_at: string | null
+        monthly_listeners: number
+        catalog_sync_state: 'idle' | 'running' | 'success' | 'error'
+        catalog_sync_mode: string | null
+        catalog_sync_updated_at: string | null
+      }>
+      total: number
+    }>('/artists', { query: params }),
+  artistEnrichBatch: (artistIds: number[]) =>
+    adminFetch<{
+      queued: number
+      job_ids: Record<string, string | null>
+      errors: Array<{ artist_id: number; detail: string }>
+    }>('/artists/enrich-batch', {
+      method: 'POST',
+      body: { artist_ids: artistIds, bypass_cache: true },
+    }),
   listDeletedUsers: (params: {
     page?: number
     size?: number
@@ -1700,15 +1740,25 @@ export const adminApi = {
     }),
 
   catalogSyncFull: (artistId: number) =>
-    adminFetch<{ queued: boolean; task: string }>(
+    adminFetch<{ queued: boolean; task: string; job_id?: string | null }>(
       `/artists/${artistId}/catalog/sync`,
       { method: 'POST', body: {} },
     ),
+  catalogSyncBatch: (artistIds: number[]) =>
+    adminFetch<{
+      queued: number
+      job_ids: Record<string, string | null>
+      errors: Array<{ artist_id: number; detail: string }>
+    }>('/artists/catalog/sync-batch', {
+      method: 'POST',
+      body: { artist_ids: artistIds },
+    }),
 
   catalogSyncRelease: (artistId: number, releaseId: number) =>
     adminFetch<{
       queued: boolean
       task: string
+      job_id?: string | null
       soundcloud_album_id: number
     }>(
       `/artists/${artistId}/catalog/releases/${releaseId}/sync`,
