@@ -1,5 +1,15 @@
 # DotSound - TODO Tracker
 
+- [x] **SoundCloud stream diagnostics (2026-05-15)**
+  - SoundCloud playback failures now return structured API diagnostics
+    in `detail`: stable `code`, `reason`, `stage`, upstream status,
+    attempted protocols, retryability, track id, source platform, catalog
+    type, and access mode.
+  - Frontend API error parsing keeps showing the human `message` when
+    backend `detail` is an object, so playback UX remains compatible.
+  - Verified SoundCloud service regressions, the new playback API
+    diagnostics case, Ruff, and frontend production build.
+
 - [x] **Profile imported track playback and bulk repair (2026-05-15)**
   - Profile “My tracks” cards now pass their list as playback context,
     matching the behavior of the main track lists.
