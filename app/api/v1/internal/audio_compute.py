@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
@@ -110,6 +111,16 @@ async def _stream_sc_cdn_to_worker(
         }
         if out_proxy:
             client_kwargs["proxy"] = out_proxy
+        from app.services.outbound_proxy import (
+            instrument_httpx_client_kwargs,
+        )
+
+        instrument_httpx_client_kwargs(
+            client_kwargs,
+            service="soundcloud",
+            proxy_url=out_proxy,
+        )
+        started_at = time.monotonic()
         async with (
             httpx.AsyncClient(**client_kwargs) as client,
             client.stream(
@@ -170,6 +181,16 @@ async def _stream_sc_cdn_to_worker(
         ValueError,
         TimeoutError,
     ) as exc:
+        from app.services.outbound_proxy import record_outbound_proxy_error
+
+        record_outbound_proxy_error(
+            service="soundcloud",
+            proxy_url=out_proxy,
+            method="GET",
+            url=stream_url,
+            error=exc,
+            started_at=started_at,
+        )
         logger.warning(
             "audio_compute_sc_proxy_failed",
             job_id=job_id,

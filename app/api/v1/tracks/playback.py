@@ -1,6 +1,7 @@
 """Track playback endpoints — stream URL, play count, cover, single track."""
 
 import contextlib
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -181,12 +182,32 @@ async def _http_proxy_range_get(
     }
     if out_proxy:
         client_kwargs["proxy"] = out_proxy
+    if proxy_service:
+        from app.services.outbound_proxy import instrument_httpx_client_kwargs
+
+        instrument_httpx_client_kwargs(
+            client_kwargs,
+            service=proxy_service,
+            proxy_url=out_proxy,
+        )
 
     client = httpx.AsyncClient(**client_kwargs)
+    started_at = time.monotonic()
     try:
         req = client.build_request("GET", stream_url, headers=h)
         resp = await client.send(req, stream=True)
     except httpx.HTTPError as exc:
+        if proxy_service:
+            from app.services.outbound_proxy import record_outbound_proxy_error
+
+            record_outbound_proxy_error(
+                service=proxy_service,
+                proxy_url=out_proxy,
+                method="GET",
+                url=stream_url,
+                error=exc,
+                started_at=started_at,
+            )
         if out_proxy:
             from app.services.outbound_proxy import (
                 report_outbound_proxy_result,

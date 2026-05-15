@@ -65,6 +65,26 @@ def test_report_proxy_result_updates_matching_circuit() -> None:
     assert circuit.ok_count == 1
 
 
+def test_describe_proxy_returns_circuit_observability() -> None:
+    pool = TorPool(settings=mock.MagicMock())
+    pool._circuits = [
+        TorCircuit(
+            index=2,
+            socks_port=9052,
+            exit_ip="203.0.113.77",
+        )
+    ]
+
+    description = pool.describe_proxy("socks5://127.0.0.1:9052")
+
+    assert description == {
+        "transport": "tor",
+        "identity": "tor:c2",
+        "egress_ip": "203.0.113.77",
+        "socks_port": 9052,
+    }
+
+
 def test_desktop_tbb_path_in_candidates(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

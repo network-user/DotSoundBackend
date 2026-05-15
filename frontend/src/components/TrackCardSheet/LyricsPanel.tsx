@@ -306,6 +306,14 @@ export function LyricsPanel({
   const lastRequestLabel = lastRequestMeta
     ? `mode=${lastRequestMeta.mode} | with_sync=${lastRequestMeta.withSync} | debug_stage=${lastRequestMeta.debugTier ?? '-'} | bypass_cache=${lastRequestMeta.bypassCache}`
     : '-'
+  const providerDiagnostic =
+    [...debugLog]
+      .reverse()
+      .find((line) =>
+        /(failed:|ERROR|HTTP \d{3}|Outbound[A-Za-z]+Error|invalid JSON|no lyrics container|empty text|rejected by artist validation)/i.test(
+          line,
+        ),
+      ) ?? null
 
   if (editing) {
     return (
@@ -589,6 +597,7 @@ export function LyricsPanel({
           {(wasNotFound || error) && (
             <p className="lyrics-empty-msg">
               {error ||
+                providerDiagnostic ||
                 t(
                   'lyrics.notFound',
                   'Текст не определён',

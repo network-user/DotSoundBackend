@@ -234,6 +234,9 @@ class TorCircuit:
     ok_count: int = 0
     fail_count: int = 0
     last_renewed: float = field(default_factory=time.time)
+    exit_ip: str | None = None
+    exit_ip_checked_at: float = 0.0
+    exit_ip_probe_pending: bool = False
 
     @property
     def failure_rate(self) -> float:
@@ -388,7 +391,21 @@ class TorPool:
             service=service,
             failure_rate=round(circuit.failure_rate, 2),
         )
+        self._schedule_exit_ip_refresh(circuit)
         return circuit.proxy_url
+
+    def describe_proxy(self, proxy_url: str) -> dict[str, Any] | None:
+        for circuit in self._circuits:
+            if circuit.proxy_url != proxy_url:
+                continue
+            self._schedule_exit_ip_refresh(circuit)
+            return {
+                "transport": "tor",
+                "identity": f"tor:c{circuit.index}",
+                "egress_ip": circuit.exit_ip,
+                "socks_port": circuit.socks_port,
+            }
+        return None
 
     def report_proxy_result(self, proxy_url: str, *, ok: bool) -> None:
         for circuit in self._circuits:
@@ -418,6 +435,10 @@ class TorPool:
                         proxy=circuit.proxy_url, timeout=15
                     ) as client:
                         await client.head("https://api.soundcloud.com")
+                        await self._refresh_circuit_exit_ip(
+                            circuit,
+                            client=client,
+                        )
                     circuit.ok_count += 1
                     logger.info(
                         "tor_circuit_healthy",
@@ -447,6 +468,46 @@ class TorPool:
                             error=str(exc),
                         )
 
+    def _schedule_exit_ip_refresh(self, circuit: TorCircuit) -> None:
+        if circuit.exit_ip_probe_pending:
+            return
+        if circuit.exit_ip and time.time() - circuit.exit_ip_checked_at < 300:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        circuit.exit_ip_probe_pending = True
+        loop.create_task(self._refresh_circuit_exit_ip(circuit))
+
+    async def _refresh_circuit_exit_ip(
+        self,
+        circuit: TorCircuit,
+        *,
+        client: httpx.AsyncClient | None = None,
+    ) -> None:
+        close_client = client is None
+        if client is None:
+            client = httpx.AsyncClient(proxy=circuit.proxy_url, timeout=10)
+        try:
+            response = await client.get("https://api.ipify.org")
+            response.raise_for_status()
+            value = (response.text or "").strip()
+            if value:
+                circuit.exit_ip = value[:64]
+                circuit.exit_ip_checked_at = time.time()
+        except Exception as exc:
+            logger.debug(
+                "tor_circuit_exit_ip_probe_failed",
+                circuit=circuit.index,
+                port=circuit.socks_port,
+                error=str(exc)[:200],
+            )
+        finally:
+            circuit.exit_ip_probe_pending = False
+            if close_client:
+                await client.aclose()
+
     async def _renewal_loop(self) -> None:
         while True:
             await asyncio.sleep(self._settings.tor_circuit_max_age_seconds)
@@ -454,13 +515,15 @@ class TorPool:
                 logger.warning("tor_renewal_skipped_no_controller")
                 continue
             try:
-                from stem import Signal  # type: ignore[import-untyped]
+                from stem import Signal
 
                 self._controller.signal(Signal.NEWNYM)
                 now = time.time()
                 for circuit in self._circuits:
                     circuit.ok_count = 0
                     circuit.fail_count = 0
+                    circuit.exit_ip = None
+                    circuit.exit_ip_checked_at = 0.0
                     circuit.last_renewed = now
                     logger.info(
                         "tor_circuit_renewed",

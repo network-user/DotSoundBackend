@@ -1,5 +1,24 @@
 # DotSound - TODO Tracker
 
+- [x] **Genius lyrics Tor fallback and diagnostics (2026-05-15)**
+  - PrivateCore lyrics provider now allows direct fallback for Genius
+    when optional Tor/proxy identities fail or are quarantined.
+  - Genius lookup progress now surfaces safe failure reasons such as
+    `HTTP 403` or `OutboundTransportError` in the lyrics panel logs.
+  - Verified live lookup for `clout / ДИЛЛЕР` returns Genius text.
+  - Added outbound direct-fallback regression coverage.
+
+- [x] **Admin Network outbound request trace fix (2026-05-15)**
+  - Backend legacy outbound proxy path now writes request/response
+    facts into the outbound status snapshot used by `/network`.
+  - SoundCloud, Bandcamp, playback proxy, and audio-compute CDN proxy
+    clients are instrumented with service, method, host/path, status,
+    duration, transport mode, identity, and cached Tor exit IP.
+  - Tor pool now keeps per-circuit `tor:cN` identity and refreshes
+    exit IP via each SOCKS port for admin diagnostics.
+  - Added regression coverage for outbound metrics hooks and Tor
+    circuit observability.
+
 - [x] **Compute worker reverse-proxy IP allowlist fix (2026-05-15)**
   - Internal worker API now resolves `X-Forwarded-For` through trusted
     proxy chains instead of checking the Docker peer IP.
@@ -2180,7 +2199,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-15 (compute worker reverse-proxy IP allowlist).*
+*Последнее обновление: 2026-05-15 (Genius lyrics Tor fallback).*
 
 ## Session Updates (2026-05-06)
 

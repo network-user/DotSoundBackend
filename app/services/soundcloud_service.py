@@ -167,7 +167,10 @@ class SoundCloudService:
         when every proxied attempt returns 404 — see
         ``get_stream_info``.
         """
-        from app.services.outbound_proxy import get_outbound_proxy
+        from app.services.outbound_proxy import (
+            get_outbound_proxy,
+            instrument_httpx_client_kwargs,
+        )
 
         proxy: str | None = (
             None if force_direct else get_outbound_proxy("soundcloud")
@@ -175,7 +178,16 @@ class SoundCloudService:
         key = (proxy, float(timeout))
         client = _sc_http_client_cache.get(key)
         if client is None or client.is_closed:
-            client = httpx.AsyncClient(timeout=timeout, proxy=proxy)  # type: ignore[arg-type]
+            client_kwargs: dict[str, Any] = {
+                "timeout": timeout,
+                "proxy": proxy,
+            }
+            instrument_httpx_client_kwargs(
+                client_kwargs,
+                service="soundcloud",
+                proxy_url=proxy,
+            )
+            client = httpx.AsyncClient(**client_kwargs)
             _sc_http_client_cache[key] = client
         yield client
 
@@ -1510,9 +1522,7 @@ class SoundCloudService:
             "artist": artist,
             "duration_seconds": duration_sec,
             "genre": sc_data.get("genre") or None,
-            "description": censor_text(
-                sc_data.get("description") or ""
-            )
+            "description": censor_text(sc_data.get("description") or "")
             or None,
             "external_id": str(sc_id) if sc_id else None,
             "imported_from": "soundcloud",

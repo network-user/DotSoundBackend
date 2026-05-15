@@ -2,6 +2,7 @@ import hashlib
 import html
 import json
 import re
+from typing import Any
 
 import httpx
 import structlog
@@ -26,12 +27,8 @@ from app.services.url_cache import (
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-_TRALBUM_ATTR_RE = re.compile(
-    r'data-tralbum="([^"]+)"', re.DOTALL
-)
-_TRALBUM_VAR_RE = re.compile(
-    r"var TralbumData\s*=\s*(\{.*?\})\s*;", re.DOTALL
-)
+_TRALBUM_ATTR_RE = re.compile(r'data-tralbum="([^"]+)"', re.DOTALL)
+_TRALBUM_VAR_RE = re.compile(r"var TralbumData\s*=\s*(\{.*?\})\s*;", re.DOTALL)
 _PAGEDATA_RE = re.compile(
     r'<script[^>]+id="pagedata"[^>]*>(\{.*?\})</script>',
     re.DOTALL,
@@ -115,10 +112,23 @@ class BandcampService:
         self, timeout: float = 15, **kwargs: object
     ) -> httpx.AsyncClient:
         """Return an AsyncClient routed through egress proxy if configured."""
-        from app.services.outbound_proxy import get_outbound_proxy
+        from app.services.outbound_proxy import (
+            get_outbound_proxy,
+            instrument_httpx_client_kwargs,
+        )
 
         proxy = get_outbound_proxy("bandcamp")
-        return httpx.AsyncClient(timeout=timeout, proxy=proxy, **kwargs)  # type: ignore[arg-type]
+        client_kwargs: dict[str, Any] = {
+            "timeout": timeout,
+            "proxy": proxy,
+            **kwargs,
+        }
+        instrument_httpx_client_kwargs(
+            client_kwargs,
+            service="bandcamp",
+            proxy_url=proxy,
+        )
+        return httpx.AsyncClient(**client_kwargs)
 
     async def search(self, q: str, limit: int = 10) -> list[dict]:
         q = (q or "").strip()
@@ -126,21 +136,23 @@ class BandcampService:
             return []
         cap = max(1, min(int(limit), 20))
         try:
-            async with bandcamp_slot():
-                async with self._bc_client(
+            async with (
+                bandcamp_slot(),
+                self._bc_client(
                     timeout=20,
                     headers={
                         "User-Agent": settings.outbound_user_agent,
                         "Accept-Language": "en-US,en;q=0.9",
                     },
                     follow_redirects=True,
-                ) as client:
-                    r = await client.get(
-                        "https://bandcamp.com/search",
-                        params={"q": q, "item_type": "t"},
-                    )
-                    r.raise_for_status()
-                    rows = _bc_search_from_html(r.text, cap)
+                ) as client,
+            ):
+                r = await client.get(
+                    "https://bandcamp.com/search",
+                    params={"q": q, "item_type": "t"},
+                )
+                r.raise_for_status()
+                rows = _bc_search_from_html(r.text, cap)
         except OutboundSemaphoreTimeout as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -153,23 +165,25 @@ class BandcampService:
 
     async def _fetch_page(self, bc_url: str) -> str:
         try:
-            async with bandcamp_slot():
-                async with self._bc_client(
+            async with (
+                bandcamp_slot(),
+                self._bc_client(
                     timeout=15,
                     headers={
                         "User-Agent": settings.outbound_user_agent,
                         "Accept-Language": "en-US,en;q=0.9",
                     },
                     follow_redirects=True,
-                ) as client:
-                    r = await client.get(bc_url)
-                    if r.status_code == 404:
-                        raise HTTPException(
-                            status_code=status.HTTP_404_NOT_FOUND,
-                            detail="Трек не найден на Bandcamp.",
-                        )
-                    r.raise_for_status()
-                    return r.text
+                ) as client,
+            ):
+                r = await client.get(bc_url)
+                if r.status_code == 404:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="Трек не найден на Bandcamp.",
+                    )
+                r.raise_for_status()
+                return r.text
         except OutboundSemaphoreTimeout as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -203,9 +217,7 @@ class BandcampService:
         data["_bc_page_url"] = bc_url
         return data
 
-    async def get_stream_info(
-        self, bc_url: str
-    ) -> tuple[str, str]:
+    async def get_stream_info(self, bc_url: str) -> tuple[str, str]:
         cached = await get_cached_stream(CACHE_KEY_BC, bc_url)
         if cached:
             logger.debug(
@@ -268,9 +280,7 @@ class BandcampService:
         track_info = tracks[0]
 
         track_id_raw = track_info.get("track_id") or track_info.get("id")
-        bc_track_id: str | None = (
-            str(track_id_raw) if track_id_raw else None
-        )
+        bc_track_id: str | None = str(track_id_raw) if track_id_raw else None
 
         if bc_track_id:
             existing = await self._fetch_by_id(bc_track_id)
@@ -383,9 +393,7 @@ class BandcampService:
         )
         return result.scalar_one_or_none()
 
-    async def _download_thumbnail(
-        self, url: str, user_id: int | None
-    ) -> str:
+    async def _download_thumbnail(self, url: str, user_id: int | None) -> str:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(url)
             r.raise_for_status()
