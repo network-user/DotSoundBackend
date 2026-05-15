@@ -99,6 +99,12 @@ def test_default_values(
     assert cfg.tor_pool_enabled is False
     assert cfg.tor_pool_fail_closed is True
     assert cfg.sc_stream_fallback_direct_on_tor_failure is False
+    assert cfg.admin_startup_alert_enabled is True
+    assert cfg.admin_startup_alert_retries == 8
+    assert cfg.system_resource_sampler_enabled is True
+    assert cfg.system_resource_sample_interval_seconds == 30
+    assert cfg.system_resource_history_ttl_seconds == 7 * 24 * 3600
+    assert cfg.system_resource_disk_path == "/"
     assert cfg.elasticsearch_url == "http://127.0.0.1:9200"
     assert cfg.elasticsearch_fallback_to_postgres_on_zero is True
 

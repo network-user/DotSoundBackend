@@ -1,5 +1,15 @@
 # DotSound - TODO Tracker
 
+- [x] **Admin startup alert and system load dashboard (2026-05-15)**
+  - Backend now sends a best-effort Telegram admin alert after API
+    startup completes, using the existing Bot internal admin-alert
+    channel and retrying while the bot comes up.
+  - Added Redis-backed CPU/RAM/storage resource sampling for the admin
+    dashboard, independent of Prometheus availability.
+  - Added `/dashboard/system-resources` for current load plus history,
+    and rendered CPU/RAM/storage KPIs and charts on the admin dashboard.
+  - Documented the new config defaults in `.env.example`.
+
 - [x] **Outbound playback/Tor mode hardening (2026-05-15)**
   - SoundCloud progressive audio proxy now uses the configured outbound
     proxy path for the CDN fetch, not only for stream URL resolution.

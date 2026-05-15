@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -161,9 +162,42 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         settings,
         component="api",
     )
+    resource_stop: asyncio.Event | None = None
+    resource_task: asyncio.Task[None] | None = None
+    if settings.system_resource_sampler_enabled:
+        from app.services.system_resource_service import (
+            system_resource_sampler_loop,
+        )
+
+        resource_stop = asyncio.Event()
+        resource_task = asyncio.create_task(
+            system_resource_sampler_loop(resource_stop),
+            name="system_resource_sampler",
+        )
+        application.state._system_resource_sampler_task = resource_task
+
+    startup_alert_task: asyncio.Task[None] | None = None
+    if settings.admin_startup_alert_enabled:
+        from app.services.admin_alert_service import (
+            send_startup_alert_with_retries,
+        )
+
+        startup_alert_task = asyncio.create_task(
+            send_startup_alert_with_retries(component="api"),
+            name="startup_admin_alert",
+        )
+        application.state._startup_alert_task = startup_alert_task
 
     yield
 
+    if startup_alert_task is not None and not startup_alert_task.done():
+        startup_alert_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await startup_alert_task
+    if resource_stop is not None and resource_task is not None:
+        resource_stop.set()
+        with contextlib.suppress(Exception):
+            await asyncio.wait_for(resource_task, timeout=5.0)
     if _tor_pool_started:
         from app.services.tor_pool import stop_tor_pool_from_settings
 

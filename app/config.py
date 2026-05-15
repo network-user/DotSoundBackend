@@ -351,6 +351,9 @@ class AppSettings(BaseSettings):
     admin_jwt_secret: str = ""
     admin_csrf_secret: str = ""
     admin_telegram_alert_chat_id: str = ""
+    admin_startup_alert_enabled: bool = True
+    admin_startup_alert_retries: int = 8
+    admin_startup_alert_retry_delay_seconds: float = 2.0
     admin_bundle_ttl_seconds: int = 3600
     admin_panel_path: str = "admin"
 
@@ -366,6 +369,11 @@ class AppSettings(BaseSettings):
     sentry_environment: str = "development"
     sentry_traces_sample_rate: float = 0.1
     docker_socket_path: str = "/var/run/docker.sock"
+    system_resource_sampler_enabled: bool = True
+    system_resource_sample_interval_seconds: int = 30
+    system_resource_history_ttl_seconds: int = 7 * 24 * 3600
+    system_resource_disk_path: str = "/"
+    system_resource_cpu_sample_seconds: float = 0.1
 
     # Elasticsearch (suggest + full text search). Set ELASTICSEARCH_URL=""
     # in env to disable, or set ELASTICSEARCH_ENABLED=false.

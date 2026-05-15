@@ -62,6 +62,26 @@ function calcTrend(points: ChartPoint[]): number {
   return ((last - first) / first) * 100
 }
 
+function formatPercent(
+  value: number | null | undefined,
+): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 'n/a'
+  }
+  return `${value.toFixed(1)}%`
+}
+
+function resourceAccent(
+  value: number | null | undefined,
+): 'default' | 'warn' | 'error' {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 'default'
+  }
+  if (value >= 90) return 'error'
+  if (value >= 75) return 'warn'
+  return 'default'
+}
+
 export function DashboardRoute() {
   const { t } = useTranslation()
   const [minutes, setMinutes] = useState(60)
@@ -137,6 +157,12 @@ export function DashboardRoute() {
   const containers = useQuery({
     queryKey: ['admin', 'containers', 'overview'],
     queryFn: () => adminApi.containers(),
+    refetchInterval: live ? 30_000 : false,
+    refetchIntervalInBackground: false,
+  })
+  const systemResources = useQuery({
+    queryKey: ['admin', 'dashboard', 'system-resources', minutes],
+    queryFn: () => adminApi.systemResources(minutes),
     refetchInterval: live ? 30_000 : false,
     refetchIntervalInBackground: false,
   })
@@ -239,6 +265,31 @@ export function DashboardRoute() {
   const radioQueueSizePoints = flattenRange(
     radioQueueSizeHistory.data,
   )
+  const resourceHistory =
+    systemResources.data?.history ?? []
+  const cpuPoints: ChartPoint[] = resourceHistory
+    .filter((item) => typeof item.cpu_pct === 'number')
+    .map((item) => ({
+      ts: item.ts,
+      value: item.cpu_pct ?? 0,
+    }))
+  const memoryPoints: ChartPoint[] = resourceHistory
+    .filter(
+      (item) => typeof item.memory_used_pct === 'number',
+    )
+    .map((item) => ({
+      ts: item.ts,
+      value: item.memory_used_pct ?? 0,
+    }))
+  const storagePoints: ChartPoint[] = resourceHistory
+    .filter(
+      (item) => typeof item.storage_used_pct === 'number',
+    )
+    .map((item) => ({
+      ts: item.ts,
+      value: item.storage_used_pct ?? 0,
+    }))
+  const currentResources = systemResources.data?.current
   const latestRadioReq = radioReqPoints.at(-1)?.value ?? 0
   const latestRadioGuard =
     radioGuardPoints.at(-1)?.value ?? 0
@@ -831,6 +882,108 @@ export function DashboardRoute() {
           />
         </article>
       </section>
+
+      <section className="admin-card">
+        <div className="admin-dashboard__chart-head">
+          <div>
+            <h2>Server load</h2>
+            <p className="admin-card__sub">
+              CPU, RAM and storage from backend host probes
+            </p>
+          </div>
+          <span className="admin-card__sub">
+            {currentResources
+              ? new Date(
+                  currentResources.ts * 1000,
+                ).toLocaleTimeString()
+              : 'waiting'}
+          </span>
+        </div>
+      </section>
+      {systemResources.isLoading || !currentResources ? (
+        <div className="admin-skeleton admin-skeleton--card" />
+      ) : (
+        <>
+          <section className="kpi-grid">
+            <KpiCard
+              label="CPU"
+              value={formatPercent(currentResources.cpu_pct)}
+              hint={
+                currentResources.load_avg.one !== null
+                  ? `load avg ${currentResources.load_avg.one.toFixed(2)}`
+                  : 'load avg n/a'
+              }
+              accent={resourceAccent(
+                currentResources.cpu_pct,
+              )}
+            />
+            <KpiCard
+              label="RAM"
+              value={formatPercent(
+                currentResources.memory.used_pct,
+              )}
+              hint={
+                currentResources.memory.used_bytes !== null &&
+                currentResources.memory.total_bytes !== null
+                  ? `${formatBytes(
+                      currentResources.memory.used_bytes,
+                    )} / ${formatBytes(
+                      currentResources.memory.total_bytes,
+                    )}`
+                  : 'memory n/a'
+              }
+              accent={resourceAccent(
+                currentResources.memory.used_pct,
+              )}
+            />
+            <KpiCard
+              label="Storage"
+              value={formatPercent(
+                currentResources.storage.used_pct,
+              )}
+              hint={
+                currentResources.storage.used_bytes !== null &&
+                currentResources.storage.total_bytes !== null
+                  ? `${formatBytes(
+                      currentResources.storage.used_bytes,
+                    )} / ${formatBytes(
+                      currentResources.storage.total_bytes,
+                    )}`
+                  : currentResources.storage.path
+              }
+              accent={resourceAccent(
+                currentResources.storage.used_pct,
+              )}
+            />
+          </section>
+          <section className="kpi-grid kpi-grid--charts">
+            <article className="admin-card">
+              <h2>CPU history</h2>
+              <LineChart
+                data={cpuPoints}
+                height={180}
+                ariaLabel="CPU history"
+              />
+            </article>
+            <article className="admin-card">
+              <h2>RAM history</h2>
+              <LineChart
+                data={memoryPoints}
+                height={180}
+                ariaLabel="RAM history"
+              />
+            </article>
+            <article className="admin-card">
+              <h2>Storage history</h2>
+              <LineChart
+                data={storagePoints}
+                height={180}
+                ariaLabel="Storage history"
+              />
+            </article>
+          </section>
+        </>
+      )}
       <details className="admin-dashboard__collapse">
         <summary className="admin-dashboard__collapse-summary">
           <span className="admin-dashboard__collapse-title">

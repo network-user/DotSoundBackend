@@ -16,9 +16,9 @@ from app.models.user import User
 from app.services.admin_dashboard_service import (
     collect_activation_funnel,
     collect_admin_stats,
+    collect_overview,
     collect_stats,
     collect_track_stats,
-    collect_overview,
 )
 from app.services.container_health_service import (
     get_container_summary,
@@ -27,6 +27,9 @@ from app.services.prometheus_service import (
     ALLOWED_METRICS,
     PrometheusServiceError,
     query_range,
+)
+from app.services.system_resource_service import (
+    get_system_resource_summary,
 )
 
 router = APIRouter(prefix="/dashboard", tags=["admin-dashboard"])
@@ -81,6 +84,14 @@ async def container_overview(
     _admin: User = Depends(require_admin_session),
 ) -> dict[str, Any]:
     return await get_container_summary()
+
+
+@router.get("/system-resources")
+async def system_resources(
+    minutes: int = Query(60, ge=1, le=10_080),
+    _admin: User = Depends(require_admin_session),
+) -> dict[str, Any]:
+    return await get_system_resource_summary(minutes=minutes)
 
 
 @router.get("/timeseries")

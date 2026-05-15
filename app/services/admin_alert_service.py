@@ -31,6 +31,7 @@ chat. Backend never knows or stores the chat token.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -73,8 +74,38 @@ def _format_payload(
     }
 
 
-@broker.task(task_name="admin.alert.send")
-async def send_admin_alert_task(
+def _alert_configured() -> bool:
+    return bool(
+        settings.bot_internal_url
+        and settings.bot_internal_secret
+        and settings.admin_telegram_alert_chat_id
+    )
+
+
+async def _post_alert_payload(
+    payload: dict[str, Any],
+) -> bool:
+    url = admin_alert_url(settings.bot_internal_url)
+    headers = {
+        **build_internal_headers(settings.bot_internal_secret),
+        "Content-Type": "application/json",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(url, json=payload, headers=headers)
+            resp.raise_for_status()
+        return True
+    except Exception:
+        logger.exception(
+            "admin_alert_failed",
+            event_type=payload.get("event_type"),
+            severity=payload.get("severity"),
+        )
+        return False
+
+
+async def send_admin_alert_now(
+    *,
     event_type: str,
     severity: str,
     title: str,
@@ -82,20 +113,17 @@ async def send_admin_alert_task(
     user_id: int | None = None,
     ip: str | None = None,
     ua: str | None = None,
-) -> None:
-    if not should_alert_on_event(event_type, severity):
-        return
-    if (
-        not settings.bot_internal_url
-        or not settings.bot_internal_secret
-        or not settings.admin_telegram_alert_chat_id
-    ):
+    apply_policy: bool = True,
+) -> bool:
+    if apply_policy and not should_alert_on_event(event_type, severity):
+        return False
+    if not _alert_configured():
         logger.info(
             "admin_alert_skipped_no_bot_config",
             event_type=event_type,
             severity=severity,
         )
-        return
+        return False
 
     payload = _format_payload(
         event_type=event_type,
@@ -106,26 +134,36 @@ async def send_admin_alert_task(
         ip=ip,
         ua=ua,
     )
-    url = admin_alert_url(settings.bot_internal_url)
-    headers = {
-        **build_internal_headers(settings.bot_internal_secret),
-        "Content-Type": "application/json",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-            resp.raise_for_status()
+    sent = await _post_alert_payload(payload)
+    if sent:
         logger.info(
             "admin_alert_sent",
             event_type=event_type,
             severity=severity,
         )
-    except Exception:
-        logger.exception(
-            "admin_alert_failed",
-            event_type=event_type,
-            severity=severity,
-        )
+    return sent
+
+
+@broker.task(task_name="admin.alert.send")
+async def send_admin_alert_task(
+    event_type: str,
+    severity: str,
+    title: str,
+    details: str,
+    user_id: int | None = None,
+    ip: str | None = None,
+    ua: str | None = None,
+) -> None:
+    await send_admin_alert_now(
+        event_type=event_type,
+        severity=severity,
+        title=title,
+        details=details,
+        user_id=user_id,
+        ip=ip,
+        ua=ua,
+        apply_policy=True,
+    )
 
 
 async def dispatch_alert(
@@ -160,3 +198,43 @@ async def dispatch_alert(
             event_type=event_type,
             severity=severity,
         )
+
+
+async def send_startup_alert_with_retries(*, component: str) -> None:
+    if not settings.admin_startup_alert_enabled:
+        return
+    if not _alert_configured():
+        logger.info("startup_alert_skipped_no_bot_config")
+        return
+
+    retries = max(1, int(settings.admin_startup_alert_retries))
+    delay = max(0.1, float(settings.admin_startup_alert_retry_delay_seconds))
+    details = (
+        f"component={component}\n"
+        "status=ready\n"
+        "backend lifespan startup completed"
+    )
+    for attempt in range(1, retries + 1):
+        sent = await send_admin_alert_now(
+            event_type="system.startup",
+            severity="info",
+            title="DotSound project started",
+            details=details,
+            apply_policy=False,
+        )
+        if sent:
+            logger.info(
+                "startup_alert_sent",
+                component=component,
+                attempt=attempt,
+            )
+            return
+        if attempt >= retries:
+            break
+        await asyncio.sleep(delay)
+        delay = min(delay * 2.0, 30.0)
+    logger.warning(
+        "startup_alert_not_delivered",
+        component=component,
+        attempts=retries,
+    )

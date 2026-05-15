@@ -576,6 +576,41 @@ export const adminApi = {
         image: string | null
       }>
     }>('/dashboard/containers'),
+  systemResources: (minutes: number) =>
+    adminFetch<{
+      generated_at: number
+      current: {
+        ts: number
+        source: string
+        cpu_pct: number | null
+        load_avg: {
+          one: number | null
+          five: number | null
+          fifteen: number | null
+        }
+        memory: {
+          total_bytes: number | null
+          used_bytes: number | null
+          available_bytes: number | null
+          used_pct: number | null
+        }
+        storage: {
+          path: string
+          total_bytes: number | null
+          used_bytes: number | null
+          free_bytes: number | null
+          used_pct: number | null
+        }
+      }
+      history: Array<{
+        ts: number
+        cpu_pct: number | null
+        memory_used_pct: number | null
+        storage_used_pct: number | null
+      }>
+    }>('/dashboard/system-resources', {
+      query: { minutes },
+    }),
   servicesHealth: () =>
     adminFetch<Record<string, unknown>>(
       '/system/services',
