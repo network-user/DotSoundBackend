@@ -659,6 +659,7 @@ export const adminApi = {
         path: string
         transport: string
         identity: string | null
+        egress_ip?: string | null
         status_code: number | null
         duration_ms: number | null
         error: string | null

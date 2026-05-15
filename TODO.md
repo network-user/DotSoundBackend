@@ -1,5 +1,14 @@
 # DotSound - TODO Tracker
 
+- [x] **Lyrics auto-detection, artist resync worker, network admin tab (2026-05-15)**
+  - Artist catalog sync now schedules lyrics discovery for every synced
+    track, including existing tracks, through the paced global lyrics queue.
+  - Auto lyrics detection keeps existing plain text intact; sync runs reuse it
+    to build timecodes instead of re-fetching or overwriting the text.
+  - Added selected-artists lyrics worker action in admin Artists and a Network
+    tab with outbound mode, proxy/Tor status, service counters, and recent
+    request traces.
+
 - [x] **Mini player desktop progress visibility fix (2026-05-15)**
   - Restored visible bottom mini-player progress on desktop PlayerBar.
   - Added explicit white played-segment fill and subtle progress background

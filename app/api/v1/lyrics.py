@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from collections.abc import AsyncIterator
 
 import structlog
 from fastapi import (
@@ -31,9 +32,9 @@ from app.schemas.lyrics import (
     LyricsAutoStatusResponse,
     LyricsCreateRequest,
     LyricsResponse,
+    LyricsSyncRequest,
     LyricsTranslationResponse,
     LyricsTranslationUpsertRequest,
-    LyricsSyncRequest,
 )
 from app.services.lyrics_service import LyricsService
 from app.services.lyrics_worker import (
@@ -342,7 +343,7 @@ async def stream_auto_lyrics_events(
 
     channel = f"{EVENTS_CHANNEL_PREFIX}{task_id}"
 
-    async def event_generator():
+    async def event_generator() -> AsyncIterator[str]:
         redis = get_redis_client()
         pubsub = redis.pubsub()
         await pubsub.subscribe(channel)

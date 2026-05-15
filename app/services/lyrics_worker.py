@@ -10,8 +10,10 @@ import tempfile
 import time
 import unicodedata
 import uuid
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC
+from typing import TYPE_CHECKING, Any, Protocol
 
 import structlog
 from sqlalchemy import select
@@ -28,6 +30,14 @@ from app.models.track import Track
 from app.repositories.lyrics import LyricsRepository
 
 logger = structlog.stdlib.get_logger(__name__)
+
+if TYPE_CHECKING:
+    import httpx
+
+
+class _ProviderLyricsResult(Protocol):
+    text: str
+    synced_lines: list[object] | None
 
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
@@ -555,7 +565,7 @@ async def _finalise(
 
 
 async def _stream_http_to_file(
-    client,  # httpx.AsyncClient
+    client: httpx.AsyncClient,
     url: str,
     path: str,
     max_bytes: int,
@@ -641,7 +651,7 @@ async def _hls_to_file(m3u8_url: str, path: str) -> bool:
 async def _fetch_audio_to_file(
     track: Track,
     tmp_dir: str,
-    session,  # AsyncSession
+    session: AsyncSession,
 ) -> str | None:
     """Download track audio to a temp file, streaming with a cap.
 
@@ -753,7 +763,7 @@ async def _heartbeat_loop(
         pass
 
 
-def _parse_progress_event(event) -> tuple[str, int | None, str | None]:
+def _parse_progress_event(event: object) -> tuple[str, int | None, str | None]:
     """Accept both legacy ``str`` and future structured dict progress.
 
     Returns ``(stage, percent)`` — percent is None if not supplied.
@@ -764,7 +774,7 @@ def _parse_progress_event(event) -> tuple[str, int | None, str | None]:
         stage = str(event.get("stage") or "processing")
         raw_percent = event.get("percent")
         percent: int | None = None
-        if isinstance(raw_percent, (int, float)):
+        if isinstance(raw_percent, int | float):
             percent = max(0, min(100, int(raw_percent)))
         message_raw = event.get("message")
         message = (
@@ -777,13 +787,13 @@ def _parse_progress_event(event) -> tuple[str, int | None, str | None]:
 
 
 def _call_provider(
-    func,
+    func: Callable[..., object],
     *,
     artist: str,
     title: str,
     audio_path: str | None,
-    on_progress,
-    on_cancel,
+    on_progress: Callable[[object], None],
+    on_cancel: Callable[[], bool],
     tier: int | None = None,
     external_id: str | None = None,
     disable_local_asr: bool | None = None,
@@ -828,7 +838,7 @@ _ALLOWED_SYNC_QUALITY = {"line", "word", "none"}
 _ALLOWED_SYNC_PROFILE = {"cpu_light", "gpu_full"}
 
 
-def _word_times_from(sl) -> list[dict] | None:
+def _word_times_from(sl: object) -> list[dict] | None:
     raw = getattr(sl, "word_times", None)
     if not raw:
         return None
@@ -861,16 +871,16 @@ def _payload_has_non_empty_synced(payload: dict) -> bool:
     return isinstance(sl, list) and len(sl) > 0
 
 
-def _result_to_payload(gen_result) -> dict:
+def _result_to_payload(gen_result: _ProviderLyricsResult) -> dict:
     synced: list[dict] | None = None
     if gen_result.synced_lines:
         synced = []
         for sl in gen_result.synced_lines:
             line: dict = {
-                "time_ms": int(sl.time_ms),
-                "text": sl.text,
+                "time_ms": int(getattr(sl, "time_ms", 0) or 0),
+                "text": str(getattr(sl, "text", "") or ""),
                 "confidence": (
-                    float(sl.confidence) if sl.confidence is not None else 0.0
+                    float(getattr(sl, "confidence", 0.0) or 0.0)
                 ),
             }
             wts = _word_times_from(sl)
@@ -1000,12 +1010,10 @@ async def _generate_lyrics_task_impl(
             now = time.monotonic()
             if last_stage and last_stage in stage_started:
                 duration_ms = int((now - stage_started[last_stage]) * 1000)
-                try:
+                with suppress(Exception):
                     await record_stage_duration(
                         profile, last_stage, duration_ms
                     )
-                except Exception:
-                    pass
             stage_started[stage] = now
             last_stage = stage
         await set_lyrics_progress(
@@ -1134,10 +1142,8 @@ async def _generate_lyrics_task_impl(
                 await session.commit()
 
                 if cached_synced is not None:
-                    try:
+                    with suppress(Exception):
                         await store_partial_synced(progress_id, cached_synced)
-                    except Exception:
-                        pass
 
                 if cache_mode != "artist_title":
                     try:
@@ -1209,7 +1215,7 @@ async def _generate_lyrics_task_impl(
 
             loop = asyncio.get_running_loop()
 
-            def on_progress(event) -> None:
+            def on_progress(event: object) -> None:
                 stage, percent_val, message = _parse_progress_event(event)
                 opaque = _opaque_stage(stage)
                 label = _STAGE_LABELS.get(opaque, "")
@@ -1312,17 +1318,16 @@ async def _generate_lyrics_task_impl(
                         "error",
                         log_line=(
                             f"[{_elapsed()}] ERROR: provider timed out "
-                            f"after {settings.lyrics_provider_timeout_seconds}s"
+                            "after "
+                            f"{settings.lyrics_provider_timeout_seconds}s"
                         ),
                     )
                     return {"status": "error", "detail": "timeout"}
                 finally:
                     _stop_evt.set()
                     _hb_task.cancel()
-                    try:
+                    with suppress(asyncio.CancelledError):
                         await _hb_task
-                    except asyncio.CancelledError:
-                        pass
 
                 if current_result is not None:
                     gen_result = current_result
@@ -1370,18 +1375,14 @@ async def _generate_lyrics_task_impl(
                         track_id=track_id,
                     )
 
-            try:
+            with suppress(Exception):
                 await store_partial_text(progress_id, payload["text"])
-            except Exception:
-                pass
 
             synced_dicts: list[dict] | None = None
             if with_sync and payload["synced_lines"]:
                 synced_dicts = payload["synced_lines"]
-                try:
+                with suppress(Exception):
                     await store_partial_synced(progress_id, synced_dicts)
-                except Exception:
-                    pass
             elif with_sync:
                 await _log(
                     "saving",
@@ -1546,7 +1547,7 @@ async def generate_lyrics_debug_task(
 
             loop = asyncio.get_running_loop()
 
-            def on_progress(event) -> None:
+            def on_progress(event: object) -> None:
                 stage, percent_val, message = _parse_progress_event(event)
                 opaque = _opaque_stage(stage)
                 label = _STAGE_LABELS.get(opaque, "")
@@ -1683,7 +1684,9 @@ async def generate_lyrics_debug_task(
                 shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def _close_job_attempt(job, *, status: str, error: str | None = None) -> None:
+def _close_job_attempt(
+    job: LyricsJob, *, status: str, error: str | None = None
+) -> None:
     """Mutate the last entry in ``job.tier_attempts`` in place.
 
     Mirrors the equivalent helper in ``lyrics_cascade.py`` to
@@ -1705,10 +1708,10 @@ def _close_job_attempt(job, *, status: str, error: str | None = None) -> None:
 
 
 async def _save_catalog_result_and_close(
-    session,
+    session: AsyncSession,
     *,
-    job,
-    payload: dict,
+    job: LyricsJob,
+    payload: dict[str, Any],
     progress_id: str,
     with_sync: bool,
 ) -> None:
@@ -1740,14 +1743,12 @@ async def _save_catalog_result_and_close(
             started = started.replace(tzinfo=UTC)
         duration_seconds = (datetime.now(UTC) - started).total_seconds()
         job.duration_ms = int(duration_seconds * 1000)
-    try:
+    with suppress(Exception):
         lyrics_job_observed(
             tier=job.current_tier or "catalog_only",
             status="success",
             duration_seconds=duration_seconds,
         )
-    except Exception:
-        pass
 
 
 @broker.task
@@ -1817,7 +1818,7 @@ async def catalog_only_lyrics_task(
         title = track.title or ""
         loop = asyncio.get_running_loop()
 
-        def on_progress(event) -> None:
+        def on_progress(event: object) -> None:
             stage, percent_val, message = _parse_progress_event(event)
             opaque = _opaque_stage(stage)
             label = _STAGE_LABELS.get(opaque, "")
@@ -1883,48 +1884,48 @@ async def catalog_only_lyrics_task(
                     with_sync
                     and isinstance(cached, dict)
                     and (cached.get("text") or "").strip()
+                    and job is not None
                 ):
-                    if job is not None:
-                        if not cached.get("preserve_existing_text"):
-                            repo_l = LyricsRepository(session)
-                            await repo_l.create_or_update(
-                                track_id=track_id,
-                                plain_text=cached["text"],
-                                source="auto",
-                                synced_lines=[],
-                                sync_quality=None,
-                                sync_profile=None,
-                                source_name=cached.get("source_name"),
-                            )
-                            await session.flush()
-                        result = await _escalate_catalog_plain_for_sync(
-                            session,
-                            job=job,
-                            progress_id=progress_id,
-                            with_sync=with_sync,
-                            bypass_cache=bypass_cache,
-                            log_line=(
-                                "[catalog_only] cached plain text "
-                                "without timecodes; escalating to "
-                                "compute worker"
-                            ),
+                    if not cached.get("preserve_existing_text"):
+                        repo_l = LyricsRepository(session)
+                        await repo_l.create_or_update(
+                            track_id=track_id,
+                            plain_text=cached["text"],
+                            source="auto",
+                            synced_lines=[],
+                            sync_quality=None,
+                            sync_profile=None,
+                            source_name=cached.get("source_name"),
                         )
-                        await session.commit()
-                        if result["status"] == "fallback":
-                            return result
-                        await _finalise(
-                            progress_id,
-                            "found",
-                            log_line=(
-                                "[catalog_only] cached plain text "
-                                "retained; no remote tier for "
-                                "timing sync"
-                            ),
-                        )
-                        return {
-                            "status": "found",
-                            "from": "cache",
-                        }
+                        await session.flush()
+                    result = await _escalate_catalog_plain_for_sync(
+                        session,
+                        job=job,
+                        progress_id=progress_id,
+                        with_sync=with_sync,
+                        bypass_cache=bypass_cache,
+                        log_line=(
+                            "[catalog_only] cached plain text "
+                            "without timecodes; escalating to "
+                            "compute worker"
+                        ),
+                    )
+                    await session.commit()
+                    if result["status"] == "fallback":
+                        return result
+                    await _finalise(
+                        progress_id,
+                        "found",
+                        log_line=(
+                            "[catalog_only] cached plain text "
+                            "retained; no remote tier for "
+                            "timing sync"
+                        ),
+                    )
+                    return {
+                        "status": "found",
+                        "from": "cache",
+                    }
 
         audio_path: str | None = None
         tmp_dir: str | None = None

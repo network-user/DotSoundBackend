@@ -357,6 +357,7 @@ export function OutboundStatusPanel() {
                   <th>{t('admin.common.service', 'Service')}</th>
                   <th>{t('admin.dashboard.outbound.transport', 'Mode')}</th>
                   <th>{t('admin.dashboard.outbound.identity', 'Identity')}</th>
+                  <th>{t('admin.dashboard.outbound.egressIp', 'IP / host')}</th>
                   <th>{t('admin.dashboard.outbound.request', 'Request')}</th>
                   <th>{t('admin.common.status', 'Status')}</th>
                   <th>{t('admin.common.duration', 'Duration')}</th>
@@ -364,10 +365,12 @@ export function OutboundStatusPanel() {
               </thead>
               <tbody>
                 {recentRequests.slice(0, 40).map((item, idx) => {
+                  const durationMs = item.duration_ms
+                  const statusCode = item.status_code
                   const status =
-                    item.status_code === null
+                    statusCode == null
                       ? item.error || 'error'
-                      : item.status_code
+                      : statusCode
                   return (
                     <tr key={`${item.ts}-${idx}`}>
                       <td className="admin-mono">
@@ -389,14 +392,17 @@ export function OutboundStatusPanel() {
                         {item.identity || 'direct'}
                       </td>
                       <td className="admin-mono">
+                        {item.egress_ip || 'n/a'}
+                      </td>
+                      <td className="admin-mono">
                         {item.method} {item.host}
                         {item.path}
                       </td>
                       <td className="admin-mono">{status}</td>
                       <td className="admin-mono">
-                        {item.duration_ms === null
+                        {durationMs == null
                           ? 'n/a'
-                          : `${item.duration_ms.toFixed(1)} ms`}
+                          : `${Number(durationMs).toFixed(1)} ms`}
                       </td>
                     </tr>
                   )

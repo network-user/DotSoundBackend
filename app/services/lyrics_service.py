@@ -1,11 +1,10 @@
 import uuid
 
 import structlog
+from dotsound_private_core import censor_text
 from fastapi import HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from dotsound_private_core import censor_text
 
 from app.models.lyrics import TrackLyrics
 from app.models.lyrics_translation import (
