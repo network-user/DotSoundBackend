@@ -12,6 +12,7 @@ const STORE = 'events'
 type PendingKind =
   | 'post-play'
   | 'record-listen'
+  | 'client-telemetry'
   | 'mutation'
 
 interface PendingEvent {

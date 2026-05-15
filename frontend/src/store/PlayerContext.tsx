@@ -1275,10 +1275,29 @@ export function PlayerProvider({
     if (
       consecutiveAutoSkipsRef.current >= MAX_CONSECUTIVE_AUTO_SKIPS
     ) {
+      const consecutiveSkips = consecutiveAutoSkipsRef.current
+      const wasRadioMode = radioModeRef.current
+      const radioSeedTrackId = radioSeedTrackIdRef.current
+      const queueSize = manualQueueRef.current.length
       consecutiveAutoSkipsRef.current = 0
       const b = unavailableSkipBatchRef.current
       if (b.islandId) dismissIsland(b.islandId)
       flushUnavailableSkipBatch()
+      if (wasRadioMode) {
+        void queueOrSend(
+          'client-telemetry',
+          '/api/v1/signals/client/playback-event',
+          {
+            event_name: 'radio_auto_skip_exhausted',
+            surface: 'radio',
+            current_track_id: trackId,
+            radio_seed_track_id: radioSeedTrackId,
+            consecutive_skips: consecutiveSkips,
+            queue_size: queueSize,
+          },
+          { silent: true },
+        )
+      }
       haltRadioAfterAutoSkipExhaustion()
       showIsland({
         kind: 'error',

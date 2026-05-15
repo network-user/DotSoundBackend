@@ -41,6 +41,7 @@ _PROM_RECSYS_PIPELINE_LATENCY = None
 _PROM_RECSYS_IMPRESSION_POSITION = None
 _PROM_OFFLINE_ELIGIBILITY = None
 _PROM_OFFLINE_PREFETCH = None
+_PROM_CLIENT_PLAYBACK_EVENTS = None
 
 
 def _is_internal_ip(client_host: str | None) -> bool:
@@ -259,6 +260,7 @@ def setup_metrics(application: object) -> None:
 
     global _PROM_OFFLINE_ELIGIBILITY
     global _PROM_OFFLINE_PREFETCH
+    global _PROM_CLIENT_PLAYBACK_EVENTS
     _PROM_OFFLINE_ELIGIBILITY = Counter(
         "offline_eligibility_checks_total",
         (
@@ -275,6 +277,12 @@ def setup_metrics(application: object) -> None:
             "(accepted/rejected/error)."
         ),
         ["outcome"],
+        registry=registry,
+    )
+    _PROM_CLIENT_PLAYBACK_EVENTS = Counter(
+        "client_playback_events_total",
+        "Client playback telemetry events by event name and surface.",
+        ["event_name", "surface"],
         registry=registry,
     )
 
@@ -704,3 +712,16 @@ def offline_prefetch_observed(*, outcome: str) -> None:
     if _PROM_OFFLINE_PREFETCH is None:
         return
     _PROM_OFFLINE_PREFETCH.labels(outcome=outcome).inc()
+
+
+def client_playback_event_observed(
+    *,
+    event_name: str,
+    surface: str,
+) -> None:
+    if _PROM_CLIENT_PLAYBACK_EVENTS is None:
+        return
+    _PROM_CLIENT_PLAYBACK_EVENTS.labels(
+        event_name=event_name,
+        surface=surface,
+    ).inc()

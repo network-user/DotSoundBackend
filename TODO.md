@@ -1,5 +1,20 @@
 # DotSound - TODO Tracker
 
+- [x] **Import source scan UX and proxy diagnostics (2026-05-15)**
+  - Fixed import scanning labels so Yandex/VK/Spotify/SoundCloud scans no
+    longer show the Telegram fallback text before the scan job is returned.
+  - Preserved Yandex scan failure messages inside the URL modal instead of
+    replacing them with a generic modal error.
+
+- [x] **Radio auto-skip exhaustion telemetry (2026-05-15)**
+  - Added authenticated client playback telemetry endpoint for the
+    `radio_auto_skip_exhausted` event.
+  - Backend now exposes the Prometheus counter
+    `client_playback_events_total` labelled by event name and surface.
+  - Player sends the event when radio auto-skip reaches the safety limit,
+    including current track, seed track, skip count, and queue size.
+  - Verified signals API tests, Ruff, and frontend production build.
+
 - [x] **Admin filtered ID selection endpoint (2026-05-15)**
   - Added backend admin ID-selection endpoints for tracks and artists so
     `All filtered` selection no longer walks every page from the browser.
@@ -2226,7 +2241,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-15 (Admin filtered ID selection endpoint).*
+*Последнее обновление: 2026-05-15 (Import source scan UX).*
 
 ## Session Updates (2026-05-06)
 

@@ -1,11 +1,14 @@
+import structlog
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.observability import client_playback_event_observed
 from app.dependencies import get_current_user, get_db
 from app.models.user import User
 from app.schemas.signal import (
-    ListenEventRequest,
     BatchListenEventRequest,
+    ClientPlaybackEventRequest,
+    ListenEventRequest,
     SearchClickRequest,
 )
 from app.services.signal_service import (
@@ -15,6 +18,7 @@ from app.services.signal_service import (
 router = APIRouter(
     prefix="/signals", tags=["signals"]
 )
+logger = structlog.get_logger(__name__)
 
 
 @router.post("/listen/batch")
@@ -22,7 +26,7 @@ async def record_listen_batch(
     body: BatchListenEventRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, object]:
     svc = SignalService(db)
     for event in body.events:
         await svc.record_listen(
@@ -41,7 +45,7 @@ async def record_listen(
     body: ListenEventRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, str]:
     svc = SignalService(db)
     await svc.record_listen(
         user_id=user.id,
@@ -59,12 +63,34 @@ async def record_search(
     body: SearchClickRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, str]:
     svc = SignalService(db)
     await svc.record_search_click(
         user_id=user.id,
         query=body.query,
         results_count=body.results_count,
         clicked_track_id=body.clicked_track_id,
+    )
+    return {"status": "ok"}
+
+
+@router.post("/client/playback-event")
+async def record_client_playback_event(
+    body: ClientPlaybackEventRequest,
+    user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    client_playback_event_observed(
+        event_name=body.event_name,
+        surface=body.surface,
+    )
+    logger.info(
+        "client_playback_event",
+        event_name=body.event_name,
+        surface=body.surface,
+        user_id=user.id,
+        current_track_id=body.current_track_id,
+        radio_seed_track_id=body.radio_seed_track_id,
+        consecutive_skips=body.consecutive_skips,
+        queue_size=body.queue_size,
     )
     return {"status": "ok"}

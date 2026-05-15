@@ -255,10 +255,11 @@ export function OnboardingImportStep({ onDone }: Props) {
         setErr('Не удалось прочитать плейлист')
         setFlow('pick')
       }
-    } catch {
+    } catch (e) {
       setErr('Не удалось прочитать плейлист')
       setFlow('pick')
       setScanningSource(undefined)
+      throw e
     } finally {
       setBusy(false)
     }
@@ -280,10 +281,11 @@ export function OnboardingImportStep({ onDone }: Props) {
         setErr('Не удалось прочитать плейлист')
         setFlow('pick')
       }
-    } catch {
+    } catch (e) {
       setErr('Не удалось прочитать плейлист')
       setFlow('pick')
       setScanningSource(undefined)
+      throw e
     } finally {
       setBusy(false)
     }
@@ -305,10 +307,11 @@ export function OnboardingImportStep({ onDone }: Props) {
         setErr('Не удалось прочитать плейлист')
         setFlow('pick')
       }
-    } catch {
+    } catch (e) {
       setErr('Не удалось прочитать плейлист')
       setFlow('pick')
       setScanningSource(undefined)
+      throw e
     } finally {
       setBusy(false)
     }
@@ -330,10 +333,11 @@ export function OnboardingImportStep({ onDone }: Props) {
         setErr('Не удалось прочитать плейлист')
         setFlow('pick')
       }
-    } catch {
+    } catch (e) {
       setErr('Не удалось прочитать плейлист')
       setFlow('pick')
       setScanningSource(undefined)
+      throw e
     } finally {
       setBusy(false)
     }
