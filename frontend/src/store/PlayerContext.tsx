@@ -655,45 +655,34 @@ function _updateMediaSession(
 ) {
   if (!('mediaSession' in navigator)) return
   try {
-    const artwork = track.cover_key
-      ? ([120, 240, 480] as const).map((width) => ({
-          src: new URL(
-            coverProxyUrl(track.cover_key!, { width }),
-            window.location.origin,
-          ).href,
-          sizes: `${width}x${width}`,
-          type: 'image/webp',
-        }))
-      : []
-
     navigator.mediaSession.metadata =
       new MediaMetadata({
         title: track.title,
         artist: track.artist || '',
-        artwork,
+        artwork: _mediaSessionArtwork(track),
       })
     navigator.mediaSession.playbackState = audio.paused
       ? 'paused'
       : 'playing'
-    navigator.mediaSession.setActionHandler(
+    _setMediaSessionActionHandler(
       'play',
       () => {
         void safePlay(audio)
       },
     )
-    navigator.mediaSession.setActionHandler(
+    _setMediaSessionActionHandler(
       'pause',
       () => audio.pause(),
     )
-    navigator.mediaSession.setActionHandler(
+    _setMediaSessionActionHandler(
       'nexttrack',
       onNext,
     )
-    navigator.mediaSession.setActionHandler(
+    _setMediaSessionActionHandler(
       'previoustrack',
       onPrev,
     )
-    navigator.mediaSession.setActionHandler(
+    _setMediaSessionActionHandler(
       'seekto',
       (d) => {
         if (
@@ -703,34 +692,30 @@ function _updateMediaSession(
           audio.currentTime = d.seekTime
       },
     )
-    try {
-      navigator.mediaSession.setActionHandler(
-        'seekforward',
-        (d) => {
-          const offset = d.seekOffset ?? 15
-          const target = Math.min(
-            (audio.duration || 0) - 0.5,
-            (audio.currentTime || 0) + offset,
-          )
-          if (Number.isFinite(target) && target >= 0) {
-            audio.currentTime = target
-          }
-        },
-      )
-      navigator.mediaSession.setActionHandler(
-        'seekbackward',
-        (d) => {
-          const offset = d.seekOffset ?? 15
-          const target = Math.max(
-            0,
-            (audio.currentTime || 0) - offset,
-          )
+    _setMediaSessionActionHandler(
+      'seekforward',
+      (d) => {
+        const offset = d.seekOffset ?? 15
+        const target = Math.min(
+          (audio.duration || 0) - 0.5,
+          (audio.currentTime || 0) + offset,
+        )
+        if (Number.isFinite(target) && target >= 0) {
           audio.currentTime = target
-        },
-      )
-    } catch {
-      // some browsers do not support seekforward/seekbackward
-    }
+        }
+      },
+    )
+    _setMediaSessionActionHandler(
+      'seekbackward',
+      (d) => {
+        const offset = d.seekOffset ?? 15
+        const target = Math.max(
+          0,
+          (audio.currentTime || 0) - offset,
+        )
+        audio.currentTime = target
+      },
+    )
   } catch {}
 }
 
@@ -902,6 +887,7 @@ export function PlayerProvider({
   >([])
   const playTrackSlideInjectRef = useRef<1 | -1 | null>(null)
   const playNextInFlightRef = useRef(false)
+  const mediaSessionSwitchHoldUntilRef = useRef(0)
   const [trackChangeSlide, setTrackChangeSlide] = useState<{
     bump: number
     dir: 0 | 1 | -1
@@ -916,6 +902,35 @@ export function PlayerProvider({
   const listenStartTimeRef = useRef(0)
   const restoredRef = useRef(false)
   const playerTimeUiLastRef = useRef(0)
+
+  const beginMediaSessionSwitchHold = (
+    audio: HTMLAudioElement,
+    nextTrack: Track,
+  ) => {
+    if (!('mediaSession' in navigator)) return
+    if (!track || track.id === nextTrack.id || audio.paused) return
+    mediaSessionSwitchHoldUntilRef.current =
+      Date.now() + MEDIA_SESSION_SWITCH_HOLD_MS
+    try {
+      navigator.mediaSession.playbackState = 'playing'
+    } catch {}
+  }
+
+  const isMediaSessionSwitchHeld = () =>
+    mediaSessionSwitchHoldUntilRef.current > Date.now()
+
+  const finishMediaSessionSwitch = (
+    nextTrack: Track,
+    audio: HTMLAudioElement,
+  ) => {
+    mediaSessionSwitchHoldUntilRef.current = 0
+    _updateMediaSession(
+      nextTrack,
+      audio,
+      () => playNext(),
+      () => playPrev(),
+    )
+  }
 
   const applyEqBands = useCallback(
     (
@@ -2024,6 +2039,7 @@ export function PlayerProvider({
     }
 
     const onPlay = () => {
+      mediaSessionSwitchHoldUntilRef.current = 0
       setIsPlaying(true)
       setCurrentTime(audio.currentTime)
       playerTimeUiLastRef.current = performance.now()
@@ -2058,7 +2074,9 @@ export function PlayerProvider({
       setCurrentTime(audio.currentTime)
       playerTimeUiLastRef.current = performance.now()
       if ('mediaSession' in navigator)
-        navigator.mediaSession.playbackState = 'paused'
+        navigator.mediaSession.playbackState = isMediaSessionSwitchHeld()
+          ? 'playing'
+          : 'paused'
       sendListenSignal()
     }
     const onEnded = () => {
@@ -2390,6 +2408,7 @@ export function PlayerProvider({
       })
       return
     }
+    beginMediaSessionSwitchHold(audio, newTrack)
     let prevForSlide: number | null = null
     setTrack((prev) => {
       prevForSlide = prev?.id ?? null
@@ -2530,12 +2549,7 @@ export function PlayerProvider({
         await startDirectPlayback(audio, cachedUrl)
         if (bail()) return
         void markCachePlayed(newTrack.id).catch(() => {})
-        _updateMediaSession(
-          newTrack,
-          audio,
-          () => playNext(),
-          () => playPrev(),
-        )
+        finishMediaSessionSwitch(newTrack, audio)
         return
       }
 
@@ -2598,12 +2612,7 @@ export function PlayerProvider({
         }
         if (bail()) return
 
-        _updateMediaSession(
-          newTrack,
-          audio,
-          () => playNext(),
-          () => playPrev(),
-        )
+        finishMediaSessionSwitch(newTrack, audio)
         return
       }
 
@@ -2621,7 +2630,7 @@ export function PlayerProvider({
         )
         await startDirectPlayback(audio, stream.url)
         if (bail()) return
-        _updateMediaSession(newTrack, audio, () => playNext(), () => playPrev())
+        finishMediaSessionSwitch(newTrack, audio)
         return
       }
 
@@ -2713,12 +2722,7 @@ export function PlayerProvider({
       }
       if (bail()) return
 
-      _updateMediaSession(
-        newTrack,
-        audio,
-        () => playNext(),
-        () => playPrev(),
-      )
+      finishMediaSessionSwitch(newTrack, audio)
 
       // Detect autoplay block on programmatic advance (radio /
       // ended / queue auto-advance): play() returned without

@@ -1,5 +1,19 @@
 # DotSound - TODO Tracker
 
+- [x] **Mobile media notification artwork and switch hold (2026-05-16)**
+  - Frontend: `MediaMetadata.artwork` теперь всегда получает реальную
+    обложку трека через cover proxy, а при отсутствии обложки — нейтральный
+    небрендированный placeholder (`media-session-placeholder-*`), чтобы
+    системная шторка не подставляла PWA/logo.
+  - Frontend: при переключении трека Media Session удерживает состояние
+    `playing` во время промежуточного `pause/src` события до старта нового
+    трека или таймаута, поэтому системная карточка не должна пропадать между
+    треками.
+  - Ограничение платформы: Web Media Session не поддерживает кастомные
+    системные actions `like`/`dislike`, поэтому кнопки лайка/дизлайка в
+    native-шторку не добавлялись нестандартной подменой.
+  - Verify: `npm run build`.
+
 - [~] **Compute offload Phase 2: dispatcher/reaper vertical slice (2026-05-16)**
   - Backend: добавлен `compute_job_dispatcher` с маршрутизацией через
     PrivateCore `compute_job_policy`; catalog sync, enrichment,
@@ -34,6 +48,10 @@
     Добавлен `COMPUTE_CLAIM_MIN_INTERVAL_SECONDS` для мягкого pacing claim,
     а result/fail/progress/heartbeat generic compute получили отдельные
     rate-limit buckets.
+  - ComputeWorker hotfix: worker-side 429 backoff теперь останавливает новые
+    ASR/generic claim на время backend rate-limit; compute in-flight lease cap
+    приведён к `WORKER_COMPUTE_CONCURRENCY_LIMIT`, чтобы worker не набирал
+    пачку быстрых jobs в ожидании per-type semaphore.
 
 - [x] **Playback buffering / fast seek overhaul (2026-05-16)**
   - Симптом: первое воспроизведение и переключение трека «висели» 20–30 c,
