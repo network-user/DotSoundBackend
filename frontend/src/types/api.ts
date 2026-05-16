@@ -1097,6 +1097,17 @@ export interface ImportExternalTrackInfo {
   duration_seconds: number | null
 }
 
+export interface ImportDiagnosticEntry {
+  provider: string
+  stage: string
+  method: string
+  url: string
+  status: number
+  elapsed_ms: number
+  ok: boolean
+  error?: string
+}
+
 export interface ImportJobResponse {
   id: number
   source: string
@@ -1111,6 +1122,7 @@ export interface ImportJobResponse {
     source_url?: string
     error_code?: string
     error_message?: string
+    diagnostics?: ImportDiagnosticEntry[]
     imported?: {
       title: string
       status: string

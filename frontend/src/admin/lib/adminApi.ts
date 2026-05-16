@@ -1763,6 +1763,33 @@ export const adminApi = {
       catalog_sync_updated_at: string | null
     }>(`/artists/${artistId}/catalog/overview`),
 
+  catalogStationProbe: (artistId: number) =>
+    adminFetch<{
+      artist_id: number
+      artist_name: string
+      soundcloud_user_id: number | null
+      station_status:
+        | 'ok'
+        | 'missing_soundcloud_user'
+        | 'not_available'
+        | 'error'
+      reason: string | null
+      station_soundcloud_album_id: number | null
+      station_title: string | null
+      fetched_track_count: number
+      importable_track_count: number
+      existing_release_id: number | null
+      existing_release_track_count: number | null
+      tracks: Array<{
+        ref: string | null
+        title: string | null
+        artist: string | null
+        permalink_url: string | null
+        importable: boolean
+        reject_reason: string | null
+      }>
+    }>(`/artists/${artistId}/catalog/station-probe`),
+
   catalogUploadAvatar: (artistId: number, file: File) => {
     const fd = new FormData()
     fd.append('file', file)

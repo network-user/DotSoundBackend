@@ -338,6 +338,23 @@ class AppSettings(BaseSettings):
     # with code ``scan_timeout`` so the UI can prompt a retry.
     scan_timeout_seconds: float = 120.0
 
+    # If a job stays ``scanning`` longer than this (e.g. Taskiq worker
+    # not consuming the queue), mark it failed so the UI does not spin
+    # forever. Set to ``0`` to disable.
+    import_external_scan_watchdog_seconds: float = 90.0
+
+    # When ``True`` we always run external scanning via
+    # ``asyncio.ensure_future`` inside the API process and skip the
+    # Taskiq broker entirely. Useful for dev where you do not run a
+    # separate worker — otherwise ``kiq()`` succeeds but nothing
+    # consumes the queue and the job hangs in ``scanning`` forever.
+    import_external_scan_inline: bool = False
+
+    # An ``ImportJob`` left in ``scanning``/``queued`` longer than
+    # this many seconds is treated as stale: it will not block new
+    # POST /import calls and will be evicted from the scan-URL cache.
+    import_external_stale_scan_seconds: float = 120.0
+
     # Public selector forwarded into PrivateCore to pick the
     # lyrics provider. Internals of each provider remain opaque
     # inside PrivateCore; only the selector value (e.g. "yandex",

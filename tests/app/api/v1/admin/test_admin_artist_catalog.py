@@ -49,6 +49,58 @@ async def test_admin_catalog_overview_404(
     assert r.status_code == 404
 
 
+async def test_admin_catalog_station_probe_reports_tracks(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 140002)
+    h = await admin_bearer_for_user(
+        client,
+        db_session,
+        user_id=admin["id"],
+    )
+    artist = Artist(
+        name="Probe Artist",
+        name_normalized="probe artist",
+        soundcloud_user_id=777001,
+    )
+    db_session.add(artist)
+    await db_session.commit()
+
+    mock_sc = AsyncMock()
+    mock_sc.fetch_expanded_artist_station_playlist.return_value = {
+        "id": -1000000000777001,
+        "title": "Probe station",
+        "tracks": [
+            {
+                "urn": "soundcloud:tracks:11",
+                "kind": "track",
+                "title": "Station Track",
+                "permalink_url": "https://soundcloud.com/a/b",
+                "user": {"username": "Other Artist"},
+                "streamable": True,
+            }
+        ],
+    }
+
+    with patch(
+        "app.services.admin_artist_catalog_service.SoundCloudService",
+        return_value=mock_sc,
+    ):
+        r = await client.get(
+            f"/api/v1/admin/artists/{artist.id}" "/catalog/station-probe",
+            headers=h,
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["station_status"] == "ok"
+    assert body["fetched_track_count"] == 1
+    assert body["importable_track_count"] == 1
+    assert body["tracks"][0]["ref"] == "soundcloud:tracks:11"
+    assert body["tracks"][0]["artist"] == "Other Artist"
+
+
 async def test_admin_list_artists_search(
     client: AsyncClient,
     db_session: AsyncSession,

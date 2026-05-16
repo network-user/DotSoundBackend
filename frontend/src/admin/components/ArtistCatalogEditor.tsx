@@ -29,6 +29,10 @@ type CatalogReleaseRow = {
   cover_key: string | null
 }
 
+type StationProbeResult = Awaited<
+  ReturnType<typeof adminApi.catalogStationProbe>
+>
+
 type WorkspaceTrackRow = {
   position: number
   track: Record<string, unknown>
@@ -122,11 +126,14 @@ export function ArtistCatalogEditor({
     useState(false)
   const [artistSettingsOpen, setArtistSettingsOpen] =
     useState(false)
+  const [stationProbe, setStationProbe] =
+    useState<StationProbeResult | null>(null)
   const [allTracksPage, setAllTracksPage] = useState(1)
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (open) setAllTracksPage(1)
+    setStationProbe(null)
   }, [artistId, open])
   const releaseCoverInputRef = useRef<HTMLInputElement>(null)
 
@@ -178,6 +185,11 @@ export function ArtistCatalogEditor({
   })
 
   const detail = releaseDetail.data
+
+  const stationProbeMut = useMutation({
+    mutationFn: () => adminApi.catalogStationProbe(artistId),
+    onSuccess: (data) => setStationProbe(data),
+  })
 
   useEffect(() => {
     if (!releaseDetail.data || selectedReleaseId === null) {
@@ -712,6 +724,17 @@ export function ArtistCatalogEditor({
     }
   }
 
+  async function onProbeStation() {
+    try {
+      await stationProbeMut.mutateAsync()
+    } catch (e) {
+      await showAlert(
+        (e as Error).message ||
+          t('admin.common.unknownError'),
+      )
+    }
+  }
+
   async function onSyncRelease(rid: number) {
     const ok = await stepUp.request('catalog.sync.run')
     if (!ok) return
@@ -990,6 +1013,90 @@ export function ArtistCatalogEditor({
             >
               {t('admin.artists.catalog.syncFull')}
             </MotionPress>
+            <MotionPress
+              variant="ghost"
+              disabled={stationProbeMut.isPending}
+              onClick={() => void onProbeStation()}
+            >
+              {stationProbeMut.isPending
+                ? t('admin.artists.catalog.probeStationLoading')
+                : t('admin.artists.catalog.probeStation')}
+            </MotionPress>
+            {stationProbe && (
+              <div
+                className="admin-catalog-station-probe"
+                data-state={stationProbe.station_status}
+              >
+                <div className="admin-catalog-station-probe__head">
+                  <span>
+                    {t(
+                      `admin.artists.catalog.stationProbeStatus.${stationProbe.station_status}`,
+                    )}
+                  </span>
+                  <span className="admin-mono">
+                    {stationProbe.station_soundcloud_album_id ??
+                      'no-station-id'}
+                  </span>
+                </div>
+                <div className="admin-auth-hint">
+                  {t('admin.artists.catalog.stationProbeCounts', {
+                    fetched: stationProbe.fetched_track_count,
+                    importable:
+                      stationProbe.importable_track_count,
+                    stored:
+                      stationProbe.existing_release_track_count ??
+                      0,
+                  })}
+                </div>
+                {stationProbe.reason && (
+                  <div className="admin-auth-hint">
+                    {t('admin.artists.catalog.stationProbeReason', {
+                      reason: stationProbe.reason,
+                    })}
+                  </div>
+                )}
+                {stationProbe.tracks.length === 0 ? (
+                  <div className="admin-auth-hint">
+                    {t('admin.artists.catalog.stationProbeEmpty')}
+                  </div>
+                ) : (
+                  <ul className="admin-catalog-station-probe__tracks">
+                    {stationProbe.tracks.map((tr, idx) => (
+                      <li key={`${tr.ref ?? 'track'}-${idx}`}>
+                        <span className="admin-catalog-station-probe__title">
+                          {tr.title || 'Untitled'}
+                        </span>
+                        {tr.artist && (
+                          <span className="admin-auth-hint">
+                            {tr.artist}
+                          </span>
+                        )}
+                        <span
+                          className={
+                            tr.importable
+                              ? 'admin-tag'
+                              : 'admin-tag admin-tag--warn'
+                          }
+                        >
+                          {tr.importable
+                            ? t(
+                                'admin.artists.catalog.stationProbeImportable',
+                              )
+                            : t(
+                                'admin.artists.catalog.stationProbeRejected',
+                                {
+                                  reason:
+                                    tr.reject_reason ??
+                                    'unknown',
+                                },
+                              )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </section>
         </details>
 

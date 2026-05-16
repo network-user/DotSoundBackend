@@ -52,15 +52,33 @@ async def scan_external_playlist_task(
             )
             return
 
+        await session.refresh(job)
+        if job.status != "scanning":
+            logger.info(
+                "external_scan_task_skipped_after_refresh",
+                job_id=job_id,
+                status=job.status,
+            )
+            return
+
         try:
             result = await scan_playlist_url(source, url)
         except ProviderError as exc:
             elapsed = round(time.monotonic() - t_start, 2)
+            await session.refresh(job)
+            if job.status != "scanning":
+                logger.info(
+                    "external_scan_task_abort_after_provider_error",
+                    job_id=job_id,
+                    status=job.status,
+                )
+                return
             job.status = "failed"
             job.tracks_data = {
                 "error_code": exc.code,
                 "error_message": exc.message,
                 "source_url": url,
+                "diagnostics": exc.diagnostics,
             }
             logger.info(
                 "external_scan_task_provider_error",
@@ -69,11 +87,20 @@ async def scan_external_playlist_task(
                 code=exc.code,
                 message=exc.message,
                 elapsed_s=elapsed,
+                diag_requests=len(exc.diagnostics),
             )
             await session.commit()
             return
         except Exception as exc:
             elapsed = round(time.monotonic() - t_start, 2)
+            await session.refresh(job)
+            if job.status != "scanning":
+                logger.info(
+                    "external_scan_task_abort_after_exception",
+                    job_id=job_id,
+                    status=job.status,
+                )
+                return
             job.status = "failed"
             job.tracks_data = {
                 "error_code": "provider_unavailable",
@@ -91,13 +118,23 @@ async def scan_external_playlist_task(
             return
 
         elapsed = round(time.monotonic() - t_start, 2)
+        await session.refresh(job)
+        if job.status != "scanning":
+            logger.info(
+                "external_scan_task_abort_success_path",
+                job_id=job_id,
+                status=job.status,
+            )
+            return
         tracks = result.get("tracks", [])
+        diagnostics = result.get("diagnostics", []) or []
         job.status = "ready"
         job.total_tracks = len(tracks)
         job.tracks_data = {
             "kind": result.get("kind"),
             "source_url": url,
             "tracks": tracks,
+            "diagnostics": diagnostics,
         }
         await session.commit()
 
@@ -107,4 +144,5 @@ async def scan_external_playlist_task(
             source=source,
             total=len(tracks),
             elapsed_s=elapsed,
+            diag_requests=len(diagnostics),
         )

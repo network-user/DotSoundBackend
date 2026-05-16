@@ -145,6 +145,18 @@ async def test_scan_external_worker_success(
     await session.flush()
     await session.refresh(job)
 
+    diagnostics = [
+        {
+            "provider": "yandex_music",
+            "stage": "yandex_album",
+            "method": "GET",
+            "url": "https://api.music.yandex.net/albums/1/with-tracks",
+            "status": 200,
+            "elapsed_ms": 31,
+            "ok": True,
+        }
+    ]
+
     await _run_worker_task(
         session,
         job.id,
@@ -156,6 +168,7 @@ async def test_scan_external_worker_success(
                 {"title": "A", "artist": "X"},
                 {"title": "B", "artist": "Y"},
             ],
+            "diagnostics": diagnostics,
         },
     )
 
@@ -165,6 +178,7 @@ async def test_scan_external_worker_success(
     assert job.tracks_data is not None
     assert len(job.tracks_data["tracks"]) == 2
     assert job.tracks_data["kind"] == "album"
+    assert job.tracks_data["diagnostics"] == diagnostics
 
 
 async def test_scan_external_worker_provider_error(
@@ -182,12 +196,29 @@ async def test_scan_external_worker_provider_error(
     await session.flush()
     await session.refresh(job)
 
+    err_diag = [
+        {
+            "provider": "yandex_music",
+            "stage": "yandex_playlist",
+            "method": "GET",
+            "url": "https://api.music.yandex.net/users/u/playlists/1?with-tracks=true",
+            "status": 403,
+            "elapsed_ms": 25,
+            "ok": False,
+            "error": "private",
+        }
+    ]
+
     await _run_worker_task(
         session,
         job.id,
         "yandex_music",
         url,
-        scan_side_effect=ProviderError("private", "playlist is private"),
+        scan_side_effect=ProviderError(
+            "private",
+            "playlist is private",
+            diagnostics=err_diag,
+        ),
     )
 
     await session.refresh(job)
@@ -196,6 +227,7 @@ async def test_scan_external_worker_provider_error(
     assert job.tracks_data["error_code"] == "private"
     assert job.tracks_data["error_message"] == "playlist is private"
     assert job.tracks_data["source_url"] == url
+    assert job.tracks_data["diagnostics"] == err_diag
 
 
 async def test_scan_external_worker_unknown_exception(

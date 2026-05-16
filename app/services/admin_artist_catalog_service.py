@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import contextlib
 from datetime import UTC, datetime
 
 import structlog
 from dotsound_private_core.services.catalog_sync_policy import (
     catalog_sync_enqueue_cooldown_remaining_seconds,
+)
+from dotsound_private_core.services.sc_track_policy import (
+    evaluate_soundcloud_track_importability,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +18,8 @@ from app.repositories.artist import ArtistRepository
 from app.repositories.artist_catalog import ArtistCatalogRepository
 from app.schemas.admin_artist_catalog import (
     AdminArtistCatalogOverviewResponse,
+    AdminArtistStationProbeResponse,
+    AdminArtistStationProbeTrack,
     AdminArtistSoundcloudPatch,
     AdminCatalogReleaseCreate,
     AdminCatalogReleasePatch,
@@ -26,7 +32,12 @@ from app.services.admin_service import AdminService
 from app.services.artist_catalog_read_service import (
     ArtistCatalogReadService,
 )
-from app.services.soundcloud_service import SoundCloudService
+from app.services.soundcloud_service import (
+    SoundCloudService,
+    SoundCloudStationNotAvailable,
+    soundcloud_track_external_id,
+    synthetic_soundcloud_id_for_artist_station,
+)
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -138,6 +149,117 @@ class AdminArtistCatalogService:
             catalog_sync_error=cs_err,
             catalog_sync_detail=cs_detail,
             catalog_sync_updated_at=cs_upd,
+        )
+
+    async def probe_station(
+        self,
+        artist_id: int,
+    ) -> AdminArtistStationProbeResponse | None:
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None:
+            return None
+        if artist.soundcloud_user_id is None:
+            return AdminArtistStationProbeResponse(
+                artist_id=artist.id,
+                artist_name=artist.name,
+                soundcloud_user_id=None,
+                station_status="missing_soundcloud_user",
+                reason="artist has no soundcloud_user_id",
+            )
+
+        sc_uid = int(artist.soundcloud_user_id)
+        station_id = synthetic_soundcloud_id_for_artist_station(sc_uid)
+        existing = await self._catalog.get_by_artist_and_sc_album(
+            artist.id,
+            station_id,
+        )
+        existing_track_count = None
+        if existing is not None:
+            existing_track_count = len(
+                await self._catalog.get_release_tracks_ordered(existing.id)
+            )
+
+        sc = SoundCloudService(settings.sc_client_id, self._session)
+        try:
+            station = await sc.fetch_expanded_artist_station_playlist(sc_uid)
+        except SoundCloudStationNotAvailable as exc:
+            return AdminArtistStationProbeResponse(
+                artist_id=artist.id,
+                artist_name=artist.name,
+                soundcloud_user_id=sc_uid,
+                station_status="not_available",
+                reason=exc.reason,
+                station_soundcloud_album_id=station_id,
+                existing_release_id=existing.id if existing else None,
+                existing_release_track_count=existing_track_count,
+            )
+        except Exception as exc:
+            return AdminArtistStationProbeResponse(
+                artist_id=artist.id,
+                artist_name=artist.name,
+                soundcloud_user_id=sc_uid,
+                station_status="error",
+                reason=str(exc),
+                station_soundcloud_album_id=station_id,
+                existing_release_id=existing.id if existing else None,
+                existing_release_track_count=existing_track_count,
+            )
+
+        raw_tracks = station.get("tracks")
+        tracks = raw_tracks if isinstance(raw_tracks, list) else []
+        out_tracks: list[AdminArtistStationProbeTrack] = []
+        importable_count = 0
+        for raw in tracks:
+            if not isinstance(raw, dict):
+                continue
+            decision = evaluate_soundcloud_track_importability(raw)
+            if decision.allowed:
+                importable_count += 1
+            user = raw.get("user")
+            user_name = None
+            if isinstance(user, dict):
+                user_name = user.get("username") or user.get("full_name")
+            ref_raw = (
+                raw.get("urn")
+                or raw.get("id")
+                or raw.get("uri")
+                or soundcloud_track_external_id(raw)
+            )
+            out_tracks.append(
+                AdminArtistStationProbeTrack(
+                    ref=str(ref_raw) if ref_raw is not None else None,
+                    title=(
+                        str(raw["title"])
+                        if isinstance(raw.get("title"), str)
+                        else None
+                    ),
+                    artist=str(user_name) if user_name else None,
+                    permalink_url=(
+                        str(raw["permalink_url"])
+                        if isinstance(raw.get("permalink_url"), str)
+                        else None
+                    ),
+                    importable=decision.allowed,
+                    reject_reason=decision.reason,
+                )
+            )
+
+        return AdminArtistStationProbeResponse(
+            artist_id=artist.id,
+            artist_name=artist.name,
+            soundcloud_user_id=sc_uid,
+            station_status="ok",
+            station_soundcloud_album_id=station_id,
+            station_title=(
+                str(station["title"])
+                if isinstance(station.get("title"), str)
+                else None
+            ),
+            fetched_track_count=len(out_tracks),
+            importable_track_count=importable_count,
+            existing_release_id=existing.id if existing else None,
+            existing_release_track_count=existing_track_count,
+            tracks=out_tracks,
         )
 
     async def release_detail(
@@ -613,9 +735,7 @@ class AdminArtistCatalogService:
             raise ValueError("soundcloud_user_not_found")
         sc_user_id, sc_permalink = result
 
-        existing = await self._artists.find_by_soundcloud_user_id(
-            sc_user_id
-        )
+        existing = await self._artists.find_by_soundcloud_user_id(sc_user_id)
         if existing is not None:
             if not existing.catalog_sync_enabled:
                 await self._artists.set_catalog_sync_enabled(
@@ -635,13 +755,9 @@ class AdminArtistCatalogService:
 
         sc_user_data = await sc.fetch_soundcloud_user_by_id(sc_user_id)
         display_name: str = sc_permalink
-        if sc_user_data and isinstance(
-            sc_user_data.get("username"), str
-        ):
+        if sc_user_data and isinstance(sc_user_data.get("username"), str):
             display_name = sc_user_data["username"]
-        elif sc_user_data and isinstance(
-            sc_user_data.get("full_name"), str
-        ):
+        elif sc_user_data and isinstance(sc_user_data.get("full_name"), str):
             display_name = sc_user_data["full_name"]
 
         from dotsound_private_core.services.artist_normalizer import (
@@ -681,13 +797,12 @@ class AdminArtistCatalogService:
         )
         await self._session.commit()
 
-        try:
+        with contextlib.suppress(Exception):
             from app.services.search_index_notify import (
                 schedule_reindex_artist,
             )
+
             await schedule_reindex_artist(artist.id)
-        except Exception:
-            pass
 
         job_id = await self._enqueue_full_sync_for_artist(artist.id)
         return AdminImportByScUrlResponse(
@@ -708,15 +823,13 @@ class AdminArtistCatalogService:
         )
         from app.services.background_jobs import IdempotencySkipped, enqueue
 
-        try:
+        with contextlib.suppress(Exception):
             await acsp.set_running(
                 artist_id,
                 mode="full",
                 soundcloud_album_id=None,
                 detail={"phase": "queued", "source": "admin_import"},
             )
-        except Exception:
-            pass
         try:
             return await enqueue(
                 sync_artist_catalog_task,

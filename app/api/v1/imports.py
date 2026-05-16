@@ -207,7 +207,7 @@ async def scan_telegram_profile(
         )
     service = ImportService(session)
     job = await service.scan_telegram_profile(current_user.id)
-    return ImportJobResponse.model_validate(job)
+    return ImportJobResponse.from_job(job)
 
 
 @router.post(
@@ -235,7 +235,7 @@ async def scan_yandex_music(
         source="yandex_music",
         url=body.url,
     )
-    return ImportJobResponse.model_validate(job)
+    return ImportJobResponse.from_job(job)
 
 
 @router.post(
@@ -265,7 +265,7 @@ async def scan_vk_music(
         source="vk_music",
         url=norm,
     )
-    return ImportJobResponse.model_validate(job)
+    return ImportJobResponse.from_job(job)
 
 
 @router.post(
@@ -295,7 +295,7 @@ async def scan_soundcloud_playlist(
         source="soundcloud_playlist",
         url=normalized,
     )
-    return ImportJobResponse.model_validate(job)
+    return ImportJobResponse.from_job(job)
 
 
 @router.post(
@@ -323,7 +323,7 @@ async def scan_spotify(
         source="spotify",
         url=body.url.strip(),
     )
-    return ImportJobResponse.model_validate(job)
+    return ImportJobResponse.from_job(job)
 
 
 @router.post(
@@ -342,7 +342,7 @@ async def start_import(
     job = await service.start_import(
         job_id, current_user.id, body.track_indices
     )
-    return ImportJobResponse.model_validate(job)
+    return ImportJobResponse.from_job(job)
 
 
 @router.get(
@@ -428,7 +428,7 @@ async def cancel_import(
 ) -> ImportJobResponse:
     service = ImportService(session)
     job = await service.cancel_job(job_id, current_user.id)
-    return ImportJobResponse.model_validate(job)
+    return ImportJobResponse.from_job(job)
 
 
 async def _scan_account(
@@ -474,7 +474,7 @@ async def _scan_account(
         source=resolved_source,
         account=account,
     )
-    return ImportJobResponse.model_validate(job)
+    return ImportJobResponse.from_job(job)
 
 
 @router.post(

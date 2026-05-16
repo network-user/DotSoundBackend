@@ -148,6 +148,35 @@ class AdminArtistCatalogSyncEnabledResponse(BaseModel):
     catalog_sync_enabled: bool
 
 
+class AdminArtistStationProbeTrack(BaseModel):
+    ref: str | None = None
+    title: str | None = None
+    artist: str | None = None
+    permalink_url: str | None = None
+    importable: bool
+    reject_reason: str | None = None
+
+
+class AdminArtistStationProbeResponse(BaseModel):
+    artist_id: int
+    artist_name: str
+    soundcloud_user_id: int | None = None
+    station_status: Literal[
+        "ok",
+        "missing_soundcloud_user",
+        "not_available",
+        "error",
+    ]
+    reason: str | None = None
+    station_soundcloud_album_id: int | None = None
+    station_title: str | None = None
+    fetched_track_count: int = 0
+    importable_track_count: int = 0
+    existing_release_id: int | None = None
+    existing_release_track_count: int | None = None
+    tracks: list[AdminArtistStationProbeTrack] = Field(default_factory=list)
+
+
 class AdminImportByScUrlRequest(BaseModel):
     url: str = Field(..., min_length=3, max_length=1024)
 

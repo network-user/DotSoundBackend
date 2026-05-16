@@ -20,6 +20,28 @@
     `"ready"` / `"failed"`. Поддержка восстановления сессии (getActiveImport возвращает scanning-job).
   - Тесты: полностью переписаны YM-тесты в PrivateCore под новый API; добавлены
     новые тесты воркера (dispatch + success/provider_error/unknown_exc) в Backend.
+  - Дополнительно (зависание «Сканируем плейлист…»): fallback `asyncio` если `kiq()`
+    падает; кнопка отмены на фазе scanning; `IMPORT_EXTERNAL_SCAN_WATCHDOG_SECONDS`
+    (по умолчанию 90 с) помечает job как `failed` с `scan_stalled`, если так и
+    остался в `scanning`; воркер делает `session.refresh` перед записью результата,
+    чтобы не перетирать отмену; в UI тексты для `scan_timeout` / `scan_stalled`.
+  - Дальнейшая отвязка от зависшего job: `IMPORT_EXTERNAL_STALE_SCAN_SECONDS` (120 с)
+    — кэш `scan_url` и `_get_active_job` больше не возвращают «застрявший» job;
+    `IMPORT_EXTERNAL_SCAN_INLINE=true` для dev без отдельного Taskiq-воркера
+    (запуск задачи через `asyncio.ensure_future` в API-процессе).
+  - **Диагностика провайдера в ответе юзеру (Я.Музыка)**:
+    `PlaylistScanResult.diagnostics: tuple[dict, ...]` — список запросов
+    к `api.music.yandex.net` (URL, HTTP status, elapsed_ms, snippet тела
+    ошибки). `_ym_api_get` принимает опциональный accumulator и пишет
+    в него запись на каждый вызов; `_scan_yandex_music_album/playlist/
+    track_fallback` прокидывают общий accumulator. Backend
+    `external_providers.scan_playlist_url` возвращает `"diagnostics"` в
+    результирующем dict, `ProviderError` несёт их же. Worker сохраняет
+    `tracks_data["diagnostics"]` и для `ready`, и для `failed`-job.
+    `ImportJobResponse.from_job` оставляет диагностику в ответе всегда
+    (отрезает только списки треков для крупных плейлистов). UI:
+    `ImportDiagnosticsPanel` показывает список запросов с цветным
+    бейджем статуса на экранах `scanning`, `select` и при ошибке.
 
 - [x] **Mini App buffering regression + radio mode reset bug (2026-05-16)**
   - Регрессия после `3120c5a fix(playback): stabilize SoundCloud and progressive

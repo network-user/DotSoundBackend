@@ -41,12 +41,20 @@ class ProviderError(Exception):
 
     ``code`` is one of ``not_found``, ``private``, ``invalid_url``,
     ``provider_unavailable`` and is safe to forward to the client so
-    the UI can render a localized message.
+    the UI can render a localized message. ``diagnostics`` is a list
+    of per-request records (URL, HTTP status, elapsed_ms, snippet)
+    that the UI surfaces to the user for debugging.
     """
 
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        diagnostics: list[dict[str, Any]] | None = None,
+    ) -> None:
         self.code = code
         self.message = message
+        self.diagnostics: list[dict[str, Any]] = list(diagnostics or [])
         super().__init__(f"{code}: {message}")
 
 
@@ -120,6 +128,8 @@ async def scan_playlist_url(source: str, url: str) -> dict[str, Any]:
 
     elapsed = round(time.monotonic() - t_start, 2)
 
+    diagnostics = [dict(d) for d in (result.diagnostics or ())]
+
     if result.status == "ok":
         logger.info(
             "scan_playlist_url_ok",
@@ -128,6 +138,7 @@ async def scan_playlist_url(source: str, url: str) -> dict[str, Any]:
             kind=result.kind,
             tracks=len(result.tracks),
             elapsed_s=elapsed,
+            diag_requests=len(diagnostics),
         )
         return {
             "kind": result.kind,
@@ -140,6 +151,7 @@ async def scan_playlist_url(source: str, url: str) -> dict[str, Any]:
                 }
                 for t in result.tracks
             ],
+            "diagnostics": diagnostics,
         }
 
     code = (
@@ -155,8 +167,10 @@ async def scan_playlist_url(source: str, url: str) -> dict[str, Any]:
         code=code,
         message=result.error_message,
         elapsed_s=elapsed,
+        diag_requests=len(diagnostics),
     )
     raise ProviderError(
         code=code,
         message=result.error_message or code,
+        diagnostics=diagnostics,
     )

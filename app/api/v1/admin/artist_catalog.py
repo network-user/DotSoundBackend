@@ -37,6 +37,7 @@ from app.schemas.admin_artist_catalog import (
     AdminArtistBulkEnrichRequest,
     AdminArtistBulkEnrichResponse,
     AdminArtistCatalogOverviewResponse,
+    AdminArtistStationProbeResponse,
     AdminArtistCatalogSyncEnabledRequest,
     AdminArtistCatalogSyncEnabledResponse,
     AdminArtistListItemResponse,
@@ -385,6 +386,27 @@ async def admin_catalog_overview(
 ) -> AdminArtistCatalogOverviewResponse:
     svc = AdminArtistCatalogService(session)
     out = await svc.overview(artist_id)
+    if out is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Artist not found",
+        )
+    return out
+
+
+@router.get(
+    "/{artist_id}/catalog/station-probe",
+    response_model=AdminArtistStationProbeResponse,
+)
+@limiter.limit("30/minute")
+async def admin_catalog_station_probe(
+    request: Request,
+    artist_id: int,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminArtistStationProbeResponse:
+    svc = AdminArtistCatalogService(session)
+    out = await svc.probe_station(artist_id)
     if out is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

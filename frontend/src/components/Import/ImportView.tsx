@@ -21,6 +21,7 @@ import { SpotifyUrlModal } from './SpotifyUrlModal'
 import { VkMusicUrlModal } from './VkMusicUrlModal'
 import { YandexMusicUrlModal } from './YandexMusicUrlModal'
 import { PlatformImportMethodModal } from './PlatformImportMethodModal'
+import { ImportDiagnosticsPanel } from './ImportDiagnosticsPanel'
 
 import '@/styles/redesign-upload.css'
 
@@ -183,6 +184,12 @@ export function ImportView({
       }
       if (code === 'invalid_url') {
         return t('import.listBadUrl')
+      }
+      if (code === 'scan_timeout') {
+        return t('import.scanTimeout')
+      }
+      if (code === 'scan_stalled') {
+        return t('import.scanStalled')
       }
       return t('import.listGeneric')
     },
@@ -580,6 +587,13 @@ export function ImportView({
         <div className="form-error" style={{ margin: '16px' }}>{errorState}</div>
       )}
 
+      {errorState && (
+        <ImportDiagnosticsPanel
+          entries={job?.tracks_data?.diagnostics}
+          defaultOpen={true}
+        />
+      )}
+
       {phase === 'pick' && (
         <ImportSourcePicker onSelect={handleSourceSelect} />
       )}
@@ -605,6 +619,10 @@ export function ImportView({
           >
             {cancelling ? t('import.cancelling') : t('playlists.cancel')}
           </MotionPress>
+          <ImportDiagnosticsPanel
+            entries={job?.tracks_data?.diagnostics}
+            defaultOpen={false}
+          />
         </div>
       )}
 
@@ -620,6 +638,11 @@ export function ImportView({
               {t('import.selectHint')}
             </span>
           </div>
+
+          <ImportDiagnosticsPanel
+            entries={job?.tracks_data?.diagnostics}
+            defaultOpen={false}
+          />
 
           <div className="import-select-actions">
             <MotionPress

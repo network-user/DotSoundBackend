@@ -216,12 +216,59 @@ async def _maybe_enqueue_audio_cache(track_id: int) -> None:
 _SC_STATION_SYNTHETIC_ID_OFFSET = 10**15
 
 _SC_TRACKS_IDS_BATCH_SIZE = 50
+_SC_TRACK_URN_PREFIX = "soundcloud:tracks:"
 
 
 def synthetic_soundcloud_id_for_artist_station(
     soundcloud_user_id: int,
 ) -> int:
     return -(_SC_STATION_SYNTHETIC_ID_OFFSET + int(soundcloud_user_id))
+
+
+def extract_soundcloud_track_ref(value: object) -> int | str | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    if raw.startswith(_SC_TRACK_URN_PREFIX):
+        return raw
+    if raw.isdecimal():
+        return int(raw)
+    marker = "/tracks/"
+    if marker in raw:
+        tail = raw.split(marker, 1)[-1].split("?", 1)[0].strip("/")
+        if tail.startswith(_SC_TRACK_URN_PREFIX):
+            return tail
+        if tail.isdecimal():
+            return int(tail)
+    return None
+
+
+def extract_soundcloud_track_ref_from_payload(
+    track: dict[str, Any],
+) -> int | str | None:
+    for key in ("urn", "id", "uri"):
+        ref = extract_soundcloud_track_ref(track.get(key))
+        if ref is not None:
+            return ref
+    return None
+
+
+def soundcloud_track_external_id(track: dict[str, Any]) -> str | None:
+    for key in ("id", "urn", "uri"):
+        ref = extract_soundcloud_track_ref(track.get(key))
+        if ref is None:
+            continue
+        if isinstance(ref, int):
+            return str(ref)
+        tail = ref.removeprefix(_SC_TRACK_URN_PREFIX)
+        return tail if tail else ref[:64]
+    return None
 
 
 def normalize_soundcloud_permalink(
@@ -1141,9 +1188,7 @@ class SoundCloudService:
                 ):
                     for _auth_attempt in range(2):
                         if params is not None:
-                            r = await client.get(
-                                next_url, params=params
-                            )
+                            r = await client.get(next_url, params=params)
                             params = None
                         else:
                             r = await client.get(next_url)
@@ -1249,11 +1294,11 @@ class SoundCloudService:
     def _track_is_stub(track: dict[str, Any]) -> bool:
         if track.get("permalink_url"):
             return False
-        return track.get("id") is not None
+        return extract_soundcloud_track_ref_from_payload(track) is not None
 
-    async def fetch_track_by_id(
+    async def fetch_track_by_ref(
         self,
-        soundcloud_track_id: int,
+        soundcloud_track_ref: int | str,
     ) -> dict[str, Any]:
         if not self._client_id:
             raise HTTPException(
@@ -1271,7 +1316,7 @@ class SoundCloudService:
             ):
                 for _auth_attempt in range(2):
                     r = await client.get(
-                        f"{_SC_API_BASE}/tracks/{soundcloud_track_id}",
+                        f"{_SC_API_BASE}/tracks/{soundcloud_track_ref}",
                         params={"client_id": self._client_id},
                     )
                     if r.status_code == 401 and _auth_attempt == 0:
@@ -1297,6 +1342,12 @@ class SoundCloudService:
             )
         return data
 
+    async def fetch_track_by_id(
+        self,
+        soundcloud_track_id: int,
+    ) -> dict[str, Any]:
+        return await self.fetch_track_by_ref(soundcloud_track_id)
+
     async def expand_playlist_stub_tracks(
         self,
         playlist: dict[str, Any],
@@ -1310,30 +1361,31 @@ class SoundCloudService:
                 out.append(item)
                 continue
             if self._track_is_stub(item):
-                tid = item.get("id")
-                if tid is None:
+                ref = extract_soundcloud_track_ref_from_payload(item)
+                if ref is None:
                     out.append(item)
                     continue
-                full = await self.fetch_track_by_id(int(tid))
+                full = await self.fetch_track_by_ref(ref)
                 out.append(full)
             else:
                 out.append(item)
         return {**playlist, "tracks": out}
 
-    async def fetch_tracks_by_ids_bulk(
+    async def _fetch_tracks_by_query_param_bulk(
         self,
-        track_ids: list[int],
+        param_name: str,
+        track_refs: list[int | str],
     ) -> list[dict[str, Any]]:
         if not self._client_id:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="SoundCloud search is not configured",
             )
-        if not track_ids:
+        if not track_refs:
             return []
         out: list[dict[str, Any]] = []
-        for start in range(0, len(track_ids), _SC_TRACKS_IDS_BATCH_SIZE):
-            chunk = track_ids[start : start + _SC_TRACKS_IDS_BATCH_SIZE]
+        for start in range(0, len(track_refs), _SC_TRACKS_IDS_BATCH_SIZE):
+            chunk = track_refs[start : start + _SC_TRACKS_IDS_BATCH_SIZE]
             ids_param = ",".join(str(i) for i in chunk)
             try:
                 async with (
@@ -1348,7 +1400,7 @@ class SoundCloudService:
                         r = await client.get(
                             f"{_SC_API_BASE}/tracks",
                             params={
-                                "ids": ids_param,
+                                param_name: ids_param,
                                 "client_id": self._client_id,
                             },
                         )
@@ -1375,6 +1427,62 @@ class SoundCloudService:
                     detail=msg,
                 )
             out.extend(t for t in payload if isinstance(t, dict))
+        return out
+
+    async def fetch_tracks_by_ids_bulk(
+        self,
+        track_ids: list[int],
+    ) -> list[dict[str, Any]]:
+        return await self._fetch_tracks_by_query_param_bulk(
+            "ids",
+            track_ids,
+        )
+
+    async def fetch_tracks_by_urns_bulk(
+        self,
+        track_urns: list[str],
+    ) -> list[dict[str, Any]]:
+        return await self._fetch_tracks_by_query_param_bulk(
+            "urns",
+            track_urns,
+        )
+
+    async def fetch_tracks_by_refs_bulk(
+        self,
+        track_refs: list[int | str],
+    ) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
+        pending: list[int | str] = []
+        pending_param: str | None = None
+
+        async def flush_pending() -> None:
+            nonlocal pending, pending_param
+            if pending_param is None or not pending:
+                return
+            out.extend(
+                await self._fetch_tracks_by_query_param_bulk(
+                    pending_param,
+                    pending,
+                )
+            )
+            pending = []
+            pending_param = None
+
+        for ref in track_refs:
+            param = (
+                "urns"
+                if isinstance(ref, str)
+                and ref.startswith(_SC_TRACK_URN_PREFIX)
+                else "ids"
+            )
+            if pending_param is not None and (
+                pending_param != param
+                or len(pending) >= _SC_TRACKS_IDS_BATCH_SIZE
+            ):
+                await flush_pending()
+            pending_param = param
+            pending.append(ref)
+        await flush_pending()
         return out
 
     async def fetch_expanded_artist_station_playlist(
@@ -1439,14 +1547,20 @@ class SoundCloudService:
                 "missing_tracks_field",
             )
 
-        tids: list[int] = []
+        track_refs: list[int | str] = []
         for item in raw_tracks:
             if not isinstance(item, dict):
                 continue
-            tid = item.get("id")
-            if tid is not None:
-                tids.append(int(tid))
-        full = await self.fetch_tracks_by_ids_bulk(tids)
+            ref = extract_soundcloud_track_ref_from_payload(item)
+            if ref is not None:
+                track_refs.append(ref)
+        if raw_tracks and not track_refs:
+            logger.warning(
+                "sc_artist_station_track_refs_missing",
+                soundcloud_user_id=soundcloud_user_id,
+                raw_track_count=len(raw_tracks),
+            )
+        full = await self.fetch_tracks_by_refs_bulk(track_refs)
         synthetic = synthetic_soundcloud_id_for_artist_station(
             soundcloud_user_id,
         )
@@ -1996,7 +2110,7 @@ class SoundCloudService:
         duration_ms: int | None = sc_data.get("duration")
         duration_sec = duration_ms // 1000 if duration_ms else None
 
-        sc_id = sc_data.get("id")
+        sc_external_id = soundcloud_track_external_id(sc_data)
         new_values = {
             # SC_PLAYBACK_MODE=reference — аварийный режим (см.
             # `app/config.py`): новые SC-треки помечаются как
@@ -2010,7 +2124,7 @@ class SoundCloudService:
             "genre": sc_data.get("genre") or None,
             "description": censor_text(sc_data.get("description") or "")
             or None,
-            "external_id": str(sc_id) if sc_id else None,
+            "external_id": sc_external_id,
             "imported_from": "soundcloud",
             "source": "soundcloud",
             "catalog_type": "external_reference",
@@ -2025,7 +2139,7 @@ class SoundCloudService:
             ),
             "source_platform": "soundcloud",
             "sc_url": sc_url or None,
-            "sc_uri": sc_data.get("uri"),
+            "sc_uri": sc_data.get("uri") or sc_data.get("urn"),
             "source_url": sc_url or None,
             "canonical_source_url": sc_url or None,
             "source_name": "SoundCloud",

@@ -17,8 +17,10 @@ from app.services.soundcloud_service import (
     SoundCloudRateLimitError,
     SoundCloudService,
     SoundCloudStationNotAvailable,
+    extract_soundcloud_track_ref,
     extract_soundcloud_profile_permalink_from_url,
     normalize_soundcloud_permalink,
+    soundcloud_track_external_id,
     synthetic_soundcloud_id_for_artist_station,
 )
 
@@ -1500,6 +1502,14 @@ def test_synthetic_soundcloud_id_for_artist_station() -> None:
     assert sid == -(10**15 + uid)
 
 
+def test_soundcloud_track_ref_helpers_accept_urn() -> None:
+    urn = "soundcloud:tracks:1234567890"
+
+    assert extract_soundcloud_track_ref(urn) == urn
+    assert soundcloud_track_external_id({"urn": urn}) == "1234567890"
+    assert soundcloud_track_external_id({"uri": urn}) == "1234567890"
+
+
 @patch(f"{_MOD}.httpx.AsyncClient")
 async def test_fetch_tracks_by_ids_bulk_batches(
     mock_client_cls: AsyncMock,
@@ -1534,6 +1544,35 @@ async def test_fetch_tracks_by_ids_bulk_batches(
 
     assert len(out) == 51
     assert mock_client.get.await_count == 2
+
+
+@patch(f"{_MOD}.httpx.AsyncClient")
+async def test_fetch_tracks_by_refs_bulk_uses_urns_param(
+    mock_client_cls: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    response = MagicMock()
+    response.status_code = 200
+    response.raise_for_status = MagicMock()
+    response.json.return_value = [
+        {"urn": "soundcloud:tracks:11", "title": "A"},
+        {"urn": "soundcloud:tracks:12", "title": "B"},
+    ]
+    mock_client = AsyncMock()
+    mock_client.get = AsyncMock(return_value=response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client_cls.return_value = mock_client
+
+    svc = SoundCloudService("cid", session)
+    out = await svc.fetch_tracks_by_refs_bulk(
+        ["soundcloud:tracks:11", "soundcloud:tracks:12"],
+    )
+
+    assert len(out) == 2
+    params = mock_client.get.await_args.kwargs["params"]
+    assert params["urns"] == "soundcloud:tracks:11,soundcloud:tracks:12"
+    assert "ids" not in params
 
 
 @patch.object(
@@ -1574,6 +1613,53 @@ async def test_fetch_expanded_artist_station_playlist(
     called_url = mock_resolve.await_args[0][0]
     assert "artist-stations:7" in called_url
     mock_bulk.assert_awaited_once_with([11, 12])
+
+
+@patch.object(
+    SoundCloudService,
+    "resolve_url",
+    new_callable=AsyncMock,
+)
+@patch.object(
+    SoundCloudService,
+    "fetch_tracks_by_refs_bulk",
+    new_callable=AsyncMock,
+)
+async def test_fetch_expanded_artist_station_playlist_uses_track_urns(
+    mock_bulk: AsyncMock,
+    mock_resolve: AsyncMock,
+    session: AsyncSession,
+) -> None:
+    mock_resolve.return_value = {
+        "kind": "system-playlist",
+        "id": "soundcloud:system-playlists:artist-stations:7",
+        "title": "Artist",
+        "tracks": [
+            {"urn": "soundcloud:tracks:11", "kind": "track"},
+            {"uri": "soundcloud:tracks:12", "kind": "track"},
+        ],
+    }
+    mock_bulk.return_value = [
+        {
+            "urn": "soundcloud:tracks:11",
+            "title": "A",
+            "permalink_url": "https://sc/a",
+        },
+        {
+            "urn": "soundcloud:tracks:12",
+            "title": "B",
+            "permalink_url": "https://sc/b",
+        },
+    ]
+
+    svc = SoundCloudService("cid", session)
+    pl = await svc.fetch_expanded_artist_station_playlist(7)
+
+    assert pl["id"] == synthetic_soundcloud_id_for_artist_station(7)
+    assert len(pl["tracks"]) == 2
+    mock_bulk.assert_awaited_once_with(
+        ["soundcloud:tracks:11", "soundcloud:tracks:12"]
+    )
 
 
 @patch.object(

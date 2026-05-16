@@ -632,6 +632,7 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
         genreMixes,
         fallbackTracks,
       )
+      navigate('/radio')
       if (!seed) {
         showIsland({
           kind: 'toast',
@@ -643,7 +644,6 @@ export function HomeView({ onOpenArtist }: HomeViewProps) {
       try {
         await startRadio(seed)
         trackActivationEvent(activation)
-        navigate('/radio')
       } catch (e) {
         showIsland({
           kind: 'error',
