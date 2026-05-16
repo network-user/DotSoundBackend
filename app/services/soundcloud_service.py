@@ -81,6 +81,32 @@ class SoundCloudRateLimitError(Exception):
         self.retry_after = retry_after
 
 
+class SoundCloudTrackUnavailable(Exception):
+    """Raised when SC has permanently lost a track (404 / 410 / dead cache).
+
+    Distinguished from rate-limits / network errors so that catalog-sync
+    workers can mark the track as ``deleted`` and skip future retries
+    instead of dead-lettering the whole job. The associated track ref
+    is also marked in :mod:`app.services.sc_dead_track_cache` so every
+    subsequent call short-circuits without spending a Tor slot.
+    """
+
+    def __init__(
+        self,
+        track_ref: int | str,
+        *,
+        upstream_status: int = 0,
+        reason: str = "",
+    ) -> None:
+        super().__init__(
+            f"SC track {track_ref} unavailable "
+            f"(http={upstream_status} reason={reason or 'dead'})"
+        )
+        self.track_ref = track_ref
+        self.upstream_status = upstream_status
+        self.reason = reason or "dead"
+
+
 class _SCAllTranscodings404(Exception):
     def __init__(
         self,
@@ -344,6 +370,102 @@ class SoundCloudService:
         from app.services.sc_client_id_manager import on_auth_failure
 
         await on_auth_failure()
+
+    async def _anti_block_get(
+        self,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        sticky_key: str | None = None,
+        timeout_s: float = 20.0,
+    ) -> dict[str, Any] | list[Any] | None:
+        """Make a SoundCloud GET via the OutboundClient anti-block stack.
+
+        Returns the parsed JSON body. Raises:
+
+        * :class:`SoundCloudTrackUnavailable` -- 404/410 on a track URL
+          or a hit on the dead-track cache; the caller should mark the
+          row as deleted and stop scheduling more attempts.
+        * :class:`SoundCloudRateLimitError` -- 429 / 503 after the
+          adapter's internal retries are exhausted.
+        * :class:`HTTPException` -- 401 (auth burned past refresh) or
+          unexpected upstream classifications.
+
+        Use this from per-track / per-artist hot paths where the legacy
+        ``_sc_client`` + ``soundcloud_slot`` pair has been the source
+        of 403 / semaphore-timeout dead-letters. Other endpoints still
+        on the legacy client keep working unchanged.
+        """
+        from app.services.sc_browser_session import (
+            ScErrorKind,
+            sc_get_with_anti_block,
+        )
+
+        outcome = await sc_get_with_anti_block(
+            url,
+            params=params,
+            timeout_s=timeout_s,
+            sticky_key=sticky_key,
+        )
+        resp = outcome.response
+        if outcome.error_kind is ScErrorKind.OK and resp is not None:
+            try:
+                return resp.json()
+            except (ValueError, TypeError) as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Unexpected SoundCloud response payload",
+                ) from exc
+        if outcome.error_kind is ScErrorKind.DEAD_TRACK:
+            track_ref = self._extract_track_ref_from_url(url)
+            raise SoundCloudTrackUnavailable(
+                track_ref=track_ref or url,
+                upstream_status=(resp.status_code if resp else 410),
+                reason="provider_404_or_410",
+            )
+        if outcome.error_kind is ScErrorKind.AUTH_BURNED:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_SC_AUTH_FAILED_MSG,
+            )
+        if outcome.error_kind is ScErrorKind.RATE_LIMITED:
+            raise SoundCloudRateLimitError(resp.status_code if resp else 429)
+        if outcome.error_kind is ScErrorKind.CIRCUIT_BURNED:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_sc_error_detail(
+                    code="soundcloud_circuit_burned",
+                    message=(
+                        "SoundCloud rejected our egress IP repeatedly. "
+                        "Retrying with a fresh circuit."
+                    ),
+                    reason="all_circuits_burned",
+                    stage="request",
+                    retryable=True,
+                ),
+            )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_sc_error_detail(
+                code="soundcloud_upstream_error",
+                message="SoundCloud upstream error",
+                reason=outcome.error_kind.value,
+                stage="request",
+                retryable=True,
+                upstream_status=resp.status_code if resp else 0,
+            ),
+        )
+
+    @staticmethod
+    def _extract_track_ref_from_url(url: str) -> int | str | None:
+        marker = "/tracks/"
+        if marker not in url:
+            return None
+        tail = url.split(marker, 1)[-1]
+        ref = tail.split("?", 1)[0].split("/", 1)[0]
+        if not ref:
+            return None
+        return int(ref) if ref.isdecimal() else ref
 
     @contextlib.asynccontextmanager
     async def _sc_client(
@@ -678,53 +800,36 @@ class SoundCloudService:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="SoundCloud search is not configured",
             )
+        sticky = f"sc:resolve:{sc_url[-40:]}"
         try:
-            async with (
-                soundcloud_slot(
-                    timeout_seconds=(
-                        settings.soundcloud_slot_acquire_timeout_seconds
-                    ),
+            data = await self._anti_block_get(
+                f"{_SC_API_BASE}/resolve",
+                params={
+                    "url": sc_url,
+                    "client_id": self._client_id,
+                },
+                sticky_key=sticky,
+            )
+        except SoundCloudTrackUnavailable as exc:
+            logger.warning(
+                "sc_resolve_404",
+                sc_url_len=len(sc_url),
+                sc_url_host=(
+                    (sc_url.split("://", 1)[-1].split("/", 1)[0])
+                    if "://" in sc_url
+                    else "?"
                 ),
-                self._sc_client() as client,
-            ):
-                for _auth_attempt in range(2):
-                    r = await client.get(
-                        f"{_SC_API_BASE}/resolve",
-                        params={
-                            "url": sc_url,
-                            "client_id": self._client_id,
-                        },
-                    )
-                    if r.status_code == 401 and _auth_attempt == 0:
-                        await self._handle_auth_failure()
-                        continue
-                    break
-                if r.status_code == 404:
-                    logger.warning(
-                        "sc_resolve_404",
-                        sc_url_len=len(sc_url),
-                        sc_url_host=(
-                            (sc_url.split("://", 1)[-1].split("/", 1)[0])
-                            if "://" in sc_url
-                            else "?"
-                        ),
-                    )
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=(
-                            "SoundCloud: трек не найден по ссылке "
-                            "(удалён, приватный или в базе устарел URL). "
-                            "Проверьте трек на soundcloud.com или "
-                            "импортируйте снова."
-                        ),
-                    )
-                if r.status_code == 401:
-                    raise HTTPException(
-                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail=_SC_AUTH_FAILED_MSG,
-                    )
-                r.raise_for_status()
-                return r.json()
+                upstream_status=exc.upstream_status,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=(
+                    "SoundCloud: трек не найден по ссылке "
+                    "(удалён, приватный или в базе устарел URL). "
+                    "Проверьте трек на soundcloud.com или "
+                    "импортируйте снова."
+                ),
+            ) from exc
         except SoundCloudSemaphoreTimeout as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -736,6 +841,12 @@ class SoundCloudService:
                     retryable=True,
                 ),
             ) from exc
+        if not isinstance(data, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Unexpected SoundCloud resolve payload",
+            )
+        return data
 
     async def _resolve_stream_via_transcodings(
         self,
@@ -1300,36 +1411,44 @@ class SoundCloudService:
         self,
         soundcloud_track_ref: int | str,
     ) -> dict[str, Any]:
+        """Fetch a track record by id / URN.
+
+        Two paths, in this order:
+
+        1. If ``SC_OFFLOAD_ENABLED=true`` and the remote ComputeWorker
+           is reachable, the call is sent as a ``soundcloud_rpc``
+           ComputeJob. The worker performs the HTTP call from its
+           own egress IP and posts the envelope back; the backend's
+           IP stays out of SoundCloud's anti-bot focus.
+        2. On worker unreachability, offload-disabled, or terminal
+           errors the call falls through to the in-process OutboundClient
+           anti-block stack (browser TLS impersonation, automatic Tor
+           rotation on 403, client_id refresh on 401, exponential
+           backoff on 429 / 5xx).
+
+        Raises :class:`SoundCloudTrackUnavailable` for 404 / 410 /
+        cached-dead responses; the catalog-sync worker treats this
+        as a permanent failure (skip future retries).
+        """
         if not self._client_id:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="SoundCloud search is not configured",
             )
+
+        offloaded = await self._try_fetch_track_by_ref_offload(
+            soundcloud_track_ref
+        )
+        if offloaded is not None:
+            return offloaded
+
+        url = f"{_SC_API_BASE}/tracks/{soundcloud_track_ref}"
+        params = {"client_id": self._client_id}
+        sticky = f"sc:track:{soundcloud_track_ref}"
         try:
-            async with (
-                soundcloud_slot(
-                    timeout_seconds=(
-                        settings.soundcloud_slot_acquire_timeout_seconds
-                    ),
-                ),
-                self._sc_client() as client,
-            ):
-                for _auth_attempt in range(2):
-                    r = await client.get(
-                        f"{_SC_API_BASE}/tracks/{soundcloud_track_ref}",
-                        params={"client_id": self._client_id},
-                    )
-                    if r.status_code == 401 and _auth_attempt == 0:
-                        await self._handle_auth_failure()
-                        continue
-                    break
-                if r.status_code == 401:
-                    raise HTTPException(
-                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                        detail=_SC_AUTH_FAILED_MSG,
-                    )
-                r.raise_for_status()
-                data = r.json()
+            data = await self._anti_block_get(
+                url, params=params, sticky_key=sticky
+            )
         except SoundCloudSemaphoreTimeout as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1340,6 +1459,54 @@ class SoundCloudService:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Unexpected SoundCloud track payload",
             )
+        return data
+
+    async def _try_fetch_track_by_ref_offload(
+        self,
+        soundcloud_track_ref: int | str,
+    ) -> dict[str, Any] | None:
+        """Attempt the worker offload path. Returns ``None`` to signal
+        the caller should drop to the local fallback path."""
+        from app.services import sc_rpc_client
+
+        if not sc_rpc_client.offload_enabled():
+            return None
+        try:
+            data = await sc_rpc_client.call_soundcloud_rpc(
+                "fetch_track",
+                args={
+                    "track_ref": soundcloud_track_ref,
+                    "client_id": self._client_id,
+                },
+                sticky_key=f"sc:track:{soundcloud_track_ref}",
+            )
+        except sc_rpc_client.ScRpcOffloadDisabled:
+            return None
+        except sc_rpc_client.ScRpcUnreachable:
+            logger.info(
+                "sc_offload_worker_unreachable_fallback_local",
+                track_ref=str(soundcloud_track_ref),
+            )
+            return None
+        except sc_rpc_client.ScRpcUpstreamError as exc:
+            if exc.error_kind == "dead_track":
+                raise SoundCloudTrackUnavailable(
+                    track_ref=soundcloud_track_ref,
+                    upstream_status=exc.upstream_status,
+                    reason="worker_404_or_410",
+                ) from exc
+            if exc.error_kind == "rate_limited":
+                raise SoundCloudRateLimitError(
+                    exc.upstream_status or 429
+                ) from exc
+            logger.info(
+                "sc_offload_upstream_error_fallback_local",
+                track_ref=str(soundcloud_track_ref),
+                error_kind=exc.error_kind,
+            )
+            return None
+        if not isinstance(data, dict):
+            return None
         return data
 
     async def fetch_track_by_id(
@@ -1387,34 +1554,18 @@ class SoundCloudService:
         for start in range(0, len(track_refs), _SC_TRACKS_IDS_BATCH_SIZE):
             chunk = track_refs[start : start + _SC_TRACKS_IDS_BATCH_SIZE]
             ids_param = ",".join(str(i) for i in chunk)
+            sticky = f"sc:tracks_bulk:{param_name}:{ids_param[:32]}"
             try:
-                async with (
-                    soundcloud_slot(
-                        timeout_seconds=(
-                            settings.soundcloud_slot_acquire_timeout_seconds
-                        ),
-                    ),
-                    self._sc_client() as client,
-                ):
-                    for _auth_attempt in range(2):
-                        r = await client.get(
-                            f"{_SC_API_BASE}/tracks",
-                            params={
-                                param_name: ids_param,
-                                "client_id": self._client_id,
-                            },
-                        )
-                        if r.status_code == 401 and _auth_attempt == 0:
-                            await self._handle_auth_failure()
-                            continue
-                        break
-                    if r.status_code == 401:
-                        raise HTTPException(
-                            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                            detail=_SC_AUTH_FAILED_MSG,
-                        )
-                    r.raise_for_status()
-                    payload = r.json()
+                payload = await self._anti_block_get(
+                    f"{_SC_API_BASE}/tracks",
+                    params={
+                        param_name: ids_param,
+                        "client_id": self._client_id,
+                    },
+                    sticky_key=sticky,
+                )
+            except SoundCloudTrackUnavailable:
+                continue
             except SoundCloudSemaphoreTimeout as exc:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

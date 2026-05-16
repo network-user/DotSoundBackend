@@ -1756,7 +1756,7 @@ export const adminApi = {
         | 'running'
         | 'success'
         | 'error'
-      catalog_sync_mode: 'full' | 'release' | null
+      catalog_sync_mode: 'full' | 'release' | 'station' | null
       catalog_sync_soundcloud_album_id: number | null
       catalog_sync_error: string | null
       catalog_sync_detail: Record<string, unknown> | null
@@ -1815,7 +1815,7 @@ export const adminApi = {
         | 'running'
         | 'success'
         | 'error'
-      catalog_sync_mode: 'full' | 'release' | null
+      catalog_sync_mode: 'full' | 'release' | 'station' | null
       catalog_sync_soundcloud_album_id: number | null
       catalog_sync_error: string | null
       catalog_sync_detail: Record<string, unknown> | null
@@ -1855,7 +1855,7 @@ export const adminApi = {
         | 'running'
         | 'success'
         | 'error'
-      catalog_sync_mode: 'full' | 'release' | null
+      catalog_sync_mode: 'full' | 'release' | 'station' | null
       catalog_sync_soundcloud_album_id: number | null
       catalog_sync_error: string | null
       catalog_sync_detail: Record<string, unknown> | null
@@ -2035,6 +2035,11 @@ export const adminApi = {
   catalogSyncFull: (artistId: number) =>
     adminFetch<{ queued: boolean; task: string; job_id?: string | null }>(
       `/artists/${artistId}/catalog/sync`,
+      { method: 'POST', body: {} },
+    ),
+  catalogForceStationSync: (artistId: number) =>
+    adminFetch<{ queued: boolean; task: string; job_id?: string | null }>(
+      `/artists/${artistId}/catalog/station/force-sync`,
       { method: 'POST', body: {} },
     ),
   catalogSyncBatch: (artistIds: number[]) =>

@@ -41,6 +41,7 @@ vi.mock('@/lib/offlineCache', () => ({
       }
     },
   ),
+  prefetchProgressiveBodyForCache: vi.fn(async () => false),
 }))
 
 vi.mock('@/lib/playbackSourcePolicy', () => ({

@@ -15,38 +15,32 @@ import asyncio
 
 import structlog
 
-from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
-from app.services import compute_queue_service as q
+from app.services import compute_job_reaper
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(
     __name__
 )
 
-REAP_BATCH_LIMIT = 100
+REAP_BATCH_LIMIT = compute_job_reaper.REAP_BATCH_LIMIT
 REAP_INTERVAL_SECONDS = 60
 
 
-async def reap_once() -> int:
-    """Recover stale claims in one pass; returns count requeued."""
-    async with AsyncSessionLocal() as session:
-        recovered = await q.requeue_stale_claims(
-            session, limit=REAP_BATCH_LIMIT
-        )
-        await session.commit()
-    if recovered:
+async def reap_once() -> dict[str, int]:
+    """Recover stale claims in one pass; returns outcome counters."""
+    stats = await compute_job_reaper.reap_once(limit=REAP_BATCH_LIMIT)
+    if any(stats.values()):
         logger.warning(
             "compute_queue_reaper_recovered",
-            count=recovered,
+            **stats,
         )
-    return int(recovered)
+    return stats
 
 
 @broker.task
 async def reap_stale_compute_jobs_task() -> dict:
     """Taskiq entrypoint for the compute-queue reaper."""
-    recovered = await reap_once()
-    return {"recovered": int(recovered)}
+    return await reap_once()
 
 
 async def run_forever() -> None:

@@ -1,8 +1,11 @@
 """HLS adaptive-bitrate streaming endpoints."""
 
+import contextlib
+
 import structlog
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
@@ -22,6 +25,24 @@ _HLS_MIME = "application/vnd.apple.mpegurl"
 _TS_MIME = "video/MP2T"
 _VALID_VARIANTS = frozenset({"hi", "lo"})
 _LEGACY_HLS_PREFIX_TEMPLATE = "hls/{track_id}"
+# Master / variant manifests change rarely (only on re-transcode) but
+# clients should still revalidate quickly so a re-transcoded bundle is
+# picked up. Sub-minute TTL is cheap because hls.js requests the
+# manifest exactly once per session.
+_MANIFEST_CACHE_CONTROL = "public, max-age=60"
+# CAS segments embed the source SHA-256 in the key — bytes can never
+# change for a given URL — so segment responses are safely immutable.
+_CAS_SEGMENT_CACHE_CONTROL = "public, max-age=31536000, immutable"
+# Legacy non-CAS segments live under ``hls/<track_id>/...`` and could
+# be re-transcoded in place. Use a moderate TTL; the SW Cache layer
+# still benefits, but we revalidate within the day.
+_LEGACY_SEGMENT_CACHE_CONTROL = "public, max-age=86400"
+
+
+def _segment_cache_control(prefix: str) -> str:
+    if prefix.startswith("hls-blobs/"):
+        return _CAS_SEGMENT_CACHE_CONTROL
+    return _LEGACY_SEGMENT_CACHE_CONTROL
 
 
 def _hls_storage_prefix(track_id: int, manifest_key: str | None) -> str:
@@ -66,6 +87,69 @@ def _offline_header(track: object) -> dict[str, str]:
     return {"X-Offline-Allowed": "1" if allowed else "0"}
 
 
+def _client_etag_match(
+    if_none_match: str | None,
+    etag: str | None,
+) -> bool:
+    if not if_none_match or not etag:
+        return False
+    target = etag.strip('"')
+    candidates = [c.strip().strip('"') for c in if_none_match.split(",")]
+    return target in candidates or "*" in candidates
+
+
+async def _stream_hls_object(
+    request: Request,
+    key: str,
+    media_type: str,
+    extra_headers: dict[str, str],
+    cache_control: str,
+) -> Response:
+    """Stream an HLS manifest or segment from S3 to the client.
+
+    Mirrors :func:`playback._stream_s3_audio_object` so segments are
+    not buffered in app RAM and conditional GET (``If-None-Match``)
+    short-circuits to 304 for the SW Cache layer.
+    """
+    if_none_match = request.headers.get("if-none-match")
+    try:
+        meta, body_iter = await s3.open_object_range(key, None)
+    except ClientError as exc:
+        code = exc.response["Error"]["Code"]
+        if code in ("NoSuchKey", "404"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="HLS asset not found",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="HLS storage error",
+        ) from exc
+
+    headers: dict[str, str] = {
+        "Cache-Control": cache_control,
+    }
+    if meta.etag:
+        headers["ETag"] = f'"{meta.etag}"'
+    headers.update(extra_headers)
+
+    if _client_etag_match(if_none_match, meta.etag):
+        with contextlib.suppress(BaseException):
+            await body_iter.aclose()
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=headers,
+        )
+
+    headers["Content-Length"] = str(meta.content_length)
+    return StreamingResponse(
+        body_iter,
+        status_code=status.HTTP_200_OK,
+        media_type=media_type,
+        headers=headers,
+    )
+
+
 @router.get(
     "/{track_id}/hls/master.m3u8",
     summary="HLS master playlist (adaptive bitrate)",
@@ -95,14 +179,12 @@ async def hls_master(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Playback temporarily unavailable for this track",
         )
-    data = await s3.download_object(track.hls_manifest_key)
-    return Response(
-        content=data,
+    return await _stream_hls_object(
+        request,
+        track.hls_manifest_key,
         media_type=_HLS_MIME,
-        headers={
-            "Cache-Control": "no-cache",
-            **_offline_header(track),
-        },
+        extra_headers=_offline_header(track),
+        cache_control=_MANIFEST_CACHE_CONTROL,
     )
 
 
@@ -118,9 +200,7 @@ async def hls_variant_playlist(
     session: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
 ) -> Response:
-    structlog.contextvars.bind_contextvars(
-        track_id=track_id, variant=variant
-    )
+    structlog.contextvars.bind_contextvars(track_id=track_id, variant=variant)
     if variant not in _VALID_VARIANTS:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -128,11 +208,7 @@ async def hls_variant_playlist(
         )
     repo = TrackRepository(session)
     track = await repo.get_by_id(track_id)
-    if (
-        not track
-        or not track.is_active
-        or not track.is_public
-    ):
+    if not track or not track.is_active or not track.is_public:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not available",
@@ -144,20 +220,12 @@ async def hls_variant_playlist(
         )
     prefix = _hls_storage_prefix(track_id, track.hls_manifest_key)
     key = f"{prefix}/{variant}/playlist.m3u8"
-    try:
-        data = await s3.download_object(key)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Playlist not found",
-        )
-    return Response(
-        content=data,
+    return await _stream_hls_object(
+        request,
+        key,
         media_type=_HLS_MIME,
-        headers={
-            "Cache-Control": "no-cache",
-            **_offline_header(track),
-        },
+        extra_headers=_offline_header(track),
+        cache_control=_MANIFEST_CACHE_CONTROL,
     )
 
 
@@ -184,11 +252,7 @@ async def hls_segment(
         )
     repo = TrackRepository(session)
     track = await repo.get_by_id(track_id)
-    if (
-        not track
-        or not track.is_active
-        or not track.is_public
-    ):
+    if not track or not track.is_active or not track.is_public:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Track not available",
@@ -205,18 +269,10 @@ async def hls_segment(
         )
     prefix = _hls_storage_prefix(track_id, track.hls_manifest_key)
     key = f"{prefix}/{variant}/{segment}"
-    try:
-        data = await s3.download_object(key)
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Segment not found",
-        )
-    return Response(
-        content=data,
+    return await _stream_hls_object(
+        request,
+        key,
         media_type=_TS_MIME,
-        headers={
-            "Cache-Control": "max-age=86400",
-            **_offline_header(track),
-        },
+        extra_headers=_offline_header(track),
+        cache_control=_segment_cache_control(prefix),
     )

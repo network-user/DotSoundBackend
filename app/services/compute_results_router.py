@@ -81,7 +81,55 @@ async def persist_result(
             r=r,
         )
         return
+    if job.job_type == q.JOB_SOUNDCLOUD_RPC:
+        await _persist_soundcloud_rpc(
+            session,
+            job=job,
+            r=r,
+        )
+        return
     raise ValueError(f"unknown_job_type:{job.job_type}")
+
+
+async def _persist_soundcloud_rpc(
+    session: AsyncSession,
+    *,
+    job: ComputeJob,
+    r: dict[str, Any],
+) -> None:
+    """Mirror the RPC envelope into Redis under the request id.
+
+    SoundCloud RPC is a synchronous-style call: a backend caller
+    enqueues the job, then waits (via :mod:`app.services.sc_rpc_client`)
+    for the result envelope to appear in Redis. The ``ComputeJob`` row
+    itself is the durable record; this side-channel just spares
+    callers a DB poll loop on every fetch.
+
+    The persisted blob is the **whole** envelope so consumers see
+    ``success / error_kind / upstream_status`` without re-loading
+    the row.
+    """
+    import json
+
+    from app.core.redis import get_redis_client
+
+    request_id = job.target_id or job.id
+    key = f"sc_rpc_result:{request_id}"
+    payload = {
+        "envelope": r,
+        "job_id": job.id,
+    }
+    try:
+        redis = get_redis_client()
+        await redis.set(key, json.dumps(payload), ex=60 * 60)
+        await redis.publish(
+            f"sc_rpc_result_chan:{request_id}",
+            json.dumps({"job_id": job.id}),
+        )
+    except Exception:
+        # The ComputeJob row still has the result; sc_rpc_client
+        # falls back to polling job.result in that case.
+        pass
 
 
 async def _persist_audio_embedding(

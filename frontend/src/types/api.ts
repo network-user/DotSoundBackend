@@ -1122,6 +1122,8 @@ export interface ImportJobResponse {
     source_url?: string
     error_code?: string
     error_message?: string
+    scan_dispatched_at?: string
+    scan_worker_started?: string
     diagnostics?: ImportDiagnosticEntry[]
     imported?: {
       title: string

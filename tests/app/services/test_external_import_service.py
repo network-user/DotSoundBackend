@@ -44,13 +44,14 @@ async def test_scan_external_rejects_unknown_source(
 
 
 @patch(
-    "app.services.external_scan_worker.scan_external_playlist_task",
+    "app.services.import_service._dispatch_external_scan",
+    new_callable=AsyncMock,
 )
 async def test_scan_external_dispatches_background_task(
-    mock_task: object,
+    mock_dispatch: AsyncMock,
     session: AsyncSession,
 ) -> None:
-    mock_task.kiq = AsyncMock(return_value=None)  # type: ignore[attr-defined]
+    mock_dispatch.return_value = "asyncio"
     user = await _make_user(session, telegram_id=3101)
 
     svc = ImportService(session)
@@ -62,7 +63,9 @@ async def test_scan_external_dispatches_background_task(
 
     assert job.status == "scanning"
     assert job.source == "yandex_music"
-    mock_task.kiq.assert_called_once_with(  # type: ignore[attr-defined]
+    assert job.tracks_data is not None
+    assert job.tracks_data.get("scan_dispatched_at")
+    mock_dispatch.assert_called_once_with(
         job.id,
         "yandex_music",
         "https://music.yandex.ru/users/u/playlists/1",
@@ -70,13 +73,14 @@ async def test_scan_external_dispatches_background_task(
 
 
 @patch(
-    "app.services.external_scan_worker.scan_external_playlist_task",
+    "app.services.import_service._dispatch_external_scan",
+    new_callable=AsyncMock,
 )
 async def test_scan_external_returns_active_scanning_job(
-    mock_task: object,
+    mock_dispatch: AsyncMock,
     session: AsyncSession,
 ) -> None:
-    mock_task.kiq = AsyncMock(return_value=None)  # type: ignore[attr-defined]
+    mock_dispatch.return_value = "asyncio"
     user = await _make_user(session, telegram_id=3104)
 
     svc = ImportService(session)
@@ -92,7 +96,7 @@ async def test_scan_external_returns_active_scanning_job(
     )
 
     assert first.id == second.id
-    assert mock_task.kiq.call_count == 1  # type: ignore[attr-defined]
+    assert mock_dispatch.call_count == 1
 
 
 async def _run_worker_task(
@@ -102,7 +106,7 @@ async def _run_worker_task(
     url: str,
     scan_side_effect: object,
 ) -> None:
-    """Call scan_external_playlist_task with the test session injected."""
+    """Call run_external_playlist_scan with the test session injected."""
     from contextlib import asynccontextmanager
 
     @asynccontextmanager  # type: ignore[arg-type]
@@ -115,6 +119,11 @@ async def _run_worker_task(
             _fake_session_factory,
         ),
         patch(
+            "app.services.external_scan_worker._try_acquire_scan_lock",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch(
             "app.services.external_scan_worker.scan_playlist_url",
             new_callable=AsyncMock,
         ) as mock_scan,
@@ -125,10 +134,10 @@ async def _run_worker_task(
             mock_scan.return_value = scan_side_effect
 
         from app.services.external_scan_worker import (
-            scan_external_playlist_task,
+            run_external_playlist_scan,
         )
 
-        await scan_external_playlist_task(job_id, source, url)
+        await run_external_playlist_scan(job_id, source, url)
 
 
 async def test_scan_external_worker_success(

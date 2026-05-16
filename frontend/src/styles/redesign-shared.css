@@ -326,6 +326,8 @@ body.ds-perf-lite .beat-pulse-target {
   scroll-padding-inline: var(--space-4);
   scrollbar-width: none;
   -ms-overflow-style: none;
+  touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .h-snap__track::-webkit-scrollbar {

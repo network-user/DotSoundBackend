@@ -1,8 +1,12 @@
 import asyncio
+import contextlib
 import hashlib
+import sys
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 import aioboto3
@@ -16,16 +20,23 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _PRESIGNED_TTL_SECONDS = 3600
 _STREAM_HASH_CHUNK = 1024 * 1024
+_RANGE_STREAM_CHUNK = 64 * 1024
 
 
-def build_cas_audio_key(
-    content_sha256_hex: str, extension: str
-) -> str:
-    ext = (
-        extension.lstrip(".")
-        if extension
-        else "bin"
-    )
+@dataclass(frozen=True)
+class ObjectRangeMeta:
+    """Metadata for a streaming S3 GET (used by ``open_object_range``)."""
+
+    content_length: int
+    content_range: str | None
+    content_type: str
+    etag: str | None
+    last_modified: datetime | None
+    accept_ranges: str
+
+
+def build_cas_audio_key(content_sha256_hex: str, extension: str) -> str:
+    ext = extension.lstrip(".") if extension else "bin"
     prefix = content_sha256_hex[:2]
     return f"blobs/{prefix}/{content_sha256_hex}.{ext}"
 
@@ -36,17 +47,12 @@ async def put_cas_audio(
     extension: str,
     content_type: str,
 ) -> str:
-    file_key = build_cas_audio_key(
-        content_sha256_hex, extension
-    )
-    await upload_object(
-        file_key, data, content_type
-    )
+    file_key = build_cas_audio_key(content_sha256_hex, extension)
+    await upload_object(file_key, data, content_type)
     return file_key
 
-def build_cas_image_key(
-    content_sha256_hex: str, extension: str
-) -> str:
+
+def build_cas_image_key(content_sha256_hex: str, extension: str) -> str:
     ext = extension.lstrip(".") if extension else "webp"
     prefix = content_sha256_hex[:2]
     return f"image-blobs/{prefix}/{content_sha256_hex}.{ext}"
@@ -63,9 +69,7 @@ async def put_cas_image(
     return file_key
 
 
-def build_cas_video_key(
-    content_sha256_hex: str, extension: str
-) -> str:
+def build_cas_video_key(content_sha256_hex: str, extension: str) -> str:
     ext = extension.lstrip(".") if extension else "mp4"
     prefix = content_sha256_hex[:2]
     return f"video-blobs/{prefix}/{content_sha256_hex}.{ext}"
@@ -82,9 +86,7 @@ async def put_cas_video(
     return file_key
 
 
-_ALLOWED_COVER_MIMES = frozenset(
-    {"image/jpeg", "image/png", "image/webp"}
-)
+_ALLOWED_COVER_MIMES = frozenset({"image/jpeg", "image/png", "image/webp"})
 _COVER_EXT_MAP = {
     "image/jpeg": "jpg",
     "image/png": "png",
@@ -194,9 +196,7 @@ async def upload_image(
         await svc.attach(blob)
         img_key = blob.s3_key
     else:
-        img_key = (
-            f"{prefix}/{owner}/{uuid.uuid4().hex}.webp"
-        )
+        img_key = f"{prefix}/{owner}/{uuid.uuid4().hex}.webp"
         await upload_object(img_key, processed, "image/webp")
 
     await upload_object(thumb_key, thumb, "image/webp")
@@ -234,21 +234,13 @@ async def upload_voice(
         process_voice,
     )
 
-    processed, duration, waveform = (
-        await process_voice(data)
-    )
+    processed, duration, waveform = await process_voice(data)
 
     is_converted = processed is not data
     ext = "ogg" if is_converted else "webm"
-    content_type = (
-        "audio/ogg"
-        if is_converted
-        else "audio/webm"
-    )
+    content_type = "audio/ogg" if is_converted else "audio/webm"
     owner = str(user_id) if user_id else "anon"
-    file_key = (
-        f"voice/{owner}/{uuid.uuid4().hex}.{ext}"
-    )
+    file_key = f"voice/{owner}/{uuid.uuid4().hex}.{ext}"
     logger.info(
         "s3_voice_upload_started",
         file_key=file_key,
@@ -280,9 +272,7 @@ async def delete_objects_by_prefix(prefix: str) -> int:
             }
             if cont_token:
                 kwargs["ContinuationToken"] = cont_token
-            resp: dict[str, Any] = await s3.list_objects_v2(  # type: ignore[assignment]
-                **kwargs
-            )
+            resp: dict[str, Any] = await s3.list_objects_v2(**kwargs)
             for obj in resp.get("Contents") or ():
                 key: str = obj["Key"]
                 n += 1
@@ -291,9 +281,7 @@ async def delete_objects_by_prefix(prefix: str) -> int:
                         Bucket=settings.minio_bucket, Key=key
                     )
                 except Exception:
-                    logger.warning(
-                        "s3_prefix_delete_key_failed", key=key
-                    )
+                    logger.warning("s3_prefix_delete_key_failed", key=key)
             if not resp.get("IsTruncated"):
                 break
             cont_token = resp.get("NextContinuationToken")
@@ -303,9 +291,7 @@ async def delete_objects_by_prefix(prefix: str) -> int:
 async def delete_object(file_key: str) -> None:
     logger.info("s3_delete_started", file_key=file_key)
     async with get_s3_client() as s3:
-        await s3.delete_object(
-            Bucket=settings.minio_bucket, Key=file_key
-        )
+        await s3.delete_object(Bucket=settings.minio_bucket, Key=file_key)
     logger.info("s3_delete_completed", file_key=file_key)
 
 
@@ -327,11 +313,11 @@ async def download_object_range(
     file_key: str,
     range_header: str | None = None,
 ) -> tuple[bytes, int, str | None, str]:
-    """Download (a range of) an S3 object.
+    """Download (a range of) an S3 object as bytes.
 
     Returns (data, content_length, content_range, content_type).
-    All data is read inside the S3 client context to avoid
-    connection-closed errors.
+    Buffers the entire body in memory; prefer ``open_object_range``
+    for hot-path audio streaming.
     """
     kwargs: dict[str, Any] = {
         "Bucket": settings.minio_bucket,
@@ -346,9 +332,7 @@ async def download_object_range(
     )
     async with get_s3_client() as s3:
         try:
-            response = await s3.get_object(
-                **kwargs
-            )
+            response = await s3.get_object(**kwargs)
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
             logger.warning(
@@ -363,10 +347,75 @@ async def download_object_range(
             data,
             int(response["ContentLength"]),
             response.get("ContentRange"),
-            response.get(
-                "ContentType", "audio/mpeg"
-            ),
+            response.get("ContentType", "audio/mpeg"),
         )
+
+
+async def open_object_range(
+    file_key: str,
+    range_header: str | None = None,
+    *,
+    chunk_size: int = _RANGE_STREAM_CHUNK,
+) -> tuple[ObjectRangeMeta, AsyncGenerator[bytes, None]]:
+    """Open an S3 object for true streaming pass-through.
+
+    Returns a metadata block plus an async iterator that yields the
+    object body in ``chunk_size`` slices. The iterator owns the S3
+    client lifetime: closing or exhausting it releases the underlying
+    connection. Designed to back ``StreamingResponse`` so audio bytes
+    flow MinIO → Backend → client without any RAM buffering, killing
+    the multi-second time-to-first-byte that ``download_object_range``
+    introduces (it reads the whole range into memory before the first
+    byte leaves the server).
+    """
+    cm = get_s3_client()
+    s3 = await cm.__aenter__()
+    try:
+        kwargs: dict[str, Any] = {
+            "Bucket": settings.minio_bucket,
+            "Key": file_key,
+        }
+        if range_header:
+            kwargs["Range"] = range_header
+        response = await s3.get_object(**kwargs)
+    except BaseException:
+        await cm.__aexit__(*sys.exc_info())
+        raise
+
+    body_cm = response["Body"]
+    body = await body_cm.__aenter__()
+
+    raw_etag = response.get("ETag")
+    etag = raw_etag.strip('"') if isinstance(raw_etag, str) else None
+
+    raw_last_modified = response.get("LastModified")
+    last_modified = (
+        raw_last_modified if isinstance(raw_last_modified, datetime) else None
+    )
+
+    meta = ObjectRangeMeta(
+        content_length=int(response["ContentLength"]),
+        content_range=response.get("ContentRange"),
+        content_type=response.get("ContentType", "audio/mpeg"),
+        etag=etag,
+        last_modified=last_modified,
+        accept_ranges=str(response.get("AcceptRanges", "bytes")),
+    )
+
+    async def _iter() -> AsyncGenerator[bytes, None]:
+        try:
+            while True:
+                chunk = await body.read(chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            with contextlib.suppress(BaseException):
+                await body_cm.__aexit__(None, None, None)
+            with contextlib.suppress(BaseException):
+                await cm.__aexit__(None, None, None)
+
+    return meta, _iter()
 
 
 async def compute_sha256_streaming(file_key: str) -> str:
@@ -388,9 +437,7 @@ async def compute_sha256_streaming(file_key: str) -> str:
 async def object_exists(file_key: str) -> bool:
     async with get_s3_client() as s3:
         try:
-            await s3.head_object(
-                Bucket=settings.minio_bucket, Key=file_key
-            )
+            await s3.head_object(Bucket=settings.minio_bucket, Key=file_key)
             return True
         except ClientError as exc:
             code = exc.response["Error"]["Code"]
@@ -399,16 +446,36 @@ async def object_exists(file_key: str) -> bool:
             raise
 
 
-def build_cas_hls_master_key(source_sha256_hex: str) -> str:
+def build_cas_hls_master_key(
+    source_sha256_hex: str,
+    *,
+    bundle_version: int | None = None,
+) -> str:
+    """Master playlist S3 key for a CAS HLS bundle.
+
+    When ``bundle_version`` is provided we put the bundle under a
+    versioned sub-prefix so the same source SHA-256 transcoded with
+    different segment durations / ladders lives in separate paths.
+    Older bundles (version=None) keep the legacy path so they remain
+    reachable until the migration worker rewrites them.
+    """
     prefix = source_sha256_hex[:2]
-    return (
-        f"hls-blobs/{prefix}/{source_sha256_hex}/master.m3u8"
-    )
+    base = f"hls-blobs/{prefix}/{source_sha256_hex}"
+    if bundle_version is None:
+        return f"{base}/master.m3u8"
+    return f"{base}/v{bundle_version}/master.m3u8"
 
 
-def build_cas_hls_prefix(source_sha256_hex: str) -> str:
+def build_cas_hls_prefix(
+    source_sha256_hex: str,
+    *,
+    bundle_version: int | None = None,
+) -> str:
     prefix = source_sha256_hex[:2]
-    return f"hls-blobs/{prefix}/{source_sha256_hex}"
+    base = f"hls-blobs/{prefix}/{source_sha256_hex}"
+    if bundle_version is None:
+        return base
+    return f"{base}/v{bundle_version}"
 
 
 async def download_object(file_key: str) -> bytes:
@@ -423,9 +490,7 @@ async def download_object(file_key: str) -> bytes:
     return data
 
 
-async def upload_object(
-    key: str, data: bytes, content_type: str
-) -> None:
+async def upload_object(key: str, data: bytes, content_type: str) -> None:
     logger.debug(
         "s3_upload_object_started",
         key=key,
@@ -454,9 +519,7 @@ async def ensure_bucket_exists() -> None:
         try:
             async with get_s3_client() as s3:
                 try:
-                    await s3.head_bucket(
-                        Bucket=settings.minio_bucket
-                    )
+                    await s3.head_bucket(Bucket=settings.minio_bucket)
                     logger.debug(
                         "s3_bucket_exists",
                         bucket=settings.minio_bucket,
@@ -465,9 +528,7 @@ async def ensure_bucket_exists() -> None:
                 except ClientError as exc:
                     code = exc.response["Error"]["Code"]
                     if code in ("404", "NoSuchBucket"):
-                        await s3.create_bucket(
-                            Bucket=settings.minio_bucket
-                        )
+                        await s3.create_bucket(Bucket=settings.minio_bucket)
                         logger.info(
                             "s3_bucket_created",
                             bucket=settings.minio_bucket,

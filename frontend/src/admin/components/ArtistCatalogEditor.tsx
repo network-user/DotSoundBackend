@@ -620,7 +620,11 @@ export function ArtistCatalogEditor({
         ? t('admin.artists.catalog.syncModeRelease')
         : mode === 'full'
           ? t('admin.artists.catalog.syncModeFull')
-          : null
+          : mode === 'station'
+            ? t('admin.artists.catalog.syncModeStation', {
+                defaultValue: 'Режим: station',
+              })
+            : null
     const err = row.catalog_sync_error
     const det = row.catalog_sync_detail as
       | Record<string, unknown>

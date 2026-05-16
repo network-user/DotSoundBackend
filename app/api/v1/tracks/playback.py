@@ -4,6 +4,8 @@ import contextlib
 import json
 import time
 from collections.abc import AsyncIterator
+from datetime import datetime
+from email.utils import formatdate
 from typing import Any
 
 import httpx
@@ -460,6 +462,124 @@ def _sc_detail_reason_is_manifest_all_404(
     )
 
 
+def _audio_cache_control(file_key: str) -> str:
+    """Cache-Control for an audio S3 key.
+
+    Content-addressed blobs (``blobs/<xx>/<sha256>.<ext>``) are
+    immutable by construction: their key embeds the full SHA-256
+    of the bytes. We tell shared caches to keep them effectively
+    forever. Legacy / per-user keys still get a short cache TTL so
+    the browser does not re-pull the same MP3 every track switch
+    inside the session.
+    """
+    if file_key.startswith("blobs/"):
+        return "public, max-age=31536000, immutable"
+    return "public, max-age=300"
+
+
+def _format_http_date(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    try:
+        seconds = value.timestamp()
+    except (AttributeError, TypeError):
+        return None
+    return formatdate(seconds, usegmt=True)
+
+
+def _client_supports_conditional_match(
+    if_none_match: str | None,
+    etag: str | None,
+) -> bool:
+    if not if_none_match or not etag:
+        return False
+    target = etag.strip('"')
+    candidates = [c.strip().strip('"') for c in if_none_match.split(",")]
+    return target in candidates or "*" in candidates
+
+
+async def _stream_s3_audio_object(
+    request: Request,
+    file_key: str,
+    extra_headers: dict[str, str],
+    *,
+    fallback_media_type: str = "audio/mpeg",
+) -> Response:
+    """Pump an S3 object straight to the client in 64 KiB chunks.
+
+    Uses :func:`s3.open_object_range` so that ``Range`` requests yield
+    the first byte to the client roughly as fast as MinIO can give it
+    to us — no whole-range buffering in app RAM. Honours
+    ``If-None-Match`` for free 304s and applies an immutability-aware
+    ``Cache-Control`` so the browser, the SW Cache, and any future
+    edge caches all do their job.
+    """
+    range_header = request.headers.get("range")
+    if_none_match = request.headers.get("if-none-match")
+    if_modified_since = request.headers.get("if-modified-since")
+
+    try:
+        meta, body_iter = await s3.open_object_range(
+            file_key,
+            range_header,
+        )
+    except ClientError as exc:
+        code = exc.response["Error"]["Code"]
+        if code == "NoSuchKey":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Audio file not found in storage",
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Storage error",
+        ) from exc
+
+    last_modified_http = _format_http_date(meta.last_modified)
+
+    base_headers: dict[str, str] = {
+        "Accept-Ranges": meta.accept_ranges or "bytes",
+        "Cache-Control": _audio_cache_control(file_key),
+    }
+    if meta.etag:
+        base_headers["ETag"] = f'"{meta.etag}"'
+    if last_modified_http:
+        base_headers["Last-Modified"] = last_modified_http
+    base_headers.update(extra_headers)
+
+    not_modified = _client_supports_conditional_match(
+        if_none_match, meta.etag
+    ) or (
+        range_header is None
+        and if_modified_since is not None
+        and last_modified_http == if_modified_since
+    )
+    if not_modified:
+        with contextlib.suppress(BaseException):
+            await body_iter.aclose()
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED,
+            headers=base_headers,
+        )
+
+    headers = dict(base_headers)
+    headers["Content-Length"] = str(meta.content_length)
+    if meta.content_range:
+        headers["Content-Range"] = meta.content_range
+
+    http_status = (
+        status.HTTP_206_PARTIAL_CONTENT
+        if meta.content_range
+        else status.HTTP_200_OK
+    )
+    return StreamingResponse(
+        body_iter,
+        status_code=http_status,
+        media_type=meta.content_type or fallback_media_type,
+        headers=headers,
+    )
+
+
 async def _resolve_third_party_stream_with_recovery(
     track: Track,
     session: AsyncSession,
@@ -878,41 +998,27 @@ async def audio_stream(
         and track.file_key
         and not track.hls_manifest_key
     ):
-        range_header = request.headers.get("range")
-        try:
-            data, content_length, content_range, content_type = (
-                await s3.download_object_range(track.file_key, range_header)
-            )
-            http_status = 206 if content_range else 200
-            headers: dict[str, str] = {
-                "Accept-Ranges": "bytes",
-                "Content-Length": str(content_length),
-            }
-            if content_range:
-                headers["Content-Range"] = content_range
-            from app.services.offline_policy_adapter import (
-                is_offline_allowed,
-            )
+        from app.services.offline_policy_adapter import (
+            is_offline_allowed,
+        )
 
-            allowed, _reason = is_offline_allowed(
-                catalog_type=track.catalog_type,
-                access_mode=track.access_mode,
-                file_size_bytes=track.file_size_bytes,
+        allowed, _reason = is_offline_allowed(
+            catalog_type=track.catalog_type,
+            access_mode=track.access_mode,
+            file_size_bytes=track.file_size_bytes,
+        )
+        try:
+            return await _stream_s3_audio_object(
+                request,
+                track.file_key,
+                {"X-Offline-Allowed": "1" if allowed else "0"},
             )
-            headers["X-Offline-Allowed"] = "1" if allowed else "0"
-            logger.info(
-                "audio_stream_from_cache",
-                track_id=track_id,
-                range=range_header,
-            )
-            return Response(
-                content=data,
-                status_code=http_status,
-                media_type=content_type,
-                headers=headers,
-            )
-        except ClientError:
-            pass  # fall through to live proxy on storage error
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_502_BAD_GATEWAY:
+                # Storage transient error — fall through to live proxy.
+                pass
+            else:
+                raise
 
     if track.access_mode == "third_party_stream":
         try:
@@ -994,41 +1100,19 @@ async def audio_stream(
             detail="Track has no audio file",
         )
 
-    range_header = request.headers.get("range")
-    try:
-        data, content_length, content_range, content_type = (
-            await s3.download_object_range(track.file_key, range_header)
-        )
-    except ClientError as exc:
-        code = exc.response["Error"]["Code"]
-        if code == "NoSuchKey":
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Audio file not found in storage",
-            ) from exc
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Storage error",
-        ) from exc
-
-    http_status = 206 if content_range else 200
-    headers = {
-        "Accept-Ranges": "bytes",
-        "Content-Length": str(content_length),
-    }
-    if content_range:
-        headers["Content-Range"] = content_range
-    logger.info(
-        "audio_stream_started",
-        track_id=track_id,
-        range=range_header,
-        status=http_status,
+    from app.services.offline_policy_adapter import (
+        is_offline_allowed,
     )
-    return Response(
-        content=data,
-        status_code=http_status,
-        media_type=content_type,
-        headers=headers,
+
+    allowed, _reason = is_offline_allowed(
+        catalog_type=track.catalog_type,
+        access_mode=track.access_mode,
+        file_size_bytes=track.file_size_bytes,
+    )
+    return await _stream_s3_audio_object(
+        request,
+        track.file_key,
+        {"X-Offline-Allowed": "1" if allowed else "0"},
     )
 
 

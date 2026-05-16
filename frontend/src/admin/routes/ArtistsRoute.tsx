@@ -45,12 +45,14 @@ interface ArtistListResponse {
   total: number
 }
 
+type CatalogSyncQueuedResult = {
+  queued: boolean
+  task: string
+  job_id?: string | null
+}
+
 type CatalogSyncResult =
-  | {
-      queued: boolean
-      task: string
-      job_id?: string | null
-    }
+  | CatalogSyncQueuedResult
   | {
       queued: number
       job_ids: Record<string, string | null>
@@ -62,10 +64,6 @@ type BulkQueueResult = {
   job_ids: Record<string, string | null>
   errors: Array<{ artist_id: number; detail: string }>
 }
-
-type StationProbeResult = Awaited<
-  ReturnType<typeof adminApi.catalogStationProbe>
->
 
 async function fetchArtists(
   q: string,
@@ -164,9 +162,7 @@ export function ArtistsRoute() {
     job_id?: string | null
   } | null>(null)
   const [scImportPending, setScImportPending] = useState(false)
-  const [stationProbeResult, setStationProbeResult] =
-    useState<StationProbeResult | null>(null)
-  const [stationProbeBusyId, setStationProbeBusyId] =
+  const [forceStationBusyId, setForceStationBusyId] =
     useState<number | null>(null)
 
   const list = useQuery({
@@ -259,13 +255,13 @@ export function ArtistsRoute() {
     },
   })
 
-  const stationProbeMutation = useMutation<
-    StationProbeResult,
+  const forceStationMutation = useMutation<
+    CatalogSyncQueuedResult,
     Error,
     number
   >({
-    mutationFn: (id: number) => adminApi.catalogStationProbe(id),
-    onSettled: () => setStationProbeBusyId(null),
+    mutationFn: (id: number) => adminApi.catalogForceStationSync(id),
+    onSettled: () => setForceStationBusyId(null),
   })
 
   function handleEnrich(id: number) {
@@ -289,12 +285,25 @@ export function ArtistsRoute() {
     deleteMutation.mutate(id)
   }
 
-  async function handleStationProbe(id: number) {
-    if (stationProbeMutation.isPending) return
-    setStationProbeBusyId(id)
+  async function handleForceStationSync(id: number) {
+    if (forceStationMutation.isPending) return
+    const ok = await stepUp.request('catalog.sync.run')
+    if (!ok) return
+    setForceStationBusyId(id)
     try {
-      const res = await stationProbeMutation.mutateAsync(id)
-      setStationProbeResult(res)
+      const res = await forceStationMutation.mutateAsync(id)
+      setSyncResult({
+        kind: 'catalog',
+        queued: 1,
+        jobIds: [
+          {
+            artistId: id,
+            jobId: res.job_id ?? null,
+          },
+        ],
+        errors: [],
+      })
+      qc.invalidateQueries({ queryKey: ['admin', 'artists'] })
     } catch (err) {
       await showAlert((err as Error).message)
     }
@@ -647,12 +656,12 @@ export function ArtistsRoute() {
             </MotionPress>
             <MotionPress
               variant="ghost"
-              disabled={busy || stationProbeMutation.isPending}
-              onClick={() => handleStationProbe(id)}
+              disabled={busy || forceStationMutation.isPending}
+              onClick={() => handleForceStationSync(id)}
             >
-              {stationProbeBusyId === id
-                ? t('admin.artists.stationProbeLoading')
-                : t('admin.artists.stationProbe')}
+              {forceStationBusyId === id
+                ? t('admin.artists.stationForceLoading')
+                : t('admin.artists.stationForce')}
             </MotionPress>
             <MotionPress
               variant="ghost"
@@ -1186,100 +1195,6 @@ export function ArtistsRoute() {
                       {e.artist_id}
                     </span>
                     : {e.detail}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-      </FormModal>
-      <FormModal
-        open={stationProbeResult !== null}
-        size="md"
-        title={t('admin.artists.stationProbeTitle')}
-        onClose={() => setStationProbeResult(null)}
-        footer={
-          <MotionPress
-            variant="primary"
-            onClick={() => setStationProbeResult(null)}
-          >
-            {t('admin.common.ok')}
-          </MotionPress>
-        }
-      >
-        {stationProbeResult && (
-          <div
-            className="admin-catalog-station-probe"
-            data-state={stationProbeResult.station_status}
-          >
-            <div className="admin-catalog-station-probe__head">
-              <span>
-                {t(
-                  `admin.artists.catalog.stationProbeStatus.${stationProbeResult.station_status}`,
-                )}
-              </span>
-              <span className="admin-mono">
-                {stationProbeResult.artist_id}
-              </span>
-            </div>
-            <div className="admin-auth-hint">
-              {stationProbeResult.artist_name}
-              {stationProbeResult.soundcloud_user_id
-                ? ` · SC ${stationProbeResult.soundcloud_user_id}`
-                : ''}
-            </div>
-            <div className="admin-auth-hint">
-              {t('admin.artists.catalog.stationProbeCounts', {
-                fetched: stationProbeResult.fetched_track_count,
-                importable:
-                  stationProbeResult.importable_track_count,
-                stored:
-                  stationProbeResult.existing_release_track_count ??
-                  0,
-              })}
-            </div>
-            {stationProbeResult.reason && (
-              <div className="admin-auth-hint">
-                {t('admin.artists.catalog.stationProbeReason', {
-                  reason: stationProbeResult.reason,
-                })}
-              </div>
-            )}
-            {stationProbeResult.tracks.length === 0 ? (
-              <div className="admin-auth-hint">
-                {t('admin.artists.catalog.stationProbeEmpty')}
-              </div>
-            ) : (
-              <ul className="admin-catalog-station-probe__tracks">
-                {stationProbeResult.tracks.map((tr, idx) => (
-                  <li key={`${tr.ref ?? 'track'}-${idx}`}>
-                    <span className="admin-catalog-station-probe__title">
-                      {tr.title || 'Untitled'}
-                    </span>
-                    {tr.artist && (
-                      <span className="admin-auth-hint">
-                        {tr.artist}
-                      </span>
-                    )}
-                    <span
-                      className={
-                        tr.importable
-                          ? 'admin-tag'
-                          : 'admin-tag admin-tag--warn'
-                      }
-                    >
-                      {tr.importable
-                        ? t(
-                            'admin.artists.catalog.stationProbeImportable',
-                          )
-                        : t(
-                            'admin.artists.catalog.stationProbeRejected',
-                            {
-                              reason:
-                                tr.reject_reason ?? 'unknown',
-                            },
-                          )}
-                    </span>
                   </li>
                 ))}
               </ul>

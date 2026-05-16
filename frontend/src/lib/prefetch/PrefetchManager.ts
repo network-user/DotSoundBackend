@@ -45,6 +45,7 @@ import {
 } from './storage'
 import {
   getCachedIdsSync,
+  prefetchProgressiveBodyForCache,
   warmProgressiveAudioForPlayback,
 } from '@/lib/offlineCache'
 import { shouldUseInternalHlsPlayback } from '@/lib/playbackSourcePolicy'
@@ -63,8 +64,22 @@ interface PendingTask {
   segmentDirUrls: string[]
   sourcePlatform: string | null
   serverWarmOnly: boolean
+  fullDownload: boolean
   abort: AbortController
 }
+
+// Contexts where the *next* track is statistically certain to play
+// next (radio engine, manual queue, autoplay continuation, etc.).
+// These are the only contexts where we burn the bandwidth budget on
+// downloading the full audio body so the next track switch is
+// genuinely instant. ``home`` / ``library`` etc. only get head-warm.
+const _FULL_DOWNLOAD_CONTEXTS: ReadonlySet<PrefetchContextName> = new Set([
+  'playback',
+  'queue',
+  'radio',
+  'deep_link',
+  'continue_on_app_start',
+])
 
 
 interface FetchPolicyArgs {
@@ -387,12 +402,20 @@ export class PrefetchManager {
 
     const list = this.contextTasks.get(options.context) ?? []
     let scheduled = 0
+    const fullBudget = this._fullDownloadBudgetForContext(options.context)
+    let fullUsed = 0
     for (const track of eligible) {
       const abort = new AbortController()
       const serverWarmOnly =
         (track as { access_mode?: string }).access_mode ===
           'third_party_stream' &&
         this.policy.skipThirdPartyAudioCache
+      const fullDownload =
+        !serverWarmOnly &&
+        fullUsed < fullBudget &&
+        _isThirdPartyCacheableSafe(track) &&
+        !this._networkForbidsFullDownload()
+      if (fullDownload) fullUsed += 1
       const task: PendingTask = {
         trackId: track.id,
         context: options.context,
@@ -407,6 +430,7 @@ export class PrefetchManager {
           (track as { source_platform?: string | null }).source_platform ??
           null,
         serverWarmOnly,
+        fullDownload,
         abort,
       }
       list.push(task)
@@ -416,6 +440,29 @@ export class PrefetchManager {
     }
     this.contextTasks.set(options.context, list)
     return scheduled
+  }
+
+  private _fullDownloadBudgetForContext(
+    context: PrefetchContextName,
+  ): number {
+    if (!_FULL_DOWNLOAD_CONTEXTS.has(context)) return 0
+    const policyAhead = Math.max(
+      0,
+      Math.floor(this.policy.fullDownloadAhead || 0),
+    )
+    return policyAhead
+  }
+
+  private _networkForbidsFullDownload(): boolean {
+    const net = this.currentNetwork
+    if (net.saveData) return true
+    if (net.effectiveType === '2g' || net.effectiveType === 'slow-2g') {
+      return true
+    }
+    if (net.downlinkMbps !== null && net.downlinkMbps < 1.0) {
+      return true
+    }
+    return false
   }
 
   private _resolveLookahead(
@@ -630,6 +677,23 @@ export class PrefetchManager {
       32 * 1024,
       this.policy.initialBytesPerTrack || 256 * 1024,
     )
+    if (task.fullDownload) {
+      // High-priority context (radio, queue, playback continuation):
+      // pull the full body so the next track switch hits Cache API
+      // and the audio element starts in <100 ms regardless of
+      // network. ``prefetchProgressiveBodyForCache`` already gates
+      // itself on save-data / 2g / quota.
+      const ok = await prefetchProgressiveBodyForCache(task.trackId, {
+        signal: task.abort.signal,
+      })
+      if (ok) {
+        // Return a sentinel positive value so the warm-record store
+        // knows this track was warmed. Actual byte count is stored
+        // by the SW Cache route.
+        return Math.max(initBytes, 1)
+      }
+      // Fall through to the head-warm prefetch on failure / skip.
+    }
     const result = await warmProgressiveAudioForPlayback(task.trackId, {
       signal: task.abort.signal,
       maxBytes: initBytes,

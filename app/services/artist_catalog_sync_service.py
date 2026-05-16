@@ -214,6 +214,7 @@ class ArtistCatalogSyncService:
         artist_id: int,
         *,
         skip_background_lyrics: bool = False,
+        force: bool = False,
     ) -> dict[str, Any]:
         artist, sc = await self._load_artist_with_autofill_sc_user(artist_id)
         await sc.sync_artist_soundcloud_uploader_profile(
@@ -237,6 +238,7 @@ class ArtistCatalogSyncService:
                 sc,
                 sc_uid,
                 skip_background_lyrics=skip_background_lyrics,
+                force=force,
             )
         except SoundCloudStationNotAvailable as exc:
             logger.info(
@@ -262,8 +264,9 @@ class ArtistCatalogSyncService:
         logger.info(
             "catalog_sync_station_done",
             artist_id=artist_id,
+            forced=force,
         )
-        return {"status": "ok"}
+        return {"status": "ok", "forced": force}
 
     async def _sync_artist_similar_station_core(
         self,
@@ -273,13 +276,14 @@ class ArtistCatalogSyncService:
         sc_uid: int,
         *,
         skip_background_lyrics: bool,
+        force: bool = False,
     ) -> dict[str, Any]:
         synthetic = synthetic_soundcloud_id_for_artist_station(sc_uid)
         existing = await self._catalog.get_by_artist_and_sc_album(
             artist_id,
             synthetic,
         )
-        if existing is not None and existing.manual_lock:
+        if existing is not None and existing.manual_lock and not force:
             return {"skipped_manual": True, "synced": False}
         display_position = (
             existing.display_position

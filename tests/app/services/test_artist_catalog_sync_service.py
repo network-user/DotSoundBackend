@@ -523,6 +523,122 @@ async def test_sync_artist_similar_station_writes_release(
 @patch(
     "app.services.artist_catalog_sync_service.SoundCloudService",
 )
+async def test_force_station_sync_overwrites_manual_locked_release(
+    mock_sc_cls: MagicMock,
+    session: AsyncSession,
+) -> None:
+    artist = Artist(
+        name="Force Seed",
+        name_normalized="force seed",
+        soundcloud_user_id=55,
+    )
+    session.add(artist)
+    await session.flush()
+    station_id = synthetic_soundcloud_id_for_artist_station(55)
+    existing = ArtistCatalogRelease(
+        artist_id=artist.id,
+        title="Locked Station",
+        release_kind=DOTSOUND_SC_ARTIST_STATION_RELEASE_KIND,
+        soundcloud_album_id=station_id,
+        display_position=7,
+        manual_lock=True,
+    )
+    old_track = Track(
+        title="Old",
+        play_count=0,
+        is_public=True,
+        is_active=True,
+    )
+    session.add_all([existing, old_track])
+    await session.flush()
+    session.add(
+        ArtistCatalogReleaseTrack(
+            release_id=existing.id,
+            track_id=old_track.id,
+            position=0,
+        )
+    )
+    await session.flush()
+
+    async def _fake_import(
+        tr: dict,
+        uid: int,
+        *,
+        skip_background_lyrics: bool = True,
+    ) -> Track:
+        t = Track(
+            title=tr.get("title", "T"),
+            artist="Real Similar",
+            source="soundcloud",
+            catalog_type="external_reference",
+            access_mode="third_party_stream",
+            imported_from="soundcloud",
+            external_id=str(tr.get("id", "0")),
+            sc_url=str(tr.get("permalink_url", "")),
+            uploaded_by_id=None,
+            is_public=True,
+            is_active=True,
+        )
+        session.add(t)
+        await session.flush()
+        await session.refresh(t)
+        return t
+
+    mock_inst = MagicMock()
+    mock_sc_cls.return_value = mock_inst
+    mock_inst.ensure_soundcloud_ids_for_artist = AsyncMock(
+        return_value=True,
+    )
+    mock_inst.sync_artist_soundcloud_uploader_profile = AsyncMock(
+        return_value=None,
+    )
+    mock_inst.fetch_expanded_artist_station_playlist = AsyncMock(
+        return_value={
+            "id": station_id,
+            "tracks": [
+                {
+                    "id": 9101,
+                    "permalink_url": "https://soundcloud.com/similar/new",
+                    "title": "New Similar",
+                    "user": {"username": "Real Similar"},
+                    "duration": 1000,
+                    "uri": "sc:new",
+                },
+            ],
+            "artwork_url": None,
+        },
+    )
+    mock_inst.download_artwork_as_cover_key = AsyncMock(return_value=None)
+    mock_inst.import_or_get_track = AsyncMock(side_effect=_fake_import)
+
+    svc = ArtistCatalogSyncService(session)
+    out = await svc.sync_artist_similar_station(artist.id, force=True)
+
+    assert out["status"] == "ok"
+    assert out["forced"] is True
+    await session.refresh(existing)
+    assert existing.manual_lock is True
+    assert existing.display_position == 7
+    links = (
+        (
+            await session.execute(
+                select(ArtistCatalogReleaseTrack).where(
+                    ArtistCatalogReleaseTrack.release_id == existing.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(links) == 1
+    new_track = await session.get(Track, links[0].track_id)
+    assert new_track is not None
+    assert new_track.title == "New Similar"
+
+
+@patch(
+    "app.services.artist_catalog_sync_service.SoundCloudService",
+)
 async def test_station_sync_does_not_link_foreign_tracks_to_seed(
     mock_sc_cls: MagicMock,
     session: AsyncSession,

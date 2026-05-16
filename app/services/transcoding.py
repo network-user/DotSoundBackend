@@ -7,6 +7,14 @@ import shutil
 import tempfile
 
 import structlog
+from dotsound_private_core.services.playback_streaming_policy import (
+    DEFAULT_HLS_HI_BITRATE_KBPS,
+    DEFAULT_HLS_LO_BITRATE_KBPS,
+    DEFAULT_HLS_SEGMENT_SECONDS,
+    DEFAULT_PROGRESSIVE_MP3_BITRATE_KBPS,
+    LATEST_BUNDLE_VERSION,
+    build_master_playlist,
+)
 
 from app.core import s3
 from app.core.db import AsyncSessionLocal
@@ -16,21 +24,16 @@ from app.services.audio_blob_service import AudioBlobService
 
 logger = structlog.stdlib.get_logger(__name__)
 
-_HLS_TIME = 10
-_HI_BITRATE = "128k"
-_LO_BITRATE = "64k"
+_HLS_TIME = DEFAULT_HLS_SEGMENT_SECONDS
+_HI_BITRATE = f"{DEFAULT_HLS_HI_BITRATE_KBPS}k"
+_LO_BITRATE = f"{DEFAULT_HLS_LO_BITRATE_KBPS}k"
+_MP3_BITRATE = f"{DEFAULT_PROGRESSIVE_MP3_BITRATE_KBPS}k"
 _LOUDNORM_FILTER = "loudnorm=I=-14:TP=-1:LRA=11"
 _FFMPEG_TIMEOUT_SEC = 600
 _LOUDNORM_STATS_RE = re.compile(r'\{\s*"input_i".*?\}', re.DOTALL)
 
-_MASTER_PLAYLIST = (
-    "#EXTM3U\n"
-    "#EXT-X-VERSION:3\n"
-    '#EXT-X-STREAM-INF:BANDWIDTH=128000,CODECS="mp4a.40.2"\n'
-    "hi/playlist.m3u8\n"
-    '#EXT-X-STREAM-INF:BANDWIDTH=64000,CODECS="mp4a.40.2"\n'
-    "lo/playlist.m3u8\n"
-)
+_MASTER_PLAYLIST = build_master_playlist()
+_BUNDLE_VERSION = LATEST_BUNDLE_VERSION
 
 
 @broker.task  # Превращаем в фоновую задачу воркера
@@ -68,20 +71,54 @@ async def transcode_and_upload(
             f.write(raw_audio_data)
 
         process = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-y", "-i", temp_in_path,
-            "-filter_complex", f"[0:a:0]{_LOUDNORM_FILTER}[norm]",
-            # Output 1: MP3 192k for range streaming fallback
-            "-map", "[norm]", "-c:a", "libmp3lame", "-b:a", "192k",
-            "-vn", temp_mp3_path,
-            # Output 2: HLS 128k (high quality)
-            "-map", "[norm]", "-c:a", "aac", "-b:a", _HI_BITRATE,
-            "-vn", "-hls_time", str(_HLS_TIME), "-hls_list_size", "0",
-            "-hls_segment_filename", f"{hi_dir}/%03d.ts",
+            "ffmpeg",
+            "-y",
+            "-i",
+            temp_in_path,
+            "-filter_complex",
+            f"[0:a:0]{_LOUDNORM_FILTER}[norm]",
+            # Output 1: MP3 for range streaming fallback
+            "-map",
+            "[norm]",
+            "-c:a",
+            "libmp3lame",
+            "-b:a",
+            _MP3_BITRATE,
+            "-vn",
+            temp_mp3_path,
+            # Output 2: HLS hi quality
+            "-map",
+            "[norm]",
+            "-c:a",
+            "aac",
+            "-b:a",
+            _HI_BITRATE,
+            "-vn",
+            "-hls_time",
+            str(_HLS_TIME),
+            "-hls_list_size",
+            "0",
+            "-hls_flags",
+            "independent_segments",
+            "-hls_segment_filename",
+            f"{hi_dir}/%03d.ts",
             f"{hi_dir}/playlist.m3u8",
-            # Output 3: HLS 64k (low quality / bad connection)
-            "-map", "[norm]", "-c:a", "aac", "-b:a", _LO_BITRATE,
-            "-vn", "-hls_time", str(_HLS_TIME), "-hls_list_size", "0",
-            "-hls_segment_filename", f"{lo_dir}/%03d.ts",
+            # Output 3: HLS lo quality (bad connection / save-data)
+            "-map",
+            "[norm]",
+            "-c:a",
+            "aac",
+            "-b:a",
+            _LO_BITRATE,
+            "-vn",
+            "-hls_time",
+            str(_HLS_TIME),
+            "-hls_list_size",
+            "0",
+            "-hls_flags",
+            "independent_segments",
+            "-hls_segment_filename",
+            f"{lo_dir}/%03d.ts",
             f"{lo_dir}/playlist.m3u8",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -131,17 +168,13 @@ async def transcode_and_upload(
             svc = AudioBlobService(session)
             track = await session.get(Track, track_id)
             if not track:
-                await _update_track_status(
-                    track_id, "error", None, None
-                )
+                await _update_track_status(track_id, "error", None, None)
                 return
             ab, _ = await svc.get_or_create_from_bytes(
                 mp3_data, "mp3", "audio/mpeg"
             )
             if source_sha256:
-                await svc.claim_source(
-                    blob=ab, source_sha256=source_sha256
-                )
+                await svc.claim_source(blob=ab, source_sha256=source_sha256)
             await svc.set_hls_manifest_key(
                 blob=ab, hls_manifest_key=manifest_key
             )
@@ -149,6 +182,8 @@ async def transcode_and_upload(
             track.processing_status = "active"
             track.file_size_bytes = len(mp3_data)
             track.hls_manifest_key = manifest_key
+            track.hls_segment_seconds = _HLS_TIME
+            track.hls_bundle_version = _BUNDLE_VERSION
             file_key_log = track.file_key
             reconciled = 0
             if source_sha256:
@@ -193,11 +228,23 @@ async def transcode_and_upload(
 
 
 async def transcode_hls_only(
-    track_id: int, file_key: str
+    track_id: int,
+    file_key: str,
+    source_sha256: str | None = None,
 ) -> None:
-    """Re-transcode an existing MP3 track to HLS only (for batch migration)."""
+    """Re-transcode an existing MP3 track to HLS only (for batch migration).
+
+    When ``source_sha256`` is supplied the bundle lands under a CAS
+    prefix so multiple tracks sharing the same source converge on
+    one set of segments and the migration cost amortises across the
+    catalogue.
+    """
     structlog.contextvars.bind_contextvars(track_id=track_id)
-    logger.info("hls_transcode_started")
+    logger.info(
+        "hls_transcode_started",
+        bundle_version=_BUNDLE_VERSION,
+        segment_seconds=_HLS_TIME,
+    )
 
     tmp_dir = tempfile.mkdtemp()
     temp_in_path = os.path.join(tmp_dir, "input.mp3")
@@ -212,15 +259,43 @@ async def transcode_hls_only(
             f.write(mp3_data)
 
         process = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-y", "-i", temp_in_path,
-            "-filter_complex", f"[0:a:0]{_LOUDNORM_FILTER}[norm]",
-            "-map", "[norm]", "-c:a", "aac", "-b:a", _HI_BITRATE,
-            "-vn", "-hls_time", str(_HLS_TIME), "-hls_list_size", "0",
-            "-hls_segment_filename", f"{hi_dir}/%03d.ts",
+            "ffmpeg",
+            "-y",
+            "-i",
+            temp_in_path,
+            "-filter_complex",
+            f"[0:a:0]{_LOUDNORM_FILTER}[norm]",
+            "-map",
+            "[norm]",
+            "-c:a",
+            "aac",
+            "-b:a",
+            _HI_BITRATE,
+            "-vn",
+            "-hls_time",
+            str(_HLS_TIME),
+            "-hls_list_size",
+            "0",
+            "-hls_flags",
+            "independent_segments",
+            "-hls_segment_filename",
+            f"{hi_dir}/%03d.ts",
             f"{hi_dir}/playlist.m3u8",
-            "-map", "[norm]", "-c:a", "aac", "-b:a", _LO_BITRATE,
-            "-vn", "-hls_time", str(_HLS_TIME), "-hls_list_size", "0",
-            "-hls_segment_filename", f"{lo_dir}/%03d.ts",
+            "-map",
+            "[norm]",
+            "-c:a",
+            "aac",
+            "-b:a",
+            _LO_BITRATE,
+            "-vn",
+            "-hls_time",
+            str(_HLS_TIME),
+            "-hls_list_size",
+            "0",
+            "-hls_flags",
+            "independent_segments",
+            "-hls_segment_filename",
+            f"{lo_dir}/%03d.ts",
             f"{lo_dir}/playlist.m3u8",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -248,16 +323,21 @@ async def transcode_hls_only(
         if stats:
             logger.info("ffmpeg_loudnorm_stats", **stats)
 
-        manifest_key = await _upload_hls(track_id, hi_dir, lo_dir)
+        manifest_key = await _upload_hls(
+            track_id, hi_dir, lo_dir, source_sha256
+        )
 
         async with AsyncSessionLocal() as session:
             track = await session.get(Track, track_id)
             if track:
                 track.hls_manifest_key = manifest_key
+                track.hls_segment_seconds = _HLS_TIME
+                track.hls_bundle_version = _BUNDLE_VERSION
                 await session.commit()
                 logger.info(
                     "hls_transcode_complete",
                     manifest_key=manifest_key,
+                    bundle_version=_BUNDLE_VERSION,
                 )
 
     except Exception:
@@ -287,13 +367,18 @@ async def _upload_hls(
     Without ``source_sha256`` we fall back to the legacy per-track prefix.
     """
     if source_sha256:
-        prefix = s3.build_cas_hls_prefix(source_sha256)
-        manifest_key = s3.build_cas_hls_master_key(source_sha256)
+        prefix = s3.build_cas_hls_prefix(
+            source_sha256, bundle_version=_BUNDLE_VERSION
+        )
+        manifest_key = s3.build_cas_hls_master_key(
+            source_sha256, bundle_version=_BUNDLE_VERSION
+        )
         if await s3.object_exists(manifest_key):
             logger.info(
                 "hls_cas_reused",
                 manifest_key=manifest_key,
                 source_sha256=source_sha256,
+                bundle_version=_BUNDLE_VERSION,
             )
             return manifest_key
     else:
@@ -306,9 +391,7 @@ async def _upload_hls(
     ):
         for fname in sorted(os.listdir(local_dir)):
             full_path = os.path.join(local_dir, fname)
-            data = await asyncio.to_thread(
-                _read_file_bytes, full_path
-            )
+            data = await asyncio.to_thread(_read_file_bytes, full_path)
             ctype = (
                 "application/vnd.apple.mpegurl"
                 if fname.endswith(".m3u8")

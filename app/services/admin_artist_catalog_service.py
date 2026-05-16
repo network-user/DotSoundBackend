@@ -121,7 +121,7 @@ class AdminArtistCatalogService:
             if raw_st in ("running", "success", "error"):
                 cs_state = raw_st
             raw_md = snap.get("mode")
-            if raw_md in ("full", "release"):
+            if raw_md in ("full", "release", "station"):
                 cs_mode = raw_md
             aid = snap.get("soundcloud_album_id")
             if isinstance(aid, int):
@@ -593,6 +593,61 @@ class AdminArtistCatalogService:
             )
         logger.info(
             "admin_catalog_full_sync_queued",
+            artist_id=artist_id,
+            job_id=job_id,
+        )
+        return job_id
+
+    async def enqueue_force_station_sync(
+        self,
+        artist_id: int,
+    ) -> str | None:
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None:
+            msg = "artist not found"
+            raise ValueError(msg)
+        await self._autofill_soundcloud_user_id_if_missing(artist_id)
+        artist = await self._artists.get_by_id(artist_id)
+        if artist is None:
+            msg = "artist not found"
+            raise ValueError(msg)
+        if artist.soundcloud_user_id is None:
+            msg = "artist has no soundcloud_user_id"
+            raise ValueError(msg)
+        from app.services.artist_catalog_sync_worker import (
+            force_sync_artist_similar_station_task,
+        )
+        from app.services.background_jobs import enqueue
+
+        try:
+            await acsp.set_running(
+                artist_id,
+                mode="station",
+                soundcloud_album_id=None,
+                detail={
+                    "phase": "queued",
+                    "forced": True,
+                    "station_force": True,
+                },
+            )
+        except Exception as exc:
+            logger.warning(
+                "admin_station_force_sync_progress_unavailable",
+                artist_id=artist_id,
+                error=str(exc),
+            )
+        job_id = await enqueue(
+            force_sync_artist_similar_station_task,
+            payload={
+                "artist_id": artist_id,
+                "skip_background_lyrics": False,
+            },
+            queue="high",
+            max_attempts=1,
+            idempotency_key=None,
+        )
+        logger.info(
+            "admin_station_force_sync_queued",
             artist_id=artist_id,
             job_id=job_id,
         )

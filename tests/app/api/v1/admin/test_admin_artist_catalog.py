@@ -485,6 +485,64 @@ async def test_admin_catalog_full_sync_cooldown_429(
         kiq.assert_not_awaited()
 
 
+async def test_admin_catalog_force_station_sync_bypasses_cooldown(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 140013)
+    h = await admin_bearer_for_user(client, db_session, user_id=admin["id"])
+    artist = Artist(
+        name="StationForce",
+        name_normalized="stationforce",
+        soundcloud_user_id=444020,
+    )
+    db_session.add(artist)
+    await db_session.flush()
+    rel = ArtistCatalogRelease(
+        artist_id=artist.id,
+        title="Fresh",
+        soundcloud_album_id=444021,
+        display_position=0,
+        synced_at=datetime.now(UTC),
+    )
+    db_session.add(rel)
+    await db_session.commit()
+
+    with (
+        patch(
+            "app.services.admin_auth_service.consume_step_up",
+            new_callable=AsyncMock,
+            return_value=True,
+        ),
+        patch(
+            "app.services.background_jobs.enqueue",
+            new_callable=AsyncMock,
+            return_value="job-force-station",
+        ) as enqueue,
+    ):
+        r = await client.post(
+            (
+                f"/api/v1/admin/artists/{artist.id}/catalog/"
+                "station/force-sync"
+            ),
+            headers=h,
+        )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["task"] == "force_sync_artist_similar_station_task"
+    assert body["job_id"] == "job-force-station"
+    enqueue.assert_awaited_once()
+    kwargs = enqueue.await_args.kwargs
+    assert kwargs["queue"] == "high"
+    assert kwargs["max_attempts"] == 1
+    assert kwargs["idempotency_key"] is None
+    assert kwargs["payload"] == {
+        "artist_id": artist.id,
+        "skip_background_lyrics": False,
+    }
+
+
 async def test_admin_catalog_full_sync_calls_autofill_when_no_sc_user(
     client: AsyncClient,
     db_session: AsyncSession,

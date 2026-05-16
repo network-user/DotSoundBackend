@@ -772,6 +772,38 @@ async def admin_catalog_enqueue_full_sync(
 
 
 @router.post(
+    "/{artist_id}/catalog/station/force-sync",
+    response_model=AdminCatalogSyncQueuedResponse,
+)
+@limiter.limit("20/minute")
+async def admin_catalog_force_station_sync(
+    request: Request,
+    artist_id: int,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_step_up("catalog.sync.run")),
+) -> AdminCatalogSyncQueuedResponse:
+    svc = AdminArtistCatalogService(session)
+    try:
+        job_id = await svc.enqueue_force_station_sync(artist_id)
+    except ValueError as exc:
+        msg = str(exc)
+        if msg == "artist not found":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=msg,
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=msg,
+        ) from exc
+    return AdminCatalogSyncQueuedResponse(
+        queued=True,
+        task="force_sync_artist_similar_station_task",
+        job_id=job_id,
+    )
+
+
+@router.post(
     "/catalog/sync-batch",
     response_model=AdminCatalogBulkSyncResponse,
 )

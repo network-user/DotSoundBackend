@@ -127,8 +127,33 @@ class AppSettings(BaseSettings):
     # global cap eats the SC_CLIENT_ID quota fast. The lyrics
     # per-track lock prevents two workers from running the same
     # generate_lyrics_task for the same track_id at the same time.
-    soundcloud_global_concurrency: int = 4
+    # Bumped 4 -> 10 to match the configured Tor pool size. The
+    # legacy "4 in flight" cap pre-dated the multi-circuit pool and
+    # was the dominant source of ``sc_semaphore_timeout`` warnings
+    # under the artist-catalog-sync sweep load. Increase further
+    # only if you also widen ``tor_pool_size`` and the Tor SOCKS
+    # ports are reachable.
+    soundcloud_global_concurrency: int = 10
     soundcloud_slot_acquire_timeout_seconds: float = 30.0
+    # When True, SoundCloud read-path calls (``fetch_track_by_ref``
+    # etc.) are offloaded to the remote DotSoundComputeWorker via a
+    # ``soundcloud_rpc`` ComputeJob. The worker performs the actual
+    # HTTP call from its own egress IP (optionally behind a
+    # residential proxy) and posts the envelope back. Off by default;
+    # turn on once the worker is up and stable. If the worker is
+    # unreachable the call transparently falls back to the in-process
+    # anti-block stack so a worker outage never blocks the backend.
+    sc_offload_enabled: bool = False
+    # Per-call timeout the backend waits for the worker's reply
+    # envelope before treating the worker as unreachable and falling
+    # back to local execution. Keep small enough that one bad worker
+    # cannot stall a Taskiq slot for a long time.
+    sc_offload_wait_seconds: float = 30.0
+    # Generic ComputeJob offload switch for Taskiq jobs that can be
+    # handled by DotSoundComputeWorker. Off by default so deploying
+    # backend changes never requires a remote worker to be already
+    # online; Taskiq workers keep executing local handlers.
+    compute_offload_enabled: bool = False
 
     # Аварийный переключатель воспроизведения для SoundCloud-треков:
     #   "stream"    — текущая модель (наш плеер поверх stream URL);
@@ -338,17 +363,9 @@ class AppSettings(BaseSettings):
     # with code ``scan_timeout`` so the UI can prompt a retry.
     scan_timeout_seconds: float = 120.0
 
-    # If a job stays ``scanning`` longer than this (e.g. Taskiq worker
-    # not consuming the queue), mark it failed so the UI does not spin
-    # forever. Set to ``0`` to disable.
+    # If a job stays ``scanning`` longer than this, mark it failed so
+    # the UI does not spin forever. Set to ``0`` to disable.
     import_external_scan_watchdog_seconds: float = 90.0
-
-    # When ``True`` we always run external scanning via
-    # ``asyncio.ensure_future`` inside the API process and skip the
-    # Taskiq broker entirely. Useful for dev where you do not run a
-    # separate worker — otherwise ``kiq()`` succeeds but nothing
-    # consumes the queue and the job hangs in ``scanning`` forever.
-    import_external_scan_inline: bool = False
 
     # An ``ImportJob`` left in ``scanning``/``queued`` longer than
     # this many seconds is treated as stale: it will not block new

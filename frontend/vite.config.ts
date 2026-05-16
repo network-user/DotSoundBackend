@@ -279,14 +279,14 @@ export default defineConfig({
             options: {
               cacheName: 'hls-segments-cache',
               expiration: {
-                // ~10 segments/track for our typical 3-min track at
-                // 10s segments. 600 entries lets a radio session of
-                // ~60 tracks stay fully cached locally so seeking
-                // back inside a played track is instant. 7-day TTL
-                // matches the default unpinned offline TTL so the
-                // GC pressure is consistent.
-                maxEntries: 600,
-                maxAgeSeconds: 60 * 60 * 24 * 7,
+                // With 4s segments a typical 3-min track has ~45
+                // segments. 1500 entries comfortably covers a
+                // ~30-track radio session, and the segment URLs are
+                // immutable (CAS path embeds the source SHA-256) so
+                // a 30-day TTL is safe. ``purgeOnQuotaError`` keeps
+                // the cache from blocking writes on tight devices.
+                maxEntries: 1500,
+                maxAgeSeconds: 60 * 60 * 24 * 30,
                 purgeOnQuotaError: true,
               },
               rangeRequests: true,
@@ -318,8 +318,12 @@ export default defineConfig({
             options: {
               cacheName: 'progressive-audio-cache',
               expiration: {
-                maxEntries: 24,
-                maxAgeSeconds: 60 * 60 * 24,
+                // Bumped from 24 to 48 so a longer radio session
+                // can keep its just-played and upcoming progressive
+                // tracks warm. 7-day TTL matches the unpinned
+                // offline TTL knob in offlineCache.ts.
+                maxEntries: 48,
+                maxAgeSeconds: 60 * 60 * 24 * 7,
                 purgeOnQuotaError: true,
               },
               rangeRequests: true,

@@ -25,7 +25,9 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _BOT_TIMEOUT = 30.0
 _SCAN_CACHE_PREFIX = "import:scan"
+_SCAN_LOCK_PREFIX = "import:scan:lock"
 _CANCEL_FLAG_PREFIX = "import:cancel"
+_background_scan_tasks: set[asyncio.Task[None]] = set()
 
 
 async def _external_scan_watchdog_coroutine(job_id: int) -> None:
@@ -58,6 +60,38 @@ def _schedule_external_scan_watchdog(job_id: int) -> None:
     if float(settings.import_external_scan_watchdog_seconds) <= 0:
         return
     asyncio.create_task(_external_scan_watchdog_coroutine(job_id))
+
+
+async def _try_acquire_scan_lock(job_id: int) -> bool:
+    try:
+        acquired = await get_redis_client().set(
+            f"{_SCAN_LOCK_PREFIX}:{job_id}",
+            "1",
+            nx=True,
+            ex=max(120, int(settings.import_external_scan_watchdog_seconds) + 30),
+        )
+        return bool(acquired)
+    except Exception:
+        return True
+
+
+async def _dispatch_external_scan(
+    job_id: int,
+    source: str,
+    url: str,
+) -> str:
+    """Schedule scan in the API process (never Taskiq queue)."""
+    from app.services.external_scan_worker import (  # noqa: PLC0415
+        run_external_playlist_scan,
+    )
+
+    task = asyncio.create_task(
+        run_external_playlist_scan(job_id, source, url),
+        name=f"external_scan_{job_id}",
+    )
+    _background_scan_tasks.add(task)
+    task.add_done_callback(_background_scan_tasks.discard)
+    return "asyncio"
 
 
 def _cancel_flag_key(job_id: int) -> str:
@@ -285,30 +319,31 @@ class ImportService:
         cached_job_id = await _get_scan_cache_job_id(user.id, source, url)
         if cached_job_id is not None:
             cached_job = await self._session.get(ImportJob, cached_job_id)
-            if cached_job and cached_job.status in ("ready", "scanning"):
+            if cached_job and cached_job.status == "ready":
+                logger.info(
+                    "external_scan_cache_hit",
+                    job_id=cached_job_id,
+                    source=source,
+                    status="ready",
+                )
+                return cached_job
+            if cached_job and cached_job.status == "scanning":
                 if _is_stale_scanning(cached_job):
                     logger.warning(
                         "external_scan_cache_stale_evict",
                         job_id=cached_job_id,
                         source=source,
-                        status=cached_job.status,
                     )
                     await _drop_scan_cache(user.id, source, url)
-                    cached_job.status = "failed"
-                    cached_job.tracks_data = {
-                        "error_code": "scan_stalled",
-                        "error_message": (
-                            "evicted stale scanning job before new POST"
-                        ),
-                        "source_url": url,
-                    }
-                    await self._session.flush()
+                    await self._fail_stale_scan_job(cached_job)
                 else:
                     logger.info(
-                        "external_scan_cache_hit",
+                        "external_scan_cache_redispatch",
                         job_id=cached_job_id,
                         source=source,
-                        status=cached_job.status,
+                    )
+                    await self._launch_external_scan_for_job(
+                        cached_job, source, url
                     )
                     return cached_job
 
@@ -318,19 +353,18 @@ class ImportService:
                 "external_scan_active_stale_evict",
                 job_id=active.id,
                 source=active.source,
-                status=active.status,
             )
-            active.status = "failed"
-            active.tracks_data = {
-                "error_code": "scan_stalled",
-                "error_message": (
-                    "evicted stale active job before new POST"
-                ),
-                "source_url": (active.tracks_data or {}).get("source_url"),
-            }
-            await self._session.flush()
+            await self._fail_stale_scan_job(active)
             active = None
-        if active:
+        elif active and active.status == "scanning":
+            scan_url = (active.tracks_data or {}).get("source_url")
+            if scan_url == url:
+                await self._launch_external_scan_for_job(
+                    active, source, url
+                )
+                return active
+            return active
+        elif active:
             return active
 
         job = ImportJob(
@@ -342,43 +376,9 @@ class ImportService:
         self._session.add(job)
         await self._session.flush()
         await self._session.refresh(job)
-        job_id = job.id
 
-        from app.services.external_scan_worker import (  # noqa: PLC0415
-            scan_external_playlist_task,
-        )
-
-        via: str
-        if settings.import_external_scan_inline:
-            asyncio.ensure_future(
-                scan_external_playlist_task(job_id, source, url)
-            )
-            via = "asyncio_inline"
-        else:
-            try:
-                await scan_external_playlist_task.kiq(job_id, source, url)
-                via = "taskiq"
-            except Exception as kiq_exc:  # noqa: BLE001
-                logger.warning(
-                    "external_scan_kiq_failed_fallback_asyncio",
-                    job_id=job_id,
-                    source=source,
-                    error=str(kiq_exc),
-                )
-                asyncio.ensure_future(
-                    scan_external_playlist_task(job_id, source, url)
-                )
-                via = "asyncio_fallback"
-
-        await _set_scan_cache(user.id, source, url, job_id)
-
-        logger.info(
-            "external_scan_dispatched",
-            job_id=job_id,
-            source=source,
-            via=via,
-        )
-        _schedule_external_scan_watchdog(job_id)
+        await self._launch_external_scan_for_job(job, source, url)
+        await _set_scan_cache(user.id, source, url, job.id)
         return job
 
     async def scan_account_library(
@@ -593,11 +593,60 @@ class ImportService:
 
     async def get_job_status(self, job_id: int, user_id: int) -> ImportJob:
         user = await self._resolve_user(user_id)
-        return await self._get_job(job_id, user.id)
+        job = await self._get_job(job_id, user.id)
+        return await self._expire_stale_scan_job(job)
 
     async def get_active_job(self, user_id: int) -> ImportJob | None:
         user = await self._resolve_user(user_id)
-        return await self._get_active_job(user.id)
+        job = await self._get_active_job(user.id)
+        if job is None:
+            return None
+        return await self._expire_stale_scan_job(job)
+
+    async def _fail_stale_scan_job(self, job: ImportJob) -> ImportJob:
+        prev = dict(job.tracks_data or {})
+        job.status = "failed"
+        job.tracks_data = {
+            "error_code": "scan_stalled",
+            "error_message": (
+                "scan did not finish in time; retry the import"
+            ),
+            "source_url": prev.get("source_url"),
+            "diagnostics": prev.get("diagnostics", []),
+        }
+        await self._session.flush()
+        await self._session.commit()
+        return job
+
+    async def _expire_stale_scan_job(self, job: ImportJob) -> ImportJob:
+        if not _is_stale_scanning(job):
+            return job
+        return await self._fail_stale_scan_job(job)
+
+    async def _launch_external_scan_for_job(
+        self,
+        job: ImportJob,
+        source: str,
+        url: str,
+    ) -> None:
+        meta = dict(job.tracks_data or {})
+        meta["source_url"] = url
+        meta["scan_dispatched_at"] = datetime.now(
+            timezone.utc
+        ).isoformat()
+        meta.pop("scan_worker_started", None)
+        job.tracks_data = meta
+        await self._session.flush()
+        await self._session.commit()
+
+        via = await _dispatch_external_scan(job.id, source, url)
+        logger.info(
+            "external_scan_dispatched",
+            job_id=job.id,
+            source=source,
+            via=via,
+        )
+        _schedule_external_scan_watchdog(job.id)
 
     async def cancel_job(self, job_id: int, user_id: int) -> ImportJob:
         user = await self._resolve_user(user_id)

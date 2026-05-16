@@ -240,3 +240,97 @@ async def test_unknown_type_raises(
             job=job,
             result={},
         )
+
+
+async def test_persist_soundcloud_rpc_writes_envelope_to_redis(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict[str, object] = {}
+
+    class _FakeRedis:
+        async def set(
+            self,
+            key: str,
+            value: str,
+            *,
+            ex: int | None = None,
+        ) -> bool:
+            captured["set_key"] = key
+            captured["set_value"] = value
+            captured["set_ex"] = ex
+            return True
+
+        async def publish(
+            self, channel: str, message: str
+        ) -> int:
+            captured["pub_chan"] = channel
+            captured["pub_msg"] = message
+            return 1
+
+    monkeypatch.setattr(
+        "app.core.redis.get_redis_client",
+        lambda: _FakeRedis(),
+    )
+
+    job = _make_job(
+        job_id="cj_sc_rpc_1",
+        job_type=q.JOB_SOUNDCLOUD_RPC,
+        target_kind=q.TARGET_KIND_SC_RPC,
+        target_id="req-abc",
+    )
+    envelope = {
+        "request_id": "req-abc",
+        "success": True,
+        "data": {"id": 1, "title": "t"},
+    }
+    await crr.persist_result(
+        db_session,
+        job=job,
+        result=envelope,
+    )
+
+    assert captured["set_key"] == "sc_rpc_result:req-abc"
+    assert captured["pub_chan"] == "sc_rpc_result_chan:req-abc"
+    import json as _json
+
+    blob = _json.loads(captured["set_value"])  # type: ignore[arg-type]
+    assert blob["envelope"]["success"] is True
+    assert blob["envelope"]["data"]["id"] == 1
+
+
+async def test_persist_soundcloud_rpc_swallows_redis_failure(
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    class _Boom:
+        async def set(
+            self, *args: object, **kwargs: object
+        ) -> bool:
+            raise RuntimeError("redis down")
+
+        async def publish(
+            self, *args: object, **kwargs: object
+        ) -> int:
+            raise RuntimeError("redis down")
+
+    monkeypatch.setattr(
+        "app.core.redis.get_redis_client",
+        lambda: _Boom(),
+    )
+
+    job = _make_job(
+        job_id="cj_sc_rpc_2",
+        job_type=q.JOB_SOUNDCLOUD_RPC,
+        target_kind=q.TARGET_KIND_SC_RPC,
+        target_id="req-def",
+    )
+    await crr.persist_result(
+        db_session,
+        job=job,
+        result={
+            "request_id": "req-def",
+            "success": False,
+            "error_kind": "dead_track",
+        },
+    )

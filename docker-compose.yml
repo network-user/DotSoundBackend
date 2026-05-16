@@ -145,7 +145,7 @@ services:
       - --workers
       - "1"
       - --max-async-tasks
-      - "30"
+      - "${TASKIQ_MAX_ASYNC_TASKS:-50}"
       - app.core.tkq:broker
       - app.services.transcoding
       - app.services.import_worker

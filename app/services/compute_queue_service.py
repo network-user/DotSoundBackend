@@ -22,6 +22,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
+from dotsound_private_core.services.compute_job_policy import (
+    all_known_job_types,
+    backoff_for_error_kind,
+    lease_seconds,
+    max_attempts,
+    offloadable_job_types,
+    priority as policy_priority,
+)
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,9 +43,6 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 DEFAULT_LEASE_MINUTES = 15
 DEFAULT_MAX_ATTEMPTS = 5
 DEFAULT_FEATURE_VERSION = "v1"
-BACKOFF_BASE_SECONDS = 30
-BACKOFF_MAX_SECONDS = 60 * 60  # 1 hour cap
-
 STATUS_PENDING = "pending"
 STATUS_CLAIMED = "claimed"
 STATUS_SUCCEEDED = "succeeded"
@@ -46,24 +51,41 @@ TERMINAL_STATUSES = {STATUS_SUCCEEDED, STATUS_FAILED}
 
 JOB_TRACK_AUDIO_FEATURES = "track_audio_features"
 JOB_ARTIST_FEATURES_UPDATE = "artist_features_update"
-JOB_ARTIST_SIMILARITY_INDEX = "artist_similarity_index"
-JOB_TRACK_SIMILARITY_INDEX = "track_similarity_index"
-JOB_CATALOG_INGEST_NORMALIZE = "catalog_ingest_normalize"
+JOB_ARTIST_SIMILARITY = "artist_similarity"
+JOB_TRACK_SIMILARITY = "track_similarity"
+JOB_CATALOG_NORMALIZE = "catalog_normalize"
 JOB_AUDIO_EMBEDDING = "audio_embedding"
+JOB_SOUNDCLOUD_RPC = "soundcloud_rpc"
+JOB_SC_ARTIST_CATALOG_SYNC = "sc_artist_catalog_sync"
+JOB_SC_ARTIST_SIMILAR_STATION_SYNC = "sc_artist_similar_station_sync"
+JOB_SC_ARTIST_RELEASE_SYNC = "sc_artist_release_sync"
+JOB_ARTIST_ENRICHMENT = "artist_enrichment"
+JOB_TRACK_INFO_FETCH = "track_info_fetch"
+JOB_EXTERNAL_IMPORT_SCAN = "external_import_scan"
+JOB_TRACK_TRANSCODING = "track_transcoding"
+JOB_TRACK_WAVEFORM = "track_waveform"
+JOB_TRACK_SNIPPET = "track_snippet"
+JOB_TRACK_COVER_PROCESSING = "track_cover_processing"
+
+JOB_ARTIST_SIMILARITY_INDEX = JOB_ARTIST_SIMILARITY
+JOB_TRACK_SIMILARITY_INDEX = JOB_TRACK_SIMILARITY
+JOB_CATALOG_INGEST_NORMALIZE = JOB_CATALOG_NORMALIZE
 
 TARGET_KIND_TRACK = "track"
 TARGET_KIND_ARTIST = "artist"
+TARGET_KIND_SC_RPC = "sc_rpc"
+TARGET_KIND_IMPORT_JOB = "import_job"
+TARGET_KIND_SNIPPET = "snippet"
+TARGET_KIND_COVER = "cover"
 
-KNOWN_JOB_TYPES: frozenset[str] = frozenset(
-    {
-        JOB_TRACK_AUDIO_FEATURES,
-        JOB_ARTIST_FEATURES_UPDATE,
-        JOB_ARTIST_SIMILARITY_INDEX,
-        JOB_TRACK_SIMILARITY_INDEX,
-        JOB_CATALOG_INGEST_NORMALIZE,
-        JOB_AUDIO_EMBEDDING,
-    }
-)
+LEGACY_JOB_TYPE_ALIASES: dict[str, str] = {
+    "artist_similarity_index": JOB_ARTIST_SIMILARITY,
+    "track_similarity_index": JOB_TRACK_SIMILARITY,
+    "catalog_ingest_normalize": JOB_CATALOG_NORMALIZE,
+}
+
+KNOWN_JOB_TYPES: frozenset[str] = frozenset(all_known_job_types())
+OFFLOADABLE_JOB_TYPES: frozenset[str] = frozenset(offloadable_job_types())
 
 
 def _now() -> datetime:
@@ -79,10 +101,21 @@ def _supports_skip_locked(session: AsyncSession) -> bool:
     return getattr(bind.dialect, "name", "") == "postgresql"
 
 
-def _backoff_for(attempts: int) -> int:
-    """Exponential backoff: 30s, 60s, 120s, 240s, ... capped."""
-    seconds = BACKOFF_BASE_SECONDS * (2 ** max(0, attempts - 1))
-    return int(min(seconds, BACKOFF_MAX_SECONDS))
+def canonical_job_type(job_type: str) -> str:
+    return LEGACY_JOB_TYPE_ALIASES.get(job_type, job_type)
+
+
+def default_priority(job_type: str) -> int:
+    return int(policy_priority(canonical_job_type(job_type)))
+
+
+def default_max_attempts(job_type: str) -> int:
+    return int(max_attempts(canonical_job_type(job_type)))
+
+
+def default_lease_minutes(job_type: str) -> int:
+    seconds = int(lease_seconds(canonical_job_type(job_type)))
+    return max(1, int((seconds + 59) // 60))
 
 
 async def enqueue(
@@ -104,6 +137,7 @@ async def enqueue(
     of its current status), so callers can post the same intent
     repeatedly without polluting the queue.
     """
+    job_type = canonical_job_type(job_type)
     target_id_str = None if target_id is None else str(target_id)
 
     existing = await find_existing_job(
@@ -168,6 +202,7 @@ async def find_existing_job(
     failed). Useful for callers that want to differentiate "newly
     enqueued" vs "already known" without inserting first.
     """
+    job_type = canonical_job_type(job_type)
     if target_id is not None and not isinstance(target_id, str):
         target_id = str(target_id)
     stmt = select(ComputeJob).where(
@@ -199,7 +234,8 @@ async def claim_next(
     Returns ``None`` if no job is eligible. The caller must commit
     the session for the lease to become visible to other workers.
     """
-    if not job_types:
+    canonical_types = sorted({canonical_job_type(t) for t in job_types})
+    if not canonical_types:
         return None
     now = _now()
     cw = (
@@ -218,7 +254,7 @@ async def claim_next(
         select(ComputeJob.id)
         .where(
             ComputeJob.status == STATUS_PENDING,
-            ComputeJob.job_type.in_(list(job_types)),
+            ComputeJob.job_type.in_(canonical_types),
             ComputeJob.next_attempt_at <= now,
             or_(
                 ComputeJob.pinned_worker_id.is_(None),
@@ -226,7 +262,7 @@ async def claim_next(
             ),
         )
         .order_by(
-            ComputeJob.priority.desc(),
+            ComputeJob.priority.asc(),
             ComputeJob.next_attempt_at.asc(),
             ComputeJob.created_at.asc(),
         )
@@ -238,7 +274,12 @@ async def claim_next(
     if not job_id:
         return None
 
-    deadline = now + timedelta(minutes=int(lease_minutes))
+    lease = int(lease_minutes)
+    if job_id:
+        job_for_lease = await session.get(ComputeJob, job_id)
+        if job_for_lease is not None:
+            lease = default_lease_minutes(job_for_lease.job_type)
+    deadline = now + timedelta(minutes=lease)
     update_stmt = (
         update(ComputeJob)
         .where(
@@ -314,7 +355,12 @@ async def mark_failed(
             reason=err,
         )
         return
-    backoff = _backoff_for(job.attempts)
+    backoff = int(
+        backoff_for_error_kind(
+            reason,
+            attempt=max(1, int(job.attempts)),
+        )
+    )
     job.status = STATUS_PENDING
     job.next_attempt_at = _now() + timedelta(seconds=backoff)
     job.last_error = err
@@ -389,7 +435,7 @@ async def queue_depth(
         func.count(ComputeJob.id),
     )
     if job_type is not None:
-        stmt = stmt.where(ComputeJob.job_type == job_type)
+        stmt = stmt.where(ComputeJob.job_type == canonical_job_type(job_type))
     stmt = stmt.group_by(ComputeJob.status)
     rows = (await session.execute(stmt)).all()
     return {str(status): int(count) for status, count in rows}
@@ -408,7 +454,7 @@ async def dead_letter_jobs(
         .limit(int(limit))
     )
     if job_type is not None:
-        stmt = stmt.where(ComputeJob.job_type == job_type)
+        stmt = stmt.where(ComputeJob.job_type == canonical_job_type(job_type))
     return [row for row in (await session.execute(stmt)).scalars()]
 
 
@@ -426,7 +472,7 @@ async def oldest_pending_age_seconds(
         ComputeJob.status == STATUS_PENDING,
     )
     if job_type is not None:
-        stmt = stmt.where(ComputeJob.job_type == job_type)
+        stmt = stmt.where(ComputeJob.job_type == canonical_job_type(job_type))
     oldest = (await session.execute(stmt)).scalar_one_or_none()
     if oldest is None:
         return None
@@ -452,7 +498,11 @@ async def enqueue_track_audio_features(
         feature_version=feature_version,
         priority=priority,
         payload=payload,
-        max_attempts=max_attempts,
+        max_attempts=(
+            max_attempts
+            if max_attempts != DEFAULT_MAX_ATTEMPTS
+            else default_max_attempts(JOB_TRACK_AUDIO_FEATURES)
+        ),
     )
 
 
@@ -473,7 +523,11 @@ async def enqueue_artist_features(
         feature_version=feature_version,
         priority=priority,
         payload=payload,
-        max_attempts=max_attempts,
+        max_attempts=(
+            max_attempts
+            if max_attempts != DEFAULT_MAX_ATTEMPTS
+            else default_max_attempts(JOB_ARTIST_FEATURES_UPDATE)
+        ),
     )
 
 
@@ -488,13 +542,17 @@ async def enqueue_artist_similarity_index(
 ) -> ComputeJob:
     return await enqueue(
         session,
-        job_type=JOB_ARTIST_SIMILARITY_INDEX,
+        job_type=JOB_ARTIST_SIMILARITY,
         target_kind=TARGET_KIND_ARTIST,
         target_id=artist_id,
         feature_version=feature_version,
         priority=priority,
         payload=payload,
-        max_attempts=max_attempts,
+        max_attempts=(
+            max_attempts
+            if max_attempts != DEFAULT_MAX_ATTEMPTS
+            else default_max_attempts(JOB_ARTIST_SIMILARITY)
+        ),
     )
 
 
@@ -509,13 +567,17 @@ async def enqueue_track_similarity_index(
 ) -> ComputeJob:
     return await enqueue(
         session,
-        job_type=JOB_TRACK_SIMILARITY_INDEX,
+        job_type=JOB_TRACK_SIMILARITY,
         target_kind=TARGET_KIND_TRACK,
         target_id=track_id,
         feature_version=feature_version,
         priority=priority,
         payload=payload,
-        max_attempts=max_attempts,
+        max_attempts=(
+            max_attempts
+            if max_attempts != DEFAULT_MAX_ATTEMPTS
+            else default_max_attempts(JOB_TRACK_SIMILARITY)
+        ),
     )
 
 
@@ -530,12 +592,65 @@ async def enqueue_catalog_ingest_normalize(
 ) -> ComputeJob:
     return await enqueue(
         session,
-        job_type=JOB_CATALOG_INGEST_NORMALIZE,
+        job_type=JOB_CATALOG_NORMALIZE,
         target_kind=TARGET_KIND_TRACK,
         target_id=track_id,
         feature_version=feature_version,
         priority=priority,
         payload=payload,
+        max_attempts=(
+            max_attempts
+            if max_attempts != DEFAULT_MAX_ATTEMPTS
+            else default_max_attempts(JOB_CATALOG_NORMALIZE)
+        ),
+    )
+
+
+async def enqueue_soundcloud_rpc(
+    session: AsyncSession,
+    *,
+    method: str,
+    args: dict[str, Any] | None = None,
+    sticky_key: str = "",
+    request_id: str | None = None,
+    timeout_seconds: float = 25.0,
+    priority: int = 10,
+    max_attempts: int = 4,
+) -> ComputeJob:
+    """Enqueue a SoundCloud RPC for the remote ComputeWorker.
+
+    Wraps the PrivateCore ``sc_rpc_protocol`` request envelope. The
+    ``request_id`` becomes the ``target_id`` so callers can wait for
+    the result by reading ``compute_job.result`` (or the Redis
+    pub/sub channel published from
+    :func:`compute_results_router.persist_result`). Pass a stable
+    ``sticky_key`` (e.g. ``artist:42``) to keep the worker's
+    OutboundClient on a consistent egress identity across retries.
+    """
+    from dotsound_private_core.contracts.sc_rpc_protocol import (
+        build_rpc_request,
+        is_known_method,
+    )
+
+    if not is_known_method(method):
+        raise ValueError(f"unsupported_sc_rpc_method:{method}")
+    payload_obj = dict(
+        build_rpc_request(
+            method=method,
+            args=args or {},
+            sticky_key=sticky_key,
+            timeout_seconds=timeout_seconds,
+        )
+    )
+    rid = request_id or _new_job_id()[3:]
+    return await enqueue(
+        session,
+        job_type=JOB_SOUNDCLOUD_RPC,
+        target_kind=TARGET_KIND_SC_RPC,
+        target_id=rid,
+        feature_version=DEFAULT_FEATURE_VERSION,
+        payload=payload_obj,
+        priority=priority,
         max_attempts=max_attempts,
     )
 
@@ -572,19 +687,41 @@ __all__ = [
     "STATUS_SUCCEEDED",
     "TERMINAL_STATUSES",
     "JOB_ARTIST_FEATURES_UPDATE",
+    "JOB_ARTIST_ENRICHMENT",
+    "JOB_ARTIST_SIMILARITY",
     "JOB_ARTIST_SIMILARITY_INDEX",
+    "JOB_CATALOG_NORMALIZE",
     "JOB_CATALOG_INGEST_NORMALIZE",
+    "JOB_EXTERNAL_IMPORT_SCAN",
+    "JOB_SC_ARTIST_CATALOG_SYNC",
+    "JOB_SC_ARTIST_RELEASE_SYNC",
+    "JOB_SC_ARTIST_SIMILAR_STATION_SYNC",
+    "JOB_SOUNDCLOUD_RPC",
+    "JOB_TRACK_COVER_PROCESSING",
     "JOB_TRACK_AUDIO_FEATURES",
+    "JOB_TRACK_INFO_FETCH",
+    "JOB_TRACK_SIMILARITY",
     "JOB_TRACK_SIMILARITY_INDEX",
+    "JOB_TRACK_SNIPPET",
+    "JOB_TRACK_TRANSCODING",
+    "JOB_TRACK_WAVEFORM",
     "KNOWN_JOB_TYPES",
+    "LEGACY_JOB_TYPE_ALIASES",
+    "OFFLOADABLE_JOB_TYPES",
     "TARGET_KIND_ARTIST",
+    "TARGET_KIND_COVER",
+    "TARGET_KIND_IMPORT_JOB",
+    "TARGET_KIND_SC_RPC",
+    "TARGET_KIND_SNIPPET",
     "TARGET_KIND_TRACK",
+    "canonical_job_type",
     "claim_next",
     "dead_letter_jobs",
     "enqueue",
     "enqueue_artist_features",
     "enqueue_artist_similarity_index",
     "enqueue_catalog_ingest_normalize",
+    "enqueue_soundcloud_rpc",
     "enqueue_track_audio_features",
     "enqueue_track_similarity_index",
     "find_existing_job",
@@ -595,3 +732,6 @@ __all__ = [
     "queue_health_snapshot",
     "requeue_stale_claims",
 ]
+    "default_lease_minutes",
+    "default_max_attempts",
+    "default_priority",

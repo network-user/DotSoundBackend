@@ -18,6 +18,7 @@ from . import (
     dashboard,
     experiments,
     genre_samples,
+    hls_migration,
     logs,
     manifest,
     metrics,
@@ -64,4 +65,5 @@ router.include_router(audit.router)
 router.include_router(security.router)
 router.include_router(antivirus.router)
 router.include_router(admin_soundcloud.router)
+router.include_router(hls_migration.router)
 router.include_router(ws.router)

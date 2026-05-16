@@ -609,6 +609,17 @@ export function ImportView({
               {t('import.scanSlowHint')}
             </p>
           )}
+          {job?.tracks_data?.scan_dispatched_at && (
+            <p className="import-scan-meta" style={{ fontSize: 12, opacity: 0.7 }}>
+              {job.tracks_data.scan_worker_started
+                ? t('import.scanWorkerStarted', {
+                    defaultValue: 'Worker started',
+                  })
+                : t('import.scanDispatched', {
+                    defaultValue: 'Queued, waiting for worker…',
+                  })}
+            </p>
+          )}
           <MotionPress
             type="button"
             variant="ghost"

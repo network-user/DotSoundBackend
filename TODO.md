@@ -1,5 +1,30 @@
 # DotSound - TODO Tracker
 
+- [x] **Mobile PWA scroll gesture unblocking (2026-05-16)**
+  - `OnboardingV2`: swipe-calibration card now allows vertical page
+    scroll from the cover (`touch-action: pan-y`) while preserving
+    horizontal like/dislike drag; short mobile viewports use a more
+    compact swipe layout so action buttons stay reachable.
+  - Shared artist/horizontal snap carousels now allow vertical pan
+    (`pan-x pan-y`) instead of trapping scroll inside clickable cards.
+  - `useSwipeX` no longer calls `preventDefault()` for swipe directions
+    that have no handler, so vertical scroll is not swallowed by passive
+    horizontal swipe zones.
+  - Verify: `npm run build`.
+
+- [x] **SoundCloud artist station: forced per-artist rebuild (2026-05-16)**
+  - Backend: added admin force station sync endpoint
+    `POST /api/v1/admin/artists/{artist_id}/catalog/station/force-sync`.
+    It requires catalog step-up, bypasses catalog cooldown/background-job
+    idempotency, records the job in `high` queue, and kicks a dedicated
+    `force_sync_artist_similar_station_task`.
+  - Catalog sync: station rebuild now accepts `force=True` and overwrites the
+    synthetic station release/tracks even when that release has `manual_lock`.
+  - Admin UI: `/admin/artists` row action is now "Rebuild station" /
+    "Переопределить station" and opens the background-job result modal.
+  - Tests: covered high-priority force enqueue and manual-lock station
+    overwrite.
+
 - [x] **SoundCloud artist station: URN refs + admin probe (2026-05-16)**
   - `app/services/soundcloud_service.py`: station sync теперь извлекает
     треки из `tracks[].urn` / `tracks[].uri` / `tracks[].id` и ходит в
@@ -29,8 +54,9 @@
     понятный `provider_unavailable` с инструкцией `YANDEX_MUSIC_PROXIES`. Тела ошибок усечены
     до `_YM_DIAG_BODY_MAX` символов для диагностики. Поддержка `YANDEX_MUSIC_TOKEN` (OAuth).
   - `DotSoundPrivateCore/.env.example`: обновлены комментарии Яндекс.Музыки.
-  - `DotSoundBackend/app/services/external_scan_worker.py`: новый Taskiq-воркер
-    `scan_external_playlist_task` — выполняет сетевое сканирование в фоне.
+  - `DotSoundBackend/app/services/external_scan_worker.py`:
+    `run_external_playlist_scan` — сетевое сканирование в фоне (asyncio в
+    процессе API); Taskiq-обёртка `scan_external_playlist_task` legacy-only.
   - `DotSoundBackend/app/services/import_service.py`: `scan_external_playlist` теперь создаёт
     job(status="scanning") и сразу диспатчит таск, не блокируя HTTP-соединение.
   - `frontend/src/components/Import/ImportView.tsx`: polling для статуса `"scanning"` —
@@ -45,8 +71,8 @@
     чтобы не перетирать отмену; в UI тексты для `scan_timeout` / `scan_stalled`.
   - Дальнейшая отвязка от зависшего job: `IMPORT_EXTERNAL_STALE_SCAN_SECONDS` (120 с)
     — кэш `scan_url` и `_get_active_job` больше не возвращают «застрявший» job;
-    `IMPORT_EXTERNAL_SCAN_INLINE=true` для dev без отдельного Taskiq-воркера
-    (запуск задачи через `asyncio.ensure_future` в API-процессе).
+    скан только через `asyncio.create_task(run_external_playlist_scan)` в API
+    (Taskiq `kiq` для external scan убран из ImportService).
   - **Диагностика провайдера в ответе юзеру (Я.Музыка)**:
     `PlaylistScanResult.diagnostics: tuple[dict, ...]` — список запросов
     к `api.music.yandex.net` (URL, HTTP status, elapsed_ms, snippet тела
@@ -343,6 +369,17 @@
     `soundcloud_track_unverified` / `soundcloud_track_not_importable`
     exceptions are caught and logged (skip the track, continue the album sync)
     instead of failing the entire background job.
+
+- [ ] **SC anti-block + ComputeWorker offload (2026-05-16, WIP — handoff)**
+  - Phase 1 done: `sc_anti_block_policy`, `sc_browser_session`, dead-track cache,
+    optional `soundcloud_rpc` offload (`SC_OFFLOAD_ENABLED=false` by default),
+    catalog sync idempotency/backpressure, Taskiq `max-async-tasks` 50.
+  - Phase 2 pending: `compute_job_dispatcher`, `compute_job_reaper`, Taskiq
+    workers → dispatcher, ComputeWorker handlers (enrichment/ffmpeg/image),
+    full `compute_results_router` persist paths.
+  - **Handoff + prompt для продолжения:**
+    `docs/handoffs/2026-05-16-sc-offload-queue-optimization.md`,
+    `docs/handoffs/PROMPT-continue-sc-offload.md`
 
 - [x] **SoundCloud encrypted-only playback guard (2026-05-16)**
   - Git history check found that the old working playback path handled
@@ -3182,7 +3219,7 @@
 
 ---
 
-*Последнее обновление: 2026-05-16 (Admin playback filters and radio skip counters).*
+*Последнее обновление: 2026-05-16 (Mobile PWA scroll gesture unblocking).*
 
 ## Session Updates (2026-05-06)
 

@@ -62,9 +62,7 @@ class Track(Base, TimestampMixin):
             postgresql_where=text(
                 "source_sha256 IS NOT NULL AND blob_id IS NULL"
             ),
-            sqlite_where=text(
-                "source_sha256 IS NOT NULL AND blob_id IS NULL"
-            ),
+            sqlite_where=text("source_sha256 IS NOT NULL AND blob_id IS NULL"),
         ),
     )
 
@@ -133,6 +131,15 @@ class Track(Base, TimestampMixin):
     )
     source_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     hls_manifest_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    hls_segment_seconds: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    hls_bundle_version: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        index=True,
+    )
     is_public: Mapped[bool] = mapped_column(
         Boolean, server_default=true(), nullable=False
     )

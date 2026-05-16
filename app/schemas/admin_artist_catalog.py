@@ -32,7 +32,7 @@ class AdminArtistCatalogOverviewResponse(BaseModel):
         "success",
         "error",
     ] = "idle"
-    catalog_sync_mode: Literal["full", "release"] | None = None
+    catalog_sync_mode: Literal["full", "release", "station"] | None = None
     catalog_sync_soundcloud_album_id: int | None = None
     catalog_sync_error: str | None = None
     catalog_sync_detail: dict[str, Any] | None = None

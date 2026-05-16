@@ -1711,7 +1711,36 @@ export function PlayerProvider({
         let readyTimer: number | null = null
         const hls = new Hls({
           enableWorker: true,
+          // -1 = ABR auto. With ``testBandwidth: false`` hls.js skips
+          // the bandwidth-probe fragment dance that otherwise adds an
+          // extra round-trip before playback. Combined with our 4s
+          // segments this trims time-to-first-frame to a single TS
+          // segment (~150 KB) on the hot path.
           startLevel: -1,
+          testBandwidth: false,
+          // Fast handshake on slow links: shorter per-fragment timeout
+          // means a stuck CDN trips the recovery path early instead
+          // of pinning the user on a 20 s default timeout.
+          fragLoadingTimeOut: 8000,
+          manifestLoadingTimeOut: 5000,
+          levelLoadingTimeOut: 5000,
+          // Buffer enough to hide a temporary stall but not so much
+          // that aggressive seeking causes the engine to refetch
+          // 10+ segments on every scrub.
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          maxBufferSize: 60 * 1000 * 1000,
+          maxBufferHole: 0.5,
+          // Pre-fetch the next fragment as soon as the current one
+          // finishes downloading; this is what kills "stutter on the
+          // segment boundary" perceived by users on edge networks.
+          startFragPrefetch: true,
+          // Keep ABR snappy: smaller EWMA windows react to a network
+          // drop within 2-3 segments instead of 6-8.
+          abrEwmaFastLive: 1.0,
+          abrEwmaSlowLive: 3.0,
+          abrEwmaFastVoD: 1.0,
+          abrEwmaSlowVoD: 3.0,
         })
         const onReady = () => {
           if (settled) return
@@ -2126,6 +2155,34 @@ export function PlayerProvider({
         })
       } catch {
         /* ignore */
+      }
+      // Auto-recover: a "stalled" event after a seek typically means
+      // hls.js is waiting on a fragment that has not arrived yet. Kick
+      // the loader at the current playhead so the engine cancels the
+      // pending fetch and starts a new one targeted at the seek point.
+      // For native progressive playback the audio element re-issues a
+      // Range request when the readyState drops; we just nudge it by
+      // re-asserting currentTime once the network is alive again.
+      try {
+        const hls = hlsRef.current
+        if (hls) {
+          try {
+            hls.stopLoad()
+            hls.startLoad(audio.currentTime)
+          } catch {
+            /* hls.js missing or destroyed */
+          }
+          return
+        }
+        if (audio.readyState < 2 && audio.networkState !== 3) {
+          // re-poke the playhead so the browser re-issues a Range
+          const t = audio.currentTime
+          if (Number.isFinite(t)) {
+            audio.currentTime = t
+          }
+        }
+      } catch {
+        /* never let recovery itself crash the player */
       }
     }
     const onTime = () => {
@@ -3090,8 +3147,12 @@ export function PlayerProvider({
           const hls = new HlsMod({
             enableWorker: true,
             startLevel: -1,
+            testBandwidth: false,
             autoStartLoad: true,
             maxBufferLength: 12,
+            startFragPrefetch: true,
+            fragLoadingTimeOut: 8000,
+            manifestLoadingTimeOut: 5000,
           })
           hls.loadSource(
             `/api/v1/tracks/${next.id}/hls/master.m3u8`,
@@ -3281,14 +3342,56 @@ export function PlayerProvider({
     [],
   )
 
+  const _applySeek = useCallback(
+    (a: HTMLAudioElement, target: number) => {
+      const clamped = Math.max(
+        0,
+        Math.min(a.duration || target, target),
+      )
+      // HLS-specific: tell hls.js to abort the in-flight fragment and
+      // jump to the new position. Without this, a long-distance seek
+      // on a still-buffering segment makes the engine wait for the
+      // current fetch to complete before starting the new one — which
+      // surfaces to the user as a multi-second freeze on scrub.
+      const hls = hlsRef.current
+      if (hls) {
+        try {
+          hls.stopLoad()
+          hls.startLoad(clamped)
+        } catch {
+          /* hls.js may not be ready yet; native seek still works */
+        }
+      }
+      // Prefer ``fastSeek`` when available: keyframe-aligned seeks are
+      // ~10x faster than precise seeks because the decoder does not
+      // need to reconstruct the exact PTS, and music never visibly
+      // suffers from rounding to the nearest GOP boundary.
+      const fastSeek = (
+        a as HTMLAudioElement & {
+          fastSeek?: (time: number) => void
+        }
+      ).fastSeek
+      if (typeof fastSeek === 'function') {
+        try {
+          fastSeek.call(a, clamped)
+        } catch {
+          a.currentTime = clamped
+        }
+      } else {
+        a.currentTime = clamped
+      }
+    },
+    [],
+  )
+
   const seek = useCallback(
     (pct: number) => {
       const a = audioRef.current
       if (!a || !a.duration) return
-      a.currentTime = (pct / 100) * a.duration
+      _applySeek(a, (pct / 100) * a.duration)
       flushPlayerTimeUi()
     },
-    [flushPlayerTimeUi],
+    [_applySeek, flushPlayerTimeUi],
   )
 
   const stop = () => {
@@ -3316,36 +3419,30 @@ export function PlayerProvider({
     (sec: number) => {
       const a = audioRef.current
       if (!a || !a.duration) return
-      a.currentTime = Math.max(
-        0,
-        Math.min(a.duration, sec),
-      )
+      _applySeek(a, sec)
       flushPlayerTimeUi()
     },
-    [flushPlayerTimeUi],
+    [_applySeek, flushPlayerTimeUi],
   )
 
   const skipForward = useCallback(
     (s = 15) => {
       const a = audioRef.current
       if (!a) return
-      a.currentTime = Math.min(
-        a.duration || 0,
-        a.currentTime + s,
-      )
+      _applySeek(a, (a.currentTime || 0) + s)
       flushPlayerTimeUi()
     },
-    [flushPlayerTimeUi],
+    [_applySeek, flushPlayerTimeUi],
   )
 
   const skipBackward = useCallback(
     (s = 15) => {
       const a = audioRef.current
       if (!a) return
-      a.currentTime = Math.max(0, a.currentTime - s)
+      _applySeek(a, (a.currentTime || 0) - s)
       flushPlayerTimeUi()
     },
-    [flushPlayerTimeUi],
+    [_applySeek, flushPlayerTimeUi],
   )
 
   const setPlaybackRate = useCallback(
