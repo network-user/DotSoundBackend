@@ -396,6 +396,63 @@ class ArtistCatalogRepository(BaseRepository[ArtistCatalogRelease]):
         rows = await self._session.execute(stmt)
         return [r for (r,) in rows.all()]
 
+    async def find_stale_full_catalog_artist_ids(
+        self,
+        threshold_days: int,
+        *,
+        limit: int = 50,
+    ) -> list[int]:
+        """Artists with SC identity whose non-station catalog is stale or
+        missing entirely. Used by the periodic full-catalog sweep task."""
+        from app.models.artist import Artist
+
+        cutoff = datetime.now(UTC) - timedelta(days=threshold_days)
+        last_sync_sq = (
+            select(
+                ArtistCatalogRelease.artist_id.label("artist_id"),
+                func.max(ArtistCatalogRelease.synced_at).label(
+                    "last_sync"
+                ),
+            )
+            .where(
+                ArtistCatalogRelease.release_kind
+                != _ARTIST_STATION_KIND,
+                ArtistCatalogRelease.soundcloud_album_id.isnot(None),
+            )
+            .group_by(ArtistCatalogRelease.artist_id)
+            .subquery()
+        )
+        stmt = (
+            select(Artist.id)
+            .outerjoin(
+                last_sync_sq,
+                last_sync_sq.c.artist_id == Artist.id,
+            )
+            .where(
+                Artist.soundcloud_user_id.isnot(None),
+                or_(
+                    last_sync_sq.c.last_sync.is_(None),
+                    last_sync_sq.c.last_sync < cutoff,
+                ),
+            )
+            .limit(limit)
+        )
+        rows = await self._session.execute(stmt)
+        return [r for (r,) in rows.all()]
+
+    async def count_artists_by_enrichment_status(
+        self,
+    ) -> dict[str, int]:
+        """Return count of artists grouped by enrichment_status."""
+        from app.models.artist import Artist
+
+        cnt = func.count(Artist.id).label("cnt")
+        stmt = select(Artist.enrichment_status, cnt).group_by(
+            Artist.enrichment_status
+        )
+        rows = await self._session.execute(stmt)
+        return {str(status): int(count) for status, count in rows.all()}
+
     async def apply_release_display_order(
         self,
         artist_id: int,

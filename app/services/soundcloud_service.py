@@ -1815,11 +1815,11 @@ class SoundCloudService:
         sc_url: str = sc_data.get("permalink_url", "")
 
         decision = evaluate_soundcloud_track_importability(sc_data)
-        official_embed_fallback = (
+        archive_unplayable_import = (
             not decision.allowed
             and decision.reason == REASON_ENCRYPTED_HLS_UNSUPPORTED
         )
-        if not decision.allowed and not official_embed_fallback:
+        if not decision.allowed and not archive_unplayable_import:
             logger.info(
                 "sc_track_import_rejected_by_policy",
                 sc_url=sc_url or None,
@@ -1841,9 +1841,9 @@ class SoundCloudService:
                     extra={"diagnostic": dict(decision.diagnostic)},
                 ),
             )
-        if official_embed_fallback:
+        if archive_unplayable_import:
             logger.info(
-                "sc_track_import_official_embed_fallback",
+                "sc_track_import_encrypted_hls_archived",
                 sc_url=sc_url or None,
                 reason=decision.reason,
                 diagnostic=dict(decision.diagnostic),
@@ -1858,35 +1858,30 @@ class SoundCloudService:
             await schedule_reindex_track(t.id)
             return playback_verified
 
-        async def _apply_official_embed_fallback(t: Track) -> None:
-            if not official_embed_fallback:
-                return
-            changed = False
-            if t.access_mode != "official_embed":
-                t.access_mode = "official_embed"
-                changed = True
-            if sc_url and not t.source_url:
-                t.source_url = sc_url
-                changed = True
-            if sc_url and not t.canonical_source_url:
-                t.canonical_source_url = sc_url
-                changed = True
-            if t.deleted_at is None and (
-                t.deleted_reason == REASON_ENCRYPTED_HLS_UNSUPPORTED
-            ):
-                t.is_active = True
-                t.is_public = is_public
-                t.deleted_reason = None
-                changed = True
-            if not changed:
-                return
-            await self._session.commit()
-            await self._session.refresh(t)
+        async def _archive_existing_unplayable(t: Track) -> None:
+            if t.access_mode != "third_party_stream":
+                t.access_mode = "third_party_stream"
+                await self._session.flush()
+            await self._verify_imported_track_playback(t)
+            await self._suppress_unverified_imported_track(
+                t,
+                sc_data=sc_data,
+            )
 
         if sc_url:
             existing = await self._fetch_by_sc_url(sc_url)
             if existing:
-                await _apply_official_embed_fallback(existing)
+                should_archive = (
+                    archive_unplayable_import
+                    and settings.sc_strict_import_verify
+                )
+                if should_archive:
+                    await _archive_existing_unplayable(existing)
+                    raise self._sc_unverified_http_exception(
+                        track=existing,
+                        sc_data=sc_data,
+                        sc_url=sc_url,
+                    )
                 await _verify_and_reindex(existing)
                 return existing
 
@@ -1945,16 +1940,13 @@ class SoundCloudService:
             "source": "soundcloud",
             "catalog_type": "external_reference",
             "access_mode": (
-                "official_embed"
-                if official_embed_fallback
-                else (
-                    "external_link"
-                    if (
-                        getattr(settings, "sc_playback_mode", "stream")
-                        == "reference"
-                    )
-                    else "third_party_stream"
+                "external_link"
+                if (
+                    not archive_unplayable_import
+                    and getattr(settings, "sc_playback_mode", "stream")
+                    == "reference"
                 )
+                else "third_party_stream"
             ),
             "source_platform": "soundcloud",
             "sc_url": sc_url or None,
@@ -1994,7 +1986,17 @@ class SoundCloudService:
                     sc_url=sc_url,
                     track_id=existing.id,
                 )
-                await _apply_official_embed_fallback(existing)
+                should_archive = (
+                    archive_unplayable_import
+                    and settings.sc_strict_import_verify
+                )
+                if should_archive:
+                    await _archive_existing_unplayable(existing)
+                    raise self._sc_unverified_http_exception(
+                        track=existing,
+                        sc_data=sc_data,
+                        sc_url=sc_url,
+                    )
                 await _verify_and_reindex(existing)
                 return existing
             await self._session.refresh(track)
@@ -2051,7 +2053,17 @@ class SoundCloudService:
                     external_id=external_id,
                     track_id=existing.id,
                 )
-                await _apply_official_embed_fallback(existing)
+                should_archive = (
+                    archive_unplayable_import
+                    and settings.sc_strict_import_verify
+                )
+                if should_archive:
+                    await _archive_existing_unplayable(existing)
+                    raise self._sc_unverified_http_exception(
+                        track=existing,
+                        sc_data=sc_data,
+                        sc_url=sc_url,
+                    )
                 await _verify_and_reindex(existing)
                 return existing
             await self._session.refresh(track)

@@ -231,6 +231,7 @@ class ArtistEnrichmentService:
             await _log("error", f"provider error: {exc}")
             await self._finalize(artist, "failed")
             await self._schedule_supplemental(artist_id)
+            await self._schedule_catalog_sync(artist_id)
             return artist
 
         if info is None or info.confidence < settings.artist_enrichment_min_confidence:
@@ -248,6 +249,7 @@ class ArtistEnrichmentService:
                 artist.enrichment_confidence = float(conf)
             await self._finalize(artist, "not_found")
             await self._schedule_supplemental(artist_id)
+            await self._schedule_catalog_sync(artist_id)
             return artist
 
         await _log(

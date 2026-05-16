@@ -171,6 +171,13 @@ export function ArtistsRoute() {
     placeholderData: keepPreviousData,
   })
 
+  const pipelineHealth = useQuery({
+    queryKey: ['admin', 'artists', 'pipeline-health'],
+    queryFn: () => adminApi.getArtistPipelineHealth(),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+  })
+
   const enrichMutation = useMutation({
     mutationFn: (id: number) =>
       enrichArtist(id),
@@ -628,6 +635,17 @@ export function ArtistsRoute() {
     Math.ceil(total / PAGE_SIZE),
   )
 
+  const healthCounts =
+    pipelineHealth.data?.enrichment_counts ?? {}
+  const healthPending =
+    (healthCounts['pending'] ?? 0) +
+    (healthCounts['in_progress'] ?? 0)
+  const healthFailed =
+    (healthCounts['failed'] ?? 0) +
+    (healthCounts['not_found'] ?? 0)
+  const healthDone = healthCounts['done'] ?? 0
+  const healthTotal = pipelineHealth.data?.total ?? 0
+
   const filters: FilterDef[] = [
     {
       type: 'search',
@@ -730,6 +748,46 @@ export function ArtistsRoute() {
                 {missingEnrichment}
               </div>
             </div>
+            {healthTotal > 0 && (
+              <>
+                <div className="admin-kpi">
+                  <div className="admin-kpi__label">
+                    Pipeline: done
+                  </div>
+                  <div className="admin-kpi__value">
+                    {healthDone}/{healthTotal}
+                  </div>
+                </div>
+                <div
+                  className="admin-kpi"
+                  style={
+                    healthPending > 0
+                      ? { color: 'var(--color-warn)' }
+                      : undefined
+                  }
+                >
+                  <div className="admin-kpi__label">
+                    Pipeline: queued
+                  </div>
+                  <div className="admin-kpi__value">
+                    {healthPending}
+                  </div>
+                </div>
+                {healthFailed > 0 && (
+                  <div
+                    className="admin-kpi"
+                    style={{ color: 'var(--color-error)' }}
+                  >
+                    <div className="admin-kpi__label">
+                      Pipeline: no match
+                    </div>
+                    <div className="admin-kpi__value">
+                      {healthFailed}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </>
         }
         filters={

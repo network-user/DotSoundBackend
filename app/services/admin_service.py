@@ -9,9 +9,13 @@ soft-validation on PATCHes).
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from dotsound_private_core.services.sc_track_policy import (
+    REASON_ENCRYPTED_HLS_UNSUPPORTED,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import s3
@@ -23,6 +27,8 @@ from app.schemas.admin_playback import (
     AdminPlaybackRepairBulkResponse,
     AdminPlaybackRepairEnqueueResponse,
     AdminPlaybackVerifyResponse,
+    AdminSoundCloudEncryptedUnsupportedCleanupRequest,
+    AdminSoundCloudEncryptedUnsupportedCleanupResponse,
     AdminSoundCloudPlaybackAuditRequest,
 )
 
@@ -200,6 +206,96 @@ class AdminService:
     ) -> tuple[list[int], int]:
         return await self._repo.list_track_ids_playback_suppressed(
             search=search,
+        )
+
+    async def list_tracks_soundcloud_encrypted_unsupported(
+        self,
+        *,
+        page: int,
+        size: int,
+        search: str | None,
+    ) -> tuple[list[Track], int]:
+        return await self._repo.list_tracks_soundcloud_encrypted_unsupported(
+            page=page,
+            size=size,
+            search=search,
+            deleted_reason=REASON_ENCRYPTED_HLS_UNSUPPORTED,
+        )
+
+    async def list_track_ids_soundcloud_encrypted_unsupported(
+        self,
+        *,
+        search: str | None,
+    ) -> tuple[list[int], int]:
+        repo_call = self._repo.list_track_ids_soundcloud_encrypted_unsupported
+        return await repo_call(
+            search=search,
+            deleted_reason=REASON_ENCRYPTED_HLS_UNSUPPORTED,
+        )
+
+    async def cleanup_soundcloud_encrypted_unsupported_embeds(
+        self,
+        body: AdminSoundCloudEncryptedUnsupportedCleanupRequest,
+        *,
+        actor_id: int,
+    ) -> AdminSoundCloudEncryptedUnsupportedCleanupResponse:
+        from app.repositories.track_playback_health import (
+            TrackPlaybackHealthRepository,
+        )
+
+        track_ids, matched = await (
+            self._repo.list_soundcloud_official_embed_cleanup_candidate_ids(
+                limit=body.limit
+            )
+        )
+        if body.dry_run:
+            return AdminSoundCloudEncryptedUnsupportedCleanupResponse(
+                matched=matched,
+                updated=0,
+                dry_run=True,
+                track_ids=track_ids,
+                detail=(
+                    "SoundCloud official_embed cleanup dry run matched "
+                    f"{matched} rows"
+                ),
+        )
+
+        now = datetime.now(UTC)
+        cleanup = self._repo.mark_soundcloud_encrypted_unsupported_cleanup
+        updated = await cleanup(
+            track_ids=track_ids,
+            deleted_reason=REASON_ENCRYPTED_HLS_UNSUPPORTED,
+            failure_at=now,
+        )
+        health_repo = TrackPlaybackHealthRepository(self._session)
+        detail = json.dumps(
+            {
+                "code": "soundcloud_encrypted_hls_unsupported",
+                "reason": REASON_ENCRYPTED_HLS_UNSUPPORTED,
+                "stage": "admin_cleanup",
+                "attempted_protocols": [
+                    "cbc-encrypted-hls",
+                    "ctr-encrypted-hls",
+                ],
+            }
+        )
+        for track_id in track_ids:
+            await health_repo.insert_failure_event(
+                track_id=track_id,
+                user_id=actor_id,
+                source="admin_sc_encrypted_cleanup",
+                http_status=422,
+                detail_truncated=detail,
+            )
+        return AdminSoundCloudEncryptedUnsupportedCleanupResponse(
+            matched=matched,
+            updated=updated,
+            dry_run=False,
+            track_ids=track_ids,
+            detail=(
+                "Archived SoundCloud official_embed rows as "
+                "encrypted-HLS unsupported"
+            ),
         )
 
     async def clear_track_playback_suppression(

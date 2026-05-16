@@ -14,7 +14,6 @@ import { api, getApiErrorMessage, getApiErrorTelemetry } from '@/lib/api'
 import { getInternalUserId } from '@/lib/telegram'
 import { dismissIsland, showIsland, updateIsland } from '@/lib/island'
 import i18n from '@/lib/i18n'
-import { Icon } from '@/components/Icon/Icon'
 import {
   getCachedAudioUrl,
   getCachedIdsSync,
@@ -127,53 +126,6 @@ function _hlsErrorTelemetry(data: HlsErrorData) {
 
 type HlsErrorTelemetry = ReturnType<typeof _hlsErrorTelemetry>
 
-type SoundCloudEmbedState = {
-  track: Track
-  url: string
-}
-
-function _trackSoundCloudPageUrl(track: Track) {
-  return track.source_url || track.canonical_source_url || track.sc_url
-}
-
-function _soundCloudWidgetUrl(raw: string | null | undefined) {
-  if (!raw) return null
-  let parsed: URL
-  try {
-    parsed = new URL(raw)
-  } catch {
-    return null
-  }
-  const host = parsed.hostname.toLowerCase()
-  const isSoundCloud =
-    host === 'soundcloud.com' || host.endsWith('.soundcloud.com')
-  if (!isSoundCloud) return null
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    return null
-  }
-  parsed.protocol = 'https:'
-  const params = new URLSearchParams({
-    url: parsed.toString(),
-    auto_play: 'true',
-    hide_related: 'true',
-    show_comments: 'false',
-    show_user: 'true',
-    show_reposts: 'false',
-    show_teaser: 'false',
-    visual: 'false',
-  })
-  return `https://w.soundcloud.com/player/?${params.toString()}`
-}
-
-function _isEncryptedHlsUnsupported(
-  telemetry: ReturnType<typeof getApiErrorTelemetry>,
-) {
-  return (
-    telemetry.errorReason === 'encrypted_hls_unsupported' ||
-    telemetry.errorCode === 'soundcloud_encrypted_hls_unsupported'
-  )
-}
-
 function _hlsErrorMessage(data: HlsErrorData) {
   const telemetry = _hlsErrorTelemetry(data)
   const detail =
@@ -182,6 +134,12 @@ function _hlsErrorMessage(data: HlsErrorData) {
     telemetry.message ||
     'unknown'
   return `HLS playback failed: ${detail}`
+}
+
+function _isRecoverableHlsMediaError(
+  telemetry: HlsErrorTelemetry,
+) {
+  return telemetry.type === 'mediaError'
 }
 
 function _loadEqState() {
@@ -833,8 +791,6 @@ export function PlayerProvider({
     () => localStorage.getItem('player-shuffle') === 'true',
   )
   const [hlsError, setHlsError] = useState<string | null>(null)
-  const [soundCloudEmbed, setSoundCloudEmbed] =
-    useState<SoundCloudEmbedState | null>(null)
   const [isPlayingFromCache, setIsPlayingFromCache] = useState(false)
   const [sleepMode, setSleepMode] = useState<
     'off' | 'minutes' | 'end-of-track'
@@ -1633,9 +1589,29 @@ export function PlayerProvider({
           }
         }
         const startFallback = () => {
+          const resumeAt = Number.isFinite(audio.currentTime)
+            ? audio.currentTime
+            : 0
           hls.destroy()
           hlsRef.current = null
           audio.crossOrigin = 'anonymous'
+          if (resumeAt > 0) {
+            const restorePosition = () => {
+              try {
+                audio.currentTime = Math.min(
+                  resumeAt,
+                  Math.max(0, (audio.duration || resumeAt + 1) - 1),
+                )
+              } catch {
+                /* ignore */
+              }
+            }
+            audio.addEventListener(
+              'loadedmetadata',
+              restorePosition,
+              { once: true },
+            )
+          }
           audio.src = fallbackUrl || ''
           audio.volume = volume
           if (autoplay) void safePlay(audio)
@@ -1645,6 +1621,7 @@ export function PlayerProvider({
           settled = true
           cleanupReady()
           if (fallbackUrl) {
+            setHlsError(null)
             startFallback()
             resolve()
           } else {
@@ -1676,12 +1653,32 @@ export function PlayerProvider({
           }
           const message = _hlsErrorMessage(d)
           console.warn('dotsound:hls_fatal_error', telemetry)
-          recordHlsFatalTelemetry(trackId, telemetry)
-          setHlsError(message)
-          if (settled) {
-            if (fallbackUrl) startFallback()
+          if (
+            fallbackUrl &&
+            _isRecoverableHlsMediaError(telemetry)
+          ) {
+            setHlsError(null)
+            if (!settled) {
+              settled = true
+              cleanupReady()
+              startFallback()
+              resolve()
+              return
+            }
+            startFallback()
             return
           }
+          recordHlsFatalTelemetry(trackId, telemetry)
+          if (settled) {
+            if (fallbackUrl) {
+              setHlsError(null)
+              startFallback()
+              return
+            }
+            setHlsError(message)
+            return
+          }
+          setHlsError(message)
           failBeforeReady(message)
         })
       })
@@ -2169,7 +2166,6 @@ export function PlayerProvider({
     lastTrackIdRef.current = newTrack.id
     streamLoadFailedTrackIdRef.current = null
     setHlsError(null)
-    setSoundCloudEmbed(null)
     void loadEqSettings()
     if (bail()) return
     _initAudioCtx()
@@ -2198,25 +2194,16 @@ export function PlayerProvider({
       _applyPitchPreservation(audio)
     }
 
-    if (newTrack.access_mode === 'official_embed') {
-      const widgetUrl = _soundCloudWidgetUrl(
-        _trackSoundCloudPageUrl(newTrack),
-      )
-      if (!widgetUrl) {
-        streamLoadFailedTrackIdRef.current =
-          newTrack.id
-        showIsland({
-          kind: 'error',
-          title: i18n.t('redesign.playerErrors.playback'),
-          durationMs: 4000,
-        })
-        return
-      }
-      setSoundCloudEmbed({ track: newTrack, url: widgetUrl })
-      setIsPlaying(true)
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.playbackState = 'playing'
-      }
+    if (
+      newTrack.access_mode === 'official_embed' ||
+      newTrack.access_mode === 'external_link'
+    ) {
+      const message = i18n.t('redesign.playerErrors.playback')
+      streamLoadFailedTrackIdRef.current = newTrack.id
+      showPlaybackErrorOnce(newTrack.id, message)
+      await skipUnavailableTrack(newTrack.id, {
+        errorReason: newTrack.access_mode,
+      })
       return
     }
 
@@ -2411,33 +2398,6 @@ export function PlayerProvider({
         i18n.t('redesign.playerErrors.playback'),
       )
       const telemetry = getApiErrorTelemetry(e)
-      if (
-        isSoundCloudUnavailableTrack(newTrack) &&
-        _isEncryptedHlsUnsupported(telemetry)
-      ) {
-        const widgetUrl = _soundCloudWidgetUrl(
-          _trackSoundCloudPageUrl(newTrack),
-        )
-        if (widgetUrl) {
-          const embeddedTrack: Track = {
-            ...newTrack,
-            access_mode: 'official_embed',
-          }
-          setTrack(embeddedTrack)
-          _saveState(embeddedTrack, 0)
-          setSoundCloudEmbed({
-            track: embeddedTrack,
-            url: widgetUrl,
-          })
-          setHlsError(null)
-          setIsPlaying(true)
-          streamLoadFailedTrackIdRef.current = null
-          if ('mediaSession' in navigator) {
-            navigator.mediaSession.playbackState = 'playing'
-          }
-          return
-        }
-      }
       const scUnavailable =
         isSoundCloudUnavailableTrack(newTrack) &&
         isSoundCloudUnavailableError(message)
@@ -2921,25 +2881,9 @@ export function PlayerProvider({
     }
   }
 
-  const closeSoundCloudEmbed = useCallback(() => {
-    setSoundCloudEmbed(null)
-    setIsPlaying(false)
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = 'none'
-    }
-  }, [])
-
   const togglePlay = () => {
     const a = audioRef.current
     if (!a || !track) return
-    if (track.access_mode === 'official_embed') {
-      if (soundCloudEmbed?.track.id === track.id) {
-        closeSoundCloudEmbed()
-        return
-      }
-      void playTrack(track)
-      return
-    }
     void loadEqSettings()
     _initAudioCtx()
     if (a.paused) {
@@ -2995,7 +2939,6 @@ export function PlayerProvider({
       hlsRef.current = null
     }
     streamLoadFailedTrackIdRef.current = null
-    setSoundCloudEmbed(null)
     if ('mediaSession' in navigator) {
       navigator.mediaSession.metadata = null
       navigator.mediaSession.playbackState = 'none'
@@ -3369,33 +3312,6 @@ export function PlayerProvider({
               <PlayerMetaCtx.Provider value={metaValue}>
                 <audio ref={audioRef} preload="none" />
                 {children}
-                {soundCloudEmbed && (
-                  <div
-                    className="sc-embed-player"
-                    role="dialog"
-                    aria-label="SoundCloud player"
-                  >
-                    <div className="sc-embed-player__bar">
-                      <span className="sc-embed-player__title">
-                        {soundCloudEmbed.track.title}
-                      </span>
-                      <button
-                        type="button"
-                        className="sc-embed-player__close press press--icon"
-                        aria-label="Close SoundCloud player"
-                        onClick={closeSoundCloudEmbed}
-                      >
-                        <Icon name="x" size={18} />
-                      </button>
-                    </div>
-                    <iframe
-                      title={`SoundCloud: ${soundCloudEmbed.track.title}`}
-                      src={soundCloudEmbed.url}
-                      allow="autoplay; encrypted-media"
-                      loading="eager"
-                    />
-                  </div>
-                )}
               </PlayerMetaCtx.Provider>
             </PlayerActionsCtx.Provider>
           </PlayerTimeCtx.Provider>

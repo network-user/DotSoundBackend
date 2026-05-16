@@ -38,6 +38,7 @@ interface TrackRow {
   sc_url?: string | null
   source_url?: string | null
   canonical_source_url?: string | null
+  deleted_reason?: string | null
   playback_last_failure_at?: string | null
   playback_last_http_status?: number | null
   playback_last_failure_source?: string | null
@@ -140,6 +141,21 @@ function summarizeScDiagnoseProbes(
   return `probes: ${ok}/${probes.length} ok, encrypted ${encrypted}, keyed ${keyed}`
 }
 
+function scDiagnosePlaybackLabel(
+  result: SoundCloudDiagnoseResponse,
+): string {
+  return result.playback?.label ?? 'Unknown'
+}
+
+function scDiagnosePlaybackKind(
+  result: SoundCloudDiagnoseResponse,
+): 'ok' | 'warn' | 'error' | 'unknown' {
+  const mode = result.playback?.mode
+  if (mode === 'dotsound_stream') return 'ok'
+  if (mode === 'unavailable') return 'error'
+  return 'unknown'
+}
+
 type ModalsAction =
   | { type: 'set'; key: keyof ModalsState; value: ModalsState[keyof ModalsState] }
   | { type: 'closeAll' }
@@ -148,7 +164,10 @@ type TrackIdScope =
   | 'all'
   | 'playback_failures'
   | 'playback_suppressed'
+  | 'sc_encrypted_unsupported'
   | 'deleted'
+
+type TrackListView = TrackIdScope
 
 type PlaybackRepairBulkResult = Awaited<
   ReturnType<typeof adminApi.repairTracksPlayback>
@@ -178,12 +197,11 @@ export function TracksRoute() {
   const [search, setSearch] = useState('')
   const [playbackErrorFilter, setPlaybackErrorFilter] = useState('')
   const [withoutLyricsOnly, setWithoutLyricsOnly] = useState(false)
-  const [listView, setListView] = useState<
-    'all' | 'playback_failures' | 'playback_suppressed' | 'deleted'
-  >('all')
+  const [listView, setListView] = useState<TrackListView>('all')
   const [playingId, setPlayingId] = useState<number | null>(null)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [bulkRepairBusy, setBulkRepairBusy] = useState(false)
+  const [scCleanupBusy, setScCleanupBusy] = useState(false)
   const [playbackRepairRun, setPlaybackRepairRun] =
     useState<PlaybackRepairRunState | null>(null)
   const [statsPeriod, setStatsPeriod] = useState<
@@ -297,6 +315,9 @@ export function TracksRoute() {
     }
     if (listView === 'playback_suppressed') {
       return adminApi.listTracksPlaybackSuppressed(base)
+    }
+    if (listView === 'sc_encrypted_unsupported') {
+      return adminApi.listTracksSoundCloudEncryptedUnsupported(base)
     }
     if (listView === 'deleted') {
       return adminApi.listDeletedTracks(base)
@@ -645,6 +666,29 @@ export function TracksRoute() {
       await showAlert((err as Error).message)
     } finally {
       setBulkRepairBusy(false)
+    }
+  }
+
+  const handleCleanupSoundCloudEncryptedUnsupported = async () => {
+    if (scCleanupBusy) return
+    const ok = await showConfirm(
+      'Hide old SoundCloud official embeds that cannot play in DotSound?',
+      { danger: true },
+    )
+    if (!ok) return
+    setScCleanupBusy(true)
+    try {
+      const result = await adminApi.cleanupSoundCloudEncryptedUnsupported({
+        limit: 5000,
+      })
+      await showAlert(
+        `SC cleanup updated ${result.updated} of ${result.matched} rows.`,
+      )
+      refresh()
+    } catch (err) {
+      await showAlert((err as Error).message)
+    } finally {
+      setScCleanupBusy(false)
     }
   }
 
@@ -1027,6 +1071,9 @@ export function TracksRoute() {
         if (r.playback_last_failure_source) {
           parts.push(r.playback_last_failure_source)
         }
+        if (r.deleted_reason) {
+          parts.push(`deleted ${r.deleted_reason}`)
+        }
         if (
           typeof r.playback_last_http_status === 'number'
         ) {
@@ -1361,13 +1408,7 @@ export function TracksRoute() {
           groupId="admin-tracks-list-scope"
           value={listView}
           onChange={(v) => {
-            setListView(
-              v as
-                | 'all'
-                | 'playback_failures'
-                | 'playback_suppressed'
-                | 'deleted',
-            )
+            setListView(v as TrackListView)
             setPage(1)
             setSelectedIds(new Set())
           }}
@@ -1380,6 +1421,10 @@ export function TracksRoute() {
             {
               value: 'playback_suppressed',
               label: 'Auto-hidden',
+            },
+            {
+              value: 'sc_encrypted_unsupported',
+              label: 'SC encrypted',
             },
             { value: 'deleted', label: 'Deleted' },
           ]}
@@ -1498,6 +1543,13 @@ export function TracksRoute() {
           onClick={handleAuditSoundCloudPlayback}
         >
           Audit SC playback
+        </MotionPress>
+        <MotionPress
+          variant="ghost"
+          disabled={scCleanupBusy}
+          onClick={handleCleanupSoundCloudEncryptedUnsupported}
+        >
+          Hide SC encrypted
         </MotionPress>
         <MotionPress
           variant="ghost"
@@ -1933,6 +1985,9 @@ export function TracksRoute() {
                 {scDiagnoseResult.decision.allowed
                   ? 'Allowed'
                   : scDiagnoseResult.decision.reason || 'Blocked'}
+              </StatusPill>
+              <StatusPill kind={scDiagnosePlaybackKind(scDiagnoseResult)}>
+                {scDiagnosePlaybackLabel(scDiagnoseResult)}
               </StatusPill>
               <span>
                 egress:{' '}

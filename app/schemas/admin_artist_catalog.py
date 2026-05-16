@@ -136,3 +136,8 @@ class AdminArtistListItemResponse(ArtistResponse):
 class AdminArtistListResponse(BaseModel):
     items: list[AdminArtistListItemResponse]
     total: int
+
+
+class ArtistPipelineHealthResponse(BaseModel):
+    enrichment_counts: dict[str, int]
+    total: int

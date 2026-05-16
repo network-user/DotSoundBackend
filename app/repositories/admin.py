@@ -7,11 +7,13 @@ closing the tech debt item in AGENTS.md.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql import Select
+from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import Subquery
 
 from app.models.artist import TrackArtist
@@ -64,6 +66,43 @@ class AdminRepository:
                 and_(latest.c.track_id == Track.id, latest.c.rn == 1),
             )
             .where(latest.c.detail_truncated.ilike(f"%{playback_error}%"))
+        )
+
+    def _soundcloud_track_filter(self) -> ColumnElement[bool]:
+        source = func.lower(func.coalesce(Track.source, ""))
+        source_platform = func.lower(func.coalesce(Track.source_platform, ""))
+        imported_from = func.lower(func.coalesce(Track.imported_from, ""))
+        return or_(
+            source == "soundcloud",
+            source_platform == "soundcloud",
+            imported_from == "soundcloud",
+            Track.sc_url.isnot(None),
+        )
+
+    def _soundcloud_encrypted_unsupported_filter(
+        self,
+        *,
+        deleted_reason: str,
+    ) -> ColumnElement[bool]:
+        return or_(
+            and_(
+                self._soundcloud_track_filter(),
+                Track.access_mode == "official_embed",
+            ),
+            Track.deleted_reason == deleted_reason,
+        )
+
+    def _apply_simple_track_search(
+        self,
+        query: Select,
+        *,
+        search: str | None,
+    ) -> Select:
+        if not search:
+            return query
+        pattern = f"%{search}%"
+        return query.where(
+            Track.title.ilike(pattern) | Track.artist.ilike(pattern)
         )
 
     def _apply_track_list_filters(
@@ -320,6 +359,107 @@ class AdminRepository:
         return [int(track_id) for track_id in rows.scalars().all()], int(
             total_result.scalar_one()
         )
+
+    async def list_tracks_soundcloud_encrypted_unsupported(
+        self,
+        *,
+        page: int = 1,
+        size: int = 20,
+        search: str | None = None,
+        deleted_reason: str,
+    ) -> tuple[list[Track], int]:
+        cond = self._soundcloud_encrypted_unsupported_filter(
+            deleted_reason=deleted_reason,
+        )
+        q = self._apply_simple_track_search(
+            select(Track).where(cond),
+            search=search,
+        )
+        cq = self._apply_simple_track_search(
+            select(func.count(Track.id)).where(cond),
+            search=search,
+        )
+        q = (
+            q.order_by(desc(Track.playback_last_failure_at), desc(Track.id))
+            .offset((page - 1) * size)
+            .limit(size)
+        )
+        result = await self._session.execute(q)
+        rows = list(result.scalars().all())
+        total_result = await self._session.execute(cq)
+        return rows, int(total_result.scalar_one())
+
+    async def list_track_ids_soundcloud_encrypted_unsupported(
+        self,
+        *,
+        search: str | None = None,
+        deleted_reason: str,
+    ) -> tuple[list[int], int]:
+        cond = self._soundcloud_encrypted_unsupported_filter(
+            deleted_reason=deleted_reason,
+        )
+        q = self._apply_simple_track_search(
+            select(Track.id).where(cond),
+            search=search,
+        ).order_by(desc(Track.playback_last_failure_at), desc(Track.id))
+        cq = self._apply_simple_track_search(
+            select(func.count(Track.id)).where(cond),
+            search=search,
+        )
+        rows = await self._session.execute(q)
+        total_result = await self._session.execute(cq)
+        return [int(track_id) for track_id in rows.scalars().all()], int(
+            total_result.scalar_one()
+        )
+
+    async def list_soundcloud_official_embed_cleanup_candidate_ids(
+        self,
+        *,
+        limit: int,
+    ) -> tuple[list[int], int]:
+        cond = and_(
+            self._soundcloud_track_filter(),
+            Track.access_mode == "official_embed",
+            Track.deleted_at.is_(None),
+        )
+        total_result = await self._session.execute(
+            select(func.count(Track.id)).where(cond),
+        )
+        rows = await self._session.execute(
+            select(Track.id)
+            .where(cond)
+            .order_by(desc(Track.id))
+            .limit(limit),
+        )
+        return [int(track_id) for track_id in rows.scalars().all()], int(
+            total_result.scalar_one()
+        )
+
+    async def mark_soundcloud_encrypted_unsupported_cleanup(
+        self,
+        *,
+        track_ids: list[int],
+        deleted_reason: str,
+        failure_at: datetime,
+    ) -> int:
+        if not track_ids:
+            return 0
+        result = await self._session.execute(
+            update(Track)
+            .where(Track.id.in_(track_ids))
+            .values(
+                access_mode="third_party_stream",
+                is_active=False,
+                is_public=False,
+                deleted_reason=deleted_reason,
+                playback_last_failure_at=failure_at,
+                playback_last_http_status=422,
+                playback_last_failure_source="admin_sc_encrypted_cleanup",
+                playback_recovery_failed_at=failure_at,
+                playback_last_checked_at=failure_at,
+            )
+        )
+        return int(result.rowcount or 0)
 
     async def latest_track_playback_failure_events(
         self,

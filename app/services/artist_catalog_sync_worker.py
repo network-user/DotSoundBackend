@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import structlog
 from typing import Any
+
+import structlog
 
 from app.core.db import AsyncSessionLocal
 from app.core.tkq import broker
@@ -84,6 +85,38 @@ async def sync_stale_stations_batch_task() -> dict[str, Any]:
 
     logger.info(
         "station_stale_sweep_complete",
+        enqueued=enqueued,
+        total_stale=len(artist_ids),
+    )
+    return {"enqueued": enqueued}
+
+
+_CATALOG_FULL_BATCH_SIZE = 10
+_CATALOG_FULL_SWEEP_LIMIT = 50
+
+
+@broker.task
+async def sync_stale_catalogs_batch_task() -> dict[str, Any]:
+    """Bi-weekly sweep: enqueue full catalog sync for artists with
+    stale or missing non-station catalog."""
+    from app.config import settings
+
+    async with AsyncSessionLocal() as session:
+        repo = ArtistCatalogRepository(session)
+        artist_ids = await repo.find_stale_full_catalog_artist_ids(
+            settings.artist_catalog_full_sync_stale_threshold_days,
+            limit=_CATALOG_FULL_SWEEP_LIMIT,
+        )
+
+    enqueued = 0
+    for i in range(0, len(artist_ids), _CATALOG_FULL_BATCH_SIZE):
+        batch = artist_ids[i : i + _CATALOG_FULL_BATCH_SIZE]
+        for artist_id in batch:
+            await sync_artist_catalog_task.kiq(artist_id)
+            enqueued += 1
+
+    logger.info(
+        "catalog_stale_sweep_complete",
         enqueued=enqueued,
         total_stale=len(artist_ids),
     )

@@ -204,6 +204,75 @@ async def test_enrich_provider_raises_sets_failed(
     assert artist.enriched_at is not None
 
 
+async def test_enrich_not_found_queues_catalog_sync(
+    db_session: AsyncSession,
+) -> None:
+    artist = await _make_artist(db_session)
+
+    with patch.dict(
+        "sys.modules",
+        {
+            "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
+                fetch_artist_info=MagicMock(return_value=None),
+                warmup_artist_info_provider=lambda: None,
+            ),
+        },
+    ), patch(
+        "app.services.artist_catalog_sync_progress.set_running",
+        new_callable=AsyncMock,
+    ), patch(
+        "app.services.background_jobs.enqueue",
+        new_callable=AsyncMock,
+        return_value="job-1",
+    ) as enqueue, patch.object(
+        ArtistEnrichmentService,
+        "_schedule_supplemental",
+        new_callable=AsyncMock,
+    ):
+        svc = ArtistEnrichmentService(db_session)
+        await svc.enrich(artist.id)
+
+    await db_session.refresh(artist)
+    assert artist.enrichment_status == "not_found"
+    enqueue.assert_awaited_once()
+
+
+async def test_enrich_failed_queues_catalog_sync(
+    db_session: AsyncSession,
+) -> None:
+    artist = await _make_artist(db_session)
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    with patch.dict(
+        "sys.modules",
+        {
+            "dotsound_private_core.services.artist_info_provider": SimpleNamespace(
+                fetch_artist_info=_boom,
+                warmup_artist_info_provider=lambda: None,
+            ),
+        },
+    ), patch(
+        "app.services.artist_catalog_sync_progress.set_running",
+        new_callable=AsyncMock,
+    ), patch(
+        "app.services.background_jobs.enqueue",
+        new_callable=AsyncMock,
+        return_value="job-1",
+    ) as enqueue, patch.object(
+        ArtistEnrichmentService,
+        "_schedule_supplemental",
+        new_callable=AsyncMock,
+    ):
+        svc = ArtistEnrichmentService(db_session)
+        await svc.enrich(artist.id)
+
+    await db_session.refresh(artist)
+    assert artist.enrichment_status == "failed"
+    enqueue.assert_awaited_once()
+
+
 async def test_enrich_skips_image_download_when_image_key_set(
     db_session: AsyncSession,
 ) -> None:

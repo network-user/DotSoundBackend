@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import os
 import shutil
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -265,6 +266,7 @@ class TorPool:
         self._newnym_callbacks: list[object] = []
         self._health_task: asyncio.Task[None] | None = None
         self._renewal_task: asyncio.Task[None] | None = None
+        self._data_dir: Path | None = None
 
     async def start(self) -> None:
         import stem.control  # type: ignore[import-untyped]
@@ -291,7 +293,12 @@ class TorPool:
             for i in range(pool_size)
         ]
 
+        data_dir = Path(tempfile.mkdtemp(prefix="tor_pool_"))
+        os.chmod(data_dir, 0o700)
+        self._data_dir = data_dir
+
         config: dict[str, str | list[str]] = {
+            "DataDirectory": str(data_dir),
             "SocksPort": [
                 f"{base_port + i} IsolateClientAuth"
                 for i in range(pool_size)
@@ -384,6 +391,10 @@ class TorPool:
             with contextlib.suppress(Exception):
                 self._process.kill()
             self._process = None
+
+        if self._data_dir is not None:
+            shutil.rmtree(self._data_dir, ignore_errors=True)
+            self._data_dir = None
 
         logger.info("tor_pool_stopped")
 

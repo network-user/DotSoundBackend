@@ -1,27 +1,32 @@
 # DotSound - TODO Tracker
 
-- [x] **SoundCloud encrypted-only official embed fallback (2026-05-16)**
+- [x] **SoundCloud encrypted-only playback guard (2026-05-16)**
   - Git history check found that the old working playback path handled
     plain SoundCloud `hls` / `progressive`; the regression was the
     May 16 attempt to normalize `cbc-encrypted-hls` /
     `ctr-encrypted-hls` as ordinary HLS.
-  - Backend now treats PrivateCore
-    `encrypted_hls_unsupported` as an importable metadata row with
-    `access_mode="official_embed"` instead of rejecting the track or
-    sending encrypted HLS into the DotSound player.
-  - Previously suppressed encrypted-only SoundCloud rows are promoted
-    to `official_embed` on re-import when their `deleted_reason` is
-    `encrypted_hls_unsupported`.
-  - Frontend `PlayerContext` opens `official_embed` SoundCloud tracks
-    through the official `w.soundcloud.com/player` iframe and skips the
-    `/stream` + `hls.js` path for them.
-  - Existing imported rows that still return
-    `encrypted_hls_unsupported` from `/stream` are handled client-side
-    too: the player converts the session track to `official_embed` and
-    opens the SoundCloud widget without requiring a re-import.
-  - Frontend CSP now allows `https://w.soundcloud.com` in `frame-src`;
-    preload/restore paths skip official embeds so they do not request
-    local HLS/audio endpoints.
+  - Backend no longer treats SoundCloud encrypted-HLS as playable HLS
+    and no longer sends it to the DotSound player. Only plain
+    `hls`/`progressive` are used for normal playback.
+  - Encrypted-only SoundCloud imports are archived as unplayable
+    `third_party_stream` rows when strict import verification is
+    enabled: the row is hidden from public playback, tagged with
+    `deleted_reason="encrypted_hls_unsupported"`, and kept visible in
+    admin playback diagnostics for manual review.
+  - Admin SoundCloud diagnose now reports the final playback mode:
+    `DotSound stream` or `Unavailable`.
+  - Added an admin cleanup path for old SoundCloud `official_embed`
+    rows from the abandoned iframe experiment. The cleanup preserves
+    source URLs, converts them to hidden `third_party_stream` rows,
+    writes `deleted_reason="encrypted_hls_unsupported"`, and records
+    playback diagnostics for manual review.
+  - Admin Tracks now has a dedicated `SC encrypted` filter for these
+    unsupported SoundCloud rows and a toolbar action to hide any
+    remaining old official embeds in one pass.
+  - Frontend no longer opens SoundCloud iframe embeds from the player.
+    Recoverable HLS media errors with a progressive fallback no longer
+    leave a stale `HLS playback failed: bufferAppendError` toast after
+    playback recovers.
 
 - [x] **Admin Network runtime mode fix (2026-05-16)**
   - Admin `GET /api/v1/admin/system/outbound-status` now overlays the
@@ -711,6 +716,33 @@
   - Added bulk artist enrichment queueing, catalog-sync filtering in
     Artists, human-readable background-job detail, and Playwright
     coverage for the Artists/Tasks sync workflow.
+
+- [x] **Artist cascade auto-discovery + pipeline monitoring (2026-05-16)**
+  - Fixed critical gap: `_schedule_catalog_sync` was only called on
+    successful enrichment. Artists whose enrichment returned
+    `not_found` or `failed` never got their SoundCloud station synced,
+    breaking the recursive artist-discovery cascade. Now catalog sync
+    is scheduled on ALL enrichment outcomes.
+  - Added `re_enrich_pending_artists_task` (daily 05:00 UTC) that
+    re-queues enrichment for artists stuck in `pending` or
+    `in_progress` for more than 2 hours — handles lost tasks when
+    Redis was temporarily unavailable at artist creation time or when
+    the worker process died mid-enrichment.
+  - Added `sync_stale_catalogs_batch_task` (1st and 15th of month,
+    04:00 UTC) that enqueues full catalog sync for artists with SC
+    identity whose non-station catalog is older than
+    `artist_catalog_full_sync_stale_threshold_days` (default 30 days).
+  - Added `count_artists_by_enrichment_status` to
+    `ArtistCatalogRepository` and `find_stale_full_catalog_artist_ids`
+    for the sweep query.
+  - Added `GET /api/v1/admin/artists/pipeline-health` endpoint
+    returning enrichment status counts across all artists.
+  - Admin Artists page now shows live pipeline KPIs (done/total,
+    queued, no-match) refreshed every 2 minutes.
+  - Migrations `0105` and `0106` seed the new scheduled jobs.
+    Run `alembic upgrade head` on the server to apply.
+  - Worker and migrations are already wired into `deploy.sh` and
+    `docker-compose.yml` — no manual steps needed on redeploy.
 
 - [x] **GitHub Actions backend full deploy with observability (2026-05-15)**
   - Backend deploy workflow now checks required SSH secrets before

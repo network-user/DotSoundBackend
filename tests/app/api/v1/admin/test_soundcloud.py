@@ -1,4 +1,7 @@
+from types import SimpleNamespace
+
 from app.api.v1.admin.soundcloud import (
+    _diagnose_playback_mode,
     _playlist_summary,
     _redact_manifest_line,
 )
@@ -34,3 +37,33 @@ def test_playlist_summary_detects_encrypted_hls() -> None:
 
 def test_redact_manifest_line_keeps_non_url_lines() -> None:
     assert _redact_manifest_line("#EXT-X-VERSION:7") == "#EXT-X-VERSION:7"
+
+
+def test_diagnose_playback_mode_reports_unavailable() -> None:
+    mode = _diagnose_playback_mode(
+        SimpleNamespace(
+            allowed=False,
+            reason="encrypted_hls_unsupported",
+        )
+    )
+
+    assert mode == {
+        "mode": "unavailable",
+        "label": "Unavailable",
+        "reason": "encrypted_hls_unsupported",
+    }
+
+
+def test_diagnose_playback_mode_reports_dotsound_stream() -> None:
+    mode = _diagnose_playback_mode(
+        SimpleNamespace(
+            allowed=True,
+            reason=None,
+        )
+    )
+
+    assert mode == {
+        "mode": "dotsound_stream",
+        "label": "DotSound stream",
+        "reason": None,
+    }

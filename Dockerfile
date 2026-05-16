@@ -7,6 +7,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     POETRY_VIRTUALENVS_CREATE=false \
     PATH="/opt/poetry/bin:$PATH"
 
+# policy-rc.d exit 101 tells invoke-rc.d to skip service start/stop
+# during apt-get install, preventing the system tor daemon from
+# starting on port 9050 and conflicting with the stem-managed pool.
+RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d \
+    && chmod +x /usr/sbin/policy-rc.d
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libpq-dev \
@@ -16,10 +22,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tor \
     && rm -rf /var/lib/apt/lists/*
 
-# `tor` package starts a system service by default. We don't want
-# that — the backend manages its own pool via stem, on per-instance
-# data dirs. Disable the system service so it doesn't conflict.
-RUN if [ -f /etc/init.d/tor ]; then update-rc.d -f tor remove || true; fi
+# Remove install-time policy guard; clean the system tor data dir so
+# no stale lock/cookie files are left behind. The stem pool writes its
+# own DataDirectory via tempfile.mkdtemp() at runtime.
+RUN rm -f /usr/sbin/policy-rc.d \
+    && rm -rf /var/lib/tor \
+    && if [ -f /etc/init.d/tor ]; then update-rc.d -f tor remove || true; fi
 
 RUN curl -sSL https://install.python-poetry.org | python3 -
 

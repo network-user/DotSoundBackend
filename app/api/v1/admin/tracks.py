@@ -25,6 +25,8 @@ from app.schemas.admin_playback import (
     AdminPlaybackRepairBulkResponse,
     AdminPlaybackRepairEnqueueResponse,
     AdminPlaybackVerifyResponse,
+    AdminSoundCloudEncryptedUnsupportedCleanupRequest,
+    AdminSoundCloudEncryptedUnsupportedCleanupResponse,
     AdminSoundCloudPlaybackAuditRequest,
 )
 from app.schemas.track import TrackUpdateRequest
@@ -158,7 +160,8 @@ async def admin_list_track_ids(
     scope: str = Query(
         "all",
         description=(
-            "One of all, playback_failures, playback_suppressed, deleted"
+            "One of all, playback_failures, playback_suppressed, "
+            "sc_encrypted_unsupported, deleted"
         ),
     ),
     is_active: bool | None = Query(None),
@@ -191,6 +194,12 @@ async def admin_list_track_ids(
     elif scope == "playback_suppressed":
         ids, total = await service.list_track_ids_playback_suppressed(
             search=search,
+        )
+    elif scope == "sc_encrypted_unsupported":
+        ids, total = await (
+            service.list_track_ids_soundcloud_encrypted_unsupported(
+                search=search
+            )
         )
     elif scope == "deleted":
         ids, total = await service.list_deleted_track_ids(search=search)
@@ -225,6 +234,36 @@ async def admin_list_playback_unavailable_tracks(
         playback_error=(
             playback_error.strip() if playback_error else None
         ),
+    )
+    return AdminTrackListResponse(
+        items=await _admin_track_responses(service, tracks),
+        total=total,
+        page=page,
+        size=size,
+    )
+
+
+@router.get(
+    "/tracks/playback-health/soundcloud-encrypted-unsupported",
+    response_model=AdminTrackListResponse,
+    summary="[Admin] SoundCloud rows blocked by encrypted HLS playback",
+)
+@limiter.limit("60/minute")
+async def admin_list_soundcloud_encrypted_unsupported_tracks(
+    request: Request,
+    page: int = Query(1, ge=1),
+    size: int = Query(25, ge=1, le=100),
+    search: str | None = Query(None, max_length=128),
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> AdminTrackListResponse:
+    service = AdminService(session)
+    tracks, total = await (
+        service.list_tracks_soundcloud_encrypted_unsupported(
+            page=page,
+            size=size,
+            search=search,
+        )
     )
     return AdminTrackListResponse(
         items=await _admin_track_responses(service, tracks),
@@ -400,6 +439,35 @@ async def admin_audit_soundcloud_playback(
         skipped=result.skipped,
         missing=result.missing,
         include_recently_checked=body.include_recently_checked,
+    )
+    return result
+
+
+@router.post(
+    "/tracks/playback-health/cleanup-soundcloud-encrypted-unsupported",
+    response_model=AdminSoundCloudEncryptedUnsupportedCleanupResponse,
+    summary=(
+        "[Admin] Hide old SoundCloud official embeds that cannot play in "
+        "DotSound"
+    ),
+)
+@limiter.limit("5/minute")
+async def admin_cleanup_soundcloud_encrypted_unsupported(
+    request: Request,
+    body: AdminSoundCloudEncryptedUnsupportedCleanupRequest,
+    session: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin_session),
+) -> AdminSoundCloudEncryptedUnsupportedCleanupResponse:
+    service = AdminService(session)
+    result = await service.cleanup_soundcloud_encrypted_unsupported_embeds(
+        body,
+        actor_id=admin.id,
+    )
+    logger.info(
+        "admin_soundcloud_encrypted_unsupported_cleanup",
+        matched=result.matched,
+        updated=result.updated,
+        dry_run=result.dry_run,
     )
     return result
 

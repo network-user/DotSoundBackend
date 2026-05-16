@@ -35,3 +35,16 @@ class AdminSoundCloudPlaybackAuditRequest(BaseModel):
     search: str | None = Field(default=None, max_length=128)
     limit: int = Field(default=500, ge=1, le=5000)
     include_recently_checked: bool = False
+
+
+class AdminSoundCloudEncryptedUnsupportedCleanupRequest(BaseModel):
+    limit: int = Field(default=500, ge=1, le=5000)
+    dry_run: bool = False
+
+
+class AdminSoundCloudEncryptedUnsupportedCleanupResponse(BaseModel):
+    matched: int
+    updated: int
+    dry_run: bool
+    track_ids: list[int] = Field(default_factory=list)
+    detail: str = ""

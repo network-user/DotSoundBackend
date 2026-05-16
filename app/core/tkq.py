@@ -45,10 +45,14 @@ async def _worker_third_party_log_level(_st: TaskiqState) -> None:
     apply_third_party_log_levels(settings.log_third_party_level)
     from app.services.tor_pool import start_tor_pool_from_settings
 
-    _worker_tor_pool_started = await start_tor_pool_from_settings(
-        settings,
-        component="worker",
-    )
+    try:
+        _worker_tor_pool_started = await start_tor_pool_from_settings(
+            settings,
+            component="worker",
+        )
+    except Exception:
+        logger.exception("tor_pool_worker_startup_failed")
+        _worker_tor_pool_started = False
 
 
 @broker.on_event(TaskiqEvents.WORKER_SHUTDOWN)

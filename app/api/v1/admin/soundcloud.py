@@ -20,6 +20,7 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 import httpx
 import structlog
 from dotsound_private_core.services.sc_track_policy import (
+    SoundCloudImportDecision,
     evaluate_soundcloud_track_importability,
 )
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -49,6 +50,10 @@ _PROBE_TIMEOUT_SECONDS = 8.0
 _EGRESS_IP_TIMEOUT_SECONDS = 4.0
 _EGRESS_IP_URL = "https://api.ipify.org?format=json"
 _URI_ATTR_RE = re.compile(r'URI="([^"]+)"')
+_PLAYBACK_MODE_LABELS = {
+    "dotsound_stream": "DotSound stream",
+    "unavailable": "Unavailable",
+}
 
 
 def _redact_proxy_url(proxy_url: str | None) -> str | None:
@@ -164,6 +169,22 @@ def _summarize_transcoding(
     }
 
 
+def _diagnose_playback_mode(
+    decision: SoundCloudImportDecision,
+) -> dict[str, str | None]:
+    if decision.allowed:
+        mode = "dotsound_stream"
+        reason = None
+    else:
+        mode = "unavailable"
+        reason = decision.reason
+    return {
+        "mode": mode,
+        "label": _PLAYBACK_MODE_LABELS[mode],
+        "reason": reason,
+    }
+
+
 def _redact_url_for_diagnostic(raw: str) -> str:
     if "?" not in raw:
         return raw
@@ -209,25 +230,17 @@ def _playlist_summary(
         if line.strip().startswith("#EXT-X-KEY")
     ]
     key_methods = sorted(
-        {
-            str(attrs["METHOD"])
-            for attrs in key_attrs
-            if attrs.get("METHOD")
-        }
+        {str(attrs["METHOD"]) for attrs in key_attrs if attrs.get("METHOD")}
     )
     keyformats = sorted(
-        {
-            str(attrs.get("KEYFORMAT") or "identity")
-            for attrs in key_attrs
-        }
+        {str(attrs.get("KEYFORMAT") or "identity") for attrs in key_attrs}
     )
     return {
         "is_hls": any(
             line.strip().startswith("#EXTM3U") for line in raw_lines[:2]
         ),
         "has_master_variants": any(
-            line.strip().startswith("#EXT-X-STREAM-INF")
-            for line in raw_lines
+            line.strip().startswith("#EXT-X-STREAM-INF") for line in raw_lines
         ),
         "has_ext_x_key": bool(key_attrs),
         "key_methods": key_methods,
@@ -373,9 +386,7 @@ async def _probe_transcoding_manifest(
         parsed = urlsplit(stream_url)
         result["stream_url_present"] = True
         result["stream_url_host"] = parsed.hostname
-        result["stream_url_redacted"] = _redact_url_for_diagnostic(
-            stream_url
-        )
+        result["stream_url_redacted"] = _redact_url_for_diagnostic(stream_url)
         protocol = str(base_summary.get("protocol") or "").lower()
         mime_type = str(base_summary.get("mime_type") or "").lower()
         if protocol.endswith("hls") or "mpegurl" in mime_type:
@@ -424,6 +435,7 @@ async def diagnose_soundcloud_track(
             client_id=client_id,
         )
         decision = evaluate_soundcloud_track_importability(sc_data)
+        playback = _diagnose_playback_mode(decision)
 
         probes: list[dict[str, Any]] = []
         media = sc_data.get("media") if isinstance(sc_data, dict) else None
@@ -484,6 +496,7 @@ async def diagnose_soundcloud_track(
         sc_url=url,
         reason=decision.reason,
         allowed=decision.allowed,
+        playback_mode=playback["mode"],
         probes_count=len(probes),
         proxied=transport["proxied"],
         egress_ip=egress_ip.get("ip"),
@@ -503,6 +516,7 @@ async def diagnose_soundcloud_track(
             "user_message": decision.user_message,
             "diagnostic": dict(decision.diagnostic),
         },
+        "playback": playback,
         "track": track_meta,
         "manifest_probes": probes,
         "track_authorization_present": bool(track_authorization),

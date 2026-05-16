@@ -350,6 +350,169 @@ async def test_admin_playback_unavailable_filters_latest_diagnostic(
     assert stale.id not in filtered_ids
 
 
+async def test_admin_soundcloud_encrypted_unsupported_filter(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 130011)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    old_embed = Track(
+        title="Old SC Embed",
+        artist="Artist",
+        uploaded_by_id=admin["id"],
+        is_active=True,
+        is_public=True,
+        source="soundcloud",
+        catalog_type="external_reference",
+        access_mode="official_embed",
+        source_platform="soundcloud",
+        processing_status="active",
+        sc_url="https://soundcloud.com/test/old-embed",
+    )
+    archived = Track(
+        title="Archived SC Encrypted",
+        artist="Artist",
+        uploaded_by_id=admin["id"],
+        is_active=False,
+        is_public=False,
+        source="soundcloud",
+        catalog_type="external_reference",
+        access_mode="third_party_stream",
+        source_platform="soundcloud",
+        processing_status="active",
+        sc_url="https://soundcloud.com/test/archived-encrypted",
+        deleted_reason="encrypted_hls_unsupported",
+        playback_last_failure_at=datetime.now(UTC),
+    )
+    other_embed = Track(
+        title="Other Official Embed",
+        artist="Artist",
+        uploaded_by_id=admin["id"],
+        is_active=True,
+        is_public=True,
+        source="external",
+        catalog_type="external_reference",
+        access_mode="official_embed",
+        source_platform="youtube",
+        processing_status="active",
+    )
+    db_session.add_all([old_embed, archived, other_embed])
+    await db_session.commit()
+    assert old_embed.id is not None
+    assert archived.id is not None
+    assert other_embed.id is not None
+
+    r = await client.get(
+        "/api/v1/admin/tracks/playback-health/"
+        "soundcloud-encrypted-unsupported",
+        headers=headers,
+    )
+
+    assert r.status_code == 200
+    ids = [item["id"] for item in r.json()["items"]]
+    assert old_embed.id in ids
+    assert archived.id in ids
+    assert other_embed.id not in ids
+    archived_row = next(
+        item for item in r.json()["items"] if item["id"] == archived.id
+    )
+    assert archived_row["deleted_reason"] == "encrypted_hls_unsupported"
+
+    ids_response = await client.get(
+        "/api/v1/admin/tracks/ids",
+        headers=headers,
+        params={"scope": "sc_encrypted_unsupported"},
+    )
+
+    assert ids_response.status_code == 200
+    filtered_ids = ids_response.json()["ids"]
+    assert old_embed.id in filtered_ids
+    assert archived.id in filtered_ids
+    assert other_embed.id not in filtered_ids
+
+
+async def test_admin_cleanup_soundcloud_encrypted_unsupported_embeds(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    admin = await create_test_user(client, 130012)
+    headers = await admin_bearer_for_user(
+        client, db_session, user_id=admin["id"]
+    )
+    old_embed = Track(
+        title="Cleanup SC Embed",
+        artist="Artist",
+        uploaded_by_id=admin["id"],
+        is_active=True,
+        is_public=True,
+        source="soundcloud",
+        catalog_type="external_reference",
+        access_mode="official_embed",
+        source_platform="soundcloud",
+        processing_status="active",
+        sc_url="https://soundcloud.com/test/cleanup-sc-embed",
+        source_url="https://soundcloud.com/test/cleanup-sc-embed",
+    )
+    other_embed = Track(
+        title="Cleanup Other Embed",
+        artist="Artist",
+        uploaded_by_id=admin["id"],
+        is_active=True,
+        is_public=True,
+        source="external",
+        catalog_type="external_reference",
+        access_mode="official_embed",
+        source_platform="youtube",
+        processing_status="active",
+    )
+    db_session.add_all([old_embed, other_embed])
+    await db_session.commit()
+    assert old_embed.id is not None
+    assert other_embed.id is not None
+
+    r = await client.post(
+        "/api/v1/admin/tracks/playback-health/"
+        "cleanup-soundcloud-encrypted-unsupported",
+        headers=headers,
+        json={"limit": 10},
+    )
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["matched"] == 1
+    assert body["updated"] == 1
+    assert body["track_ids"] == [old_embed.id]
+    await db_session.refresh(old_embed)
+    await db_session.refresh(other_embed)
+    assert old_embed.access_mode == "third_party_stream"
+    assert old_embed.is_active is False
+    assert old_embed.is_public is False
+    assert old_embed.deleted_reason == "encrypted_hls_unsupported"
+    assert old_embed.playback_last_failure_source == (
+        "admin_sc_encrypted_cleanup"
+    )
+    assert old_embed.source_url == (
+        "https://soundcloud.com/test/cleanup-sc-embed"
+    )
+    assert other_embed.access_mode == "official_embed"
+    assert other_embed.is_active is True
+
+    event = (
+        await db_session.scalars(
+            select(TrackPlaybackFailureEvent).where(
+                TrackPlaybackFailureEvent.track_id == old_embed.id,
+            )
+        )
+    ).one()
+    detail = json.loads(event.detail_truncated or "{}")
+    assert event.source == "admin_sc_encrypted_cleanup"
+    assert event.http_status == 422
+    assert detail["code"] == "soundcloud_encrypted_hls_unsupported"
+    assert detail["reason"] == "encrypted_hls_unsupported"
+
+
 async def test_admin_playback_repair_returns_progress_id(
     client: AsyncClient,
     db_session: AsyncSession,

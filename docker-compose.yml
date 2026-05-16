@@ -177,6 +177,10 @@ services:
       ELASTICSEARCH_URL: http://elasticsearch:9200
       INTERNAL_API_ALLOWED_CIDRS: ${INTERNAL_API_ALLOWED_CIDRS:-},172.16.0.0/12
       PYTHONPATH: /DotSoundPrivateCore/src
+      # If Tor fails to start the worker must not crash — it falls back
+      # to direct/proxy connections. Override with TOR_POOL_FAIL_CLOSED=true
+      # in .env only when Tor is required for all outbound requests.
+      TOR_POOL_FAIL_CLOSED: "false"
     depends_on:
       redis:
         condition: service_healthy

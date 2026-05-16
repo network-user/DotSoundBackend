@@ -12,6 +12,7 @@ from app.schemas.user import UserResponse
 class AdminTrackResponse(TrackResponse):
     uploaded_by_id: int | None = None
     is_active: bool = True
+    deleted_reason: str | None = None
     lyrics_catalog_miss_at: datetime | None = None
     playback_last_failure_at: datetime | None = None
     playback_last_http_status: int | None = None

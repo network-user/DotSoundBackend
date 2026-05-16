@@ -155,11 +155,11 @@ class AppSettings(BaseSettings):
     # Requires: apt install tor / Tor Expert Bundle on Windows.
     tor_pool_enabled: bool = False
     tor_pool_size: int = 10
-    tor_socks_base_port: int = 9050
+    tor_socks_base_port: int = 19050
     # If this falls into [``TOR_SOCKS_BASE_PORT``,
     # ``TOR_SOCKS_BASE_PORT`` + ``TOR_POOL_SIZE``) it is moved at runtime
     # (it must not double as a SOCKS listener).
-    tor_control_port: int = 9151
+    tor_control_port: int = 19060
     # Plain-text password for Tor ControlPort; leave empty to use
     # CookieAuthentication.
     tor_control_password: str = ""

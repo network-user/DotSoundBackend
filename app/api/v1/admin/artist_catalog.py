@@ -30,6 +30,7 @@ from app.dependencies import (
     require_step_up,
 )
 from app.models.user import User
+from app.repositories.artist_catalog import ArtistCatalogRepository
 from app.schemas.admin_artist_catalog import (
     AdminArtistBulkEnrichError,
     AdminArtistBulkEnrichRequest,
@@ -50,6 +51,7 @@ from app.schemas.admin_artist_catalog import (
     AdminCatalogReleaseSyncQueuedResponse,
     AdminCatalogReleaseTracksBody,
     AdminCatalogSyncQueuedResponse,
+    ArtistPipelineHealthResponse,
 )
 from app.schemas.artist_catalog import ArtistCatalogReleaseDetailResponse
 from app.services import artist_catalog_sync_progress as acsp
@@ -211,6 +213,24 @@ async def admin_list_artist_ids(
         return AdminIdSelectionResponse(ids=matched, total=len(matched))
     ids, total = await svc.list_admin_ids(q=q, enrichment=enrichment)
     return AdminIdSelectionResponse(ids=ids, total=total)
+
+
+@router.get(
+    "/pipeline-health",
+    response_model=ArtistPipelineHealthResponse,
+)
+@limiter.limit("60/minute")
+async def admin_artist_pipeline_health(
+    request: Request,
+    session: AsyncSession = Depends(get_db),
+    _admin: User = Depends(require_admin_session),
+) -> ArtistPipelineHealthResponse:
+    repo = ArtistCatalogRepository(session)
+    counts = await repo.count_artists_by_enrichment_status()
+    return ArtistPipelineHealthResponse(
+        enrichment_counts=counts,
+        total=sum(counts.values()),
+    )
 
 
 @router.post(

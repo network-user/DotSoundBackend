@@ -9,6 +9,7 @@ from unittest.mock import (
 
 import pytest
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artist import Artist
@@ -1559,57 +1560,93 @@ class TestImportOrGetTrackPolicyRejection:
         ".schedule_new_track_background_jobs",
         new_callable=AsyncMock,
     )
-    async def test_encrypted_hls_import_uses_official_embed(
+    async def test_encrypted_hls_import_is_archived_as_unplayable(
         self,
         _sched: object,
         session: AsyncSession,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        from app.config import settings as _settings
+        from app.models.track import Track as _Track
+
         enqueue_audio_cache = AsyncMock()
         monkeypatch.setattr(
             "app.services.soundcloud_service._maybe_enqueue_audio_cache",
             enqueue_audio_cache,
         )
+        monkeypatch.setattr(_settings, "sc_strict_import_verify", True)
+
+        async def _reject_encrypted(
+            *_args: object,
+            **_kwargs: object,
+        ) -> tuple[str, str]:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "soundcloud_encrypted_hls_unsupported",
+                    "reason": "encrypted_hls_unsupported",
+                },
+            )
+
+        monkeypatch.setattr(
+            "app.api.v1.tracks.playback._resolve_third_party_stream",
+            _reject_encrypted,
+        )
 
         svc = SoundCloudService("test_id", session)
         sc_url = "https://soundcloud.com/encrypted/track"
-        track = await svc.import_or_get_track(
-            {
-                "permalink_url": sc_url,
-                "title": "Encrypted HLS",
-                "user": {"username": "Artist"},
-                "duration": 100000,
-                "uri": "sc:encrypted",
-                "kind": "track",
-                "media": {
-                    "transcodings": [
-                        {
-                            "url": "https://api/encrypted",
-                            "snipped": False,
-                            "format": {
-                                "protocol": "cbc-encrypted-hls",
+        with pytest.raises(HTTPException) as exc:
+            await svc.import_or_get_track(
+                {
+                    "permalink_url": sc_url,
+                    "title": "Encrypted HLS",
+                    "user": {"username": "Artist"},
+                    "duration": 100000,
+                    "uri": "sc:encrypted",
+                    "kind": "track",
+                    "media": {
+                        "transcodings": [
+                            {
+                                "url": "https://api/encrypted",
+                                "snipped": False,
+                                "format": {
+                                    "protocol": "cbc-encrypted-hls",
+                                },
                             },
-                        },
-                    ],
+                        ],
+                    },
                 },
-            },
-            uploader_id=1,
-        )
+                uploader_id=1,
+            )
 
-        assert track.access_mode == "official_embed"
+        assert exc.value.status_code == 422
+        assert exc.value.detail["code"] == "soundcloud_track_unverified"
+        assert exc.value.detail["reason"] == "encrypted_hls_unsupported"
+
+        result = await session.execute(
+            select(_Track).where(_Track.sc_url == sc_url)
+        )
+        track = result.scalar_one()
+
+        assert track.access_mode == "third_party_stream"
         assert track.catalog_type == "external_reference"
         assert track.source_platform == "soundcloud"
         assert track.sc_url == sc_url
         assert track.source_url == sc_url
         assert track.canonical_source_url == sc_url
-        assert track.is_active is True
+        assert track.is_active is False
+        assert track.is_public is False
+        assert track.deleted_reason == "encrypted_hls_unsupported"
+        assert track.playback_last_failure_at is not None
+        assert track.playback_suppressed_until is not None
         enqueue_audio_cache.assert_not_awaited()
 
-    async def test_encrypted_hls_import_restores_suppressed_existing(
+    async def test_encrypted_hls_import_keeps_existing_suppressed(
         self,
         session: AsyncSession,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
+        from app.config import settings as _settings
         from app.models.track import Track as _Track
 
         async def _noop_reindex(*_args: object, **_kwargs: object) -> None:
@@ -1618,6 +1655,24 @@ class TestImportOrGetTrackPolicyRejection:
         monkeypatch.setattr(
             "app.services.search_index_notify.schedule_reindex_track",
             _noop_reindex,
+        )
+        monkeypatch.setattr(_settings, "sc_strict_import_verify", True)
+
+        async def _reject_encrypted(
+            *_args: object,
+            **_kwargs: object,
+        ) -> tuple[str, str]:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "soundcloud_encrypted_hls_unsupported",
+                    "reason": "encrypted_hls_unsupported",
+                },
+            )
+
+        monkeypatch.setattr(
+            "app.api.v1.tracks.playback._resolve_third_party_stream",
+            _reject_encrypted,
         )
 
         sc_url = "https://soundcloud.com/encrypted/existing"
@@ -1643,34 +1698,37 @@ class TestImportOrGetTrackPolicyRejection:
         await session.refresh(existing)
 
         svc = SoundCloudService("test_id", session)
-        result = await svc.import_or_get_track(
-            {
-                "permalink_url": sc_url,
-                "title": "Encrypted HLS",
-                "user": {"username": "Artist"},
-                "duration": 100000,
-                "uri": "sc:encrypted-existing",
-                "kind": "track",
-                "media": {
-                    "transcodings": [
-                        {
-                            "url": "https://api/encrypted",
-                            "snipped": False,
-                            "format": {
-                                "protocol": "ctr-encrypted-hls",
+        with pytest.raises(HTTPException) as exc:
+            await svc.import_or_get_track(
+                {
+                    "permalink_url": sc_url,
+                    "title": "Encrypted HLS",
+                    "user": {"username": "Artist"},
+                    "duration": 100000,
+                    "uri": "sc:encrypted-existing",
+                    "kind": "track",
+                    "media": {
+                        "transcodings": [
+                            {
+                                "url": "https://api/encrypted",
+                                "snipped": False,
+                                "format": {
+                                    "protocol": "ctr-encrypted-hls",
+                                },
                             },
-                        },
-                    ],
+                        ],
+                    },
                 },
-            },
-            uploader_id=2,
-        )
+                uploader_id=2,
+            )
 
-        assert result.id == existing.id
-        assert result.access_mode == "official_embed"
-        assert result.is_active is True
-        assert result.is_public is True
-        assert result.deleted_reason is None
+        assert exc.value.status_code == 422
+        assert exc.value.detail["reason"] == "encrypted_hls_unsupported"
+        await session.refresh(existing)
+        assert existing.access_mode == "third_party_stream"
+        assert existing.is_active is False
+        assert existing.is_public is False
+        assert existing.deleted_reason == "encrypted_hls_unsupported"
 
     async def test_blocked_policy_rejects_import_without_db_write(
         self,

@@ -86,6 +86,11 @@ export interface SoundCloudDiagnoseResponse {
     user_message: string | null
     diagnostic: Record<string, unknown>
   }
+  playback?: {
+    mode: 'dotsound_stream' | 'unavailable'
+    label: string
+    reason: string | null
+  }
   track: Record<string, unknown>
   manifest_probes: Array<Record<string, unknown>>
   track_authorization_present: boolean
@@ -893,6 +898,11 @@ export const adminApi = {
       ids: number[]
       total: number
     }>('/artists/ids', { query: params }),
+  getArtistPipelineHealth: () =>
+    adminFetch<{
+      enrichment_counts: Record<string, number>
+      total: number
+    }>('/artists/pipeline-health'),
   artistEnrichBatch: (artistIds: number[]) =>
     adminFetch<{
       queued: number
@@ -972,7 +982,12 @@ export const adminApi = {
       size: number
     }>('/tracks', { query: params }),
   listTrackIds: (params: {
-    scope?: 'all' | 'playback_failures' | 'playback_suppressed' | 'deleted'
+    scope?:
+      | 'all'
+      | 'playback_failures'
+      | 'playback_suppressed'
+      | 'sc_encrypted_unsupported'
+      | 'deleted'
     is_active?: boolean
     without_lyrics?: boolean
     lyrics_catalog_miss_only?: boolean
@@ -1008,6 +1023,36 @@ export const adminApi = {
       page: number
       size: number
     }>('/tracks/playback-health/suppressed', { query: params }),
+  listTracksSoundCloudEncryptedUnsupported: (params: {
+    page?: number
+    size?: number
+    search?: string
+  }) =>
+    adminFetch<{
+      items: Array<Record<string, unknown>>
+      total: number
+      page: number
+      size: number
+    }>('/tracks/playback-health/soundcloud-encrypted-unsupported', {
+      query: params,
+    }),
+  cleanupSoundCloudEncryptedUnsupported: (params?: {
+    limit?: number
+    dry_run?: boolean
+  }) =>
+    adminFetch<{
+      matched: number
+      updated: number
+      dry_run: boolean
+      track_ids: number[]
+      detail: string
+    }>('/tracks/playback-health/cleanup-soundcloud-encrypted-unsupported', {
+      method: 'POST',
+      body: {
+        limit: params?.limit,
+        dry_run: params?.dry_run,
+      },
+    }),
   clearTrackPlaybackSuppression: (trackId: number) =>
     adminFetch<Record<string, unknown>>(
       `/tracks/${trackId}/playback-health/clear-suppression`,
